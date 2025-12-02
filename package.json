@@ -1,0 +1,26 @@
+{
+    "name": "landing-page-agent",
+    "version": "1.0.0",
+    "description": "An agent to scrape websites and generate landing pages.",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@openrouter/sdk": "^0.1.27",
+        "axios": "^1.7.9",
+        "dotenv": "^16.4.7",
+        "openai": "^6.9.1",
+        "puppeteer": "^23.10.1",
+        "puppeteer-extra": "^3.3.6",
+        "puppeteer-extra-plugin-stealth": "^2.11.2"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.1",
+        "tslab": "^1.0.22",
+        "typescript": "^5.7.2"
+    }
+}
