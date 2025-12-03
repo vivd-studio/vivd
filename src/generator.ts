@@ -32,10 +32,13 @@ export async function generateLandingPage(outputDir: string) {
                                 `Use the attached screenshot for visual context of their current brand, but feel free to improve the design. \n\n` +
                                 `Put everything inside a single index.html file. \n\n` +
                                 `Output ONLY the raw HTML code for the new index.html file. \n\n` +
-                                `Current Text on the website: \n${text} \n\n` +
-                                `Available Image Assets (in 'images/' folder): \n` +
-                                fs.readdirSync(path.join(outputDir, 'images')).map(file => `- images/${file}`).join('\n') +
-                                `\n\nYou CAN use these images in your HTML if they fit the design, but you don't have to.`
+                                `Those are the ALL images that were on the old website. They are located in the "images" folder. \n\n` +
+                                `They have not been filtered, so all of them might be good, all of them might be bad or something in between. \n\n` +
+                                `You can use them if they fit the design, but you don't have to. Use the descriptions to choose the images. \n\n` +
+                                (fs.existsSync(path.join(outputDir, 'image-files-description.txt'))
+                                    ? fs.readFileSync(path.join(outputDir, 'image-files-description.txt'), 'utf-8')
+                                    : fs.readdirSync(path.join(outputDir, 'images')).map(file => `- images/${file}`).join('\n')) +
+                                `\n\nCurrent Text on the website: \n${text} \n\n`
                         },
                         {
                             type: 'image_url',

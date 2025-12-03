@@ -8,6 +8,9 @@ import { MAX_SCREENSHOT_HEIGHT } from './config';
 
 puppeteer.use(StealthPlugin());
 
+// TODO: Check vor url:... in background image, there are sometimes some images that we are not currently grabbing.
+// example: <div class="IFuOkc" style="background-size: cover; background-position: center center; background-image: url(https://lh3.googleusercontent.com/sitesv/AAzXCkeXs8I6lUCsUizVVokNZuuyeATNDLm52C6NVy6egmntJxNJZJ8GktYqWVc0PIQSKlk_SAFlfpZFYOL9qd68IQuS2LjrH6F4M-qR1NXhd5bGi6SkvVqb8PkA005dpIvwLS2pAJNs7CmdOThxmHOhUvepsiG7ZM4GDhk=w16383);" jsname="LQX2Vd"></div>
+
 export async function handleCookieBanner(page: any) {
     // Simple heuristic to find and click cookie buttons
     const terms = ['accept', 'agree', 'allow', 'consent', 'okay', 'i understand', 'akzeptieren', 'zustimmen', 'verstanden'];
