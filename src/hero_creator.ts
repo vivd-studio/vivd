@@ -6,7 +6,6 @@ import { OpenRouter } from '@openrouter/sdk';
 import { OPENROUTER_API_KEY, GENERATION_MODEL, HERO_GENERATION_MODEL } from './config';
 import { log } from './logger';
 import { cleanText } from './utils';
-import { ImageInfo } from './image_analyzer';
 
 const openai = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
