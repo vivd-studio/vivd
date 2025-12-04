@@ -3,10 +3,12 @@ import { generateLandingPage } from './src/generator';
 import { analyzeImages } from './src/image_analyzer';
 import { createHeroImage } from './src/hero_creator';
 import { log } from './src/logger';
+import { validateConfig } from './src/config';
 import * as path from 'path';
 import * as fs from 'fs';
 
 async function main() {
+    validateConfig();
     const args = process.argv.slice(2);
     if (args.length === 0) {
         console.error('Usage: npx tsx index.ts <url>');

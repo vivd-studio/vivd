@@ -1,9 +1,9 @@
-import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import execa from 'execa';
 import { log } from './logger';
 import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL, NAVIGATION_MODEL } from './config';
+import { openai } from './client';
 
 export interface GenerationAgent {
     generate(
@@ -19,10 +19,6 @@ export class OpenRouterAgent implements GenerationAgent {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
 
-        const openai = new OpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: OPENROUTER_API_KEY,
-        });
 
         const screenshotBuffer = fs.readFileSync(screenshotPath);
         const screenshotBase64 = screenshotBuffer.toString('base64');

@@ -14,7 +14,9 @@ export const ENABLE_IMAGE_ANALYSIS = true;
 export const USE_LOCAL_AGENT = false;
 export const LOCAL_AGENT_COMMAND = 'cursor-agent';
 
-if (!OPENROUTER_API_KEY && !USE_LOCAL_AGENT) {
-    console.error('Please set OPENROUTER_API_KEY in your .env file or set USE_LOCAL_AGENT=true.');
-    process.exit(1);
+export function validateConfig() {
+    if (!OPENROUTER_API_KEY && !USE_LOCAL_AGENT) {
+        console.error('Please set OPENROUTER_API_KEY in your .env file or set USE_LOCAL_AGENT=true.');
+        process.exit(1);
+    }
 }

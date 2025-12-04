@@ -52,3 +52,25 @@ export function cleanText(text: string): string {
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
+
+export function parseJsonFromLLM(content: string | null): any {
+    if (!content) return null;
+
+    try {
+        return JSON.parse(content);
+    } catch (e) {
+        // Handle markdown code blocks
+        const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/) ||
+            content.match(/\{[\s\S]*\}/) ||
+            content.match(/\[[\s\S]*\]/);
+
+        if (jsonMatch) {
+            try {
+                return JSON.parse(jsonMatch[0] || jsonMatch[1]);
+            } catch (e2) {
+                return null;
+            }
+        }
+    }
+    return null;
+}

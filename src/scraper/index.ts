@@ -3,10 +3,10 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '../logger';
-import { MAX_SCREENSHOT_HEIGHT } from '../config';
 import { scrapePage } from './page';
 import { extractNavigationLinks, findLinksMatchingTexts, prioritizeNavigationLinks } from './navigation';
 import { deduplicateImages } from './images';
+import { takeMainPageScreenshot, takeHeaderScreenshot } from './screenshots';
 
 puppeteer.use(StealthPlugin());
 
@@ -24,24 +24,10 @@ export async function scrapeWebsite(url: string, outputDir: string) {
         const mainPageData = await scrapePage(page, url, outputDir, true);
 
         // Screenshot Main Page
-        log('Taking screenshot of main page...');
-        const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
-        const height = Math.min(bodyHeight, MAX_SCREENSHOT_HEIGHT);
-        await page.screenshot({
-            path: path.join(outputDir, 'screenshot.png'),
-            fullPage: false,
-            clip: { x: 0, y: 0, width: 1280, height: height }
-        });
-        log(`Screenshot saved to ${path.join(outputDir, 'screenshot.png')}`);
+        await takeMainPageScreenshot(page, outputDir);
 
         // 2. Take Header Screenshot for Navigation Analysis
-        log('Taking screenshot of header for navigation analysis...');
-        const headerScreenshotPath = path.join(outputDir, 'header_screenshot.png');
-        await page.screenshot({
-            path: headerScreenshotPath,
-            fullPage: false,
-            clip: { x: 0, y: 0, width: 1280, height: 500 } // Top 500px
-        });
+        const headerScreenshotPath = await takeHeaderScreenshot(page, outputDir);
 
         // 3. Analyze Navigation with Vision Model
         const navigationTexts = await extractNavigationLinks(headerScreenshotPath);

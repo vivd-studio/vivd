@@ -1,19 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import OpenAI from 'openai';
-import { OPENROUTER_API_KEY, VISION_MODEL } from '../config';
+import { VISION_MODEL } from '../config';
 import { log } from '../logger';
 import { IMAGE_DESCRIPTION_PROMPT } from '../prompts';
+import { openai } from '../client';
+import { parseJsonFromLLM } from '../utils';
 import { ImageInfo } from './types';
-
-const openai = new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: OPENROUTER_API_KEY,
-    defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/landing-page-agent',
-        'X-Title': 'Landing Page Agent',
-    },
-});
 
 export async function describeImage(image: ImageInfo, outputDir: string): Promise<{ description: string }> {
     const imagePath = path.join(outputDir, 'images', image.filename);
@@ -49,13 +41,7 @@ export async function describeImage(image: ImageInfo, outputDir: string): Promis
         const content = completion.choices[0].message.content;
         if (!content) return { description: 'Failed to analyze' };
 
-        let parsed;
-        try {
-            parsed = JSON.parse(content);
-        } catch (e) {
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
-            if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-        }
+        const parsed = parseJsonFromLLM(content);
 
         return {
             description: parsed?.description || 'No description',

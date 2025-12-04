@@ -1,45 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import OpenAI from 'openai';
 import axios from 'axios';
-import { OpenRouter } from '@openrouter/sdk';
 import { OPENROUTER_API_KEY, GENERATION_MODEL, HERO_GENERATION_MODEL } from './config';
 import { log } from './logger';
 import { cleanText } from './utils';
+import { getTopImages } from './image_analyzer/utils';
+import { openai } from './client';
 
-const openai = new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: OPENROUTER_API_KEY,
-    defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/landing-page-agent',
-        'X-Title': 'Landing Page Agent',
-    },
-});
-
-const openRouter = new OpenRouter({
-    apiKey: OPENROUTER_API_KEY,
-});
-
-function getTopImages(outputDir: string): string[] {
-    const descriptionPath = path.join(outputDir, 'image-files-description.txt');
-    if (fs.existsSync(descriptionPath)) {
-        const content = fs.readFileSync(descriptionPath, 'utf-8');
-        // Parse lines like "- filename (WxH) - description"
-        const lines = content.split('\n').filter(l => l.startsWith('- '));
-        // They are already sorted by priority in analyzeImages
-        return lines.slice(0, 5).map(line => {
-            const match = line.match(/- (.*?) \(/);
-            return match ? match[1] : '';
-        }).filter(f => f);
-    }
-    
-    // Fallback to reading directory
-    const imagesDir = path.join(outputDir, 'images');
-    if (!fs.existsSync(imagesDir)) return [];
-    return fs.readdirSync(imagesDir)
-        .filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
-        .slice(0, 5);
-}
 
 async function generateHeroPrompt(text: string, imageDescriptions: string): Promise<string> {
     const prompt = `
@@ -89,7 +56,7 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
             const base64 = buffer.toString('base64');
             const ext = path.extname(imgName).substring(1);
             const mimeType = ext === 'svg' ? 'svg+xml' : ext;
-            
+
             messages[0].content.push({
                 type: 'image_url',
                 imageUrl: {
@@ -100,7 +67,7 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
     }
 
     log(`Sending generation request to ${HERO_GENERATION_MODEL}...`);
-    
+
     try {
         // Use direct Axios call to OpenRouter to ensure custom parameters are passed correctly
         const response = await axios.post(
@@ -132,32 +99,32 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
 
         if (result.choices && result.choices[0]) {
             const message = result.choices[0].message;
-            
+
             // Check for images in the special OpenRouter format (snake_case based on user example)
             if (message.images && message.images.length > 0) {
                 const imgObj = message.images[0];
                 // Handle both snake_case (Gemini) and camelCase (standard OpenRouter/OpenAI)
                 const imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
-                
+
                 if (imageUrl) {
                     return imageUrl;
                 }
             }
-            
+
             // Fallback: check content for markdown or URL if the SDK returns it there
             if (message.content) {
                 let content = '';
                 if (typeof message.content === 'string') {
                     content = message.content;
                 } else if (Array.isArray(message.content)) {
-                     // Extract text parts
-                     content = message.content
+                    // Extract text parts
+                    content = message.content
                         .filter((c: any) => c.type === 'text')
                         .map((c: any) => c.text)
                         .join('');
                 }
 
-                 // Check for Markdown image link ![alt](url)
+                // Check for Markdown image link ![alt](url)
                 const match = content.match(/\!\[.*?\]\((.*?)\)/);
                 if (match) return match[1];
                 if (content.startsWith('http')) return content;
@@ -170,7 +137,7 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
     } catch (e: any) {
         log(`Error generating hero image: ${e.message}`);
         if (e.response) {
-             log(`Response: ${JSON.stringify(e.response.data)}`);
+            log(`Response: ${JSON.stringify(e.response.data)}`);
         }
         return null;
     }
@@ -185,11 +152,11 @@ async function saveImage(urlOrBase64: string, outputDir: string): Promise<string
             const response = await axios.get(urlOrBase64, { responseType: 'arraybuffer' });
             fs.writeFileSync(outputPath, response.data);
         } else if (urlOrBase64.startsWith('data:image')) {
-             const base64Data = urlOrBase64.replace(/^data:image\/\w+;base64,/, "");
-             fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
+            const base64Data = urlOrBase64.replace(/^data:image\/\w+;base64,/, "");
+            fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
         } else {
-             // Assume raw base64?
-             fs.writeFileSync(outputPath, Buffer.from(urlOrBase64, 'base64'));
+            // Assume raw base64?
+            fs.writeFileSync(outputPath, Buffer.from(urlOrBase64, 'base64'));
         }
         return filename;
     } catch (e) {
@@ -211,7 +178,7 @@ export async function createHeroImage(outputDir: string) {
 
     const topImages = getTopImages(outputDir);
     let imageDescriptions = '';
-    
+
     const descriptionPath = path.join(outputDir, 'image-files-description.txt');
     if (fs.existsSync(descriptionPath)) {
         imageDescriptions = fs.readFileSync(descriptionPath, 'utf-8');
@@ -232,30 +199,30 @@ export async function createHeroImage(outputDir: string) {
         log('First attempt failed or returned no image. Retrying image generation...');
         imageUrl = await generateImage(heroPrompt, topImages, outputDir);
     }
-    
+
     if (imageUrl) {
         // Step 3: Save
         const filename = await saveImage(imageUrl, outputDir);
-        
+
         if (filename) {
             log(`Saved hero image to ${filename}`);
-            
+
             // Step 4: Update Description File
             const descFile = path.join(outputDir, 'image-files-description.txt');
             const newEntry = `- ${filename} (Generated) - A professionally generated hero image based on the client's brand: ${heroPrompt.replace(/\n/g, ' ')}\n`;
-            
+
             // Prepend or Append? "include it in the images description".
             // It's good to put it at the top or with high priority.
             // AnalyzeImages sorts by analyzed/priority.
             // I'll prepend it to the text content so it's seen first.
-            
+
             if (fs.existsSync(descFile)) {
                 const currentContent = fs.readFileSync(descFile, 'utf-8');
                 fs.writeFileSync(descFile, newEntry + currentContent);
             } else {
                 fs.writeFileSync(descFile, newEntry);
             }
-            
+
         }
     } else {
         log('Failed to generate hero image.');

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import sizeOf from 'image-size';
 import { log } from '../logger';
 
@@ -12,4 +13,25 @@ export function getImageDimensions(filePath: string): { width: number; height: n
         log(`Error getting dimensions for ${filePath}: ${e}`);
         return { width: 0, height: 0 };
     }
+}
+
+export function getTopImages(outputDir: string): string[] {
+    const descriptionPath = path.join(outputDir, 'image-files-description.txt');
+    if (fs.existsSync(descriptionPath)) {
+        const content = fs.readFileSync(descriptionPath, 'utf-8');
+        // Parse lines like "- filename (WxH) - description"
+        const lines = content.split('\n').filter(l => l.startsWith('- '));
+        // They are already sorted by priority in analyzeImages
+        return lines.slice(0, 5).map(line => {
+            const match = line.match(/- (.*?) \(/);
+            return match ? match[1] : '';
+        }).filter(f => f);
+    }
+
+    // Fallback to reading directory
+    const imagesDir = path.join(outputDir, 'images');
+    if (!fs.existsSync(imagesDir)) return [];
+    return fs.readdirSync(imagesDir)
+        .filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
+        .slice(0, 5);
 }

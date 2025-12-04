@@ -1,17 +1,9 @@
-import OpenAI from 'openai';
 import { OPENROUTER_API_KEY, PRIORITIZATION_MODEL } from '../config';
 import { log } from '../logger';
 import { IMAGE_PRIORITIZATION_PROMPT } from '../prompts';
 import { ImageInfo } from './types';
-
-const openai = new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: OPENROUTER_API_KEY,
-    defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/landing-page-agent',
-        'X-Title': 'Landing Page Agent',
-    },
-});
+import { openai } from '../client';
+import { parseJsonFromLLM } from '../utils';
 
 export async function prioritizeImages(images: ImageInfo[]): Promise<string[]> {
     log('Prioritizing images...');
@@ -28,17 +20,7 @@ export async function prioritizeImages(images: ImageInfo[]): Promise<string[]> {
         const content = completion.choices[0].message.content;
         if (!content) return [];
 
-        // Handle potential JSON wrapping
-        let parsed;
-        try {
-            parsed = JSON.parse(content);
-        } catch (e) {
-            // Sometimes models return markdown code blocks
-            const jsonMatch = content.match(/```json\n([\s\S] *?) \n```/) || content.match(/\{[\s\S]*\}/) || content.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[0] || jsonMatch[1]);
-            }
-        }
+        const parsed = parseJsonFromLLM(content);
 
         if (Array.isArray(parsed)) {
             return parsed;

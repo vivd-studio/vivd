@@ -1,7 +1,8 @@
 import * as fs from 'fs';
-import OpenAI from 'openai';
 import { log } from '../logger';
 import { OPENROUTER_API_KEY, NAVIGATION_MODEL } from '../config';
+import { openai } from '../client';
+import { parseJsonFromLLM } from '../utils';
 
 export async function extractNavigationLinks(screenshotPath: string): Promise<string[]> {
     log('Extracting navigation links from screenshot...');
@@ -23,14 +24,6 @@ export async function extractNavigationLinks(screenshotPath: string): Promise<st
     Only return the text you see.
     `;
 
-    const openai = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: OPENROUTER_API_KEY,
-        defaultHeaders: {
-            'HTTP-Referer': 'https://github.com/landing-page-agent',
-            'X-Title': 'Landing Page Agent',
-        },
-    });
 
     try {
         const completion = await openai.chat.completions.create({
@@ -55,15 +48,7 @@ export async function extractNavigationLinks(screenshotPath: string): Promise<st
         const content = completion.choices[0].message.content;
         if (!content) return [];
 
-        let parsed;
-        try {
-            parsed = JSON.parse(content);
-        } catch (e) {
-            const jsonMatch = content.match(/\{[\s\S]*\}/) || content.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                parsed = JSON.parse(jsonMatch[0]);
-            }
-        }
+        const parsed = parseJsonFromLLM(content);
 
         if (Array.isArray(parsed)) {
             return parsed;
@@ -94,10 +79,6 @@ export async function prioritizeNavigationLinks(links: { text: string, url: stri
         return links.slice(0, 6).map(l => l.url);
     }
 
-    const openai = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: OPENROUTER_API_KEY,
-    });
 
     const prompt = `
     You are a web scraper helper. I have a list of links found on a website's navigation menu.
@@ -123,13 +104,7 @@ export async function prioritizeNavigationLinks(links: { text: string, url: stri
         const content = completion.choices[0].message.content;
         if (!content) return links.slice(0, 6).map(l => l.url);
 
-        let parsed;
-        try {
-            parsed = JSON.parse(content);
-        } catch (e) {
-            const jsonMatch = content.match(/\{[\s\S]*\}/) || content.match(/\[[\s\S]*\]/);
-            if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
-        }
+        const parsed = parseJsonFromLLM(content);
 
         if (Array.isArray(parsed)) return parsed;
         if (parsed && Array.isArray(parsed.urls)) return parsed.urls;
