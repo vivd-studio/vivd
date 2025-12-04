@@ -3,7 +3,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from './logger';
-import { autoScroll, downloadImage } from './utils';
+import { autoScroll, downloadImage, cleanText } from './utils';
 import { MAX_SCREENSHOT_HEIGHT } from './config';
 
 puppeteer.use(StealthPlugin());
@@ -76,8 +76,9 @@ export async function scrapeWebsite(url: string, outputDir: string) {
 
         // Get Text
         const text = await page.evaluate(() => document.body.innerText);
-        log(`Extracted ${text.length} characters of text.`);
-        fs.writeFileSync(path.join(outputDir, 'website_text.txt'), text);
+        const cleanedText = cleanText(text);
+        log(`Extracted ${text.length} characters of text. Cleaned to ${cleanedText.length} characters.`);
+        fs.writeFileSync(path.join(outputDir, 'website_text.txt'), cleanedText);
 
         // Get Images
         const imageUrls = await page.evaluate(() => {

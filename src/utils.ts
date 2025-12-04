@@ -37,3 +37,18 @@ export async function downloadImage(url: string, filepath: string) {
         log(`Failed to download image: ${url}`);
     }
 }
+
+export function cleanText(text: string): string {
+    return text
+        // Normalize newlines
+        .replace(/\r\n/g, '\n')
+        // Replace non-breaking spaces
+        .replace(/\u00A0/g, ' ')
+        // Trim each line
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n')
+        // Replace 3+ newlines with 2
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}

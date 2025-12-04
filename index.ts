@@ -1,6 +1,7 @@
 import { scrapeWebsite } from './src/scraper';
 import { generateLandingPage } from './src/generator';
 import { analyzeImages } from './src/image_analyzer';
+import { createHeroImage } from './src/hero_creator';
 import { log } from './src/logger';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -27,6 +28,7 @@ async function main() {
     try {
         await scrapeWebsite(targetUrl, outputDir);
         await analyzeImages(outputDir);
+        await createHeroImage(outputDir);
         await generateLandingPage(outputDir);
     } catch (error) {
         log(`An error occurred: ${error}`);

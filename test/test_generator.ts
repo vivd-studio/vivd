@@ -1,4 +1,4 @@
-import { generateLandingPage } from './src/generator';
+import { generateLandingPage } from '../src/generator';
 import * as path from 'path';
 
 async function test() {

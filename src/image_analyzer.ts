@@ -2,8 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import sizeOf from 'image-size';
 import OpenAI from 'openai';
-import { OPENROUTER_API_KEY, PRIORITIZATION_MODEL, VISION_MODEL } from './config';
+import { OPENROUTER_API_KEY, PRIORITIZATION_MODEL, VISION_MODEL, ENABLE_IMAGE_ANALYSIS } from './config';
 import { log } from './logger';
+import { IMAGE_DESCRIPTION_PROMPT, IMAGE_PRIORITIZATION_PROMPT } from './prompts';
 
 const openai = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
@@ -14,7 +15,7 @@ const openai = new OpenAI({
     },
 });
 
-interface ImageInfo {
+export interface ImageInfo {
     filename: string;
     width: number;
     height: number;
@@ -38,21 +39,8 @@ function getImageDimensions(filePath: string): { width: number; height: number }
 async function prioritizeImages(images: ImageInfo[]): Promise<string[]> {
     // TODO: Dont tell the model to return if fewer than 20, just let it prioritize the images it has and then programmatically only use the first 20.
     log('Prioritizing images...');
-    const prompt = `
-    I have a list of images from a website. I need to identify the 20 most relevant images that could be used for a new website design or are meaningful for the customer's brand.
-    
-    Heuristics:
-    - Prefer images with standard aspect ratios (4:3, 16:9, 1:1).
-    - Avoid very long and thin images (e.g. banners, dividers) as they are likely not relevant content.
-    - Check if the Filename indicates the content of the image (e.g. "hero.jpg", "product.jpg").
-    
-    Here is the list of images with their dimensions:
-    ${images.map(img => `- ${img.filename} (${img.width}x${img.height})`).join('\n')}
-    
-    Please return a JSON array of strings containing ONLY the filenames of the top 20 most relevant images, in order of importance (most relevant first).
-    If there are fewer than 20 images, return all of them in order of importance.
-    Example: ["image1.jpg", "hero_banner.png", ...]
-    `;
+    const imagesList = images.map(img => `- ${img.filename} (${img.width}x${img.height})`).join('\n');
+    const prompt = IMAGE_PRIORITIZATION_PROMPT(imagesList);
 
     try {
         const completion = await openai.chat.completions.create({
@@ -108,14 +96,7 @@ async function describeImage(image: ImageInfo, outputDir: string): Promise<{ des
     const ext = path.extname(image.filename).substring(1);
     const dataUrl = `data:image/${ext === 'svg' ? 'svg+xml' : ext};base64,${base64Image}`;
 
-    const prompt = `
-    Analyze this website image.
-    Provide a short and concise description of the image content in 1 sentence. Don't start with "The image shows...", start right with what it is. 
-
-    Example: "A person holding a phone" 
-    
-    Return a JSON object: { "description": "string" }
-    `;
+    const prompt = IMAGE_DESCRIPTION_PROMPT;
 
     try {
         const completion = await openai.chat.completions.create({
@@ -239,20 +220,24 @@ export async function analyzeImages(outputDir: string) {
 
     log(`Filtered ${images.length - validImages.length} images. Proceeding with ${validImages.length} images.`);
 
-    // 1. Prioritize
-    const topImageNames = await prioritizeImages(validImages);
-    log(`Prioritized ${topImageNames.length} images.`);
+    if (ENABLE_IMAGE_ANALYSIS) {
+        // 1. Prioritize
+        const topImageNames = await prioritizeImages(validImages);
+        log(`Prioritized ${topImageNames.length} images.`);
 
-    // 2. Describe top images
-    for (const img of validImages) {
-        const priorityIndex = topImageNames.indexOf(img.filename);
-        if (priorityIndex !== -1) {
-            log(`Analyzing ${img.filename}...`);
-            const result = await describeImage(img, outputDir);
-            img.description = result.description;
-            img.priorityIndex = priorityIndex;
-            img.analyzed = true;
+        // 2. Describe top images
+        for (const img of validImages) {
+            const priorityIndex = topImageNames.indexOf(img.filename);
+            if (priorityIndex !== -1) {
+                log(`Analyzing ${img.filename}...`);
+                const result = await describeImage(img, outputDir);
+                img.description = result.description;
+                img.priorityIndex = priorityIndex;
+                img.analyzed = true;
+            }
         }
+    } else {
+        log('Image analysis disabled via config.');
     }
 
     // 3. Generate Report
