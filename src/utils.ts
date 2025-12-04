@@ -66,11 +66,34 @@ export function parseJsonFromLLM(content: string | null): any {
 
         if (jsonMatch) {
             try {
-                return JSON.parse(jsonMatch[0] || jsonMatch[1]);
+                return JSON.parse(jsonMatch[1] || jsonMatch[0]);
             } catch (e2) {
                 return null;
             }
         }
     }
     return null;
+}
+
+export function extractHtmlFromText(text: string): string {
+    // 1. Try to find markdown code block
+    const codeBlockMatch = text.match(/```html\n([\s\S]*?)\n```/);
+    if (codeBlockMatch) {
+        return codeBlockMatch[1];
+    }
+
+    // 2. Try to find DOCTYPE ... </html>
+    const doctypeMatch = text.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
+    if (doctypeMatch) {
+        return doctypeMatch[0];
+    }
+
+    // 3. Try to find <html> ... </html>
+    const htmlMatch = text.match(/<html[\s\S]*<\/html>/i);
+    if (htmlMatch) {
+        return htmlMatch[0];
+    }
+
+    // 4. Fallback: return original text
+    return text;
 }

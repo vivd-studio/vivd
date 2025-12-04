@@ -1,12 +1,9 @@
 export const OPEN_ROUTER_LANDING_PAGE_PROMPT = (text: string, imagesSection: string) => {
-    return `Create a new, modern, beautiful, high-converting landing page for the company described in the text below. 
-
+    return `Create a new, modern, beautiful, fully-fledged, high-converting landing page for the company described in the text below. 
 You will receive a screenshot of the company's current brand, which is probably a little outdated.
-
 Use the attached screenshot for visual context of their current brand, but feel free to improve the design.
-
+Use the best practices of modern web design, for example adding scroll-triggered "appear animations" (e.g., fade-in-up) to elements as they enter the viewport, typical of modern landing pages.
 Put everything inside a single index.html file. 
-
 Output ONLY the raw HTML code for the new index.html file. 
 
 ${imagesSection}
@@ -19,17 +16,12 @@ ${text}
 };
 
 export const LOCAL_AGENT_LANDING_PAGE_PROMPT = (text: string, imagesSection: string) => {
-    return `Create a new, modern, beautiful, high-converting landing page for the company described in the text below. 
-
+    return `Create a new, modern, beautiful, fully-fledged, high-converting landing page for the company described in the text below. 
 You will receive a screenshot of the company's current brand, which is probably a little outdated.
-
 Use the attached screenshot for visual context of their current brand, but feel free to improve the design.
-
+Use the best practices of modern web design, for example adding scroll-triggered "appear animations" (e.g., fade-in-up) to elements as they enter the viewport, typical of modern landing pages.
 The screenshot is at ./screenshot.png
-
 Put everything inside a single index.html file. 
-
-Output ONLY the raw HTML code for the new index.html file. 
 
 ${imagesSection}
 
@@ -71,7 +63,7 @@ export const getImagesSection = (imageList: string, isAnalyzed: boolean) => {
 
 They have not been filtered, so all of them might be good, all of them might be bad or something in between. 
 
-You can use them if they fit the design, but you don't have to. Use the descriptions to choose the images. Keep in mind the resolution of the images.
+You can use them if they fit the design, but you don't have to. Use the descriptions to choose the images. Keep in mind the resolution of the images, and avoid using small images for large spaces.
 
 ${imageList}`;
     } else {

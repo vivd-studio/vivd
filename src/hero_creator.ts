@@ -26,7 +26,7 @@ Instructions:
 3. The hero image should reflect the client's products, brand, or generally important things for that client.
 4. If there are already good product images available in the list above, the prompt should EXPLICITLY ask to combine or feature these core products in a professional composition.
 5. The image should look like a real, high-end professional photo.
-6. DO NOT ask the model to include text, words or logos. The image should be purely visual.
+6. DO NOT ask the model to include text, words or logos. The image should be purely visual. Also try and avoid describing people or faces. Don't explicitly ask to exclude it, just don't mention it at all.
 7. Output ONLY the prompt text, nothing else.
     `.trim();
 

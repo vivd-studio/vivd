@@ -21,7 +21,7 @@ export async function takeHeaderScreenshot(page: Page, outputDir: string): Promi
     await page.screenshot({
         path: headerScreenshotPath,
         fullPage: false,
-        clip: { x: 0, y: 0, width: 1280, height: 500 } // Top 500px
+        clip: { x: 0, y: 0, width: 1280, height: 1080 } // Top 1080px
     });
     return headerScreenshotPath;
 }

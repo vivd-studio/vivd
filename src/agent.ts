@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import execa from 'execa';
 import { log } from './logger';
+import { extractHtmlFromText } from './utils';
 import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL, NAVIGATION_MODEL } from './config';
 import { openai } from './client';
 
@@ -52,8 +53,7 @@ export class OpenRouterAgent implements GenerationAgent {
 
         if (html) {
             const outputPath = path.join(outputDir, 'index.html');
-            // Extract HTML if wrapped in markdown code blocks
-            const cleanHtml = html.replace(/```html/g, '').replace(/```/g, '');
+            const cleanHtml = extractHtmlFromText(html);
             fs.writeFileSync(outputPath, cleanHtml);
             log(`Generated index.html in ${outputDir}`);
         } else {

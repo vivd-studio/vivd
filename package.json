@@ -21,8 +21,13 @@
         "puppeteer-extra-plugin-stealth": "^2.11.2"
     },
     "devDependencies": {
+        "@types/chai": "^5.2.3",
         "@types/image-size": "^0.7.0",
+        "@types/mocha": "^10.0.10",
         "@types/node": "^22.10.1",
+        "chai": "^6.2.1",
+        "mocha": "^11.7.5",
+        "ts-node": "^10.9.2",
         "tslab": "^1.0.22",
         "typescript": "^5.7.2"
     }

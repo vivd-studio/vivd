@@ -6,6 +6,7 @@ import { log } from '../logger';
 import { scrapePage } from './page';
 import { extractNavigationLinks, findLinksMatchingTexts, prioritizeNavigationLinks } from './navigation';
 import { deduplicateImages } from './images';
+import { removeDuplicateContent } from './deduplication';
 import { takeMainPageScreenshot, takeHeaderScreenshot } from './screenshots';
 
 puppeteer.use(StealthPlugin());
@@ -53,8 +54,11 @@ export async function scrapeWebsite(url: string, outputDir: string) {
             log(`Scraping subpage: ${subpageUrl}`);
             const subpageData = await scrapePage(page, subpageUrl, outputDir, false);
 
+            // Deduplicate text against the main page
+            const cleanedText = removeDuplicateContent(mainPageData.text, subpageData.text);
+
             // Add header and text
-            aggregatedText += `## Page: ${subpageUrl}\n\n${subpageData.text}\n\n`;
+            aggregatedText += `## Page: ${subpageUrl}\n\n${cleanedText}\n\n`;
         }
 
         // 5. Save Aggregated Text
