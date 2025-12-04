@@ -60,7 +60,8 @@ Instructions:
 3. The hero image should reflect the client's products, brand, or generally important things for that client.
 4. If there are already good product images available in the list above, the prompt should EXPLICITLY ask to combine or feature these core products in a professional composition.
 5. The image should look like a real, high-end professional photo.
-6. Output ONLY the prompt text, nothing else.
+6. DO NOT ask the model to include text, words or logos. The image should be purely visual.
+7. Output ONLY the prompt text, nothing else.
     `.trim();
 
     const completion = await openai.chat.completions.create({
@@ -226,7 +227,12 @@ export async function createHeroImage(outputDir: string) {
 
     // Step 2: Generate Image
     log('Generating image with OpenRouter...');
-    const imageUrl = await generateImage(heroPrompt, topImages, outputDir);
+    let imageUrl = await generateImage(heroPrompt, topImages, outputDir);
+
+    if (!imageUrl) {
+        log('First attempt failed or returned no image. Retrying image generation...');
+        imageUrl = await generateImage(heroPrompt, topImages, outputDir);
+    }
     
     if (imageUrl) {
         // Step 3: Save

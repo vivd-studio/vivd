@@ -11,8 +11,6 @@ export interface GenerationAgent {
         screenshotPath: string,
         outputDir: string
     ): Promise<void>;
-
-    analyzeNavigation(links: { text: string, url: string }[]): Promise<string[]>;
 }
 
 export class OpenRouterAgent implements GenerationAgent {
@@ -67,58 +65,6 @@ export class OpenRouterAgent implements GenerationAgent {
         }
     }
 
-    async analyzeNavigation(links: { text: string, url: string }[]): Promise<string[]> {
-        if (!OPENROUTER_API_KEY) {
-            log('OPENROUTER_API_KEY is not set, skipping navigation analysis.');
-            return [];
-        }
-
-        const openai = new OpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: OPENROUTER_API_KEY,
-        });
-
-        const prompt = `
-        You are a web scraper helper. I have a list of links from a website's navigation menu.
-        I need to identify the most important subpages to scrape to understand the business better.
-        Prioritize pages like: "About Us", "Team", "Contact", "Services", "Products", "Pricing".
-        Ignore pages like: "Login", "Sign Up", "Terms", "Privacy", "Social Media Links".
-        
-        Return a JSON array of the URLs of the top 3-5 most relevant pages.
-        
-        Links:
-        ${JSON.stringify(links.slice(0, 50), null, 2)}
-        
-        Output JSON only.
-        `;
-
-        try {
-            const completion = await openai.chat.completions.create({
-                model: NAVIGATION_MODEL, // Use a fast model for this
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                response_format: { type: 'json_object' }
-            });
-
-            const content = completion.choices[0].message.content;
-            if (!content) return [];
-
-            const parsed = JSON.parse(content);
-            // Handle if it returns { urls: [...] } or just [...]
-            if (Array.isArray(parsed)) return parsed;
-            if (parsed.urls && Array.isArray(parsed.urls)) return parsed.urls;
-            return [];
-
-        } catch (e) {
-            log(`Error analyzing navigation: ${e}`);
-            return [];
-        }
-    }
-
     private extractContent(content: string | null | any[]): string {
         if (!content) return '';
 
@@ -168,9 +114,4 @@ export class LocalCursorAgent implements GenerationAgent {
         }
     }
 
-    async analyzeNavigation(links: { text: string, url: string }[]): Promise<string[]> {
-        // Local agent doesn't support this yet, fallback to heuristic or empty
-        log('Local agent does not support navigation analysis yet.');
-        return [];
-    }
 }

@@ -71,7 +71,7 @@ export const getImagesSection = (imageList: string, isAnalyzed: boolean) => {
 
 They have not been filtered, so all of them might be good, all of them might be bad or something in between. 
 
-You can use them if they fit the design, but you don't have to. Use the descriptions to choose the images. 
+You can use them if they fit the design, but you don't have to. Use the descriptions to choose the images. Keep in mind the resolution of the images.
 
 ${imageList}`;
     } else {
