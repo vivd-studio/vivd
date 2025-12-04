@@ -12,6 +12,8 @@ Output ONLY the raw HTML code for the new index.html file.
 ${imagesSection}
 
 Current Text on the website: 
+The text below contains content from the main page and potentially several subpages (e.g. About, Contact, Team).
+Use this content to build a comprehensive landing page. You can decide which information is most relevant for the main page.
 ${text} 
 `;
 };
@@ -32,6 +34,8 @@ Output ONLY the raw HTML code for the new index.html file.
 ${imagesSection}
 
 Current Text on the website: 
+The text below contains content from the main page and potentially several subpages (e.g. About, Contact, Team).
+Use this content to build a comprehensive landing page. You can decide which information is most relevant for the main page.
 ${text} 
 `;
 };

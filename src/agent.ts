@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import execa from 'execa';
 import { log } from './logger';
-import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL } from './config';
+import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL, NAVIGATION_MODEL } from './config';
 
 export interface GenerationAgent {
     generate(
@@ -11,6 +11,8 @@ export interface GenerationAgent {
         screenshotPath: string,
         outputDir: string
     ): Promise<void>;
+
+    analyzeNavigation(links: { text: string, url: string }[]): Promise<string[]>;
 }
 
 export class OpenRouterAgent implements GenerationAgent {
@@ -65,9 +67,61 @@ export class OpenRouterAgent implements GenerationAgent {
         }
     }
 
+    async analyzeNavigation(links: { text: string, url: string }[]): Promise<string[]> {
+        if (!OPENROUTER_API_KEY) {
+            log('OPENROUTER_API_KEY is not set, skipping navigation analysis.');
+            return [];
+        }
+
+        const openai = new OpenAI({
+            baseURL: 'https://openrouter.ai/api/v1',
+            apiKey: OPENROUTER_API_KEY,
+        });
+
+        const prompt = `
+        You are a web scraper helper. I have a list of links from a website's navigation menu.
+        I need to identify the most important subpages to scrape to understand the business better.
+        Prioritize pages like: "About Us", "Team", "Contact", "Services", "Products", "Pricing".
+        Ignore pages like: "Login", "Sign Up", "Terms", "Privacy", "Social Media Links".
+        
+        Return a JSON array of the URLs of the top 3-5 most relevant pages.
+        
+        Links:
+        ${JSON.stringify(links.slice(0, 50), null, 2)}
+        
+        Output JSON only.
+        `;
+
+        try {
+            const completion = await openai.chat.completions.create({
+                model: NAVIGATION_MODEL, // Use a fast model for this
+                messages: [
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                response_format: { type: 'json_object' }
+            });
+
+            const content = completion.choices[0].message.content;
+            if (!content) return [];
+
+            const parsed = JSON.parse(content);
+            // Handle if it returns { urls: [...] } or just [...]
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed.urls && Array.isArray(parsed.urls)) return parsed.urls;
+            return [];
+
+        } catch (e) {
+            log(`Error analyzing navigation: ${e}`);
+            return [];
+        }
+    }
+
     private extractContent(content: string | null | any[]): string {
         if (!content) return '';
-        
+
         let contentString = '';
         if (typeof content === 'string') {
             contentString = content;
@@ -112,5 +166,11 @@ export class LocalCursorAgent implements GenerationAgent {
         } catch (error: any) {
             throw new Error(`Local agent process failed: ${error.message}`);
         }
+    }
+
+    async analyzeNavigation(links: { text: string, url: string }[]): Promise<string[]> {
+        // Local agent doesn't support this yet, fallback to heuristic or empty
+        log('Local agent does not support navigation analysis yet.');
+        return [];
     }
 }

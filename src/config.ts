@@ -8,6 +8,7 @@ export const GENERATION_MODEL = 'google/gemini-3-pro-preview';
 export const HERO_GENERATION_MODEL = 'google/gemini-2.5-flash-image-preview';
 export const LOCAL_GENERATION_MODEL = 'gemini-3-pro';
 export const PRIORITIZATION_MODEL = 'google/gemini-2.5-flash';
+export const NAVIGATION_MODEL = 'google/gemini-2.5-flash';
 export const VISION_MODEL = 'google/gemma-3-12b-it:free';
 export const ENABLE_IMAGE_ANALYSIS = true;
 export const USE_LOCAL_AGENT = false;
