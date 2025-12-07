@@ -2,7 +2,7 @@ import { log } from '../logger';
 
 export async function handleCookieBanner(page: any) {
     // Simple heuristic to find and click cookie buttons
-    const terms = ['accept', 'agree', 'allow', 'consent', 'okay', 'i understand', 'akzeptieren', 'zustimmen', 'verstanden'];
+    const terms = ['accept', 'agree', 'allow', 'consent', 'okay', 'i understand', 'akzeptiere', 'zustimmen', 'verstanden'];
     try {
         const buttons = await page.$$('button, a, div[role="button"]');
         for (const button of buttons) {
@@ -32,7 +32,7 @@ export async function handleCookieBanner(page: any) {
             const isBottomOrTop = style.bottom === '0px' || style.top === '0px';
             const hasKeywords = cookieKeywords.some(keyword => el.innerText?.toLowerCase().includes(keyword));
 
-            if (isFixedOrSticky && (isBottomOrTop || hasKeywords)) {
+            if ((isFixedOrSticky || isBottomOrTop) && hasKeywords) {
                 // Check if it's small enough to be a banner (not the whole page)
                 const rect = el.getBoundingClientRect();
                 if (rect.height < window.innerHeight * 0.5) {

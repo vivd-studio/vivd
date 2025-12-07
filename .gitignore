@@ -1,5 +1,5 @@
 .env
 .venv
 node_modules
-generated/
 .DS_Store
+generated/

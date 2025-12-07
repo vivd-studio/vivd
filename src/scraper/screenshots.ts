@@ -5,6 +5,11 @@ import { MAX_SCREENSHOT_HEIGHT } from '../config';
 
 export async function takeMainPageScreenshot(page: Page, outputDir: string): Promise<void> {
     log('Taking screenshot of main page...');
+
+    // Scroll to top and wait for any animations/sticky headers
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await new Promise(r => setTimeout(r, 2000));
+
     const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
     const height = Math.min(bodyHeight, MAX_SCREENSHOT_HEIGHT);
     await page.screenshot({
@@ -17,6 +22,11 @@ export async function takeMainPageScreenshot(page: Page, outputDir: string): Pro
 
 export async function takeHeaderScreenshot(page: Page, outputDir: string): Promise<string> {
     log('Taking screenshot of header for navigation analysis...');
+
+    // Scroll to top and wait for any animations/sticky headers
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await new Promise(r => setTimeout(r, 2000));
+
     const headerScreenshotPath = path.join(outputDir, 'header_screenshot.png');
     await page.screenshot({
         path: headerScreenshotPath,
