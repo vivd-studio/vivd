@@ -24,19 +24,42 @@ export async function processUrl(targetUrl: string) {
     }
 
     // Save project metadata
-    fs.writeFileSync(path.join(outputDir, 'project.json'), JSON.stringify({
+    const projectJsonPath = path.join(outputDir, 'project.json');
+    const projectData = {
         url: targetUrl,
-        createdAt: new Date().toISOString()
-    }, null, 2));
+        createdAt: new Date().toISOString(),
+        status: 'pending'
+    };
+    fs.writeFileSync(projectJsonPath, JSON.stringify(projectData, null, 2));
+
+    const updateStatus = (status: string) => {
+        const currentData = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
+        currentData.status = status;
+        fs.writeFileSync(projectJsonPath, JSON.stringify(currentData, null, 2));
+    };
 
     try {
+        updateStatus('scraping');
         await scrapeWebsite(targetUrl, outputDir);
+
+        updateStatus('analyzing_images');
         await analyzeImages(outputDir);
+
+        updateStatus('creating_hero');
         await createHeroImage(outputDir);
+
+        updateStatus('generating_html');
         await generateLandingPage(outputDir);
+
+        updateStatus('completed');
         return { success: true, outputDir, domainSlug };
     } catch (error) {
         log(`An error occurred: ${error}`);
+        try {
+            updateStatus('failed');
+        } catch (writeError) {
+            console.error('Failed to write failure status to project.json:', writeError);
+        }
         throw error;
     }
 }

@@ -32,6 +32,9 @@ The docker-compose.override.yml file is used to override the docker-compose.yml 
 2. **Analyzes** the content and current brand visual.
 3. **Generates** a new, high-converting landing page (HTML/Tailwind) via OpenRouter API.
 
+We save all the generated and downloaded files from the url in the generated/domain-name folder and also keep a project.json in the root folder, that tracks the url, created_at, status, etc.
+
+
 ## Testing Note
 > [!IMPORTANT]
 > **Do not run tests on every change.**

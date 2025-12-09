@@ -48,7 +48,7 @@ export const projectRouter = router({
 
             // Delete contents
             fs.rmSync(outputDir, { recursive: true, force: true });
-            
+
             // Fire and forget processing
             processUrl(url).then(() => {
                 console.log(`Finished regenerating ${url}`);
@@ -86,7 +86,27 @@ export const projectRouter = router({
             const files = fs.readdirSync(generatedDir, { withFileTypes: true });
             const projects = files
                 .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+                .map(dirent => {
+                    const projectSlug = dirent.name;
+                    const projectJsonPath = path.join(generatedDir, projectSlug, 'project.json');
+                    let status = 'unknown'; // Default for legacy projects
+
+                    if (fs.existsSync(projectJsonPath)) {
+                        try {
+                            const projectData = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
+                            if (projectData.status) {
+                                status = projectData.status;
+                            }
+                        } catch (e) {
+                            console.error(`Error reading metadata for ${projectSlug}`, e);
+                        }
+                    }
+
+                    return {
+                        slug: projectSlug,
+                        status
+                    };
+                });
             return { projects };
         } catch (error) {
             console.error("Failed to list projects:", error);

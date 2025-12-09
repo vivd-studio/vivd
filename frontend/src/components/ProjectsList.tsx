@@ -9,7 +9,9 @@ interface ProjectsListProps {
 }
 
 export function ProjectsList({ onPreview }: ProjectsListProps) {
-    const { data: projectsData, isLoading, error } = trpc.project.list.useQuery()
+    const { data: projectsData, isLoading, error } = trpc.project.list.useQuery(undefined, {
+        refetchInterval: 2000 // Poll every 2 seconds to check status
+    })
     const { mutateAsync: regenerateProject } = trpc.project.regenerate.useMutation()
     const [regenerating, setRegenerating] = useState<string | null>(null)
 
@@ -44,23 +46,40 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
                     <div className="grid gap-2">
                         {projectsData?.projects.map(project => {
                             // Normalize the URL
-                            const previewUrl = `/api/preview/${project}/index.html`
+                            const previewUrl = `/api/preview/${project.slug}/index.html`
+                            const isProcessing = project.status !== 'completed' && project.status !== 'failed' && project.status !== 'unknown'
+                            const isFailed = project.status === 'failed'
+                            const isUnknown = project.status === 'unknown'
 
                             return (
                                 <div
-                                    key={project}
-                                    className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"
-                                    onClick={() => onPreview(previewUrl)}
+                                    key={project.slug}
+                                    className={`flex items-center justify-between p-2 border rounded ${isProcessing ? 'opacity-70 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-50 cursor-pointer'
+                                        }`}
+                                    onClick={() => {
+                                        if (!isProcessing && !isFailed) {
+                                            onPreview(previewUrl)
+                                        }
+                                    }}
                                 >
-                                    <span className="font-medium">{project}</span>
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{project.slug}</span>
+                                        <span className={`text-xs ${isFailed ? 'text-red-500' :
+                                                isProcessing ? 'text-amber-500' :
+                                                    isUnknown ? 'text-slate-500' :
+                                                        'text-green-500'
+                                            } uppercase`}>
+                                            {project.status === 'pending' ? 'Starting...' : project.status.replace('_', ' ')}
+                                        </span>
+                                    </div>
                                     <div className="flex gap-2">
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            disabled={regenerating === project}
-                                            onClick={(e) => handleRegenerate(e, project)}
+                                            disabled={isProcessing || regenerating === project.slug}
+                                            onClick={(e) => handleRegenerate(e, project.slug)}
                                         >
-                                            {regenerating === project ? (
+                                            {regenerating === project.slug ? (
                                                 <RefreshCw className="h-4 w-4 animate-spin" />
                                             ) : (
                                                 <RefreshCw className="h-4 w-4" />
@@ -70,9 +89,12 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
                                         <Button
                                             variant="outline"
                                             size="sm"
+                                            disabled={isProcessing || isFailed}
                                             onClick={(e) => {
                                                 e.stopPropagation()
-                                                window.open(previewUrl, '_blank')
+                                                if (!isProcessing && !isFailed) {
+                                                    window.open(previewUrl, '_blank')
+                                                }
                                             }}
                                         >
                                             Open Page
