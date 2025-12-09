@@ -5,6 +5,7 @@ WORKDIR /app
 # Setup backend types/files availability
 WORKDIR /app/backend
 COPY backend/package*.json ./
+RUN npm install
 COPY backend ./
 
 # Setup frontend
@@ -24,6 +25,7 @@ WORKDIR /app
 # Setup backend for types
 WORKDIR /app/backend
 COPY backend/package*.json ./
+RUN npm install
 COPY backend ./
 
 # Setup frontend
