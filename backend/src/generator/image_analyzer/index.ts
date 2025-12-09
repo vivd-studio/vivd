@@ -2,13 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ENABLE_IMAGE_ANALYSIS } from '../config';
 import { log } from '../logger';
-import { ImageInfo } from './types';
+import type { ImageInfo } from './types';
 import { getImageDimensions } from './utils';
 import { prioritizeImages } from './prioritize';
 import { describeImage } from './describe';
 import { generateImageDescriptionFile } from './report';
 
-export { ImageInfo };
+export type { ImageInfo };
 
 export async function analyzeImages(outputDir: string) {
     const imagesDir = path.join(outputDir, 'images');

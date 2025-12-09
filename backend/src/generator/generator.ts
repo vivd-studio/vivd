@@ -4,11 +4,12 @@ import { log } from './logger';
 import { cleanText } from './utils';
 import { ENABLE_IMAGE_ANALYSIS, USE_LOCAL_AGENT } from './config';
 import { OPEN_ROUTER_LANDING_PAGE_PROMPT, LOCAL_AGENT_LANDING_PAGE_PROMPT, getImagesSection } from './prompts';
-import { OpenRouterAgent, LocalCursorAgent, GenerationAgent } from './agent';
+import { OpenRouterAgent, LocalCursorAgent } from './agent';
+import type { GenerationAgent } from './agent';
 
 export async function generateLandingPage(outputDir: string) {
-    const agent: GenerationAgent = USE_LOCAL_AGENT 
-        ? new LocalCursorAgent() 
+    const agent: GenerationAgent = USE_LOCAL_AGENT
+        ? new LocalCursorAgent()
         : new OpenRouterAgent();
 
     const textPath = path.join(outputDir, 'website_text.txt');
@@ -37,7 +38,7 @@ export async function generateLandingPage(outputDir: string) {
         } else {
             prompt = OPEN_ROUTER_LANDING_PAGE_PROMPT(text, imagesSection);
         }
-        
+
         // The agent is now responsible for creating the files directly
         await agent.generate(prompt, screenshotPath, outputDir);
     } catch (error: any) {

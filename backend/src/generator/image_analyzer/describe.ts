@@ -6,7 +6,7 @@ import { IMAGE_DESCRIPTION_PROMPT } from '../prompts';
 import { openai } from '../client';
 import { parseJsonFromLLM } from '../utils';
 import { convertSvgToPngBuffer } from './utils';
-import { ImageInfo } from './types';
+import type { ImageInfo } from './types';
 
 export async function describeImage(image: ImageInfo, outputDir: string): Promise<{ description: string }> {
     const imagePath = path.join(outputDir, 'images', image.filename);

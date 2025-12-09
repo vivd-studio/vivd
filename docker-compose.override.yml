@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     env_file:
@@ -7,6 +5,8 @@ services:
     environment:
       - NODE_ENV=development
     command: npm run dev
+    volumes:
+      - ./backend/generated:/app/generated
     develop:
       watch:
         - action: sync
@@ -14,11 +14,7 @@ services:
           target: /app
           ignore:
             - node_modules/
-        - action: sync
-          path: ./backend/generated
-          target: /app/generated
-          ignore:
-            - .DS_Store
+            - generated/
         - action: rebuild
           path: ./backend/package.json
 

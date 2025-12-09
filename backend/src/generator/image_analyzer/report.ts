@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { log } from '../logger';
-import { ImageInfo } from './types';
+import type { ImageInfo } from './types';
 
 export function generateImageDescriptionFile(images: ImageInfo[], outputDir: string) {
     let content = 'Image Files Description\n\nImages are in images/ folder.\n\n';

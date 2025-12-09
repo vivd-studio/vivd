@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { admin } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 
@@ -11,6 +12,7 @@ export const auth = betterAuth({
             create: {
                 before: async (user) => {
                     const existingUser = await db.query.user.findFirst();
+                    // first user is admin
                     if (!existingUser) {
                         return {
                             data: {
@@ -19,11 +21,9 @@ export const auth = betterAuth({
                             },
                         };
                     }
-                    // Explicitly set check role is user just in case
                     return {
                         data: {
                             ...user,
-                            role: "user"
                         }
                     };
                 },
@@ -34,4 +34,7 @@ export const auth = betterAuth({
         enabled: true,
     },
     trustedOrigins: [process.env.FRONTEND_URL || "http://localhost:5173"],
+    plugins: [
+        admin()
+    ]
 });

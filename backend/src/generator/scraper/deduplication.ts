@@ -1,4 +1,5 @@
-import { log } from '../logger';
+// Look ahead to see if the match continues
+// (Optimization for extended blocks is handled by next iterations of outer loop)
 
 /**
  * Removes blocks of text from newText that already exist in baseText.
@@ -41,22 +42,8 @@ export function removeDuplicateContent(baseText: string, newText: string, minBlo
                 linesToRemove.add(i + j);
             }
 
-            // Look ahead to see if the match continues
-            let k = minBlockLines;
-            while (i + k < newLines.length) {
-                const nextLine = newLines[i + k].trim();
-                // We need to check if the extended block also exists. 
-                // Actually, if we found a block of 3, and the 4th line also matches in sequence...
-                // The simple approach: just mark the block of 3. The next iteration will check i+1.
-                // But if we mark i, i+1, i+2. Next loop checks i+1... which is already marked.
-                // Optimization: if we found a match, we can try to extend it.
-
-                // Let's stick to the simple sliding window for robustness first.
-                // If lines i..i+2 match, they get marked.
-                // Loop continues to i+1. If i+1..i+3 match, they get marked.
-                // This covers extended blocks.
-                k++;
-            }
+            // Optimization for extended blocks is implicitly handled by the next iterations of the outer loop
+            // as we check every position i. If i matches, i+1 might also match as part of next block check.
         }
     }
 

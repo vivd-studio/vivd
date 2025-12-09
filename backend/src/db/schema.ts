@@ -13,6 +13,9 @@ export const user = pgTable("user", {
         .$onUpdate(() => new Date())
         .notNull(),
     role: text("role").default("user").notNull(),
+    banned: boolean("banned"),
+    banReason: text("ban_reason"),
+    banExpires: timestamp("ban_expires"),
 });
 
 export const session = pgTable(

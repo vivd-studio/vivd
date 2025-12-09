@@ -6,17 +6,19 @@
     "scripts": {
         "dev": "nodemon --exec ts-node src/server.ts",
         "build": "tsc",
-        "start": "node dist/src/server.js",
+        "start": "node dist/server.js",
         "test": "echo \"Error: no test specified\" && exit 1",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
-        "db:generate": "drizzle-kit generate"
+        "db:generate": "drizzle-kit generate",
+        "db:migrate": "ts-node src/db/migrate.ts"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
         "@openrouter/sdk": "^0.2.9",
+        "@trpc/server": "^11.7.2",
         "axios": "^1.13.2",
         "better-auth": "^1.4.6",
         "cors": "^2.8.5",

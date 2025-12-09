@@ -32,10 +32,14 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@backend/*": [
+        "../backend/src/*"
       ]
     }
   },
   "include": [
-    "src"
+    "src",
+    "../backend/src"
   ]
 }

@@ -1,7 +1,7 @@
-import { OPENROUTER_API_KEY, PRIORITIZATION_MODEL } from '../config';
+import { PRIORITIZATION_MODEL } from '../config';
 import { log } from '../logger';
 import { IMAGE_PRIORITIZATION_PROMPT } from '../prompts';
-import { ImageInfo } from './types';
+import type { ImageInfo } from './types';
 import { openai } from '../client';
 import { parseJsonFromLLM } from '../utils';
 

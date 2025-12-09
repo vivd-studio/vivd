@@ -31,7 +31,7 @@ export function deduplicateImages(outputDir: string) {
     let removedCount = 0;
 
     // Check for duplicates within groups based on file size
-    for (const [canonicalName, groupFiles] of groups) {
+    for (const [_, groupFiles] of groups) {
         if (groupFiles.length < 2) continue;
 
         const sizeGroups = new Map<number, string[]>();
@@ -50,7 +50,7 @@ export function deduplicateImages(outputDir: string) {
         }
 
         // Remove duplicates within size groups
-        for (const [size, filesWithSize] of sizeGroups) {
+        for (const [_, filesWithSize] of sizeGroups) {
             if (filesWithSize.length > 1) {
                 // Sort to keep the one with the shortest name (likely the original without suffix, or smallest suffix)
                 filesWithSize.sort((a, b) => a.length - b.length || a.localeCompare(b));

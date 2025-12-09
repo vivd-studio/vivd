@@ -36,6 +36,7 @@ export async function scrapePage(page: any, url: string, outputDir: string, isMa
     log(`Extracted ${text.length} characters of text from ${frames.length} frames.`);
 
     // Get Images
+    type ImageInfo = { url: string; area: number };
     const images = await page.evaluate(() => {
         return Array.from(document.images)
             .map(img => {
@@ -58,7 +59,7 @@ export async function scrapePage(page: any, url: string, outputDir: string, isMa
                 };
             })
             .filter(item => item.url.startsWith('http'));
-    });
+    }) as ImageInfo[];
 
     // Sort by area descending (largest first) to prioritize content images over small icons if limit is reached
     images.sort((a, b) => b.area - a.area);

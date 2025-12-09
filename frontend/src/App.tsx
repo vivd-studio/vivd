@@ -2,24 +2,15 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
 import Signup from "./pages/Signup"
+import Admin from "./pages/Admin"
+import { Layout } from "@/components/Layout"
 import { authClient } from "@/lib/auth-client"
-import { useQuery } from "@tanstack/react-query"
-import { getApiHasUsers } from "@/client/sdk.gen"
-
+import { trpc } from '@/lib/trpc';
+// ...
 export default function App() {
   const { data: session, isPending: isSessionPending } = authClient.useSession()
 
-  const { data: hasUsersData, isLoading: isHasUsersLoading, isError, error } = useQuery({
-    queryKey: ['hasUsers'],
-    queryFn: async () => {
-      try {
-        const { data } = await getApiHasUsers()
-        return data
-      } catch (err) {
-        throw err
-      }
-    }
-  })
+  const { data: hasUsersData, isLoading: isHasUsersLoading, isError, error } = trpc.user.hasUsers.useQuery()
 
   if (isSessionPending || isHasUsersLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>
 
@@ -44,17 +35,24 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-        <Route path="/" element={session ? <Dashboard /> : <Navigate to="/login" />} />
-        {/* If users exist but user manually goes to signup, maybe allow or redirect? 
-            For this specific "first time setup" requirement, maybe getting to signup is restricted? 
-            But better-auth handles auth. 
-            If user created, hasUsers is true. 
-            So this block won't render. 
-            If they want to add more users, better-auth doesn't have a default signup page unless we expose it.
-            But the user asked for "When the app starts first time we will see a signup window".
-            So subsequent signups might be hidden or manual?
-            I'll just leave it as is: redirect to login if users exist.
-        */}
+        <Route path="/admin" element={
+          session?.user?.role === "admin" ? (
+            <Layout>
+              <Admin />
+            </Layout>
+          ) : (
+            <Navigate to="/" />
+          )
+        } />
+        <Route path="/" element={
+          session ? (
+            <Layout>
+              <Dashboard />
+            </Layout>
+          ) : (
+            <Navigate to="/login" />
+          )
+        } />
       </Routes>
     </BrowserRouter>
   )

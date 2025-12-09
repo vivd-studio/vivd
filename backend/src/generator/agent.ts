@@ -3,7 +3,7 @@ import * as path from 'path';
 import { execa } from 'execa';
 import { log } from './logger';
 import { extractHtmlFromText } from './utils';
-import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL, NAVIGATION_MODEL } from './config';
+import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL } from './config';
 import { openai } from './client';
 
 export interface GenerationAgent {
@@ -58,7 +58,7 @@ export class OpenRouterAgent implements GenerationAgent {
             fs.writeFileSync(outputPath, cleanHtml);
             log(`Generated index.html in ${outputDir}`);
         } else {
-            log(completion.choices[0].message.content);
+            log(completion.choices[0].message.content || '');
             log('No content generated from OpenRouter');
         }
     }
@@ -80,7 +80,7 @@ export class OpenRouterAgent implements GenerationAgent {
 }
 
 export class LocalCursorAgent implements GenerationAgent {
-    async generate(prompt: string, screenshotPath: string, outputDir: string): Promise<void> {
+    async generate(prompt: string, _screenshotPath: string, outputDir: string): Promise<void> {
         log(`Executing local agent: ${LOCAL_AGENT_COMMAND}`);
 
         try {
