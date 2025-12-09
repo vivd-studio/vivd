@@ -1,0 +1,53 @@
+{
+    "name": "landing-page-agent",
+    "version": "1.0.0",
+    "description": "An agent to scrape websites and generate landing pages.",
+    "main": "index.js",
+    "scripts": {
+        "dev": "nodemon --exec ts-node src/server.ts",
+        "build": "tsc",
+        "start": "node dist/src/server.js",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "db:push": "drizzle-kit push",
+        "db:studio": "drizzle-kit studio",
+        "db:generate": "drizzle-kit generate"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@openrouter/sdk": "^0.2.9",
+        "axios": "^1.13.2",
+        "better-auth": "^1.4.6",
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.3",
+        "drizzle-orm": "^0.45.0",
+        "execa": "^9.6.1",
+        "express": "^5.2.1",
+        "image-size": "^2.0.2",
+        "openai": "^6.10.0",
+        "pg": "^8.16.3",
+        "puppeteer": "^24.32.1",
+        "puppeteer-extra": "^3.3.6",
+        "puppeteer-extra-plugin-stealth": "^2.11.2",
+        "zod": "^4.1.13"
+    },
+    "devDependencies": {
+        "@types/chai": "^5.2.3",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
+        "@types/image-size": "^0.8.0",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^24.10.2",
+        "@types/pg": "^8.15.6",
+        "@types/sharp": "^0.32.0",
+        "chai": "^6.2.1",
+        "drizzle-kit": "^0.31.8",
+        "mocha": "^11.7.5",
+        "nodemon": "^3.1.11",
+        "sharp": "^0.34.5",
+        "ts-node": "^10.9.2",
+        "tslab": "^1.0.22",
+        "typescript": "^5.9.3"
+    }
+}

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./backend/generated
+          target: /app/generated
+          ignore:
+            - .DS_Store
+        - action: rebuild
+          path: ./backend/package.json
+
+  frontend:
+    env_file:
+      - .env
+    command: npm run dev -- --host
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app
+          ignore:
+            - node_modules/
+        - action: rebuild
+          path: ./frontend/package.json
