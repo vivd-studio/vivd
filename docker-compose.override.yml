@@ -34,7 +34,7 @@ services:
       watch:
         - action: sync
           path: ./frontend
-          target: /app
+          target: /app/frontend
           ignore:
             - node_modules/
             - dist/

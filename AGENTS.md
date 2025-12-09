@@ -23,8 +23,8 @@ The backend is a Node.js application that provides an API for interacting with t
 
 # Deployment & Development
 
-We are using the docker-compose.yml file to deploy all of our services (backend, frontend, database) so this file needs to be ready to deploy.
-The docker-compose.override.yml file is used to override the docker-compose.yml file for local development.
+We are using the docker-compose.yml file to deploy all of our services (backend, frontend, database) so this file needs to be ready to deploy. (PROD)
+The docker-compose.override.yml file is used to override the docker-compose.yml file for local development. (DEV)
 
 
 ## How it works
