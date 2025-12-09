@@ -1,5 +1,4 @@
 import { authClient } from "@/lib/auth-client"
-import { useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +7,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { trpc } from "@/lib/trpc"
 
 const signupSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -18,7 +18,7 @@ const signupSchema = z.object({
 type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function Signup() {
-    const queryClient = useQueryClient()
+    const utils = trpc.useUtils()
     const navigate = useNavigate()
     const form = useForm<SignupFormValues>({
         resolver: zodResolver(signupSchema),
@@ -35,8 +35,8 @@ export default function Signup() {
             password: data.password,
             name: data.name,
         }, {
-            onSuccess: () => {
-                queryClient.invalidateQueries({ queryKey: ['hasUsers'] })
+            onSuccess: async () => {
+                await utils.user.hasUsers.invalidate()
                 navigate("/")
             },
             onError: (ctx) => {
