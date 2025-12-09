@@ -19,10 +19,21 @@ export async function scrapePage(page: any, url: string, outputDir: string, isMa
     log('Scrolling...');
     await autoScroll(page);
 
-    // Get Text
-    const text = await page.evaluate(() => document.body.innerText);
+    // Get Text from all frames
+    let text = "";
+    const frames = page.frames();
+    for (const frame of frames) {
+        try {
+            const frameText = await frame.evaluate(() => document.body.innerText);
+            if (frameText) {
+                text += frameText + "\n";
+            }
+        } catch (e) {
+            // Ignore cross-origin frame errors or empty frames
+        }
+    }
     const cleanedText = cleanText(text);
-    log(`Extracted ${text.length} characters of text.`);
+    log(`Extracted ${text.length} characters of text from ${frames.length} frames.`);
 
     // Get Images
     const images = await page.evaluate(() => {

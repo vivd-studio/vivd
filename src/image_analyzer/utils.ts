@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import sharp from 'sharp';
 import sizeOf from 'image-size';
 import { log } from '../logger';
 
@@ -34,4 +35,15 @@ export function getTopImages(outputDir: string): string[] {
     return fs.readdirSync(imagesDir)
         .filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
         .slice(0, 5);
+}
+
+export async function convertSvgToPngBuffer(filepath: string): Promise<Buffer | null> {
+    try {
+        return await sharp(filepath)
+            .png()
+            .toBuffer();
+    } catch (e) {
+        log(`Failed to convert SVG to PNG buffer: ${filepath}. Error: ${e}`);
+        return null;
+    }
 }

@@ -70,8 +70,9 @@ export async function analyzeImages(outputDir: string) {
 
     if (ENABLE_IMAGE_ANALYSIS) {
         // 1. Prioritize
-        const topImageNames = await prioritizeImages(validImages);
-        log(`Prioritized ${topImageNames.length} images.`);
+        const prioritizedImages = await prioritizeImages(validImages);
+        const topImageNames = prioritizedImages.slice(0, 20);
+        log(`Prioritized ${prioritizedImages.length} images. Analyzing top ${topImageNames.length}.`);
 
         // 2. Describe top images
         for (const img of validImages) {

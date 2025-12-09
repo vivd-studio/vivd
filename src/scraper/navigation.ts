@@ -121,64 +121,78 @@ export async function prioritizeNavigationLinks(links: { text: string, url: stri
 export async function findLinksMatchingTexts(page: any, texts: string[]): Promise<string[]> {
     log(`Searching for links matching ${texts.length} terms...`);
 
-    return await page.evaluate((texts: string[]) => {
-        const links = Array.from(document.querySelectorAll('a'));
-        const foundUrls = new Set<string>();
-        const lowerTexts = texts.map(t => t.toLowerCase());
+    const frames = page.frames();
+    const allFoundUrls = new Set<string>();
 
-        for (const a of links) {
-            let match = false;
+    for (const frame of frames) {
+        try {
+            const frameUrls = await frame.evaluate((texts: string[]) => {
+                const links = Array.from(document.querySelectorAll('a'));
+                const foundUrls = new Set<string>();
+                const lowerTexts = texts.map(t => t.trim().toLowerCase());
 
-            // 1. Check innerText
-            const text = a.innerText?.trim().toLowerCase();
-            if (text && lowerTexts.some(t => text.includes(t))) {
-                match = true;
-            }
+                for (const a of links) {
+                    let match = false;
 
-            // 2. Check ID
-            if (!match && a.id) {
-                const id = a.id.toLowerCase();
-                if (lowerTexts.some(t => id.includes(t))) {
-                    match = true;
-                }
-            }
+                    // 1. Check innerText
+                    // Normalize whitespace (replace newlines/tabs with space) and trim
+                    const text = a.innerText?.toLowerCase().replace(/\s+/g, ' ').trim();
 
-            // 3. Check Image children
-            if (!match) {
-                const img = a.querySelector('img');
-                if (img) {
-                    // Check alt
-                    if (img.alt && lowerTexts.some(t => img.alt.toLowerCase().includes(t))) {
+                    if (text && lowerTexts.some(t => text.includes(t))) {
                         match = true;
                     }
-                    // Check id
-                    if (!match && img.id && lowerTexts.some(t => img.id.toLowerCase().includes(t))) {
-                        match = true;
-                    }
-                    // Check name
-                    if (!match && img.name && lowerTexts.some(t => img.name.toLowerCase().includes(t))) {
-                        match = true;
-                    }
-                }
-            }
 
-            if (match) {
-                // Resolve URL
-                let url = a.href;
-                const hrefAttr = a.getAttribute('href');
-                if (hrefAttr && !hrefAttr.startsWith('http') && !hrefAttr.startsWith('//') && !hrefAttr.startsWith('javascript:') && !hrefAttr.startsWith('mailto:') && !hrefAttr.startsWith('tel:') && !hrefAttr.startsWith('#')) {
-                    try {
-                        url = new URL(hrefAttr, window.location.href).href;
-                    } catch (e) {
-                        // Keep original
+                    // 2. Check ID
+                    if (!match && a.id) {
+                        const id = a.id.toLowerCase();
+                        if (lowerTexts.some(t => id.includes(t))) {
+                            match = true;
+                        }
+                    }
+
+                    // 3. Check Image children
+                    if (!match) {
+                        const img = a.querySelector('img');
+                        if (img) {
+                            // Check alt
+                            if (img.alt && lowerTexts.some(t => img.alt.toLowerCase().includes(t))) {
+                                match = true;
+                            }
+                            // Check id
+                            if (!match && img.id && lowerTexts.some(t => img.id.toLowerCase().includes(t))) {
+                                match = true;
+                            }
+                            // Check name
+                            if (!match && img.name && lowerTexts.some(t => img.name.toLowerCase().includes(t))) {
+                                match = true;
+                            }
+                        }
+                    }
+
+                    if (match) {
+                        // Resolve URL
+                        let url = a.href;
+                        const hrefAttr = a.getAttribute('href');
+                        if (hrefAttr && !hrefAttr.startsWith('http') && !hrefAttr.startsWith('//') && !hrefAttr.startsWith('javascript:') && !hrefAttr.startsWith('mailto:') && !hrefAttr.startsWith('tel:') && !hrefAttr.startsWith('#')) {
+                            try {
+                                url = new URL(hrefAttr, window.location.href).href;
+                            } catch (e) {
+                                // Keep original
+                            }
+                        }
+
+                        if (url && url.startsWith('http')) {
+                            foundUrls.add(url);
+                        }
                     }
                 }
+                return Array.from(foundUrls);
+            }, texts);
 
-                if (url && url.startsWith('http')) {
-                    foundUrls.add(url);
-                }
-            }
+            frameUrls.forEach((url: string) => allFoundUrls.add(url));
+        } catch (e) {
+            // Ignore frame errors
         }
-        return Array.from(foundUrls);
-    }, texts);
+    }
+    return Array.from(allFoundUrls);
 }

@@ -41,6 +41,6 @@ export async function prioritizeImages(images: ImageInfo[]): Promise<string[]> {
 
     } catch (e) {
         log(`Error prioritizing images: ${e} `);
-        return images.slice(0, 20).map(img => img.filename); // Fallback
+        return images.map(img => img.filename); // Fallback: return all in original order
     }
 }

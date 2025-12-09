@@ -45,7 +45,8 @@ export class OpenRouterAgent implements GenerationAgent {
                         }
                     ]
                 }
-            ]
+            ],
+            reasoning_effort: 'high',
         });
 
         const content = completion.choices[0].message.content;
@@ -57,6 +58,7 @@ export class OpenRouterAgent implements GenerationAgent {
             fs.writeFileSync(outputPath, cleanHtml);
             log(`Generated index.html in ${outputDir}`);
         } else {
+            log(completion.choices[0].message.content);
             log('No content generated from OpenRouter');
         }
     }
