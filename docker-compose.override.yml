@@ -1,27 +1,35 @@
 services:
   backend:
+    build:
+      target: dev
     env_file:
       - .env
     environment:
       - NODE_ENV=development
-    command: npm run dev
     volumes:
       - ./backend/generated:/app/generated
     develop:
       watch:
         - action: sync
-          path: ./backend
-          target: /app
+          path: ./backend/src
+          target: /app/src
           ignore:
             - node_modules/
+            - dist/
             - generated/
         - action: rebuild
           path: ./backend/package.json
+    command: npm run dev
 
   frontend:
-    env_file:
-      - .env
+    build:
+      target: dev
+    ports:
+      - "5173:5173"
     command: npm run dev -- --host
+    environment:
+      - NODE_ENV=development
+      - VITE_API_PROXY_TARGET=http://backend:3000
     develop:
       watch:
         - action: sync
@@ -29,5 +37,6 @@ services:
           target: /app
           ignore:
             - node_modules/
+            - dist/
         - action: rebuild
           path: ./frontend/package.json

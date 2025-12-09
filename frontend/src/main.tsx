@@ -12,7 +12,7 @@ function Root() {
     trpc.createClient({
       links: [
         httpBatchLink({
-          url: import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/trpc` : "http://localhost:3000/trpc",
+          url: "/api/trpc",
           async headers() {
             return {};
           },

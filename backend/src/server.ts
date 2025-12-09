@@ -21,19 +21,19 @@ app.use(express.json());
 app.all("/api/auth/*path", toNodeHandler(auth));
 
 // Static files
-app.use('/generated', express.static(path.join(__dirname, '../generated')));
-app.use('/preview', express.static(path.join(__dirname, '../generated')));
+app.use('/api/generated', express.static(path.join(__dirname, '../generated')));
+app.use('/api/preview', express.static(path.join(__dirname, '../generated')));
 
 // tRPC
 app.use(
-    '/trpc',
+    '/api/trpc',
     createExpressMiddleware({
         router: appRouter,
         createContext,
     }),
 );
 
-app.get('/health', (_req, res) => {
+app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
 });
 

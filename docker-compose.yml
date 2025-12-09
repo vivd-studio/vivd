@@ -1,20 +1,23 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: prod
     ports:
       - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - PORT=3000
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    volumes:
+      - backend_data:/app/generated
     depends_on:
       - postgres
 
   frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:3000
+    build:
+      context: ./frontend
+      target: prod
     depends_on:
       - backend
 
@@ -31,3 +34,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_data:

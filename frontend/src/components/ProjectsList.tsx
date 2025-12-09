@@ -1,7 +1,12 @@
 import { trpc } from "@/lib/trpc"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 
-export function ProjectsList() {
+interface ProjectsListProps {
+    onPreview: (url: string) => void
+}
+
+export function ProjectsList({ onPreview }: ProjectsListProps) {
     const { data: projectsData, isLoading, error } = trpc.project.list.useQuery()
 
     if (isLoading) return <div className="mt-8">Loading projects...</div>
@@ -18,18 +23,26 @@ export function ProjectsList() {
                 ) : (
                     <div className="grid gap-2">
                         {projectsData?.projects.map(project => {
-                            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+                            // Normalize the URL
+                            const previewUrl = `/api/preview/${project}/index.html`
+
                             return (
-                                <div key={project} className="flex items-center justify-between p-2 border rounded hover:bg-slate-50">
+                                <div
+                                    key={project}
+                                    className="flex items-center justify-between p-2 border rounded hover:bg-slate-50 cursor-pointer"
+                                    onClick={() => onPreview(previewUrl)}
+                                >
                                     <span className="font-medium">{project}</span>
-                                    <a
-                                        href={`${baseUrl}/preview/${project}/index.html`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-blue-500 hover:underline"
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            window.open(previewUrl, '_blank')
+                                        }}
                                     >
-                                        View
-                                    </a>
+                                        Open Page
+                                    </Button>
                                 </div>
                             )
                         })}

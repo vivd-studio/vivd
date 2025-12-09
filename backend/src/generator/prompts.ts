@@ -4,6 +4,7 @@ You will receive a screenshot of the company's current website, which is probabl
 Use the attached screenshot for visual context of their current brand. 
 Think about how to improve the current design, colors, typography, effects, and layout. Use subtle appear animations on scroll. Keep it professional and fitting for the company.
 Think about the vibe and artstyle of the website, should it be modern, professional, playful, minimal, sleek, scandinavian, artsy, neo-brutalism, neon, dark, light, etc.
+Don't make the Headline text over the hero image too cringe - if there is something catchy on the page already, take that otherwise keep it professional.
 Use the current text to build a comprehensive landing page. Think about which information is most relevant for the main page and where the information should be placed.
 Put everything inside a single index.html file. 
 Output ONLY the raw HTML code for the new index.html file. 
@@ -22,6 +23,7 @@ export const LOCAL_AGENT_LANDING_PAGE_PROMPT = (text: string, imagesSection: str
 You will receive a screenshot of the company's current brand, which is probably a little outdated.
 Use the attached screenshot for visual context of their current brand. Think about how to improve the current design, colors, typography, and layout.
 Use the best practices of modern web design, for example adding scroll-triggered "appear animations" (e.g., fade-in-up) to elements as they enter the viewport, typical of modern landing pages.
+Don't make the Headline text over the hero image too cringe - if there is something catchy on the page already, take that otherwise keep it professional.
 The screenshot is at ./screenshot.png
 Put everything inside a single index.html file. 
 
