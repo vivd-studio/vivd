@@ -1,14 +1,12 @@
+import './init-env';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { auth } from './auth';
 import { appRouter } from './routers/appRouter';
 import { createContext } from './trpc';
-
-dotenv.config({ path: path.resolve(__dirname, '../../.env') }); // Adjust path if needed
 
 const app = express();
 const PORT = process.env.PORT || 3000;

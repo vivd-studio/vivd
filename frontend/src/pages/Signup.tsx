@@ -1,31 +1,46 @@
-import { useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useNavigate } from "react-router-dom"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+
+const signupSchema = z.object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+})
+
+type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function Signup() {
-    const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
-    const [name, setName] = useState("Admin")
     const queryClient = useQueryClient()
     const navigate = useNavigate()
+    const form = useForm<SignupFormValues>({
+        resolver: zodResolver(signupSchema),
+        defaultValues: {
+            name: "Admin",
+            email: "",
+            password: "",
+        },
+    })
 
-    const handleSignup = async () => {
+    const handleSignup = async (data: SignupFormValues) => {
         await authClient.signUp.email({
-            email,
-            password,
-            name,
+            email: data.email,
+            password: data.password,
+            name: data.name,
         }, {
             onSuccess: () => {
                 queryClient.invalidateQueries({ queryKey: ['hasUsers'] })
                 navigate("/")
             },
             onError: (ctx) => {
-                alert(ctx.error.message)
+                form.setError("root", { message: ctx.error.message })
             }
         })
     }
@@ -37,22 +52,60 @@ export default function Signup() {
                     <CardTitle className="text-2xl">First Time Setup</CardTitle>
                     <p className="text-sm text-gray-500">Create your admin account</p>
                 </CardHeader>
-                <CardContent className="grid gap-4">
-                    <div className="grid gap-2">
-                        <Label htmlFor="name">Name</Label>
-                        <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="email">Email</Label>
-                        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="password">Password</Label>
-                        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                    </div>
-                    <Button onClick={handleSignup} className="w-full">
-                        Create Admin Account
-                    </Button>
+                <CardContent>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(handleSignup)} className="grid gap-4">
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Name</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Admin" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="email"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Email</FormLabel>
+                                        <FormControl>
+                                            <Input type="email" placeholder="admin@example.com" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {form.formState.errors.root && (
+                                <p className="text-sm font-medium text-destructive">
+                                    {form.formState.errors.root.message}
+                                </p>
+                            )}
+
+                            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting ? "Creating Account..." : "Create Admin Account"}
+                            </Button>
+                        </form>
+                    </Form>
                 </CardContent>
             </Card>
         </div>

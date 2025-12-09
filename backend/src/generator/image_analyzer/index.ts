@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ENABLE_IMAGE_ANALYSIS } from '../config';
+import { ENABLE_IMAGE_ANALYSIS, MAX_IMAGES_TO_ANALYZE } from '../config';
 import { log } from '../logger';
 import type { ImageInfo } from './types';
 import { getImageDimensions } from './utils';
@@ -71,11 +71,11 @@ export async function analyzeImages(outputDir: string) {
     if (ENABLE_IMAGE_ANALYSIS) {
         // 1. Prioritize
         const prioritizedImages = await prioritizeImages(validImages);
-        const topImageNames = prioritizedImages.slice(0, 20);
+        const topImageNames = prioritizedImages.slice(0, MAX_IMAGES_TO_ANALYZE);
         log(`Prioritized ${prioritizedImages.length} images. Analyzing top ${topImageNames.length}.`);
 
         // 2. Describe top images
-        for (const img of validImages) {
+        const analysisPromises = validImages.map(async (img) => {
             const priorityIndex = topImageNames.indexOf(img.filename);
             if (priorityIndex !== -1) {
                 log(`Analyzing ${img.filename}...`);
@@ -84,7 +84,9 @@ export async function analyzeImages(outputDir: string) {
                 img.priorityIndex = priorityIndex;
                 img.analyzed = true;
             }
-        }
+        });
+
+        await Promise.all(analysisPromises);
     } else {
         log('Image analysis disabled via config.');
     }

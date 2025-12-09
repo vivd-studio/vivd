@@ -25,41 +25,64 @@ export class OpenRouterAgent implements GenerationAgent {
         const screenshotBase64 = screenshotBuffer.toString('base64');
 
         log('Sending request to OpenRouter...');
-        log(`Prompt sent to agent: \n${prompt}`);
 
-        const completion = await openai.chat.completions.create({
-            model: GENERATION_MODEL,
-            messages: [
-                {
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'text',
-                            text: prompt
-                        },
-                        {
-                            type: 'image_url',
-                            image_url: {
-                                url: `data:image/png;base64,${screenshotBase64}`
-                            }
-                        }
-                    ]
+
+        let attempts = 0;
+        const maxRetries = 1;
+
+        while (attempts <= maxRetries) {
+            attempts++;
+            try {
+                if (attempts > 1) {
+                    log(`Attempt ${attempts}/${maxRetries + 1}: Retrying generation...`);
                 }
-            ],
-            reasoning_effort: 'high',
-        });
 
-        const content = completion.choices[0].message.content;
-        const html = this.extractContent(content);
+                const completion = await openai.chat.completions.create({
+                    model: GENERATION_MODEL,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: prompt
+                                },
+                                {
+                                    type: 'image_url',
+                                    image_url: {
+                                        url: `data:image/png;base64,${screenshotBase64}`
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    reasoning_effort: 'high',
+                });
 
-        if (html) {
-            const outputPath = path.join(outputDir, 'index.html');
-            const cleanHtml = extractHtmlFromText(html);
-            fs.writeFileSync(outputPath, cleanHtml);
-            log(`Generated index.html in ${outputDir}`);
-        } else {
-            log(completion.choices[0].message.content || '');
-            log('No content generated from OpenRouter');
+                const content = completion.choices[0].message.content;
+                const html = this.extractContent(content);
+
+                if (html) {
+                    const outputPath = path.join(outputDir, 'index.html');
+                    const cleanHtml = extractHtmlFromText(html);
+                    fs.writeFileSync(outputPath, cleanHtml);
+                    log(`Generated index.html in ${outputDir}`);
+                    return; // Success, exit the loop
+                } else {
+                    log(`Warning: No HTML content extracted from response on attempt ${attempts}`);
+                    log(`Full response content: ${content}`);
+                    log(`Full completion object: ${JSON.stringify(completion, null, 2)}`);
+
+                    if (attempts > maxRetries) {
+                        log('Error: No content generated from OpenRouter after all retries');
+                    }
+                }
+            } catch (error) {
+                log(`Error during generation attempt ${attempts}: ${error}`);
+                if (attempts > maxRetries) {
+                    throw error;
+                }
+            }
         }
     }
 
@@ -90,7 +113,7 @@ export class LocalCursorAgent implements GenerationAgent {
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 
-            log(`Prompt sent to agent: \n${prompt}`);
+
 
             if (subprocess.stdin) {
                 subprocess.stdin.write(prompt);

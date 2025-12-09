@@ -8,6 +8,8 @@ The frontend is a React with Vite application that provides a user interface for
 
 - The client is generated with hey-api.
 - Try to use shadcn components if possible.
+- use react-hook-form for forms
+- use tailwind for styling
 
 # Backend
 

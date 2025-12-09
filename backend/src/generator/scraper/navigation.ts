@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { log } from '../logger';
-import { OPENROUTER_API_KEY, NAVIGATION_MODEL } from '../config';
+import { OPENROUTER_API_KEY, NAVIGATION_MODEL, MAX_SCRAPE_SUBPAGES } from '../config';
 import { openai } from '../client';
 import { parseJsonFromLLM } from '../utils';
 
@@ -76,17 +76,17 @@ export async function extractNavigationLinks(screenshotPath: string): Promise<st
 export async function prioritizeNavigationLinks(links: { text: string, url: string }[]): Promise<string[]> {
     if (!OPENROUTER_API_KEY) {
         log('OPENROUTER_API_KEY is not set, skipping prioritization.');
-        return links.slice(0, 6).map(l => l.url);
+        return links.slice(0, MAX_SCRAPE_SUBPAGES).map(l => l.url);
     }
 
 
     const prompt = `
     You are a web scraper helper. I have a list of links found on a website's navigation menu.
-    I need to identify the top 6 most important subpages to scrape to understand the business and its offerings.
+    I need to identify the top ${MAX_SCRAPE_SUBPAGES} most important subpages to scrape to understand the business and its offerings.
     
     Ignore pages like: "Login", "Sign Up", "Terms", "Privacy", "Social Media Links", "Forgot Password".
     
-    Return a JSON array of the URLs of the top 6 most relevant pages.
+    Return a JSON array of the URLs of the top ${MAX_SCRAPE_SUBPAGES} most relevant pages.
     
     Links:
     ${JSON.stringify(links, null, 2)}
@@ -102,7 +102,7 @@ export async function prioritizeNavigationLinks(links: { text: string, url: stri
         });
 
         const content = completion.choices[0].message.content;
-        if (!content) return links.slice(0, 6).map(l => l.url);
+        if (!content) return links.slice(0, MAX_SCRAPE_SUBPAGES).map(l => l.url);
 
         const parsed = parseJsonFromLLM(content);
 
@@ -110,11 +110,11 @@ export async function prioritizeNavigationLinks(links: { text: string, url: stri
         if (parsed && Array.isArray(parsed.urls)) return parsed.urls;
         if (parsed && Array.isArray(parsed.links)) return parsed.links;
 
-        return links.slice(0, 6).map(l => l.url);
+        return links.slice(0, MAX_SCRAPE_SUBPAGES).map(l => l.url);
 
     } catch (e) {
         log(`Error prioritizing links: ${e}`);
-        return links.slice(0, 6).map(l => l.url);
+        return links.slice(0, MAX_SCRAPE_SUBPAGES).map(l => l.url);
     }
 }
 

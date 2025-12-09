@@ -1,12 +1,21 @@
-
 import { authClient } from "@/lib/auth-client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { useState } from "react"
 import { Shield, UserPlus, Loader2, AlertCircle } from "lucide-react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 
 interface User {
@@ -17,11 +26,29 @@ interface User {
     createdAt: string
 }
 
+const addUserSchema = z.object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    role: z.enum(["user", "admin"]),
+})
+
+type AddUserFormValues = z.infer<typeof addUserSchema>
+
 export default function Admin() {
     const [isAddUserOpen, setIsAddUserOpen] = useState(false)
-    const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "user" })
     const [error, setError] = useState("")
     const queryClient = useQueryClient()
+
+    const form = useForm<AddUserFormValues>({
+        resolver: zodResolver(addUserSchema),
+        defaultValues: {
+            name: "",
+            email: "",
+            password: "",
+            role: "user",
+        },
+    })
 
     const { data: users, isLoading, error: fetchError } = useQuery<User[]>({
         queryKey: ['admin-users'],
@@ -37,19 +64,19 @@ export default function Admin() {
     })
 
     const addUserMutation = useMutation({
-        mutationFn: async () => {
+        mutationFn: async (data: AddUserFormValues) => {
             const res = await authClient.admin.createUser({
-                name: newUser.name,
-                email: newUser.email,
-                password: newUser.password,
-                role: newUser.role as "user" | "admin"
+                name: data.name,
+                email: data.email,
+                password: data.password,
+                role: data.role
             })
             if (res.error) throw res.error
             return res.data
         },
         onSuccess: () => {
             setIsAddUserOpen(false)
-            setNewUser({ name: "", email: "", password: "", role: "user" })
+            form.reset()
             setError("")
             queryClient.invalidateQueries({ queryKey: ['admin-users'] })
         },
@@ -58,13 +85,9 @@ export default function Admin() {
         }
     })
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!newUser.name || !newUser.email || !newUser.password) {
-            setError("Please fill in all fields")
-            return
-        }
-        addUserMutation.mutate()
+    const onSubmit = (data: AddUserFormValues) => {
+        setError("")
+        addUserMutation.mutate(data)
     }
 
     if (isLoading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin h-8 w-8 text-blue-600" /></div>
@@ -89,61 +112,82 @@ export default function Admin() {
                         <CardTitle>Add New User</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="name">Name</Label>
-                                    <Input
-                                        id="name"
-                                        value={newUser.name}
-                                        onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                                        placeholder="John Doe"
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="name"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Name</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="John Doe" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="email"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Email</FormLabel>
+                                                <FormControl>
+                                                    <Input type="email" placeholder="john@example.com" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="password"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Password</FormLabel>
+                                                <FormControl>
+                                                    <Input type="password" placeholder="••••••••" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="role"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Role</FormLabel>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select a role" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        <SelectItem value="user">User</SelectItem>
+                                                        <SelectItem value="admin">Admin</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        value={newUser.email}
-                                        onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                        placeholder="john@example.com"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
-                                    <Input
-                                        id="password"
-                                        type="password"
-                                        value={newUser.password}
-                                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                                        placeholder="••••••••"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="role">Role</Label>
-                                    <select
-                                        id="role"
-                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                        value={newUser.role}
-                                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                                    >
-                                        <option value="user">User</option>
-                                        <option value="admin">Admin</option>
-                                    </select>
-                                </div>
-                            </div>
 
-                            {error && <p className="text-red-500 text-sm">{error}</p>}
+                                {error && <p className="text-red-500 text-sm">{error}</p>}
 
-                            <div className="flex justify-end gap-2">
-                                <Button type="button" variant="ghost" onClick={() => setIsAddUserOpen(false)}>Cancel</Button>
-                                <Button type="submit" disabled={addUserMutation.isPending}>
-                                    {addUserMutation.isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-                                    Create User
-                                </Button>
-                            </div>
-                        </form>
+                                <div className="flex justify-end gap-2">
+                                    <Button type="button" variant="ghost" onClick={() => setIsAddUserOpen(false)}>Cancel</Button>
+                                    <Button type="submit" disabled={addUserMutation.isPending}>
+                                        {addUserMutation.isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
+                                        Create User
+                                    </Button>
+                                </div>
+                            </form>
+                        </Form>
                     </CardContent>
                 </Card>
             )}

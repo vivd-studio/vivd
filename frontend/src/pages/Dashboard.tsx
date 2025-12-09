@@ -4,12 +4,32 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProjectsList } from "@/components/ProjectsList"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"
+
+const generateSchema = z.object({
+    url: z.string().min(1, "URL is required"),
+})
+
+type GenerateFormValues = z.infer<typeof generateSchema>
 
 export default function Dashboard() {
-    const [url, setUrl] = useState("")
     const [slug, setSlug] = useState<string | null>(null)
+    const form = useForm<GenerateFormValues>({
+        resolver: zodResolver(generateSchema),
+        defaultValues: {
+            url: "",
+        },
+    })
 
-    const generateMutation = trpc.project.generate.useMutation()
+    const generateMutation = trpc.project.generate.useMutation({
+        onError: (error) => {
+            console.error("Mutation error:", error);
+            form.setError("root", { message: error.message || "Failed to start generation" });
+        }
+    })
 
     // Poll status if slug exists
     const statusQuery = trpc.project.status.useQuery(
@@ -23,15 +43,20 @@ export default function Dashboard() {
         }
     )
 
-    const handleSubmit = async () => {
+    const onSubmit = async (data: GenerateFormValues) => {
         try {
-            const result = await generateMutation.mutateAsync({ url })
+            let urlToSubmit = data.url.trim();
+            // Prepend https:// if missing protocol
+            if (!/^https?:\/\//i.test(urlToSubmit)) {
+                urlToSubmit = `https://${urlToSubmit}`;
+            }
+
+            const result = await generateMutation.mutateAsync({ url: urlToSubmit })
             if (result?.slug) {
                 setSlug(result.slug)
             }
         } catch (e) {
-            console.error(e)
-            alert("Error starting generation")
+            // Handled by onError
         }
     }
 
@@ -41,13 +66,34 @@ export default function Dashboard() {
                 <CardHeader>
                     <CardTitle>Generate Landing Page</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                        <Input placeholder="https://example.com" value={url} onChange={e => setUrl(e.target.value)} />
-                        <Button onClick={handleSubmit} disabled={generateMutation.isPending}>
-                            {generateMutation.isPending ? "Starting..." : "Generate"}
-                        </Button>
-                    </div>
+                <CardContent>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <div className="flex gap-2 items-start">
+                                <FormField
+                                    control={form.control}
+                                    name="url"
+                                    render={({ field }) => (
+                                        <FormItem className="flex-1">
+                                            <FormControl>
+                                                <Input placeholder="https://example.com" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <Button type="submit" disabled={generateMutation.isPending}>
+                                    {generateMutation.isPending ? "Starting..." : "Generate"}
+                                </Button>
+                            </div>
+                            {form.formState.errors.root && (
+                                <p className="text-sm font-medium text-destructive">
+                                    {form.formState.errors.root.message}
+                                </p>
+                            )}
+                        </form>
+                    </Form>
+
 
                     {slug && (
                         <div className="mt-4">

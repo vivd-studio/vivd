@@ -2,7 +2,7 @@ export const OPEN_ROUTER_LANDING_PAGE_PROMPT = (text: string, imagesSection: str
     return `Create a new, modern, beautiful, fully-fledged, high-converting landing page for the company described in the text below. 
 You will receive a screenshot of the company's current website, which is probably a little outdated, as well as the current text on the website.
 Use the attached screenshot for visual context of their current brand. 
-Think about how to improve the current design, colors, typography, effects, and layout. Think about animations you want to use, if they should be subtle or stronger. Keep it professional and fitting for the company.
+Think about how to improve the current design, colors, typography, effects, and layout. Use subtle appear animations on scroll. Keep it professional and fitting for the company.
 Think about the vibe and artstyle of the website, should it be modern, professional, playful, minimal, sleek, scandinavian, artsy, neo-brutalism, neon, dark, light, etc.
 Use the current text to build a comprehensive landing page. Think about which information is most relevant for the main page and where the information should be placed.
 Put everything inside a single index.html file. 
