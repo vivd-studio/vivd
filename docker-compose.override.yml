@@ -11,8 +11,8 @@ services:
     develop:
       watch:
         - action: sync
-          path: ./backend/src
-          target: /app/src
+          path: ./backend
+          target: /app
           ignore:
             - node_modules/
             - dist/

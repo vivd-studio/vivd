@@ -24,7 +24,7 @@ export class OpenRouterAgent implements GenerationAgent {
         const screenshotBuffer = fs.readFileSync(screenshotPath);
         const screenshotBase64 = screenshotBuffer.toString('base64');
 
-        log('Sending request to OpenRouter...');
+        log('Starting HTML generation with OpenRouter...');
 
 
         let attempts = 0;

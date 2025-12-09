@@ -23,6 +23,12 @@ export async function processUrl(targetUrl: string) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    // Save project metadata
+    fs.writeFileSync(path.join(outputDir, 'project.json'), JSON.stringify({
+        url: targetUrl,
+        createdAt: new Date().toISOString()
+    }, null, 2));
+
     try {
         await scrapeWebsite(targetUrl, outputDir);
         await analyzeImages(outputDir);

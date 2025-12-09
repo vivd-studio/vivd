@@ -10,6 +10,7 @@ The frontend is a React with Vite application that provides a user interface for
 - Try to use shadcn components if possible.
 - use react-hook-form for forms
 - use tailwind for styling
+- for api-calls with trpc, always deconstruct queries or mutations, for example: const { x, y, z } = trpc.example.useMutation()
 
 # Backend
 

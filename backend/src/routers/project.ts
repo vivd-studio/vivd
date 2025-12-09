@@ -24,6 +24,41 @@ export const projectRouter = router({
             return { status: 'processing', slug: domainSlug, message: "Generation started." };
         }),
 
+    regenerate: protectedProcedure
+        .input(z.object({ slug: z.string() }))
+        .mutation(async ({ input }) => {
+            const { slug } = input;
+            const outputDir = path.join(__dirname, '../../generated', slug);
+
+            if (!fs.existsSync(outputDir)) {
+                throw new Error("Project not found");
+            }
+
+            const projectJsonPath = path.join(outputDir, 'project.json');
+            if (!fs.existsSync(projectJsonPath)) {
+                throw new Error("Project metadata not found (cannot regenerate legacy projects)");
+            }
+
+            const projectData = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
+            const url = projectData.url;
+
+            if (!url) {
+                throw new Error("Original URL not found in project metadata");
+            }
+
+            // Delete contents
+            fs.rmSync(outputDir, { recursive: true, force: true });
+            
+            // Fire and forget processing
+            processUrl(url).then(() => {
+                console.log(`Finished regenerating ${url}`);
+            }).catch(err => {
+                console.error(`Error regenerating ${url}:`, err);
+            });
+
+            return { status: 'processing', slug, message: "Regeneration started." };
+        }),
+
     status: publicProcedure
         .input(z.object({ slug: z.string() }))
         .query(async ({ input }) => {
