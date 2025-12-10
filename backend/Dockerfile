@@ -3,9 +3,14 @@ FROM node:23 AS base
 WORKDIR /app
 # Install chrome dependencies for Puppeteer
 RUN apt-get update \
-    && apt-get install -y chromium fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
+    && apt-get install -y chromium fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 curl unzip wget gnupg ca-certificates \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+# Install sst/opencode
+# RUN curl -fsSL https://opencode.ai/install | bash
+RUN npm install -g opencode-ai
+
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY package*.json ./

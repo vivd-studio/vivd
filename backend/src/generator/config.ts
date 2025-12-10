@@ -14,6 +14,10 @@ export const LOCAL_AGENT_COMMAND = 'cursor-agent';
 export const MAX_SCRAPE_SUBPAGES = 10;
 export const MAX_IMAGES_TO_ANALYZE = 30;
 
+export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+
+export const OPENCODE_MODEL = process.env.OPENCODE_MODEL;
+
 export function validateConfig() {
     if (!process.env.OPENROUTER_API_KEY && !process.env.USE_LOCAL_AGENT) {
         throw new Error('Please set OPENROUTER_API_KEY in your .env file or set USE_LOCAL_AGENT=true.');
