@@ -66,13 +66,19 @@ export function GenerateSection({ onGenerationStarted }: GenerateSectionProps) {
                                 render={({ field }) => (
                                     <FormItem className="flex-1">
                                         <FormControl>
-                                            <Input placeholder="https://example.com" {...field} />
+                                            <div className="relative">
+                                                <Input
+                                                    placeholder="Enter a URL to generate a landing page (e.g., https://example.com)"
+                                                    className="shadow-sm border-1 border-indigo-200 focus-visible:border-indigo-500 focus-visible:ring-indigo-500 transition-all duration-200"
+                                                    {...field}
+                                                />
+                                            </div>
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
                             />
-                            <Button type="submit" disabled={generateMutation.isPending}>
+                            <Button type="submit" disabled={generateMutation.isPending} className="shadow-md transition-all hover:scale-105 active:scale-95 bg-indigo-600 hover:bg-indigo-700 text-white">
                                 {generateMutation.isPending ? "Starting..." : "Generate"}
                             </Button>
                         </div>
