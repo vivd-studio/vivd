@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc"
 import { useState } from "react"
 import { ProjectCard } from "./ProjectCard"
+import { OverwriteDialog } from "./OverwriteDialog"
 
 interface ProjectsListProps {
     onPreview: (url: string, originalUrl?: string) => void
@@ -11,20 +12,26 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
         refetchInterval: 2000 // Poll every 2 seconds to check status
     })
     const { mutateAsync: regenerateProject } = trpc.project.regenerate.useMutation()
-    const [regenerating, setRegenerating] = useState<string | null>(null)
+    const [regeneratingSlug, setRegeneratingSlug] = useState<string | null>(null)
+    const [confirmationSlug, setConfirmationSlug] = useState<string | null>(null)
 
-    const handleRegenerate = async (slug: string) => {
-        if (!confirm(`Are you sure you want to regenerate ${slug}? This will delete the existing project.`)) return
+    const handleRegenerateClick = (slug: string) => {
+        setConfirmationSlug(slug);
+    }
 
-        setRegenerating(slug)
+    const handleConfirmRegenerate = async () => {
+        if (!confirmationSlug) return;
+        const slug = confirmationSlug;
+        setConfirmationSlug(null);
+
+        setRegeneratingSlug(slug)
         try {
             await regenerateProject({ slug })
-            // Toast or alert could go here, but the UI update is enough for now
         } catch (error) {
             console.error(error)
             alert(`Failed to regenerate ${slug}: ${(error as Error).message}`)
         } finally {
-            setRegenerating(null)
+            setRegeneratingSlug(null)
         }
     }
 
@@ -54,12 +61,19 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
                             key={project.slug}
                             project={project}
                             onPreview={onPreview}
-                            onRegenerate={handleRegenerate}
-                            isRegenerating={regenerating === project.slug}
+                            onRegenerate={handleRegenerateClick}
+                            isRegenerating={regeneratingSlug === project.slug}
                         />
                     ))}
                 </div>
             )}
+
+            <OverwriteDialog
+                open={!!confirmationSlug}
+                onOpenChange={(open) => !open && setConfirmationSlug(null)}
+                onConfirm={handleConfirmRegenerate}
+                projectName={confirmationSlug || undefined}
+            />
         </div>
     )
 }

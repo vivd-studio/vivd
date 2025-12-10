@@ -76,24 +76,21 @@ export function parseJsonFromLLM(content: string | null): any {
 }
 
 export function extractHtmlFromText(text: string): string {
-    // 1. Try to find DOCTYPE ... </html>
-    const doctypeMatch = text.match(/<!DOCTYPE html[\s\S]*<\/html>/i);
-    if (doctypeMatch) {
-        return doctypeMatch[0];
+    // 1. Try to find HTML content, optionally starting with DOCTYPE
+    // This regex looks for an optional DOCTYPE tag, followed by <html ... </html>
+    // It captures everything from the first match of either DOCTYPE or <html> until the last </html>
+    const htmlRegex = /(?:<!DOCTYPE[^>]*>\s*)?<html[\s\S]*<\/html>/i;
+    const match = text.match(htmlRegex);
+    if (match) {
+        return match[0];
     }
 
-    // 2. Try to find <html> ... </html>
-    const htmlMatch = text.match(/<html[\s\S]*<\/html>/i);
-    if (htmlMatch) {
-        return htmlMatch[0];
-    }
-
-    // 3. Try to find markdown code block (relaxed regex)
+    // 2. Fallback: Try markdown code block (relaxed regex)
     const codeBlockMatch = text.match(/```html\s*([\s\S]*?)\s*```/);
     if (codeBlockMatch) {
         return codeBlockMatch[1];
     }
 
-    // 4. Fallback: return original text
+    // 3. Fallback: return original text
     return text;
 }

@@ -6,9 +6,40 @@ import fs from "fs";
 
 export const projectRouter = router({
     generate: protectedProcedure
-        .input(z.object({ url: z.string().min(1) }))
+        .input(z.object({
+            url: z.string().min(1)
+        }))
         .mutation(async ({ input }) => {
             const { url } = input;
+
+            let targetUrl = url;
+            if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
+            // logic mirrored from generator/index.ts to ensure consistent slug generation
+            const domainSlug = new URL(targetUrl).hostname.replace('www.', '').split('.')[0];
+            const outputDir = path.join(__dirname, '../../generated', domainSlug);
+
+            if (fs.existsSync(outputDir)) {
+                // Check status
+                let status = 'unknown';
+                const projectJsonPath = path.join(outputDir, 'project.json');
+                if (fs.existsSync(projectJsonPath)) {
+                    try {
+                        const projectData = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
+                        status = projectData.status || 'unknown';
+                    } catch (e) {
+                        console.error(`Error reading metadata for ${domainSlug}`, e);
+                    }
+                } else if (fs.existsSync(path.join(outputDir, 'index.html'))) {
+                    status = 'completed';
+                }
+
+                if (status === 'processing' || status === 'scraping' || status === 'analyzing_images' || status === 'creating_hero' || status === 'generating_html') {
+                    // It is processing
+                    throw new Error("Project is currently being generated");
+                }
+
+                return { status: 'exists', slug: domainSlug, message: "Project already exists" };
+            }
 
             // Fire and forget processing
             processUrl(url).then(() => {
@@ -16,10 +47,6 @@ export const projectRouter = router({
             }).catch(err => {
                 console.error(`Error processing ${url}:`, err);
             });
-
-            let targetUrl = url;
-            if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
-            const domainSlug = new URL(targetUrl).hostname.replace('www.', '').split('.')[0];
 
             return { status: 'processing', slug: domainSlug, message: "Generation started." };
         }),

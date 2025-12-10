@@ -1,0 +1,18 @@
+{
+    "extends": "../tsconfig.json",
+    "include": [
+        "../src/**/*",
+        "./**/*"
+    ],
+    "exclude": [
+        "node_modules"
+    ],
+    "compilerOptions": {
+        "module": "commonjs",
+        "types": [
+            "node",
+            "mocha",
+            "chai"
+        ]
+    }
+}
