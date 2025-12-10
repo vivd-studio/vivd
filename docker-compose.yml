@@ -7,6 +7,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - PORT=3000
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
     volumes:
       - backend_data:/app/generated
     depends_on:
