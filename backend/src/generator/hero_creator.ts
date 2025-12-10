@@ -3,7 +3,7 @@ import * as path from 'path';
 import axios from 'axios';
 import { OPENROUTER_API_KEY, GENERATION_MODEL, HERO_GENERATION_MODEL } from './config';
 import { log } from './logger';
-import { cleanText } from './utils';
+import { cleanText, downloadImage, saveImageBuffer } from './utils';
 import { getTopImages } from './image_analyzer/utils';
 import { openai } from './client';
 
@@ -74,12 +74,7 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
             'https://openrouter.ai/api/v1/chat/completions',
             {
                 model: HERO_GENERATION_MODEL,
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt,
-                    },
-                ],
+                messages: messages,
                 modalities: ['image', 'text'],
                 image_config: {
                     aspect_ratio: "16:9"
@@ -144,19 +139,24 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
 }
 
 async function saveImage(urlOrBase64: string, outputDir: string): Promise<string | null> {
-    const filename = 'generated_hero.png';
+    const filename = 'generated_hero.webp';
     const outputPath = path.join(outputDir, 'images', filename);
 
     try {
         if (urlOrBase64.startsWith('http')) {
-            const response = await axios.get(urlOrBase64, { responseType: 'arraybuffer' });
-            fs.writeFileSync(outputPath, response.data);
-        } else if (urlOrBase64.startsWith('data:image')) {
-            const base64Data = urlOrBase64.replace(/^data:image\/\w+;base64,/, "");
-            fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
+            await downloadImage(urlOrBase64, outputPath);
         } else {
-            // Assume raw base64?
-            fs.writeFileSync(outputPath, Buffer.from(urlOrBase64, 'base64'));
+            let buffer: Buffer;
+
+            if (urlOrBase64.startsWith('data:image')) {
+                const base64Data = urlOrBase64.replace(/^data:image\/\w+;base64,/, "");
+                buffer = Buffer.from(base64Data, 'base64');
+            } else {
+                // Assume raw base64
+                buffer = Buffer.from(urlOrBase64, 'base64');
+            }
+
+            await saveImageBuffer(buffer, outputPath);
         }
         return filename;
     } catch (e) {

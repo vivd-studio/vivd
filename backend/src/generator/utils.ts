@@ -21,20 +21,41 @@ export async function autoScroll(page: any) {
     });
 }
 
+/**
+ * Saves a buffer to a file, converting to WebP if the extension matches.
+ */
+export async function saveImageBuffer(buffer: Buffer, filepath: string) {
+    if (filepath.endsWith('.webp')) {
+        const sharp = require('sharp');
+        await sharp(buffer)
+            .webp({ quality: 80 })
+            .toFile(filepath);
+    } else {
+        await fs.promises.writeFile(filepath, buffer);
+    }
+}
+
+/**
+ * Downloads an image from a URL and saves it to a file.
+ * Uses saveImageBuffer for optional WebP conversion.
+ */
 export async function downloadImage(url: string, filepath: string) {
     try {
         const response = await axios({
             url,
             method: 'GET',
-            responseType: 'stream'
+            responseType: 'arraybuffer',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
         });
-        return new Promise((resolve, reject) => {
-            response.data.pipe(fs.createWriteStream(filepath))
-                .on('error', reject)
-                .once('close', () => resolve(filepath));
-        });
+
+        await saveImageBuffer(response.data, filepath);
+
+        return filepath;
     } catch (e) {
-        log(`Failed to download image: ${url}`);
+        log(`Failed to download image: ${url} - ${e}`);
+        throw e;
     }
 }
 
@@ -85,12 +106,31 @@ export function extractHtmlFromText(text: string): string {
         return match[0];
     }
 
-    // 2. Fallback: Try markdown code block (relaxed regex)
-    const codeBlockMatch = text.match(/```html\s*([\s\S]*?)\s*```/);
+    // 2. Fallback: Try generic markdown code block
+    // Matches ``` followed by optional language identifier, content, then ```
+    // This allows for case-insensitivity and other languages, or no language
+    const codeBlockMatch = text.match(/```[\w-]*\s*([\s\S]*?)\s*```/);
     if (codeBlockMatch) {
         return codeBlockMatch[1];
     }
 
-    // 3. Fallback: return original text
+    // 3. Last resort: Manual cleanup of markdown tags if regex failed (e.g. truncated)
+    // If text starts with ``` but didn't match the block regex (likely missing end),
+    // we strip the start and potentially the end if it exists.
+    let cleanText = text.trim();
+    if (cleanText.startsWith('```')) {
+        const lines = cleanText.split('\n');
+        // Remove the first line (the ``` line)
+        if (lines.length > 0) lines.shift();
+
+        // Check if the last line is just ``` and remove it (in case regex failed for some other reason)
+        if (lines.length > 0 && lines[lines.length - 1].trim().startsWith('```')) {
+            lines.pop();
+        }
+
+        return lines.join('\n').trim();
+    }
+
+    // 4. Fallback: return original text
     return text;
 }

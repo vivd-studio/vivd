@@ -98,17 +98,27 @@ export async function scrapePage(page: any, url: string, outputDir: string, isMa
         // Sanitize filename
         filename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
+        // Convert extension to webp for raster images
+        let finalExt = ext;
+        if (['.jpg', '.jpeg', '.png'].includes(ext.toLowerCase())) {
+            finalExt = '.webp';
+        }
+
         // Ensure extension matches
-        if (!filename.toLowerCase().endsWith(ext.toLowerCase())) {
-            filename += ext;
+        if (!filename.toLowerCase().endsWith(finalExt.toLowerCase())) {
+            // Remove old extension if present
+            if (filename.toLowerCase().endsWith(ext.toLowerCase())) {
+                filename = filename.substring(0, filename.length - ext.length);
+            }
+            filename += finalExt;
         }
 
         // Handle duplicates
         let finalFilename = filename;
         let counter = 1;
         while (downloadedNames.has(finalFilename) || fs.existsSync(path.join(imagesDir, finalFilename))) {
-            const namePart = path.basename(filename, ext);
-            finalFilename = `${namePart}_${counter}${ext}`;
+            const namePart = path.basename(filename, finalExt);
+            finalFilename = `${namePart}_${counter}${finalExt}`;
             counter++;
         }
         downloadedNames.add(finalFilename);
