@@ -38,7 +38,7 @@ export class OpenCodeService {
                     const chunk = data.toString();
                     stderr += chunk;
                     // Stream to console
-                    process.stderr.write(`[OpenCode Error] ${chunk}`);
+                    process.stderr.write(`[OpenCode Log] ${chunk}`);
                 });
             }
 

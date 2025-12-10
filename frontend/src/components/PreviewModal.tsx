@@ -1,14 +1,13 @@
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Copy, Check, ExternalLink, MessageSquare } from "lucide-react"
+import { Copy, Check, ExternalLink } from "lucide-react"
 import { useState } from "react"
-import { ChatSidepanel } from "./ChatSidepanel"
+import { ChatPanel } from "./ChatSidepanel"
 
 interface PreviewModalProps {
     open: boolean
@@ -47,16 +46,10 @@ export function PreviewModal({ open, onOpenChange, url, originalUrl, projectSlug
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[95vw] w-full h-[90vh] flex flex-col p-0 gap-0">
-                <DialogHeader className="px-6 py-4 border-b flex flex-row items-center gap-4 space-y-0">
+            <DialogContent className="max-w-[95vw] w-full h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                <DialogHeader className="px-6 py-4 border-b flex flex-row items-center gap-4 space-y-0 shrink-0 z-10 bg-background">
                     <DialogTitle>Preview</DialogTitle>
                     <div className="flex items-center gap-2 ml-auto mr-12">
-                        {projectSlug && (
-                            <Button variant="outline" size="sm" onClick={() => setChatOpen(true)}>
-                                <MessageSquare className="w-4 h-4 mr-2" />
-                                Chat with Agent
-                            </Button>
-                        )}
                         {originalUrl && (
                             <Button variant="ghost" size="sm" onClick={() => window.open(originalUrl, '_blank')} className="text-muted-foreground">
                                 <ExternalLink className="w-4 h-4 mr-2" />
@@ -72,29 +65,42 @@ export function PreviewModal({ open, onOpenChange, url, originalUrl, projectSlug
                             Open Page
                         </Button>
                     </div>
-                    <DialogDescription className="sr-only">
-                        Preview of the generated landing page
-                    </DialogDescription>
                 </DialogHeader>
-                <div className="flex-1 w-full bg-muted/20 relative">
-                    <iframe
-                        key={refreshKey}
-                        src={fullUrl}
-                        className="w-full h-full border-0"
-                        title="Preview"
-                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                    />
+
+                <div className="flex flex-1 min-h-0 relative">
+                    <div className="flex-1 relative bg-muted/20">
+                        <iframe
+                            key={refreshKey}
+                            src={fullUrl}
+                            className="w-full h-full border-0"
+                            title="Preview"
+                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                        />
+
+
+                        {/* Floating Chat Button */}
+                        {projectSlug && !chatOpen && (
+                            <Button
+                                className="absolute bottom-8 right-8 rounded-full h-14 w-14 shadow-lg p-0 bg-gradient-to-br from-indigo-600 to-violet-600 animate-bop animate-pulse-outline hover:from-indigo-500 hover:to-violet-500 border-none"
+                                onClick={() => setChatOpen(true)}
+                            >
+                                <img src="/favicon-transparent.svg" alt="App Logo" className="w-10 h-10" />
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* Chat Panel - Pushes iframe when open */}
+                    {projectSlug && chatOpen && (
+                        <div className="w-[400px] border-l bg-background flex flex-col h-full shadow-xl z-20 transition-all">
+                            <ChatPanel
+                                projectSlug={projectSlug}
+                                onTaskComplete={handleTaskComplete}
+                                onClose={() => setChatOpen(false)}
+                            />
+                        </div>
+                    )}
                 </div>
             </DialogContent>
-
-            {projectSlug && (
-                <ChatSidepanel
-                    open={chatOpen}
-                    onOpenChange={setChatOpen}
-                    projectSlug={projectSlug}
-                    onTaskComplete={handleTaskComplete}
-                />
-            )}
         </Dialog>
     )
 }

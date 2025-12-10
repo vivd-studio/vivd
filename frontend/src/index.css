@@ -67,3 +67,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes bop {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-outline {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(124, 58, 237, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+  }
+}
+
+.animate-bop {
+  animation: bop 3s ease-in-out infinite;
+}
+
+.animate-pulse-outline {
+  animation: pulse-outline 2s infinite;
+}

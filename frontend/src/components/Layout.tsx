@@ -33,7 +33,7 @@ export function Layout({ children }: PropsWithChildren) {
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-6">
                         <Link to="/" className="font-bold text-xl tracking-tight">
-                            Landing<span className="text-blue-600">Gen</span>
+                            Landing<span className="text-primary">Gen</span>
                         </Link>
 
                         {session?.user?.role === "admin" && (
