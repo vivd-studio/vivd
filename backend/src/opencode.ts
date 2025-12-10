@@ -1,7 +1,4 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { spawn } from 'child_process';
 
 export class OpenCodeService {
     /**
@@ -11,30 +8,53 @@ export class OpenCodeService {
      * @returns The stdout output of the agent.
      */
     static async runTask(task: string, cwd: string): Promise<string> {
-        try {
+        return new Promise((resolve, reject) => {
             console.log(`[OpenCode] Starting task in ${cwd}: "${task}"`);
 
-            // Escape the task string to prevent shell injection, though basic quotes help.
-            // A more robust solution might use spawn or thorough escaping.
-            const safeTask = task.replace(/"/g, '\\"');
+            const model = process.env.OPENCODE_MODEL ? ['--model', process.env.OPENCODE_MODEL] : [];
+            // Construct arguments: run "task" --model ...
+            const args = ['run', task, ...model];
 
-            const model = process.env.OPENCODE_MODEL ? ` --model ${process.env.OPENCODE_MODEL}` : '';
-            const command = `opencode run "${safeTask}"${model}`;
-
-            const { stdout, stderr } = await execAsync(command, {
+            const child = spawn('opencode', args, {
                 cwd,
-                env: { ...process.env }, // Pass through env vars just in case
+                env: { ...process.env },
+                stdio: ['ignore', 'pipe', 'pipe'] // Ignore stdin, pipe stdout/stderr
             });
 
-            if (stderr) {
-                console.warn(`[OpenCode] Stderr: ${stderr}`);
+            let stdout = '';
+            let stderr = '';
+
+            if (child.stdout) {
+                child.stdout.on('data', (data) => {
+                    const chunk = data.toString();
+                    stdout += chunk;
+                    // Stream to console
+                    process.stdout.write(`[OpenCode Output] ${chunk}`);
+                });
             }
 
-            console.log(`[OpenCode] Task completed successfully.`);
-            return stdout;
-        } catch (error: any) {
-            console.error(`[OpenCode] Execution failed:`, error);
-            throw new Error(`OpenCode task failed: ${error.message}`);
-        }
+            if (child.stderr) {
+                child.stderr.on('data', (data) => {
+                    const chunk = data.toString();
+                    stderr += chunk;
+                    // Stream to console
+                    process.stderr.write(`[OpenCode Error] ${chunk}`);
+                });
+            }
+
+            child.on('error', (error) => {
+                console.error(`[OpenCode] Spawn error:`, error);
+                reject(new Error(`Failed to start opencode process: ${error.message}`));
+            });
+
+            child.on('close', (code) => {
+                console.log(`[OpenCode] Process exited with code ${code}`);
+                if (code === 0) {
+                    resolve(stdout);
+                } else {
+                    reject(new Error(`OpenCode task failed with exit code ${code}. Stderr: ${stderr}`));
+                }
+            });
+        });
     }
 }

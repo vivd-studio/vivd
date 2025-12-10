@@ -6,11 +6,13 @@ import { PreviewModal } from "@/components/PreviewModal"
 export default function Dashboard() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [originalUrl, setOriginalUrl] = useState<string | null>(null)
+    const [projectSlug, setProjectSlug] = useState<string | undefined>(undefined)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
-    const handlePreview = (url: string, origUrl?: string) => {
+    const handlePreview = (url: string, origUrl?: string, slug?: string) => {
         setPreviewUrl(url)
         setOriginalUrl(origUrl || null)
+        setProjectSlug(slug)
         setIsPreviewOpen(true)
     }
 
@@ -25,6 +27,7 @@ export default function Dashboard() {
                 onOpenChange={setIsPreviewOpen}
                 url={previewUrl}
                 originalUrl={originalUrl}
+                projectSlug={projectSlug}
             />
         </div>
     )

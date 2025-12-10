@@ -12,7 +12,7 @@ export interface Project {
 
 interface ProjectCardProps {
     project: Project
-    onPreview: (url: string, originalUrl?: string) => void
+    onPreview: (url: string, originalUrl?: string, projectSlug?: string) => void
     onRegenerate: (slug: string) => void
     isRegenerating: boolean
 }
@@ -67,7 +67,7 @@ export function ProjectCard({ project, onPreview, onRegenerate, isRegenerating }
                 }`}
             onClick={() => {
                 if (isCompleted) {
-                    onPreview(previewUrl, project.url)
+                    onPreview(previewUrl, project.url, project.slug)
                 }
             }}
         >

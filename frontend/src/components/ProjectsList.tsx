@@ -60,7 +60,7 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
                         <ProjectCard
                             key={project.slug}
                             project={project}
-                            onPreview={onPreview}
+                            onPreview={(url, originalUrl) => onPreview(url, originalUrl, project.slug)}
                             onRegenerate={handleRegenerateClick}
                             isRegenerating={regeneratingSlug === project.slug}
                         />

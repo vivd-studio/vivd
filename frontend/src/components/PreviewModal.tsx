@@ -6,18 +6,22 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Copy, Check, ExternalLink } from "lucide-react"
+import { Copy, Check, ExternalLink, MessageSquare } from "lucide-react"
 import { useState } from "react"
+import { ChatSidepanel } from "./ChatSidepanel"
 
 interface PreviewModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     url: string | null
     originalUrl?: string | null
+    projectSlug?: string
 }
 
-export function PreviewModal({ open, onOpenChange, url, originalUrl }: PreviewModalProps) {
+export function PreviewModal({ open, onOpenChange, url, originalUrl, projectSlug }: PreviewModalProps) {
     const [copied, setCopied] = useState(false)
+    const [chatOpen, setChatOpen] = useState(false)
+    const [refreshKey, setRefreshKey] = useState(0)
 
     if (!url) return null
 
@@ -36,12 +40,23 @@ export function PreviewModal({ open, onOpenChange, url, originalUrl }: PreviewMo
         setTimeout(() => setCopied(false), 2000)
     }
 
+    const handleTaskComplete = () => {
+        // Refresh the iframe
+        setRefreshKey(prev => prev + 1)
+    }
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-[95vw] w-full h-[90vh] flex flex-col p-0 gap-0">
                 <DialogHeader className="px-6 py-4 border-b flex flex-row items-center gap-4 space-y-0">
                     <DialogTitle>Preview</DialogTitle>
                     <div className="flex items-center gap-2 ml-auto mr-12">
+                        {projectSlug && (
+                            <Button variant="outline" size="sm" onClick={() => setChatOpen(true)}>
+                                <MessageSquare className="w-4 h-4 mr-2" />
+                                Chat with Agent
+                            </Button>
+                        )}
                         {originalUrl && (
                             <Button variant="ghost" size="sm" onClick={() => window.open(originalUrl, '_blank')} className="text-muted-foreground">
                                 <ExternalLink className="w-4 h-4 mr-2" />
@@ -61,8 +76,9 @@ export function PreviewModal({ open, onOpenChange, url, originalUrl }: PreviewMo
                         Preview of the generated landing page
                     </DialogDescription>
                 </DialogHeader>
-                <div className="flex-1 w-full bg-muted/20">
+                <div className="flex-1 w-full bg-muted/20 relative">
                     <iframe
+                        key={refreshKey}
                         src={fullUrl}
                         className="w-full h-full border-0"
                         title="Preview"
@@ -70,6 +86,15 @@ export function PreviewModal({ open, onOpenChange, url, originalUrl }: PreviewMo
                     />
                 </div>
             </DialogContent>
+
+            {projectSlug && (
+                <ChatSidepanel
+                    open={chatOpen}
+                    onOpenChange={setChatOpen}
+                    projectSlug={projectSlug}
+                    onTaskComplete={handleTaskComplete}
+                />
+            )}
         </Dialog>
     )
 }
