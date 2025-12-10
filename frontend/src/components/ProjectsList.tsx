@@ -1,11 +1,9 @@
 import { trpc } from "@/lib/trpc"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { useState } from "react"
-import { RefreshCw } from "lucide-react"
+import { ProjectCard } from "./ProjectCard"
 
 interface ProjectsListProps {
-    onPreview: (url: string) => void
+    onPreview: (url: string, originalUrl?: string) => void
 }
 
 export function ProjectsList({ onPreview }: ProjectsListProps) {
@@ -15,14 +13,13 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
     const { mutateAsync: regenerateProject } = trpc.project.regenerate.useMutation()
     const [regenerating, setRegenerating] = useState<string | null>(null)
 
-    const handleRegenerate = async (e: React.MouseEvent, slug: string) => {
-        e.stopPropagation()
+    const handleRegenerate = async (slug: string) => {
         if (!confirm(`Are you sure you want to regenerate ${slug}? This will delete the existing project.`)) return
 
         setRegenerating(slug)
         try {
             await regenerateProject({ slug })
-            alert(`Regeneration started for ${slug}`)
+            // Toast or alert could go here, but the UI update is enough for now
         } catch (error) {
             console.error(error)
             alert(`Failed to regenerate ${slug}: ${(error as Error).message}`)
@@ -31,81 +28,38 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
         }
     }
 
-    if (isLoading) return <div className="mt-8">Loading projects...</div>
+    if (isLoading) {
+        return (
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-48 rounded-xl border bg-card text-card-foreground shadow animate-pulse" />
+                ))}
+            </div>
+        )
+    }
+
     if (error) return <div className="mt-8 text-red-500">Error loading projects</div>
 
     return (
-        <Card className="mt-8">
-            <CardHeader>
-                <CardTitle>Generated Projects</CardTitle>
-            </CardHeader>
-            <CardContent>
-                {projectsData?.projects.length === 0 ? (
-                    <p className="text-muted-foreground">No projects generated yet.</p>
-                ) : (
-                    <div className="grid gap-2">
-                        {projectsData?.projects.map(project => {
-                            // Normalize the URL
-                            const previewUrl = `/api/preview/${project.slug}/index.html`
-                            const isProcessing = project.status !== 'completed' && project.status !== 'failed' && project.status !== 'unknown'
-                            const isFailed = project.status === 'failed'
-                            const isUnknown = project.status === 'unknown'
-
-                            return (
-                                <div
-                                    key={project.slug}
-                                    className={`flex items-center justify-between p-2 border rounded ${isProcessing ? 'opacity-70 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-50 cursor-pointer'
-                                        }`}
-                                    onClick={() => {
-                                        if (!isProcessing && !isFailed) {
-                                            onPreview(previewUrl)
-                                        }
-                                    }}
-                                >
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{project.slug}</span>
-                                        <span className={`text-xs ${isFailed ? 'text-red-500' :
-                                                isProcessing ? 'text-amber-500' :
-                                                    isUnknown ? 'text-slate-500' :
-                                                        'text-green-500'
-                                            } uppercase`}>
-                                            {project.status === 'pending' ? 'Starting...' : project.status.replace('_', ' ')}
-                                        </span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isProcessing || regenerating === project.slug}
-                                            onClick={(e) => handleRegenerate(e, project.slug)}
-                                        >
-                                            {regenerating === project.slug ? (
-                                                <RefreshCw className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="h-4 w-4" />
-                                            )}
-                                            <span className="ml-2">Regenerate</span>
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isProcessing || isFailed}
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (!isProcessing && !isFailed) {
-                                                    window.open(previewUrl, '_blank')
-                                                }
-                                            }}
-                                        >
-                                            Open Page
-                                        </Button>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+        <div className="mt-8">
+            <h2 className="text-2xl font-bold tracking-tight mb-4">Your Projects</h2>
+            {projectsData?.projects.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed rounded-xl">
+                    <p className="text-muted-foreground">No projects generated yet. create one above!</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {projectsData?.projects.map(project => (
+                        <ProjectCard
+                            key={project.slug}
+                            project={project}
+                            onPreview={onPreview}
+                            onRegenerate={handleRegenerate}
+                            isRegenerating={regenerating === project.slug}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
     )
 }

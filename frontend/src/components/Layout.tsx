@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
+import { ModeToggle } from "@/components/mode-toggle"
+
 export function Layout({ children }: PropsWithChildren) {
     const { data: session, isPending } = authClient.useSession()
     const navigate = useNavigate()
@@ -27,7 +29,7 @@ export function Layout({ children }: PropsWithChildren) {
 
     return (
         <div className="min-h-screen bg-background">
-            <header className="border-b sticky top-0 z-40 bg-white/80 backdrop-blur-md">
+            <header className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur-md">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-6">
                         <Link to="/" className="font-bold text-xl tracking-tight">
@@ -46,6 +48,7 @@ export function Layout({ children }: PropsWithChildren) {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        <ModeToggle />
                         {session ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>

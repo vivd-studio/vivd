@@ -13,9 +13,10 @@ interface PreviewModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     url: string | null
+    originalUrl?: string | null
 }
 
-export function PreviewModal({ open, onOpenChange, url }: PreviewModalProps) {
+export function PreviewModal({ open, onOpenChange, url, originalUrl }: PreviewModalProps) {
     const [copied, setCopied] = useState(false)
 
     if (!url) return null
@@ -40,14 +41,22 @@ export function PreviewModal({ open, onOpenChange, url }: PreviewModalProps) {
             <DialogContent className="max-w-[95vw] w-full h-[90vh] flex flex-col p-0 gap-0">
                 <DialogHeader className="px-6 py-4 border-b flex flex-row items-center gap-4 space-y-0">
                     <DialogTitle>Preview</DialogTitle>
-                    <Button variant="outline" size="sm" onClick={handleCopy}>
-                        {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-                        {copied ? "Copied" : "Copy Link"}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => window.open(fullUrl, '_blank')}>
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Open Page
-                    </Button>
+                    <div className="flex items-center gap-2 ml-auto mr-12">
+                        {originalUrl && (
+                            <Button variant="ghost" size="sm" onClick={() => window.open(originalUrl, '_blank')} className="text-muted-foreground">
+                                <ExternalLink className="w-4 h-4 mr-2" />
+                                Original Website
+                            </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={handleCopy}>
+                            {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                            {copied ? "Copied" : "Copy preview link"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => window.open(fullUrl, '_blank')}>
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Open Page
+                        </Button>
+                    </div>
                     <DialogDescription className="sr-only">
                         Preview of the generated landing page
                     </DialogDescription>

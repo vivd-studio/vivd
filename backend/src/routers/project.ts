@@ -66,13 +66,35 @@ export const projectRouter = router({
             // Note: Assuming the generated folder is at ../generated relative to src
             // server.ts has: path.join(__dirname, '../generated')
             // but here we are in src/routers, so it should be ../../generated
-            const outputDir = path.join(__dirname, '../../generated', slug);
+            const generatedDir = path.join(__dirname, '../../generated');
+            const projectJsonPath = path.join(generatedDir, slug, 'project.json');
 
-            if (fs.existsSync(path.join(outputDir, 'index.html'))) {
-                return { status: 'completed', url: `/generated/${slug}/index.html` };
-            } else {
-                return { status: 'processing' };
+            let status = 'processing';
+            let originalUrl = '';
+            let createdAt = '';
+
+            if (fs.existsSync(projectJsonPath)) {
+                try {
+                    const projectData = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
+                    if (projectData.status) status = projectData.status;
+                    if (projectData.url) originalUrl = projectData.url;
+                    if (projectData.createdAt) createdAt = projectData.createdAt;
+                } catch (e) {
+                    console.error(`Error reading metadata for ${slug}`, e);
+                }
+            } else if (fs.existsSync(path.join(generatedDir, slug, 'index.html'))) {
+                // Fallback for very old legacy projects without json
+                status = 'completed';
             }
+
+            const resultUrl = status === 'completed' ? `/generated/${slug}/index.html` : undefined;
+
+            return {
+                status,
+                url: resultUrl,
+                originalUrl,
+                createdAt
+            };
         }),
 
     list: publicProcedure.query(async () => {
@@ -91,12 +113,15 @@ export const projectRouter = router({
                     const projectJsonPath = path.join(generatedDir, projectSlug, 'project.json');
                     let status = 'unknown'; // Default for legacy projects
 
+                    let url = '';
+                    let createdAt = '';
+
                     if (fs.existsSync(projectJsonPath)) {
                         try {
                             const projectData = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
-                            if (projectData.status) {
-                                status = projectData.status;
-                            }
+                            if (projectData.status) status = projectData.status;
+                            if (projectData.url) url = projectData.url;
+                            if (projectData.createdAt) createdAt = projectData.createdAt;
                         } catch (e) {
                             console.error(`Error reading metadata for ${projectSlug}`, e);
                         }
@@ -104,7 +129,9 @@ export const projectRouter = router({
 
                     return {
                         slug: projectSlug,
-                        status
+                        status,
+                        url,
+                        createdAt
                     };
                 });
             return { projects };
