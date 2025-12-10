@@ -8,9 +8,9 @@ import { getTopImages } from './image_analyzer/utils';
 import { openai } from './client';
 
 
-async function generateHeroPrompt(text: string, imageDescriptions: string): Promise<string> {
+export async function generateHeroPrompt(text: string, imageDescriptions: string): Promise<{ prompt: string; selected_images: string[] }> {
     const prompt = `
-You are a creative director for a web design agency.
+You are a creative director for a top-tier web design agency.
 Your goal is to write a prompt for an AI image generator to create a stunning, professional Hero Image for a client's landing page.
 
 Context:
@@ -21,24 +21,40 @@ Available Brand Images (Descriptions):
 ${imageDescriptions}
 
 Instructions:
-1. Analyze the client's brand and products.
-2. Write a DETAILED prompt for an image generation model.
-3. The hero image should reflect the client's products, brand, or generally important things for that client.
-4. If there are already good product images available in the list above, the prompt should EXPLICITLY ask to combine or feature these core products in a professional composition.
-5. The image should look like a real, high-end professional photo.
-6. DO NOT ask the model to include text, words or logos. The image should be purely visual. Also try and avoid describing people or faces. Don't explicitly ask to exclude it, just don't mention it at all.
-7. Output ONLY the prompt text, nothing else.
+Analyze the client's business type, brand, and core offering. This could be anything: a product-based company, a service provider (e.g., doctor, marketing agency), a venue (e.g., hotel, restaurant), or an institution (e.g., school), etc.
+Think about what visual representation would best capture the essence and professionalism of this specific client.
+The image should still capture real entities of the client (products, buildings, interior, etc.) so make the image rather a composition of existing images, than something completely new.
+Select the 3-6 most relevant and high-quality images from the list above that would be best for a hero composition.
+The prompt should explicitly describe a professional composition that incorporates the selected images (if any).
+The image should look like a real, high-end professional photo.
+DO NOT ask the model to include text, words or logos. The image should be purely visual. Also try and avoid describing people or faces unless they are central to the selected images (e.g. a doctor's portrait). Don't explicitly ask to exclude it, just don't mention it at all if not necessary.
+Output ONLY a valid JSON object with the following structure:
+{
+  "prompt": "The detailed image generation prompt",
+  "selected_images": ["filename1.jpg", "filename2.png"]
+}
     `.trim();
 
     const completion = await openai.chat.completions.create({
         model: GENERATION_MODEL,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: "json_object" }
     });
 
-    return completion.choices[0].message.content || '';
+    try {
+        const content = completion.choices[0].message.content || '{}';
+        const parsed = JSON.parse(content);
+        return {
+            prompt: parsed.prompt || '',
+            selected_images: Array.isArray(parsed.selected_images) ? parsed.selected_images : []
+        };
+    } catch (e) {
+        log(`Error parsing hero prompt JSON: ${e}`);
+        return { prompt: '', selected_images: [] };
+    }
 }
 
-async function generateImage(prompt: string, inputImages: string[], outputDir: string): Promise<string | null> {
+export async function generateImage(prompt: string, inputImages: string[], outputDir: string): Promise<string | null> {
     const messages: any[] = [
         {
             role: 'user',
@@ -67,6 +83,7 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
     }
 
     log(`Sending generation request to ${HERO_GENERATION_MODEL}...`);
+    log(`Selected images: ${inputImages.join(', ')}`);
 
     try {
         // Use direct Axios call to OpenRouter to ensure custom parameters are passed correctly
@@ -77,7 +94,7 @@ async function generateImage(prompt: string, inputImages: string[], outputDir: s
                 messages: messages,
                 modalities: ['image', 'text'],
                 image_config: {
-                    aspect_ratio: "16:9"
+                    aspect_ratio: "16:9" // Or maybe 21:9?
                 },
             },
             {
@@ -186,18 +203,31 @@ export async function createHeroImage(outputDir: string) {
         imageDescriptions = topImages.join('\n');
     }
 
-    // Step 1: Generate Prompt
-    log('Generating prompt for hero image...');
-    const heroPrompt = await generateHeroPrompt(text, imageDescriptions);
+    // Step 1: Generate Prompt and Select Images
+    log('Generating prompt and selecting images for hero image...');
+    const { prompt: heroPrompt, selected_images: selectedImages } = await generateHeroPrompt(text, imageDescriptions);
+
+    if (!heroPrompt) {
+        log('Failed to generate hero prompt.');
+        return;
+    }
+
     log(`Generated Prompt: ${heroPrompt}`);
+    log(`Selected Images: ${selectedImages.join(', ')}`);
+
+    // Basic validation to ensure selected images are actually in the top set (optional but good for safety)
+    // We can filter selectedImages to ensure they exist in outputDir/images
+    const validSelectedImages = selectedImages.filter(img =>
+        fs.existsSync(path.join(outputDir, 'images', img))
+    );
 
     // Step 2: Generate Image
     log('Generating image with OpenRouter...');
-    let imageUrl = await generateImage(heroPrompt, topImages, outputDir);
+    let imageUrl = await generateImage(heroPrompt, validSelectedImages, outputDir);
 
     if (!imageUrl) {
         log('First attempt failed or returned no image. Retrying image generation...');
-        imageUrl = await generateImage(heroPrompt, topImages, outputDir);
+        imageUrl = await generateImage(heroPrompt, validSelectedImages, outputDir);
     }
 
     if (imageUrl) {
@@ -210,11 +240,6 @@ export async function createHeroImage(outputDir: string) {
             // Step 4: Update Description File
             const descFile = path.join(outputDir, 'image-files-description.txt');
             const newEntry = `- ${filename} (Generated) - A professionally generated hero image based on the client's brand: ${heroPrompt.replace(/\n/g, ' ')}\n`;
-
-            // Prepend or Append? "include it in the images description".
-            // It's good to put it at the top or with high priority.
-            // AnalyzeImages sorts by analyzed/priority.
-            // I'll prepend it to the text content so it's seen first.
 
             if (fs.existsSync(descFile)) {
                 const currentContent = fs.readFileSync(descFile, 'utf-8');
