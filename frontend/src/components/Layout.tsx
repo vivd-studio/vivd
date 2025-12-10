@@ -3,7 +3,7 @@ import { type PropsWithChildren } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
-import { LogOut, Shield } from "lucide-react"
+import { LogOut, Shield, Settings } from "lucide-react"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -69,6 +69,12 @@ export function Layout({ children }: PropsWithChildren) {
                                         </div>
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator />
+                                    <DropdownMenuItem asChild>
+                                        <Link to="/settings" className="cursor-pointer">
+                                            <Settings className="mr-2 h-4 w-4" />
+                                            <span>Settings</span>
+                                        </Link>
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onClick={handleLogout}>
                                         <LogOut className="mr-2 h-4 w-4" />
                                         <span>Log out</span>

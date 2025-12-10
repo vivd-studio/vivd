@@ -3,9 +3,11 @@ import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
 import Signup from "./pages/Signup"
 import Admin from "./pages/Admin"
+import Settings from "./pages/Settings"
 import { Layout } from "@/components/Layout"
 import { authClient } from "@/lib/auth-client"
 import { trpc } from '@/lib/trpc';
+import { Toaster } from "@/components/ui/sonner"
 // ...
 export default function App() {
   const { data: session, isPending: isSessionPending } = authClient.useSession()
@@ -26,6 +28,7 @@ export default function App() {
         <Routes>
           <Route path="*" element={<Signup />} />
         </Routes>
+        <Toaster />
       </BrowserRouter>
     )
   }
@@ -35,6 +38,15 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
+        <Route path="/settings" element={
+          session ? (
+            <Layout>
+              <Settings />
+            </Layout>
+          ) : (
+            <Navigate to="/login" />
+          )
+        } />
         <Route path="/admin" element={
           session?.user?.role === "admin" ? (
             <Layout>
@@ -54,6 +66,7 @@ export default function App() {
           )
         } />
       </Routes>
+      <Toaster />
     </BrowserRouter>
   )
 }
