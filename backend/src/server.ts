@@ -3,8 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createOpencode } from "@opencode-ai/sdk";
-import { setOpencodeServerUrl } from './opencode';
+
+import { initOpencode } from './opencode';
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { auth } from './auth';
@@ -49,35 +49,9 @@ app.listen(PORT, async () => {
     // Initialize OpenCode Server
     try {
         console.log('[OpenCode] Starting internal server...');
-        const options: any = {};
-        if (process.env.OPENCODE_MODEL) {
-            options.config = {
-                model: process.env.OPENCODE_MODEL
-            };
-        }
 
-        // This starts the server
-        const instance = await createOpencode(options);
-        console.log(`[OpenCode] Server started at ${instance.server.url}`);
+        await initOpencode({ config: { model: process.env.OPENCODE_MODEL } });
 
-        // Set the server URL for the service to use (creates fresh clients per request)
-        setOpencodeServerUrl(instance.server.url);
-
-        // Graceful shutdown
-        const cleanup = () => {
-            console.log('[OpenCode] Stopping server...');
-            try {
-                instance.server.close();
-            } catch (e) {
-                // ignore
-            }
-        };
-
-        process.on('SIGTERM', cleanup);
-        process.on('SIGINT', cleanup);
-        process.on('exit', cleanup);
-
-        // Note: we don't close the server here, it stays running with the app
     } catch (error) {
         console.error('[OpenCode] Failed to start server:', error);
     }

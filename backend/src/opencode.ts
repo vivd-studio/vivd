@@ -1,11 +1,24 @@
-import { createOpencodeClient } from "@opencode-ai/sdk";
+import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk";
 
-let openCodeServerUrl: string | null = null;
-const DEFAULT_URL = "http://localhost:4096";
+type OpencodeClient = ReturnType<typeof createOpencodeClient>;
 
-export function setOpencodeServerUrl(url: string) {
-    console.log(`[OpenCode] Server URL set globally to ${url}`);
-    openCodeServerUrl = url;
+let client: OpencodeClient | null = null;
+let server: any | null = null;
+
+export async function initOpencode(options: any = {}) {
+    console.log(`[OpenCode] Starting internal server...`);
+    const instance = await createOpencode(options);
+    client = instance.client;
+    server = instance.server;
+    console.log(`[OpenCode] Initialized. Server URL: ${server.url}`);
+    return instance;
+}
+
+export function getOpencodeClient() {
+    if (!client) {
+        throw new Error("OpenCode client not initialized. Call initOpencode first.");
+    }
+    return client;
 }
 
 export class OpenCodeService {
@@ -17,103 +30,57 @@ export class OpenCodeService {
      * @returns The output of the agent and the session ID.
      */
     static async runTask(task: string, cwd: string, sessionId?: string): Promise<{ output: string, sessionId: string }> {
-        const baseUrl = openCodeServerUrl || DEFAULT_URL;
-        console.log(`[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${sessionId || 'New'}) using server ${baseUrl}`);
-
-        // Create a fresh client for each request to avoid state leakage
-        const client = createOpencodeClient({
-            baseUrl: baseUrl,
-        });
+        const client = getOpencodeClient();
+        console.log(`[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${sessionId || 'New'})`);
 
         try {
-            let currentSessionId = sessionId;
+            const currentSessionId = await this.getOrCreateSession(client, cwd, sessionId);
+            await this.sendPrompt(client, currentSessionId, cwd, task);
+            const output = await this.getLastResponse(client, currentSessionId);
 
-            // 1. Create a session if one doesn't exist
-            if (!currentSessionId) {
-                // Ensure cwd is absolute? It is gathered from path.join(process.cwd(), ...) so yes.
-                const sessionResult = await client.session.create({
-                    query: {
-                        directory: cwd
-                    }
-                });
-
-                if (sessionResult.error) {
-                    throw new Error(`Failed to create session: ${JSON.stringify(sessionResult.error)}`);
-                }
-
-                // sessionResult.data is Session object which has id directly
-                if (!sessionResult.data?.id) {
-                    throw new Error('Session created but no ID returned');
-                }
-                currentSessionId = sessionResult.data.id;
-                console.log(`[OpenCode] Created new session: ${currentSessionId} for directory: ${cwd}`);
-            } else {
-                console.log(`[OpenCode] Reusing existing session: ${currentSessionId} for directory: ${cwd}`);
-            }
-
-            // 2. Send the task prompt
-            // The SDK prompt method sends a message to the session.
-            const promptResult = await client.session.prompt({
-                path: {
-                    id: currentSessionId
-                },
-                query: {
-                    directory: cwd
-                },
-                body: {
-                    parts: [{ type: 'text', text: task }]
-                }
-            });
-
-            if (promptResult.error) {
-                throw new Error(`Failed to prompt session: ${JSON.stringify(promptResult.error)}`);
-            }
-
-            // 3. Retrieve the response
-            // We need to fetch the messages to get the assistant's response. 
-            // The prompt might return it, but listing messages is safer to get the full context if needed.
-            // However, usually prompt returns the response. Let's check the data.
-            // Assuming promptResult.data contains the new messages or we iterate.
-
-            // For now, let's fetch the last message from the session to be sure.
-            const messagesResult = await client.session.messages({
-                path: { id: currentSessionId! }
-            });
-
-            if (messagesResult.error) {
-                throw new Error(`Failed to fetch messages: ${JSON.stringify(messagesResult.error)}`);
-            }
-
-            const messages = messagesResult.data || [];
-            // Messages structure is Array<{ info: Message, parts: Part[] }>
-            // Get the last assistant message
-            const lastMessage = messages.slice().reverse().find((m: any) => m.info && m.info.role === 'assistant');
-
-            let output = '';
-            if (lastMessage && lastMessage.parts) {
-                // Extract text parts
-                const textParts = lastMessage.parts.filter((p: any) => p.type === 'text');
-                if (textParts.length > 0) {
-                    output = textParts.map((p: any) => p.text).join('\n');
-                } else {
-                    // Fallback to JSON if no text parts (e.g. only tool calls)
-                    output = JSON.stringify(lastMessage.parts);
-                }
-            } else {
-                output = "Task completed (no textual output found)";
-            }
-
-            // Stream to console to maintain logs
             console.log(`[OpenCode Output] ${output}`);
-
-            return {
-                output,
-                sessionId: currentSessionId!
-            };
-
+            return { output, sessionId: currentSessionId };
         } catch (error: any) {
             console.error(`[OpenCode] Error:`, error);
             throw new Error(`OpenCode task failed: ${error.message}`);
         }
+    }
+
+    private static async getOrCreateSession(client: OpencodeClient, cwd: string, sessionId?: string): Promise<string> {
+        if (sessionId) {
+            console.log(`[OpenCode] Reusing existing session: ${sessionId} for directory: ${cwd}`);
+            return sessionId;
+        }
+
+        const result = await client.session.create({ query: { directory: cwd } });
+        if (result.error) throw new Error(`Failed to create session: ${JSON.stringify(result.error)}`);
+        if (!result.data?.id) throw new Error('Session created but no ID returned');
+
+        console.log(`[OpenCode] Created new session: ${result.data.id} for directory: ${cwd}`);
+        return result.data.id;
+    }
+
+    private static async sendPrompt(client: OpencodeClient, sessionId: string, cwd: string, task: string): Promise<void> {
+        const result = await client.session.prompt({
+            path: { id: sessionId },
+            query: { directory: cwd },
+            body: { parts: [{ type: 'text', text: task }] }
+        });
+        if (result.error) throw new Error(`Failed to prompt session: ${JSON.stringify(result.error)}`);
+    }
+
+    private static async getLastResponse(client: OpencodeClient, sessionId: string): Promise<string> {
+        const result = await client.session.messages({ path: { id: sessionId } });
+        if (result.error) throw new Error(`Failed to fetch messages: ${JSON.stringify(result.error)}`);
+
+        const messages = result.data || [];
+        const lastMessage = messages.slice().reverse().find((m: any) => m.info?.role === 'assistant');
+
+        if (!lastMessage?.parts) return "Task completed (no textual output found)";
+
+        const textParts = lastMessage.parts.filter((p: any) => p.type === 'text');
+        return textParts.length > 0
+            ? textParts.map((p: any) => p.text).join('\n')
+            : JSON.stringify(lastMessage.parts);
     }
 }
