@@ -50,7 +50,21 @@ app.listen(PORT, async () => {
     try {
         console.log('[OpenCode] Starting internal server...');
 
-        await initOpencode({ config: { model: process.env.OPENCODE_MODEL } });
+        const instance = await initOpencode({ config: { model: process.env.OPENCODE_MODEL } });
+
+        // Graceful shutdown
+        const cleanup = () => {
+            console.log('[OpenCode] Stopping server...');
+            try {
+                instance.server.close();
+            } catch (e) {
+                // ignore
+            }
+        };
+
+        process.on('SIGTERM', cleanup);
+        process.on('SIGINT', cleanup);
+        process.on('exit', cleanup);
 
     } catch (error) {
         console.error('[OpenCode] Failed to start server:', error);

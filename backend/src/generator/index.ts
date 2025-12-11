@@ -8,7 +8,6 @@ import { validateConfig } from './config';
 export { scrapeWebsite, generateLandingPage, analyzeImages, createHeroImage, log, validateConfig };
 import * as path from 'path';
 import * as fs from 'fs';
-import { fileURLToPath } from 'url';
 
 export async function processUrl(targetUrl: string) {
     validateConfig();
@@ -65,13 +64,4 @@ export async function processUrl(targetUrl: string) {
     }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-    const args = process.argv.slice(2);
-    if (args.length === 0) {
-        console.error('Usage: npx tsx index.ts <url>');
-        process.exit(1);
-    }
-    processUrl(args[0]).catch(error => {
-        console.error('An error occurred:', error);
-    });
-}
+
