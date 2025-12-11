@@ -2,6 +2,8 @@
 import { processUrl } from './index';
 import { fileURLToPath } from 'url';
 
+
+// This is for running the processing without the server
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const args = process.argv.slice(2);
     if (args.length === 0) {
