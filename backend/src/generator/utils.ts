@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as fs from 'fs';
+import sharp from 'sharp';
 import { log } from './logger';
 
 export async function autoScroll(page: any) {
@@ -26,7 +27,6 @@ export async function autoScroll(page: any) {
  */
 export async function saveImageBuffer(buffer: Buffer, filepath: string) {
     if (filepath.endsWith('.webp')) {
-        const sharp = require('sharp');
         await sharp(buffer)
             .webp({ quality: 80 })
             .toFile(filepath);

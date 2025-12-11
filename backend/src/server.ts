@@ -48,7 +48,7 @@ app.listen(PORT, async () => {
 
     // Initialize OpenCode Server
     try {
-        console.log('[OpenCode] Starting internal server...');
+        console.log('[OpenCode] Starting internal server with model', process.env.OPENCODE_MODEL);
 
         const instance = await initOpencode({ config: { model: process.env.OPENCODE_MODEL } });
 

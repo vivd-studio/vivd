@@ -1,5 +1,4 @@
-
-export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+export const OPENROUTER_API_KEY = process.env._OPENROUTER_API_KEY;
 export const MAX_SCREENSHOT_HEIGHT = 2000; // Limit screenshot height to avoid huge files
 export const GENERATION_MODEL = 'google/gemini-3-pro-preview'; // model to create index.html
 export const LOCAL_GENERATION_MODEL = 'gemini-3-pro'; // model that cursor-agent uses
@@ -19,7 +18,7 @@ export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 export const OPENCODE_MODEL = process.env.OPENCODE_MODEL;
 
 export function validateConfig() {
-    if (!process.env.OPENROUTER_API_KEY && !process.env.USE_LOCAL_AGENT) {
+    if (!process.env._OPENROUTER_API_KEY && !process.env.USE_LOCAL_AGENT) {
         throw new Error('Please set OPENROUTER_API_KEY in your .env file or set USE_LOCAL_AGENT=true.');
     }
 }

@@ -8,7 +8,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
-RUN npm install -g opencode-ai
+# RUN npm install -g opencode-ai
 
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \

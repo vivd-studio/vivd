@@ -1,15 +1,28 @@
-import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk";
+import { createOpencode, createOpencodeClient, ServerOptions } from "@opencode-ai/sdk";
 
 type OpencodeClient = ReturnType<typeof createOpencodeClient>;
 
 let client: OpencodeClient | null = null;
 let server: any | null = null;
 
-export async function initOpencode(options: any = {}) {
+export async function initOpencode(options: ServerOptions = {}) {
     console.log(`[OpenCode] Starting internal server...`);
     const instance = await createOpencode(options);
     client = instance.client;
     server = instance.server;
+
+    // Start event listener in background
+    (async () => {
+        try {
+            const events = await client!.event.subscribe();
+            for await (const event of events.stream) {
+                console.log("[OpenCode Event]", event.type, event.properties);
+            }
+        } catch (err) {
+            console.error("[OpenCode] Error reading event stream:", err);
+        }
+    })();
+
     console.log(`[OpenCode] Initialized. Server URL: ${server.url}`);
     return instance;
 }
@@ -61,10 +74,16 @@ export class OpenCodeService {
     }
 
     private static async sendPrompt(client: OpencodeClient, sessionId: string, cwd: string, task: string): Promise<void> {
+        const modelEnv = process.env.OPENCODE_MODEL || "google/gemini-3-pro-preview";
+        const [providerID, modelID] = modelEnv.split("/");
+
         const result = await client.session.prompt({
             path: { id: sessionId },
             query: { directory: cwd },
-            body: { parts: [{ type: 'text', text: task }] }
+            body: {
+                model: { providerID, modelID },
+                parts: [{ type: 'text', text: task }]
+            }
         });
         if (result.error) throw new Error(`Failed to prompt session: ${JSON.stringify(result.error)}`);
     }

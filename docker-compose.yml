@@ -6,12 +6,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - PORT=3000
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - _OPENROUTER_API_KEY=${_OPENROUTER_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - OPENCODE_MODEL=${OPENCODE_MODEL}
       - FRONTEND_URL=${FRONTEND_URL}
     volumes:
       - backend_data:/app/generated
+      - opencode_data:/root/.local/share/opencode/storage
     depends_on:
       - postgres
     networks:
@@ -45,3 +46,4 @@ networks:
 volumes:
   postgres_data:
   backend_data:
+  opencode_data:
