@@ -1,105 +1,149 @@
-import { createOpencode, createOpencodeClient, ServerOptions } from "@opencode-ai/sdk";
+import {
+  createOpencode,
+  createOpencodeClient,
+  OpencodeClient,
+} from "@opencode-ai/sdk";
 
-type OpencodeClient = ReturnType<typeof createOpencodeClient>;
+let serverUrl: string;
 
-let client: OpencodeClient | null = null;
-let server: any | null = null;
+export async function initOpencode() {
+  console.log(
+    `[OpenCode] Starting internal server with model ${process.env.OPENCODE_MODEL}`
+  );
+  const opencode = await createOpencode({
+    config: { model: process.env.OPENCODE_MODEL },
+  });
+  console.log(
+    `[OpenCode] Server Initialized. Server URL: ${opencode.server.url}`
+  );
+  serverUrl = opencode.server.url;
 
-export async function initOpencode(options: ServerOptions = {}) {
-    console.log(`[OpenCode] Starting internal server...`);
-    const instance = await createOpencode(options);
-    client = instance.client;
-    server = instance.server;
-
-    // Start event listener in background
-    (async () => {
-        try {
-            const events = await client!.event.subscribe();
-            for await (const event of events.stream) {
-                console.log("[OpenCode Event]", event.type, event.properties);
-            }
-        } catch (err) {
-            console.error("[OpenCode] Error reading event stream:", err);
-        }
-    })();
-
-    console.log(`[OpenCode] Initialized. Server URL: ${server.url}`);
-    return instance;
+  return opencode;
 }
 
-export function getOpencodeClient() {
-    if (!client) {
-        throw new Error("OpenCode client not initialized. Call initOpencode first.");
+export async function runTask(
+  task: string,
+  cwd: string,
+  sessionId?: string
+): Promise<{ output: string; sessionId: string }> {
+  console.log(
+    `[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${
+      sessionId || "New"
+    })`
+  );
+
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+
+  const client = createOpencodeClient({
+    baseUrl: serverUrl,
+    directory: cwd,
+  });
+
+  const events = await client.event.subscribe();
+
+  (async () => {
+    try {
+      for await (const event of events.stream) {
+        console.log("Event:", event.type, event.properties);
+      }
+    } catch (e) {
+      // console.error("Stream closed", e);
     }
-    return client;
+  })();
+
+  try {
+    const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
+    await sendPrompt(client, currentSessionId, cwd, task);
+    const output = await getLastResponse(client, currentSessionId);
+
+    console.log(`[OpenCode Output] ${output}`);
+    return { output, sessionId: currentSessionId };
+  } catch (error: any) {
+    console.error(`[OpenCode] Error:`, error);
+    throw new Error(`OpenCode task failed: ${error.message}`);
+  }
 }
 
-export class OpenCodeService {
-    /**
-     * Runs an OpenCode agent task in the specified working directory.
-     * @param task The natural language task description.
-     * @param cwd The directory where the agent should operate.
-     * @param sessionId Optional session ID to continue a conversation.
-     * @returns The output of the agent and the session ID.
-     */
-    static async runTask(task: string, cwd: string, sessionId?: string): Promise<{ output: string, sessionId: string }> {
-        const client = getOpencodeClient();
-        console.log(`[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${sessionId || 'New'})`);
+async function getOrCreateSession(
+  client: OpencodeClient,
+  cwd: string,
+  sessionId?: string
+): Promise<string> {
+  if (sessionId) {
+    console.log(
+      `[OpenCode] Reusing existing session: ${sessionId} for directory: ${cwd}`
+    );
+    return sessionId;
+  }
 
-        try {
-            const currentSessionId = await this.getOrCreateSession(client, cwd, sessionId);
-            await this.sendPrompt(client, currentSessionId, cwd, task);
-            const output = await this.getLastResponse(client, currentSessionId);
+  const result = await client.session.create({ query: { directory: cwd } });
+  if (result.error)
+    throw new Error(
+      `Failed to create session: ${JSON.stringify(result.error)}`
+    );
+  if (!result.data?.id) throw new Error("Session created but no ID returned");
 
-            console.log(`[OpenCode Output] ${output}`);
-            return { output, sessionId: currentSessionId };
-        } catch (error: any) {
-            console.error(`[OpenCode] Error:`, error);
-            throw new Error(`OpenCode task failed: ${error.message}`);
-        }
-    }
+  console.log(
+    `[OpenCode] Created new session: ${result.data.id} for directory: ${cwd}`
+  );
+  return result.data.id;
+}
 
-    private static async getOrCreateSession(client: OpencodeClient, cwd: string, sessionId?: string): Promise<string> {
-        if (sessionId) {
-            console.log(`[OpenCode] Reusing existing session: ${sessionId} for directory: ${cwd}`);
-            return sessionId;
-        }
+async function sendPrompt(
+  client: OpencodeClient,
+  sessionId: string,
+  cwd: string,
+  task: string
+): Promise<void> {
+  const modelEnv = process.env.OPENCODE_MODEL;
+  const [providerID, modelID] = modelEnv.split("/");
 
-        const result = await client.session.create({ query: { directory: cwd } });
-        if (result.error) throw new Error(`Failed to create session: ${JSON.stringify(result.error)}`);
-        if (!result.data?.id) throw new Error('Session created but no ID returned');
+  console.log(
+    `[OpenCode] Sending prompt to session: ${sessionId} for directory: ${cwd}, with model: ${modelEnv}`
+  );
+  try {
+    const result = await client.session.prompt({
+      path: { id: sessionId },
+      query: { directory: cwd },
+      body: {
+        model: { providerID, modelID },
+        parts: [{ type: "text", text: task }],
+      },
+    });
+    if (result.error)
+      throw new Error(
+        `Failed to prompt session: ${JSON.stringify(result.error)}`
+      );
+  } catch (error: any) {
+    console.error(`[OpenCode] Error:`, error);
+    throw new Error(`OpenCode task failed: ${error.message}`);
+  }
 
-        console.log(`[OpenCode] Created new session: ${result.data.id} for directory: ${cwd}`);
-        return result.data.id;
-    }
+  console.log(`[OpenCode] Prompt sent to session: ${sessionId}`);
+}
 
-    private static async sendPrompt(client: OpencodeClient, sessionId: string, cwd: string, task: string): Promise<void> {
-        const modelEnv = process.env.OPENCODE_MODEL || "google/gemini-3-pro-preview";
-        const [providerID, modelID] = modelEnv.split("/");
+async function getLastResponse(
+  client: OpencodeClient,
+  sessionId: string
+): Promise<string> {
+  const result = await client.session.messages({ path: { id: sessionId } });
+  if (result.error)
+    throw new Error(
+      `Failed to fetch messages: ${JSON.stringify(result.error)}`
+    );
 
-        const result = await client.session.prompt({
-            path: { id: sessionId },
-            query: { directory: cwd },
-            body: {
-                model: { providerID, modelID },
-                parts: [{ type: 'text', text: task }]
-            }
-        });
-        if (result.error) throw new Error(`Failed to prompt session: ${JSON.stringify(result.error)}`);
-    }
+  const messages = result.data || [];
+  const lastMessage = messages
+    .slice()
+    .reverse()
+    .find((m: any) => m.info?.role === "assistant");
 
-    private static async getLastResponse(client: OpencodeClient, sessionId: string): Promise<string> {
-        const result = await client.session.messages({ path: { id: sessionId } });
-        if (result.error) throw new Error(`Failed to fetch messages: ${JSON.stringify(result.error)}`);
+  if (!lastMessage?.parts) return "Task completed (no textual output found)";
 
-        const messages = result.data || [];
-        const lastMessage = messages.slice().reverse().find((m: any) => m.info?.role === 'assistant');
-
-        if (!lastMessage?.parts) return "Task completed (no textual output found)";
-
-        const textParts = lastMessage.parts.filter((p: any) => p.type === 'text');
-        return textParts.length > 0
-            ? textParts.map((p: any) => p.text).join('\n')
-            : JSON.stringify(lastMessage.parts);
-    }
+  const textParts = lastMessage.parts.filter((p: any) => p.type === "text");
+  return textParts.length > 0
+    ? textParts.map((p: any) => p.text).join("\n")
+    : JSON.stringify(lastMessage.parts);
 }
