@@ -1,22 +1,24 @@
 {
     "name": "landing-page-agent",
     "version": "1.0.0",
+    "type": "module",
     "description": "An agent to scrape websites and generate landing pages.",
     "main": "index.js",
     "scripts": {
-        "dev": "nodemon",
-        "build": "tsc",
+        "dev": "tsx watch src/server.ts",
+        "build": "tsup src/server.ts --format esm --clean --shims",
         "start": "node dist/server.js",
         "test": "echo \"Error: no test specified\" && exit 1",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
         "db:generate": "drizzle-kit generate",
-        "db:migrate": "ts-node src/db/migrate.ts"
+        "db:migrate": "tsx src/db/migrate.ts"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "@opencode-ai/sdk": "^1.0.143",
         "@openrouter/sdk": "^0.2.9",
         "@trpc/server": "^11.7.2",
         "axios": "^1.13.2",
@@ -32,8 +34,8 @@
         "puppeteer": "^24.32.1",
         "puppeteer-extra": "^3.3.6",
         "puppeteer-extra-plugin-stealth": "^2.11.2",
-        "zod": "^4.1.13",
-        "sharp": "^0.34.5"
+        "sharp": "^0.34.5",
+        "zod": "^4.1.13"
     },
     "devDependencies": {
         "@types/chai": "^5.2.3",
@@ -46,9 +48,11 @@
         "@types/sharp": "^0.32.0",
         "chai": "^6.2.1",
         "drizzle-kit": "^0.31.8",
+        "tsup": "^8.3.5",
         "mocha": "^11.7.5",
         "nodemon": "^3.1.11",
         "ts-node": "^10.9.2",
+        "tsx": "^4.19.2",
         "tslab": "^1.0.22",
         "typescript": "^5.9.3"
     }

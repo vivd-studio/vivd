@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
-import sizeOf from 'image-size';
+import { imageSize as sizeOf } from 'image-size';
 import { log } from '../logger';
 
 export function getImageDimensions(filePath: string): { width: number; height: number } {

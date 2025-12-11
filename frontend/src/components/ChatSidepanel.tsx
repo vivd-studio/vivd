@@ -18,11 +18,15 @@ interface Message {
 export function ChatPanel({ projectSlug, onTaskComplete, onClose }: ChatPanelProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState("")
+    const [sessionId, setSessionId] = useState<string | undefined>(undefined)
     const scrollRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     const runTaskMutation = trpc.agent.runTask.useMutation({
         onSuccess: (data) => {
+            if (data.sessionId) {
+                setSessionId(data.sessionId)
+            }
             setMessages(prev => [...prev, { role: 'agent', content: data.output || "Task completed." }])
             onTaskComplete?.()
         },
@@ -47,7 +51,7 @@ export function ChatPanel({ projectSlug, onTaskComplete, onClose }: ChatPanelPro
         }
         setMessages(prev => [...prev, { role: 'user', content: task }])
 
-        runTaskMutation.mutate({ projectSlug, task })
+        runTaskMutation.mutate({ projectSlug, task, sessionId })
     }
 
     const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

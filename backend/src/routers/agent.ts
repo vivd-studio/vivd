@@ -1,6 +1,6 @@
-import { router, publicProcedure } from "../trpc";
+import { router, publicProcedure } from '../trpc';
 import { z } from "zod";
-import { OpenCodeService } from "../opencode";
+import { OpenCodeService } from '../opencode';
 import path from "path";
 import fs from "fs";
 
@@ -12,7 +12,8 @@ export const agentRouter = router({
     runTask: publicProcedure
         .input(z.object({
             projectSlug: z.string(),
-            task: z.string()
+            task: z.string(),
+            sessionId: z.string().optional()
         }))
         .mutation(async ({ input }) => {
             const projectPath = path.join(GENERATED_PROJECTS_DIR, input.projectSlug);
@@ -27,8 +28,8 @@ export const agentRouter = router({
             }
 
             try {
-                const result = await OpenCodeService.runTask(input.task, projectPath);
-                return { success: true, output: result };
+                const { output, sessionId } = await OpenCodeService.runTask(input.task, projectPath, input.sessionId);
+                return { success: true, output, sessionId };
             } catch (error: any) {
                 console.error("Agent execution error:", error);
                 throw new Error(error.message || "Failed to execute agent task");

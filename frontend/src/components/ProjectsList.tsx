@@ -4,7 +4,7 @@ import { ProjectCard } from "./ProjectCard"
 import { OverwriteDialog } from "./OverwriteDialog"
 
 interface ProjectsListProps {
-    onPreview: (url: string, originalUrl?: string) => void
+    onPreview: (url: string, originalUrl?: string, slug?: string) => void
 }
 
 export function ProjectsList({ onPreview }: ProjectsListProps) {

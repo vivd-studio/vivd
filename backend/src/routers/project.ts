@@ -4,6 +4,7 @@ import { processUrl } from "../generator/index";
 import path from "path";
 import fs from "fs";
 
+
 export const projectRouter = router({
     generate: protectedProcedure
         .input(z.object({
@@ -12,11 +13,11 @@ export const projectRouter = router({
         .mutation(async ({ input }) => {
             const { url } = input;
 
+            // Ensure consistent slug generation
             let targetUrl = url;
             if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
-            // logic mirrored from generator/index.ts to ensure consistent slug generation
             const domainSlug = new URL(targetUrl).hostname.replace('www.', '').split('.')[0];
-            const outputDir = path.join(__dirname, '../../generated', domainSlug);
+            const outputDir = path.join(process.cwd(), 'generated', domainSlug);
 
             if (fs.existsSync(outputDir)) {
                 // Check status
@@ -55,7 +56,7 @@ export const projectRouter = router({
         .input(z.object({ slug: z.string() }))
         .mutation(async ({ input }) => {
             const { slug } = input;
-            const outputDir = path.join(__dirname, '../../generated', slug);
+            const outputDir = path.join(process.cwd(), 'generated', slug);
 
             if (!fs.existsSync(outputDir)) {
                 throw new Error("Project not found");
@@ -90,10 +91,7 @@ export const projectRouter = router({
         .input(z.object({ slug: z.string() }))
         .query(async ({ input }) => {
             const { slug } = input;
-            // Note: Assuming the generated folder is at ../generated relative to src
-            // server.ts has: path.join(__dirname, '../generated')
-            // but here we are in src/routers, so it should be ../../generated
-            const generatedDir = path.join(__dirname, '../../generated');
+            const generatedDir = path.join(process.cwd(), 'generated');
             const projectJsonPath = path.join(generatedDir, slug, 'project.json');
 
             let status = 'processing';
@@ -125,7 +123,7 @@ export const projectRouter = router({
         }),
 
     list: publicProcedure.query(async () => {
-        const generatedDir = path.join(__dirname, '../../generated');
+        const generatedDir = path.join(process.cwd(), 'generated');
 
         if (!fs.existsSync(generatedDir)) {
             return { projects: [] };
