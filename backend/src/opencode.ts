@@ -46,7 +46,9 @@ export async function runTask(
   (async () => {
     try {
       for await (const event of events.stream) {
-        console.log("Event:", event.type, event.properties);
+        if (event.type === "session.updated") {
+          console.log(`[OpenCode] Session updated: ${JSON.stringify(event)}`);
+        }
       }
     } catch (e) {
       // console.error("Stream closed", e);
