@@ -93,6 +93,7 @@ export function PreviewModal({ open, onOpenChange, url, originalUrl, projectSlug
                     {projectSlug && chatOpen && (
                         <div className="w-[400px] border-l bg-background flex flex-col h-full shadow-xl z-20 transition-all">
                             <ChatPanel
+                                key={projectSlug}
                                 projectSlug={projectSlug}
                                 onTaskComplete={handleTaskComplete}
                                 onClose={() => setChatOpen(false)}

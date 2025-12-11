@@ -1,10 +1,11 @@
 import { createOpencodeClient } from "@opencode-ai/sdk";
 
-let openCodeClient: any = null;
+let openCodeServerUrl: string | null = null;
+const DEFAULT_URL = "http://localhost:4096";
 
-export function setOpencodeClient(client: any) {
-    console.log('[OpenCode] Client set globally');
-    openCodeClient = client;
+export function setOpencodeServerUrl(url: string) {
+    console.log(`[OpenCode] Server URL set globally to ${url}`);
+    openCodeServerUrl = url;
 }
 
 export class OpenCodeService {
@@ -16,24 +17,20 @@ export class OpenCodeService {
      * @returns The output of the agent and the session ID.
      */
     static async runTask(task: string, cwd: string, sessionId?: string): Promise<{ output: string, sessionId: string }> {
-        console.log(`[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${sessionId || 'New'})`);
+        const baseUrl = openCodeServerUrl || DEFAULT_URL;
+        console.log(`[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${sessionId || 'New'}) using server ${baseUrl}`);
 
-        if (!openCodeClient) {
-            // Fallback: try to connect to localhost:4096 if client not set
-            // This handles cases where server might be running externally or we want to connect lazily
-            console.log('[OpenCode] Client not set, attempting to connect to default localhost:4096');
-            openCodeClient = createOpencodeClient({
-                baseUrl: "http://localhost:4096",
-            });
-        }
-
-        const client = openCodeClient;
+        // Create a fresh client for each request to avoid state leakage
+        const client = createOpencodeClient({
+            baseUrl: baseUrl,
+        });
 
         try {
             let currentSessionId = sessionId;
 
             // 1. Create a session if one doesn't exist
             if (!currentSessionId) {
+                // Ensure cwd is absolute? It is gathered from path.join(process.cwd(), ...) so yes.
                 const sessionResult = await client.session.create({
                     query: {
                         directory: cwd
@@ -49,7 +46,9 @@ export class OpenCodeService {
                     throw new Error('Session created but no ID returned');
                 }
                 currentSessionId = sessionResult.data.id;
-                console.log(`[OpenCode] Created new session: ${currentSessionId}`);
+                console.log(`[OpenCode] Created new session: ${currentSessionId} for directory: ${cwd}`);
+            } else {
+                console.log(`[OpenCode] Reusing existing session: ${currentSessionId} for directory: ${cwd}`);
             }
 
             // 2. Send the task prompt
@@ -57,6 +56,9 @@ export class OpenCodeService {
             const promptResult = await client.session.prompt({
                 path: {
                     id: currentSessionId
+                },
+                query: {
+                    directory: cwd
                 },
                 body: {
                     parts: [{ type: 'text', text: task }]

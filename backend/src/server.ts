@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createOpencode } from "@opencode-ai/sdk";
-import { setOpencodeClient } from './opencode';
+import { setOpencodeServerUrl } from './opencode';
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { auth } from './auth';
@@ -60,8 +60,8 @@ app.listen(PORT, async () => {
         const instance = await createOpencode(options);
         console.log(`[OpenCode] Server started at ${instance.server.url}`);
 
-        // Set the client for the service to use
-        setOpencodeClient(instance.client);
+        // Set the server URL for the service to use (creates fresh clients per request)
+        setOpencodeServerUrl(instance.server.url);
 
         // Graceful shutdown
         const cleanup = () => {
