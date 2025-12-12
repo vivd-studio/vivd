@@ -44,3 +44,14 @@ export const protectedProcedure = t.procedure.use(async function isAuthed(opts) 
         },
     });
 });
+
+export const adminProcedure = protectedProcedure.use(async function isAdmin(opts) {
+    const { ctx } = opts;
+    if (ctx.session.user.role !== "admin") {
+        throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Admin access required",
+        });
+    }
+    return opts.next();
+});

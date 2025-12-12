@@ -1,6 +1,11 @@
-import { router, publicProcedure } from "../trpc";
+import { router, publicProcedure, adminProcedure } from "../trpc";
 import { z } from "zod";
-import { runTask } from "../opencode";
+import {
+  runTask,
+  listSessions,
+  listProjects,
+  getSessionContent,
+} from "../opencode";
 import path from "path";
 import fs from "fs";
 
@@ -39,6 +44,38 @@ export const agentRouter = router({
       } catch (error: any) {
         console.error("Agent execution error:", error);
         throw new Error(error.message || "Failed to execute agent task");
+      }
+    }),
+
+  listSessions: adminProcedure.query(async () => {
+    try {
+      const sessions = await listSessions();
+      return sessions;
+    } catch (error: any) {
+      console.error("Failed to list sessions:", error);
+      throw new Error(error.message || "Failed to list sessions");
+    }
+  }),
+
+  listProjects: adminProcedure.query(async () => {
+    try {
+      const projects = await listProjects();
+      return projects;
+    } catch (error: any) {
+      console.error("Failed to list projects:", error);
+      throw new Error(error.message || "Failed to list projects");
+    }
+  }),
+
+  getSessionContent: adminProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const content = await getSessionContent(input.sessionId);
+        return content;
+      } catch (error: any) {
+        console.error("Failed to get session content:", error);
+        throw new Error(error.message || "Failed to get session content");
       }
     }),
 });

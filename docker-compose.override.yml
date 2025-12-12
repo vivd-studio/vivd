@@ -10,7 +10,7 @@ services:
       - ./backend/generated:/app/generated
     develop:
       watch:
-        - action: sync
+        - action: sync+restart
           path: ./backend
           target: /app
           ignore:

@@ -45,13 +45,12 @@ export async function runTask(
 
   (async () => {
     try {
+      // TODO: Log out the proper and imporant events, like tool calls
       for await (const event of events.stream) {
-        if (event.type === "session.updated") {
-          console.log(`[OpenCode] Session updated: ${JSON.stringify(event)}`);
-        }
+        console.log(`[OpenCode] Event: ${JSON.stringify(event)}`);
       }
     } catch (e) {
-      // console.error("Stream closed", e);
+      console.error("Stream closed", e);
     }
   })();
 
@@ -66,6 +65,38 @@ export async function runTask(
     console.error(`[OpenCode] Error:`, error);
     throw new Error(`OpenCode task failed: ${error.message}`);
   }
+}
+
+export async function listSessions() {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl });
+  // @ts-ignore
+  const result = await client.session.list({});
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return result.data || [];
+}
+
+export async function listProjects() {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl });
+  // @ts-ignore
+  const result = await client.project.list({});
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return result.data || [];
+}
+
+export async function getSessionContent(sessionId: string) {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl });
+  const result = await client.session.messages({ path: { id: sessionId } });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return result.data || [];
 }
 
 async function getOrCreateSession(
@@ -100,6 +131,9 @@ async function sendPrompt(
   task: string
 ): Promise<void> {
   const modelEnv = process.env.OPENCODE_MODEL;
+  if (!modelEnv) {
+    throw new Error("OPENCODE_MODEL environment variable is not set");
+  }
   const [providerID, modelID] = modelEnv.split("/");
 
   console.log(
