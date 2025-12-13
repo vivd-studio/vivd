@@ -5,7 +5,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, ExternalLink } from "lucide-react";
+import { Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { ChatPanel } from "./ChatSidepanel";
 
@@ -49,12 +49,16 @@ export function PreviewModal({
     setRefreshKey((prev) => prev + 1);
   };
 
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-full h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b flex flex-row items-center gap-4 space-y-0 shrink-0 z-10 bg-background">
           <DialogTitle>Preview</DialogTitle>
-          <div className="flex items-center gap-2 ml-auto mr-12">
+          <div className="flex items-center gap-2 ml-auto mr-4 md:mr-12 overflow-x-auto max-w-full">
             {originalUrl && (
               <Button
                 variant="ghost"
@@ -66,6 +70,15 @@ export function PreviewModal({
                 Original Website
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              title="Refresh Preview"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
             <Button variant="outline" size="sm" onClick={handleCopy}>
               {copied ? (
                 <Check className="w-4 h-4 mr-2" />
