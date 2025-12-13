@@ -70,7 +70,6 @@ export function useEvents(
 
                 const toolCall: ToolCall = {
                   tool: part.tool,
-                  title: part.title,
                   input: part.state.input,
                   status: currentStatus,
                   id: part.id,
