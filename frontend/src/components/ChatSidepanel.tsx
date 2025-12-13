@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Send, X, ChevronRight, ChevronDown } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { SessionList } from "./chat/SessionList";
+import { MessageList } from "./chat/MessageList";
+import { MessageInput } from "./chat/MessageInput";
 
 interface ChatPanelProps {
   projectSlug: string;
@@ -21,10 +23,9 @@ export function ChatPanel({
   onTaskComplete,
   onClose,
 }: ChatPanelProps) {
+  // TODO: Make this event driven and not with polling!!
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [sessions, setSessions] = useState<{ id: string }[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
@@ -108,20 +109,36 @@ export function ChatPanel({
     },
   });
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const deleteSessionMutation = trpc.agent.deleteSession.useMutation({
+    onSuccess: () => {
+      refetchSessions();
+      if (sessions.length > 0) {
+        // If the deleted session was selected, deselect it or select another one
+        // Note: Logic to handle selected session update can be improved
+      }
+    },
+  });
+
+  const handleDeleteSession = async (
+    e: React.MouseEvent,
+    sessionId: string
+  ) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this session?")) {
+      await deleteSessionMutation.mutateAsync({ sessionId });
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId(null);
+        setMessages([]);
+      }
     }
-  }, [messages]);
+  };
 
   const handleSend = () => {
     if (!input.trim() || runTaskMutation.isPending) return;
 
     const task = input;
     setInput("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+
     if (selectedSessionId) {
       setMessages((prev) => [...prev, { role: "user", content: task }]);
       runTaskMutation.mutate({
@@ -136,17 +153,9 @@ export function ChatPanel({
     }
   };
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = `${e.target.scrollHeight}px`;
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const handleNewSession = () => {
+    setSelectedSessionId(null);
+    setMessages([]);
   };
 
   return (
@@ -162,156 +171,28 @@ export function ChatPanel({
               </Button>
             )}
           </div>
-          {/* Session Tabs */}
-          <div className="flex gap-2 w-full overflow-x-auto pb-2 scrollbar-thin">
-            <Button
-              variant={selectedSessionId === null ? "secondary" : "ghost"}
-              size="sm"
-              className="text-xs shrink-0"
-              onClick={() => {
-                setSelectedSessionId(null);
-                setMessages([]);
-              }}
-            >
-              + New Session
-            </Button>
-            {sessions.map((session: any) => (
-              <Button
-                key={session.id}
-                variant={
-                  selectedSessionId === session.id ? "secondary" : "ghost"
-                }
-                size="sm"
-                className="text-xs shrink-0 max-w-[120px] truncate"
-                onClick={() => {
-                  setSelectedSessionId(session.id);
-                  // messages will be fetched by the query
-                }}
-              >
-                {session.id.slice(0, 8)}...
-              </Button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-        <div className="flex flex-col gap-4 pb-4">
-          {messages.length === 0 && (
-            <div className="text-center text-muted-foreground mt-8">
-              <p>Describe a task for the agent to execute.</p>
-              <p className="text-sm mt-2">
-                Example: "Change the headline color to blue"
-              </p>
-            </div>
-          )}
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex flex-col gap-1 ${
-                msg.role === "user" ? "items-end" : "items-start"
-              }`}
-            >
-              <div
-                className={`rounded-lg px-4 py-2 max-w-[90%] whitespace-pre-wrap ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                }`}
-              >
-                {/* Render parts if available to show tools/reasoning */}
-                {msg.parts && msg.parts.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {msg.parts.map((part: any, pIndex: number) => {
-                      if (part.type === "text")
-                        return <span key={pIndex}>{part.text}</span>;
-                      if (part.type === "reasoning")
-                        return <ThinkingBlock key={pIndex} text={part.text} />;
-                      if (part.type === "tool")
-                        return (
-                          <div
-                            key={pIndex}
-                            className="text-xs bg-black/10 dark:bg-white/10 p-2 rounded flex items-center gap-2 font-mono"
-                          >
-                            <span>🛠️ {part.tool}</span>
-                            {/* Show input if needed, or status */}
-                          </div>
-                        );
-                      return null;
-                    })}
-                  </div>
-                ) : (
-                  msg.content ||
-                  (msg.role === "agent" ? (
-                    <span className="text-muted-foreground italic flex items-center gap-2">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
-                    </span>
-                  ) : null)
-                )}
-              </div>
-            </div>
-          ))}
-          {(runTaskMutation.isPending || isThinking) && (
-            <div className="flex justify-start">
-              <div className="bg-muted rounded-lg px-4 py-2 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Agent is working...</span>
-              </div>
-            </div>
-          )}
-          {/* Check if the last message from agent is potentially thinking: tricky with polling.
-                        We can add a visual indicator if polling tells us something is happening,
-                        but currently we only get messages.
-                     */}
-        </div>
-      </ScrollArea>
-
-      <div className="p-4 border-t mt-auto">
-        <div className="flex gap-2 items-end">
-          <textarea
-            ref={textareaRef}
-            className="flex min-h-[40px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none max-h-[200px]"
-            placeholder="Type a task..."
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            disabled={runTaskMutation.isPending}
-            rows={1}
+          <SessionList
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            onSelectSession={setSelectedSessionId}
+            onDeleteSession={handleDeleteSession}
+            onNewSession={handleNewSession}
           />
-          <Button
-            onClick={handleSend}
-            disabled={runTaskMutation.isPending || !input.trim()}
-            size="icon"
-            className="h-10 w-10 shrink-0"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
         </div>
       </div>
-    </div>
-  );
-}
 
-function ThinkingBlock({ text }: { text: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  return (
-    <div className="text-xs">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {isOpen ? (
-          <ChevronDown className="w-3 h-3" />
-        ) : (
-          <ChevronRight className="w-3 h-3" />
-        )}
-        <span className="italic">Thinking Process</span>
-      </button>
-      {isOpen && (
-        <div className="mt-1 pl-4 border-l-2 border-muted text-muted-foreground whitespace-pre-wrap">
-          {text}
-        </div>
-      )}
+      <MessageList
+        messages={messages}
+        isThinking={isThinking}
+        isLoading={runTaskMutation.isPending}
+      />
+
+      <MessageInput
+        input={input}
+        setInput={setInput}
+        onSend={handleSend}
+        isLoading={runTaskMutation.isPending}
+      />
     </div>
   );
 }

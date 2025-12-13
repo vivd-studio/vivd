@@ -5,6 +5,7 @@ import {
   listSessions,
   listProjects,
   getSessionContent,
+  deleteSession as deleteSessionFn,
 } from "../opencode";
 import path from "path";
 import fs from "fs";
@@ -91,6 +92,18 @@ export const agentRouter = router({
       } catch (error: any) {
         console.error("Failed to get session content:", error);
         throw new Error(error.message || "Failed to get session content");
+      }
+    }),
+
+  deleteSession: adminProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ input }) => {
+      try {
+        await deleteSessionFn(input.sessionId);
+        return { success: true };
+      } catch (error: any) {
+        console.error("Failed to delete session:", error);
+        throw new Error(error.message || "Failed to delete session");
       }
     }),
 });

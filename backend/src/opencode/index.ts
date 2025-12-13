@@ -183,6 +183,7 @@ async function sendPrompt(
     `[OpenCode] Sending prompt to session: ${sessionId} for directory: ${cwd}, with model: ${modelEnv}`
   );
   try {
+    // TODO: change this to promptAsync
     const result = await client.session.prompt({
       path: { id: sessionId },
       query: { directory: cwd },
@@ -225,4 +226,14 @@ async function getLastResponse(
   return textParts.length > 0
     ? textParts.map((p: any) => p.text).join("\n")
     : JSON.stringify(lastMessage.parts);
+}
+
+export async function deleteSession(sessionId: string) {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl });
+  const result = await client.session.delete({ path: { id: sessionId } });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return true;
 }
