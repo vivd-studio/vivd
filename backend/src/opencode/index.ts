@@ -28,7 +28,7 @@ export async function runTask(
   task: string,
   cwd: string,
   sessionId?: string
-): Promise<{ output: string; sessionId: string }> {
+): Promise<{ sessionId: string }> {
   console.log(
     `[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${
       sessionId || "New"
@@ -44,6 +44,9 @@ export async function runTask(
     directory: cwd,
   });
 
+  const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
+
+  // We start the event stream but don't wait for it to finish
   const { start, stop } = useEvents(client, {
     onStartThinking: () => {
       console.log(`[OpenCode] Thinking...`);
@@ -72,35 +75,50 @@ export async function runTask(
     },
   });
 
-  await start();
+  // Start listening to events in the background
+  start();
 
-  try {
-    const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
-    await sendPrompt(client, currentSessionId, cwd, task);
+  // Trigger the prompt in the background
+  sendPrompt(client, currentSessionId, cwd, task)
+    .then(async () => {
+      console.log(`[OpenCode] Task execution completed`);
+    })
+    .catch((error) => {
+      console.error(`[OpenCode] Background Task Error:`, error);
+    })
+    .finally(() => {
+      // Ensure we stop the event stream or we'll leak listeners/connections
+      // which results in duplicated logs for subsequent tasks.
+      stop();
+    });
 
-    stop();
-
-    const output = await getLastResponse(client, currentSessionId);
-
-    console.log(`[OpenCode Output] ${output}`);
-    return { output, sessionId: currentSessionId };
-  } catch (error: any) {
-    console.error(`[OpenCode] Error:`, error);
-    throw new Error(`OpenCode task failed: ${error.message}`);
-  } finally {
-    stop();
-  }
+  return { sessionId: currentSessionId };
 }
 
-export async function listSessions() {
+export async function listSessions(directory?: string) {
   if (!serverUrl) {
     throw new Error("OpenCode server not initialized");
   }
   const client = createOpencodeClient({ baseUrl: serverUrl });
-  // @ts-ignore
-  const result = await client.session.list({});
+  const query = directory ? { directory } : {};
+  const result = await client.session.list({ query });
   if (result.error) throw new Error(JSON.stringify(result.error));
-  return result.data || [];
+
+  let sessions = result.data || [];
+
+  if (directory) {
+    // Manual filtering is necessary as the API might return all sessions
+    sessions = sessions.filter((s: any) => {
+      if (!s.directory) return false;
+      // Simple exact match or trailing slash agnostic match
+      return (
+        s.directory === directory ||
+        s.directory.replace(/\/$/, "") === directory.replace(/\/$/, "")
+      );
+    });
+  }
+
+  return sessions;
 }
 
 export async function listProjects() {

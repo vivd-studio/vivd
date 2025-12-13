@@ -35,27 +35,42 @@ export const agentRouter = router({
       }
 
       try {
-        const { output, sessionId } = await runTask(
+        const { sessionId } = await runTask(
           input.task,
           projectPath,
           input.sessionId
         );
-        return { success: true, output, sessionId };
+        return { success: true, sessionId };
       } catch (error: any) {
         console.error("Agent execution error:", error);
         throw new Error(error.message || "Failed to execute agent task");
       }
     }),
 
-  listSessions: adminProcedure.query(async () => {
-    try {
-      const sessions = await listSessions();
-      return sessions;
-    } catch (error: any) {
-      console.error("Failed to list sessions:", error);
-      throw new Error(error.message || "Failed to list sessions");
-    }
-  }),
+  listSessions: adminProcedure
+    .input(z.object({ projectSlug: z.string().optional() }))
+    .query(async ({ input }) => {
+      try {
+        let directory: string | undefined;
+        if (input.projectSlug) {
+          const projectPath = path.join(
+            GENERATED_PROJECTS_DIR,
+            input.projectSlug
+          );
+          // Security check
+          if (!projectPath.startsWith(GENERATED_PROJECTS_DIR)) {
+            throw new Error("Invalid project path");
+          }
+          directory = projectPath;
+        }
+
+        const sessions = await listSessions(directory);
+        return sessions;
+      } catch (error: any) {
+        console.error("Failed to list sessions:", error);
+        throw new Error(error.message || "Failed to list sessions");
+      }
+    }),
 
   listProjects: adminProcedure.query(async () => {
     try {
