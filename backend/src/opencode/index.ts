@@ -3,7 +3,7 @@ import {
   createOpencodeClient,
   OpencodeClient,
 } from "@opencode-ai/sdk";
-import { useEvents, ToolCall } from "./useEvents";
+import { useEvents, type ToolCall } from "./useEvents";
 
 export { useEvents };
 
@@ -52,7 +52,7 @@ export async function runTask(
       console.log(`[OpenCode] Thinking...`);
     },
     // We don't log streaming reasoning to the console to avoid messing up the logs
-    onReasoning: (content) => {
+    onReasoning: (_content) => {
       // console.log(`[OpenCode] Reasoning: ${content}`);
     },
     onToolCall: (toolCall: ToolCall) => {
@@ -202,30 +202,6 @@ async function sendPrompt(
   }
 
   // console.log(`[OpenCode] Prompt sent to session: ${sessionId}`);
-}
-
-async function getLastResponse(
-  client: OpencodeClient,
-  sessionId: string
-): Promise<string> {
-  const result = await client.session.messages({ path: { id: sessionId } });
-  if (result.error)
-    throw new Error(
-      `Failed to fetch messages: ${JSON.stringify(result.error)}`
-    );
-
-  const messages = result.data || [];
-  const lastMessage = messages
-    .slice()
-    .reverse()
-    .find((m: any) => m.info?.role === "assistant");
-
-  if (!lastMessage?.parts) return "Task completed (no textual output found)";
-
-  const textParts = lastMessage.parts.filter((p: any) => p.type === "text");
-  return textParts.length > 0
-    ? textParts.map((p: any) => p.text).join("\n")
-    : JSON.stringify(lastMessage.parts);
 }
 
 export async function deleteSession(sessionId: string) {

@@ -23,7 +23,7 @@ export function OpencodeDebugPanel() {
     isLoading: isLoadingSessions,
     refetch: refetchSessions,
     error: sessionError,
-  } = trpc.agent.listSessions.useQuery();
+  } = trpc.agent.listSessions.useQuery({});
 
   const {
     data: projects,
