@@ -15,3 +15,8 @@ in container:
 /root/.local/share/opencode/storage
 - we have: message  migration  part  project  session  session_diff
 
+/root/.local/share/opencode/storage/session/global
+- for example: ses_4f34327b2ffeFLV1bvmdon3l53.json  ses_4f34a4fbdffel8SBYjLW8zrVZ3.json
+
+
+/root/.config/opencode

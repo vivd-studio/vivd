@@ -3,6 +3,9 @@ import {
   createOpencodeClient,
   OpencodeClient,
 } from "@opencode-ai/sdk";
+import { useEvents, ToolCall } from "./useEvents";
+
+export { useEvents };
 
 let serverUrl: string;
 
@@ -41,22 +44,42 @@ export async function runTask(
     directory: cwd,
   });
 
-  const events = await client.event.subscribe();
-
-  (async () => {
-    try {
-      // TODO: Log out the proper and imporant events, like tool calls
-      for await (const event of events.stream) {
-        console.log(`[OpenCode] Event: ${JSON.stringify(event)}`);
+  const { start, stop } = useEvents(client, {
+    onStartThinking: () => {
+      console.log(`[OpenCode] Thinking...`);
+    },
+    // We don't log streaming reasoning to the console to avoid messing up the logs
+    onReasoning: (content) => {
+      // console.log(`[OpenCode] Reasoning: ${content}`);
+    },
+    onToolCall: (toolCall: ToolCall) => {
+      // @ts-ignore
+      const input = toolCall.input || {};
+      const inputStr =
+        Object.keys(input).length > 0 ? ` input: ${JSON.stringify(input)}` : "";
+      console.log(
+        `[OpenCode] Tool Call: ${toolCall.tool}${
+          // @ts-ignore
+          toolCall.title ? ` - ${toolCall.title}` : ""
+        }${inputStr}`
+      );
+    },
+    onToolCallFinished: (toolCall: ToolCall) => {
+      // @ts-ignore
+      if (toolCall.state?.status === "error" || toolCall.status === "error") {
+        console.log(`[OpenCode] Tool Error: ${toolCall.tool}`);
       }
-    } catch (e) {
-      console.error("Stream closed", e);
-    }
-  })();
+    },
+  });
+
+  await start();
 
   try {
     const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
     await sendPrompt(client, currentSessionId, cwd, task);
+
+    stop();
+
     const output = await getLastResponse(client, currentSessionId);
 
     console.log(`[OpenCode Output] ${output}`);
@@ -64,6 +87,8 @@ export async function runTask(
   } catch (error: any) {
     console.error(`[OpenCode] Error:`, error);
     throw new Error(`OpenCode task failed: ${error.message}`);
+  } finally {
+    stop();
   }
 }
 
@@ -157,7 +182,7 @@ async function sendPrompt(
     throw new Error(`OpenCode task failed: ${error.message}`);
   }
 
-  console.log(`[OpenCode] Prompt sent to session: ${sessionId}`);
+  // console.log(`[OpenCode] Prompt sent to session: ${sessionId}`);
 }
 
 async function getLastResponse(

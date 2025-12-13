@@ -34,6 +34,8 @@ The docker-compose.override.yml file is used to override the docker-compose.yml 
 
 We save all the generated and downloaded files from the url in the generated/domain-name folder and also keep a project.json in the root folder, that tracks the url, created_at, status, etc.
 
+Afterwards we can use an Agent to request changes on to our website. The agent is opencode (https://opencode.ai/docs) and we are consuming its SDK in our backend. 
+
 
 ## Testing Note
 > [!IMPORTANT]
