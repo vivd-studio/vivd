@@ -1,7 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { ProjectCard } from "./ProjectCard";
-import { OverwriteDialog } from "./OverwriteDialog";
+import { VersionDialog } from "./VersionDialog";
 
 interface ProjectsListProps {
   onPreview: (
@@ -10,6 +10,13 @@ interface ProjectsListProps {
     slug?: string,
     version?: number
   ) => void;
+}
+
+interface VersionDialogData {
+  slug: string;
+  url: string;
+  currentVersion: number;
+  totalVersions: number;
 }
 
 export function ProjectsList({ onPreview }: ProjectsListProps) {
@@ -22,24 +29,48 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
   });
   const { mutateAsync: regenerateProject } =
     trpc.project.regenerate.useMutation();
+  const { mutateAsync: generateProject } = trpc.project.generate.useMutation();
   const [regeneratingSlug, setRegeneratingSlug] = useState<string | null>(null);
-  const [confirmationData, setConfirmationData] = useState<{
-    slug: string;
-    version?: number;
-  } | null>(null);
+  const [versionDialogData, setVersionDialogData] =
+    useState<VersionDialogData | null>(null);
 
-  const handleRegenerateClick = (slug: string, version?: number) => {
-    setConfirmationData({ slug, version });
+  const handleCreateNewClick = (slug: string, version?: number) => {
+    // Find the project to get its URL and version info
+    const project = projectsData?.projects.find((p) => p.slug === slug);
+    if (project) {
+      setVersionDialogData({
+        slug: project.slug,
+        url: project.url,
+        currentVersion: version ?? project.currentVersion ?? 1,
+        totalVersions: project.totalVersions ?? 1,
+      });
+    }
   };
 
-  const handleConfirmRegenerate = async () => {
-    if (!confirmationData) return;
-    const { slug, version } = confirmationData;
-    setConfirmationData(null);
+  const handleCreateNewVersion = async () => {
+    if (!versionDialogData) return;
+    const { url } = versionDialogData;
+    setVersionDialogData(null);
+
+    setRegeneratingSlug(versionDialogData.slug);
+    try {
+      await generateProject({ url, createNewVersion: true });
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to create new version: ${(error as Error).message}`);
+    } finally {
+      setRegeneratingSlug(null);
+    }
+  };
+
+  const handleOverwriteCurrent = async () => {
+    if (!versionDialogData) return;
+    const { slug, currentVersion } = versionDialogData;
+    setVersionDialogData(null);
 
     setRegeneratingSlug(slug);
     try {
-      await regenerateProject({ slug, version });
+      await regenerateProject({ slug, version: currentVersion });
     } catch (error) {
       console.error(error);
       alert(`Failed to regenerate ${slug}: ${(error as Error).message}`);
@@ -82,18 +113,21 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
               onPreview={(url, originalUrl, _slug, version) =>
                 onPreview(url, originalUrl, project.slug, version)
               }
-              onRegenerate={handleRegenerateClick}
+              onRegenerate={handleCreateNewClick}
               isRegenerating={regeneratingSlug === project.slug}
             />
           ))}
         </div>
       )}
 
-      <OverwriteDialog
-        open={!!confirmationData}
-        onOpenChange={(open) => !open && setConfirmationData(null)}
-        onConfirm={handleConfirmRegenerate}
-        projectName={confirmationData?.slug || undefined}
+      <VersionDialog
+        open={!!versionDialogData}
+        onOpenChange={(open) => !open && setVersionDialogData(null)}
+        onCreateNewVersion={handleCreateNewVersion}
+        onOverwriteCurrent={handleOverwriteCurrent}
+        projectName={versionDialogData?.slug}
+        currentVersion={versionDialogData?.currentVersion ?? 1}
+        totalVersions={versionDialogData?.totalVersions ?? 1}
       />
     </div>
   );

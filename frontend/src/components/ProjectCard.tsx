@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Loader2, Layers } from "lucide-react";
+import { Plus, Loader2, Layers } from "lucide-react";
 
 export interface VersionInfo {
   version: number;
@@ -185,19 +185,18 @@ export function ProjectCard({
           </Button>
         </div>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="px-2 ml-auto"
+          className="ml-auto gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
           disabled={isProcessing || isRegenerating}
           onClick={(e) => {
             e.stopPropagation();
             onRegenerate(project.slug, currentVersion);
           }}
-          title="Regenerate"
+          title="Create new version"
         >
-          <RefreshCw
-            className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`}
-          />
+          <Plus className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`} />
+          <span className="text-xs font-medium">New</span>
         </Button>
       </CardFooter>
     </Card>
