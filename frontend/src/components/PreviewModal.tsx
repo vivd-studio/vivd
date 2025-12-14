@@ -115,10 +115,6 @@ export function PreviewModal({
                   if (doc) {
                     const style = doc.createElement("style");
                     style.textContent = `
-                                            /* Fix position:fixed elements to be relative to iframe, not viewport */
-                                            html {
-                                                transform: translateZ(0);
-                                            }
                                             ::-webkit-scrollbar {
                                                 width: 14px;
                                                 height: 14px;
