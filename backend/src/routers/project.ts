@@ -233,17 +233,9 @@ export const projectRouter = router({
 
           const manifest = getManifest(projectSlug);
 
+          // Only include directories that have a valid manifest (are actual projects)
           if (!manifest) {
-            // Fallback for projects without manifest
-            return {
-              slug: projectSlug,
-              status: "unknown",
-              url: "",
-              createdAt: "",
-              currentVersion: 0,
-              totalVersions: 0,
-              versions: [] as VersionInfo[],
-            };
+            return null;
           }
 
           // Get data from current version
@@ -259,7 +251,10 @@ export const projectRouter = router({
             totalVersions: manifest.versions.length,
             versions: manifest.versions,
           };
-        });
+        })
+        .filter(
+          (project): project is NonNullable<typeof project> => project !== null
+        );
       return { projects };
     } catch (error) {
       console.error("Failed to list projects:", error);

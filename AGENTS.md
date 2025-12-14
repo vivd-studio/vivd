@@ -26,18 +26,17 @@ The backend is a Node.js application that provides an API for interacting with t
 We are using the docker-compose.yml file to deploy all of our services (backend, frontend, database) so this file needs to be ready to deploy. (PROD)
 The docker-compose.override.yml file is used to override the docker-compose.yml file for local development. (DEV)
 
-
 ## How it works
+
 1. **Scrapes** a target URL for text, images, and a screenshot using Puppeteer.
 2. **Analyzes** the content and current brand visual.
 3. **Generates** a new, high-converting landing page (HTML/Tailwind) via OpenRouter API.
 
 We save all the generated and downloaded files from the url in the generated/domain-name folder and also keep a project.json in the root folder, that tracks the url, created_at, status, etc.
 
-Afterwards we can use an Agent to request changes on to our website. The agent is opencode (https://opencode.ai/docs) and we are consuming its SDK in our backend. 
-
+Afterwards we can use an Agent to request changes on to our website. The agent is an opencode agent (https://opencode.ai/docs) and we are consuming its SDK in our backend.
 
 ## Testing Note
-> [!IMPORTANT]
-> **Do not run tests on every change.**
+
+> [!IMPORTANT] > **Do not run tests on every change.**
 > The workflow is long-running and uses paid API calls. Running tests frequently can be pricey and time-consuming.

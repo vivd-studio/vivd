@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -7,7 +8,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Loader2, Layers } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Loader2, Layers, Check, ChevronDown } from "lucide-react";
 
 export interface VersionInfo {
   version: number;
@@ -43,11 +52,25 @@ export function ProjectCard({
   onRegenerate,
   isRegenerating,
 }: ProjectCardProps) {
-  const isCompleted = project.status === "completed";
-  const isFailed = project.status === "failed";
+  const [selectedVersion, setSelectedVersion] = useState(
+    project.currentVersion || 1
+  );
+  const hasMultipleVersions = (project.totalVersions || 1) > 1;
+  const versions = project.versions || [];
+
+  // Get status for selected version
+  const selectedVersionInfo = versions.find(
+    (v) => v.version === selectedVersion
+  );
+  const isCompleted =
+    selectedVersionInfo?.status === "completed" ||
+    (selectedVersion === project.currentVersion &&
+      project.status === "completed");
+  const isFailed =
+    selectedVersionInfo?.status === "failed" ||
+    (selectedVersion === project.currentVersion && project.status === "failed");
   const isProcessing =
-    !isCompleted && !isFailed && project.status !== "unknown";
-  const currentVersion = project.currentVersion || 1;
+    !isCompleted && !isFailed && selectedVersionInfo?.status !== "unknown";
   const totalVersions = project.totalVersions || 1;
 
   // Calculate progress and label
@@ -88,7 +111,7 @@ export function ProjectCard({
   }
 
   // Version-aware preview URL
-  const previewUrl = `/api/preview/${project.slug}/v${currentVersion}/index.html`;
+  const previewUrl = `/api/preview/${project.slug}/v${selectedVersion}/index.html`;
 
   return (
     <Card
@@ -99,7 +122,7 @@ export function ProjectCard({
       } ${isCompleted ? "cursor-pointer hover:border-primary/50" : ""}`}
       onClick={() => {
         if (isCompleted) {
-          onPreview(previewUrl, project.url, project.slug, currentVersion);
+          onPreview(previewUrl, project.url, project.slug, selectedVersion);
         }
       }}
     >
@@ -112,17 +135,70 @@ export function ProjectCard({
             >
               {project.slug}
             </CardTitle>
-            {totalVersions > 0 && (
-              <Badge
-                variant="secondary"
-                className="shrink-0 text-xs px-1.5 py-0 font-normal"
-                title={`${totalVersions} version${
-                  totalVersions > 1 ? "s" : ""
-                }`}
-              >
-                <Layers className="w-3 h-3 mr-1" />v{currentVersion}
-              </Badge>
-            )}
+            {totalVersions > 0 &&
+              (hasMultipleVersions ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Badge
+                      variant="secondary"
+                      className="shrink-0 text-xs px-1.5 py-0 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
+                      title={`Click to select from ${totalVersions} versions`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
+                      <ChevronDown className="w-3 h-3 ml-1" />
+                    </Badge>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenuLabel>Select Version</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {versions.map((v) => (
+                      <DropdownMenuItem
+                        key={v.version}
+                        onClick={() => setSelectedVersion(v.version)}
+                        className={
+                          selectedVersion === v.version ? "bg-accent" : ""
+                        }
+                      >
+                        <Check
+                          className={`w-4 h-4 mr-2 ${
+                            selectedVersion === v.version
+                              ? "opacity-100"
+                              : "opacity-0"
+                          }`}
+                        />
+                        <span>v{v.version}</span>
+                        <span
+                          className={`ml-auto text-xs ${
+                            v.status === "completed"
+                              ? "text-green-600"
+                              : v.status === "failed"
+                              ? "text-red-500"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {v.status === "completed"
+                            ? "✓"
+                            : v.status === "failed"
+                            ? "✗"
+                            : "..."}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Badge
+                  variant="secondary"
+                  className="shrink-0 text-xs px-1.5 py-0 font-normal"
+                  title={`${totalVersions} version`}
+                >
+                  <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
+                </Badge>
+              ))}
           </div>
           <Badge
             variant={statusColor}
@@ -191,7 +267,7 @@ export function ProjectCard({
           disabled={isProcessing || isRegenerating}
           onClick={(e) => {
             e.stopPropagation();
-            onRegenerate(project.slug, currentVersion);
+            onRegenerate(project.slug, selectedVersion);
           }}
           title="Create new version"
         >
