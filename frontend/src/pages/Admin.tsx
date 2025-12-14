@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { Shield, UserPlus, Loader2, AlertCircle } from "lucide-react";
+import { Shield, UserPlus, Loader2, AlertCircle, Database } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 
 import { OpencodeDebugPanel } from "@/components/OpencodeDebugPanel";
+import { trpc } from "@/lib/trpc";
 
 interface User {
   id: string;
@@ -42,6 +43,82 @@ const addUserSchema = z.object({
 });
 
 type AddUserFormValues = z.infer<typeof addUserSchema>;
+
+/**
+ * One-time migration card component.
+ * This can be removed after the migration is complete.
+ */
+function MigrationCard() {
+  const [migrationResult, setMigrationResult] = useState<{
+    migrated: number;
+    skipped: number;
+    total: number;
+    message: string;
+  } | null>(null);
+
+  const migrateMutation = trpc.project.migrateToVersions.useMutation({
+    onSuccess: (data) => {
+      setMigrationResult({
+        migrated: data.migrated,
+        skipped: data.skipped,
+        total: data.total,
+        message: data.message,
+      });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Database className="h-5 w-5 text-orange-600" />
+          System Maintenance
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Run the one-time migration to convert legacy projects to the new
+            versioned folder structure (v1/, v2/, etc).
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => migrateMutation.mutate()}
+              disabled={migrateMutation.isPending}
+            >
+              {migrateMutation.isPending ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Running Migration...
+                </>
+              ) : (
+                "Run Version Migration"
+              )}
+            </Button>
+          </div>
+
+          {migrateMutation.isError && (
+            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
+              <AlertCircle className="h-4 w-4" />
+              {migrateMutation.error?.message || "Migration failed"}
+            </div>
+          )}
+
+          {migrationResult && (
+            <div className="mt-3 p-3 rounded-md bg-muted text-sm">
+              <p className="font-medium">{migrationResult.message}</p>
+              <p className="text-muted-foreground mt-1">
+                Migrated: {migrationResult.migrated} | Skipped:{" "}
+                {migrationResult.skipped} | Total: {migrationResult.total}
+              </p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -298,6 +375,10 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+
+      {/* System Maintenance Card */}
+      <MigrationCard />
+
       <OpencodeDebugPanel />
     </div>
   );

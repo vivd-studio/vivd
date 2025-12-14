@@ -16,6 +16,7 @@ export interface EventCallbacks {
   onToolCallFinished?: (toolCall: ToolCall) => void;
 }
 
+// TODO: Clean this up, and make sure the callbacks are correct
 export function useEvents(
   client: OpencodeClient,
   callbacks: EventCallbacks = {}

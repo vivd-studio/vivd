@@ -1,4 +1,4 @@
-import { router, publicProcedure, adminProcedure } from "../trpc";
+import { router, protectedProcedure, adminProcedure } from "../trpc";
 import { z } from "zod";
 import {
   runTask,
@@ -7,41 +7,50 @@ import {
   getSessionContent,
   deleteSession as deleteSessionFn,
 } from "../opencode";
-import path from "path";
+import {
+  getProjectDir,
+  getVersionDir,
+  getCurrentVersion,
+} from "../generator/versionUtils";
 import fs from "fs";
 
-// Assuming projects are stored in a standard location similar to other routers.
-// I need to verify where projects are stored. Typically 'generated/<slug>'.
-const GENERATED_PROJECTS_DIR = path.join(process.cwd(), "generated");
-
 export const agentRouter = router({
-  runTask: publicProcedure
+  runTask: protectedProcedure
     .input(
       z.object({
         projectSlug: z.string(),
         task: z.string(),
         sessionId: z.string().optional(),
+        version: z.number().optional(),
       })
     )
     .mutation(async ({ input }) => {
-      const projectPath = path.join(GENERATED_PROJECTS_DIR, input.projectSlug);
+      const projectDir = getProjectDir(input.projectSlug);
 
-      // Basic security check to prevent directory traversal
-      if (!projectPath.startsWith(GENERATED_PROJECTS_DIR)) {
-        throw new Error("Invalid project path");
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
       }
 
-      if (!fs.existsSync(projectPath)) {
-        throw new Error("Project not found");
+      // Determine version and get version-specific path
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      if (targetVersion === 0) {
+        throw new Error("No versions found for this project");
+      }
+
+      const versionPath = getVersionDir(input.projectSlug, targetVersion);
+
+      if (!fs.existsSync(versionPath)) {
+        throw new Error(`Version ${targetVersion} not found for project`);
       }
 
       try {
         const { sessionId } = await runTask(
           input.task,
-          projectPath,
+          versionPath,
           input.sessionId
         );
-        return { success: true, sessionId };
+        return { success: true, sessionId, version: targetVersion };
       } catch (error: any) {
         console.error("Agent execution error:", error);
         throw new Error(error.message || "Failed to execute agent task");
@@ -49,20 +58,24 @@ export const agentRouter = router({
     }),
 
   listSessions: adminProcedure
-    .input(z.object({ projectSlug: z.string().optional() }))
+    .input(
+      z.object({
+        projectSlug: z.string().optional(),
+        version: z.number().optional(),
+      })
+    )
     .query(async ({ input }) => {
       try {
         let directory: string | undefined;
         if (input.projectSlug) {
-          const projectPath = path.join(
-            GENERATED_PROJECTS_DIR,
-            input.projectSlug
-          );
-          // Security check
-          if (!projectPath.startsWith(GENERATED_PROJECTS_DIR)) {
-            throw new Error("Invalid project path");
+          // Determine version and get version-specific path
+          const targetVersion =
+            input.version ?? getCurrentVersion(input.projectSlug);
+          if (targetVersion > 0) {
+            directory = getVersionDir(input.projectSlug, targetVersion);
+          } else {
+            directory = getProjectDir(input.projectSlug);
           }
-          directory = projectPath;
         }
 
         const sessions = await listSessions(directory);

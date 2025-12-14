@@ -8,6 +8,7 @@ import { MessageInput } from "./chat/MessageInput";
 
 interface ChatPanelProps {
   projectSlug: string;
+  version?: number;
   onTaskComplete?: () => void;
   onClose?: () => void;
 }
@@ -20,6 +21,7 @@ interface Message {
 
 export function ChatPanel({
   projectSlug,
+  version,
   onTaskComplete,
   onClose,
 }: ChatPanelProps) {
@@ -34,7 +36,7 @@ export function ChatPanel({
   // Poll for sessions to keep the list updated
   const { data: sessionsData, refetch: refetchSessions } =
     trpc.agent.listSessions.useQuery(
-      { projectSlug },
+      { projectSlug, version },
       {
         // Ensure we refetch when the component mounts or slug changes
         refetchOnMount: true,
@@ -145,11 +147,12 @@ export function ChatPanel({
         projectSlug,
         task,
         sessionId: selectedSessionId,
+        version,
       });
     } else {
       // New session
       setMessages((prev) => [...prev, { role: "user", content: task }]);
-      runTaskMutation.mutate({ projectSlug, task });
+      runTaskMutation.mutate({ projectSlug, task, version });
     }
   };
 

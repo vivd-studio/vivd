@@ -15,6 +15,7 @@ interface PreviewModalProps {
   url: string | null;
   originalUrl?: string | null;
   projectSlug?: string;
+  version?: number;
 }
 
 export function PreviewModal({
@@ -23,6 +24,7 @@ export function PreviewModal({
   url,
   originalUrl,
   projectSlug,
+  version,
 }: PreviewModalProps) {
   const [copied, setCopied] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -157,8 +159,9 @@ export function PreviewModal({
           {projectSlug && chatOpen && (
             <div className="w-[400px] border-l bg-background flex flex-col h-full shadow-xl z-20 transition-all">
               <ChatPanel
-                key={projectSlug}
+                key={`${projectSlug}-${version}`}
                 projectSlug={projectSlug}
+                version={version}
                 onTaskComplete={handleTaskComplete}
                 onClose={() => setChatOpen(false)}
               />
