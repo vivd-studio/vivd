@@ -1,10 +1,5 @@
 import { z } from "zod";
-import {
-  publicProcedure,
-  protectedProcedure,
-  adminProcedure,
-  router,
-} from "../trpc";
+import { protectedProcedure, adminProcedure, router } from "../trpc";
 import { processUrl } from "../generator/index";
 import {
   getProjectDir,
