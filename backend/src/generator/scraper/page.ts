@@ -175,7 +175,11 @@ export async function scrapePage(
 
   for (const url of imageUrls.slice(0, imageLimit)) {
     const ext = path.extname(url).split("?")[0] || ".jpg";
-    if (![".jpg", ".jpeg", ".png", ".webp", ".svg"].includes(ext.toLowerCase()))
+    if (
+      ![".jpg", ".jpeg", ".png", ".webp", ".svg", ".gif"].includes(
+        ext.toLowerCase()
+      )
+    )
       continue;
 
     // Extract filename from URL
