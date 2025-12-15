@@ -10,6 +10,10 @@ RUN apt-get update \
 # Install opencode CLI (required for SDK to spawn server)
 RUN npm install -g opencode-ai
 
+# Configure git for automated commits (required for OpenCode undo/revert)
+RUN git config --global user.email "generator@landing-page-agent.local" \
+    && git config --global user.name "Landing Page Generator"
+
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

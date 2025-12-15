@@ -6,6 +6,8 @@ import {
   listProjects,
   getSessionContent,
   deleteSession as deleteSessionFn,
+  revertToUserMessage,
+  unrevertSession,
 } from "../opencode";
 import {
   getProjectDir,
@@ -109,14 +111,107 @@ export const agentRouter = router({
     }),
 
   deleteSession: adminProcedure
-    .input(z.object({ sessionId: z.string() }))
+    .input(
+      z.object({
+        sessionId: z.string(),
+        projectSlug: z.string().optional(),
+        version: z.number().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
+      let directory: string | undefined;
+      if (input.projectSlug) {
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
+        }
+      }
+
       try {
-        await deleteSessionFn(input.sessionId);
+        await deleteSessionFn(input.sessionId, directory);
         return { success: true };
       } catch (error: any) {
         console.error("Failed to delete session:", error);
         throw new Error(error.message || "Failed to delete session");
+      }
+    }),
+
+  revertToMessage: adminProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        messageId: z.string(),
+        projectSlug: z.string().optional(),
+        version: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      console.log("[Revert] Attempting to revert to user message:", {
+        sessionId: input.sessionId,
+        userMessageId: input.messageId,
+        projectSlug: input.projectSlug,
+      });
+
+      let directory: string | undefined;
+      if (input.projectSlug) {
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
+        }
+      }
+
+      try {
+        const result = await revertToUserMessage(
+          input.sessionId,
+          input.messageId,
+          directory
+        );
+        console.log("[Revert] Revert completed:", result);
+        return { success: true, ...result };
+      } catch (error: any) {
+        console.error("[Revert] Failed to revert session:", error);
+        throw new Error(error.message || "Failed to revert session");
+      }
+    }),
+
+  unrevertSession: adminProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        projectSlug: z.string().optional(),
+        version: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      console.log(
+        "[Unrevert] Attempting to unrevert session:",
+        input.sessionId
+      );
+
+      let directory: string | undefined;
+      if (input.projectSlug) {
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
+        }
+      }
+
+      try {
+        const result = await unrevertSession(input.sessionId, directory);
+        console.log("[Unrevert] Unrevert successful, result:", result);
+        return { success: true };
+      } catch (error: any) {
+        console.error("[Unrevert] Failed to unrevert session:", error);
+        throw new Error(error.message || "Failed to unrevert session");
       }
     }),
 });

@@ -11,6 +11,7 @@ import {
   updateVersionStatus,
   getNextVersion,
 } from "./versionUtils";
+import { initializeGitRepository } from "./gitUtils";
 
 export {
   scrapeWebsite,
@@ -90,6 +91,14 @@ export async function processUrl(targetUrl: string, version?: number) {
     await generateLandingPage(outputDir);
 
     updateStatus("completed");
+    // Initialize git and commit files (required for OpenCode undo/revert to work)
+    try {
+      await initializeGitRepository(outputDir, "Initial generation");
+      log(`[Git] Initialized repository and committed in ${outputDir}`);
+    } catch (gitError) {
+      log(`[Git] Warning: Failed to initialize/commit git: ${gitError}`);
+    }
+
     return { success: true, outputDir, domainSlug, version: targetVersion };
   } catch (error) {
     log(`An error occurred: ${error}`);

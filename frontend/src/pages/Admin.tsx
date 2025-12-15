@@ -56,11 +56,31 @@ function MigrationCard() {
     message: string;
   } | null>(null);
 
+  const [gitInitResult, setGitInitResult] = useState<{
+    initialized: number;
+    skipped: number;
+    failed: number;
+    total: number;
+    message: string;
+  } | null>(null);
+
   const migrateMutation = trpc.project.migrateToVersions.useMutation({
     onSuccess: (data) => {
       setMigrationResult({
         migrated: data.migrated,
         skipped: data.skipped,
+        total: data.total,
+        message: data.message,
+      });
+    },
+  });
+
+  const gitInitMutation = trpc.project.initGitInProjects.useMutation({
+    onSuccess: (data) => {
+      setGitInitResult({
+        initialized: data.initialized,
+        skipped: data.skipped,
+        failed: data.failed,
         total: data.total,
         message: data.message,
       });
@@ -75,7 +95,8 @@ function MigrationCard() {
           System Maintenance
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
+        {/* Version Migration */}
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
             Run the one-time migration to convert legacy projects to the new
@@ -111,6 +132,48 @@ function MigrationCard() {
               <p className="text-muted-foreground mt-1">
                 Migrated: {migrationResult.migrated} | Skipped:{" "}
                 {migrationResult.skipped} | Total: {migrationResult.total}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Git Init Migration */}
+        <div className="flex flex-col gap-2 pt-4 border-t">
+          <p className="text-sm text-muted-foreground">
+            Initialize git in all project versions. Required for the revert/undo
+            feature to work (OpenCode uses git under the hood).
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => gitInitMutation.mutate()}
+              disabled={gitInitMutation.isPending}
+            >
+              {gitInitMutation.isPending ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Initializing Git...
+                </>
+              ) : (
+                "Initialize Git in Projects"
+              )}
+            </Button>
+          </div>
+
+          {gitInitMutation.isError && (
+            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
+              <AlertCircle className="h-4 w-4" />
+              {gitInitMutation.error?.message || "Git initialization failed"}
+            </div>
+          )}
+
+          {gitInitResult && (
+            <div className="mt-3 p-3 rounded-md bg-muted text-sm">
+              <p className="font-medium">{gitInitResult.message}</p>
+              <p className="text-muted-foreground mt-1">
+                Initialized: {gitInitResult.initialized} | Skipped:{" "}
+                {gitInitResult.skipped} | Failed: {gitInitResult.failed} |
+                Total: {gitInitResult.total}
               </p>
             </div>
           )}

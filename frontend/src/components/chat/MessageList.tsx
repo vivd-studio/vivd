@@ -1,8 +1,10 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, ChevronRight, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ChevronRight, ChevronDown, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface Message {
+  id?: string;
   role: "user" | "agent";
   content: string;
   parts?: any[];
@@ -12,12 +14,18 @@ interface MessageListProps {
   messages: Message[];
   isThinking: boolean;
   isLoading: boolean;
+  onRevert?: (messageId: string) => void;
+  onRestore?: () => void;
+  isReverted?: boolean;
 }
 
 export function MessageList({
   messages,
   isThinking,
   isLoading,
+  onRevert,
+  onRestore,
+  isReverted,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -44,6 +52,18 @@ export function MessageList({
               msg.role === "user" ? "items-end" : "items-start"
             }`}
           >
+            {/* Revert button above user messages - backend handles finding assistant messages */}
+            {msg.role === "user" && msg.id && onRevert && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+                onClick={() => onRevert(msg.id!)}
+              >
+                <Undo2 className="w-3 h-3 mr-1" />
+                Revert to before this
+              </Button>
+            )}
             <div
               className={`rounded-lg px-4 py-2 max-w-[90%] whitespace-pre-wrap ${
                 msg.role === "user"
@@ -89,6 +109,20 @@ export function MessageList({
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Agent is working...</span>
             </div>
+          </div>
+        )}
+        {/* Restore button when session is reverted */}
+        {isReverted && onRestore && (
+          <div className="flex justify-center py-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRestore}
+              className="text-sm"
+            >
+              <Undo2 className="w-4 h-4 mr-2" />
+              Restore reverted changes
+            </Button>
           </div>
         )}
         <div ref={bottomRef} />

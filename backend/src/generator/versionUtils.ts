@@ -16,6 +16,7 @@ export interface VersionInfo {
   version: number;
   createdAt: string;
   status: string; // 'processing' | 'completed' | 'failed' | etc.
+  startedAt?: string; // ISO timestamp when processing started
 }
 
 // Version-specific data (at generated/<slug>/v<N>/project.json)
@@ -24,6 +25,45 @@ export interface VersionData {
   createdAt: string;
   status: string;
   version: number;
+  startedAt?: string; // ISO timestamp when processing started
+}
+
+// Statuses that indicate a project is currently being processed
+export const PROCESSING_STATUSES = [
+  "processing",
+  "scraping",
+  "analyzing_content",
+  "analyzing_images",
+  "creating_hero",
+  "generating_html",
+  "pending",
+];
+
+// How long (in minutes) before a processing project is considered stale
+const STALE_THRESHOLD_MINUTES = 30;
+
+/**
+ * Check if a version is stale (stuck in processing for too long)
+ */
+export function isVersionStale(
+  versionInfo: VersionInfo | VersionData | null
+): boolean {
+  if (!versionInfo) return false;
+
+  // Only check for processing statuses
+  if (!PROCESSING_STATUSES.includes(versionInfo.status)) {
+    return false;
+  }
+
+  // Use startedAt if available, otherwise fall back to createdAt
+  const startTime = versionInfo.startedAt || versionInfo.createdAt;
+  if (!startTime) return false;
+
+  const startDate = new Date(startTime);
+  const now = new Date();
+  const diffMinutes = (now.getTime() - startDate.getTime()) / (1000 * 60);
+
+  return diffMinutes > STALE_THRESHOLD_MINUTES;
 }
 
 /**
@@ -254,6 +294,7 @@ export function createVersionEntry(
       version,
       createdAt: now,
       status,
+      startedAt: now, // Track when processing started
     };
   } else {
     // Add new version
@@ -261,6 +302,7 @@ export function createVersionEntry(
       version,
       createdAt: now,
       status,
+      startedAt: now, // Track when processing started
     });
   }
 

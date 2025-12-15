@@ -16,7 +16,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Loader2, Layers, Check, ChevronDown } from "lucide-react";
+import {
+  Plus,
+  Loader2,
+  Layers,
+  Check,
+  ChevronDown,
+  RotateCcw,
+} from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 export interface VersionInfo {
   version: number;
@@ -52,11 +62,45 @@ export function ProjectCard({
   onRegenerate,
   isRegenerating,
 }: ProjectCardProps) {
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
+  const utils = trpc.useUtils();
+
+  const resetMutation = trpc.project.resetStatus.useMutation({
+    onSuccess: (data) => {
+      toast.success("Status Reset", {
+        description: data.message,
+      });
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Reset Failed", {
+        description: error.message,
+      });
+    },
+  });
+
+  const setCurrentVersionMutation = trpc.project.setCurrentVersion.useMutation({
+    onSuccess: () => {
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to set version", {
+        description: error.message,
+      });
+    },
+  });
+
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1
   );
   const hasMultipleVersions = (project.totalVersions || 1) > 1;
   const versions = project.versions || [];
+
+  const handleVersionSelect = (version: number) => {
+    setSelectedVersion(version);
+    setCurrentVersionMutation.mutate({ slug: project.slug, version });
+  };
 
   // Get status for selected version
   const selectedVersionInfo = versions.find(
@@ -158,7 +202,7 @@ export function ProjectCard({
                     {versions.map((v) => (
                       <DropdownMenuItem
                         key={v.version}
-                        onClick={() => setSelectedVersion(v.version)}
+                        onClick={() => handleVersionSelect(v.version)}
                         className={
                           selectedVersion === v.version ? "bg-accent" : ""
                         }
@@ -220,9 +264,41 @@ export function ProjectCard({
       </CardHeader>
       <CardContent className="pb-3 grow flex items-center justify-center">
         {isProcessing && (
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm font-medium">{statusLabel}...</span>
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">{statusLabel}...</span>
+            </div>
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (
+                    confirm(
+                      `Force reset ${project.slug} v${selectedVersion} to 'failed' status?`
+                    )
+                  ) {
+                    resetMutation.mutate({
+                      slug: project.slug,
+                      version: selectedVersion,
+                    });
+                  }
+                }}
+                disabled={resetMutation.isPending}
+              >
+                <RotateCcw
+                  className={`w-3 h-3 mr-1 ${
+                    resetMutation.isPending ? "animate-spin" : ""
+                  }`}
+                />
+                {resetMutation.isPending
+                  ? "Resetting..."
+                  : "Force Reset (Admin)"}
+              </Button>
+            )}
           </div>
         )}
 

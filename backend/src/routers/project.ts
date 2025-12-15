@@ -8,19 +8,13 @@ import {
   getCurrentVersion,
   getNextVersion,
   getVersionData,
-  type VersionInfo,
+  isVersionStale,
+  updateVersionStatus,
+  PROCESSING_STATUSES,
 } from "../generator/versionUtils";
+import { initializeGitRepository } from "../generator/gitUtils";
 import path from "path";
 import fs from "fs";
-
-const PROCESSING_STATUSES = [
-  "processing",
-  "scraping",
-  "analyzing_images",
-  "creating_hero",
-  "generating_html",
-  "pending",
-];
 
 export const projectRouter = router({
   generate: protectedProcedure
@@ -46,11 +40,17 @@ export const projectRouter = router({
         const currentVersion = getCurrentVersion(domainSlug);
 
         if (manifest && currentVersion > 0) {
-          // Check if any version is currently processing
+          // Check if any version is currently processing (but not stale)
           const currentVersionData = getVersionData(domainSlug, currentVersion);
           const status = currentVersionData?.status || "unknown";
+          const versionInfo = manifest.versions.find(
+            (v) => v.version === currentVersion
+          );
 
-          if (PROCESSING_STATUSES.includes(status)) {
+          // If status is processing but stale (>30 min), allow regeneration
+          const isStale = isVersionStale(versionInfo || currentVersionData);
+
+          if (PROCESSING_STATUSES.includes(status) && !isStale) {
             throw new Error("Project is currently being generated");
           }
 
@@ -423,6 +423,212 @@ export const projectRouter = router({
         migratedCount > 0
           ? `Successfully migrated ${migratedCount} project(s) to versioned structure.`
           : "All projects are already migrated.",
+    };
+  }),
+
+  /**
+   * Set the current version for a project (persists to manifest.json)
+   */
+  setCurrentVersion: protectedProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version } = input;
+      const projectDir = getProjectDir(slug);
+
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
+      }
+
+      const manifest = getManifest(slug);
+      if (!manifest) {
+        throw new Error("Project manifest not found");
+      }
+
+      // Validate that the version exists
+      const versionExists = manifest.versions.some(
+        (v) => v.version === version
+      );
+      if (!versionExists) {
+        throw new Error(`Version ${version} does not exist for this project`);
+      }
+
+      // Update the manifest with new currentVersion
+      manifest.currentVersion = version;
+      const manifestPath = path.join(projectDir, "manifest.json");
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+      return {
+        success: true,
+        slug,
+        currentVersion: version,
+        message: `Current version set to ${version}`,
+      };
+    }),
+
+  /**
+   * Admin endpoint to hard reset a stuck project's status.
+   * Use this when a project is stuck in a processing state.
+   */
+  resetStatus: adminProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version } = input;
+      const projectDir = getProjectDir(slug);
+
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
+      }
+
+      const manifest = getManifest(slug);
+      if (!manifest) {
+        throw new Error("Project manifest not found");
+      }
+
+      const targetVersion = version ?? getCurrentVersion(slug);
+      if (targetVersion === 0) {
+        throw new Error("No versions found for this project");
+      }
+
+      const versionData = getVersionData(slug, targetVersion);
+      const currentStatus = versionData?.status || "unknown";
+
+      // Update the status to 'failed'
+      updateVersionStatus(slug, targetVersion, "failed");
+
+      // Also update the version-specific project.json if it exists
+      const versionDir = getVersionDir(slug, targetVersion);
+      const projectJsonPath = path.join(versionDir, "project.json");
+      if (fs.existsSync(projectJsonPath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(projectJsonPath, "utf-8"));
+          data.status = "failed";
+          fs.writeFileSync(projectJsonPath, JSON.stringify(data, null, 2));
+        } catch (e) {
+          console.error(
+            `Failed to update project.json for ${slug}/v${targetVersion}:`,
+            e
+          );
+        }
+      }
+
+      console.log(
+        `[Admin] Reset status for ${slug}/v${targetVersion}: ${currentStatus} -> failed`
+      );
+
+      return {
+        success: true,
+        slug,
+        version: targetVersion,
+        previousStatus: currentStatus,
+        newStatus: "failed",
+        message: `Reset ${slug} v${targetVersion} from '${currentStatus}' to 'failed'`,
+      };
+    }),
+
+  /**
+   * Admin endpoint to initialize git in all existing project versions.
+   * This is required for OpenCode's undo/revert functionality to work.
+   */
+  initGitInProjects: adminProcedure.mutation(async () => {
+    const generatedDir = path.join(process.cwd(), "generated");
+
+    if (!fs.existsSync(generatedDir)) {
+      return {
+        success: true,
+        initialized: 0,
+        skipped: 0,
+        failed: 0,
+        total: 0,
+        message: "No generated/ directory found.",
+      };
+    }
+
+    console.log("=== Git Initialization Migration ===\n");
+
+    const projectDirs = fs
+      .readdirSync(generatedDir, { withFileTypes: true })
+      .filter((item) => item.isDirectory());
+
+    let initialized = 0;
+    let skipped = 0;
+    let failed = 0;
+    const details: string[] = [];
+
+    for (const projectDir of projectDirs) {
+      const projectPath = path.join(generatedDir, projectDir.name);
+      const manifest = getManifest(projectDir.name);
+
+      if (!manifest) {
+        console.log(`  [SKIP] ${projectDir.name} - no manifest`);
+        skipped++;
+        continue;
+      }
+
+      // Initialize git in each version directory
+      for (const versionInfo of manifest.versions) {
+        const versionPath = path.join(projectPath, `v${versionInfo.version}`);
+
+        if (!fs.existsSync(versionPath)) {
+          console.log(
+            `  [SKIP] ${projectDir.name}/v${versionInfo.version} - directory not found`
+          );
+          skipped++;
+          continue;
+        }
+
+        const gitPath = path.join(versionPath, ".git");
+        if (fs.existsSync(gitPath)) {
+          console.log(
+            `  [SKIP] ${projectDir.name}/v${versionInfo.version} - already has git`
+          );
+          skipped++;
+          continue;
+        }
+
+        try {
+          await initializeGitRepository(
+            versionPath,
+            "Initial commit (migration)"
+          );
+          console.log(`  [INIT] ${projectDir.name}/v${versionInfo.version}`);
+          initialized++;
+          details.push(`${projectDir.name}/v${versionInfo.version}`);
+        } catch (error) {
+          console.error(
+            `  [FAIL] ${projectDir.name}/v${versionInfo.version}:`,
+            error
+          );
+          failed++;
+        }
+      }
+    }
+
+    console.log("\n=== Git Initialization Complete ===");
+    console.log(`Initialized: ${initialized}`);
+    console.log(`Skipped: ${skipped}`);
+    console.log(`Failed: ${failed}`);
+
+    return {
+      success: true,
+      initialized,
+      skipped,
+      failed,
+      total: initialized + skipped + failed,
+      details,
+      message:
+        initialized > 0
+          ? `Initialized git in ${initialized} version(s).`
+          : "All versions already have git or were skipped.",
     };
   }),
 });

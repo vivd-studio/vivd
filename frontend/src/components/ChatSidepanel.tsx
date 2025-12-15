@@ -14,6 +14,7 @@ interface ChatPanelProps {
 }
 
 interface Message {
+  id?: string;
   role: "user" | "agent";
   content: string;
   parts?: any[];
@@ -32,6 +33,7 @@ export function ChatPanel({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
+  const [isReverted, setIsReverted] = useState(false);
 
   // Poll for sessions to keep the list updated
   const { data: sessionsData, refetch: refetchSessions } =
@@ -44,10 +46,10 @@ export function ChatPanel({
       }
     );
 
-  // When projectSlug changes, we should reset selected session to avoid showing a session from another project
   useEffect(() => {
     setSelectedSessionId(null);
     setMessages([]);
+    setIsReverted(false);
   }, [projectSlug]);
 
   useEffect(() => {
@@ -82,7 +84,12 @@ export function ChatPanel({
             .map((p: any) => p.text)
             .join("\n") || "";
 
-        return { role, content: textContent, parts: msg.parts };
+        return {
+          id: msg.info?.id,
+          role,
+          content: textContent,
+          parts: msg.parts,
+        };
       });
       setMessages(mappedMessages);
     }
@@ -127,12 +134,60 @@ export function ChatPanel({
   ) => {
     e.stopPropagation();
     if (confirm("Are you sure you want to delete this session?")) {
-      await deleteSessionMutation.mutateAsync({ sessionId });
+      await deleteSessionMutation.mutateAsync({
+        sessionId,
+        projectSlug,
+        version,
+      });
       if (selectedSessionId === sessionId) {
         setSelectedSessionId(null);
         setMessages([]);
       }
     }
+  };
+
+  const revertMutation = trpc.agent.revertToMessage.useMutation({
+    onSuccess: () => {
+      // Refetch messages after revert
+      refetchSessions();
+      // Refresh the iframe preview
+      onTaskComplete?.();
+      // Track reverted state
+      setIsReverted(true);
+    },
+  });
+
+  const unrevertMutation = trpc.agent.unrevertSession.useMutation({
+    onSuccess: () => {
+      refetchSessions();
+      // Refresh the iframe preview
+      onTaskComplete?.();
+      // Clear reverted state
+      setIsReverted(false);
+    },
+  });
+
+  const handleRevert = async (messageId: string) => {
+    if (!selectedSessionId) return;
+    if (
+      confirm("Revert changes from this task? This will undo file changes.")
+    ) {
+      await revertMutation.mutateAsync({
+        sessionId: selectedSessionId,
+        messageId,
+        projectSlug,
+        version,
+      });
+    }
+  };
+
+  const handleUnrevert = async () => {
+    if (!selectedSessionId) return;
+    await unrevertMutation.mutateAsync({
+      sessionId: selectedSessionId,
+      projectSlug,
+      version,
+    });
   };
 
   const handleSend = () => {
@@ -188,6 +243,9 @@ export function ChatPanel({
         messages={messages}
         isThinking={isThinking}
         isLoading={runTaskMutation.isPending}
+        onRevert={handleRevert}
+        onRestore={handleUnrevert}
+        isReverted={isReverted}
       />
 
       <MessageInput

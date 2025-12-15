@@ -204,12 +204,75 @@ async function sendPrompt(
   // console.log(`[OpenCode] Prompt sent to session: ${sessionId}`);
 }
 
-export async function deleteSession(sessionId: string) {
+export async function deleteSession(sessionId: string, directory?: string) {
   if (!serverUrl) {
     throw new Error("OpenCode server not initialized");
   }
-  const client = createOpencodeClient({ baseUrl: serverUrl });
+  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
   const result = await client.session.delete({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
   return true;
+}
+
+export async function revertSession(
+  sessionId: string,
+  messageID: string,
+  directory?: string,
+  partID?: string
+) {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+  const result = await client.session.revert({
+    path: { id: sessionId },
+    body: { messageID, partID },
+  });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return result.data;
+}
+
+export async function unrevertSession(sessionId: string, directory?: string) {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+  const result = await client.session.unrevert({
+    path: { id: sessionId },
+  });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+  return result.data;
+}
+
+/**
+ * Reverts changes made after a specific user message.
+ * OpenCode uses git under the hood, so reverting the first assistant message
+ * after the user message will revert all changes from that task.
+ */
+export async function revertToUserMessage(
+  sessionId: string,
+  userMessageId: string,
+  directory?: string
+) {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+
+  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+
+  // Revert to the user message directly - OpenCode will revert all changes after this point
+  console.log(`[Revert] Reverting to message: ${userMessageId}`);
+
+  const result = await client.session.revert({
+    path: { id: sessionId },
+    body: { messageID: userMessageId },
+  });
+
+  if (result.error) {
+    console.error("[Revert] Revert failed:", result.error);
+    throw new Error(`Revert failed: ${JSON.stringify(result.error)}`);
+  }
+
+  console.log("[Revert] Revert successful");
+  return { reverted: true, messageId: userMessageId };
 }
