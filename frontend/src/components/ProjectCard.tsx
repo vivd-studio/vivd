@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -94,6 +94,15 @@ export function ProjectCard({
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1
   );
+
+  // Sync selectedVersion with project.currentVersion when it changes
+  // This ensures we switch to the new version when one is created
+  useEffect(() => {
+    if (project.currentVersion && project.currentVersion !== selectedVersion) {
+      setSelectedVersion(project.currentVersion);
+    }
+  }, [project.currentVersion]);
+
   const hasMultipleVersions = (project.totalVersions || 1) > 1;
   const versions = project.versions || [];
 

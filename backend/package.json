@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "migrate:versions": "tsx src/scripts/migrate-to-versions.ts"
+    "migrate:versions": "tsx src/scripts/migrate-to-versions.ts",
+    "cli": "tsx src/generator/cli.ts"
   },
   "keywords": [],
   "author": "",

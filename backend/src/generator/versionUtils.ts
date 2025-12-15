@@ -133,10 +133,33 @@ export function getCurrentVersion(slug: string): number {
 }
 
 /**
+ * Get the highest version number for a project
+ * Returns 0 if no versions exist
+ */
+export function getHighestVersion(slug: string): number {
+  const manifest = getManifest(slug);
+  if (manifest && manifest.versions.length > 0) {
+    // Return the maximum version number from the versions array
+    return Math.max(...manifest.versions.map((v) => v.version));
+  }
+  // Check for legacy project (files directly in slug folder)
+  const projectDir = getProjectDir(slug);
+  if (
+    fs.existsSync(path.join(projectDir, "index.html")) ||
+    fs.existsSync(path.join(projectDir, "project.json"))
+  ) {
+    // Legacy project exists, will be migrated to v1
+    return 1;
+  }
+  return 0;
+}
+
+/**
  * Get the next version number for a project
+ * Based on the highest existing version, not the currently selected version
  */
 export function getNextVersion(slug: string): number {
-  return getCurrentVersion(slug) + 1;
+  return getHighestVersion(slug) + 1;
 }
 
 /**
