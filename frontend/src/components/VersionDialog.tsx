@@ -7,7 +7,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface VersionDialogProps {
   open: boolean;
@@ -28,6 +29,63 @@ export function VersionDialog({
   currentVersion,
   totalVersions,
 }: VersionDialogProps) {
+  const [showConfirmOverwrite, setShowConfirmOverwrite] = useState(false);
+
+  // Reset confirmation state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setShowConfirmOverwrite(false);
+    }
+  }, [open]);
+
+  const handleOverwriteClick = () => {
+    setShowConfirmOverwrite(true);
+  };
+
+  const handleConfirmOverwrite = () => {
+    setShowConfirmOverwrite(false);
+    onOverwriteCurrent();
+  };
+
+  const handleCancelOverwrite = () => {
+    setShowConfirmOverwrite(false);
+  };
+
+  // Confirmation view for overwrite
+  if (showConfirmOverwrite) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertTriangle className="h-5 w-5" />
+              Confirm Overwrite
+            </DialogTitle>
+            <DialogDescription className="space-y-2">
+              <span className="block">
+                Are you sure you want to overwrite{" "}
+                <strong>v{currentVersion}</strong>?
+              </span>
+              <span className="block text-orange-600">
+                This will permanently delete all files in the current version
+                and regenerate it from scratch.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={handleCancelOverwrite}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmOverwrite}>
+              Yes, Overwrite v{currentVersion}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Main dialog view
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -57,7 +115,7 @@ export function VersionDialog({
             <Plus className="h-4 w-4" />
             <div className="text-left">
               <div className="font-medium">
-                Create New Version (v{currentVersion + 1})
+                Create New Version (v{totalVersions + 1})
               </div>
               <div className="text-xs opacity-80">
                 Keep existing versions and create a new one
@@ -66,7 +124,7 @@ export function VersionDialog({
           </Button>
           <Button
             variant="outline"
-            onClick={onOverwriteCurrent}
+            onClick={handleOverwriteClick}
             className="w-full justify-start gap-2 h-auto py-3 border-orange-300 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
           >
             <RefreshCw className="h-4 w-4" />
