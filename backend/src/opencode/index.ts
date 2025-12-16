@@ -146,14 +146,7 @@ export async function runTask(
         );
       }
     },
-  });
-
-  // Start listening to events in the background
-  start();
-
-  // Trigger the prompt in the background
-  sendPrompt(client, currentSessionId, cwd, task)
-    .then(async () => {
+    onIdle: () => {
       console.log(`[OpenCode] Task execution completed`);
       // Emit session completed event to frontend
       agentEventEmitter.emitSessionEvent(
@@ -162,15 +155,19 @@ export async function runTask(
           kind: "session.completed",
         } as SessionCompletedData)
       );
-    })
-    .catch((error) => {
-      console.error(`[OpenCode] Background Task Error:`, error);
-    })
-    .finally(() => {
-      // Ensure we stop the event stream or we'll leak listeners/connections
-      // which results in duplicated logs for subsequent tasks.
       stop();
-    });
+    },
+  });
+
+  // Start listening to events in the background
+  start();
+
+  try {
+    await sendPromptAsync(client, currentSessionId, cwd, task);
+  } catch (error) {
+    console.error(`[OpenCode] Task Error:`, error);
+    stop();
+  }
 
   return { sessionId: currentSessionId };
 }
@@ -247,7 +244,7 @@ async function getOrCreateSession(
   return result.data.id;
 }
 
-async function sendPrompt(
+async function sendPromptAsync(
   client: OpencodeClient,
   sessionId: string,
   cwd: string,
@@ -263,8 +260,7 @@ async function sendPrompt(
     `[OpenCode] Sending prompt to session: ${sessionId} for directory: ${cwd}, with model: ${modelEnv}`
   );
   try {
-    // TODO: change this to promptAsync
-    const result = await client.session.prompt({
+    const result = await client.session.promptAsync({
       path: { id: sessionId },
       query: { directory: cwd },
       body: {
@@ -280,8 +276,6 @@ async function sendPrompt(
     console.error(`[OpenCode] Error:`, error);
     throw new Error(`OpenCode task failed: ${error.message}`);
   }
-
-  // console.log(`[OpenCode] Prompt sent to session: ${sessionId}`);
 }
 
 export async function deleteSession(sessionId: string, directory?: string) {

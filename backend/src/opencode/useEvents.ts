@@ -19,6 +19,7 @@ export interface EventCallbacks {
   onText?: (content: string, partId: string) => void;
   onToolCall?: (toolCall: ToolCall) => void;
   onToolCallFinished?: (toolCall: ToolCall) => void;
+  onIdle?: () => void;
 }
 
 // TODO: Clean this up, and make sure the callbacks are correct
@@ -46,7 +47,7 @@ export function useEvents(
           }
 
           if (event.type === "message.part.updated") {
-            const { part } = event.properties;
+            const { part } = (event as any).properties;
 
             if (part.type === "reasoning") {
               if (!seenParts.has(part.id)) {
@@ -104,6 +105,17 @@ export function useEvents(
                     callbacks.onToolCallFinished(toolCall);
                   }
                 }
+              }
+            }
+          } else if (event.type === "session.idle") {
+            if (callbacks.onIdle) {
+              callbacks.onIdle();
+            }
+          } else if (event.type === "session.status") {
+            const status = (event as any).properties?.status;
+            if (status?.type === "idle") {
+              if (callbacks.onIdle) {
+                callbacks.onIdle();
               }
             }
           }
