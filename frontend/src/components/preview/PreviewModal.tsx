@@ -6,7 +6,7 @@ import { PreviewModalProvider, usePreviewModal } from "./PreviewModalContext";
 import { PreviewToolbar } from "./PreviewToolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
-import { FloatingButtons } from "./FloatingButtons";
+import { UnsavedChangesBar } from "./UnsavedChangesBar";
 import { ExitConfirmationDialog } from "./ExitConfirmationDialog";
 import type { PreviewModalProps } from "./types";
 
@@ -93,7 +93,7 @@ function PreviewModalContent() {
                 />
               )}
 
-              <FloatingButtons />
+              <UnsavedChangesBar />
             </div>
 
             {/* Chat Panel - Right side */}

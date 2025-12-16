@@ -24,8 +24,6 @@ import {
   Smartphone,
   Monitor,
   Edit3,
-  Save,
-  X,
   MoreHorizontal,
   Globe,
   FolderOpen,
@@ -53,9 +51,6 @@ export function PreviewToolbar() {
     handleCopy,
     handleRefresh,
     toggleEditMode,
-    handleSave,
-    handleCancelEdit,
-    saveFileMutation,
     assetsOpen,
     setAssetsOpen,
     chatOpen,
@@ -204,44 +199,32 @@ export function PreviewToolbar() {
       {/* Edit Controls */}
       {projectSlug && (
         <div className="flex items-center gap-1">
-          {editMode || hasUnsavedChanges ? (
-            <>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleSave}
-                disabled={saveFileMutation.isPending}
-                className="bg-green-600 hover:bg-green-700 text-white h-8"
-              >
-                <Save className="w-4 h-4 mr-1.5" />
-                Save
-              </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCancelEdit}
-                    disabled={saveFileMutation.isPending}
-                    className="h-8 px-2"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Discard Changes</TooltipContent>
-              </Tooltip>
-            </>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleEditMode}
-              className="h-8"
-            >
-              <Edit3 className="w-4 h-4 mr-1.5" />
-              Edit
-            </Button>
-          )}
+          {/* Edit button - disabled when in edit mode or when there are unsaved changes */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant={editMode ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={toggleEditMode}
+                  disabled={hasUnsavedChanges && !editMode}
+                  className={`h-8 ${
+                    !editMode && !hasUnsavedChanges
+                      ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white border-none"
+                      : ""
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4 mr-1.5" />
+                  {editMode ? "Editing..." : "Edit Text"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {hasUnsavedChanges && !editMode && (
+              <TooltipContent>
+                Save or discard image changes first
+              </TooltipContent>
+            )}
+          </Tooltip>
         </div>
       )}
 

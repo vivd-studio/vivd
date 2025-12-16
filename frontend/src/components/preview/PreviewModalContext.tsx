@@ -188,11 +188,11 @@ export function PreviewModalProvider({
     }
   }, [version]);
 
-  // Enable image drag-and-drop from Asset Explorer
+  // Enable image drag-and-drop from Asset Explorer (disabled during text editing)
   useImageDropZone({
     iframeRef,
     projectSlug,
-    enabled: open && !!projectSlug,
+    enabled: open && !!projectSlug && !editMode,
     onImageDropped: () => {
       // Mark as having unsaved changes when an image is dropped
       setHasUnsavedChanges(true);
