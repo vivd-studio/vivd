@@ -20,7 +20,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "opencode-ai": "^1.0.146",
     "@opencode-ai/sdk": "^1.0.146",
     "@openrouter/sdk": "^0.2.9",
     "@trpc/server": "^11.7.2",
@@ -32,7 +31,9 @@
     "execa": "^9.6.1",
     "express": "^5.2.1",
     "image-size": "^2.0.2",
+    "multer": "^2.0.2",
     "openai": "^6.10.0",
+    "opencode-ai": "^1.0.146",
     "pg": "^8.16.3",
     "puppeteer": "^24.32.1",
     "puppeteer-extra": "^3.3.6",
@@ -46,17 +47,18 @@
     "@types/express": "^5.0.6",
     "@types/image-size": "^0.8.0",
     "@types/mocha": "^10.0.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^24.10.2",
     "@types/pg": "^8.15.6",
     "@types/sharp": "^0.32.0",
     "chai": "^6.2.1",
     "drizzle-kit": "^0.31.8",
-    "tsup": "^8.3.5",
     "mocha": "^11.7.5",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
-    "tsx": "^4.19.2",
     "tslab": "^1.0.22",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
     "typescript": "^5.9.3"
   }
 }

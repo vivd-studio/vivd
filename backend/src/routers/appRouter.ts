@@ -1,12 +1,14 @@
-import { router } from '../trpc';
-import { userRouter } from './user';
-import { projectRouter } from './project';
-import { agentRouter } from './agent';
+import { router } from "../trpc";
+import { userRouter } from "./user";
+import { projectRouter } from "./project";
+import { agentRouter } from "./agent";
+import { assetsRouter } from "./assetsRouter";
 
 export const appRouter = router({
-    user: userRouter,
-    project: projectRouter,
-    agent: agentRouter,
+  user: userRouter,
+  project: projectRouter,
+  agent: agentRouter,
+  assets: assetsRouter,
 });
 
 export type AppRouter = typeof appRouter;
