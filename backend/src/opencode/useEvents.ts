@@ -38,6 +38,8 @@ export function useEvents(
         const toolStates = new Map<string, string>();
         const reasoningState = new Map<string, number>();
         const textState = new Map<string, number>();
+        // Track which messages are assistant messages (not user messages)
+        const assistantMessageIds = new Set<string>();
 
         for await (const event of events.stream) {
           if (!isActive) break;
@@ -46,10 +48,25 @@ export function useEvents(
             callbacks.onEvent(event);
           }
 
+          // Track message roles from message.updated events
+          if (event.type === "message.updated") {
+            const { info } = (event as any).properties;
+            if (info?.role === "assistant") {
+              assistantMessageIds.add(info.id);
+            }
+          }
+
           if (event.type === "message.part.updated") {
             const { part } = (event as any).properties;
 
+            // Only process parts from assistant messages for text/reasoning
+            // User messages should not emit text deltas to the streaming UI
+            const isAssistantMessage = assistantMessageIds.has(part.messageID);
+
             if (part.type === "reasoning") {
+              // Reasoning parts are only from assistant messages, but double-check
+              if (!isAssistantMessage) continue;
+
               if (!seenParts.has(part.id)) {
                 if (callbacks.onStartThinking) {
                   callbacks.onStartThinking();
@@ -67,6 +84,9 @@ export function useEvents(
                 reasoningState.set(part.id, text.length);
               }
             } else if (part.type === "text") {
+              // Skip text parts from user messages - they would echo the user's prompt
+              if (!isAssistantMessage) continue;
+
               const text = part.text || "";
               const lastLength = textState.get(part.id) || 0;
               if (text.length > lastLength) {

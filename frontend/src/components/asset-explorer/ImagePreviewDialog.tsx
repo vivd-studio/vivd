@@ -5,7 +5,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Trash2, Wand2 } from "lucide-react";
+import { Download, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
 
 interface ImagePreviewDialogProps {
@@ -15,6 +15,7 @@ interface ImagePreviewDialogProps {
   onClose: () => void;
   onAiEdit: () => void;
   onDelete: () => void;
+  onDownload: () => void;
 }
 
 export function ImagePreviewDialog({
@@ -24,6 +25,7 @@ export function ImagePreviewDialog({
   onClose,
   onAiEdit,
   onDelete,
+  onDownload,
 }: ImagePreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
@@ -34,6 +36,15 @@ export function ImagePreviewDialog({
           </DialogTitle>
           {imageItem && (
             <div className="flex gap-2 mr-8">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onDownload}
+                title="Download file"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"

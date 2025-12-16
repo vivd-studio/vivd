@@ -45,7 +45,10 @@ function PreviewModalContent() {
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-[100vw] w-screen h-screen flex flex-col p-0 gap-0 overflow-hidden rounded-none border-0">
+        <DialogContent
+          className="max-w-[100vw] w-screen h-screen flex flex-col p-0 gap-0 overflow-hidden rounded-none border-0"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <PreviewToolbar />
 
           <div className="flex flex-1 min-h-0 relative">

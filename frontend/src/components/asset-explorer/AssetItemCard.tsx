@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Trash2, Wand2 } from "lucide-react";
+import { Download, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
 import { formatSize, getFileIconComponent, buildImageUrl } from "./utils";
 import { ImageThumbnail } from "./ImageThumbnail";
@@ -11,6 +11,7 @@ interface AssetItemCardProps {
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onAiEdit?: (e: React.MouseEvent) => void;
+  onDownload?: (e: React.MouseEvent) => void;
 }
 
 export function AssetItemCard({
@@ -20,12 +21,24 @@ export function AssetItemCard({
   onClick,
   onDelete,
   onAiEdit,
+  onDownload,
 }: AssetItemCardProps) {
   const { icon: Icon, className: iconClassName } = getFileIconComponent(item);
 
   // Action buttons for images
   const imageActions = (
     <>
+      {onDownload && (
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-6 w-6"
+          onClick={onDownload}
+          title="Download"
+        >
+          <Download className="h-3 w-3" />
+        </Button>
+      )}
       {onAiEdit && (
         <Button
           variant="secondary"
@@ -81,6 +94,17 @@ export function AssetItemCard({
       </div>
       {/* Action buttons */}
       <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onDownload && item.type === "file" && (
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onDownload}
+            title="Download"
+          >
+            <Download className="h-3 w-3" />
+          </Button>
+        )}
         {/* Delete button */}
         <Button
           variant="destructive"

@@ -308,6 +308,24 @@ export function AssetExplorer({
                       ? (e) => handleAiEdit(item, e)
                       : undefined
                   }
+                  onDownload={
+                    item.type === "file"
+                      ? (e) => {
+                          e.stopPropagation();
+                          const url = buildImageUrl(
+                            projectSlug,
+                            version,
+                            item.path
+                          );
+                          const link = document.createElement("a");
+                          link.href = url;
+                          link.download = item.name;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -344,6 +362,16 @@ export function AssetExplorer({
             });
             setSelectedImageUrl(null);
             setSelectedImageItem(null);
+          }
+        }}
+        onDownload={() => {
+          if (selectedImageUrl && selectedImageItem) {
+            const link = document.createElement("a");
+            link.href = selectedImageUrl;
+            link.download = selectedImageItem.name;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
           }
         }}
       />
