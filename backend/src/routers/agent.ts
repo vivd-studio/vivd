@@ -10,7 +10,6 @@ import {
   revertToUserMessage,
   unrevertSession,
   agentEventEmitter,
-  type AgentEvent,
 } from "../opencode";
 import {
   getProjectDir,

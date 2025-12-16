@@ -59,9 +59,6 @@ export async function runTask(
 
   const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
 
-  // Track reasoning part IDs for delta updates
-  const reasoningPartIds = new Map<string, number>();
-
   // We start the event stream but don't wait for it to finish
   const { start, stop } = useEvents(client, {
     onStartThinking: () => {

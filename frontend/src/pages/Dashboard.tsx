@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ProjectsList } from "@/components/ProjectsList";
 import { GenerateSection } from "@/components/GenerateSection";
-import { PreviewModal } from "@/components/PreviewModal";
+import { PreviewModal } from "@/components/preview";
 
 export default function Dashboard() {
   const [searchParams, setSearchParams] = useSearchParams();

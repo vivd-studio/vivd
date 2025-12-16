@@ -25,7 +25,7 @@ export function AssetExplorer({
   onClose,
 }: AssetExplorerProps) {
   // Navigation state
-  const [currentPath, setCurrentPath] = useState("");
+  const [currentPath, setCurrentPath] = useState("images");
 
   // Folder creation state
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);

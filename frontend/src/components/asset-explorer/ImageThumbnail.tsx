@@ -14,6 +14,7 @@ interface ImageThumbnailProps {
   onClick?: () => void;
   actions?: React.ReactNode;
   className?: string;
+  draggable?: boolean;
 }
 
 export function ImageThumbnail({
@@ -24,6 +25,7 @@ export function ImageThumbnail({
   onClick,
   actions,
   className = "",
+  draggable = true,
 }: ImageThumbnailProps) {
   const hasResolution = item.width && item.height;
   const resolutionText = hasResolution ? `${item.width}×${item.height}` : null;
@@ -36,14 +38,56 @@ export function ImageThumbnail({
     </div>
   );
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    // Set multiple data types for flexibility
+    e.dataTransfer.setData("text/plain", item.path);
+    e.dataTransfer.setData("application/x-asset-path", item.path);
+    e.dataTransfer.setData("application/x-asset-url", imageUrl);
+    e.dataTransfer.effectAllowed = "copy";
+
+    // Create a custom drag image with a styled border
+    const dragPreview = document.createElement("div");
+    dragPreview.style.cssText = `
+      width: 80px;
+      height: 80px;
+      border: 3px solid #22c55e;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4), 0 0 0 4px rgba(34, 197, 94, 0.2);
+      overflow: hidden;
+      background: white;
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+    `;
+
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.style.cssText = `
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    `;
+    dragPreview.appendChild(img);
+    document.body.appendChild(dragPreview);
+
+    e.dataTransfer.setDragImage(dragPreview, 40, 40);
+
+    // Clean up the element after drag starts
+    requestAnimationFrame(() => {
+      document.body.removeChild(dragPreview);
+    });
+  };
+
   return (
     <div
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={handleDragStart}
       className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all group ${
         showSelection && selected
           ? "border-primary ring-2 ring-primary/20"
           : "border-transparent hover:border-muted-foreground/50"
-      } ${className}`}
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${className}`}
     >
       {/* Image container */}
       <div className="aspect-square bg-muted">
