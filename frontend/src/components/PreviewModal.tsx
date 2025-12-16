@@ -22,13 +22,28 @@ import {
   FolderOpen,
   Layers,
   ChevronDown,
+  Smartphone,
+  Monitor,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ChatPanel } from "./ChatSidepanel";
-import { AssetExplorer } from "./AssetExplorer";
+import { AssetExplorer } from "./asset-explorer";
 import { ResizeHandle } from "./ResizeHandle";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { trpc } from "@/lib/trpc";
+
+// Mobile device presets with popular phone dimensions
+const DEVICE_PRESETS = [
+  { name: "iPhone 14 Pro", width: 393, height: 852 },
+  { name: "iPhone 14 Pro Max", width: 430, height: 932 },
+  { name: "iPhone SE", width: 375, height: 667 },
+  { name: "Samsung Galaxy S23", width: 360, height: 780 },
+  { name: "Samsung Galaxy S23 Ultra", width: 384, height: 824 },
+  { name: "Google Pixel 8", width: 412, height: 915 },
+  { name: "Google Pixel 8 Pro", width: 448, height: 998 },
+] as const;
+
+type DevicePreset = (typeof DEVICE_PRESETS)[number];
 
 interface PreviewModalProps {
   open: boolean;
@@ -52,8 +67,54 @@ export function PreviewModal({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedVersion, setSelectedVersion] = useState(version || 1);
+  const [mobileView, setMobileView] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(
+    DEVICE_PRESETS[0]
+  );
+  const [mobileScale, setMobileScale] = useState(1);
+  const mobileContainerRef = useRef<HTMLDivElement>(null);
 
   const utils = trpc.useUtils();
+
+  // Calculate scale to fit phone in container
+  const calculateScale = useCallback(() => {
+    if (!mobileContainerRef.current || !mobileView) return;
+
+    const container = mobileContainerRef.current;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    // Add padding (40px on each side)
+    const padding = 80;
+    const availableWidth = containerWidth - padding;
+    const availableHeight = containerHeight - padding;
+
+    // Device dimensions include the border (8px on each side)
+    const deviceTotalWidth = selectedDevice.width + 16;
+    const deviceTotalHeight = selectedDevice.height + 16;
+
+    // Calculate scale to fit both dimensions
+    const scaleX = availableWidth / deviceTotalWidth;
+    const scaleY = availableHeight / deviceTotalHeight;
+    const scale = Math.min(scaleX, scaleY, 1); // Never scale up
+
+    setMobileScale(scale);
+  }, [mobileView, selectedDevice]);
+
+  // Recalculate scale when container size changes or device changes
+  useEffect(() => {
+    calculateScale();
+
+    const container = mobileContainerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      calculateScale();
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [calculateScale]);
 
   // Fetch project data to get version information
   const { data: projectsData } = trpc.project.list.useQuery(undefined, {
@@ -221,6 +282,60 @@ export function PreviewModal({
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant={mobileView ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMobileView(!mobileView)}
+                title={
+                  mobileView
+                    ? "Switch to Desktop View"
+                    : "Switch to Mobile View"
+                }
+              >
+                {mobileView ? (
+                  <Monitor className="w-4 h-4 mr-2" />
+                ) : (
+                  <Smartphone className="w-4 h-4 mr-2" />
+                )}
+                {mobileView ? "Desktop" : "Mobile"}
+              </Button>
+              {mobileView && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1">
+                      {selectedDevice.name}
+                      <ChevronDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Select Device</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {DEVICE_PRESETS.map((device) => (
+                      <DropdownMenuItem
+                        key={device.name}
+                        onClick={() => setSelectedDevice(device)}
+                        className={
+                          selectedDevice.name === device.name ? "bg-accent" : ""
+                        }
+                      >
+                        <Check
+                          className={`w-4 h-4 mr-2 ${
+                            selectedDevice.name === device.name
+                              ? "opacity-100"
+                              : "opacity-0"
+                          }`}
+                        />
+                        <span>{device.name}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {device.width}×{device.height}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
             <Button variant="outline" size="sm" onClick={handleCopy}>
               {copied ? (
                 <Check className="w-4 h-4 mr-2" />
@@ -259,44 +374,99 @@ export function PreviewModal({
             </div>
           )}
 
-          <div className="flex-1 relative bg-muted/20">
-            <iframe
-              key={refreshKey}
-              src={fullUrl}
-              className="w-full h-full border-0"
-              title="Preview"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              onLoad={(e) => {
-                const iframe = e.currentTarget;
-                try {
-                  const doc = iframe.contentDocument;
-                  if (doc) {
-                    const style = doc.createElement("style");
-                    style.textContent = `
-                                            ::-webkit-scrollbar {
-                                                width: 14px;
-                                                height: 14px;
-                                            }
-                                            ::-webkit-scrollbar-track {
-                                                background: transparent;
-                                            }
-                                            ::-webkit-scrollbar-thumb {
-                                                background-color: rgba(156, 163, 175, 0.5);
-                                                border-radius: 5px;
-                                                border: 2px solid transparent;
-                                                background-clip: content-box;
-                                            }
-                                            ::-webkit-scrollbar-thumb:hover {
-                                                background-color: rgba(156, 163, 175, 0.8);
-                                            }
-                                        `;
-                    doc.head.appendChild(style);
+          <div
+            ref={mobileContainerRef}
+            className={`flex-1 relative bg-muted/20 ${
+              mobileView
+                ? "flex items-center justify-center overflow-hidden"
+                : ""
+            }`}
+          >
+            {mobileView ? (
+              <div
+                className="relative bg-background rounded-3xl shadow-2xl border-8 border-gray-800 overflow-hidden transition-transform duration-200"
+                style={{
+                  width: selectedDevice.width,
+                  height: selectedDevice.height,
+                  transform: `scale(${mobileScale})`,
+                  transformOrigin: "center center",
+                }}
+              >
+                <iframe
+                  key={refreshKey}
+                  src={fullUrl}
+                  className="w-full h-full border-0"
+                  title="Preview"
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                  onLoad={(e) => {
+                    const iframe = e.currentTarget;
+                    try {
+                      const doc = iframe.contentDocument;
+                      if (doc) {
+                        const style = doc.createElement("style");
+                        style.textContent = `
+                          ::-webkit-scrollbar {
+                            width: 8px;
+                            height: 8px;
+                          }
+                          ::-webkit-scrollbar-track {
+                            background: transparent;
+                          }
+                          ::-webkit-scrollbar-thumb {
+                            background-color: rgba(156, 163, 175, 0.5);
+                            border-radius: 4px;
+                          }
+                          ::-webkit-scrollbar-thumb:hover {
+                            background-color: rgba(156, 163, 175, 0.8);
+                          }
+                        `;
+                        doc.head.appendChild(style);
+                      }
+                    } catch (err) {
+                      console.warn("Could not inject styles into iframe", err);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <iframe
+                key={refreshKey}
+                src={fullUrl}
+                className="w-full h-full border-0"
+                title="Preview"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                onLoad={(e) => {
+                  const iframe = e.currentTarget;
+                  try {
+                    const doc = iframe.contentDocument;
+                    if (doc) {
+                      const style = doc.createElement("style");
+                      style.textContent = `
+                        ::-webkit-scrollbar {
+                          width: 14px;
+                          height: 14px;
+                        }
+                        ::-webkit-scrollbar-track {
+                          background: transparent;
+                        }
+                        ::-webkit-scrollbar-thumb {
+                          background-color: rgba(156, 163, 175, 0.5);
+                          border-radius: 5px;
+                          border: 2px solid transparent;
+                          background-clip: content-box;
+                        }
+                        ::-webkit-scrollbar-thumb:hover {
+                          background-color: rgba(156, 163, 175, 0.8);
+                        }
+                      `;
+                      doc.head.appendChild(style);
+                    }
+                  } catch (err) {
+                    console.warn("Could not inject styles into iframe", err);
                   }
-                } catch (err) {
-                  console.warn("Could not inject styles into iframe", err);
-                }
-              }}
-            />
+                }}
+              />
+            )}
 
             {/* Floating Asset Button - Left side */}
             {projectSlug && version !== undefined && !assetsOpen && (

@@ -4,7 +4,12 @@ import { getVersionDir } from "../generator/versionUtils";
 import path from "path";
 import fs from "fs";
 import axios from "axios";
-import { OPENROUTER_API_KEY, IMAGE_EDITING_MODEL } from "../generator/config";
+import sizeOf from "image-size";
+import {
+  OPENROUTER_API_KEY,
+  IMAGE_EDITING_MODEL,
+  HERO_GENERATION_MODEL,
+} from "../generator/config";
 import { downloadImage, saveImageBuffer } from "../generator/utils";
 
 // Get MIME type from extension
@@ -76,13 +81,31 @@ export const assetsRouter = router({
               path: path.join(relativePath, entry.name),
             };
           } else {
+            const isImage = isImageFile(entry.name);
+            let width: number | undefined;
+            let height: number | undefined;
+
+            // Read image dimensions if it's an image
+            if (isImage) {
+              try {
+                const buffer = fs.readFileSync(fullPath);
+                const dimensions = sizeOf(buffer);
+                width = dimensions.width;
+                height = dimensions.height;
+              } catch {
+                // Ignore errors reading dimensions (e.g., corrupt files, SVGs without viewBox)
+              }
+            }
+
             return {
               name: entry.name,
               type: "file" as const,
               path: path.join(relativePath, entry.name),
               size: stats.size,
               mimeType: getMimeType(entry.name),
-              isImage: isImageFile(entry.name),
+              isImage,
+              width,
+              height,
             };
           }
         })
@@ -153,7 +176,6 @@ export const assetsRouter = router({
     .mutation(async ({ input }) => {
       const { slug, version, relativePath, folderName } = input;
       const versionDir = getVersionDir(slug, version);
-      const targetDir = path.join(versionDir, relativePath, folderName);
 
       // Sanitize folder name
       const sanitizedName = folderName.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -218,9 +240,7 @@ export const assetsRouter = router({
       const mimeType = ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
 
       // Build the prompt for editing
-      const editPrompt = `Edit this image according to the following instructions: ${prompt}
-
-Keep the overall composition and style similar to the original image, but apply the requested changes.`;
+      const editPrompt = `Edit this image according to the following instructions: ${prompt}`;
 
       // Call the image generation model
       console.log(
@@ -351,6 +371,168 @@ Keep the overall composition and style similar to the original image, but apply 
           );
         }
         throw new Error(`Failed to edit image: ${error.message}`);
+      }
+    }),
+
+  /**
+   * Create a new image with AI - generates an image from a prompt with optional reference images
+   */
+  createImageWithAI: protectedProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        prompt: z.string().min(1), // generation prompt
+        referenceImages: z.array(z.string()).optional().default([]), // paths to reference images
+        targetPath: z.string().optional().default(""), // where to save the image (relative path)
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version, prompt, referenceImages, targetPath } = input;
+      const versionDir = getVersionDir(slug, version);
+
+      // Validate versionDir exists
+      if (!fs.existsSync(versionDir)) {
+        throw new Error("Project version not found");
+      }
+
+      // Build the messages array with prompt and optional reference images
+      const messages: any[] = [
+        {
+          role: "user",
+          content: [{ type: "text", text: prompt }],
+        },
+      ];
+
+      // Add reference images
+      for (const imgPath of referenceImages) {
+        const fullPath = path.join(versionDir, imgPath);
+        if (fs.existsSync(fullPath) && isImageFile(fullPath)) {
+          const buffer = fs.readFileSync(fullPath);
+          const base64 = buffer.toString("base64");
+          const ext = path.extname(fullPath).substring(1).toLowerCase();
+          const mimeType =
+            ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
+
+          messages[0].content.push({
+            type: "image_url",
+            image_url: {
+              url: `data:image/${mimeType};base64,${base64}`,
+            },
+          });
+        }
+      }
+
+      console.log(
+        `[AI Create] Creating image with prompt: ${prompt.substring(0, 100)}...`
+      );
+      console.log(
+        `[AI Create] Reference images: ${referenceImages.join(", ") || "none"}`
+      );
+
+      try {
+        const response = await axios.post(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            model: HERO_GENERATION_MODEL,
+            messages: messages,
+            modalities: ["image", "text"],
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "https://github.com/landing-page-agent",
+              "X-Title": "Landing Page Agent",
+            },
+          }
+        );
+
+        const result = response.data;
+        let imageUrl: string | null = null;
+
+        if (result.choices && result.choices[0]) {
+          const message = result.choices[0].message;
+
+          // Check for images in the OpenRouter format
+          if (message.images && message.images.length > 0) {
+            const imgObj = message.images[0];
+            imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
+          }
+
+          // Fallback: check content for markdown or URL
+          if (!imageUrl && message.content) {
+            let content = "";
+            if (typeof message.content === "string") {
+              content = message.content;
+            } else if (Array.isArray(message.content)) {
+              content = message.content
+                .filter((c: any) => c.type === "text")
+                .map((c: any) => c.text)
+                .join("");
+            }
+
+            const match = content.match(/\!\[.*?\]\((.*?)\)/);
+            if (match) imageUrl = match[1];
+            else if (content.startsWith("http")) imageUrl = content;
+          }
+        }
+
+        if (!imageUrl) {
+          throw new Error("Failed to generate image - no image in response");
+        }
+
+        // Generate filename from prompt (sanitized)
+        const sanitizedPrompt = prompt
+          .substring(0, 30)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "");
+
+        const timestamp = Date.now();
+        const newFileName = `ai-${sanitizedPrompt}-${timestamp}.webp`;
+
+        // Determine save path
+        const saveDir = path.join(versionDir, targetPath);
+        if (!fs.existsSync(saveDir)) {
+          fs.mkdirSync(saveDir, { recursive: true });
+        }
+
+        const newFilePath = path.join(saveDir, newFileName);
+
+        // Download or save the image
+        if (imageUrl.startsWith("http")) {
+          await downloadImage(imageUrl, newFilePath);
+        } else {
+          // Handle base64
+          let buffer: Buffer;
+          if (imageUrl.startsWith("data:image")) {
+            const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+            buffer = Buffer.from(base64Data, "base64");
+          } else {
+            buffer = Buffer.from(imageUrl, "base64");
+          }
+          await saveImageBuffer(buffer, newFilePath);
+        }
+
+        const newRelativePath = path.join(targetPath, newFileName);
+        console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
+
+        return {
+          success: true,
+          path: newRelativePath,
+          fileName: newFileName,
+        };
+      } catch (error: any) {
+        console.error(`[AI Create] Error:`, error.message);
+        if (error.response?.data) {
+          console.error(
+            `[AI Create] Response:`,
+            JSON.stringify(error.response.data)
+          );
+        }
+        throw new Error(`Failed to create image: ${error.message}`);
       }
     }),
 });
