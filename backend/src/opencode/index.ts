@@ -4,8 +4,21 @@ import {
   OpencodeClient,
 } from "@opencode-ai/sdk";
 import { useEvents, type ToolCall } from "./useEvents";
+import {
+  agentEventEmitter,
+  createAgentEvent,
+  type ReasoningDeltaData,
+  type MessageDeltaData,
+  type ToolStartedData,
+  type ToolCompletedData,
+  type ToolErrorData,
+  type SessionCompletedData,
+  type ThinkingStartedData,
+} from "./eventEmitter";
 
 export { useEvents };
+export { agentEventEmitter } from "./eventEmitter";
+export type { AgentEvent, AgentEventType } from "./eventEmitter";
 
 let serverUrl: string;
 
@@ -46,14 +59,42 @@ export async function runTask(
 
   const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
 
+  // Track reasoning part IDs for delta updates
+  const reasoningPartIds = new Map<string, number>();
+
   // We start the event stream but don't wait for it to finish
   const { start, stop } = useEvents(client, {
     onStartThinking: () => {
       console.log(`[OpenCode] Thinking...`);
+      // Emit thinking started event to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "thinking.started", {
+          kind: "thinking.started",
+        } as ThinkingStartedData)
+      );
     },
-    // We don't log streaming reasoning to the console to avoid messing up the logs
-    onReasoning: (_content) => {
-      // console.log(`[OpenCode] Reasoning: ${content}`);
+    onReasoning: (content, partId) => {
+      // Emit reasoning delta to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "reasoning.delta", {
+          kind: "reasoning.delta",
+          content,
+          partId: partId || "unknown",
+        } as ReasoningDeltaData)
+      );
+    },
+    onText: (content, partId) => {
+      // Emit text delta to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "message.delta", {
+          kind: "message.delta",
+          content,
+          partId: partId || "unknown",
+        } as MessageDeltaData)
+      );
     },
     onToolCall: (toolCall: ToolCall) => {
       // @ts-ignore
@@ -66,11 +107,43 @@ export async function runTask(
           toolCall.title ? ` - ${toolCall.title}` : ""
         }${inputStr}`
       );
+      // Emit tool started event to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "tool.started", {
+          kind: "tool.started",
+          toolId: toolCall.id,
+          tool: toolCall.tool,
+          title: toolCall.title,
+          input: toolCall.input,
+        } as ToolStartedData)
+      );
     },
     onToolCallFinished: (toolCall: ToolCall) => {
       // @ts-ignore
-      if (toolCall.state?.status === "error" || toolCall.status === "error") {
+      const isError =
+        toolCall.state?.status === "error" || toolCall.status === "error";
+      if (isError) {
         console.log(`[OpenCode] Tool Error: ${toolCall.tool}`);
+        // Emit tool error event to frontend
+        agentEventEmitter.emitSessionEvent(
+          currentSessionId,
+          createAgentEvent(currentSessionId, "tool.error", {
+            kind: "tool.error",
+            toolId: toolCall.id,
+            tool: toolCall.tool,
+          } as ToolErrorData)
+        );
+      } else {
+        // Emit tool completed event to frontend
+        agentEventEmitter.emitSessionEvent(
+          currentSessionId,
+          createAgentEvent(currentSessionId, "tool.completed", {
+            kind: "tool.completed",
+            toolId: toolCall.id,
+            tool: toolCall.tool,
+          } as ToolCompletedData)
+        );
       }
     },
   });
@@ -82,6 +155,13 @@ export async function runTask(
   sendPrompt(client, currentSessionId, cwd, task)
     .then(async () => {
       console.log(`[OpenCode] Task execution completed`);
+      // Emit session completed event to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "session.completed", {
+          kind: "session.completed",
+        } as SessionCompletedData)
+      );
     })
     .catch((error) => {
       console.error(`[OpenCode] Background Task Error:`, error);

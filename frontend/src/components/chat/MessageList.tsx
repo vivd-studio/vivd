@@ -17,6 +17,7 @@ interface MessageListProps {
   onRevert?: (messageId: string) => void;
   onRestore?: () => void;
   isReverted?: boolean;
+  streamingParts?: any[];
 }
 
 export function MessageList({
@@ -26,17 +27,18 @@ export function MessageList({
   onRevert,
   onRestore,
   isReverted,
+  streamingParts,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isThinking]);
+  }, [messages, isThinking, streamingParts]);
 
   return (
     <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-      <div className="flex flex-col gap-4 pb-4">
+      <div className="flex flex-col gap-6 pb-4">
         {messages.length === 0 && (
           <div className="text-center text-muted-foreground mt-8">
             <p>Describe a task for the agent to execute.</p>
@@ -45,72 +47,91 @@ export function MessageList({
             </p>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex flex-col gap-1 ${
-              msg.role === "user" ? "items-end" : "items-start"
-            }`}
-          >
-            {/* Revert button above user messages - backend handles finding assistant messages */}
-            {msg.role === "user" && msg.id && onRevert && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
-                onClick={() => onRevert(msg.id!)}
-              >
-                <Undo2 className="w-3 h-3 mr-1" />
-                Revert to before this
-              </Button>
-            )}
+        {messages.map((msg, i) => {
+          // Skip empty messages (no content and no parts)
+          if (!msg.content && (!msg.parts || msg.parts.length === 0)) {
+            return null;
+          }
+
+          const isUser = msg.role === "user";
+
+          return (
             <div
-              className={`rounded-lg px-4 py-2 max-w-[90%] whitespace-pre-wrap ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
+              key={i}
+              className={`flex flex-col gap-1 ${
+                isUser ? "items-end" : "items-start"
               }`}
             >
-              {/* Render parts if available to show tools/reasoning */}
-              {msg.parts && msg.parts.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {msg.parts.map((part: any, pIndex: number) => {
-                    if (part.type === "text")
-                      return <span key={pIndex}>{part.text}</span>;
-                    if (part.type === "reasoning")
-                      return <ThinkingBlock key={pIndex} text={part.text} />;
-                    if (part.type === "tool")
-                      return (
-                        <div
-                          key={pIndex}
-                          className="text-xs bg-black/10 dark:bg-white/10 p-2 rounded flex items-center gap-2 font-mono"
-                        >
-                          <span>🛠️ {part.tool}</span>
-                          {/* Show input if needed, or status */}
-                        </div>
-                      );
-                    return null;
-                  })}
+              {/* Revert button above user messages - backend handles finding assistant messages */}
+              {isUser && msg.id && onRevert && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+                  onClick={() => onRevert(msg.id!)}
+                >
+                  <Undo2 className="w-3 h-3 mr-1" />
+                  Revert to before this
+                </Button>
+              )}
+
+              {/* User Message Bubble */}
+              {isUser ? (
+                <div className="rounded-lg px-4 py-2 max-w-[90%] whitespace-pre-wrap bg-primary text-primary-foreground">
+                  {msg.content}
                 </div>
               ) : (
-                msg.content ||
-                (msg.role === "agent" ? (
-                  <span className="text-muted-foreground italic flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
-                  </span>
-                ) : null)
+                /* Agent Message Construction - Split into parts */
+                <div className="flex flex-col gap-2 max-w-[90%] w-full items-start">
+                  {msg.parts && msg.parts.length > 0 ? (
+                    msg.parts.map((part: any, pIndex: number) => (
+                      <MessagePartBubble key={pIndex} part={part} />
+                    ))
+                  ) : (
+                    /* Fallback for legacy messages */
+                    <div className="bg-muted rounded-lg px-4 py-2 w-full whitespace-pre-wrap">
+                      {msg.content}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+        {/* Streaming / Loading State */}
         {(isLoading || isThinking) && (
-          <div className="flex justify-start">
-            <div className="bg-muted rounded-lg px-4 py-2 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Agent is working...</span>
+          <div className="flex justify-start w-full max-w-[90%]">
+            <div className="flex flex-col gap-2 w-full items-start">
+              {/* Immediate Feedback: Show a fake active reasoning block if waiting but no parts yet */}
+              {isThinking &&
+                (!streamingParts || streamingParts.length === 0) && (
+                  <ThinkingBlock
+                    text=""
+                    isStreaming={true}
+                    defaultOpen={false}
+                    label="Thinking Process"
+                  />
+                )}
+
+              {/* Streaming Parts */}
+              {streamingParts &&
+                streamingParts.map((part, idx) => {
+                  const isLast = idx === streamingParts.length - 1;
+                  return (
+                    <MessagePartBubble
+                      key={idx}
+                      part={part}
+                      isStreaming={true}
+                      isLast={isLast}
+                      defaultOpen={false} // Open if it's the active one
+                    />
+                  );
+                })}
             </div>
           </div>
         )}
+
         {/* Restore button when session is reverted */}
         {isReverted && onRestore && (
           <div className="flex justify-center py-4">
@@ -125,30 +146,107 @@ export function MessageList({
             </Button>
           </div>
         )}
+
         <div ref={bottomRef} />
       </div>
     </ScrollArea>
   );
 }
 
-function ThinkingBlock({ text }: { text: string }) {
-  const [isOpen, setIsOpen] = useState(false);
+function MessagePartBubble({
+  part,
+  isStreaming = false,
+  isLast = false,
+  defaultOpen = false,
+}: {
+  part: any;
+  isStreaming?: boolean;
+  isLast?: boolean;
+  defaultOpen?: boolean;
+}) {
+  if (part.type === "reasoning") {
+    // Determine active state: must be streaming AND be the last item
+    const isActive = isStreaming && isLast;
+
+    return (
+      <ThinkingBlock
+        text={part.text}
+        isStreaming={isActive} // Only show spinner if active
+        defaultOpen={defaultOpen}
+        label={isActive ? "Thinking Process" : "Thought"} // Change label based on state
+      />
+    );
+  }
+  if (part.type === "tool") {
+    return (
+      <div className="bg-muted border rounded-lg px-3 py-2 text-xs font-mono w-full max-w-md">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2 opacity-70">
+            {part.status === "running" ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : part.status === "error" ? (
+              <span>❌</span>
+            ) : (
+              <span>✅</span>
+            )}
+            <span>Tool Call</span>
+          </div>
+          <span className="opacity-50 text-[10px] uppercase tracking-wider">
+            {part.status}
+          </span>
+        </div>
+
+        <div className="font-semibold">{part.tool}</div>
+        {part.title && (
+          <div className="text-muted-foreground mt-1 truncate">
+            {part.title}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (part.type === "text") {
+    return (
+      <div className="bg-muted rounded-lg px-4 py-2 w-full whitespace-pre-wrap">
+        {part.text}
+      </div>
+    );
+  }
+  return null;
+}
+
+function ThinkingBlock({
+  text,
+  defaultOpen = false,
+  isStreaming = false,
+  label = "Thinking Process",
+}: {
+  text: string;
+  defaultOpen?: boolean;
+  isStreaming?: boolean;
+  label?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
   return (
-    <div className="text-xs">
+    <div className="w-full max-w-md">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-xs font-medium py-1 px-1"
       >
         {isOpen ? (
           <ChevronDown className="w-3 h-3" />
         ) : (
           <ChevronRight className="w-3 h-3" />
         )}
-        <span className="italic">Thinking Process</span>
+        <span className="flex items-center gap-2">
+          {isStreaming && <Loader2 className="w-3 h-3 animate-spin" />}
+          {label}
+        </span>
       </button>
       {isOpen && (
-        <div className="mt-1 pl-4 border-l-2 border-muted text-muted-foreground whitespace-pre-wrap">
-          {text}
+        <div className="mt-1 ml-1 pl-3 border-l-2 border-muted text-muted-foreground text-sm whitespace-pre-wrap py-1">
+          {text || "..."}
         </div>
       )}
     </div>

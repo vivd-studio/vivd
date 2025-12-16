@@ -6,12 +6,17 @@ export interface ToolCall {
   input?: any;
   status: "running" | "completed" | "error";
   id: string;
+  state?: {
+    status?: "running" | "completed" | "error";
+    input?: any;
+  };
 }
 
 export interface EventCallbacks {
   onEvent?: (event: any) => void;
   onStartThinking?: () => void;
-  onReasoning?: (content: string) => void;
+  onReasoning?: (content: string, partId: string) => void;
+  onText?: (content: string, partId: string) => void;
   onToolCall?: (toolCall: ToolCall) => void;
   onToolCallFinished?: (toolCall: ToolCall) => void;
 }
@@ -31,6 +36,7 @@ export function useEvents(
         const seenParts = new Set<string>();
         const toolStates = new Map<string, string>();
         const reasoningState = new Map<string, number>();
+        const textState = new Map<string, number>();
 
         for await (const event of events.stream) {
           if (!isActive) break;
@@ -55,9 +61,19 @@ export function useEvents(
               if (text.length > lastLength) {
                 const newContent = text.slice(lastLength);
                 if (callbacks.onReasoning) {
-                  callbacks.onReasoning(newContent);
+                  callbacks.onReasoning(newContent, part.id);
                 }
                 reasoningState.set(part.id, text.length);
+              }
+            } else if (part.type === "text") {
+              const text = part.text || "";
+              const lastLength = textState.get(part.id) || 0;
+              if (text.length > lastLength) {
+                const newContent = text.slice(lastLength);
+                if (callbacks.onText) {
+                  callbacks.onText(newContent, part.id);
+                }
+                textState.set(part.id, text.length);
               }
             } else if (part.type === "tool") {
               const currentStatus = part.state.status as

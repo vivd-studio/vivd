@@ -1,5 +1,6 @@
 import { router, protectedProcedure, adminProcedure } from "../trpc";
 import { z } from "zod";
+import { tracked } from "@trpc/server";
 import {
   runTask,
   listSessions,
@@ -8,6 +9,8 @@ import {
   deleteSession as deleteSessionFn,
   revertToUserMessage,
   unrevertSession,
+  agentEventEmitter,
+  type AgentEvent,
 } from "../opencode";
 import {
   getProjectDir,
@@ -212,6 +215,44 @@ export const agentRouter = router({
       } catch (error: any) {
         console.error("[Unrevert] Failed to unrevert session:", error);
         throw new Error(error.message || "Failed to unrevert session");
+      }
+    }),
+
+  /**
+   * SSE subscription for real-time agent session events.
+   * Uses tRPC's async generator pattern for SSE support.
+   * Clients can reconnect using lastEventId to resume from where they left off.
+   */
+  sessionEvents: adminProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        // Optional: last event ID for resumable streams
+        lastEventId: z.string().optional(),
+      })
+    )
+    .subscription(async function* ({ input, signal }) {
+      console.log(
+        `[SessionEvents] Client subscribed to session: ${input.sessionId}`
+      );
+
+      // Use the event emitter's async generator to yield events
+      const eventStream = agentEventEmitter.createSessionStream(
+        input.sessionId,
+        signal
+      );
+
+      try {
+        for await (const event of eventStream) {
+          // Use tracked() to enable resumable streams with event IDs
+          // The event ID is based on timestamp + type for uniqueness
+          const eventId = `${event.timestamp}-${event.type}`;
+          yield tracked(eventId, event);
+        }
+      } finally {
+        console.log(
+          `[SessionEvents] Client unsubscribed from session: ${input.sessionId}`
+        );
       }
     }),
 });
