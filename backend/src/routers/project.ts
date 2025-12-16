@@ -262,6 +262,40 @@ export const projectRouter = router({
     }
   }),
 
+  saveFile: protectedProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        filePath: z.string().default("index.html"),
+        content: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version, filePath, content } = input;
+      const versionDir = getVersionDir(slug, version);
+
+      if (!fs.existsSync(versionDir)) {
+        throw new Error("Project version not found");
+      }
+
+      // Security check to prevent directory traversal
+      const targetPath = path.join(versionDir, filePath);
+
+      // Ensure the version directory path is resolved to handle potential symlinks/relative paths correctly for comparison
+      // limiting scope to the version directory
+      const absoluteVersionDir = path.resolve(versionDir);
+      const resolvedPath = path.resolve(targetPath);
+
+      if (!resolvedPath.startsWith(absoluteVersionDir)) {
+        throw new Error("Invalid file path");
+      }
+
+      fs.writeFileSync(targetPath, content, "utf-8");
+
+      return { success: true };
+    }),
+
   /**
    * One-time migration endpoint to convert legacy projects to versioned structure.
    * This is admin-only and can be removed after all projects are migrated.

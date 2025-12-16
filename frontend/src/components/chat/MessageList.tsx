@@ -2,6 +2,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Loader2, ChevronRight, ChevronDown, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   id?: string;
@@ -77,8 +79,37 @@ export function MessageList({
 
               {/* User Message Bubble */}
               {isUser ? (
-                <div className="rounded-lg px-4 py-2 max-w-[90%] whitespace-pre-wrap bg-primary text-primary-foreground">
-                  {msg.content}
+                <div className="rounded-lg px-4 py-2 max-w-[90%] bg-primary text-primary-foreground">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ node, ...props }) => (
+                        <p {...props} className="m-0" />
+                      ),
+                      a: ({ node, ...props }) => (
+                        <a
+                          {...props}
+                          className="underline text-primary-foreground/90 hover:text-primary-foreground"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        />
+                      ),
+                      code: ({ node, ...props }) => (
+                        <code
+                          {...props}
+                          className="bg-primary-foreground/20 rounded px-1"
+                        />
+                      ),
+                      pre: ({ node, ...props }) => (
+                        <pre
+                          {...props}
+                          className="bg-primary-foreground/20 p-2 rounded overflow-x-auto"
+                        />
+                      ),
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
               ) : (
                 /* Agent Message Construction - Split into parts */
@@ -89,8 +120,10 @@ export function MessageList({
                     ))
                   ) : (
                     /* Fallback for legacy messages */
-                    <div className="bg-muted rounded-lg px-4 py-2 w-full whitespace-pre-wrap">
-                      {msg.content}
+                    <div className="bg-muted rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   )}
                 </div>
@@ -207,8 +240,8 @@ function MessagePartBubble({
   }
   if (part.type === "text") {
     return (
-      <div className="bg-muted rounded-lg px-4 py-2 w-full whitespace-pre-wrap">
-        {part.text}
+      <div className="bg-muted rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
       </div>
     );
   }
