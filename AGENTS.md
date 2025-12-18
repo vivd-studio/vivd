@@ -1,6 +1,6 @@
-# Landing Page Agent
+# Vivd
 
-This project is an automated agent that scrapes websites and generates modern landing pages using AI.
+Vivd is an AI-powered website builder that scrapes websites and generates modern landing pages using AI.
 
 # Frontend
 

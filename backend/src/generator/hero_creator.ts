@@ -111,8 +111,8 @@ export async function generateImage(
         headers: {
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://github.com/landing-page-agent",
-          "X-Title": "Landing Page Agent",
+          "HTTP-Referer": "https://github.com/vivd",
+          "X-Title": "Vivd",
         },
       }
     );

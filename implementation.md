@@ -1,196 +1,370 @@
-# Strategic Product Direction: AI-Powered CMS Architecture
+# Vivd: Product Roadmap
 
-## Current State Summary
-
-You've built a **language-driven website generator/CMS** with these components:
-
-- **Entry**: URL → scrape → AI-generate new website
-- **Editing**: Agent chat, visual text editing, asset management
-- **Auth**: `admin` (full access) and `user` (create/edit sites) roles
-- **Storage**: File-based (`generated/{slug}/v{n}/`) with versioning
-- **Deployment**: Single docker-compose on Dokploy
+> Single-tenant, managed-first AI website builder
 
 ---
 
-## The Core Decision: Single-Tenant vs Multi-Tenant
-
-```mermaid
-flowchart TD
-    subgraph MT["Multi-Tenant (SaaS)"]
-        MT1["One instance, many customers"]
-        MT2["Shared infrastructure"]
-        MT3["Centralized updates"]
-        MT4["Complex isolation"]
-    end
-
-    subgraph ST["Single-Tenant (White-label/Self-hosted)"]
-        ST1["One instance per customer"]
-        ST2["Complete isolation"]
-        ST3["Distributed updates"]
-        ST4["Simple data model"]
-    end
-
-    Q["Your Decision"] --> MT
-    Q --> ST
-```
-
-### WordPress Reference
-
-| Aspect        | WordPress.com (Multi-tenant) | WordPress.org (Single-tenant)    |
-| ------------- | ---------------------------- | -------------------------------- |
-| Hosting       | Automattic hosts everything  | Customer self-hosts              |
-| Updates       | Automatic, centralized       | Manual or automated per instance |
-| Customization | Limited by tier              | Unlimited                        |
-| Revenue Model | Subscription tiers           | License/support/hosting services |
-
----
-
-## Recommended Path: Single-Tenant First
-
-> [!IMPORTANT] > **My recommendation**: Start with single-tenant. It's simpler, lower-risk, and you can always add multi-tenant later. Here's why:
-
-### Why Single-Tenant First?
-
-| Factor                 | Single-Tenant ✅                       | Multi-Tenant ❌                            |
-| ---------------------- | -------------------------------------- | ------------------------------------------ |
-| **Complexity**         | Keep current architecture nearly as-is | Requires tenant isolation, billing, quotas |
-| **Security**           | Complete isolation by default          | Need careful RLS/data separation           |
-| **Your Overview Page** | Keep it! Each instance has their own   | Need to scope everything by tenant         |
-| **Deployment**         | Dokploy compose per customer           | Complex shared infra                       |
-| **Time to Market**     | Weeks                                  | Months                                     |
-
----
-
-## Structured Decision Framework
-
-### 1. Entrypoint Question
-
-**"Is URL → generate the right entry?"**
-
-| Option                   | Pros                          | Cons                      |
-| ------------------------ | ----------------------------- | ------------------------- |
-| **Keep URL entry**       | Fast start, clear value prop  | Limited to existing sites |
-| **Add template gallery** | Accessible to non-site owners | More upfront work         |
-| **Blank canvas**         | Maximum flexibility           | Higher barrier to start   |
-
-> [!TIP] > **Recommendation**: Keep URL as primary, add templates as enhancement later.
-
----
-
-### 2. User Roles for Single-Tenant
-
-For single-tenant, you likely **don't need a new "customer" role**. Instead:
-
-```
-Instance Owner (your current "admin")
-  └── Can manage users, settings, billing
-  └── Can create/edit all sites
-
-Team Members (your current "user")
-  └── Can create/edit sites (scoped as needed)
-```
-
-The "customer" concept becomes: **each customer gets their own instance**.
-
----
-
-### 3. Deployment Strategy
+## Architecture Overview
 
 ```mermaid
 flowchart LR
-    subgraph Your_Dev["Your Development"]
-        Dev["Push to main"]
-        CI["Build Docker Images"]
-        Registry["Container Registry"]
+    subgraph Customer["Customer Instance (per client)"]
+        Caddy["Caddy (TLS + routing)"]
+        App["Backend + Frontend"]
+        DB["Postgres"]
+
+        Caddy -->|"/"| Sites["Published Site"]
+        Caddy -->|"/admin/*"| App
+        Caddy -->|"/api/*"| App
+        App --> DB
     end
 
-    subgraph Customers["Customer Instances"]
-        C1["Customer 1 Compose"]
-        C2["Customer 2 Compose"]
-        C3["Customer N Compose"]
+    subgraph You["Your Infrastructure"]
+        Dev["Your Code"] --> GHCR["GitHub Container Registry"]
     end
 
-    Dev --> CI --> Registry
-    Registry --> C1
-    Registry --> C2
-    Registry --> C3
+    GHCR -->|"pull"| Customer
 ```
 
-**Implementation path**:
+**Key decisions**:
 
-1. **Short term**: Keep developing on your instance, publish images to a registry
-2. **Per customer**: Create Dokploy compose that pulls your images with `image:` instead of `build:`
-3. **Updates**: Customer composes pull `:latest` or tagged versions
-4. **Serving**: Add Caddy/Nginx to each compose for static site serving
-
----
-
-### 4. Your Overview Page
-
-| Scenario                         | Where it lives                                                        |
-| -------------------------------- | --------------------------------------------------------------------- |
-| Single-tenant                    | **Stays exactly where it is** in each customer's instance             |
-| If you want a "master dashboard" | Build a separate admin tool that aggregates across instances (future) |
+- ✅ Single-tenant (one instance per customer, one published site)
+- ✅ Backend serves frontend (2 containers: App + Caddy)
+- ✅ GHCR for private image distribution
+- ✅ Path-based admin (`acme.com/admin`)
+- ✅ Multi-project dashboard only for your dev instance
 
 ---
 
-### 5. Versioning & Updates
+## Phase 1: Core Product Polish
 
-**Suggested approach**:
+### 1.1 Project Creation Flow
+
+> Choice-based wizard; customers land directly here if no site exists
+
+**Dashboard behavior**:
+
+- `MULTI_PROJECT_DASHBOARD=true` → Shows project list (your dev instance)
+- `MULTI_PROJECT_DASHBOARD=false` → Direct to admin view or start wizard
+
+**Start flow** (when no site exists or "New Project"):
+
+```
+┌─────────────────────────────────────┐
+│  How do you want to start?          │
+│                                     │
+│  ○ Start from scratch               │
+│    Describe your business and we'll │
+│    create everything from zero      │
+│                                     │
+│  ○ Start from existing website      │
+│    We'll analyze and recreate it    │
+│    ⚠️ Only use websites you own     │
+└─────────────────────────────────────┘
+```
+
+**Tasks**:
+
+- [ ] Create `ProjectWizard` component with step flow
+- [ ] **Scratch flow**:
+  - [ ] Step 1: Business type, name, industry
+  - [ ] Step 2: Upload existing assets (logo, images) or generate
+  - [ ] Step 3: Color/style preferences
+  - [ ] Step 4: AI generates full site (logo if needed, hero image, content)
+- [ ] **URL flow** (current):
+  - [ ] Add legal disclaimer checkbox: "I own this website and its content"
+  - [ ] Existing generation pipeline
+- [ ] Adapt `processUrl` to `generateProject({ type: 'scratch' | 'url', ... })`
+
+---
+
+### 1.2 Chat UX Improvements
+
+> Make AI editing intuitive for non-technical users
+
+**Features**:
+
+- [ ] **Element selector mode**:
+  - Click "Select Element" → cursor becomes crosshair
+  - Click any element in preview → highlight + send selector to chat
+  - Auto-message: "I want to change [element description]"
+- [ ] **Empty state prompt**:
+  ```
+  "👋 Hi! Click any element in the preview to tell me what
+   you'd like to change, or just describe what you need."
+  ```
+- [ ] **Simplify success/error states** - clear visual feedback
+
+**Implementation**:
+
+- [ ] Add `postMessage` bridge for iframe → parent element selection
+- [ ] Store selected element XPath/selector in chat context
+- [ ] Create `EmptyStatePrompt` component
+
+---
+
+### 1.3 Feature Licensing System
+
+> Control what each instance can do (env-first, license-server later)
+
+**Restricted features**:
+| Feature | Env Var | Default |
+|---------|---------|---------|
+| `LICENSE_IMAGE_GEN` | `true` | Image generation enabled |
+| `MULTI_PROJECT_DASHBOARD` | `false` | Show project list (your instance only) |
+| `LICENSE_MAX_PROJECTS` | `1` | Sites per instance (1 for customers) |
+| `LICENSE_MAX_USERS` | `3` | Team members |
+
+**AI rate limits**:
+| Env Var | Default | Purpose |
+|---------|---------|---------||
+| `LICENSE_AI_TOKENS_PER_MINUTE` | `500000` | Burst protection |
+| `LICENSE_AI_TOKENS_PER_MONTH` | `10000000` | Monthly cap |
+| `LICENSE_AI_REQUESTS_PER_DAY` | `200` | Request throttle |
+| `LICENSE_IMAGE_GEN_PER_DAY` | `20` | Daily image limit |
+| `LICENSE_IMAGE_GEN_PER_MONTH` | `50` | Monthly image cap |
+
+**Tasks**:
+
+- [ ] Create `LicenseService` in backend
+  - [ ] Read limits from env vars
+  - [ ] Check limits before operations
+  - [ ] Return 402/upgrade-required when exceeded
+- [ ] **Token tracking**:
+  - [ ] Hook into OpenCode task events
+  - [ ] Store cumulative usage per month in DB
+- [ ] **Image generation tracking**:
+  - [ ] Wrap image gen calls with counter
+- [ ] Frontend: show usage stats in admin dashboard
+- [ ] Frontend: graceful "limit reached" messaging
+
+**Future**: Add license server verification for non-managed customers
+
+---
+
+## Phase 2: Deployment & Publishing
+
+### 2.1 Save & Publish Workflow
+
+> Git-based versioning with publish-to-production flow
+
+**Concepts**:
+
+- **Working copy**: Current edits (auto-saved to files)
+- **Save**: Git commit with message
+- **Publish**: Deploy specific version to production
+
+**User flow**:
+
+```
+┌─────────────────────────────────────┐
+│ Project: acme-corp          [Save ▼]│
+│                                     │
+│ Unpublished changes (3 saves)       │
+│ ├── "Updated hero text"     10:30   │
+│ ├── "New contact section"   09:15   │
+│ └── "Initial version"       ★ Live  │
+│                                     │
+│           [Publish Latest]          │
+└─────────────────────────────────────┘
+```
+
+**Tasks**:
+
+- [ ] **Backend: Git operations**
+  - [ ] `project.save({ message })` → `git add . && git commit`
+  - [ ] `project.listSaves()` → `git log --oneline`
+  - [ ] `project.revert({ commitHash })` → `git checkout`
+  - [ ] `project.publish()` → copy to published folder + tag
+- [ ] **Frontend: Save UI**
+  - [ ] "Save" button with commit message prompt
+  - [ ] Version history drawer
+  - [ ] "Published" indicator on versions
+- [ ] **Published site serving**:
+  - [ ] Published versions go to `/srv/published/{slug}/`
+  - [ ] Caddy serves from published folder
+  - [ ] Preview continues from working folder
+
+---
+
+### 2.2 Caddy Integration
+
+> Add static file server to docker-compose
+
+**New service in docker-compose**:
 
 ```yaml
-# Customer docker-compose.yml
 services:
-  backend:
-    image: your-registry/landing-page-agent-backend:v1.2.3
-    # ... rest of config
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - published_sites:/srv/published
+    depends_on:
+      - app
+
+  app:
+    image: ghcr.io/you/vivd:latest
+    # Backend serves both API and frontend
 ```
 
-| Update Strategy                 | Complexity | Customer Control              |
-| ------------------------------- | ---------- | ----------------------------- |
-| `:latest` auto-pull             | Low        | Low (they always get updates) |
-| Semantic versioning (`:v1.2.3`) | Medium     | High (they choose when)       |
-| Watchtower auto-update          | Low        | Medium (auto but controlled)  |
+**Caddyfile template**:
+
+```caddyfile
+{$DOMAIN} {
+    # API routes
+    handle /api/* {
+        reverse_proxy app:3000
+    }
+
+    # Admin panel (served by app)
+    handle /admin/* {
+        reverse_proxy app:3000
+    }
+
+    # Published site (static files)
+    handle {
+        root * /srv/published
+        file_server
+    }
+}
+```
+
+**Tasks**:
+
+- [ ] Add Caddy service to docker-compose
+- [ ] Create Caddyfile template
+- [ ] Add `published_sites` volume
+- [ ] Implement publish sync (copy from working to published)
+- [ ] Handle domain config per customer
 
 ---
 
-## Recommended Next Steps (Prioritized)
+## Phase 3: Distribution Infrastructure
 
-### Phase 1: Production-Ready Single Instance (Current Priority)
+### 3.1 Container Registry Setup
 
-- [ ] Add static file serving to docker-compose (Caddy/Nginx sidecar)
-- [ ] Define how "published" sites are served vs "preview"
-- [ ] Document deployment for your first customer (yourself or a pilot)
+> Push images to GHCR for customer distribution
 
-### Phase 2: Reproducible Customer Deployment
+**GitHub Actions workflow** (`.github/workflows/publish.yml`):
 
-- [ ] Push images to a container registry (GitHub Container Registry is free)
-- [ ] Create a "customer template" docker-compose that uses `image:`
-- [ ] Document customer onboarding process
+```yaml
+name: Build and Push
+on:
+  push:
+    tags: ["v*"]
 
-### Phase 3: Update Mechanism
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-- [ ] Decide on versioning strategy (semantic tags recommended)
-- [ ] Consider Watchtower or similar for opt-in auto-updates
-- [ ] Create changelog/release notes process
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-### Phase 4: Future (Only if needed)
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/vivd:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/vivd:latest
 
-- [ ] Multi-tenant conversion (only if SaaS model becomes primary)
-- [ ] Master dashboard across instances
+      # Similar for frontend
+```
+
+**Tasks**:
+
+- [ ] Create GitHub Actions workflow
+- [ ] Make images private in GHCR settings
+- [ ] Create "customer template" docker-compose (uses `image:` not `build:`)
+- [ ] Document customer onboarding (PAT generation, docker login)
+- [ ] Test full cycle: push → pull on clean server
 
 ---
 
-## Questions for You
+### 3.2 Update Strategy
 
-1. **Who is your first customer?** (Yourself? A pilot client?) This shapes priorities.
+> How customers get updates
 
-2. **Serving finished sites**: Do customers want their sites served from this same system, or exported and hosted elsewhere (Netlify, Vercel, their own server)?
+**Options implemented**:
 
-3. **Your business model**:
+1. **Manual** (default): Pin to version tag, customer decides when to update
+2. **Watchtower** (optional): Auto-pull on schedule
 
-   - One-time setup fee + hosting?
-   - Monthly subscription per instance?
-   - This affects whether you even need multi-tenant
+**Customer compose with Watchtower**:
 
-4. **Development pace**: How often do you expect to push breaking changes that would require customer coordination?
+```yaml
+services:
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=true
+    command: --label-enable
+
+  app:
+    image: ghcr.io/you/vivd:latest
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+```
+
+**Tasks**:
+
+- [ ] Add watchtower to template compose (commented, opt-in)
+- [ ] Create `CHANGELOG.md` format
+- [ ] Add version display in admin UI
+- [ ] Consider: Webhook to notify you when customer updates
+
+---
+
+## Phase 4: Future Enhancements
+
+- [ ] **Template gallery**: Pre-built starting points
+- [ ] **Multi-site publishing**: Multiple domains from one instance
+- [ ] **Customer billing dashboard**: If moving to self-service
+- [ ] **License server**: For non-managed deployments
+- [ ] **Master dashboard**: Your view across all customer instances
+
+---
+
+## Quick Reference
+
+### File Changes Summary
+
+| Path                                                | Change                     |
+| --------------------------------------------------- | -------------------------- |
+| `frontend/src/components/ProjectWizard.tsx`         | NEW - wizard flow          |
+| `frontend/src/components/chat/ElementSelector.tsx`  | NEW - click-to-select      |
+| `frontend/src/components/chat/EmptyStatePrompt.tsx` | NEW - empty state          |
+| `backend/src/services/LicenseService.ts`            | NEW - feature limits       |
+| `backend/src/services/UsageTracker.ts`              | NEW - token/image counting |
+| `backend/src/routers/project.ts`                    | MODIFY - add save/publish  |
+| `docker-compose.yml`                                | MODIFY - add Caddy         |
+| `Caddyfile`                                         | NEW - routing config       |
+| `.github/workflows/publish.yml`                     | NEW - image build/push     |
+| `docker-compose.customer.yml`                       | NEW - customer template    |
+
+### Priority Order
+
+```
+1. Project Wizard (scratch + URL)     ← Enables core product
+2. Chat UX (element selector)         ← Usability
+3. Licensing (env vars)               ← Enables sales
+4. Save/Publish workflow              ← Production readiness
+5. Caddy integration                  ← Customer deployment
+6. GHCR + Actions                     ← Distribution
+```

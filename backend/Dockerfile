@@ -11,8 +11,8 @@ RUN apt-get update \
 RUN npm install -g opencode-ai
 
 # Configure git for automated commits (required for OpenCode undo/revert)
-RUN git config --global user.email "generator@landing-page-agent.local" \
-    && git config --global user.name "Landing Page Generator"
+RUN git config --global user.email "generator@vivd.local" \
+    && git config --global user.name "Vivd Generator"
 
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \

@@ -1,14 +1,14 @@
 {
-    "name": "landing-page-agent-root",
-    "private": true,
-    "scripts": {
-        "gen:client": "cd backend && npm run generate:spec && cd ../frontend && npm run generate:client",
-        "db:push": "cd backend && npm run db:push",
-        "db:studio": "cd backend && npm run db:studio",
-        "db:generate": "cd backend && npm run db:generate",
-        "db:migrate": "cd backend && npm run db:migrate"
-    },
-    "devDependencies": {
-        "concurrently": "^8.2.2"
-    }
+  "name": "vivd-root",
+  "private": true,
+  "scripts": {
+    "gen:client": "cd backend && npm run generate:spec && cd ../frontend && npm run generate:client",
+    "db:push": "cd backend && npm run db:push",
+    "db:studio": "cd backend && npm run db:studio",
+    "db:generate": "cd backend && npm run db:generate",
+    "db:migrate": "cd backend && npm run db:migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
 }
