@@ -73,10 +73,12 @@ export function PreviewToolbar() {
 
   return (
     <DialogHeader className="px-4 py-2.5 border-b flex flex-row items-center gap-2 space-y-0 shrink-0 z-10 bg-background">
-      {/* Left Section: App Name + Preview Identity */}
-      <span className="font-bold text-lg tracking-tight shrink-0">
-        vi<span className="text-primary">vd</span>
-      </span>
+      {/* Left Section: App Icon + Preview Identity */}
+      <img
+        src="/favicon-transparent.svg"
+        alt="vivd"
+        className="h-6 w-6 shrink-0"
+      />
 
       {/* Separator */}
       <div className="h-5 w-px bg-border mx-1" />
