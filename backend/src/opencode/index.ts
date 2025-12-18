@@ -22,12 +22,29 @@ export type { AgentEvent, AgentEventType } from "./eventEmitter";
 
 let serverUrl: string;
 
+// TODO: Evaluate - we might also want to create the server on prompt level, and not Globally
+// Because thats the only way we can enforce the permissions via config
+// const opencode = await createOpencode({
+//   config: {
+//     model: process.env.OPENCODE_MODEL,
+//     // Deny access to files outside the working directory for security
+//     permission: {
+//       external_directory: "deny",
+//       doom_loop: "deny",
+//     },
+//   },
+// });
+
 export async function initOpencode() {
   console.log(
     `[OpenCode] Starting internal server with model ${process.env.OPENCODE_MODEL}`
   );
   const opencode = await createOpencode({
-    config: { model: process.env.OPENCODE_MODEL },
+    // every Agent can still access everything up to /app/... because this is where we are starting the global server
+    config: {
+      model: process.env.OPENCODE_MODEL,
+      permission: { external_directory: "deny", doom_loop: "deny" },
+    },
   });
   console.log(
     `[OpenCode] Server Initialized. Server URL: ${opencode.server.url}`

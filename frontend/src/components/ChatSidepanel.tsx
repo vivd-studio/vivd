@@ -43,6 +43,46 @@ export function ChatPanel({
   const isWaitingForAgent = useRef(false);
   const [isWaiting, setIsWaiting] = useState(false);
 
+  // Tracking for inactivity timeout (2 minutes)
+  const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
+  const lastEventTimeRef = useRef<number>(Date.now());
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset inactivity timer on each event
+  const resetInactivityTimer = () => {
+    lastEventTimeRef.current = Date.now();
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    if (isStreaming || isWaiting) {
+      inactivityTimerRef.current = setTimeout(() => {
+        console.warn(
+          `[ChatSidepanel] No events received for ${
+            INACTIVITY_TIMEOUT_MS / 1000
+          }s while waiting/streaming. Last event at: ${new Date(
+            lastEventTimeRef.current
+          ).toISOString()}`
+        );
+        console.warn("[ChatSidepanel] Auto-recovering from stuck state...");
+        // Auto-recover: reset streaming state and refetch messages
+        setIsStreaming(false);
+        setIsWaiting(false);
+        isWaitingForAgent.current = false;
+        setStreamingParts([]);
+        refetchMessages();
+      }, INACTIVITY_TIMEOUT_MS);
+    }
+  };
+
+  // Cleanup inactivity timer on unmount
+  useEffect(() => {
+    return () => {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, []);
+
   // Poll for sessions to keep the list updated
   const { data: sessionsData, refetch: refetchSessions } =
     trpc.agent.listSessions.useQuery(
@@ -92,6 +132,9 @@ export function ChatPanel({
         // AgentEvent.data is the specific event payload (AgentEventData)
         const event = trackedEvent.data;
         const innerData = event.data;
+
+        // Reset inactivity timer on each event received
+        resetInactivityTimer();
 
         switch (innerData.kind) {
           case "thinking.started":
@@ -345,6 +388,9 @@ export function ChatPanel({
     // Set waiting flag immediately
     isWaitingForAgent.current = true;
     setIsWaiting(true);
+
+    // Start inactivity timer for stuck state detection
+    resetInactivityTimer();
 
     // Clear previous streaming parts for new request
     setStreamingParts([]);

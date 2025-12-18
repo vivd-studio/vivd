@@ -22,15 +22,46 @@ export interface EventCallbacks {
   onIdle?: () => void;
 }
 
+// Inactivity timeout in milliseconds (1 minute)
+const INACTIVITY_TIMEOUT_MS = 60 * 1000;
+
 // TODO: Clean this up, and make sure the callbacks are correct
 export function useEvents(
   client: OpencodeClient,
   callbacks: EventCallbacks = {}
 ) {
   let isActive = true;
+  let lastEvent: any = null;
+  let lastEventTime: number = Date.now();
+  let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Reset the inactivity timer on each event
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+    }
+    inactivityTimer = setTimeout(() => {
+      if (isActive && lastEvent) {
+        console.warn(
+          `[useEvents] No events received for ${
+            INACTIVITY_TIMEOUT_MS / 1000
+          }s. Last event:`,
+          JSON.stringify(lastEvent, null, 2)
+        );
+        console.warn(
+          `[useEvents] Last event was at: ${new Date(
+            lastEventTime
+          ).toISOString()}`
+        );
+      }
+    }, INACTIVITY_TIMEOUT_MS);
+  };
 
   const start = async () => {
     const events = await client.event.subscribe();
+
+    // Start the inactivity timer
+    resetInactivityTimer();
 
     (async () => {
       try {
@@ -43,6 +74,11 @@ export function useEvents(
 
         for await (const event of events.stream) {
           if (!isActive) break;
+
+          // Track latest event for debugging
+          lastEvent = event;
+          lastEventTime = Date.now();
+          resetInactivityTimer();
 
           if (callbacks.onEvent) {
             callbacks.onEvent(event);
@@ -150,6 +186,10 @@ export function useEvents(
     start,
     stop: () => {
       isActive = false;
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+      }
     },
   };
 }

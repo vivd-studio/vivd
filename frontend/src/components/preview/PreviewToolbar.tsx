@@ -199,6 +199,21 @@ export function PreviewToolbar() {
       {/* Edit Controls */}
       {projectSlug && (
         <div className="flex items-center gap-1">
+          {/* Assets button */}
+          <Button
+            variant={assetsOpen ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setAssetsOpen(!assetsOpen)}
+            className={`h-8 ${
+              !assetsOpen
+                ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white border-none"
+                : ""
+            }`}
+          >
+            <FolderOpen className="w-4 h-4 mr-1.5" />
+            Assets
+          </Button>
+
           {/* Edit button - disabled when in edit mode or when there are unsaved changes */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -233,20 +248,6 @@ export function PreviewToolbar() {
         {/* Panel Toggles */}
         {projectSlug && (
           <>
-            <Button
-              variant={assetsOpen ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setAssetsOpen(!assetsOpen)}
-              className={`h-8 ${
-                !assetsOpen
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white border-none"
-                  : ""
-              }`}
-            >
-              <FolderOpen className="w-4 h-4 mr-1.5" />
-              Assets
-            </Button>
-
             <Button
               variant={chatOpen ? "secondary" : "outline"}
               size="sm"
