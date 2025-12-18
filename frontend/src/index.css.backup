@@ -36,7 +36,7 @@
 
     --border: 40 15% 88%;
     --input: 40 15% 88%;
-    --ring: 153 50% 30%; /* Deep green for strong visibility */
+    --ring: 153 42% 52%; /* Matches primary */
 
     /* Charts using the natural palette */
     --chart-1: 153 42% 52%; /* Fresh sage green */
@@ -129,15 +129,15 @@
 
 @keyframes pulse-outline {
   0% {
-    box-shadow: 0 0 0 0 hsla(155, 35%, 48%, 0.6);
+    box-shadow: 0 0 0 0 hsla(153, 28%, 49%, 0.6);
   }
 
   70% {
-    box-shadow: 0 0 0 10px hsla(155, 35%, 48%, 0);
+    box-shadow: 0 0 0 10px hsla(153, 28%, 49%, 0);
   }
 
   100% {
-    box-shadow: 0 0 0 0 hsla(155, 35%, 48%, 0);
+    box-shadow: 0 0 0 0 hsla(153, 28%, 49%, 0);
   }
 }
 
