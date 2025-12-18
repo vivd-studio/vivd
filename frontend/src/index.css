@@ -3,58 +3,89 @@
 
 @layer base {
   :root {
-    --radius: 0.65rem;
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+
+    /* Natural Light Theme - Pristine & Clean */
+    --background: 40 33% 98%; /* Warm off-white */
+    --foreground: 20 25% 18%; /* Warm dark brown (#583828 adjusted) */
+
+    --card: 40 25% 99%; /* Slightly warmer white */
+    --card-foreground: 20 25% 18%;
+
+    --popover: 40 33% 99%;
+    --popover-foreground: 20 25% 18%;
+
+    /* Primary: Fresh Sage Green (lighter & sharper) */
+    --primary: 153 42% 52%;
+    --primary-foreground: 40 33% 98%;
+
+    /* Secondary: Soft cream (#fadb90 lightened) */
+    --secondary: 43 60% 94%;
+    --secondary-foreground: 20 25% 22%;
+
+    /* Muted: Very light warm gray */
+    --muted: 40 20% 94%;
+    --muted-foreground: 20 10% 50%;
+
+    /* Accent: Warm coral/orange (#f38560) */
+    --accent: 16 86% 66%;
+    --accent-foreground: 40 33% 98%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 153 42% 52%; /* Matches primary */
+
+    /* Charts using the natural palette */
+    --chart-1: 153 42% 52%; /* Fresh sage green */
+    --chart-2: 16 86% 66%; /* Coral orange */
+    --chart-3: 184 48% 24%; /* Deep teal */
+    --chart-4: 43 75% 77%; /* Soft yellow */
+    --chart-5: 193 24% 76%; /* Soft blue-gray */
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Natural Dark Theme - Warm & Earthy */
+    --background: 20 20% 8%; /* Warm charcoal */
+    --foreground: 40 20% 92%; /* Warm off-white */
+
+    --card: 20 18% 11%; /* Slightly lighter warm dark */
+    --card-foreground: 40 20% 92%;
+
+    --popover: 20 18% 10%;
+    --popover-foreground: 40 20% 92%;
+
+    /* Primary: Fresh Sage Green (lighter & sharper) */
+    --primary: 153 50% 60%;
+    --primary-foreground: 20 20% 8%;
+
+    /* Secondary: Muted warm tones */
+    --secondary: 20 15% 16%;
+    --secondary-foreground: 40 20% 92%;
+
+    /* Muted: Warm dark gray */
+    --muted: 20 12% 16%;
+    --muted-foreground: 40 12% 60%;
+
+    /* Accent: Warm coral/orange */
+    --accent: 16 70% 58%;
+    --accent-foreground: 20 20% 8%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 20 12% 20%;
+    --input: 20 12% 20%;
+    --ring: 153 50% 60%;
+
+    /* Charts in dark mode */
+    --chart-1: 153 50% 60%;
+    --chart-2: 16 75% 60%;
+    --chart-3: 184 40% 40%;
+    --chart-4: 43 65% 65%;
+    --chart-5: 193 30% 65%;
   }
 }
 
@@ -66,10 +97,26 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Fix autofill background in dark mode */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px hsl(var(--card)) inset !important;
+    -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground)) !important;
+  }
+
+  /* Give inputs a visible background */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    background-color: hsl(var(--card)) !important;
+  }
 }
 
 @keyframes bop {
-
   0%,
   100% {
     transform: translateY(0);
@@ -82,15 +129,15 @@
 
 @keyframes pulse-outline {
   0% {
-    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.7);
+    box-shadow: 0 0 0 0 hsla(153, 28%, 49%, 0.6);
   }
 
   70% {
-    box-shadow: 0 0 0 10px rgba(124, 58, 237, 0);
+    box-shadow: 0 0 0 10px hsla(153, 28%, 49%, 0);
   }
 
   100% {
-    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+    box-shadow: 0 0 0 0 hsla(153, 28%, 49%, 0);
   }
 }
 

@@ -23,6 +23,8 @@
     "@opencode-ai/sdk": "^1.0.146",
     "@openrouter/sdk": "^0.2.9",
     "@trpc/server": "^11.7.2",
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "axios": "^1.13.2",
     "better-auth": "^1.4.6",
     "cors": "^2.8.5",

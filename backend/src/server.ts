@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
+import archiver from "archiver";
 
 import { initOpencode } from "./opencode";
 import { toNodeHandler } from "better-auth/node";
@@ -102,6 +103,55 @@ app.post(
     }
   }
 );
+
+// Download project version as ZIP
+app.get("/api/download/:slug/:version", async (req, res) => {
+  try {
+    // Verify auth using better-auth
+    const session = await auth.api.getSession({
+      headers: req.headers as any,
+    });
+
+    if (!session) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { slug, version } = req.params;
+    const versionDir = getVersionDir(slug, parseInt(version));
+
+    if (!fs.existsSync(versionDir)) {
+      return res.status(404).json({ error: "Project version not found" });
+    }
+
+    // Set response headers for zip download
+    const filename = `${slug}-v${version}.zip`;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Create archive
+    const archive = archiver("zip", {
+      zlib: { level: 5 }, // Balanced compression
+    });
+
+    // Handle archive errors
+    archive.on("error", (err) => {
+      console.error("Archive error:", err);
+      res.status(500).json({ error: "Failed to create archive" });
+    });
+
+    // Pipe archive to response
+    archive.pipe(res);
+
+    // Add the version directory contents to the archive
+    archive.directory(versionDir, false);
+
+    // Finalize the archive
+    await archive.finalize();
+  } catch (error) {
+    console.error("Download error:", error);
+    return res.status(500).json({ error: "Download failed" });
+  }
+});
 
 // tRPC
 app.use(
