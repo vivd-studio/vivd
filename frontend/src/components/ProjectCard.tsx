@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -46,22 +47,16 @@ export interface Project {
 
 interface ProjectCardProps {
   project: Project;
-  onPreview: (
-    url: string,
-    originalUrl?: string,
-    projectSlug?: string,
-    version?: number
-  ) => void;
   onRegenerate: (slug: string, version?: number) => void;
   isRegenerating: boolean;
 }
 
 export function ProjectCard({
   project,
-  onPreview,
   onRegenerate,
   isRegenerating,
 }: ProjectCardProps) {
+  const navigate = useNavigate();
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user?.role === "admin";
   const utils = trpc.useUtils();
@@ -175,7 +170,7 @@ export function ProjectCard({
       } ${isCompleted ? "cursor-pointer hover:border-primary/50" : ""}`}
       onClick={() => {
         if (isCompleted) {
-          onPreview(previewUrl, project.url, project.slug, selectedVersion);
+          navigate(`/project/${project.slug}`);
         }
       }}
     >

@@ -8,7 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { usePreviewModal } from "./PreviewModalContext";
+import { usePreview } from "./PreviewContext";
 
 export function ExitConfirmationDialog() {
   const {
@@ -16,7 +16,7 @@ export function ExitConfirmationDialog() {
     setShowExitConfirmation,
     handleDiscardAndClose,
     handleSaveAndClose,
-  } = usePreviewModal();
+  } = usePreview();
 
   return (
     <AlertDialog

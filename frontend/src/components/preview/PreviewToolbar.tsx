@@ -13,7 +13,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Copy,
@@ -32,9 +31,10 @@ import {
   Download,
   LogOut,
   Settings,
+  X,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { usePreviewModal } from "./PreviewModalContext";
+import { usePreview } from "./PreviewContext";
 import { DEVICE_PRESETS } from "./types";
 import { ModeToggle } from "@/components/mode-toggle";
 import { authClient } from "@/lib/auth-client";
@@ -69,10 +69,11 @@ export function PreviewToolbar() {
     setAssetsOpen,
     chatOpen,
     setChatOpen,
-  } = usePreviewModal();
+    handleClose,
+  } = usePreview();
 
   return (
-    <DialogHeader className="px-4 py-2.5 border-b flex flex-row items-center gap-2 space-y-0 shrink-0 z-10 bg-background">
+    <header className="px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 z-10 bg-background">
       {/* Left Section: App Icon + Preview Identity */}
       <img
         src="/favicon-transparent.svg"
@@ -83,7 +84,7 @@ export function PreviewToolbar() {
       {/* Separator */}
       <div className="h-5 w-px bg-border mx-1" />
 
-      <DialogTitle className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <span className="font-medium text-muted-foreground">Preview</span>
         {projectSlug && hasMultipleVersions ? (
           <DropdownMenu>
@@ -141,7 +142,7 @@ export function PreviewToolbar() {
             <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
           </Badge>
         ) : null}
-      </DialogTitle>
+      </div>
 
       {/* Separator */}
       <div className="h-5 w-px bg-border mx-1" />
@@ -267,7 +268,7 @@ export function PreviewToolbar() {
       )}
 
       {/* Right Section: Panel Toggles + Quick Actions (pushed to right) */}
-      <div className="flex items-center gap-1 ml-auto mr-4 md:mr-10">
+      <div className="flex items-center gap-1 ml-auto">
         {/* Panel Toggles */}
         {projectSlug && (
           <>
@@ -415,7 +416,25 @@ export function PreviewToolbar() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        {/* Separator */}
+        <div className="h-5 w-px bg-border mx-1" />
+
+        {/* Close/Back Button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClose}
+              className="h-8 w-8 p-0"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Back to Dashboard</TooltipContent>
+        </Tooltip>
       </div>
-    </DialogHeader>
+    </header>
   );
 }

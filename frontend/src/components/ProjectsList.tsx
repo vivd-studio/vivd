@@ -3,15 +3,6 @@ import { useState } from "react";
 import { ProjectCard } from "./ProjectCard";
 import { VersionDialog } from "./VersionDialog";
 
-interface ProjectsListProps {
-  onPreview: (
-    url: string,
-    originalUrl?: string,
-    slug?: string,
-    version?: number
-  ) => void;
-}
-
 interface VersionDialogData {
   slug: string;
   url: string;
@@ -19,7 +10,7 @@ interface VersionDialogData {
   totalVersions: number;
 }
 
-export function ProjectsList({ onPreview }: ProjectsListProps) {
+export function ProjectsList() {
   const {
     data: projectsData,
     isLoading,
@@ -110,9 +101,6 @@ export function ProjectsList({ onPreview }: ProjectsListProps) {
             <ProjectCard
               key={project.slug}
               project={project}
-              onPreview={(url, originalUrl, _slug, version) =>
-                onPreview(url, originalUrl, project.slug, version)
-              }
               onRegenerate={handleCreateNewClick}
               isRegenerating={regeneratingSlug === project.slug}
             />

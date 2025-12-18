@@ -12,11 +12,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useImageDropZone } from "./useImageDropZone";
-import {
-  DEVICE_PRESETS,
-  type DevicePreset,
-  type PreviewModalProps,
-} from "./types";
+import { DEVICE_PRESETS, type DevicePreset } from "./types";
 
 // Version info from project data
 interface VersionInfo {
@@ -24,9 +20,8 @@ interface VersionInfo {
   status: string;
 }
 
-interface PreviewModalContextValue {
+interface PreviewContextValue {
   // Props
-  open: boolean;
   url: string | null;
   originalUrl?: string | null;
   projectSlug?: string;
@@ -68,7 +63,7 @@ interface PreviewModalContextValue {
   toggleEditMode: () => void;
   handleSave: () => void;
   handleCancelEdit: () => void;
-  handleClose: (open: boolean) => void;
+  handleClose: () => void;
   handleDiscardAndClose: () => void;
   handleSaveAndClose: () => void;
 
@@ -80,33 +75,33 @@ interface PreviewModalContextValue {
   chatPanel: ReturnType<typeof useResizablePanel>;
 }
 
-const PreviewModalContext = createContext<PreviewModalContextValue | null>(
-  null
-);
+const PreviewContext = createContext<PreviewContextValue | null>(null);
 
-export function usePreviewModal() {
-  const context = useContext(PreviewModalContext);
+export function usePreview() {
+  const context = useContext(PreviewContext);
   if (!context) {
-    throw new Error(
-      "usePreviewModal must be used within a PreviewModalProvider"
-    );
+    throw new Error("usePreview must be used within a PreviewProvider");
   }
   return context;
 }
 
-interface PreviewModalProviderProps extends PreviewModalProps {
+interface PreviewProviderProps {
   children: ReactNode;
+  url: string | null;
+  originalUrl?: string | null;
+  projectSlug?: string;
+  version?: number;
+  onClose: () => void;
 }
 
-export function PreviewModalProvider({
+export function PreviewProvider({
   children,
-  open,
-  onOpenChange,
   url,
   originalUrl,
   projectSlug,
   version,
-}: PreviewModalProviderProps) {
+  onClose,
+}: PreviewProviderProps) {
   const [copied, setCopied] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
@@ -167,7 +162,7 @@ export function PreviewModalProvider({
 
   // Fetch project data to get version information
   const { data: projectsData } = trpc.project.list.useQuery(undefined, {
-    enabled: open && !!projectSlug,
+    enabled: !!projectSlug,
   });
 
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
@@ -192,7 +187,7 @@ export function PreviewModalProvider({
   useImageDropZone({
     iframeRef,
     projectSlug,
-    enabled: open && !!projectSlug && !editMode,
+    enabled: !!projectSlug && !editMode,
     onImageDropped: () => {
       // Mark as having unsaved changes when an image is dropped
       setHasUnsavedChanges(true);
@@ -232,11 +227,11 @@ export function PreviewModalProvider({
     toast.info("Changes discarded");
   };
 
-  const handleClose = (newOpen: boolean) => {
-    if (!newOpen && (editMode || hasUnsavedChanges)) {
+  const handleClose = () => {
+    if (editMode || hasUnsavedChanges) {
       setShowExitConfirmation(true);
     } else {
-      onOpenChange(newOpen);
+      onClose();
     }
   };
 
@@ -244,7 +239,7 @@ export function PreviewModalProvider({
     setEditMode(false);
     setHasUnsavedChanges(false);
     setShowExitConfirmation(false);
-    onOpenChange(false);
+    onClose();
   };
 
   const toggleEditMode = () => {
@@ -397,7 +392,7 @@ export function PreviewModalProvider({
           setEditMode(false);
           setHasUnsavedChanges(false);
           setShowExitConfirmation(false);
-          onOpenChange(false); // Close the main modal
+          onClose();
           setRefreshKey((prev) => prev + 1);
         },
       }
@@ -447,9 +442,8 @@ export function PreviewModalProvider({
     setRefreshKey((prev) => prev + 1);
   };
 
-  const value: PreviewModalContextValue = {
+  const value: PreviewContextValue = {
     // Props
-    open,
     url,
     originalUrl,
     projectSlug,
@@ -504,8 +498,6 @@ export function PreviewModalProvider({
   };
 
   return (
-    <PreviewModalContext.Provider value={value}>
-      {children}
-    </PreviewModalContext.Provider>
+    <PreviewContext.Provider value={value}>{children}</PreviewContext.Provider>
   );
 }

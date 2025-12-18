@@ -1,6 +1,6 @@
 import { Save, X, AlertCircle, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { usePreviewModal } from "./PreviewModalContext";
+import { usePreview } from "./PreviewContext";
 
 export function UnsavedChangesBar() {
   const {
@@ -9,7 +9,7 @@ export function UnsavedChangesBar() {
     handleSave,
     handleCancelEdit,
     saveFileMutation,
-  } = usePreviewModal();
+  } = usePreview();
 
   // Show when there are unsaved changes OR in edit mode
   if (!hasUnsavedChanges && !editMode) return null;
