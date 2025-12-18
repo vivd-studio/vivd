@@ -13,8 +13,6 @@ services:
     volumes:
       - backend_data:/app/generated
       - opencode_data:/root/.local/share/opencode/storage
-    ports:
-      - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy

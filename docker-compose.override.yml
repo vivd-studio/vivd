@@ -8,6 +8,8 @@ services:
       - NODE_ENV=development
     volumes:
       - ./backend/generated:/app/generated
+    ports:
+      - "3000:3000"
     develop:
       watch:
         - action: sync
