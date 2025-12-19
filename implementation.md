@@ -84,22 +84,23 @@ flowchart LR
 
 **Features**:
 
-- [ ] **Element selector mode**:
+- [x] **Element selector mode**:
   - Click "Select Element" → cursor becomes crosshair
-  - Click any element in preview → highlight + send selector to chat
-  - Auto-message: "I want to change [element description]"
-- [ ] **Empty state prompt**:
+  - Click any element in preview → highlight + send XPath to chat
+  - Shows element pill in chat input and messages
+- [x] **Empty state prompt**:
   ```
   "👋 Hi! Click any element in the preview to tell me what
    you'd like to change, or just describe what you need."
   ```
-- [ ] **Simplify success/error states** - clear visual feedback
+- [x] **Simplify success/error states** - clear visual feedback
 
 **Implementation**:
 
-- [ ] Add `postMessage` bridge for iframe → parent element selection
-- [ ] Store selected element XPath/selector in chat context
-- [ ] Create `EmptyStatePrompt` component
+- [x] Add `postMessage` bridge for iframe → parent element selection
+- [x] Store selected element XPath in chat context
+- [x] Create `EmptyStatePrompt` component with integrated input
+- [ ] Review implementation, consider refactoring chat panel into smaller components
 
 ---
 

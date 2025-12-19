@@ -52,6 +52,10 @@ export default {
           4: "hsl(var(--chart-4))",
           5: "hsl(var(--chart-5))",
         },
+        "chat-user": {
+          DEFAULT: "hsl(var(--chat-user))",
+          foreground: "hsl(var(--chat-user-foreground))",
+        },
       },
     },
   },

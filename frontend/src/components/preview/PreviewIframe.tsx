@@ -1,4 +1,5 @@
-import { forwardRef, type SyntheticEvent } from "react";
+import { forwardRef, useEffect, type SyntheticEvent } from "react";
+import { ELEMENT_SELECTOR_SCRIPT } from "../chat/ElementSelector";
 
 interface PreviewIframeProps {
   src: string;
@@ -6,6 +7,7 @@ interface PreviewIframeProps {
   className?: string;
   isMobile?: boolean;
   onLoad?: () => void;
+  selectorMode?: boolean;
 }
 
 // Scrollbar style injection for the iframe
@@ -59,15 +61,111 @@ const injectScrollbarStyles = (
   }
 };
 
+// Script to listen for highlight messages from parent
+const HIGHLIGHT_LISTENER_SCRIPT = `
+(function() {
+  if (window.__vivdHighlightListener) return;
+  window.__vivdHighlightListener = true;
+  
+  let highlightedElement = null;
+  let originalOutline = null;
+  
+  function evaluateXPath(xpath) {
+    try {
+      const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+      return result.singleNodeValue;
+    } catch (e) {
+      console.warn('Failed to evaluate XPath:', xpath, e);
+      return null;
+    }
+  }
+  
+  function highlightElement(el) {
+    if (!el) return;
+    if (highlightedElement) {
+      unhighlightElement();
+    }
+    highlightedElement = el;
+    originalOutline = el.style.outline;
+    el.style.outline = '3px solid #f59e0b';
+    el.style.outlineOffset = '2px';
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  
+  function unhighlightElement() {
+    if (highlightedElement) {
+      highlightedElement.style.outline = originalOutline || '';
+      highlightedElement.style.outlineOffset = '';
+      highlightedElement = null;
+      originalOutline = null;
+    }
+  }
+  
+  window.addEventListener('message', function(e) {
+    if (e.data?.type === 'vivd-highlight-element' && e.data.xpath) {
+      const el = evaluateXPath(e.data.xpath);
+      if (el) highlightElement(el);
+    } else if (e.data?.type === 'vivd-unhighlight-element') {
+      unhighlightElement();
+    }
+  });
+})();
+`;
+
+// Inject highlight listener script into iframe
+const injectHighlightListener = (iframe: HTMLIFrameElement) => {
+  try {
+    const doc = iframe.contentDocument;
+    if (doc && !doc.getElementById("vivd-highlight-script")) {
+      const script = doc.createElement("script");
+      script.id = "vivd-highlight-script";
+      script.textContent = HIGHLIGHT_LISTENER_SCRIPT;
+      doc.body.appendChild(script);
+    }
+  } catch (err) {
+    console.warn("Could not inject highlight script into iframe", err);
+  }
+};
+
+// Inject element selector script into iframe
+const injectSelectorScript = (iframe: HTMLIFrameElement) => {
+  try {
+    const doc = iframe.contentDocument;
+    if (doc) {
+      const script = doc.createElement("script");
+      script.id = "vivd-selector-script";
+      script.textContent = ELEMENT_SELECTOR_SCRIPT;
+      doc.body.appendChild(script);
+    }
+  } catch (err) {
+    console.warn("Could not inject selector script into iframe", err);
+  }
+};
+
 export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
   function PreviewIframe(
-    { src, refreshKey, className = "", isMobile = false, onLoad },
+    {
+      src,
+      refreshKey,
+      className = "",
+      isMobile = false,
+      onLoad,
+      selectorMode = false,
+    },
     ref
   ) {
     const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
       injectScrollbarStyles(e.currentTarget, isMobile);
+      injectHighlightListener(e.currentTarget);
       onLoad?.();
     };
+
+    // Inject selector script when selectorMode becomes active
+    useEffect(() => {
+      if (selectorMode && ref && typeof ref !== "function" && ref.current) {
+        injectSelectorScript(ref.current);
+      }
+    }, [selectorMode, ref]);
 
     return (
       <iframe

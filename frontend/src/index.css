@@ -41,12 +41,15 @@
     --input: 220 13% 91%;
     --ring: 217 91% 60%;
 
-    /* Charts */
     --chart-1: 217 91% 60%; /* Blue */
     --chart-2: 142 71% 45%; /* Green */
     --chart-3: 262 83% 58%; /* Purple */
     --chart-4: 43 96% 56%; /* Yellow */
     --chart-5: 0 84% 60%; /* Red */
+
+    /* Chat user bubble: softer blue-gray */
+    --chat-user: 220 13% 91%;
+    --chat-user-foreground: 224 10% 20%;
   }
 
   .dark {
@@ -89,6 +92,10 @@
     --chart-3: 262 83% 58%;
     --chart-4: 43 96% 56%;
     --chart-5: 0 84% 60%;
+
+    /* Chat user bubble: softer slate */
+    --chat-user: 215 28% 22%;
+    --chat-user-foreground: 210 20% 98%;
   }
 
   /* ============================================
@@ -134,6 +141,10 @@
     --chart-3: 184 48% 24%;
     --chart-4: 38 80% 62%;
     --chart-5: 193 24% 76%;
+
+    /* Chat user bubble: soft sage-gray */
+    --chat-user: 153 20% 85%;
+    --chat-user-foreground: 20 25% 18%;
   }
 
   [data-color-theme="natural"].dark,
@@ -177,6 +188,10 @@
     --chart-3: 184 40% 40%;
     --chart-4: 35 65% 48%;
     --chart-5: 193 30% 65%;
+
+    /* Chat user bubble: soft warm gray */
+    --chat-user: 20 12% 22%;
+    --chat-user-foreground: 40 20% 92%;
   }
 
   /* ============================================
@@ -222,6 +237,10 @@
     --chart-3: 184 55% 28%;
     --chart-4: 40 85% 58%;
     --chart-5: 193 35% 55%;
+
+    /* Chat user bubble: soft green-gray */
+    --chat-user: 152 15% 82%;
+    --chat-user-foreground: 20 30% 12%;
   }
 
   [data-color-theme="vivd-green"].dark,
@@ -265,6 +284,10 @@
     --chart-3: 184 50% 45%;
     --chart-4: 38 70% 45%;
     --chart-5: 193 40% 60%;
+
+    /* Chat user bubble: soft warm dark gray */
+    --chat-user: 20 15% 20%;
+    --chat-user-foreground: 40 30% 95%;
   }
 
   /* ============================================
@@ -310,6 +333,10 @@
     --chart-3: 184 70% 25%;
     --chart-4: 40 95% 55%;
     --chart-5: 193 50% 50%;
+
+    /* Chat user bubble: clean gray */
+    --chat-user: 0 0% 88%;
+    --chat-user-foreground: 0 0% 10%;
   }
 
   [data-color-theme="vivd-sharp"].dark,
@@ -353,6 +380,10 @@
     --chart-3: 184 60% 40%;
     --chart-4: 38 80% 40%;
     --chart-5: 193 50% 55%;
+
+    /* Chat user bubble: dark neutral gray */
+    --chat-user: 0 0% 16%;
+    --chat-user-foreground: 0 0% 98%;
   }
 }
 

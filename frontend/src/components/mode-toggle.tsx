@@ -44,13 +44,13 @@ export function ModeToggle() {
           onClick={() => setColorTheme("clean")}
           className={colorTheme === "clean" ? "bg-accent" : ""}
         >
-          Clean (Blue)
+          Clean
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setColorTheme("natural")}
           className={colorTheme === "natural" ? "bg-accent" : ""}
         >
-          Natural (Green)
+          Natural
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setColorTheme("vivd-green")}

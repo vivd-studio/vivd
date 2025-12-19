@@ -4,6 +4,8 @@ import { Loader2, ChevronRight, ChevronDown, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { EmptyStatePrompt } from "./EmptyStatePrompt";
+import { ElementRefPill, parseElementRef } from "./SelectedElementPill";
 
 interface Message {
   id?: string;
@@ -20,6 +22,16 @@ interface MessageListProps {
   onRestore?: () => void;
   isReverted?: boolean;
   streamingParts?: any[];
+  onSuggestionClick?: (suggestion: string) => void;
+  onEnterSelectorMode?: () => void;
+  selectorModeAvailable?: boolean;
+  selectorMode?: boolean;
+  // Input props for empty state
+  input?: string;
+  setInput?: (value: string) => void;
+  onSend?: () => void;
+  attachedElement?: { selector: string; description: string } | null;
+  onRemoveElement?: () => void;
 }
 
 export function MessageList({
@@ -30,6 +42,15 @@ export function MessageList({
   onRestore,
   isReverted,
   streamingParts,
+  onSuggestionClick,
+  onEnterSelectorMode,
+  selectorModeAvailable = false,
+  selectorMode = false,
+  input,
+  setInput,
+  onSend,
+  attachedElement,
+  onRemoveElement,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -42,12 +63,18 @@ export function MessageList({
     <ScrollArea className="flex-1 p-6" ref={scrollRef}>
       <div className="flex flex-col gap-6 pb-4">
         {messages.length === 0 && (
-          <div className="text-center text-muted-foreground mt-8">
-            <p>Describe a task for the agent to execute.</p>
-            <p className="text-sm mt-2">
-              Example: "Change the headline color to blue"
-            </p>
-          </div>
+          <EmptyStatePrompt
+            onSuggestionClick={onSuggestionClick}
+            onEnterSelectorMode={onEnterSelectorMode}
+            selectorModeAvailable={selectorModeAvailable}
+            selectorMode={selectorMode}
+            input={input}
+            setInput={setInput}
+            onSend={onSend}
+            isLoading={isLoading}
+            attachedElement={attachedElement}
+            onRemoveElement={onRemoveElement}
+          />
         )}
         {messages.map((msg, i) => {
           // Skip empty messages (no content and no parts)
@@ -79,38 +106,50 @@ export function MessageList({
 
               {/* User Message Bubble */}
               {isUser ? (
-                <div className="rounded-lg px-4 py-2 max-w-[90%] bg-primary text-primary-foreground">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      p: ({ node, ...props }) => (
-                        <p {...props} className="m-0" />
-                      ),
-                      a: ({ node, ...props }) => (
-                        <a
-                          {...props}
-                          className="underline text-primary-foreground/90 hover:text-primary-foreground"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        />
-                      ),
-                      code: ({ node, ...props }) => (
-                        <code
-                          {...props}
-                          className="bg-primary-foreground/20 rounded px-1"
-                        />
-                      ),
-                      pre: ({ node, ...props }) => (
-                        <pre
-                          {...props}
-                          className="bg-primary-foreground/20 p-2 rounded overflow-x-auto"
-                        />
-                      ),
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
+                (() => {
+                  const { cleanMessage, elementHtml } = parseElementRef(
+                    msg.content
+                  );
+                  return (
+                    <div className="rounded-lg px-4 py-2 max-w-[90%] bg-muted text-foreground">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ node, ...props }) => (
+                            <p {...props} className="m-0" />
+                          ),
+                          a: ({ node, ...props }) => (
+                            <a
+                              {...props}
+                              className="underline hover:text-foreground/80"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            />
+                          ),
+                          code: ({ node, ...props }) => (
+                            <code
+                              {...props}
+                              className="bg-foreground/10 rounded px-1"
+                            />
+                          ),
+                          pre: ({ node, ...props }) => (
+                            <pre
+                              {...props}
+                              className="bg-foreground/10 p-2 rounded overflow-x-auto"
+                            />
+                          ),
+                        }}
+                      >
+                        {cleanMessage}
+                      </ReactMarkdown>
+                      {elementHtml && (
+                        <div className="mt-2 pt-2 border-t border-foreground/10">
+                          <ElementRefPill html={elementHtml} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 /* Agent Message Construction - Split into parts */
                 <div className="flex flex-col gap-2 max-w-[90%] w-full items-start">
@@ -120,7 +159,7 @@ export function MessageList({
                     ))
                   ) : (
                     /* Fallback for legacy messages */
-                    <div className="bg-muted rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
+                    <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {msg.content}
                       </ReactMarkdown>
@@ -212,24 +251,23 @@ function MessagePartBubble({
   }
   if (part.type === "tool") {
     return (
-      <div className="bg-muted border rounded-lg px-3 py-2 text-xs font-mono w-full max-w-md">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <div className="flex items-center gap-2 opacity-70">
+      <div className="rounded-lg px-3 py-2 text-xs font-mono w-full max-w-md">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             {part.status === "running" ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
+              <Loader2 className="w-3 h-3 animate-spin opacity-70" />
             ) : part.status === "error" ? (
               <span>❌</span>
             ) : (
               <span>✅</span>
             )}
-            <span>Tool Call</span>
+            <span className="opacity-70">Tool Call:</span>
+            <span className="font-semibold">{part.tool}</span>
           </div>
           <span className="opacity-50 text-[10px] uppercase tracking-wider">
             {part.status}
           </span>
         </div>
-
-        <div className="font-semibold">{part.tool}</div>
         {part.title && (
           <div className="text-muted-foreground mt-1 truncate">
             {part.title}
@@ -240,7 +278,7 @@ function MessagePartBubble({
   }
   if (part.type === "text") {
     return (
-      <div className="bg-muted rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
+      <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
       </div>
     );

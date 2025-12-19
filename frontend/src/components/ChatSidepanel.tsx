@@ -4,7 +4,12 @@ import { X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { SessionList } from "./chat/SessionList";
 import { MessageList } from "./chat/MessageList";
-import { MessageInput } from "./chat/MessageInput";
+import { ElementSelector } from "./chat/ElementSelector";
+import {
+  SelectedElementPill,
+  formatMessageWithSelector,
+} from "./chat/SelectedElementPill";
+import { usePreview } from "./preview/PreviewContext";
 
 interface ChatPanelProps {
   projectSlug: string;
@@ -26,6 +31,25 @@ export function ChatPanel({
   onTaskComplete,
   onClose,
 }: ChatPanelProps) {
+  // Access PreviewContext for element selection (may not be available outside preview page)
+  let previewContext: ReturnType<typeof usePreview> | null = null;
+  try {
+    previewContext = usePreview();
+  } catch {
+    // Not in a preview context, element selection won't be available
+  }
+
+  const selectorMode = previewContext?.selectorMode ?? false;
+  const setSelectorMode = previewContext?.setSelectorMode;
+  const selectedElement = previewContext?.selectedElement ?? null;
+  const clearSelectedElement = previewContext?.clearSelectedElement;
+
+  // Local state for attached element (shown as pill)
+  const [attachedElement, setAttachedElement] = useState<{
+    selector: string;
+    description: string;
+  } | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sessions, setSessions] = useState<{ id: string }[]>([]);
@@ -99,6 +123,17 @@ export function ChatPanel({
     setIsStreaming(false);
     setStreamingParts([]);
   }, [projectSlug]);
+
+  // Handle element selection - attach element and clear from context
+  useEffect(() => {
+    if (selectedElement && clearSelectedElement) {
+      setAttachedElement({
+        selector: selectedElement.selector,
+        description: selectedElement.description,
+      });
+      clearSelectedElement();
+    }
+  }, [selectedElement, clearSelectedElement]);
 
   useEffect(() => {
     if (sessionsData) {
@@ -380,10 +415,18 @@ export function ChatPanel({
   };
 
   const handleSend = () => {
-    if (!input.trim() || runTaskMutation.isPending) return;
+    // Allow sending if there's input OR an attached element
+    if ((!input.trim() && !attachedElement) || runTaskMutation.isPending)
+      return;
 
-    const task = input;
+    // Build the task message, including selector if element is attached
+    let task = input.trim() || "I want to change this element";
+    if (attachedElement) {
+      task = formatMessageWithSelector(task, attachedElement.selector);
+    }
+
     setInput("");
+    setAttachedElement(null); // Clear attached element after sending
 
     // Set waiting flag immediately
     isWaitingForAgent.current = true;
@@ -394,6 +437,9 @@ export function ChatPanel({
 
     // Clear previous streaming parts for new request
     setStreamingParts([]);
+
+    // Log the sent prompt
+    console.log("[Vivd] Sending prompt:", task);
 
     if (selectedSessionId) {
       setMessages((prev) => [...prev, { role: "user", content: task }]);
@@ -447,14 +493,93 @@ export function ChatPanel({
         isReverted={isReverted}
         // Pass streaming state
         streamingParts={streamingParts}
-      />
-
-      <MessageInput
+        // Element selector integration
+        onSuggestionClick={(suggestion) => setInput(suggestion)}
+        onEnterSelectorMode={() => setSelectorMode?.(!selectorMode)}
+        selectorModeAvailable={!!setSelectorMode}
+        selectorMode={selectorMode}
+        // Input props for empty state
         input={input}
         setInput={setInput}
         onSend={handleSend}
-        isLoading={runTaskMutation.isPending}
+        attachedElement={attachedElement}
+        onRemoveElement={() => setAttachedElement(null)}
       />
+
+      {/* Only show bottom input when there are messages (otherwise input is in EmptyStatePrompt) */}
+      {messages.length > 0 && (
+        <div className="p-4 border-t mt-auto">
+          {/* Show attached element pill above input */}
+          {attachedElement && (
+            <div className="mb-2">
+              <SelectedElementPill
+                selector={attachedElement.selector}
+                description={attachedElement.description}
+                onRemove={() => setAttachedElement(null)}
+              />
+            </div>
+          )}
+          <div className="flex gap-2 items-end">
+            {setSelectorMode && (
+              <ElementSelector
+                isActive={selectorMode}
+                onToggle={() => setSelectorMode(!selectorMode)}
+                disabled={runTaskMutation.isPending}
+              />
+            )}
+            <div className="flex-1 flex gap-2 items-end">
+              <textarea
+                className="flex min-h-[40px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none max-h-[200px]"
+                placeholder={
+                  selectorMode
+                    ? "Click an element in the preview..."
+                    : attachedElement
+                    ? "Describe what you want to change..."
+                    : "Type a task..."
+                }
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                disabled={runTaskMutation.isPending}
+                rows={1}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={
+                  runTaskMutation.isPending ||
+                  (!input.trim() && !attachedElement)
+                }
+                size="icon"
+                className="h-10 w-10 shrink-0"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m22 2-7 20-4-9-9-4Z" />
+                  <path d="M22 2 11 13" />
+                </svg>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

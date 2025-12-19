@@ -63,3 +63,7 @@ Dedicated Volume (generated/)
 - **Volumes**: Dedicated storage volumes for generated files and assets
 - **Agent**: opencode runs within the backend, scoped to that user's project files only
 - **Publishing**: A separate Caddy server serves the published live website
+
+# Implementation Plan
+
+We are constantly keeping track of the implementation plan in the implementation.md file, it's kind of our main-quest. If you are tasked to work on it, ask if you can tick of certain elements so we can mark them as done.

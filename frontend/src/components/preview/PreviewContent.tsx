@@ -29,6 +29,7 @@ export function PreviewContent() {
     chatPanel,
     iframeLoading,
     onIframeLoad,
+    selectorMode,
   } = usePreview();
 
   return (
@@ -91,6 +92,7 @@ export function PreviewContent() {
                     refreshKey={refreshKey}
                     isMobile={true}
                     onLoad={onIframeLoad}
+                    selectorMode={selectorMode}
                   />
                 </MobileFrame>
               ) : (
@@ -100,6 +102,7 @@ export function PreviewContent() {
                   refreshKey={refreshKey}
                   isMobile={false}
                   onLoad={onIframeLoad}
+                  selectorMode={selectorMode}
                 />
               )}
             </div>

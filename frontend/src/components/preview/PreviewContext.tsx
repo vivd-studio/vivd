@@ -20,6 +20,14 @@ interface VersionInfo {
   status: string;
 }
 
+// Selected element info from iframe
+interface SelectedElement {
+  description: string;
+  selector: string;
+  tagName: string;
+  text: string;
+}
+
 interface PreviewContextValue {
   // Props
   url: string | null;
@@ -45,6 +53,12 @@ interface PreviewContextValue {
   hasUnsavedChanges: boolean;
   showExitConfirmation: boolean;
   setShowExitConfirmation: (show: boolean) => void;
+
+  // Element Selector
+  selectorMode: boolean;
+  setSelectorMode: (mode: boolean) => void;
+  selectedElement: SelectedElement | null;
+  clearSelectedElement: () => void;
 
   // Refs
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -118,6 +132,9 @@ export function PreviewProvider({
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+  const [selectorMode, setSelectorModeState] = useState(false);
+  const [selectedElement, setSelectedElement] =
+    useState<SelectedElement | null>(null);
   const mobileContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -449,6 +466,43 @@ export function PreviewProvider({
     setRefreshKey((prev) => prev + 1);
   };
 
+  // Element Selector Mode
+  const setSelectorMode = useCallback((mode: boolean) => {
+    setSelectorModeState(mode);
+    if (!mode) {
+      // Clean up selector in iframe
+      const iframe = iframeRef.current;
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(
+          { type: "vivd-cleanup-selector" },
+          "*"
+        );
+      }
+    }
+  }, []);
+
+  const clearSelectedElement = useCallback(() => {
+    setSelectedElement(null);
+  }, []);
+
+  // Listen for element selection from iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "vivd-element-selected") {
+        const { description, selector, tagName, text } = event.data.data;
+        setSelectedElement({ description, selector, tagName, text });
+        setSelectorModeState(false);
+        // Open chat panel when element is selected
+        setChatOpen(true);
+      } else if (event.data?.type === "vivd-selector-cancelled") {
+        setSelectorModeState(false);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   const value: PreviewContextValue = {
     // Props
     url,
@@ -474,6 +528,12 @@ export function PreviewProvider({
     hasUnsavedChanges,
     showExitConfirmation,
     setShowExitConfirmation,
+
+    // Element Selector
+    selectorMode,
+    setSelectorMode,
+    selectedElement,
+    clearSelectedElement,
 
     // Refs
     iframeRef,
