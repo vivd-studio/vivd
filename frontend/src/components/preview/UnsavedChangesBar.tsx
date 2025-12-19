@@ -19,7 +19,7 @@ export function UnsavedChangesBar() {
   const Icon = editMode ? Edit3 : AlertCircle;
 
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 animate-in slide-in-from-bottom-4 fade-in duration-300 max-w-[calc(100vw-2rem)] px-2 sm:px-0">
+    <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 animate-in slide-in-from-bottom-4 fade-in duration-300 max-w-[calc(100vw-2rem)] px-2 sm:px-0">
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full bg-linear-to-r from-amber-500/95 to-orange-500/95 backdrop-blur-sm shadow-lg shadow-amber-500/25 border border-amber-400/30">
         <div className="flex items-center gap-1.5 sm:gap-2 text-white">
           <Icon className="w-4 h-4 shrink-0" />

@@ -33,7 +33,7 @@ export function PreviewContent() {
 
   return (
     <>
-      <div className="w-screen h-screen flex flex-col overflow-hidden bg-background">
+      <div className="w-screen h-dvh flex flex-col overflow-hidden bg-background">
         <PreviewToolbar />
 
         <div className="flex flex-1 min-h-0 relative">
