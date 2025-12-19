@@ -37,7 +37,18 @@ export function Layout({ children }: PropsWithChildren) {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link to="/" className="font-bold text-xl tracking-tight">
-              vi<span className="text-primary">vd</span>
+              vi
+              <span
+                style={{
+                  background:
+                    "linear-gradient(135deg, #10B981 0%, #F59E0B 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                vd
+              </span>
             </Link>
 
             {session?.user?.role === "admin" && (

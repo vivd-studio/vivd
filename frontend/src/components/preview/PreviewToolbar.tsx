@@ -7,6 +7,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -32,16 +35,22 @@ import {
   LogOut,
   Settings,
   X,
+  Menu,
+  Sun,
+  Moon,
+  Laptop,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePreview } from "./PreviewContext";
 import { DEVICE_PRESETS } from "./types";
 import { ModeToggle } from "@/components/mode-toggle";
 import { authClient } from "@/lib/auth-client";
+import { useTheme } from "@/components/theme-provider";
 
 export function PreviewToolbar() {
   const { data: session } = authClient.useSession();
   const navigate = useNavigate();
+  const { setTheme, theme } = useTheme();
 
   const handleLogout = async () => {
     await authClient.signOut();
@@ -72,8 +81,189 @@ export function PreviewToolbar() {
     handleClose,
   } = usePreview();
 
+  // Mobile menu content for actions
+  const MobileActionsMenu = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 md:hidden">
+          <Menu className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {/* View Controls Group */}
+        <DropdownMenuLabel>View</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => setMobileView(false)}>
+          <Monitor className="w-4 h-4 mr-2" />
+          Desktop View
+          {!mobileView && <Check className="w-4 h-4 ml-auto" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setMobileView(true)}>
+          <Smartphone className="w-4 h-4 mr-2" />
+          Mobile View
+          {mobileView && <Check className="w-4 h-4 ml-auto" />}
+        </DropdownMenuItem>
+
+        {mobileView && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Smartphone className="w-4 h-4 mr-2" />
+              Device: {selectedDevice.name}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {DEVICE_PRESETS.map((device) => (
+                <DropdownMenuItem
+                  key={device.name}
+                  onClick={() => setSelectedDevice(device)}
+                >
+                  {selectedDevice.name === device.name && (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  <span
+                    className={
+                      selectedDevice.name === device.name ? "" : "ml-6"
+                    }
+                  >
+                    {device.name}
+                  </span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {device.width}×{device.height}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+
+        <DropdownMenuSeparator />
+
+        {/* Actions Group */}
+        {projectSlug && (
+          <>
+            <DropdownMenuLabel>Panels</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setAssetsOpen(!assetsOpen)}>
+              <FolderOpen className="w-4 h-4 mr-2" />
+              {assetsOpen ? "Hide Assets" : "Show Assets"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setChatOpen(!chatOpen)}>
+              <MessageSquare className="w-4 h-4 mr-2" />
+              {chatOpen ? "Hide Agent" : "Show Agent"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={toggleEditMode}
+              disabled={hasUnsavedChanges && !editMode}
+            >
+              <Edit3 className="w-4 h-4 mr-2" />
+              {editMode ? "Stop Editing" : "Edit Text"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        {/* Quick Actions */}
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        <DropdownMenuItem onClick={handleRefresh}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh Preview
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleCopy}>
+          <Copy className="w-4 h-4 mr-2" />
+          {copied ? "Copied!" : "Copy Link"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => window.open(fullUrl, "_blank")}>
+          <ExternalLink className="w-4 h-4 mr-2" />
+          Open in New Tab
+        </DropdownMenuItem>
+
+        {projectSlug && (
+          <>
+            <DropdownMenuItem
+              onClick={() => {
+                const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                window.open(
+                  `${baseUrl}/api/download/${projectSlug}/${selectedVersion}`,
+                  "_blank"
+                );
+              }}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download as ZIP
+            </DropdownMenuItem>
+            {originalUrl && (
+              <DropdownMenuItem
+                onClick={() => window.open(originalUrl, "_blank")}
+              >
+                <Globe className="w-4 h-4 mr-2" />
+                View Original Website
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
+
+        <DropdownMenuSeparator />
+
+        {/* Theme */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            {theme === "light" ? (
+              <Sun className="w-4 h-4 mr-2" />
+            ) : theme === "dark" ? (
+              <Moon className="w-4 h-4 mr-2" />
+            ) : (
+              <Laptop className="w-4 h-4 mr-2" />
+            )}
+            Theme
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onClick={() => setTheme("light")}>
+              <Sun className="w-4 h-4 mr-2" />
+              Light
+              {theme === "light" && <Check className="w-4 h-4 ml-auto" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")}>
+              <Moon className="w-4 h-4 mr-2" />
+              Dark
+              {theme === "dark" && <Check className="w-4 h-4 ml-auto" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")}>
+              <Laptop className="w-4 h-4 mr-2" />
+              System
+              {theme === "system" && <Check className="w-4 h-4 ml-auto" />}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        {/* User Options */}
+        {session && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">
+                  {session.user.name}
+                </p>
+                <p className="text-xs leading-none text-muted-foreground">
+                  {session.user.email}
+                </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link to="/settings" className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
-    <header className="px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 z-10 bg-background">
+    <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
       {/* Left Section: App Icon + Preview Identity */}
       <img
         src="/favicon-transparent.svg"
@@ -81,11 +271,13 @@ export function PreviewToolbar() {
         className="h-6 w-6 shrink-0"
       />
 
-      {/* Separator */}
-      <div className="h-5 w-px bg-border mx-1" />
+      {/* Separator - hidden on mobile */}
+      <div className="hidden sm:block h-5 w-px bg-border mx-1" />
 
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="font-medium text-muted-foreground">Preview</span>
+      <div className="flex items-center gap-1 md:gap-2 shrink-0">
+        <span className="hidden sm:inline font-medium text-muted-foreground">
+          Preview
+        </span>
         {projectSlug && hasMultipleVersions ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -144,11 +336,11 @@ export function PreviewToolbar() {
         ) : null}
       </div>
 
-      {/* Separator */}
-      <div className="h-5 w-px bg-border mx-1" />
+      {/* Separator - hidden on mobile */}
+      <div className="hidden md:block h-5 w-px bg-border mx-1" />
 
-      {/* Center Section: View Controls */}
-      <div className="flex items-center gap-1">
+      {/* Center Section: View Controls - hidden on mobile */}
+      <div className="hidden md:flex items-center gap-1">
         {/* Viewport Toggle */}
         <div className="flex items-center">
           <Tooltip>
@@ -179,7 +371,7 @@ export function PreviewToolbar() {
           </Tooltip>
         </div>
 
-        {/* Device Selector (only when mobile) */}
+        {/* Device Selector (only when mobile view) */}
         {mobileView && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -217,12 +409,12 @@ export function PreviewToolbar() {
         )}
       </div>
 
-      {/* Separator */}
-      <div className="h-5 w-px bg-border mx-1" />
+      {/* Separator - hidden on mobile */}
+      <div className="hidden md:block h-5 w-px bg-border mx-1" />
 
-      {/* Edit Controls */}
+      {/* Edit Controls - hidden on mobile */}
       {projectSlug && (
-        <div className="flex items-center gap-1">
+        <div className="hidden md:flex items-center gap-1">
           {/* Assets button */}
           <Button
             variant={assetsOpen ? "secondary" : "outline"}
@@ -235,7 +427,7 @@ export function PreviewToolbar() {
             }`}
           >
             <FolderOpen className="w-4 h-4 mr-1.5" />
-            Assets
+            <span className="hidden lg:inline">Assets</span>
           </Button>
 
           {/* Edit button - disabled when in edit mode or when there are unsaved changes */}
@@ -254,7 +446,9 @@ export function PreviewToolbar() {
                   }`}
                 >
                   <Edit3 className="w-4 h-4 mr-1.5" />
-                  {editMode ? "Editing..." : "Edit Text"}
+                  <span className="hidden lg:inline">
+                    {editMode ? "Editing..." : "Edit Text"}
+                  </span>
                 </Button>
               </span>
             </TooltipTrigger>
@@ -268,35 +462,36 @@ export function PreviewToolbar() {
       )}
 
       {/* Right Section: Panel Toggles + Quick Actions (pushed to right) */}
-      <div className="flex items-center gap-1 ml-auto">
-        {/* Panel Toggles */}
+      <div className="flex items-center gap-1 ml-auto shrink-0">
+        {/* Panel Toggles - hidden on mobile */}
         {projectSlug && (
           <>
             <Button
               variant={chatOpen ? "secondary" : "outline"}
               size="sm"
               onClick={() => setChatOpen(!chatOpen)}
-              className={`h-8 ${
+              className={`hidden md:flex h-8 ${
                 !chatOpen
                   ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white border-none"
                   : ""
               }`}
             >
               <MessageSquare className="w-4 h-4 mr-1.5" />
-              Agent
+              <span className="hidden lg:inline">Agent</span>
             </Button>
 
-            <div className="h-5 w-px bg-border mx-1" />
+            <div className="hidden md:block h-5 w-px bg-border mx-1" />
           </>
         )}
 
+        {/* Quick actions - hidden on small screens */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleRefresh}
-              className="h-8 w-8 p-0"
+              className="hidden sm:flex h-8 w-8 p-0"
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -310,7 +505,7 @@ export function PreviewToolbar() {
               variant="ghost"
               size="sm"
               onClick={handleCopy}
-              className="h-8 w-8 p-0"
+              className="hidden sm:flex h-8 w-8 p-0"
             >
               {copied ? (
                 <Check className="w-4 h-4 text-green-600" />
@@ -328,7 +523,7 @@ export function PreviewToolbar() {
               variant="ghost"
               size="sm"
               onClick={() => window.open(fullUrl, "_blank")}
-              className="h-8 w-8 p-0"
+              className="hidden sm:flex h-8 w-8 p-0"
             >
               <ExternalLink className="w-4 h-4" />
             </Button>
@@ -336,11 +531,15 @@ export function PreviewToolbar() {
           <TooltipContent>Open in New Tab</TooltipContent>
         </Tooltip>
 
-        {/* More Actions Dropdown */}
+        {/* More Actions Dropdown - hidden on mobile */}
         {projectSlug && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden sm:flex h-8 w-8 p-0"
+              >
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -369,17 +568,22 @@ export function PreviewToolbar() {
           </DropdownMenu>
         )}
 
-        {/* Separator */}
-        <div className="h-5 w-px bg-border mx-1" />
+        {/* Separator - hidden on mobile */}
+        <div className="hidden md:block h-5 w-px bg-border mx-1" />
 
-        {/* Theme Toggle */}
-        <ModeToggle />
+        {/* Theme Toggle - hidden on mobile */}
+        <div className="hidden md:block">
+          <ModeToggle />
+        </div>
 
-        {/* Profile Avatar */}
+        {/* Profile Avatar - hidden on mobile */}
         {session && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+              <Button
+                variant="ghost"
+                className="hidden md:flex relative h-8 w-8 rounded-full"
+              >
                 <Avatar className="h-8 w-8">
                   <AvatarImage
                     src={session.user.image || undefined}
@@ -417,10 +621,13 @@ export function PreviewToolbar() {
           </DropdownMenu>
         )}
 
-        {/* Separator */}
-        <div className="h-5 w-px bg-border mx-1" />
+        {/* Separator - hidden on mobile */}
+        <div className="hidden md:block h-5 w-px bg-border mx-1" />
 
-        {/* Close/Back Button */}
+        {/* Mobile Menu Button */}
+        <MobileActionsMenu />
+
+        {/* Close/Back Button - always visible */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
