@@ -30,6 +30,16 @@ export default function PreviewPage() {
     }
   }, [project]);
 
+  // Set document title to project name
+  useEffect(() => {
+    if (project?.slug) {
+      document.title = `vivd - ${project.slug}`;
+    }
+    return () => {
+      document.title = "vivd";
+    };
+  }, [project?.slug]);
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">

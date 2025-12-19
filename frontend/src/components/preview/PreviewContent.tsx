@@ -80,9 +80,9 @@ export function PreviewContent() {
 
             {/* Iframe container with fade-in */}
             <div
-              className={`w-full h-full transition-opacity duration-150 ${
+              className={`transition-opacity duration-150 ${
                 iframeLoading ? "opacity-0" : "opacity-100"
-              }`}
+              } ${mobileView ? "" : "w-full h-full"}`}
             >
               {mobileView ? (
                 <MobileFrame device={selectedDevice} scale={mobileScale}>
