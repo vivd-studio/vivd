@@ -159,7 +159,7 @@ export function ProjectCard({
   }
 
   // Version-aware preview URL
-  const previewUrl = `/api/preview/${project.slug}/v${selectedVersion}/index.html`;
+  const previewUrl = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/index.html`;
 
   return (
     <Card

@@ -38,15 +38,21 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 
 // Auth Routes
-app.all("/api/auth/*path", toNodeHandler(auth));
+app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
 
 // Static files
-app.use("/api/projects", express.static(path.join(__dirname, "../projects")));
-app.use("/api/preview", express.static(path.join(__dirname, "../projects")));
+app.use(
+  "/vivd-studio/api/projects",
+  express.static(path.join(__dirname, "../projects"))
+);
+app.use(
+  "/vivd-studio/api/preview",
+  express.static(path.join(__dirname, "../projects"))
+);
 
 // File upload endpoint
 app.post(
-  "/api/upload/:slug/:version",
+  "/vivd-studio/api/upload/:slug/:version",
   upload.array("files", 20),
   async (req, res) => {
     try {
@@ -105,7 +111,7 @@ app.post(
 );
 
 // Download project version as ZIP
-app.get("/api/download/:slug/:version", async (req, res) => {
+app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
   try {
     // Verify auth using better-auth
     const session = await auth.api.getSession({
@@ -155,14 +161,14 @@ app.get("/api/download/:slug/:version", async (req, res) => {
 
 // tRPC
 app.use(
-  "/api/trpc",
+  "/vivd-studio/api/trpc",
   createExpressMiddleware({
     router: appRouter,
     createContext,
   })
 );
 
-app.get("/api/health", (_req, res) => {
+app.get("/vivd-studio/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 

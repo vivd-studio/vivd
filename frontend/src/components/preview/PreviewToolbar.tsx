@@ -180,7 +180,7 @@ export function PreviewToolbar() {
               onClick={() => {
                 const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                 window.open(
-                  `${baseUrl}/api/download/${projectSlug}/${selectedVersion}`,
+                  `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
                   "_blank"
                 );
               }}
@@ -550,7 +550,7 @@ export function PreviewToolbar() {
                 onClick={() => {
                   const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                   window.open(
-                    `${baseUrl}/api/download/${projectSlug}/${selectedVersion}`,
+                    `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
                     "_blank"
                   );
                 }}

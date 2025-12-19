@@ -17,11 +17,11 @@ function Root() {
           // Route subscriptions through SSE, everything else through batch HTTP
           condition: (op) => op.type === "subscription",
           true: httpSubscriptionLink({
-            url: "/api/trpc",
+            url: "/vivd-studio/api/trpc",
             // EventSource will auto-reconnect on disconnect
           }),
           false: httpBatchLink({
-            url: "/api/trpc",
+            url: "/vivd-studio/api/trpc",
             async headers() {
               return {};
             },

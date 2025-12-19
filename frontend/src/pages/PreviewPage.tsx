@@ -15,7 +15,7 @@ export default function PreviewPage() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
   const previewUrl = projectSlug
-    ? `/api/preview/${projectSlug}/v${version}/index.html`
+    ? `/vivd-studio/api/preview/${projectSlug}/v${version}/index.html`
     : null;
 
   // Handle close/back navigation

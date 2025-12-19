@@ -15,7 +15,6 @@ flowchart LR
 
         Caddy -->|"/"| Sites["Published Site"]
         Caddy -->|"/vivd-studio/*"| App
-        Caddy -->|"/api/*"| App
         App --> DB
     end
 
@@ -36,94 +35,233 @@ flowchart LR
 
 ---
 
-## Phase 1: Core Product Polish
+## Phase 1: Core Product Polish ✅ (Completed)
 
-### 1.1 Project Creation Flow
+### 1.1 Project Creation Flow ✅
 
-> Choice-based wizard; customers land directly here if no site exists
+- [x] Create `ProjectWizard` component with step flow
+- [x] **URL flow**: Legal disclaimer checkbox + existing generation pipeline
+- [ ] **Scratch flow** (coming soon placeholder added)
 
-**Routing structure**:
+### 1.2 Chat UX Improvements ✅
 
-- `/vivd-studio` → Project overview (dashboard with project list + wizard)
-- `/vivd-studio/admin` → Internal admin (user management, admin-only)
-- `/` → Published site (Caddy serves static files)
+- [x] Element selector mode with XPath
+- [x] Empty state prompt
+- [x] Clear visual feedback for success/error states
+- [x] `postMessage` bridge for iframe → parent element selection
 
-**Start flow** (when no site exists or "New Project"):
+---
+
+## Phase 2: Save, Publish & Caddy Integration (Current Focus)
+
+> Git-based versioning with publish-to-production flow
+
+### 2.1 Git-Based Save System
+
+**Concepts**:
+
+- **Working copy**: Current edits (auto-saved to files, uncommitted)
+- **Save**: Git commit with message (creates a version)
+- **Load**: Checkout a specific commit/version
+
+**Terminology**:
+
+- **Working** → Current uncommitted changes you're editing (live preview)
+- **Saved** → A git commit (versioned snapshot)
+- **Published** → The version deployed to production (Caddy)
+
+**User flow**:
 
 ```
-┌─────────────────────────────────────┐
-│  How do you want to start?          │
-│                                     │
-│  ○ Start from scratch               │
-│    Describe your business and we'll │
-│    create everything from zero      │
-│                                     │
-│  ○ Start from existing website      │
-│    We'll analyze and recreate it    │
-│    ⚠️ Only use websites you own     │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ Project: acme-corp                  [Save ▼]│
+│                                             │
+│ ⚡ Working (unsaved changes)                │
+│                                             │
+│ Version History                             │
+│ ├── "Updated hero text"   10:30  📦 Published│
+│ ├── "New contact section" 09:15             │
+│ └── "Initial version"     08:00             │
+│                                             │
+│        [Load Version]  [Publish Latest]     │
+└─────────────────────────────────────────────┘
 ```
 
 **Tasks**:
 
-- [x] Create `ProjectWizard` component with step flow
-- [ ] **Scratch flow** (coming soon placeholder added):
+#### Backend: Git Operations
+
+- [ ] **Create `GitService` module** (`backend/src/services/GitService.ts`)
+
+  - [ ] `save({ slug, message })` → `git add . && git commit -m "message"`
+  - [ ] `getHistory({ slug })` → `git log --oneline --format=json`
+  - [ ] `loadVersion({ slug, commitHash })` → `git checkout <hash> -- .`
+  - [ ] `getCurrentCommit({ slug })` → `git rev-parse HEAD`
+  - [ ] `hasUncommittedChanges({ slug })` → `git status --porcelain`
+
+- [ ] **Project Router Endpoints** (`backend/src/routers/project.ts`)
+  - [ ] `project.save` → commit with message
+  - [ ] `project.history` → list versions (commits)
+  - [ ] `project.loadVersion` → checkout specific version
+  - [ ] `project.hasChanges` → check for uncommitted changes
+
+#### Frontend: Version UI
+
+- [ ] **VersionHistoryPanel** component
+
+  - [ ] Show "Working" state at top if uncommitted changes exist
+  - [ ] List of commits with hash, message, date
+  - [ ] "📦 Published" tag on the deployed version
+  - [ ] "Load" button per version
+  - [ ] "Current" indicator for checked-out version
+
+- [ ] **SaveVersionDialog** component
+
+  - [ ] Text input for commit message
+  - [ ] Shows diff summary (files changed)
+  - [ ] Save button
+
+- [ ] **Toolbar integration**
+  - [ ] "Save" button in preview toolbar
+  - [ ] Version history drawer toggle
+  - [ ] Uncommitted changes indicator
+
+---
+
+### 2.2 Caddy Integration
+
+> Add Caddy as reverse proxy and static file server
+
+**Architecture**:
+
+```mermaid
+flowchart TB
+    subgraph Caddy["Caddy Container"]
+        R[Routing Engine]
+    end
+    subgraph App["App Container"]
+        API["/api/* endpoints"]
+        Studio["/vivd-studio/* SPA"]
+    end
+    subgraph Files["Shared Volume"]
+        Published["/srv/published/{slug}/"]
+        Working["/app/projects/{slug}/v{N}/"]
+    end
+
+    R -->|"/api/*"| API
+    R -->|"/vivd-studio/*"| Studio
+    R -->|"/"| Published
+```
+
+**Tasks**:
+
+#### Docker Configuration
+
+- [ ] **Add Caddy service** to `docker-compose.yml`
+
+  ```yaml
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - published_sites:/srv/published
+    depends_on:
+      - backend
+  ```
+
+- [ ] **Create Caddyfile** (`/Caddyfile`)
+
+  ```caddyfile
+  {$DOMAIN:localhost} {
+      # Admin panel + API (all under /vivd-studio/*)
+      handle /vivd-studio/* {
+          reverse_proxy backend:3000
+      }
+
+      # Published site (static files)
+      handle {
+          root * /srv/published
+          try_files {path} {path}/ /index.html
+          file_server
+      }
+  }
+  ```
+
+- [ ] **Add shared volumes**
+  - `published_sites:/srv/published` (Caddy reads)
+  - Mount same volume to backend for publishing
+
+---
+
+### 2.3 Publish Workflow
+
+> Deploy specific version to production (Caddy-served root)
+
+**Tasks**:
+
+- [ ] **Backend: Publish Service**
+
+  - [ ] `publish({ slug, commitHash? })` → copy version files to `/srv/published/{slug}/`
+  - [ ] Store published commit hash in manifest
+  - [ ] Create git tag for published versions (e.g., `published-{timestamp}`)
+
+- [ ] **Frontend: Publish UI**
+
+  - [ ] "Publish" button (publishes current/selected version)
+  - [ ] Published version indicator in history
+  - [ ] Confirmation dialog before publishing
+  - [ ] "View Live Site" link to root domain
+
+- [ ] **Manifest extension**
+  - [ ] Add `publishedCommit: string | null` to manifest
+  - [ ] Add `publishedAt: string | null` timestamp
+
+---
+
+## Phase 3: Scratch Project Flow & Licensing
+
+### 3.1 Scratch Project Flow
+
+> Generate site from business description (no source URL)
+
+**Tasks**:
+
+- [ ] **Wizard steps**:
+
   - [ ] Step 1: Business type, name, industry
   - [ ] Step 2: Upload existing assets (logo, images) or generate
   - [ ] Step 3: Color/style preferences
-  - [ ] Step 4: AI generates full site (logo if needed, hero image, content)
-- [x] **URL flow** (current):
-  - [x] Add legal disclaimer checkbox: "I own this website and its content"
-  - [x] Existing generation pipeline
-- [ ] Adapt `processUrl` to `generateProject({ type: 'scratch' | 'url', ... })`
+  - [ ] Step 4: AI generates full site
+
+- [ ] **Backend**: Adapt `processUrl` to `generateProject({ type: 'scratch' | 'url', ... })`
 
 ---
 
-### 1.2 Chat UX Improvements
-
-> Make AI editing intuitive for non-technical users
-
-**Features**:
-
-- [x] **Element selector mode**:
-  - Click "Select Element" → cursor becomes crosshair
-  - Click any element in preview → highlight + send XPath to chat
-  - Shows element pill in chat input and messages
-- [x] **Empty state prompt**:
-  ```
-  "👋 Hi! Click any element in the preview to tell me what
-   you'd like to change, or just describe what you need."
-  ```
-- [x] **Simplify success/error states** - clear visual feedback
-
-**Implementation**:
-
-- [x] Add `postMessage` bridge for iframe → parent element selection
-- [x] Store selected element XPath in chat context
-- [x] Create `EmptyStatePrompt` component with integrated input
-- [ ] Review implementation, consider refactoring chat panel into smaller components
-
----
-
-### 1.3 Feature Licensing System
+### 3.2 Feature Licensing System
 
 > Control what each instance can do (env-first, license-server later)
 
 **Restricted features**:
-| Feature | Env Var | Default |
-|---------|---------|---------|
-| `LICENSE_IMAGE_GEN` | `true` | Image generation enabled |
-| `LICENSE_MAX_PROJECTS` | `1` | Sites per instance (1 for customers) |
-| `LICENSE_MAX_USERS` | `3` | Team members |
+
+| Feature                | Env Var | Default                              |
+| ---------------------- | ------- | ------------------------------------ |
+| `LICENSE_IMAGE_GEN`    | `true`  | Image generation enabled             |
+| `LICENSE_MAX_PROJECTS` | `1`     | Sites per instance (1 for customers) |
+| `LICENSE_MAX_USERS`    | `3`     | Team members                         |
 
 **AI rate limits**:
-| Env Var | Default | Purpose |
-|---------|---------|---------||
-| `LICENSE_AI_TOKENS_PER_MINUTE` | `500000` | Burst protection |
-| `LICENSE_AI_TOKENS_PER_MONTH` | `10000000` | Monthly cap |
-| `LICENSE_AI_REQUESTS_PER_DAY` | `200` | Request throttle |
-| `LICENSE_IMAGE_GEN_PER_DAY` | `20` | Daily image limit |
-| `LICENSE_IMAGE_GEN_PER_MONTH` | `50` | Monthly image cap |
+
+| Env Var                        | Default    | Purpose           |
+| ------------------------------ | ---------- | ----------------- |
+| `LICENSE_AI_TOKENS_PER_MINUTE` | `500000`   | Burst protection  |
+| `LICENSE_AI_TOKENS_PER_MONTH`  | `10000000` | Monthly cap       |
+| `LICENSE_AI_REQUESTS_PER_DAY`  | `200`      | Request throttle  |
+| `LICENSE_IMAGE_GEN_PER_DAY`    | `20`       | Daily image limit |
+| `LICENSE_IMAGE_GEN_PER_MONTH`  | `50`       | Monthly image cap |
 
 **Tasks**:
 
@@ -143,111 +281,9 @@ flowchart LR
 
 ---
 
-## Phase 2: Deployment & Publishing
+## Phase 4: Distribution Infrastructure
 
-### 2.1 Save & Publish Workflow
-
-> Git-based versioning with publish-to-production flow
-
-**Concepts**:
-
-- **Working copy**: Current edits (auto-saved to files)
-- **Save**: Git commit with message
-- **Publish**: Deploy specific version to production
-
-**User flow**:
-
-```
-┌─────────────────────────────────────┐
-│ Project: acme-corp          [Save ▼]│
-│                                     │
-│ Unpublished changes (3 saves)       │
-│ ├── "Updated hero text"     10:30   │
-│ ├── "New contact section"   09:15   │
-│ └── "Initial version"       ★ Live  │
-│                                     │
-│           [Publish Latest]          │
-└─────────────────────────────────────┘
-```
-
-**Tasks**:
-
-- [ ] **Backend: Git operations**
-  - [ ] `project.save({ message })` → `git add . && git commit`
-  - [ ] `project.listSaves()` → `git log --oneline`
-  - [ ] `project.revert({ commitHash })` → `git checkout`
-  - [ ] `project.publish()` → copy to published folder + tag
-- [ ] **Frontend: Save UI**
-  - [ ] "Save" button with commit message prompt
-  - [ ] Version history drawer
-  - [ ] "Published" indicator on versions
-- [ ] **Published site serving**:
-  - [ ] Published versions go to `/srv/published/{slug}/`
-  - [ ] Caddy serves from published folder
-  - [ ] Preview continues from working folder
-
----
-
-### 2.2 Caddy Integration
-
-> Add static file server to docker-compose
-
-**New service in docker-compose**:
-
-```yaml
-services:
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - published_sites:/srv/published
-    depends_on:
-      - app
-
-  app:
-    image: ghcr.io/you/vivd:latest
-    # Backend serves both API and frontend
-```
-
-**Caddyfile template**:
-
-```caddyfile
-{$DOMAIN} {
-    # API routes
-    handle /api/* {
-        reverse_proxy app:3000
-    }
-
-    # Admin panel (served by app)
-    handle /admin/* {
-        reverse_proxy app:3000
-    }
-
-    # Published site (static files)
-    handle {
-        root * /srv/published
-        file_server
-    }
-}
-```
-
-**Tasks**:
-
-- [ ] Add Caddy service to docker-compose
-- [ ] Create Caddyfile template
-- [ ] Add `published_sites` volume
-- [ ] Implement publish sync (copy from working to published)
-- [ ] Handle domain config per customer
-
----
-
-## Phase 3: Distribution Infrastructure
-
-### 3.1 Container Registry Setup
+### 4.1 Container Registry Setup
 
 > Push images to GHCR for customer distribution
 
@@ -294,7 +330,7 @@ jobs:
 
 ---
 
-### 3.2 Update Strategy
+### 4.2 Update Strategy
 
 > How customers get updates
 
@@ -332,40 +368,43 @@ services:
 
 ---
 
-## Phase 4: Future Enhancements
+## Phase 5: Future Enhancements
 
 - [ ] **Template gallery**: Pre-built starting points
 - [ ] **Multi-site publishing**: Multiple domains from one instance
 - [ ] **Customer billing dashboard**: If moving to self-service
 - [ ] **License server**: For non-managed deployments
 - [ ] **Master dashboard**: Your view across all customer instances
+- [ ] **Chat refactoring**: Review and split chat panel into smaller components
 
 ---
 
 ## Quick Reference
 
+### Priority Order (Updated)
+
+```
+1. ✅ Project Wizard (URL flow)          ← Done
+2. ✅ Chat UX (element selector)         ← Done
+3. 🔄 Git-based Save/Load workflow       ← CURRENT
+4. 🔄 Caddy integration                  ← CURRENT
+5. 🔄 Publish workflow                   ← CURRENT
+6. ⏳ Scratch project flow               ← Next
+7. ⏳ Licensing (env vars)               ← Enables sales
+8. ⏳ GHCR + Actions                     ← Distribution
+```
+
 ### File Changes Summary
 
-| Path                                                | Change                     |
-| --------------------------------------------------- | -------------------------- |
-| `frontend/src/components/ProjectWizard.tsx`         | NEW - wizard flow          |
-| `frontend/src/components/chat/ElementSelector.tsx`  | NEW - click-to-select      |
-| `frontend/src/components/chat/EmptyStatePrompt.tsx` | NEW - empty state          |
-| `backend/src/services/LicenseService.ts`            | NEW - feature limits       |
-| `backend/src/services/UsageTracker.ts`              | NEW - token/image counting |
-| `backend/src/routers/project.ts`                    | MODIFY - add save/publish  |
-| `docker-compose.yml`                                | MODIFY - add Caddy         |
-| `Caddyfile`                                         | NEW - routing config       |
-| `.github/workflows/publish.yml`                     | NEW - image build/push     |
-| `docker-compose.customer.yml`                       | NEW - customer template    |
-
-### Priority Order
-
-```
-1. Project Wizard (scratch + URL)     ← Enables core product
-2. Chat UX (element selector)         ← Usability
-3. Licensing (env vars)               ← Enables sales
-4. Save/Publish workflow              ← Production readiness
-5. Caddy integration                  ← Customer deployment
-6. GHCR + Actions                     ← Distribution
-```
+| Path                                              | Change                         |
+| ------------------------------------------------- | ------------------------------ |
+| `backend/src/services/GitService.ts`              | NEW - git operations           |
+| `backend/src/routers/project.ts`                  | MODIFY - add save/load/publish |
+| `frontend/src/components/VersionHistoryPanel.tsx` | NEW - version list UI          |
+| `frontend/src/components/SaveVersionDialog.tsx`   | NEW - commit dialog            |
+| `docker-compose.yml`                              | MODIFY - add Caddy             |
+| `Caddyfile`                                       | NEW - routing config           |
+| `backend/src/services/LicenseService.ts`          | NEW - feature limits           |
+| `backend/src/services/UsageTracker.ts`            | NEW - token/image counting     |
+| `.github/workflows/publish.yml`                   | NEW - image build/push         |
+| `docker-compose.customer.yml`                     | NEW - customer template        |

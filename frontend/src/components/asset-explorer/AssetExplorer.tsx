@@ -188,7 +188,7 @@ export function AssetExplorer({
       });
 
       const response = await fetch(
-        `/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(
+        `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(
           currentPath
         )}`,
         {

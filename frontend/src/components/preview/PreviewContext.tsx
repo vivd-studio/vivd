@@ -439,10 +439,10 @@ export function PreviewProvider({
 
   // Build version-aware URL
   const baseUrl = projectSlug
-    ? `/api/preview/${projectSlug}/v${selectedVersion}/index.html`
-    : url?.startsWith("http") || url?.startsWith("/api")
+    ? `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/index.html`
+    : url?.startsWith("http") || url?.startsWith("/vivd-studio/api")
     ? url
-    : `/api${url}`;
+    : `/vivd-studio/api${url}`;
   const fullUrl = baseUrl || "";
 
   const handleCopy = () => {
@@ -502,6 +502,23 @@ export function PreviewProvider({
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  // Global Escape key handler to exit edit mode and selector mode
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (editMode) {
+          handleCancelEdit();
+        }
+        if (selectorMode) {
+          setSelectorMode(false);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editMode, selectorMode, setSelectorMode]);
 
   const value: PreviewContextValue = {
     // Props

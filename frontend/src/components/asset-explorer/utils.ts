@@ -26,5 +26,5 @@ export function buildImageUrl(
   version: number,
   path: string
 ): string {
-  return `/api/projects/${projectSlug}/v${version}/${path}`;
+  return `/vivd-studio/api/projects/${projectSlug}/v${version}/${path}`;
 }
