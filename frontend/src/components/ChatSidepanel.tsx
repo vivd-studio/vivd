@@ -52,11 +52,16 @@ export function ChatPanel({
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [sessions, setSessions] = useState<{ id: string }[]>([]);
+  const [sessions, setSessions] = useState<
+    { id: string; revert?: { messageID: string } }[]
+  >([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
-  const [isReverted, setIsReverted] = useState(false);
+
+  // Derive isReverted from session data instead of local state
+  const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+  const isReverted = Boolean(selectedSession?.revert);
 
   // Real-time streaming state from SSE subscription
   const [isStreaming, setIsStreaming] = useState(false);
@@ -119,7 +124,6 @@ export function ChatPanel({
   useEffect(() => {
     setSelectedSessionId(null);
     setMessages([]);
-    setIsReverted(false);
     setIsStreaming(false);
     setStreamingParts([]);
   }, [projectSlug]);
@@ -372,22 +376,19 @@ export function ChatPanel({
 
   const revertMutation = trpc.agent.revertToMessage.useMutation({
     onSuccess: () => {
-      // Refetch messages after revert
+      // Refetch sessions to get updated revert state
       refetchSessions();
       // Refresh the iframe preview
       onTaskComplete?.();
-      // Track reverted state
-      setIsReverted(true);
     },
   });
 
   const unrevertMutation = trpc.agent.unrevertSession.useMutation({
     onSuccess: () => {
+      // Refetch sessions to get updated revert state
       refetchSessions();
       // Refresh the iframe preview
       onTaskComplete?.();
-      // Clear reverted state
-      setIsReverted(false);
     },
   });
 
