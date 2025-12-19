@@ -4,6 +4,8 @@ interface PreviewIframeProps {
   src: string;
   refreshKey: number;
   className?: string;
+  isMobile?: boolean;
+  onLoad?: () => void;
 }
 
 // Scrollbar style injection for the iframe
@@ -57,26 +59,26 @@ const injectScrollbarStyles = (
   }
 };
 
-export const PreviewIframe = forwardRef<
-  HTMLIFrameElement,
-  PreviewIframeProps & { isMobile?: boolean }
->(function PreviewIframe(
-  { src, refreshKey, className = "", isMobile = false },
-  ref
-) {
-  const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
-    injectScrollbarStyles(e.currentTarget, isMobile);
-  };
+export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
+  function PreviewIframe(
+    { src, refreshKey, className = "", isMobile = false, onLoad },
+    ref
+  ) {
+    const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
+      injectScrollbarStyles(e.currentTarget, isMobile);
+      onLoad?.();
+    };
 
-  return (
-    <iframe
-      key={refreshKey}
-      ref={ref}
-      src={src}
-      className={`w-full h-full border-0 ${className}`}
-      title="Preview"
-      sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-      onLoad={handleLoad}
-    />
-  );
-});
+    return (
+      <iframe
+        key={refreshKey}
+        ref={ref}
+        src={src}
+        className={`w-full h-full border-0 ${className}`}
+        title="Preview"
+        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+        onLoad={handleLoad}
+      />
+    );
+  }
+);

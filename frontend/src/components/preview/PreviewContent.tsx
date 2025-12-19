@@ -7,6 +7,7 @@ import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
 import { ExitConfirmationDialog } from "./ExitConfirmationDialog";
+import { Loader2 } from "lucide-react";
 
 export function PreviewContent() {
   const {
@@ -26,6 +27,8 @@ export function PreviewContent() {
     handleTaskComplete,
     assetPanel,
     chatPanel,
+    iframeLoading,
+    onIframeLoad,
   } = usePreview();
 
   return (
@@ -60,23 +63,46 @@ export function PreviewContent() {
                 : ""
             }`}
           >
-            {mobileView ? (
-              <MobileFrame device={selectedDevice} scale={mobileScale}>
+            {/* Loading Overlay - fades out when done */}
+            <div
+              className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
+                iframeLoading ? "opacity-100" : "opacity-0 pointer-events-none"
+              }`}
+            >
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">
+                  Loading preview...
+                </span>
+              </div>
+            </div>
+
+            {/* Iframe container with fade-in */}
+            <div
+              className={`w-full h-full transition-opacity duration-150 ${
+                iframeLoading ? "opacity-0" : "opacity-100"
+              }`}
+            >
+              {mobileView ? (
+                <MobileFrame device={selectedDevice} scale={mobileScale}>
+                  <PreviewIframe
+                    ref={iframeRef}
+                    src={fullUrl}
+                    refreshKey={refreshKey}
+                    isMobile={true}
+                    onLoad={onIframeLoad}
+                  />
+                </MobileFrame>
+              ) : (
                 <PreviewIframe
                   ref={iframeRef}
                   src={fullUrl}
                   refreshKey={refreshKey}
-                  isMobile={true}
+                  isMobile={false}
+                  onLoad={onIframeLoad}
                 />
-              </MobileFrame>
-            ) : (
-              <PreviewIframe
-                ref={iframeRef}
-                src={fullUrl}
-                refreshKey={refreshKey}
-                isMobile={false}
-              />
-            )}
+              )}
+            </div>
 
             <UnsavedChangesBar />
           </div>

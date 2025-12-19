@@ -41,12 +41,14 @@ interface PreviewContextValue {
   setSelectedDevice: (device: DevicePreset) => void;
   mobileScale: number;
   editMode: boolean;
+  iframeLoading: boolean;
   hasUnsavedChanges: boolean;
   showExitConfirmation: boolean;
   setShowExitConfirmation: (show: boolean) => void;
 
   // Refs
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  onIframeLoad: () => void;
   mobileContainerRef: RefObject<HTMLDivElement | null>;
 
   // Computed
@@ -106,6 +108,7 @@ export function PreviewProvider({
   const [chatOpen, setChatOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [iframeLoading, setIframeLoading] = useState(true);
   const [selectedVersion, setSelectedVersion] = useState(version || 1);
   const [mobileView, setMobileView] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(
@@ -203,6 +206,7 @@ export function PreviewProvider({
       });
     }
     // Refresh iframe to show new version
+    setIframeLoading(true);
     setRefreshKey((prev) => prev + 1);
   };
 
@@ -225,6 +229,7 @@ export function PreviewProvider({
     setHasUnsavedChanges(false);
     setRefreshKey((prev) => prev + 1);
     toast.info("Changes discarded");
+    setIframeLoading(true);
   };
 
   const handleClose = () => {
@@ -436,9 +441,11 @@ export function PreviewProvider({
   const handleTaskComplete = () => {
     // Refresh the iframe
     setRefreshKey((prev) => prev + 1);
+    setIframeLoading(true);
   };
 
   const handleRefresh = () => {
+    setIframeLoading(true);
     setRefreshKey((prev) => prev + 1);
   };
 
@@ -463,12 +470,14 @@ export function PreviewProvider({
     setSelectedDevice,
     mobileScale,
     editMode,
+    iframeLoading,
     hasUnsavedChanges,
     showExitConfirmation,
     setShowExitConfirmation,
 
     // Refs
     iframeRef,
+    onIframeLoad: () => setIframeLoading(false),
     mobileContainerRef,
 
     // Computed
