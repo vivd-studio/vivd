@@ -20,7 +20,7 @@ export default function PreviewPage() {
 
   // Handle close/back navigation
   const handleClose = () => {
-    navigate("/");
+    navigate("/vivd-studio");
   };
 
   // Set ready once we have project data

@@ -56,46 +56,35 @@ export default function App() {
       <Routes>
         <Route
           path="/login"
-          element={!session ? <Login /> : <Navigate to="/" />}
+          element={!session ? <Login /> : <Navigate to="/vivd-studio" />}
         />
+        {/* Nested routes under /vivd-studio with Layout */}
         <Route
-          path="/settings"
-          element={
-            session ? (
-              <Layout>
-                <Settings />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            session?.user?.role === "admin" ? (
-              <Layout>
+          path="/vivd-studio"
+          element={session ? <Layout /> : <Navigate to="/login" />}
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="settings" element={<Settings />} />
+          <Route
+            path="admin"
+            element={
+              session?.user?.role === "admin" ? (
                 <Admin />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
+              ) : (
+                <Navigate to="/vivd-studio" />
+              )
+            }
+          />
+        </Route>
+        {/* PreviewPage outside Layout - has its own full-screen UI */}
         <Route
-          path="/project/:projectSlug"
+          path="/projects/:projectSlug"
           element={session ? <PreviewPage /> : <Navigate to="/login" />}
         />
         <Route
           path="/"
           element={
-            session ? (
-              <Layout>
-                <Dashboard />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
+            session ? <Navigate to="/vivd-studio" /> : <Navigate to="/login" />
           }
         />
       </Routes>

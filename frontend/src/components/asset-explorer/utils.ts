@@ -26,5 +26,5 @@ export function buildImageUrl(
   version: number,
   path: string
 ): string {
-  return `/api/generated/${projectSlug}/v${version}/${path}`;
+  return `/api/projects/${projectSlug}/v${version}/${path}`;
 }

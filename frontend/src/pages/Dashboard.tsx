@@ -1,10 +1,10 @@
 import { ProjectsList } from "@/components/ProjectsList";
-import { GenerateSection } from "@/components/GenerateSection";
+import { ProjectWizard } from "@/components/ProjectWizard";
 
 export default function Dashboard() {
   return (
     <div className="p-8 space-y-8">
-      <GenerateSection onGenerationStarted={() => {}} />
+      <ProjectWizard onGenerationStarted={() => {}} />
 
       <ProjectsList />
     </div>

@@ -1,10 +1,10 @@
 import * as path from "path";
 import * as fs from "fs";
 
-// Base directory for all generated projects
-const GENERATED_DIR = path.join(process.cwd(), "generated");
+// Base directory for all projects
+const PROJECTS_DIR = path.join(process.cwd(), "projects");
 
-// Project-level manifest (at generated/<slug>/manifest.json)
+// Project-level manifest (at projects/<slug>/manifest.json)
 export interface ProjectManifest {
   url: string;
   createdAt: string;
@@ -19,7 +19,7 @@ export interface VersionInfo {
   startedAt?: string; // ISO timestamp when processing started
 }
 
-// Version-specific data (at generated/<slug>/v<N>/project.json)
+// Version-specific data (at projects/<slug>/v<N>/project.json)
 export interface VersionData {
   url: string;
   createdAt: string;
@@ -70,7 +70,7 @@ export function isVersionStale(
  * Get the base project directory for a slug
  */
 export function getProjectDir(slug: string): string {
-  return path.join(GENERATED_DIR, slug);
+  return path.join(PROJECTS_DIR, slug);
 }
 
 /**
@@ -202,7 +202,7 @@ export function isLegacyProject(slug: string): boolean {
 
 /**
  * Migrate a legacy project to the versioned structure
- * Moves all files from generated/<slug>/ to generated/<slug>/v1/
+ * Moves all files from projects/<slug>/ to projects/<slug>/v1/
  */
 export function migrateProjectIfNeeded(slug: string): boolean {
   if (!isLegacyProject(slug)) {

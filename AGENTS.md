@@ -12,7 +12,7 @@ Vivd is an AI-powered website builder that let's Anyone build their own website.
 The frontend is a React with Vite application that provides a user interface for interacting with the backend.
 
 - we are using trpc for api-calls.
-- the generated website files will be served by the backend from statically from the generated/ folder.
+- the generated website files will be served by the backend from statically from the projects/ folder.
 - Try to use shadcn components if possible.
 - use react-hook-form for forms
 - use our tailwind tokens from index.css for styling
@@ -20,7 +20,7 @@ The frontend is a React with Vite application that provides a user interface for
 
 # Backend
 
-The backend is a Node.js application that provides an API for interacting with the frontend. The backend statically serves all the generated index.htmls from the generated/ folder
+The backend is a Node.js application that provides an API for interacting with the frontend. The backend statically serves all the generated index.htmls from the projects/ folder
 
 - express.js
 - drizzle-orm with migrations for database
@@ -40,7 +40,7 @@ The docker-compose.override.yml file is used to override the docker-compose.yml 
 2. **Analyzes** the content and current brand visual.
 3. **Generates** a new, high-converting landing page (HTML/Tailwind) via OpenRouter API.
 
-We save all the generated and downloaded files from the url in the generated/domain-name folder and also keep a project.json in the root folder, that tracks the url, created_at, status, etc.
+We save all the generated and downloaded files from the url in the projects/domain-name folder and also keep a project.json in the root folder, that tracks the url, created_at, status, etc.
 
 Afterwards we can use an Agent to request changes on to our website. The agent is an opencode agent (https://opencode.ai/docs) and we are consuming its SDK in our backend.
 
@@ -56,7 +56,7 @@ Vivd uses a **single-tenant architecture** where each user gets their own isolat
 
 Per-User Instance
 Frontend / Backend (+ opencode agent) / Postgres Database / Caddy Server for live website
-Dedicated Volume (generated/)
+Dedicated Volume (projects/)
 
 - **Backend**: Each user has their own backend container with an embedded opencode agent
 - **Database**: Separate Postgres database per user (isolated data)

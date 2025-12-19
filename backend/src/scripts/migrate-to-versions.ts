@@ -3,13 +3,13 @@
  *
  * Run this once with: npx tsx src/scripts/migrate-to-versions.ts
  *
- * After running, all projects in generated/<slug>/ will be migrated to generated/<slug>/v1/
+ * After running, all projects in projects/<slug>/ will be migrated to projects/<slug>/v1/
  */
 
 import * as fs from "fs";
 import * as path from "path";
 
-const GENERATED_DIR = path.join(process.cwd(), "generated");
+const PROJECTS_DIR = path.join(process.cwd(), "projects");
 
 interface ProjectManifest {
   url: string;
@@ -39,7 +39,7 @@ function isLegacyProject(projectDir: string): boolean {
 }
 
 function migrateProject(slug: string): boolean {
-  const projectDir = path.join(GENERATED_DIR, slug);
+  const projectDir = path.join(PROJECTS_DIR, slug);
 
   if (!isLegacyProject(projectDir)) {
     console.log(`  [SKIP] ${slug} - already migrated or not a legacy project`);
@@ -121,12 +121,12 @@ function migrateProject(slug: string): boolean {
 function main() {
   console.log("=== Project Versioning Migration ===\n");
 
-  if (!fs.existsSync(GENERATED_DIR)) {
-    console.log("No generated/ directory found. Nothing to migrate.");
+  if (!fs.existsSync(PROJECTS_DIR)) {
+    console.log("No projects/ directory found. Nothing to migrate.");
     return;
   }
 
-  const items = fs.readdirSync(GENERATED_DIR, { withFileTypes: true });
+  const items = fs.readdirSync(PROJECTS_DIR, { withFileTypes: true });
   const projectDirs = items.filter((item) => item.isDirectory());
 
   console.log(`Found ${projectDirs.length} project(s) to check.\n`);

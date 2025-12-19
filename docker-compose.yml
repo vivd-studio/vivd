@@ -11,7 +11,7 @@ services:
       - OPENCODE_MODEL=${OPENCODE_MODEL}
       - FRONTEND_URL=${FRONTEND_URL}
     volumes:
-      - backend_data:/app/generated
+      - backend_data:/app/projects
       - opencode_data:/root/.local/share/opencode/storage
     depends_on:
       postgres:

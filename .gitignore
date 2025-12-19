@@ -2,6 +2,8 @@
 .venv
 node_modules
 .DS_Store
-generated/
-generated_backup/
+projects/
+projects_backup/
 dist/
+generated/
+generated_backup*/

@@ -1,5 +1,4 @@
-import { type PropsWithChildren } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, Outlet } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { LogOut, Shield, Settings } from "lucide-react";
@@ -15,7 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { ModeToggle } from "@/components/mode-toggle";
 
-export function Layout({ children }: PropsWithChildren) {
+export function Layout() {
   const { data: session, isPending } = authClient.useSession();
   const navigate = useNavigate();
 
@@ -36,7 +35,10 @@ export function Layout({ children }: PropsWithChildren) {
       <header className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <Link to="/" className="font-bold text-xl tracking-tight">
+            <Link
+              to="/vivd-studio"
+              className="font-bold text-xl tracking-tight"
+            >
               vi
               <span
                 style={{
@@ -53,7 +55,7 @@ export function Layout({ children }: PropsWithChildren) {
 
             {session?.user?.role === "admin" && (
               <Link
-                to="/admin"
+                to="/vivd-studio/admin"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
               >
                 <Shield className="h-4 w-4" />
@@ -95,7 +97,7 @@ export function Layout({ children }: PropsWithChildren) {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/settings" className="cursor-pointer">
+                    <Link to="/vivd-studio/settings" className="cursor-pointer">
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </Link>
@@ -115,7 +117,9 @@ export function Layout({ children }: PropsWithChildren) {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">{children}</main>
+      <main className="container mx-auto px-4 py-8">
+        <Outlet />
+      </main>
     </div>
   );
 }

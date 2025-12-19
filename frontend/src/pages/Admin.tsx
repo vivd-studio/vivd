@@ -64,6 +64,11 @@ function MigrationCard() {
     message: string;
   } | null>(null);
 
+  const [folderMigrationResult, setFolderMigrationResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
   const migrateMutation = trpc.project.migrateToVersions.useMutation({
     onSuccess: (data) => {
       setMigrationResult({
@@ -86,6 +91,16 @@ function MigrationCard() {
       });
     },
   });
+
+  const folderMigrationMutation =
+    trpc.project.migrateToProjectsFolder.useMutation({
+      onSuccess: (data) => {
+        setFolderMigrationResult({
+          success: data.success,
+          message: data.message,
+        });
+      },
+    });
 
   return (
     <Card>
@@ -174,6 +189,60 @@ function MigrationCard() {
                 Initialized: {gitInitResult.initialized} | Skipped:{" "}
                 {gitInitResult.skipped} | Failed: {gitInitResult.failed} |
                 Total: {gitInitResult.total}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Folder Migration (generated/ -> projects/) */}
+        <div className="flex flex-col gap-2 pt-4 border-t">
+          <p className="text-sm text-muted-foreground">
+            Migrate from the old{" "}
+            <code className="px-1 py-0.5 rounded bg-muted">generated/</code>{" "}
+            folder to the new{" "}
+            <code className="px-1 py-0.5 rounded bg-muted">projects/</code>{" "}
+            folder. This is a one-time migration for existing deployments.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => folderMigrationMutation.mutate()}
+              disabled={folderMigrationMutation.isPending}
+            >
+              {folderMigrationMutation.isPending ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Migrating Folder...
+                </>
+              ) : (
+                "Migrate to projects/ Folder"
+              )}
+            </Button>
+          </div>
+
+          {folderMigrationMutation.isError && (
+            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
+              <AlertCircle className="h-4 w-4" />
+              {folderMigrationMutation.error?.message ||
+                "Folder migration failed"}
+            </div>
+          )}
+
+          {folderMigrationResult && (
+            <div
+              className={`mt-3 p-3 rounded-md text-sm ${
+                folderMigrationResult.success
+                  ? "bg-muted"
+                  : "bg-red-50 dark:bg-red-950"
+              }`}
+            >
+              <p
+                className={`font-medium ${
+                  !folderMigrationResult.success &&
+                  "text-red-600 dark:text-red-400"
+                }`}
+              >
+                {folderMigrationResult.message}
               </p>
             </div>
           )}

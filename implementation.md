@@ -14,7 +14,7 @@ flowchart LR
         DB["Postgres"]
 
         Caddy -->|"/"| Sites["Published Site"]
-        Caddy -->|"/admin/*"| App
+        Caddy -->|"/vivd-studio/*"| App
         Caddy -->|"/api/*"| App
         App --> DB
     end
@@ -31,8 +31,8 @@ flowchart LR
 - ✅ Single-tenant (one instance per customer, one published site)
 - ✅ Backend serves frontend (2 containers: App + Caddy)
 - ✅ GHCR for private image distribution
-- ✅ Path-based admin (`acme.com/admin`)
-- ✅ Multi-project dashboard only for your dev instance
+- ✅ Path-based admin (`acme.com/vivd-studio`)
+- ✅ Project limit controlled by `LICENSE_MAX_PROJECTS` (default: 1)
 
 ---
 
@@ -42,10 +42,11 @@ flowchart LR
 
 > Choice-based wizard; customers land directly here if no site exists
 
-**Dashboard behavior**:
+**Routing structure**:
 
-- `MULTI_PROJECT_DASHBOARD=true` → Shows project list (your dev instance)
-- `MULTI_PROJECT_DASHBOARD=false` → Direct to admin view or start wizard
+- `/vivd-studio` → Project overview (dashboard with project list + wizard)
+- `/vivd-studio/admin` → Internal admin (user management, admin-only)
+- `/` → Published site (Caddy serves static files)
 
 **Start flow** (when no site exists or "New Project"):
 
@@ -65,15 +66,15 @@ flowchart LR
 
 **Tasks**:
 
-- [ ] Create `ProjectWizard` component with step flow
-- [ ] **Scratch flow**:
+- [x] Create `ProjectWizard` component with step flow
+- [ ] **Scratch flow** (coming soon placeholder added):
   - [ ] Step 1: Business type, name, industry
   - [ ] Step 2: Upload existing assets (logo, images) or generate
   - [ ] Step 3: Color/style preferences
   - [ ] Step 4: AI generates full site (logo if needed, hero image, content)
-- [ ] **URL flow** (current):
-  - [ ] Add legal disclaimer checkbox: "I own this website and its content"
-  - [ ] Existing generation pipeline
+- [x] **URL flow** (current):
+  - [x] Add legal disclaimer checkbox: "I own this website and its content"
+  - [x] Existing generation pipeline
 - [ ] Adapt `processUrl` to `generateProject({ type: 'scratch' | 'url', ... })`
 
 ---
@@ -112,7 +113,6 @@ flowchart LR
 | Feature | Env Var | Default |
 |---------|---------|---------|
 | `LICENSE_IMAGE_GEN` | `true` | Image generation enabled |
-| `MULTI_PROJECT_DASHBOARD` | `false` | Show project list (your instance only) |
 | `LICENSE_MAX_PROJECTS` | `1` | Sites per instance (1 for customers) |
 | `LICENSE_MAX_USERS` | `3` | Team members |
 

@@ -203,7 +203,7 @@ export const projectRouter = router({
       // Build the preview URL for the specific version
       const resultUrl =
         status === "completed"
-          ? `/generated/${slug}/v${targetVersion}/index.html`
+          ? `/projects/${slug}/v${targetVersion}/index.html`
           : undefined;
 
       return {
@@ -218,14 +218,14 @@ export const projectRouter = router({
     }),
 
   list: protectedProcedure.query(async () => {
-    const generatedDir = path.join(process.cwd(), "generated");
+    const projectsDir = path.join(process.cwd(), "projects");
 
-    if (!fs.existsSync(generatedDir)) {
+    if (!fs.existsSync(projectsDir)) {
       return { projects: [] };
     }
 
     try {
-      const files = fs.readdirSync(generatedDir, { withFileTypes: true });
+      const files = fs.readdirSync(projectsDir, { withFileTypes: true });
       const projects = files
         .filter((dirent) => dirent.isDirectory())
         .map((dirent) => {
@@ -301,15 +301,15 @@ export const projectRouter = router({
    * This is admin-only and can be removed after all projects are migrated.
    */
   migrateToVersions: adminProcedure.mutation(async () => {
-    const generatedDir = path.join(process.cwd(), "generated");
+    const projectsDir = path.join(process.cwd(), "projects");
 
-    if (!fs.existsSync(generatedDir)) {
+    if (!fs.existsSync(projectsDir)) {
       return {
         success: true,
         migrated: 0,
         skipped: 0,
         total: 0,
-        message: "No generated/ directory found. Nothing to migrate.",
+        message: "No projects/ directory found. Nothing to migrate.",
       };
     }
 
@@ -336,7 +336,7 @@ export const projectRouter = router({
     };
 
     const migrateProject = (slug: string): boolean => {
-      const projectDir = path.join(generatedDir, slug);
+      const projectDir = path.join(projectsDir, slug);
 
       if (!isLegacyProject(projectDir)) {
         console.log(
@@ -426,7 +426,7 @@ export const projectRouter = router({
 
     console.log("=== Project Versioning Migration ===\n");
 
-    const items = fs.readdirSync(generatedDir, { withFileTypes: true });
+    const items = fs.readdirSync(projectsDir, { withFileTypes: true });
     const projectDirs = items.filter((item) => item.isDirectory());
 
     console.log(`Found ${projectDirs.length} project(s) to check.\n`);
@@ -574,23 +574,23 @@ export const projectRouter = router({
    * This is required for OpenCode's undo/revert functionality to work.
    */
   initGitInProjects: adminProcedure.mutation(async () => {
-    const generatedDir = path.join(process.cwd(), "generated");
+    const projectsDir = path.join(process.cwd(), "projects");
 
-    if (!fs.existsSync(generatedDir)) {
+    if (!fs.existsSync(projectsDir)) {
       return {
         success: true,
         initialized: 0,
         skipped: 0,
         failed: 0,
         total: 0,
-        message: "No generated/ directory found.",
+        message: "No projects/ directory found.",
       };
     }
 
     console.log("=== Git Initialization Migration ===\n");
 
     const projectDirs = fs
-      .readdirSync(generatedDir, { withFileTypes: true })
+      .readdirSync(projectsDir, { withFileTypes: true })
       .filter((item) => item.isDirectory());
 
     let initialized = 0;
@@ -599,7 +599,7 @@ export const projectRouter = router({
     const details: string[] = [];
 
     for (const projectDir of projectDirs) {
-      const projectPath = path.join(generatedDir, projectDir.name);
+      const projectPath = path.join(projectsDir, projectDir.name);
       const manifest = getManifest(projectDir.name);
 
       if (!manifest) {
@@ -664,5 +664,60 @@ export const projectRouter = router({
           ? `Initialized git in ${initialized} version(s).`
           : "All versions already have git or were skipped.",
     };
+  }),
+
+  /**
+   * Admin endpoint to migrate from generated/ folder to projects/ folder.
+   * This is a one-time migration for existing deployments.
+   */
+  migrateToProjectsFolder: adminProcedure.mutation(async () => {
+    const generatedDir = path.join(process.cwd(), "generated");
+    const projectsDir = path.join(process.cwd(), "projects");
+
+    // Check if generated/ folder exists
+    if (!fs.existsSync(generatedDir)) {
+      // Check if projects/ already exists
+      if (fs.existsSync(projectsDir)) {
+        return {
+          success: true,
+          message: "Migration already complete. projects/ folder exists.",
+        };
+      }
+      return {
+        success: true,
+        message: "No generated/ folder found. Nothing to migrate.",
+      };
+    }
+
+    // Check if projects/ already exists
+    if (fs.existsSync(projectsDir)) {
+      return {
+        success: false,
+        message:
+          "Both generated/ and projects/ folders exist. Please manually resolve this conflict.",
+      };
+    }
+
+    try {
+      console.log("=== Migrating generated/ to projects/ ===");
+
+      // Rename the folder
+      fs.renameSync(generatedDir, projectsDir);
+
+      console.log("Migration complete: generated/ -> projects/");
+
+      return {
+        success: true,
+        message: "Successfully migrated generated/ folder to projects/",
+      };
+    } catch (error) {
+      console.error("Migration failed:", error);
+      return {
+        success: false,
+        message: `Migration failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
   }),
 });

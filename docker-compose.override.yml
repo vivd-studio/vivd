@@ -7,7 +7,7 @@ services:
     environment:
       - NODE_ENV=development
     volumes:
-      - ./backend/generated:/app/generated
+      - ./backend/projects:/app/projects
     ports:
       - "3000:3000"
     develop:
@@ -18,7 +18,7 @@ services:
           ignore:
             - node_modules/
             - dist/
-            - generated/
+            - projects/
         - action: rebuild
           path: ./backend/package.json
     command: npm run dev
