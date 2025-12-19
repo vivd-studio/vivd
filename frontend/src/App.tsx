@@ -78,7 +78,7 @@ export default function App() {
         </Route>
         {/* PreviewPage outside Layout - has its own full-screen UI */}
         <Route
-          path="/projects/:projectSlug"
+          path="/vivd-studio/projects/:projectSlug"
           element={session ? <PreviewPage /> : <Navigate to="/login" />}
         />
         <Route

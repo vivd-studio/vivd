@@ -265,11 +265,13 @@ export function PreviewToolbar() {
   return (
     <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
       {/* Left Section: App Icon + Preview Identity */}
-      <img
-        src="/favicon-transparent.svg"
-        alt="vivd"
-        className="h-6 w-6 shrink-0"
-      />
+      <Link to="/vivd-studio" className="hover:opacity-80 transition-opacity">
+        <img
+          src="/favicon-transparent.svg"
+          alt="vivd"
+          className="h-6 w-6 shrink-0"
+        />
+      </Link>
 
       {/* Separator - hidden on mobile */}
       <div className="hidden sm:block h-5 w-px bg-border mx-1" />

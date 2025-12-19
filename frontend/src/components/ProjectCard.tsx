@@ -170,7 +170,7 @@ export function ProjectCard({
       } ${isCompleted ? "cursor-pointer hover:border-primary/50" : ""}`}
       onClick={() => {
         if (isCompleted) {
-          navigate(`/projects/${project.slug}`);
+          navigate(`/vivd-studio/projects/${project.slug}`);
         }
       }}
     >

@@ -21,19 +21,14 @@ const injectScrollbarStyles = (
       const style = doc.createElement("style");
       style.textContent = isMobile
         ? `
+          /* Hide scrollbar for Chrome, Safari and Opera */
           ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            display: none;
           }
-          ::-webkit-scrollbar-track {
-            background: transparent;
-          }
-          ::-webkit-scrollbar-thumb {
-            background-color: rgba(156, 163, 175, 0.5);
-            border-radius: 4px;
-          }
-          ::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(156, 163, 175, 0.8);
+          /* Hide scrollbar for IE, Edge and Firefox */
+          body {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
           }
         `
         : `
