@@ -65,7 +65,7 @@ export function PreviewContent() {
           >
             {/* Loading Overlay - fades out when done */}
             <div
-              className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-300 ${
+              className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
                 iframeLoading ? "opacity-100" : "opacity-0 pointer-events-none"
               }`}
             >
@@ -79,7 +79,7 @@ export function PreviewContent() {
 
             {/* Iframe container with fade-in */}
             <div
-              className={`w-full h-full transition-opacity duration-300 ${
+              className={`w-full h-full transition-opacity duration-150 ${
                 iframeLoading ? "opacity-0" : "opacity-100"
               }`}
             >
