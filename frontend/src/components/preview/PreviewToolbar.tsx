@@ -39,7 +39,6 @@ import {
   Sun,
   Moon,
   Laptop,
-  Save,
   History,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -49,7 +48,6 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { authClient } from "@/lib/auth-client";
 import { useTheme } from "@/components/theme-provider";
 import { useState } from "react";
-import { SaveVersionDialog } from "@/components/SaveVersionDialog";
 import { VersionHistoryPanel } from "@/components/VersionHistoryPanel";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -61,7 +59,6 @@ export function PreviewToolbar() {
   const utils = trpc.useUtils();
 
   // Save/History dialog states
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -318,13 +315,16 @@ export function PreviewToolbar() {
     <>
       <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
         {/* Left Section: App Icon + Preview Identity */}
-        <Link to="/vivd-studio" className="hover:opacity-80 transition-opacity">
+        <button
+          onClick={handleClose}
+          className="hover:opacity-80 transition-opacity focus:outline-none"
+        >
           <img
             src="/favicon-transparent.svg"
             alt="vivd"
             className="h-6 w-6 shrink-0"
           />
-        </Link>
+        </button>
 
         {/* Separator - hidden on mobile */}
         <div className="hidden sm:block h-5 w-px bg-border mx-1" />
@@ -544,29 +544,7 @@ export function PreviewToolbar() {
           )}
 
           {/* Quick actions - hidden on small screens */}
-          {/* Save button */}
-          {projectSlug && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSaveDialogOpen(true)}
-                  className="hidden sm:flex h-8 w-8 p-0 relative"
-                >
-                  <Save className="w-4 h-4" />
-                  {hasGitChanges && (
-                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-amber-500 rounded-full" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {hasGitChanges ? "Save (unsaved changes)" : "Save version"}
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          {/* History button */}
+          {/* History/Snapshots button */}
           {projectSlug && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -574,12 +552,19 @@ export function PreviewToolbar() {
                   variant={historyPanelOpen ? "secondary" : "ghost"}
                   size="sm"
                   onClick={() => setHistoryPanelOpen(true)}
-                  className="hidden sm:flex h-8 w-8 p-0"
+                  className="hidden sm:flex h-8 w-8 p-0 relative"
                 >
                   <History className="w-4 h-4" />
+                  {hasGitChanges && (
+                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-amber-500 rounded-full" />
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Version history</TooltipContent>
+              <TooltipContent>
+                {hasGitChanges
+                  ? "Snapshots (pending changes)"
+                  : "Snapshots & History"}
+              </TooltipContent>
             </Tooltip>
           )}
 
@@ -724,17 +709,6 @@ export function PreviewToolbar() {
           </Tooltip>
         </div>
       </header>
-
-      {/* Save Version Dialog */}
-      {projectSlug && (
-        <SaveVersionDialog
-          open={saveDialogOpen}
-          onOpenChange={setSaveDialogOpen}
-          projectSlug={projectSlug}
-          version={selectedVersion}
-          onSaveComplete={() => handleRefresh()}
-        />
-      )}
 
       {/* Version History Panel */}
       {projectSlug && (

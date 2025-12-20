@@ -6,7 +6,7 @@ import { PreviewToolbar } from "./PreviewToolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
-import { ExitConfirmationDialog } from "./ExitConfirmationDialog";
+
 import { Loader2 } from "lucide-react";
 
 export function PreviewContent() {
@@ -131,8 +131,6 @@ export function PreviewContent() {
           )}
         </div>
       </div>
-
-      <ExitConfirmationDialog />
     </>
   );
 }

@@ -51,8 +51,6 @@ interface PreviewContextValue {
   editMode: boolean;
   iframeLoading: boolean;
   hasUnsavedChanges: boolean;
-  showExitConfirmation: boolean;
-  setShowExitConfirmation: (show: boolean) => void;
 
   // Element Selector
   selectorMode: boolean;
@@ -80,8 +78,6 @@ interface PreviewContextValue {
   handleSave: () => void;
   handleCancelEdit: () => void;
   handleClose: () => void;
-  handleDiscardAndClose: () => void;
-  handleSaveAndClose: () => void;
 
   // Mutations
   saveFileMutation: ReturnType<typeof trpc.project.saveFile.useMutation>;
@@ -131,7 +127,7 @@ export function PreviewProvider({
   const [mobileScale, setMobileScale] = useState(1);
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+
   const [selectorMode, setSelectorModeState] = useState(false);
   const [selectedElement, setSelectedElement] =
     useState<SelectedElement | null>(null);
@@ -239,7 +235,7 @@ export function PreviewProvider({
       toast.success("Changes saved successfully");
       setEditMode(false);
       setHasUnsavedChanges(false);
-      setShowExitConfirmation(false);
+      setHasUnsavedChanges(false);
       setRefreshKey((prev) => prev + 1);
       utils.project.gitHasChanges.invalidate();
     },
@@ -258,17 +254,6 @@ export function PreviewProvider({
   };
 
   const handleClose = () => {
-    if (editMode || hasUnsavedChanges || hasGitChanges) {
-      setShowExitConfirmation(true);
-    } else {
-      onClose();
-    }
-  };
-
-  const handleDiscardAndClose = () => {
-    setEditMode(false);
-    setHasUnsavedChanges(false);
-    setShowExitConfirmation(false);
     onClose();
   };
 
@@ -398,35 +383,6 @@ export function PreviewProvider({
       filePath: "index.html",
       content: htmlContent,
     });
-  };
-
-  const handleSaveAndClose = () => {
-    const iframe = iframeRef.current;
-    if (!iframe || !iframe.contentDocument || !projectSlug) return;
-
-    const doc = iframe.contentDocument;
-    cleanupEditMode(doc);
-
-    const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
-
-    saveFileMutation.mutate(
-      {
-        slug: projectSlug,
-        version: selectedVersion,
-        filePath: "index.html",
-        content: htmlContent,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Changes saved successfully");
-          setEditMode(false);
-          setHasUnsavedChanges(false);
-          setShowExitConfirmation(false);
-          onClose();
-          setRefreshKey((prev) => prev + 1);
-        },
-      }
-    );
   };
 
   const assetPanel = useResizablePanel({
@@ -566,8 +522,6 @@ export function PreviewProvider({
     editMode,
     iframeLoading,
     hasUnsavedChanges,
-    showExitConfirmation,
-    setShowExitConfirmation,
 
     // Element Selector
     selectorMode,
@@ -595,8 +549,6 @@ export function PreviewProvider({
     handleSave,
     handleCancelEdit,
     handleClose,
-    handleDiscardAndClose,
-    handleSaveAndClose,
 
     // Mutations
     saveFileMutation,
