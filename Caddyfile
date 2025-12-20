@@ -5,6 +5,12 @@
     # Disable automatic HTTPS since TLS is terminated by external load balancer
     auto_https off
     
+    # Trust all private IP ranges for X-Forwarded-* headers
+    # This is necessary when behind a load balancer (Dokploy/Traefik) that terminates TLS
+    servers {
+        trusted_proxies static private_ranges
+    }
+    
     # Enable admin API for dynamic config reloads
     # Binds to all interfaces within container, but port 2019 is NOT exposed
     # externally (only ports 80/443 are in docker-compose), so this is safe.
