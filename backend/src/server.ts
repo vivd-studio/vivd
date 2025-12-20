@@ -32,7 +32,9 @@ const upload = multer({
 app.use(
   cors({
     origin: process.env.DOMAIN
-      ? `http://${process.env.DOMAIN}`
+      ? process.env.DOMAIN.startsWith("http")
+        ? process.env.DOMAIN
+        : `https://${process.env.DOMAIN}`
       : "http://localhost:5173",
     credentials: true,
   })

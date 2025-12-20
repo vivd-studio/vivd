@@ -36,7 +36,9 @@ export const auth = betterAuth({
   },
   trustedOrigins: [
     process.env.DOMAIN
-      ? `http://${process.env.DOMAIN}`
+      ? process.env.DOMAIN.startsWith("http")
+        ? process.env.DOMAIN
+        : `https://${process.env.DOMAIN}`
       : "http://localhost:5173",
   ],
   plugins: [admin()],
