@@ -190,6 +190,13 @@ export function PreviewProvider({
   const totalVersions = project?.totalVersions || 1;
   const hasMultipleVersions = totalVersions > 1;
 
+  // Query for git changes (unsaved work)
+  const { data: changesData } = trpc.project.gitHasChanges.useQuery(
+    { slug: projectSlug!, version: selectedVersion },
+    { enabled: !!projectSlug, refetchInterval: 5000 }
+  );
+  const hasGitChanges = changesData?.hasChanges || false;
+
   const setCurrentVersionMutation = trpc.project.setCurrentVersion.useMutation({
     onSuccess: () => {
       utils.project.list.invalidate();
@@ -234,6 +241,7 @@ export function PreviewProvider({
       setHasUnsavedChanges(false);
       setShowExitConfirmation(false);
       setRefreshKey((prev) => prev + 1);
+      utils.project.gitHasChanges.invalidate();
     },
     onError: (error) => {
       toast.error(`Failed to save changes: ${error.message}`);
@@ -250,7 +258,7 @@ export function PreviewProvider({
   };
 
   const handleClose = () => {
-    if (editMode || hasUnsavedChanges) {
+    if (editMode || hasUnsavedChanges || hasGitChanges) {
       setShowExitConfirmation(true);
     } else {
       onClose();
@@ -519,6 +527,21 @@ export function PreviewProvider({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [editMode, selectorMode, setSelectorMode]);
+
+  // Warn user before leaving page if there are unsaved git changes
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasGitChanges) {
+        event.preventDefault();
+        // Modern browsers require returnValue to be set
+        event.returnValue = "";
+        return "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasGitChanges]);
 
   const value: PreviewContextValue = {
     // Props

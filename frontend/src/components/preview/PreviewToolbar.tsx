@@ -39,6 +39,8 @@ import {
   Sun,
   Moon,
   Laptop,
+  Save,
+  History,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePreview } from "./PreviewContext";
@@ -46,11 +48,21 @@ import { DEVICE_PRESETS } from "./types";
 import { ModeToggle } from "@/components/mode-toggle";
 import { authClient } from "@/lib/auth-client";
 import { useTheme } from "@/components/theme-provider";
+import { useState } from "react";
+import { SaveVersionDialog } from "@/components/SaveVersionDialog";
+import { VersionHistoryPanel } from "@/components/VersionHistoryPanel";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 export function PreviewToolbar() {
   const { data: session } = authClient.useSession();
   const navigate = useNavigate();
   const { setTheme, theme } = useTheme();
+  const utils = trpc.useUtils();
+
+  // Save/History dialog states
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
 
   const handleLogout = async () => {
     await authClient.signOut();
@@ -80,6 +92,46 @@ export function PreviewToolbar() {
     setChatOpen,
     handleClose,
   } = usePreview();
+
+  // Query for unsaved git changes
+  const { data: changesData } = trpc.project.gitHasChanges.useQuery(
+    { slug: projectSlug!, version: selectedVersion },
+    { enabled: !!projectSlug, refetchInterval: 5000 }
+  );
+  const hasGitChanges = changesData?.hasChanges || false;
+
+  // Load version mutation
+  const loadVersionMutation = trpc.project.gitLoadVersion.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      // Refresh the preview and history
+      handleRefresh();
+      utils.project.gitHistory.invalidate({
+        slug: projectSlug!,
+        version: selectedVersion,
+      });
+      utils.project.gitHasChanges.invalidate({
+        slug: projectSlug!,
+        version: selectedVersion,
+      });
+      utils.project.gitWorkingCommit.invalidate({
+        slug: projectSlug!,
+        version: selectedVersion,
+      });
+    },
+    onError: (error) => {
+      toast.error(`Failed to load version: ${error.message}`);
+    },
+  });
+
+  const handleLoadVersion = (commitHash: string) => {
+    if (!projectSlug) return;
+    loadVersionMutation.mutate({
+      slug: projectSlug,
+      version: selectedVersion,
+      commitHash,
+    });
+  };
 
   // Mobile menu content for actions
   const MobileActionsMenu = () => (
@@ -263,278 +315,289 @@ export function PreviewToolbar() {
   );
 
   return (
-    <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
-      {/* Left Section: App Icon + Preview Identity */}
-      <Link to="/vivd-studio" className="hover:opacity-80 transition-opacity">
-        <img
-          src="/favicon-transparent.svg"
-          alt="vivd"
-          className="h-6 w-6 shrink-0"
-        />
-      </Link>
+    <>
+      <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
+        {/* Left Section: App Icon + Preview Identity */}
+        <Link to="/vivd-studio" className="hover:opacity-80 transition-opacity">
+          <img
+            src="/favicon-transparent.svg"
+            alt="vivd"
+            className="h-6 w-6 shrink-0"
+          />
+        </Link>
 
-      {/* Separator - hidden on mobile */}
-      <div className="hidden sm:block h-5 w-px bg-border mx-1" />
+        {/* Separator - hidden on mobile */}
+        <div className="hidden sm:block h-5 w-px bg-border mx-1" />
 
-      <div className="flex items-center gap-1 md:gap-2 shrink-0">
-        <span className="hidden sm:inline font-medium text-muted-foreground">
-          Preview
-        </span>
-        {projectSlug && hasMultipleVersions ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Badge
-                variant="secondary"
-                className="shrink-0 text-xs px-2 py-0.5 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
-                title={`Click to select from ${versions.length} versions`}
-              >
-                <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
-                <ChevronDown className="w-3 h-3 ml-1" />
-              </Badge>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Select Version</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {versions.map((v) => (
-                <DropdownMenuItem
-                  key={v.version}
-                  onClick={() => handleVersionSelect(v.version)}
-                  className={selectedVersion === v.version ? "bg-accent" : ""}
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
+          <span className="hidden sm:inline font-medium text-muted-foreground">
+            Preview
+          </span>
+          {projectSlug && hasMultipleVersions ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Badge
+                  variant="secondary"
+                  className="shrink-0 text-xs px-2 py-0.5 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
+                  title={`Click to select from ${versions.length} versions`}
                 >
-                  <Check
-                    className={`w-4 h-4 mr-2 ${
-                      selectedVersion === v.version
-                        ? "opacity-100"
-                        : "opacity-0"
-                    }`}
-                  />
-                  <span>v{v.version}</span>
-                  <span
-                    className={`ml-auto text-xs ${
-                      v.status === "completed"
-                        ? "text-green-600"
-                        : v.status === "failed"
-                        ? "text-red-500"
-                        : "text-muted-foreground"
-                    }`}
+                  <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
+                  <ChevronDown className="w-3 h-3 ml-1" />
+                </Badge>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Select Version</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {versions.map((v) => (
+                  <DropdownMenuItem
+                    key={v.version}
+                    onClick={() => handleVersionSelect(v.version)}
+                    className={selectedVersion === v.version ? "bg-accent" : ""}
                   >
-                    {v.status === "completed"
-                      ? "✓"
-                      : v.status === "failed"
-                      ? "✗"
-                      : "..."}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : projectSlug ? (
-          <Badge
-            variant="secondary"
-            className="shrink-0 text-xs px-2 py-0.5 font-normal"
-          >
-            <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
-          </Badge>
-        ) : null}
-      </div>
-
-      {/* Separator - hidden on mobile */}
-      <div className="hidden md:block h-5 w-px bg-border mx-1" />
-
-      {/* Center Section: View Controls - hidden on mobile */}
-      <div className="hidden md:flex items-center gap-1">
-        {/* Viewport Toggle */}
-        <div className="flex items-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={!mobileView ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setMobileView(false)}
-                className="rounded-r-none px-2.5"
-              >
-                <Monitor className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Desktop View</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={mobileView ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setMobileView(true)}
-                className="rounded-l-none border-l-0 px-2.5"
-              >
-                <Smartphone className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Mobile View</TooltipContent>
-          </Tooltip>
+                    <Check
+                      className={`w-4 h-4 mr-2 ${
+                        selectedVersion === v.version
+                          ? "opacity-100"
+                          : "opacity-0"
+                      }`}
+                    />
+                    <span>v{v.version}</span>
+                    <span
+                      className={`ml-auto text-xs ${
+                        v.status === "completed"
+                          ? "text-green-600"
+                          : v.status === "failed"
+                          ? "text-red-500"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {v.status === "completed"
+                        ? "✓"
+                        : v.status === "failed"
+                        ? "✗"
+                        : "..."}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : projectSlug ? (
+            <Badge
+              variant="secondary"
+              className="shrink-0 text-xs px-2 py-0.5 font-normal"
+            >
+              <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
+            </Badge>
+          ) : null}
         </div>
 
-        {/* Device Selector (only when mobile view) */}
-        {mobileView && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1 text-xs h-8">
-                {selectedDevice.name}
-                <ChevronDown className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Select Device</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {DEVICE_PRESETS.map((device) => (
-                <DropdownMenuItem
-                  key={device.name}
-                  onClick={() => setSelectedDevice(device)}
-                  className={
-                    selectedDevice.name === device.name ? "bg-accent" : ""
-                  }
-                >
-                  <Check
-                    className={`w-4 h-4 mr-2 ${
-                      selectedDevice.name === device.name
-                        ? "opacity-100"
-                        : "opacity-0"
-                    }`}
-                  />
-                  <span>{device.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {device.width}×{device.height}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+        {/* Separator - hidden on mobile */}
+        <div className="hidden md:block h-5 w-px bg-border mx-1" />
 
-      {/* Separator - hidden on mobile */}
-      <div className="hidden md:block h-5 w-px bg-border mx-1" />
-
-      {/* Edit Controls - hidden on mobile */}
-      {projectSlug && (
+        {/* Center Section: View Controls - hidden on mobile */}
         <div className="hidden md:flex items-center gap-1">
-          {/* Assets button */}
-          <Button
-            variant={assetsOpen ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => setAssetsOpen(!assetsOpen)}
-            className={`h-8 ${
-              !assetsOpen
-                ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white border-none"
-                : ""
-            }`}
-          >
-            <FolderOpen className="w-4 h-4 mr-1.5" />
-            <span className="hidden lg:inline">Assets</span>
-          </Button>
-
-          {/* Edit button - disabled when in edit mode or when there are unsaved changes */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
+          {/* Viewport Toggle */}
+          <div className="flex items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button
-                  variant={editMode ? "secondary" : "outline"}
+                  variant={!mobileView ? "secondary" : "ghost"}
                   size="sm"
-                  onClick={toggleEditMode}
-                  disabled={hasUnsavedChanges && !editMode}
-                  className={`h-8 ${
-                    !editMode && !hasUnsavedChanges
-                      ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white border-none"
-                      : ""
-                  }`}
+                  onClick={() => setMobileView(false)}
+                  className="rounded-r-none px-2.5"
                 >
-                  <Edit3 className="w-4 h-4 mr-1.5" />
-                  <span className="hidden lg:inline">
-                    {editMode ? "Editing..." : "Edit Text"}
-                  </span>
+                  <Monitor className="w-4 h-4" />
                 </Button>
-              </span>
-            </TooltipTrigger>
-            {hasUnsavedChanges && !editMode && (
-              <TooltipContent>
-                Save or discard image changes first
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </div>
-      )}
+              </TooltipTrigger>
+              <TooltipContent>Desktop View</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={mobileView ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setMobileView(true)}
+                  className="rounded-l-none border-l-0 px-2.5"
+                >
+                  <Smartphone className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Mobile View</TooltipContent>
+            </Tooltip>
+          </div>
 
-      {/* Right Section: Panel Toggles + Quick Actions (pushed to right) */}
-      <div className="flex items-center gap-1 ml-auto shrink-0">
-        {/* Panel Toggles - hidden on mobile */}
+          {/* Device Selector (only when mobile view) */}
+          {mobileView && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs h-8"
+                >
+                  {selectedDevice.name}
+                  <ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Select Device</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {DEVICE_PRESETS.map((device) => (
+                  <DropdownMenuItem
+                    key={device.name}
+                    onClick={() => setSelectedDevice(device)}
+                    className={
+                      selectedDevice.name === device.name ? "bg-accent" : ""
+                    }
+                  >
+                    <Check
+                      className={`w-4 h-4 mr-2 ${
+                        selectedDevice.name === device.name
+                          ? "opacity-100"
+                          : "opacity-0"
+                      }`}
+                    />
+                    <span>{device.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {device.width}×{device.height}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* Separator - hidden on mobile */}
+        <div className="hidden md:block h-5 w-px bg-border mx-1" />
+
+        {/* Edit Controls - hidden on mobile */}
         {projectSlug && (
-          <>
+          <div className="hidden md:flex items-center gap-1">
+            {/* Assets button */}
             <Button
-              variant={chatOpen ? "secondary" : "outline"}
+              variant={assetsOpen ? "secondary" : "outline"}
               size="sm"
-              onClick={() => setChatOpen(!chatOpen)}
-              className={`hidden md:flex h-8 ${
-                !chatOpen
-                  ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white border-none"
+              onClick={() => setAssetsOpen(!assetsOpen)}
+              className={`h-8 ${
+                !assetsOpen
+                  ? "border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
                   : ""
               }`}
             >
-              <MessageSquare className="w-4 h-4 mr-1.5" />
-              <span className="hidden lg:inline">Agent</span>
+              <FolderOpen className="w-4 h-4 mr-1.5" />
+              <span className="hidden lg:inline">Assets</span>
             </Button>
 
-            <div className="hidden md:block h-5 w-px bg-border mx-1" />
-          </>
+            {/* Edit button - disabled when in edit mode or when there are unsaved changes */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant={editMode ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={toggleEditMode}
+                    disabled={hasUnsavedChanges && !editMode}
+                    className={`h-8 ${
+                      !editMode && !hasUnsavedChanges
+                        ? "border-blue-500/50 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                        : ""
+                    }`}
+                  >
+                    <Edit3 className="w-4 h-4 mr-1.5" />
+                    <span className="hidden lg:inline">
+                      {editMode ? "Editing..." : "Edit Text"}
+                    </span>
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {hasUnsavedChanges && !editMode && (
+                <TooltipContent>
+                  Save or discard image changes first
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </div>
         )}
 
-        {/* Quick actions - hidden on small screens */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              className="hidden sm:flex h-8 w-8 p-0"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Refresh Preview</TooltipContent>
-        </Tooltip>
+        {/* Right Section: Panel Toggles + Quick Actions (pushed to right) */}
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {/* Panel Toggles - hidden on mobile */}
+          {projectSlug && (
+            <>
+              <Button
+                variant={chatOpen ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setChatOpen(!chatOpen)}
+                className={`hidden md:flex h-8 ${
+                  !chatOpen
+                    ? "border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400"
+                    : ""
+                }`}
+              >
+                <MessageSquare className="w-4 h-4 mr-1.5" />
+                <span className="hidden lg:inline">Agent</span>
+              </Button>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopy}
-              className="hidden sm:flex h-8 w-8 p-0"
-            >
-              {copied ? (
-                <Check className="w-4 h-4 text-green-600" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{copied ? "Copied!" : "Copy Link"}</TooltipContent>
-        </Tooltip>
+              <div className="hidden md:block h-5 w-px bg-border mx-1" />
+            </>
+          )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => window.open(fullUrl, "_blank")}
-              className="hidden sm:flex h-8 w-8 p-0"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Open in New Tab</TooltipContent>
-        </Tooltip>
+          {/* Quick actions - hidden on small screens */}
+          {/* Save button */}
+          {projectSlug && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSaveDialogOpen(true)}
+                  className="hidden sm:flex h-8 w-8 p-0 relative"
+                >
+                  <Save className="w-4 h-4" />
+                  {hasGitChanges && (
+                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-amber-500 rounded-full" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {hasGitChanges ? "Save (unsaved changes)" : "Save version"}
+              </TooltipContent>
+            </Tooltip>
+          )}
 
-        {/* More Actions Dropdown - hidden on mobile */}
-        {projectSlug && (
+          {/* History button */}
+          {projectSlug && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={historyPanelOpen ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setHistoryPanelOpen(true)}
+                  className="hidden sm:flex h-8 w-8 p-0"
+                >
+                  <History className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Version history</TooltipContent>
+            </Tooltip>
+          )}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                className="hidden sm:flex h-8 w-8 p-0"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh Preview</TooltipContent>
+          </Tooltip>
+
+          {/* More Actions Dropdown - hidden on mobile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -546,104 +609,144 @@ export function PreviewToolbar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-                  window.open(
-                    `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
-                    "_blank"
-                  );
-                }}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download as ZIP
+              <DropdownMenuItem onClick={handleCopy}>
+                {copied ? (
+                  <Check className="w-4 h-4 mr-2 text-green-600" />
+                ) : (
+                  <Copy className="w-4 h-4 mr-2" />
+                )}
+                {copied ? "Copied!" : "Copy URL"}
               </DropdownMenuItem>
-              {originalUrl && (
-                <DropdownMenuItem
-                  onClick={() => window.open(originalUrl, "_blank")}
-                >
-                  <Globe className="w-4 h-4 mr-2" />
-                  View Original Website
-                </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => window.open(fullUrl, "_blank")}>
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open in New Tab
+              </DropdownMenuItem>
+              {projectSlug && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                      window.open(
+                        `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
+                        "_blank"
+                      );
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download as ZIP
+                  </DropdownMenuItem>
+                  {originalUrl && (
+                    <DropdownMenuItem
+                      onClick={() => window.open(originalUrl, "_blank")}
+                    >
+                      <Globe className="w-4 h-4 mr-2" />
+                      View Original Website
+                    </DropdownMenuItem>
+                  )}
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
 
-        {/* Separator - hidden on mobile */}
-        <div className="hidden md:block h-5 w-px bg-border mx-1" />
+          {/* Separator - hidden on mobile */}
+          <div className="hidden md:block h-5 w-px bg-border mx-1" />
 
-        {/* Theme Toggle - hidden on mobile */}
-        <div className="hidden md:block">
-          <ModeToggle />
-        </div>
+          {/* Theme Toggle - hidden on mobile */}
+          <div className="hidden md:block">
+            <ModeToggle />
+          </div>
 
-        {/* Profile Avatar - hidden on mobile */}
-        {session && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          {/* Profile Avatar - hidden on mobile */}
+          {session && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="hidden md:flex relative h-8 w-8 rounded-full"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage
+                      src={session.user.image || undefined}
+                      alt={session.user.name}
+                    />
+                    <AvatarFallback>
+                      {session.user.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {session.user.name}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session.user.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/vivd-studio/settings" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Separator - hidden on mobile */}
+          <div className="hidden md:block h-5 w-px bg-border mx-1" />
+
+          {/* Mobile Menu Button */}
+          <MobileActionsMenu />
+
+          {/* Close/Back Button - always visible */}
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                className="hidden md:flex relative h-8 w-8 rounded-full"
+                size="sm"
+                onClick={handleClose}
+                className="h-8 w-8 p-0"
               >
-                <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src={session.user.image || undefined}
-                    alt={session.user.name}
-                  />
-                  <AvatarFallback>
-                    {session.user.name.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <X className="w-4 h-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    {session.user.name}
-                  </p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {session.user.email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/vivd-studio/settings" className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            </TooltipTrigger>
+            <TooltipContent>Back to Dashboard</TooltipContent>
+          </Tooltip>
+        </div>
+      </header>
 
-        {/* Separator - hidden on mobile */}
-        <div className="hidden md:block h-5 w-px bg-border mx-1" />
+      {/* Save Version Dialog */}
+      {projectSlug && (
+        <SaveVersionDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          projectSlug={projectSlug}
+          version={selectedVersion}
+          onSaveComplete={() => handleRefresh()}
+        />
+      )}
 
-        {/* Mobile Menu Button */}
-        <MobileActionsMenu />
-
-        {/* Close/Back Button - always visible */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClose}
-              className="h-8 w-8 p-0"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Back to Dashboard</TooltipContent>
-        </Tooltip>
-      </div>
-    </header>
+      {/* Version History Panel */}
+      {projectSlug && (
+        <VersionHistoryPanel
+          open={historyPanelOpen}
+          onOpenChange={setHistoryPanelOpen}
+          projectSlug={projectSlug}
+          version={selectedVersion}
+          onLoadVersion={handleLoadVersion}
+          onRefresh={handleRefresh}
+        />
+      )}
+    </>
   );
 }

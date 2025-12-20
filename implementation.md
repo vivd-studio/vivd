@@ -140,7 +140,7 @@ flowchart TB
         R[Routing Engine]
     end
     subgraph App["App Container"]
-        API["/api/* endpoints"]
+        API["/vivd-studio/api/* endpoints"]
         Studio["/vivd-studio/* SPA"]
     end
     subgraph Files["Shared Volume"]
@@ -148,8 +148,7 @@ flowchart TB
         Working["/app/projects/{slug}/v{N}/"]
     end
 
-    R -->|"/api/*"| API
-    R -->|"/vivd-studio/*"| Studio
+    R -->|"/vivd-studio/*"| App
     R -->|"/"| Published
 ```
 

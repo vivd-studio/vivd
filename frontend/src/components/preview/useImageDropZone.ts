@@ -153,7 +153,9 @@ export function useImageDropZone({
     if (style) style.remove();
 
     // Remove drag mode from body
-    doc.body.classList.remove("drag-mode-active");
+    if (doc.body) {
+      doc.body.classList.remove("drag-mode-active");
+    }
 
     const images = doc.querySelectorAll("img[data-drop-target]");
     images.forEach((img) => {
