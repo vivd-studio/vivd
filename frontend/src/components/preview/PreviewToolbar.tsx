@@ -40,6 +40,7 @@ import {
   Moon,
   Laptop,
   History,
+  Rocket,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePreview } from "./PreviewContext";
@@ -549,24 +550,37 @@ export function PreviewToolbar() {
           )}
 
           {/* Quick actions - hidden on small screens */}
-          {/* Publish Button */}
+          {/* Publish Button - subtle green outline near History */}
           {projectSlug && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant={isPublished ? "secondary" : "default"}
+                  variant="ghost"
                   size="sm"
                   onClick={() => setPublishDialogOpen(true)}
-                  className={`hidden sm:flex h-8 gap-1.5 ${
-                    !isPublished
-                      ? "bg-green-600 hover:bg-green-700 text-white"
-                      : ""
-                  }`}
+                  className="hidden sm:flex h-8 w-8 p-0"
                 >
-                  <Globe className="w-4 h-4" />
-                  <span className="hidden lg:inline">
-                    {isPublished ? "Published" : "Publish"}
-                  </span>
+                  <Rocket
+                    className="w-4 h-4"
+                    style={{
+                      stroke: "url(#favicon-gradient)",
+                    }}
+                  />
+                  {/* SVG gradient definition for rocket icon */}
+                  <svg width="0" height="0" className="absolute">
+                    <defs>
+                      <linearGradient
+                        id="favicon-gradient"
+                        x1="0%"
+                        y1="0%"
+                        x2="100%"
+                        y2="100%"
+                      >
+                        <stop offset="0%" stopColor="#10B981" />
+                        <stop offset="100%" stopColor="#F59E0B" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
