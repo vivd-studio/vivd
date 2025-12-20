@@ -71,8 +71,10 @@ export function useEvents(
         const textState = new Map<string, number>();
         // Track which messages are assistant messages (not user messages)
         const assistantMessageIds = new Set<string>();
+        let eventCount = 0;
 
         for await (const event of events.stream) {
+          eventCount++;
           if (!isActive) break;
 
           // Track latest event for debugging
@@ -164,12 +166,22 @@ export function useEvents(
               }
             }
           } else if (event.type === "session.idle") {
+            if (eventCount <= 1) {
+              console.warn(
+                `[useEvents] Session went idle after only ${eventCount} event(s) - model may not have processed the task`
+              );
+            }
             if (callbacks.onIdle) {
               callbacks.onIdle();
             }
           } else if (event.type === "session.status") {
             const status = (event as any).properties?.status;
             if (status?.type === "idle") {
+              if (eventCount <= 1) {
+                console.warn(
+                  `[useEvents] Session status idle after only ${eventCount} event(s) - model may not have processed the task`
+                );
+              }
               if (callbacks.onIdle) {
                 callbacks.onIdle();
               }
