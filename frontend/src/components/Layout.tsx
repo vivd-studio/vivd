@@ -20,7 +20,7 @@ export function Layout() {
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/login");
+    navigate("/vivd-studio/login");
   };
 
   if (isPending)
@@ -110,7 +110,7 @@ export function Layout() {
               </DropdownMenu>
             ) : (
               <Button asChild variant="default" size="sm">
-                <Link to="/login">Log in</Link>
+                <Link to="/vivd-studio/login">Log in</Link>
               </Button>
             )}
           </div>

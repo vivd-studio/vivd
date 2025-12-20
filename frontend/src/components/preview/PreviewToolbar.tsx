@@ -63,7 +63,7 @@ export function PreviewToolbar() {
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/login");
+    navigate("/vivd-studio/login");
   };
   const {
     projectSlug,

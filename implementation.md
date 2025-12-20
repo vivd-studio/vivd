@@ -89,42 +89,43 @@ flowchart LR
 
 **Tasks**:
 
-#### Backend: Git Operations
+#### Backend: Git Operations ✅
 
-- [ ] **Create `GitService` module** (`backend/src/services/GitService.ts`)
+- [x] **Create `GitService` module** (`backend/src/services/GitService.ts`)
 
-  - [ ] `save({ slug, message })` → `git add . && git commit -m "message"`
-  - [ ] `getHistory({ slug })` → `git log --oneline --format=json`
-  - [ ] `loadVersion({ slug, commitHash })` → `git checkout <hash> -- .`
-  - [ ] `getCurrentCommit({ slug })` → `git rev-parse HEAD`
-  - [ ] `hasUncommittedChanges({ slug })` → `git status --porcelain`
+  - [x] `save({ slug, message })` → `git add . && git commit -m "message"`
+  - [x] `getHistory({ slug })` → `git log --oneline --format=json`
+  - [x] `loadVersion({ slug, commitHash })` → `git checkout <hash> -- .`
+  - [x] `getCurrentCommit({ slug })` → `git rev-parse HEAD`
+  - [x] `hasUncommittedChanges({ slug })` → `git status --porcelain`
 
-- [ ] **Project Router Endpoints** (`backend/src/routers/project.ts`)
-  - [ ] `project.save` → commit with message
-  - [ ] `project.history` → list versions (commits)
-  - [ ] `project.loadVersion` → checkout specific version
-  - [ ] `project.hasChanges` → check for uncommitted changes
+- [x] **Project Router Endpoints** (`backend/src/routers/project.ts`)
+  - [x] `project.save` → commit with message
+  - [x] `project.history` → list versions (commits)
+  - [x] `project.loadVersion` → checkout specific version
+  - [x] `project.hasChanges` → check for uncommitted changes
 
-#### Frontend: Version UI
+#### Frontend: Version UI ✅
 
-- [ ] **VersionHistoryPanel** component
+- [x] **VersionHistoryPanel** component (consolidated with save in one button)
 
-  - [ ] Show "Working" state at top if uncommitted changes exist
-  - [ ] List of commits with hash, message, date
-  - [ ] "📦 Published" tag on the deployed version
-  - [ ] "Load" button per version
-  - [ ] "Current" indicator for checked-out version
+  - [x] Show "Working" state at top if uncommitted changes exist
+  - [x] List of commits with hash, message, date
+  - [ ] "📦 Published" tag on the deployed version _(pending publish workflow)_
+  - [x] "Load" button per version
+  - [x] "Current" indicator for checked-out version
+  - [x] "Discard changes" option
 
-- [ ] **SaveVersionDialog** component
+- [x] **SaveVersionDialog** component
 
-  - [ ] Text input for commit message
-  - [ ] Shows diff summary (files changed)
-  - [ ] Save button
+  - [x] Text input for commit message (with suggested default)
+  - [x] Save button
+  - [x] No-changes detection (prevents empty commits)
 
-- [ ] **Toolbar integration**
-  - [ ] "Save" button in preview toolbar
-  - [ ] Version history drawer toggle
-  - [ ] Uncommitted changes indicator
+- [x] **Toolbar integration** (consolidated save + history in one button)
+  - [x] Save/History dropdown button in preview toolbar
+  - [x] Version history panel toggle
+  - [x] Uncommitted changes indicator
 
 ---
 

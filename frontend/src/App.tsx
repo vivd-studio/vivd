@@ -55,13 +55,13 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route
-          path="/login"
+          path="/vivd-studio/login"
           element={!session ? <Login /> : <Navigate to="/vivd-studio" />}
         />
         {/* Nested routes under /vivd-studio with Layout */}
         <Route
           path="/vivd-studio"
-          element={session ? <Layout /> : <Navigate to="/login" />}
+          element={session ? <Layout /> : <Navigate to="/vivd-studio/login" />}
         >
           <Route index element={<Dashboard />} />
           <Route path="settings" element={<Settings />} />
@@ -79,12 +79,18 @@ export default function App() {
         {/* PreviewPage outside Layout - has its own full-screen UI */}
         <Route
           path="/vivd-studio/projects/:projectSlug"
-          element={session ? <PreviewPage /> : <Navigate to="/login" />}
+          element={
+            session ? <PreviewPage /> : <Navigate to="/vivd-studio/login" />
+          }
         />
         <Route
           path="/"
           element={
-            session ? <Navigate to="/vivd-studio" /> : <Navigate to="/login" />
+            session ? (
+              <Navigate to="/vivd-studio" />
+            ) : (
+              <Navigate to="/vivd-studio/login" />
+            )
           }
         />
       </Routes>
