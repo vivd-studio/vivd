@@ -155,9 +155,9 @@ flowchart TB
 
 **Tasks**:
 
-#### Docker Configuration
+#### Docker Configuration ✅
 
-- [ ] **Add Caddy service** to `docker-compose.yml`
+- [x] **Add Caddy service** to `docker-compose.yml`
 
   ```yaml
   caddy:
@@ -173,7 +173,7 @@ flowchart TB
       - backend
   ```
 
-- [ ] **Create Caddyfile** (`/Caddyfile`)
+- [x] **Create Caddyfile** (`/Caddyfile`)
 
   ```caddyfile
   {$DOMAIN:localhost} {
@@ -191,34 +191,35 @@ flowchart TB
   }
   ```
 
-- [ ] **Add shared volumes**
+- [x] **Add shared volumes**
   - `published_sites:/srv/published` (Caddy reads)
   - Mount same volume to backend for publishing
 
 ---
 
-### 2.3 Publish Workflow
+### 2.3 Publish Workflow ✅
 
 > Deploy specific version to production (Caddy-served root)
 
 **Tasks**:
 
-- [ ] **Backend: Publish Service**
+- [x] **Backend: Publish Service**
 
-  - [ ] `publish({ slug, commitHash? })` → copy version files to `/srv/published/{slug}/`
-  - [ ] Store published commit hash in manifest
-  - [ ] Create git tag for published versions (e.g., `published-{timestamp}`)
+  - [x] `publish({ slug, commitHash? })` → copy version files to `/srv/published/{slug}/`
+  - [x] Store published commit hash in database (`published_site` table)
+  - [x] Domain normalization (strips www., validates format)
 
-- [ ] **Frontend: Publish UI**
+- [x] **Frontend: Publish UI**
 
-  - [ ] "Publish" button (publishes current/selected version)
-  - [ ] Published version indicator in history
-  - [ ] Confirmation dialog before publishing
-  - [ ] "View Live Site" link to root domain
+  - [x] "Publish" button (publishes current/selected version)
+  - [x] Published version indicator in history (📦 Published badge)
+  - [x] Domain input dialog with real-time validation
+  - [x] "View Live Site" link to domain
 
-- [ ] **Manifest extension**
-  - [ ] Add `publishedCommit: string | null` to manifest
-  - [ ] Add `publishedAt: string | null` timestamp
+- [x] **Database: Published Site Tracking**
+  - [x] `published_site` table with domain, commit_hash, published_at
+  - [x] Unique constraint on domain
+  - [x] Foreign key to user for tracking who published
 
 ---
 

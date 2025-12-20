@@ -1,4 +1,8 @@
 services:
+  caddy:
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - ./backend/static:/srv/default:ro
   backend:
     build:
       target: dev
@@ -6,8 +10,13 @@ services:
       - .env
     environment:
       - NODE_ENV=development
+      # Use the same paths that Caddy uses (shared volumes from main docker-compose)
+      # PUBLISHED_DIR, CADDY_SITES_DIR, CADDY_ADMIN_URL inherited from docker-compose.yml
     volumes:
       - ./backend/projects:/app/projects
+      # These are defined in docker-compose.yml and shared with Caddy
+      # published_sites and caddy_sites volumes are inherited from main compose
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
     ports:
       - "3000:3000"
     develop:
@@ -26,8 +35,6 @@ services:
   frontend:
     build:
       target: dev
-    ports:
-      - "5173:5173"
     command: npm run dev -- --host
     environment:
       - NODE_ENV=development
@@ -42,3 +49,6 @@ services:
             - dist/
         - action: rebuild
           path: ./frontend/package.json
+  postgres:
+    ports:
+      - "5432:5432"

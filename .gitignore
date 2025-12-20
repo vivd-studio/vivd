@@ -7,3 +7,5 @@ projects_backup/
 dist/
 generated/
 generated_backup*/
+published/
+caddy-sites/

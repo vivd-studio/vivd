@@ -1,4 +1,21 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_sites:/etc/caddy/sites.d
+      - published_sites:/srv/published:ro
+      - ./backend/static:/srv/default:ro
+    depends_on:
+      - backend
+    networks:
+      - vivd-network
+
   backend:
     build:
       context: ./backend
@@ -9,10 +26,16 @@ services:
       - _OPENROUTER_API_KEY=${_OPENROUTER_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - OPENCODE_MODEL=${OPENCODE_MODEL}
-      - FRONTEND_URL=${FRONTEND_URL}
+      - DOMAIN=${DOMAIN}
+      - PUBLISHED_DIR=/srv/published
+      - CADDY_SITES_DIR=/etc/caddy/sites.d
+      - CADDY_ADMIN_URL=http://caddy:2019
     volumes:
       - backend_data:/app/projects
       - opencode_data:/root/.local/share/opencode/storage
+      - published_sites:/srv/published
+      - caddy_sites:/etc/caddy/sites.d
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,3 +75,7 @@ volumes:
   postgres_data:
   backend_data:
   opencode_data:
+  caddy_data:
+  caddy_config:
+  caddy_sites:
+  published_sites:

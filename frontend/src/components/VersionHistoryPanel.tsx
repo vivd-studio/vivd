@@ -17,6 +17,7 @@ import {
   Trash2,
   Save,
   Loader2,
+  Globe,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -73,6 +74,12 @@ export function VersionHistoryPanel({
 
   const { data: workingCommitData } = trpc.project.gitWorkingCommit.useQuery(
     { slug: projectSlug, version },
+    { enabled: open && !!projectSlug }
+  );
+
+  // Get publish status to show "Published" badge
+  const { data: publishStatus } = trpc.project.publishStatus.useQuery(
+    { slug: projectSlug },
     { enabled: open && !!projectSlug }
   );
 
@@ -151,6 +158,9 @@ export function VersionHistoryPanel({
   const commits = historyData?.commits || [];
   const hasUncommittedChanges = changesData?.hasChanges || false;
   const workingCommitHash = workingCommitData?.hash || null;
+  const publishedCommitHash = publishStatus?.isPublished
+    ? publishStatus.commitHash
+    : null;
 
   const handleDiscard = () => {
     if (
@@ -307,6 +317,15 @@ export function VersionHistoryPanel({
                                     className="text-[10px] h-5 px-1.5"
                                   >
                                     Latest
+                                  </Badge>
+                                )}
+                                {publishedCommitHash === commit.hash && (
+                                  <Badge
+                                    variant="default"
+                                    className="text-[10px] h-5 px-1.5 bg-blue-600 hover:bg-blue-700"
+                                  >
+                                    <Globe className="h-3 w-3 mr-0.5" />
+                                    Published
                                   </Badge>
                                 )}
                               </div>

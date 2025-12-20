@@ -49,8 +49,10 @@ import { authClient } from "@/lib/auth-client";
 import { useTheme } from "@/components/theme-provider";
 import { useState } from "react";
 import { VersionHistoryPanel } from "@/components/VersionHistoryPanel";
+import { PublishDialog } from "@/components/PublishDialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import faviconSvg from "/favicon-transparent.svg";
 
 export function PreviewToolbar() {
   const { data: session } = authClient.useSession();
@@ -60,6 +62,7 @@ export function PreviewToolbar() {
 
   // Save/History dialog states
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   const handleLogout = async () => {
     await authClient.signOut();
@@ -90,12 +93,18 @@ export function PreviewToolbar() {
     handleClose,
   } = usePreview();
 
-  // Query for unsaved git changes
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
     { slug: projectSlug!, version: selectedVersion },
     { enabled: !!projectSlug, refetchInterval: 5000 }
   );
   const hasGitChanges = changesData?.hasChanges || false;
+
+  // Get publish status
+  const { data: publishStatus } = trpc.project.publishStatus.useQuery(
+    { slug: projectSlug! },
+    { enabled: !!projectSlug }
+  );
+  const isPublished = publishStatus?.isPublished || false;
 
   // Load version mutation
   const loadVersionMutation = trpc.project.gitLoadVersion.useMutation({
@@ -319,11 +328,7 @@ export function PreviewToolbar() {
           onClick={handleClose}
           className="hover:opacity-80 transition-opacity focus:outline-none"
         >
-          <img
-            src="/favicon-transparent.svg"
-            alt="vivd"
-            className="h-6 w-6 shrink-0"
-          />
+          <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
         </button>
 
         {/* Separator - hidden on mobile */}
@@ -544,6 +549,34 @@ export function PreviewToolbar() {
           )}
 
           {/* Quick actions - hidden on small screens */}
+          {/* Publish Button */}
+          {projectSlug && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isPublished ? "secondary" : "default"}
+                  size="sm"
+                  onClick={() => setPublishDialogOpen(true)}
+                  className={`hidden sm:flex h-8 gap-1.5 ${
+                    !isPublished
+                      ? "bg-green-600 hover:bg-green-700 text-white"
+                      : ""
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  <span className="hidden lg:inline">
+                    {isPublished ? "Published" : "Publish"}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isPublished
+                  ? `Live at ${publishStatus?.domain}`
+                  : "Publish to web"}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           {/* History/Snapshots button */}
           {projectSlug && (
             <Tooltip>
@@ -719,6 +752,19 @@ export function PreviewToolbar() {
           version={selectedVersion}
           onLoadVersion={handleLoadVersion}
           onRefresh={handleRefresh}
+        />
+      )}
+
+      {/* Publish Dialog */}
+      {projectSlug && (
+        <PublishDialog
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          projectSlug={projectSlug}
+          version={selectedVersion}
+          onPublished={() => {
+            utils.project.publishStatus.invalidate({ slug: projectSlug });
+          }}
         />
       )}
     </>

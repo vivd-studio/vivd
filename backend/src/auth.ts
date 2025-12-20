@@ -34,6 +34,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  trustedOrigins: [process.env.FRONTEND_URL || "http://localhost:5173"],
+  trustedOrigins: [
+    process.env.DOMAIN
+      ? `http://${process.env.DOMAIN}`
+      : "http://localhost:5173",
+  ],
   plugins: [admin()],
 });

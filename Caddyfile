@@ -1,0 +1,65 @@
+# Vivd Caddy Configuration
+# Serves published sites and proxies to backend for studio routes
+
+{
+    # Enable admin API for dynamic config reloads
+    # Binds to all interfaces within container, but port 2019 is NOT exposed
+    # externally (only ports 80/443 are in docker-compose), so this is safe.
+    # Only containers on vivd-network can access it.
+    admin 0.0.0.0:2019 {
+        origins *
+    }
+}
+
+# Import all dynamically-generated site configs
+import /etc/caddy/sites.d/*.caddy
+
+# Default server - handles studio routes and fallback
+# Default server - handles studio routes and fallback
+(studio_routes) {
+    # Redirect /vivd-studio to /vivd-studio/ (required for SPA routing)
+    redir /vivd-studio /vivd-studio/ permanent
+
+    # Vivd Studio API routes - proxy to backend
+    handle /vivd-studio/api/* {
+        reverse_proxy backend:3000
+    }
+
+    # Vivd Studio frontend - proxy to frontend container
+    handle /vivd-studio/* {
+        reverse_proxy frontend:80
+    }
+
+    # Health check endpoint
+    handle /health {
+        respond "OK" 200
+    }
+
+    # Default: try to serve published site or return 404
+    handle {
+        root * /srv/published
+        try_files {path} {path}/index.html =404
+        file_server
+    }
+
+    # Global 404 handler for the fallback server
+    handle_errors {
+        @404 expression {err.status_code} == 404
+        handle @404 {
+            root * /srv/default
+            rewrite * /default-404.html
+            file_server
+        }
+    }
+}
+
+:80 {
+    import studio_routes
+}
+
+# HTTPS variant for production (Caddy auto-provisions certs)
+:443 {
+    import studio_routes
+}
+
+

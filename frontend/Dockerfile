@@ -39,7 +39,7 @@ RUN npm run build
 
 # Stage 3: Production
 FROM nginx:alpine AS prod
-COPY --from=build /app/frontend/dist /usr/share/nginx/html
+COPY --from=build /app/frontend/dist /usr/share/nginx/html/vivd-studio
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
