@@ -3,6 +3,9 @@ services:
     volumes:
       - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
       - ./backend/static:/srv/default:ro
+    ports:
+      - "80:80"
+      - "443:443"
   backend:
     build:
       target: dev

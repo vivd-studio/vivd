@@ -2,6 +2,9 @@
 # Serves published sites and proxies to backend for studio routes
 
 {
+    # Disable automatic HTTPS since TLS is terminated by external load balancer
+    auto_https off
+    
     # Enable admin API for dynamic config reloads
     # Binds to all interfaces within container, but port 2019 is NOT exposed
     # externally (only ports 80/443 are in docker-compose), so this is safe.
@@ -15,8 +18,8 @@
 import /etc/caddy/sites.d/*.caddy
 
 # Default server - handles studio routes and fallback
-# Default server - handles studio routes and fallback
-(studio_routes) {
+# Only listen on :80 - TLS is handled by external load balancer
+:80 {
     # Redirect /vivd-studio to /vivd-studio/ (required for SPA routing)
     redir /vivd-studio /vivd-studio/ permanent
 
@@ -51,15 +54,6 @@ import /etc/caddy/sites.d/*.caddy
             file_server
         }
     }
-}
-
-:80 {
-    import studio_routes
-}
-
-# HTTPS variant for production (Caddy auto-provisions certs)
-:443 {
-    import studio_routes
 }
 
 
