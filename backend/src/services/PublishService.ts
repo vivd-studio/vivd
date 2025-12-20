@@ -341,11 +341,14 @@ export class PublishService {
       fs.mkdirSync(CADDY_SITES_DIR, { recursive: true });
     }
 
-    // For development domains, use http:// to prevent Caddy from trying to get TLS certs
+    // Always use http:// prefix to prevent Caddy from trying to handle TLS
+    // TLS is terminated by the external load balancer in production
     const isDev = this.isDevDomain(domain);
-    // For dev domains, use http:// and no www prefix (www.localhost is invalid)
+    // For dev domains, no www prefix (www.localhost is invalid)
     // For production domains, include www variant
-    const domainSpec = isDev ? `http://${domain}` : `${domain}, www.${domain}`;
+    const domainSpec = isDev
+      ? `http://${domain}`
+      : `http://${domain}, http://www.${domain}`;
 
     // Determine frontend port based on environment
     // In development (NODE_ENV=development), frontend runs Vite on 5173
