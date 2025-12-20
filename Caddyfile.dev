@@ -16,16 +16,13 @@ import /etc/caddy/sites.d/*.caddy
 
 # Default server - handles studio routes and fallback
 :80 {
-    # Redirect /vivd-studio to /vivd-studio/ (Vite requires trailing slash)
-    redir /vivd-studio /vivd-studio/ permanent
-
     # Vivd Studio API routes - proxy to backend
     handle /vivd-studio/api/* {
         reverse_proxy backend:3000
     }
 
-    # Vivd Studio frontend - proxy to Vite dev server
-    handle /vivd-studio/* {
+    # Vivd Studio frontend - proxy to Vite dev server (handles /vivd-studio and /vivd-studio/*)
+    handle /vivd-studio* {
         reverse_proxy frontend:5173
     }
 

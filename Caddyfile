@@ -5,12 +5,6 @@
     # Disable automatic HTTPS since TLS is terminated by external load balancer
     auto_https off
     
-    # Trust all private IP ranges for X-Forwarded-* headers
-    # This is necessary when behind a load balancer (Dokploy/Traefik) that terminates TLS
-    servers {
-        trusted_proxies static private_ranges
-    }
-    
     # Enable admin API for dynamic config reloads
     # Binds to all interfaces within container, but port 2019 is NOT exposed
     # externally (only ports 80/443 are in docker-compose), so this is safe.
@@ -26,16 +20,13 @@ import /etc/caddy/sites.d/*.caddy
 # Default server - handles studio routes and fallback
 # Only listen on :80 - TLS is handled by external load balancer
 :80 {
-    # Redirect /vivd-studio to /vivd-studio/ (required for SPA routing)
-    redir /vivd-studio /vivd-studio/ permanent
-
     # Vivd Studio API routes - proxy to backend
     handle /vivd-studio/api/* {
         reverse_proxy backend:3000
     }
 
-    # Vivd Studio frontend - proxy to frontend container
-    handle /vivd-studio/* {
+    # Vivd Studio frontend - proxy to frontend container (handles /vivd-studio and /vivd-studio/*)
+    handle /vivd-studio* {
         reverse_proxy frontend:80
     }
 
