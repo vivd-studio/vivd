@@ -6,52 +6,30 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EmptyStatePrompt } from "./EmptyStatePrompt";
 import { ElementRefPill, parseElementRef } from "./SelectedElementPill";
+import { useChatContext } from "./ChatContext";
 
-interface Message {
-  id?: string;
-  role: "user" | "agent";
-  content: string;
-  parts?: any[];
-}
+export function MessageList() {
+  const {
+    messages,
+    isThinking,
+    isLoading,
+    handleRevert,
+    handleUnrevert,
+    isReverted,
+    streamingParts,
+    setInput,
+    selectorMode,
+    setSelectorMode,
+    selectorModeAvailable,
+    input,
+    handleSend,
+    attachedElement,
+    setAttachedElement,
+  } = useChatContext();
 
-interface MessageListProps {
-  messages: Message[];
-  isThinking: boolean;
-  isLoading: boolean;
-  onRevert?: (messageId: string) => void;
-  onRestore?: () => void;
-  isReverted?: boolean;
-  streamingParts?: any[];
-  onSuggestionClick?: (suggestion: string) => void;
-  onEnterSelectorMode?: () => void;
-  selectorModeAvailable?: boolean;
-  selectorMode?: boolean;
-  // Input props for empty state
-  input?: string;
-  setInput?: (value: string) => void;
-  onSend?: () => void;
-  attachedElement?: { selector: string; description: string } | null;
-  onRemoveElement?: () => void;
-}
+  const onSuggestionClick = (suggestion: string) => setInput(suggestion);
+  const onEnterSelectorMode = () => setSelectorMode?.(!selectorMode);
 
-export function MessageList({
-  messages,
-  isThinking,
-  isLoading,
-  onRevert,
-  onRestore,
-  isReverted,
-  streamingParts,
-  onSuggestionClick,
-  onEnterSelectorMode,
-  selectorModeAvailable = false,
-  selectorMode = false,
-  input,
-  setInput,
-  onSend,
-  attachedElement,
-  onRemoveElement,
-}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -70,10 +48,10 @@ export function MessageList({
             selectorMode={selectorMode}
             input={input}
             setInput={setInput}
-            onSend={onSend}
+            onSend={handleSend}
             isLoading={isLoading}
             attachedElement={attachedElement}
-            onRemoveElement={onRemoveElement}
+            onRemoveElement={() => setAttachedElement(null)}
           />
         )}
         {messages.map((msg, i) => {
@@ -92,12 +70,12 @@ export function MessageList({
               }`}
             >
               {/* Revert button above user messages - backend handles finding assistant messages */}
-              {isUser && msg.id && onRevert && (
+              {isUser && msg.id && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
-                  onClick={() => onRevert(msg.id!)}
+                  onClick={() => handleRevert(msg.id!)}
                 >
                   <Undo2 className="w-3 h-3 mr-1" />
                   Revert to before this
@@ -205,12 +183,12 @@ export function MessageList({
         )}
 
         {/* Restore button when session is reverted */}
-        {isReverted && onRestore && (
+        {isReverted && (
           <div className="flex justify-center py-4">
             <Button
               variant="outline"
               size="sm"
-              onClick={onRestore}
+              onClick={handleUnrevert}
               className="text-sm"
             >
               <Undo2 className="w-4 h-4 mr-2" />

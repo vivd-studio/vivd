@@ -1,36 +1,98 @@
-import { Button } from "@/components/ui/button";
-import { trpc } from "@/lib/trpc";
-import { X } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
-import { SessionList } from "./chat/SessionList";
-import { MessageList } from "./chat/MessageList";
-import { ElementSelector } from "./chat/ElementSelector";
 import {
-  SelectedElementPill,
-  formatMessageWithSelector,
-} from "./chat/SelectedElementPill";
-import { usePreview } from "./preview/PreviewContext";
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+import { trpc } from "@/lib/trpc";
+import { usePreview } from "../preview/PreviewContext";
+import { formatMessageWithSelector } from "./SelectedElementPill";
 
-interface ChatPanelProps {
-  projectSlug: string;
-  version?: number;
-  onTaskComplete?: () => void;
-  onClose?: () => void;
-}
-
-interface Message {
+// Types
+export interface Message {
   id?: string;
   role: "user" | "agent";
   content: string;
   parts?: any[];
 }
 
-export function ChatPanel({
+interface Session {
+  id: string;
+  revert?: { messageID: string };
+}
+
+interface AttachedElement {
+  selector: string;
+  description: string;
+}
+
+interface ChatContextValue {
+  // Project info
+  projectSlug: string;
+  version?: number;
+
+  // Session state
+  sessions: Session[];
+  selectedSessionId: string | null;
+  setSelectedSessionId: (id: string | null) => void;
+
+  // Messages
+  messages: Message[];
+
+  // Streaming state
+  isStreaming: boolean;
+  isWaiting: boolean;
+  isThinking: boolean;
+  streamingParts: any[];
+
+  // Input state
+  input: string;
+  setInput: (value: string) => void;
+  attachedElement: AttachedElement | null;
+  setAttachedElement: (element: AttachedElement | null) => void;
+
+  // Element selector
+  selectorMode: boolean;
+  setSelectorMode: ((mode: boolean) => void) | undefined;
+  selectorModeAvailable: boolean;
+
+  // Derived state
+  isReverted: boolean;
+  isLoading: boolean;
+
+  // Actions
+  handleSend: () => void;
+  handleNewSession: () => void;
+  handleDeleteSession: (e: React.MouseEvent, sessionId: string) => void;
+  handleRevert: (messageId: string) => void;
+  handleUnrevert: () => void;
+}
+
+const ChatContext = createContext<ChatContextValue | null>(null);
+
+export function useChatContext() {
+  const context = useContext(ChatContext);
+  if (!context) {
+    throw new Error("useChatContext must be used within a ChatProvider");
+  }
+  return context;
+}
+
+interface ChatProviderProps {
+  children: ReactNode;
+  projectSlug: string;
+  version?: number;
+  onTaskComplete?: () => void;
+}
+
+export function ChatProvider({
+  children,
   projectSlug,
   version,
   onTaskComplete,
-  onClose,
-}: ChatPanelProps) {
+}: ChatProviderProps) {
   // Access PreviewContext for element selection (may not be available outside preview page)
   let previewContext: ReturnType<typeof usePreview> | null = null;
   try {
@@ -45,16 +107,12 @@ export function ChatPanel({
   const clearSelectedElement = previewContext?.clearSelectedElement;
 
   // Local state for attached element (shown as pill)
-  const [attachedElement, setAttachedElement] = useState<{
-    selector: string;
-    description: string;
-  } | null>(null);
+  const [attachedElement, setAttachedElement] =
+    useState<AttachedElement | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [sessions, setSessions] = useState<
-    { id: string; revert?: { messageID: string } }[]
-  >([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
@@ -86,13 +144,13 @@ export function ChatPanel({
     if (isStreaming || isWaiting) {
       inactivityTimerRef.current = setTimeout(() => {
         console.warn(
-          `[ChatSidepanel] No events received for ${
+          `[ChatContext] No events received for ${
             INACTIVITY_TIMEOUT_MS / 1000
           }s while waiting/streaming. Last event at: ${new Date(
             lastEventTimeRef.current
           ).toISOString()}`
         );
-        console.warn("[ChatSidepanel] Auto-recovering from stuck state...");
+        console.warn("[ChatContext] Auto-recovering from stuck state...");
         // Auto-recover: reset streaming state and refetch messages
         setIsStreaming(false);
         setIsWaiting(false);
@@ -147,7 +205,6 @@ export function ChatPanel({
   }, [sessionsData]);
 
   // Poll for messages of the selected session
-  // Only poll when NOT streaming, and use a slower interval
   const { data: sessionMessages, refetch: refetchMessages } =
     trpc.agent.getSessionContent.useQuery(
       {
@@ -166,9 +223,6 @@ export function ChatPanel({
     {
       enabled: !!selectedSessionId,
       onData: (trackedEvent) => {
-        // tracked() wraps the event - access the actual data
-        // trackedEvent.data is the AgentEvent object
-        // AgentEvent.data is the specific event payload (AgentEventData)
         const event = trackedEvent.data;
         const innerData = event.data;
 
@@ -178,9 +232,7 @@ export function ChatPanel({
         switch (innerData.kind) {
           case "thinking.started":
             setIsStreaming(true);
-            setIsWaiting(false); // Stop waiting state once streaming starts
-            // Don't clear parts here! This event fires for every new thought block.
-            // keeping history of the current stream.
+            setIsWaiting(false);
             break;
 
           case "reasoning.delta":
@@ -245,7 +297,7 @@ export function ChatPanel({
               setStreamingParts((prev) => [
                 ...prev,
                 {
-                  id: toolId, // Use toolId as partId for tools
+                  id: toolId,
                   type: "tool",
                   tool,
                   title,
@@ -282,7 +334,6 @@ export function ChatPanel({
             setStreamingParts([]);
             isWaitingForAgent.current = false;
             setIsWaiting(false);
-            // Final refetch to get complete message content
             refetchMessages();
             onTaskComplete?.();
             break;
@@ -290,7 +341,6 @@ export function ChatPanel({
       },
       onError: (err) => {
         console.error("[SessionEvents] Subscription error:", err);
-        // Fallback to polling on subscription error
         setIsStreaming(false);
         setIsWaiting(false);
       },
@@ -326,13 +376,10 @@ export function ChatPanel({
       if (data.sessionId) {
         setSelectedSessionId(data.sessionId);
         refetchSessions();
-        // Set waiting flag to enable subscription and thinking state
         isWaitingForAgent.current = true;
       }
-      // Note: We don't call onTaskComplete here anymore, we wait for session.completed event
     },
     onError: (error) => {
-      // If runTask fails immediately (network error to backend)
       setMessages((prev) => [
         ...prev,
         { role: "agent", content: `Error: ${error.message}` },
@@ -346,8 +393,6 @@ export function ChatPanel({
     onSuccess: () => {
       refetchSessions();
       if (sessions.length > 0) {
-        // If the deleted session was selected, deselect it or select another one
-        // Note: Logic to handle selected session update can be improved
         if (selectedSessionId) {
           setSelectedSessionId(null);
           setMessages([]);
@@ -376,18 +421,14 @@ export function ChatPanel({
 
   const revertMutation = trpc.agent.revertToMessage.useMutation({
     onSuccess: () => {
-      // Refetch sessions to get updated revert state
       refetchSessions();
-      // Refresh the iframe preview
       onTaskComplete?.();
     },
   });
 
   const unrevertMutation = trpc.agent.unrevertSession.useMutation({
     onSuccess: () => {
-      // Refetch sessions to get updated revert state
       refetchSessions();
-      // Refresh the iframe preview
       onTaskComplete?.();
     },
   });
@@ -416,30 +457,23 @@ export function ChatPanel({
   };
 
   const handleSend = () => {
-    // Allow sending if there's input OR an attached element
     if ((!input.trim() && !attachedElement) || runTaskMutation.isPending)
       return;
 
-    // Build the task message, including selector if element is attached
     let task = input.trim() || "I want to change this element";
     if (attachedElement) {
       task = formatMessageWithSelector(task, attachedElement.selector);
     }
 
     setInput("");
-    setAttachedElement(null); // Clear attached element after sending
+    setAttachedElement(null);
 
-    // Set waiting flag immediately
     isWaitingForAgent.current = true;
     setIsWaiting(true);
 
-    // Start inactivity timer for stuck state detection
     resetInactivityTimer();
-
-    // Clear previous streaming parts for new request
     setStreamingParts([]);
 
-    // Log the sent prompt
     console.log("[Vivd] Sending prompt:", task);
 
     if (selectedSessionId) {
@@ -451,7 +485,6 @@ export function ChatPanel({
         version,
       });
     } else {
-      // New session
       setMessages((prev) => [...prev, { role: "user", content: task }]);
       runTaskMutation.mutate({ projectSlug, task, version });
     }
@@ -462,125 +495,32 @@ export function ChatPanel({
     setMessages([]);
   };
 
-  return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="px-6 py-4 border-b flex justify-between items-center bg-background z-10">
-        <div className="flex flex-col gap-2 w-full">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Agent Chat</h2>
-            {onClose && (
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <span className="sr-only">Close</span>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-          <SessionList
-            sessions={sessions}
-            selectedSessionId={selectedSessionId}
-            onSelectSession={setSelectedSessionId}
-            onDeleteSession={handleDeleteSession}
-            onNewSession={handleNewSession}
-          />
-        </div>
-      </div>
+  const value: ChatContextValue = {
+    projectSlug,
+    version,
+    sessions,
+    selectedSessionId,
+    setSelectedSessionId,
+    messages,
+    isStreaming,
+    isWaiting,
+    isThinking,
+    streamingParts,
+    input,
+    setInput,
+    attachedElement,
+    setAttachedElement,
+    selectorMode,
+    setSelectorMode,
+    selectorModeAvailable: !!setSelectorMode,
+    isReverted,
+    isLoading: runTaskMutation.isPending,
+    handleSend,
+    handleNewSession,
+    handleDeleteSession,
+    handleRevert,
+    handleUnrevert,
+  };
 
-      <MessageList
-        messages={messages}
-        isThinking={isThinking}
-        isLoading={runTaskMutation.isPending}
-        onRevert={handleRevert}
-        onRestore={handleUnrevert}
-        isReverted={isReverted}
-        // Pass streaming state
-        streamingParts={streamingParts}
-        // Element selector integration
-        onSuggestionClick={(suggestion) => setInput(suggestion)}
-        onEnterSelectorMode={() => setSelectorMode?.(!selectorMode)}
-        selectorModeAvailable={!!setSelectorMode}
-        selectorMode={selectorMode}
-        // Input props for empty state
-        input={input}
-        setInput={setInput}
-        onSend={handleSend}
-        attachedElement={attachedElement}
-        onRemoveElement={() => setAttachedElement(null)}
-      />
-
-      {/* Only show bottom input when there are messages (otherwise input is in EmptyStatePrompt) */}
-      {messages.length > 0 && (
-        <div className="p-4 border-t mt-auto">
-          {/* Show attached element pill above input */}
-          {attachedElement && (
-            <div className="mb-2">
-              <SelectedElementPill
-                selector={attachedElement.selector}
-                description={attachedElement.description}
-                onRemove={() => setAttachedElement(null)}
-              />
-            </div>
-          )}
-          <div className="flex gap-2 items-end">
-            {setSelectorMode && (
-              <ElementSelector
-                isActive={selectorMode}
-                onToggle={() => setSelectorMode(!selectorMode)}
-                disabled={runTaskMutation.isPending}
-              />
-            )}
-            <div className="flex-1 flex gap-2 items-end">
-              <textarea
-                className="flex min-h-[40px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none max-h-[200px]"
-                placeholder={
-                  selectorMode
-                    ? "Click an element in the preview..."
-                    : attachedElement
-                    ? "Describe what you want to change..."
-                    : "Type a task..."
-                }
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                disabled={runTaskMutation.isPending}
-                rows={1}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={
-                  runTaskMutation.isPending ||
-                  (!input.trim() && !attachedElement)
-                }
-                size="icon"
-                className="h-10 w-10 shrink-0"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="m22 2-7 20-4-9-9-4Z" />
-                  <path d="M22 2 11 13" />
-                </svg>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

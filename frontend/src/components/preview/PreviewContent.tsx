@@ -1,4 +1,4 @@
-import { ChatPanel } from "../ChatSidepanel";
+import { ChatPanel } from "../chat/ChatPanel";
 import { AssetExplorer } from "../asset-explorer";
 import { ResizeHandle } from "../ResizeHandle";
 import { usePreview } from "./PreviewContext";
