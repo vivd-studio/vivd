@@ -34,7 +34,14 @@ export function MessageList() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only scroll when there are messages - don't scroll on empty session
+    if (
+      messages.length > 0 ||
+      isThinking ||
+      (streamingParts && streamingParts.length > 0)
+    ) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, isThinking, streamingParts]);
 
   return (
@@ -130,14 +137,14 @@ export function MessageList() {
                 })()
               ) : (
                 /* Agent Message Construction - Split into parts */
-                <div className="flex flex-col gap-2 max-w-[90%] w-full items-start">
+                <div className="flex flex-col gap-2 max-w-[90%] w-full items-start overflow-hidden">
                   {msg.parts && msg.parts.length > 0 ? (
                     msg.parts.map((part: any, pIndex: number) => (
                       <MessagePartBubble key={pIndex} part={part} />
                     ))
                   ) : (
                     /* Fallback for legacy messages */
-                    <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
+                    <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word overflow-x-auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {msg.content}
                       </ReactMarkdown>
@@ -256,7 +263,7 @@ function MessagePartBubble({
   }
   if (part.type === "text") {
     return (
-      <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word">
+      <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word overflow-x-auto">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
       </div>
     );

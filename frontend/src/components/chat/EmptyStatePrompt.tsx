@@ -46,11 +46,11 @@ export function EmptyStatePrompt({
   }, [isLoading, attachedElement]);
 
   return (
-    <div className="flex flex-col items-center text-center px-6 py-12 h-full">
+    <div className="flex flex-col items-center text-center px-6 py-8 h-full">
       {/* Header */}
-      <div className="mb-8">
-        <div className="w-14 h-14 rounded-full bg-linear-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-4 mx-auto">
-          <Sparkles className="w-7 h-7 text-amber-500" />
+      <div className="mb-6">
+        <div className="w-12 h-12 rounded-full bg-linear-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-3 mx-auto">
+          <Sparkles className="w-6 h-6 text-amber-500" />
         </div>
         <h3 className="text-lg font-semibold mb-2">👋 Hi! How can I help?</h3>
         <p className="text-sm text-muted-foreground max-w-sm">
