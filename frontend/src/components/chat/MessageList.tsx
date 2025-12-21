@@ -156,8 +156,8 @@ export function MessageList() {
           );
         })}
 
-        {/* Streaming / Loading State */}
-        {(isLoading || isThinking) && (
+        {/* Streaming / Loading State - only show when we have messages (not in empty state) */}
+        {messages.length > 0 && (isLoading || isThinking) && (
           <div className="flex justify-start w-full max-w-[90%]">
             <div className="flex flex-col gap-2 w-full items-start">
               {/* Immediate Feedback: Show a fake active reasoning block if waiting but no parts yet */}

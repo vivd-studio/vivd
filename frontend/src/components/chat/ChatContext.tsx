@@ -493,6 +493,10 @@ export function ChatProvider({
   const handleNewSession = () => {
     setSelectedSessionId(null);
     setMessages([]);
+    // Clear streaming state to prevent previous session data from appearing
+    setIsStreaming(false);
+    setIsWaiting(false);
+    setStreamingParts([]);
   };
 
   const value: ChatContextValue = {
