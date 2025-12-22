@@ -20,6 +20,11 @@ export interface Message {
 
 interface Session {
   id: string;
+  title?: string;
+  time?: {
+    created?: number;
+    updated?: number;
+  };
   revert?: { messageID: string };
 }
 
@@ -156,6 +161,8 @@ export function ChatProvider({
     null
   );
   const pendingSessionIdRef = useRef<string | null>(null);
+  const autoSelectLockedRef = useRef(false);
+  const hasAutoSelectedRunningSessionRef = useRef(false);
 
   // Derive isReverted from session data instead of local state
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
@@ -209,6 +216,8 @@ export function ChatProvider({
     setMessages([]);
     setIsStreaming(false);
     setStreamingParts([]);
+    autoSelectLockedRef.current = false;
+    hasAutoSelectedRunningSessionRef.current = false;
   }, [projectSlug]);
 
   useEffect(() => {
@@ -247,10 +256,43 @@ export function ChatProvider({
 
   useEffect(() => {
     if (sessionsData) {
-      // @ts-ignore
       setSessions(sessionsData);
     }
   }, [sessionsData]);
+
+  useEffect(() => {
+    if (
+      selectedSessionId ||
+      autoSelectLockedRef.current ||
+      hasAutoSelectedRunningSessionRef.current
+    ) {
+      return;
+    }
+
+    if (!sessionStatuses || sessions.length === 0) {
+      return;
+    }
+
+    const activeSessions = sessions.filter((session) => {
+      const status = sessionStatuses?.[session.id];
+      return status && status.type !== "idle";
+    });
+
+    if (activeSessions.length === 0) {
+      return;
+    }
+
+    const getSessionTimestamp = (session: Session) =>
+      session.time?.updated ?? session.time?.created ?? 0;
+    const mostRecentSession = activeSessions.reduce((latest, session) => {
+      return getSessionTimestamp(session) > getSessionTimestamp(latest)
+        ? session
+        : latest;
+    }, activeSessions[0]);
+
+    hasAutoSelectedRunningSessionRef.current = true;
+    setSelectedSessionId(mostRecentSession.id);
+  }, [selectedSessionId, sessionStatuses, sessions]);
 
   // Poll for messages of the selected session
   const { data: sessionMessages, refetch: refetchMessages } =
@@ -665,6 +707,7 @@ export function ChatProvider({
   };
 
   const handleNewSession = () => {
+    autoSelectLockedRef.current = true;
     pendingSessionIdRef.current = null;
     setSelectedSessionId(null);
     setMessages([]);
@@ -696,7 +739,10 @@ export function ChatProvider({
     version,
     sessions,
     selectedSessionId,
-    setSelectedSessionId,
+    setSelectedSessionId: (sessionId) => {
+      autoSelectLockedRef.current = true;
+      setSelectedSessionId(sessionId);
+    },
     messages,
     isStreaming,
     isWaiting,
