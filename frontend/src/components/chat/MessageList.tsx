@@ -20,6 +20,7 @@ export function MessageList() {
     messages,
     isThinking,
     isStreaming,
+    isWaiting,
     isLoading,
     handleRevert,
     handleUnrevert,
@@ -195,13 +196,6 @@ export function MessageList() {
         {messages.length > 0 && (isLoading || isThinking) && (
           <div className="flex justify-start w-full max-w-[90%]">
             <div className="flex flex-col gap-2 w-full items-start">
-              {/* Immediate Feedback: Show a fake active reasoning block only when actually streaming and no reasoning parts exist yet */}
-              {isStreaming &&
-                (!streamingParts ||
-                  !streamingParts.some((p) => p.type === "reasoning")) && (
-                  <ThinkingBlock text="" isStreaming={true} label="Thought" />
-                )}
-
               {/* Streaming Parts */}
               {streamingParts &&
                 streamingParts.map((part, idx) => {
@@ -218,7 +212,7 @@ export function MessageList() {
 
               {/* Status indicator with animated dots */}
               <StatusIndicator
-                isWaiting={!isStreaming}
+                isWaiting={isWaiting}
                 streamingParts={streamingParts}
               />
             </div>

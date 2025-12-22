@@ -15,6 +15,7 @@ import {
   type SessionCompletedData,
   type ThinkingStartedData,
   type SessionErrorData,
+  type SessionStatus,
 } from "./eventEmitter";
 
 export { useEvents };
@@ -64,9 +65,11 @@ export async function runTask(
   });
 
   const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
+  agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
 
   // We start the event stream but don't wait for it to finish
   const { start, stop } = useEvents(client, {
+    sessionId: currentSessionId,
     onStartThinking: () => {
       console.log(`[OpenCode] Thinking...`);
       // Emit thinking started event to frontend
@@ -174,13 +177,18 @@ export async function runTask(
     },
   });
 
-  // Start listening to events in the background
-  start();
+  try {
+    // Ensure the event stream is connected before sending the prompt
+    await start();
+  } catch (error) {
+    console.error("[OpenCode] Failed to start event stream:", error);
+  }
 
   try {
     await sendPromptAsync(client, currentSessionId, cwd, task);
   } catch (error) {
     console.error(`[OpenCode] Task Error:`, error);
+    agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
     stop();
   }
 
@@ -348,6 +356,99 @@ export async function unrevertSession(sessionId: string, directory?: string) {
  * OpenCode uses git under the hood, so reverting the first assistant message
  * after the user message will revert all changes from that task.
  */
+/**
+ * Get the status of all sessions.
+ * Returns a map of sessionId -> SessionStatus where status can be:
+ * - { type: "idle" } - Session is not active
+ * - { type: "busy" } - Session is actively processing
+ * - { type: "retry", attempt, message, next } - Retrying after error
+ */
+export async function getSessionsStatus(directory?: string) {
+  if (!serverUrl) {
+    throw new Error("OpenCode server not initialized");
+  }
+  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+  const sessions = await listSessions(directory);
+  const result = await client.session.status({
+    query: directory ? { directory } : undefined,
+  });
+  console.log(
+    "[getSessionsStatus] Raw result from OpenCode:",
+    JSON.stringify(result, null, 2)
+  );
+  if (result.error) throw new Error(JSON.stringify(result.error));
+
+  const normalizedStatuses = normalizeSessionStatuses(
+    result.data,
+    sessions
+  );
+  const emitterStatuses = agentEventEmitter.getSessionStatuses();
+
+  const statusMap: Record<string, SessionStatus> = {};
+  for (const session of sessions) {
+    statusMap[session.id] = { type: "idle" };
+  }
+
+  for (const [sessionId, status] of Object.entries(normalizedStatuses)) {
+    if (sessionId in statusMap) {
+      statusMap[sessionId] = status;
+    }
+  }
+
+  for (const [sessionId, status] of Object.entries(emitterStatuses)) {
+    if (sessionId in statusMap) {
+      statusMap[sessionId] = status;
+    }
+  }
+
+  return statusMap;
+}
+
+function normalizeSessionStatuses(
+  data: unknown,
+  sessions: { id: string }[]
+): Record<string, SessionStatus> {
+  if (!data) return {};
+
+  if (Array.isArray(data)) {
+    const mapped: Record<string, SessionStatus> = {};
+    for (const entry of data) {
+      if (!entry || typeof entry !== "object") continue;
+      const record = entry as Record<string, any>;
+      const id = record.sessionID ?? record.sessionId ?? record.id;
+      const status = (record.status ?? record) as SessionStatus;
+      if (id && status && typeof status === "object" && "type" in status) {
+        mapped[id] = status;
+      }
+    }
+
+    if (Object.keys(mapped).length > 0) {
+      return mapped;
+    }
+
+    if (data.length === 1 && sessions.length === 1) {
+      const onlyStatus = data[0] as SessionStatus;
+      if (onlyStatus && typeof onlyStatus === "object" && "type" in onlyStatus) {
+        return { [sessions[0].id]: onlyStatus };
+      }
+    }
+
+    return {};
+  }
+
+  if (data instanceof Map) {
+    return Object.fromEntries(
+      Array.from(data.entries())
+    ) as Record<string, SessionStatus>;
+  }
+
+  if (typeof data === "object") {
+    return data as Record<string, SessionStatus>;
+  }
+
+  return {};
+}
+
 export async function revertToUserMessage(
   sessionId: string,
   userMessageId: string,

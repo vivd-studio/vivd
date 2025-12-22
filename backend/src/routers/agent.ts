@@ -10,6 +10,7 @@ import {
   revertToUserMessage,
   unrevertSession,
   agentEventEmitter,
+  getSessionsStatus,
 } from "../opencode";
 import {
   getProjectDir,
@@ -99,6 +100,46 @@ export const agentRouter = router({
       throw new Error(error.message || "Failed to list projects");
     }
   }),
+
+  /**
+   * Get the status of all sessions.
+   * Returns a map of sessionId -> SessionStatus (idle/busy/retry)
+   * Used by frontend to determine if a session is actively processing.
+   */
+  getSessionsStatus: adminProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      try {
+        // Compute the directory for this project/version
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        let directory: string | undefined;
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
+        }
+
+        console.log(
+          "[getSessionsStatus] Fetching status for directory:",
+          directory
+        );
+        const statuses = await getSessionsStatus(directory);
+        console.log(
+          "[getSessionsStatus] Statuses:",
+          JSON.stringify(statuses, null, 2)
+        );
+        return statuses;
+      } catch (error: any) {
+        console.error("Failed to get sessions status:", error);
+        throw new Error(error.message || "Failed to get sessions status");
+      }
+    }),
 
   getSessionContent: adminProcedure
     .input(z.object({ sessionId: z.string() }))
@@ -238,15 +279,14 @@ export const agentRouter = router({
       // Use the event emitter's async generator to yield events
       const eventStream = agentEventEmitter.createSessionStream(
         input.sessionId,
-        signal
+        signal,
+        input.lastEventId
       );
 
       try {
         for await (const event of eventStream) {
           // Use tracked() to enable resumable streams with event IDs
-          // The event ID is based on timestamp + type for uniqueness
-          const eventId = `${event.timestamp}-${event.type}`;
-          yield tracked(eventId, event);
+          yield tracked(event.eventId, event);
         }
       } finally {
         console.log(

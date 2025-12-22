@@ -13,6 +13,7 @@ export interface ToolCall {
 }
 
 export interface EventCallbacks {
+  sessionId?: string;
   onEvent?: (event: any) => void;
   onStartThinking?: () => void;
   onReasoning?: (content: string, partId: string) => void;
@@ -65,6 +66,7 @@ export function useEvents(
 
   const start = async () => {
     const events = await client.event.subscribe();
+    const filterSessionId = callbacks.sessionId;
 
     // Start the inactivity timer
     resetInactivityTimer();
@@ -82,6 +84,13 @@ export function useEvents(
         for await (const event of events.stream) {
           eventCount++;
           if (!isActive) break;
+
+          if (filterSessionId) {
+            const eventSessionId = getEventSessionId(event);
+            if (!eventSessionId || eventSessionId !== filterSessionId) {
+              continue;
+            }
+          }
 
           // Track latest event for debugging
           lastEvent = event;
@@ -223,4 +232,14 @@ export function useEvents(
       }
     },
   };
+}
+
+function getEventSessionId(event: any): string | undefined {
+  const props = event?.properties;
+  if (!props) return undefined;
+  if (props.sessionID) return props.sessionID as string;
+  if (props.sessionId) return props.sessionId as string;
+  if (props.info?.sessionID) return props.info.sessionID as string;
+  if (props.part?.sessionID) return props.part.sessionID as string;
+  return undefined;
 }

@@ -40,6 +40,7 @@ export interface SessionDebugState {
   lastEventTime: string | null;
   lastEventType: string | null;
   sessionError: SessionError | null;
+  sessionStatus: string | null; // "idle" | "busy" | "retry" from backend
 }
 
 export interface SessionError {
@@ -147,6 +148,7 @@ export function ChatProvider({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
+  const pendingSessionIdRef = useRef<string | null>(null);
 
   // Derive isReverted from session data instead of local state
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
@@ -181,12 +183,49 @@ export function ChatProvider({
       }
     );
 
+  // Poll for session statuses - this is the source of truth for whether a session is active
+  const { data: sessionStatuses } = trpc.agent.getSessionsStatus.useQuery(
+    { projectSlug, version },
+    {
+      // Poll more frequently when we think something is active
+      refetchInterval: isWaiting || isStreaming ? 2000 : 10000,
+    }
+  );
+
+  // Get current session's status from polled data
+  const currentSessionStatus = selectedSessionId
+    ? sessionStatuses?.[selectedSessionId]
+    : undefined;
+
   useEffect(() => {
     setSelectedSessionId(null);
     setMessages([]);
     setIsStreaming(false);
     setStreamingParts([]);
   }, [projectSlug]);
+
+  useEffect(() => {
+    const isPendingSession = pendingSessionIdRef.current === selectedSessionId;
+
+    setStreamingParts([]);
+    setIsStreaming(false);
+    setSessionError(null);
+    setSseConnected(false);
+    setLastEventTime(null);
+    setLastEventType(null);
+
+    if (isPendingSession) {
+      pendingSessionIdRef.current = null;
+      if (isWaitingForAgent.current) {
+        setIsWaiting(true);
+      }
+      return;
+    }
+
+    setMessages([]);
+    setIsWaiting(false);
+    isWaitingForAgent.current = false;
+  }, [selectedSessionId]);
 
   // Handle element selection - attach element and clear from context
   useEffect(() => {
@@ -220,6 +259,56 @@ export function ChatProvider({
       }
     );
 
+  // Sync local streaming state with the polled session status (source of truth)
+  // This handles cases where SSE events were missed (reconnection, session switch, page refresh)
+  useEffect(() => {
+    if (!currentSessionStatus) return;
+
+    if (currentSessionStatus.type === "idle") {
+      // Session is definitely done - clear all streaming state if it was stuck
+      if (isWaitingForAgent.current && !isStreaming) {
+        if (!isWaiting) {
+          setIsWaiting(true);
+        }
+        return;
+      }
+
+      if (isStreaming || isWaiting) {
+        console.log(
+          "[ChatContext] Session status is idle but was streaming/waiting - resetting state"
+        );
+        setIsStreaming(false);
+        setIsWaiting(false);
+        isWaitingForAgent.current = false;
+        setStreamingParts([]);
+        refetchMessages();
+      }
+    } else if (currentSessionStatus.type === "busy") {
+      // Session is active - ensure we're in streaming state
+      if (!isStreaming && !isWaiting) {
+        console.log(
+          "[ChatContext] Session status is busy but idle locally - marking waiting state"
+        );
+        setIsWaiting(true);
+      }
+    } else if (currentSessionStatus.type === "retry") {
+      // Session is in retry state (quota error, etc.)
+      console.log(
+        "[ChatContext] Session status is retry:",
+        currentSessionStatus
+      );
+      setSessionError({
+        type: "retry",
+        message: currentSessionStatus.message || "Session retrying",
+        attempt: currentSessionStatus.attempt,
+        nextRetryAt: currentSessionStatus.next,
+      });
+      setIsStreaming(false);
+      setIsWaiting(false);
+      isWaitingForAgent.current = false;
+    }
+  }, [currentSessionStatus, isStreaming, isWaiting, refetchMessages]);
+
   // SSE subscription for real-time events
   trpc.agent.sessionEvents.useSubscription(
     {
@@ -243,8 +332,8 @@ export function ChatProvider({
           case "thinking.started":
             // Clear any stale streaming parts from previous turns
             setStreamingParts([]);
-            setIsStreaming(true);
-            setIsWaiting(false);
+            setIsStreaming(false);
+            setIsWaiting(true);
             break;
 
           case "reasoning.delta":
@@ -307,6 +396,8 @@ export function ChatProvider({
 
           case "tool.started":
             if ("toolId" in innerData && "tool" in innerData) {
+              setIsStreaming(true);
+              setIsWaiting(false);
               const toolId = innerData.toolId as string;
               const tool = innerData.tool as string;
               const title =
@@ -447,7 +538,10 @@ export function ChatProvider({
   const runTaskMutation = trpc.agent.runTask.useMutation({
     onSuccess: (data) => {
       if (data.sessionId) {
-        setSelectedSessionId(data.sessionId);
+        if (data.sessionId !== selectedSessionId) {
+          pendingSessionIdRef.current = data.sessionId;
+          setSelectedSessionId(data.sessionId);
+        }
         refetchSessions();
         isWaitingForAgent.current = true;
       }
@@ -542,6 +636,7 @@ export function ChatProvider({
     setAttachedElement(null);
 
     isWaitingForAgent.current = true;
+    setIsStreaming(false);
     setIsWaiting(true);
 
     setStreamingParts([]);
@@ -563,6 +658,7 @@ export function ChatProvider({
   };
 
   const handleNewSession = () => {
+    pendingSessionIdRef.current = null;
     setSelectedSessionId(null);
     setMessages([]);
     // Clear streaming state to prevent previous session data from appearing
@@ -585,6 +681,7 @@ export function ChatProvider({
     lastEventTime,
     lastEventType,
     sessionError,
+    sessionStatus: currentSessionStatus?.type ?? null,
   };
 
   const value: ChatContextValue = {

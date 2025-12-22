@@ -12,12 +12,22 @@ export type AgentEventType =
   | "session.completed"
   | "session.error";
 
-export interface AgentEvent {
+export interface AgentEventInput {
   type: AgentEventType;
   sessionId: string;
   timestamp: number;
   data: AgentEventData;
 }
+
+export interface AgentEvent extends AgentEventInput {
+  eventId: string;
+  sequence: number;
+}
+
+export type SessionStatus =
+  | { type: "idle" }
+  | { type: "busy" }
+  | { type: "retry"; attempt?: number; message?: string; next?: number };
 
 export type AgentEventData =
   | ThinkingStartedData
@@ -93,6 +103,8 @@ class AgentEventEmitter extends EventEmitter {
   private static instance: AgentEventEmitter;
   // Buffer events per session for late subscribers
   private sessionBuffers: Map<string, AgentEvent[]> = new Map();
+  private sessionSequences: Map<string, number> = new Map();
+  private sessionStatuses: Map<string, SessionStatus> = new Map();
   // Track which sessions are complete to know when to clean up
   private completedSessions: Set<string> = new Set();
   // Cleanup timeout for completed sessions (5 minutes)
@@ -115,12 +127,22 @@ class AgentEventEmitter extends EventEmitter {
    * Emit an event for a specific session.
    * Also buffers the event for late subscribers.
    */
-  emitSessionEvent(sessionId: string, event: AgentEvent): void {
+  emitSessionEvent(sessionId: string, event: AgentEventInput): void {
+    const sequence = this.nextSequence(sessionId);
+    const eventId = this.getEventId(sessionId, sequence);
+    const eventWithMeta: AgentEvent = {
+      ...event,
+      eventId,
+      sequence,
+    };
+
+    this.updateSessionStatus(sessionId, eventWithMeta);
+
     // Buffer the event
     if (!this.sessionBuffers.has(sessionId)) {
       this.sessionBuffers.set(sessionId, []);
     }
-    this.sessionBuffers.get(sessionId)!.push(event);
+    this.sessionBuffers.get(sessionId)!.push(eventWithMeta);
 
     // Mark session as complete and schedule cleanup
     if (event.type === "session.completed") {
@@ -130,7 +152,7 @@ class AgentEventEmitter extends EventEmitter {
       }, AgentEventEmitter.BUFFER_CLEANUP_DELAY_MS);
     }
 
-    this.emit(`session:${sessionId}`, event);
+    this.emit(`session:${sessionId}`, eventWithMeta);
   }
 
   /**
@@ -177,33 +199,35 @@ class AgentEventEmitter extends EventEmitter {
    */
   async *createSessionStream(
     sessionId: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    lastEventId?: string
   ): AsyncGenerator<AgentEvent, void, unknown> {
     const queue: AgentEvent[] = [];
     let resolve: (() => void) | null = null;
     let isAborted = false;
 
-    // First, replay any buffered events (handles late subscriber race condition)
-    const bufferedEvents = this.getBufferedEvents(sessionId);
-    for (const event of bufferedEvents) {
-      yield event;
-    }
-
     const unsubscribe = this.subscribeToSession(sessionId, (event) => {
-      // Skip events we already yielded from buffer
-      const alreadyYielded = bufferedEvents.some(
-        (e) => e.timestamp === event.timestamp && e.type === event.type
-      );
-      if (alreadyYielded) {
-        return;
-      }
-
       queue.push(event);
       if (resolve) {
         resolve();
         resolve = null;
       }
     });
+
+    // First, replay any buffered events (handles late subscriber race condition)
+    const bufferedEvents = this.getBufferedEvents(sessionId);
+    let startIndex = 0;
+    if (lastEventId) {
+      const lastIndex = bufferedEvents.findIndex(
+        (event) => event.eventId === lastEventId
+      );
+      if (lastIndex >= 0) {
+        startIndex = lastIndex + 1;
+      }
+    }
+    for (const event of bufferedEvents.slice(startIndex)) {
+      yield event;
+    }
 
     const abortHandler = () => {
       isAborted = true;
@@ -238,6 +262,48 @@ class AgentEventEmitter extends EventEmitter {
       signal?.removeEventListener("abort", abortHandler);
     }
   }
+
+  setSessionStatus(sessionId: string, status: SessionStatus): void {
+    if (status.type === "idle") {
+      this.sessionStatuses.delete(sessionId);
+      return;
+    }
+    this.sessionStatuses.set(sessionId, status);
+  }
+
+  getSessionStatuses(): Record<string, SessionStatus> {
+    return Object.fromEntries(this.sessionStatuses.entries());
+  }
+
+  private nextSequence(sessionId: string): number {
+    const next = (this.sessionSequences.get(sessionId) ?? 0) + 1;
+    this.sessionSequences.set(sessionId, next);
+    return next;
+  }
+
+  private getEventId(sessionId: string, sequence: number): string {
+    return `${sessionId}:${sequence}`;
+  }
+
+  private updateSessionStatus(sessionId: string, event: AgentEvent): void {
+    if (event.type === "session.completed") {
+      this.sessionStatuses.delete(sessionId);
+      return;
+    }
+
+    if (event.type === "session.error") {
+      const data = event.data as SessionErrorData;
+      this.sessionStatuses.set(sessionId, {
+        type: "retry",
+        attempt: data.attempt,
+        message: data.message,
+        next: data.nextRetryAt,
+      });
+      return;
+    }
+
+    this.sessionStatuses.set(sessionId, { type: "busy" });
+  }
 }
 
 export const agentEventEmitter = AgentEventEmitter.getInstance();
@@ -249,7 +315,7 @@ export function createAgentEvent(
   sessionId: string,
   type: AgentEventType,
   data: AgentEventData
-): AgentEvent {
+): AgentEventInput {
   return {
     type,
     sessionId,
