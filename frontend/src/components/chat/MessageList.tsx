@@ -1,6 +1,13 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronRight, ChevronDown, Undo2 } from "lucide-react";
+import {
+  Loader2,
+  ChevronRight,
+  ChevronDown,
+  Undo2,
+  AlertTriangle,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,6 +19,7 @@ export function MessageList() {
   const {
     messages,
     isThinking,
+    isStreaming,
     isLoading,
     handleRevert,
     handleUnrevert,
@@ -25,6 +33,8 @@ export function MessageList() {
     handleSend,
     attachedElement,
     setAttachedElement,
+    sessionError,
+    clearSessionError,
   } = useChatContext();
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
@@ -45,8 +55,8 @@ export function MessageList() {
   }, [messages, isThinking, streamingParts]);
 
   return (
-    <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-      <div className="flex flex-col gap-6 pb-4">
+    <ScrollArea className="flex-1" ref={scrollRef}>
+      <div className="flex flex-col gap-6 px-6 py-6">
         {messages.length === 0 && (
           <EmptyStatePrompt
             onSuggestionClick={onSuggestionClick}
@@ -64,6 +74,13 @@ export function MessageList() {
         {messages.map((msg, i) => {
           // Skip empty messages (no content and no parts)
           if (!msg.content && (!msg.parts || msg.parts.length === 0)) {
+            return null;
+          }
+
+          // Skip the last agent message when we're actively streaming
+          // because its parts are being rendered in the streaming area
+          const isLastMessage = i === messages.length - 1;
+          if (isLastMessage && msg.role === "agent" && isStreaming) {
             return null;
           }
 
@@ -160,15 +177,11 @@ export function MessageList() {
         {messages.length > 0 && (isLoading || isThinking) && (
           <div className="flex justify-start w-full max-w-[90%]">
             <div className="flex flex-col gap-2 w-full items-start">
-              {/* Immediate Feedback: Show a fake active reasoning block if waiting but no parts yet */}
-              {isThinking &&
-                (!streamingParts || streamingParts.length === 0) && (
-                  <ThinkingBlock
-                    text=""
-                    isStreaming={true}
-                    defaultOpen={false}
-                    label="Thinking Process"
-                  />
+              {/* Immediate Feedback: Show a fake active reasoning block only when actually streaming and no reasoning parts exist yet */}
+              {isStreaming &&
+                (!streamingParts ||
+                  !streamingParts.some((p) => p.type === "reasoning")) && (
+                  <ThinkingBlock text="" isStreaming={true} label="Thought" />
                 )}
 
               {/* Streaming Parts */}
@@ -181,10 +194,47 @@ export function MessageList() {
                       part={part}
                       isStreaming={true}
                       isLast={isLast}
-                      defaultOpen={false} // Open if it's the active one
                     />
                   );
                 })}
+
+              {/* Status indicator with animated dots */}
+              <StatusIndicator
+                isWaiting={!isStreaming}
+                streamingParts={streamingParts}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Session Error Display */}
+        {sessionError && (
+          <div className="flex justify-center py-2">
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
+              <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm text-destructive">
+                  {sessionError.type === "retry"
+                    ? "Rate Limit Exceeded"
+                    : "Session Error"}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 break-words">
+                  {sessionError.message}
+                </p>
+                {sessionError.attempt && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Attempt #{sessionError.attempt}
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 h-6 w-6 p-0"
+                onClick={clearSessionError}
+              >
+                <X className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         )}
@@ -204,6 +254,21 @@ export function MessageList() {
           </div>
         )}
 
+        {/* Subtle "Done" indicator when generation is complete */}
+        {messages.length > 0 &&
+          messages[messages.length - 1].role === "agent" &&
+          !isThinking &&
+          !isLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+              <div className="h-px flex-1 bg-border" />
+              <span className="flex items-center gap-1">
+                <span className="text-green-600">✓</span>
+                Done
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
+
         <div ref={bottomRef} />
       </div>
     </ScrollArea>
@@ -214,12 +279,10 @@ function MessagePartBubble({
   part,
   isStreaming = false,
   isLast = false,
-  defaultOpen = false,
 }: {
   part: any;
   isStreaming?: boolean;
   isLast?: boolean;
-  defaultOpen?: boolean;
 }) {
   if (part.type === "reasoning") {
     // Determine active state: must be streaming AND be the last item
@@ -229,8 +292,7 @@ function MessagePartBubble({
       <ThinkingBlock
         text={part.text}
         isStreaming={isActive} // Only show spinner if active
-        defaultOpen={defaultOpen}
-        label={isActive ? "Thinking Process" : "Thought"} // Change label based on state
+        label="Thought"
       />
     );
   }
@@ -273,16 +335,30 @@ function MessagePartBubble({
 
 function ThinkingBlock({
   text,
-  defaultOpen = false,
   isStreaming = false,
-  label = "Thinking Process",
+  label = "Thought",
 }: {
   text: string;
-  defaultOpen?: boolean;
   isStreaming?: boolean;
   label?: string;
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isOpen, setIsOpen] = useState(isStreaming);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync open state with streaming state
+  useEffect(() => {
+    setIsOpen(isStreaming);
+  }, [isStreaming]);
+
+  // Auto-scroll to bottom when text changes (smooth scroll)
+  useEffect(() => {
+    if (isOpen && scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [text, isOpen]);
 
   return (
     <div className="w-full max-w-md">
@@ -301,10 +377,48 @@ function ThinkingBlock({
         </span>
       </button>
       {isOpen && (
-        <div className="mt-1 ml-1 pl-3 border-l-2 border-muted text-muted-foreground text-sm whitespace-pre-wrap py-1">
-          {text || "..."}
+        <div
+          ref={scrollRef}
+          className="mt-1 ml-1 pl-3 border border-muted rounded-md text-muted-foreground text-sm whitespace-pre-wrap py-2 px-3 h-40 overflow-y-auto bg-muted/30"
+        >
+          {text?.trim() || "..."}
         </div>
       )}
+    </div>
+  );
+}
+
+// Animated status indicator with cycling dots
+function StatusIndicator({
+  isWaiting,
+  streamingParts,
+}: {
+  isWaiting: boolean;
+  streamingParts?: any[];
+}) {
+  const [dots, setDots] = useState(1);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((prev) => (prev % 3) + 1);
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Determine label based on what we're streaming
+  let label = "Waiting";
+  if (!isWaiting) {
+    // Check if the last streaming part is a reasoning/thought
+    const lastPart = streamingParts?.[streamingParts.length - 1];
+    label = lastPart?.type === "reasoning" ? "Thinking" : "Generating";
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium py-1 px-1">
+      <span>
+        {label}
+        {".".repeat(dots)}
+      </span>
     </div>
   );
 }

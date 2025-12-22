@@ -1,15 +1,95 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
-import { ChatProvider, useChatContext } from "./ChatContext";
+import {
+  ChatProvider,
+  useChatContext,
+  type SessionDebugState,
+} from "./ChatContext";
+import { authClient } from "@/lib/auth-client";
 
 interface ChatPanelProps {
   projectSlug: string;
   version?: number;
   onTaskComplete?: () => void;
   onClose?: () => void;
+}
+
+// Debug display component for session state (admin only, toggleable)
+function SessionDebugDisplay({ debug }: { debug: SessionDebugState }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
+
+  // Only show to admin users
+  if (!isAdmin) return null;
+
+  return (
+    <div className="border-t bg-muted/50 text-xs font-mono text-muted-foreground">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full px-4 py-1.5 flex items-center justify-between hover:bg-muted/80 transition-colors"
+      >
+        <span className="font-semibold text-foreground/70">Debug</span>
+        {isExpanded ? (
+          <ChevronDown className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronUp className="h-3.5 w-3.5" />
+        )}
+      </button>
+      {isExpanded && (
+        <div className="px-4 pb-2 space-y-1">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+            <span>Session ID:</span>
+            <span className="truncate">
+              {debug.selectedSessionId ?? "none"}
+            </span>
+
+            <span>SSE Connected:</span>
+            <span
+              className={debug.sseConnected ? "text-green-600" : "text-red-600"}
+            >
+              {debug.sseConnected ? "✓ Yes" : "✗ No"}
+            </span>
+
+            <span>Streaming:</span>
+            <span className={debug.isStreaming ? "text-blue-600" : ""}>
+              {debug.isStreaming ? "Yes" : "No"}
+            </span>
+
+            <span>Waiting:</span>
+            <span className={debug.isWaiting ? "text-amber-600" : ""}>
+              {debug.isWaiting ? "Yes" : "No"}
+            </span>
+
+            <span>Thinking:</span>
+            <span className={debug.isThinking ? "text-purple-600" : ""}>
+              {debug.isThinking ? "Yes" : "No"}
+            </span>
+
+            <span>Messages:</span>
+            <span>{debug.messagesCount}</span>
+
+            <span>Streaming Parts:</span>
+            <span>{debug.streamingPartsCount}</span>
+
+            <span>Last Event:</span>
+            <span className="truncate">{debug.lastEventType ?? "none"}</span>
+
+            <span>Event Time:</span>
+            <span className="truncate">
+              {debug.lastEventTime
+                ? new Date(debug.lastEventTime).toLocaleTimeString()
+                : "never"}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Inner component that uses the context
@@ -21,6 +101,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     handleDeleteSession,
     handleNewSession,
     messages,
+    sessionDebugState,
   } = useChatContext();
 
   return (
@@ -50,6 +131,9 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
 
       {/* Only show bottom input when there are messages (otherwise input is in EmptyStatePrompt) */}
       {messages.length > 0 && <ChatInput />}
+
+      {/* Debug display for session state (admin only) */}
+      <SessionDebugDisplay debug={sessionDebugState} />
     </div>
   );
 }

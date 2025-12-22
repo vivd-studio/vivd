@@ -20,6 +20,12 @@ export interface EventCallbacks {
   onToolCall?: (toolCall: ToolCall) => void;
   onToolCallFinished?: (toolCall: ToolCall) => void;
   onIdle?: () => void;
+  onSessionError?: (error: {
+    type: string;
+    message: string;
+    attempt?: number;
+    nextRetryAt?: number;
+  }) => void;
 }
 
 // Inactivity timeout in milliseconds (1 minute)
@@ -184,6 +190,19 @@ export function useEvents(
               }
               if (callbacks.onIdle) {
                 callbacks.onIdle();
+              }
+            } else if (status?.type === "retry" || status?.type === "error") {
+              // Handle retry/error status (e.g., quota exceeded)
+              console.warn(
+                `[useEvents] Session status ${status.type}: ${status.message}`
+              );
+              if (callbacks.onSessionError) {
+                callbacks.onSessionError({
+                  type: status.type,
+                  message: status.message || `Session ${status.type}`,
+                  attempt: status.attempt,
+                  nextRetryAt: status.next, // 'next' is the field from OpenCode SDK
+                });
               }
             }
           }

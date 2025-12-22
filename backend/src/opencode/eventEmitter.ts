@@ -9,7 +9,8 @@ export type AgentEventType =
   | "tool.completed"
   | "tool.error"
   | "message.updated"
-  | "session.completed";
+  | "session.completed"
+  | "session.error";
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -26,7 +27,8 @@ export type AgentEventData =
   | ToolCompletedData
   | ToolErrorData
   | MessageUpdatedData
-  | SessionCompletedData;
+  | SessionCompletedData
+  | SessionErrorData;
 
 export interface ThinkingStartedData {
   kind: "thinking.started";
@@ -72,6 +74,14 @@ export interface MessageUpdatedData {
 
 export interface SessionCompletedData {
   kind: "session.completed";
+}
+
+export interface SessionErrorData {
+  kind: "session.error";
+  errorType: string; // 'retry', 'error', 'quota', etc.
+  message: string;
+  attempt?: number;
+  nextRetryAt?: number; // Unix timestamp in ms for next retry
 }
 
 /**
@@ -163,6 +173,7 @@ class AgentEventEmitter extends EventEmitter {
    * Create an async generator that yields events for a session.
    * This is used by tRPC subscriptions.
    * Replays buffered events first, then yields new events.
+   * The stream stays open indefinitely to support multiple messages in the same session.
    */
   async *createSessionStream(
     sessionId: string,
@@ -171,20 +182,11 @@ class AgentEventEmitter extends EventEmitter {
     const queue: AgentEvent[] = [];
     let resolve: (() => void) | null = null;
     let isAborted = false;
-    let sessionCompleted = false;
 
     // First, replay any buffered events (handles late subscriber race condition)
     const bufferedEvents = this.getBufferedEvents(sessionId);
     for (const event of bufferedEvents) {
-      if (event.type === "session.completed") {
-        sessionCompleted = true;
-      }
       yield event;
-    }
-
-    // If session already completed, we're done
-    if (sessionCompleted) {
-      return;
     }
 
     const unsubscribe = this.subscribeToSession(sessionId, (event) => {
@@ -197,9 +199,6 @@ class AgentEventEmitter extends EventEmitter {
       }
 
       queue.push(event);
-      if (event.type === "session.completed") {
-        sessionCompleted = true;
-      }
       if (resolve) {
         resolve();
         resolve = null;
@@ -217,7 +216,9 @@ class AgentEventEmitter extends EventEmitter {
     signal?.addEventListener("abort", abortHandler);
 
     try {
-      while (!isAborted && !sessionCompleted) {
+      // Keep the stream open indefinitely until aborted by client
+      // This allows multiple messages to be sent in the same session
+      while (!isAborted) {
         if (queue.length > 0) {
           const event = queue.shift()!;
           yield event;
@@ -228,7 +229,7 @@ class AgentEventEmitter extends EventEmitter {
           });
         }
       }
-      // Drain remaining events
+      // Drain remaining events when aborting
       while (queue.length > 0) {
         yield queue.shift()!;
       }

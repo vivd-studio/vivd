@@ -28,6 +28,27 @@ interface AttachedElement {
   description: string;
 }
 
+// Debug state for session monitoring
+export interface SessionDebugState {
+  selectedSessionId: string | null;
+  isStreaming: boolean;
+  isWaiting: boolean;
+  isThinking: boolean;
+  streamingPartsCount: number;
+  messagesCount: number;
+  sseConnected: boolean;
+  lastEventTime: string | null;
+  lastEventType: string | null;
+  sessionError: SessionError | null;
+}
+
+export interface SessionError {
+  type: string;
+  message: string;
+  attempt?: number;
+  nextRetryAt?: number;
+}
+
 interface ChatContextValue {
   // Project info
   projectSlug: string;
@@ -61,6 +82,13 @@ interface ChatContextValue {
   // Derived state
   isReverted: boolean;
   isLoading: boolean;
+
+  // Debug
+  sessionDebugState: SessionDebugState;
+
+  // Error state
+  sessionError: SessionError | null;
+  clearSessionError: () => void;
 
   // Actions
   handleSend: () => void;
@@ -111,6 +139,9 @@ export function ChatProvider({
     useState<AttachedElement | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  // Ref to access current messages in effects without adding to dependency array
+  const messagesRef = useRef<Message[]>([]);
+  messagesRef.current = messages;
   const [input, setInput] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
@@ -130,52 +161,23 @@ export function ChatProvider({
   const isWaitingForAgent = useRef(false);
   const [isWaiting, setIsWaiting] = useState(false);
 
-  // Tracking for inactivity timeout (2 minutes)
-  const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
-  const lastEventTimeRef = useRef<number>(Date.now());
-  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debug tracking for SSE connection status
+  const [sseConnected, setSseConnected] = useState(false);
+  const [lastEventTime, setLastEventTime] = useState<string | null>(null);
+  const [lastEventType, setLastEventType] = useState<string | null>(null);
 
-  // Reset inactivity timer on each event
-  const resetInactivityTimer = () => {
-    lastEventTimeRef.current = Date.now();
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-    }
-    if (isStreaming || isWaiting) {
-      inactivityTimerRef.current = setTimeout(() => {
-        console.warn(
-          `[ChatContext] No events received for ${
-            INACTIVITY_TIMEOUT_MS / 1000
-          }s while waiting/streaming. Last event at: ${new Date(
-            lastEventTimeRef.current
-          ).toISOString()}`
-        );
-        console.warn("[ChatContext] Auto-recovering from stuck state...");
-        // Auto-recover: reset streaming state and refetch messages
-        setIsStreaming(false);
-        setIsWaiting(false);
-        isWaitingForAgent.current = false;
-        setStreamingParts([]);
-        refetchMessages();
-      }, INACTIVITY_TIMEOUT_MS);
-    }
-  };
+  // Session error state (for quota limits, API errors, etc.)
+  const [sessionError, setSessionError] = useState<SessionError | null>(null);
+  const clearSessionError = () => setSessionError(null);
 
-  // Cleanup inactivity timer on unmount
-  useEffect(() => {
-    return () => {
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current);
-      }
-    };
-  }, []);
-
-  // Poll for sessions to keep the list updated
+  // Poll for sessions to keep the list and status updated
   const { data: sessionsData, refetch: refetchSessions } =
     trpc.agent.listSessions.useQuery(
       { projectSlug, version },
       {
         refetchOnMount: true,
+        // Poll every 2 seconds when waiting or streaming to keep session status in sync
+        refetchInterval: isWaiting || isStreaming ? 2000 : false,
       }
     );
 
@@ -212,6 +214,9 @@ export function ChatProvider({
       },
       {
         enabled: !!selectedSessionId,
+        // Poll every 2 seconds when waiting/streaming as a recovery mechanism
+        // in case SSE events are missed
+        refetchInterval: isWaiting || isStreaming ? 2000 : false,
       }
     );
 
@@ -222,20 +227,30 @@ export function ChatProvider({
     },
     {
       enabled: !!selectedSessionId,
+      onStarted: () => {
+        console.log("[ChatContext] SSE subscription started");
+        setSseConnected(true);
+      },
       onData: (trackedEvent) => {
         const event = trackedEvent.data;
         const innerData = event.data;
 
-        // Reset inactivity timer on each event received
-        resetInactivityTimer();
+        // Track debug info
+        setLastEventTime(new Date().toISOString());
+        setLastEventType(innerData.kind);
 
         switch (innerData.kind) {
           case "thinking.started":
+            // Clear any stale streaming parts from previous turns
+            setStreamingParts([]);
             setIsStreaming(true);
             setIsWaiting(false);
             break;
 
           case "reasoning.delta":
+            // Ensure we mark as streaming when receiving content
+            setIsStreaming(true);
+            setIsWaiting(false);
             if ("content" in innerData && "partId" in innerData) {
               const partId = innerData.partId;
               setStreamingParts((prev) => {
@@ -262,6 +277,9 @@ export function ChatProvider({
             break;
 
           case "message.delta":
+            // Ensure we mark as streaming when receiving content
+            setIsStreaming(true);
+            setIsWaiting(false);
             if ("content" in innerData && "partId" in innerData) {
               const partId = innerData.partId;
               setStreamingParts((prev) => {
@@ -334,15 +352,35 @@ export function ChatProvider({
             setStreamingParts([]);
             isWaitingForAgent.current = false;
             setIsWaiting(false);
+            setSessionError(null); // Clear any previous errors on success
             refetchMessages();
             onTaskComplete?.();
+            break;
+
+          case "session.error":
+            // Handle session errors (quota exceeded, retry status, etc.)
+            if ("errorType" in innerData && "message" in innerData) {
+              setSessionError({
+                type: innerData.errorType as string,
+                message: innerData.message as string,
+                attempt: (innerData as any).attempt,
+                nextRetryAt: (innerData as any).nextRetryAt,
+              });
+              // Clear waiting states - we're in an error state now
+              setIsWaiting(false);
+              setIsStreaming(false);
+            }
             break;
         }
       },
       onError: (err) => {
         console.error("[SessionEvents] Subscription error:", err);
+        setSseConnected(false);
         setIsStreaming(false);
         setIsWaiting(false);
+        // Refetch messages on SSE error to ensure state is synchronized
+        refetchMessages();
+        refetchSessions();
       },
     }
   );
@@ -365,6 +403,41 @@ export function ChatProvider({
         };
       });
       setMessages(mappedMessages);
+
+      // Recovery: If we're waiting/streaming but the fetched messages include a
+      // NEWER agent response than what's in our current messages, we likely missed
+      // the SSE event. Only apply recovery if we sent a user message that the server
+      // has now responded to.
+      if ((isWaiting || isStreaming) && mappedMessages.length > 0) {
+        const lastFetchedMessage = mappedMessages[mappedMessages.length - 1];
+        const currentMessages = messagesRef.current;
+        const lastLocalMessage = currentMessages[currentMessages.length - 1];
+
+        // Only recover if:
+        // 1. The fetched messages end with an agent message with content
+        // 2. AND our local messages also end with a user message that was already sent
+        //    (meaning the server has responded but we missed the SSE)
+        // 3. OR fetched message count is higher (new messages arrived)
+        const serverHasAgentResponse =
+          lastFetchedMessage.role === "agent" && lastFetchedMessage.content;
+        const localEndsWithUser = lastLocalMessage?.role === "user";
+        const fetchedMessageCountHigher =
+          mappedMessages.length > currentMessages.length;
+
+        if (
+          serverHasAgentResponse &&
+          (localEndsWithUser || fetchedMessageCountHigher)
+        ) {
+          console.log(
+            "[ChatContext] Recovery: Task completed but state was stuck. Resetting."
+          );
+          setIsStreaming(false);
+          setIsWaiting(false);
+          isWaitingForAgent.current = false;
+          setStreamingParts([]);
+          onTaskComplete?.();
+        }
+      }
     }
   }, [sessionMessages, selectedSessionId]);
 
@@ -471,7 +544,6 @@ export function ChatProvider({
     isWaitingForAgent.current = true;
     setIsWaiting(true);
 
-    resetInactivityTimer();
     setStreamingParts([]);
 
     console.log("[Vivd] Sending prompt:", task);
@@ -499,6 +571,20 @@ export function ChatProvider({
     setStreamingParts([]);
   };
 
+  // Build debug state object
+  const sessionDebugState: SessionDebugState = {
+    selectedSessionId,
+    isStreaming,
+    isWaiting,
+    isThinking,
+    streamingPartsCount: streamingParts.length,
+    messagesCount: messages.length,
+    sseConnected,
+    lastEventTime,
+    lastEventType,
+    sessionError,
+  };
+
   const value: ChatContextValue = {
     projectSlug,
     version,
@@ -519,6 +605,9 @@ export function ChatProvider({
     selectorModeAvailable: !!setSelectorMode,
     isReverted,
     isLoading: runTaskMutation.isPending,
+    sessionDebugState,
+    sessionError,
+    clearSessionError,
     handleSend,
     handleNewSession,
     handleDeleteSession,

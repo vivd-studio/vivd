@@ -14,6 +14,7 @@ import {
   type ToolErrorData,
   type SessionCompletedData,
   type ThinkingStartedData,
+  type SessionErrorData,
 } from "./eventEmitter";
 
 export { useEvents };
@@ -99,15 +100,11 @@ export async function runTask(
       );
     },
     onToolCall: (toolCall: ToolCall) => {
-      // @ts-ignore
-      const input = toolCall.input || {};
-      const inputStr =
-        Object.keys(input).length > 0 ? ` input: ${JSON.stringify(input)}` : "";
       console.log(
         `[OpenCode] Tool Call: ${toolCall.tool}${
           // @ts-ignore
           toolCall.title ? ` - ${toolCall.title}` : ""
-        }${inputStr}`
+        }`
       );
       // Emit tool started event to frontend
       agentEventEmitter.emitSessionEvent(
@@ -158,6 +155,22 @@ export async function runTask(
         } as SessionCompletedData)
       );
       stop();
+    },
+    onSessionError: (error) => {
+      console.error(
+        `[OpenCode] Session error (${error.type}): ${error.message}`
+      );
+      // Emit session error event to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "session.error", {
+          kind: "session.error",
+          errorType: error.type,
+          message: error.message,
+          attempt: error.attempt,
+          nextRetryAt: error.nextRetryAt,
+        } as SessionErrorData)
+      );
     },
   });
 
