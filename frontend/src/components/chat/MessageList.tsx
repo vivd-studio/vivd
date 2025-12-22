@@ -77,11 +77,29 @@ export function MessageList() {
             return null;
           }
 
-          // Skip the last agent message when we're actively streaming
-          // because its parts are being rendered in the streaming area
+          // Skip agent messages that have parts currently being rendered in streamingParts
+          // This prevents duplicate Thought/Tool Call blocks during streaming
           const isLastMessage = i === messages.length - 1;
           if (isLastMessage && msg.role === "agent" && isStreaming) {
             return null;
+          }
+
+          // Also skip if any part of this message overlaps with current streaming parts
+          // This handles cases where polling returns partial data while still streaming
+          if (
+            msg.role === "agent" &&
+            isStreaming &&
+            msg.parts &&
+            streamingParts &&
+            streamingParts.length > 0
+          ) {
+            const streamingPartIds = new Set(streamingParts.map((p) => p.id));
+            const hasOverlap = msg.parts.some(
+              (p: any) => p.id && streamingPartIds.has(p.id)
+            );
+            if (hasOverlap) {
+              return null;
+            }
           }
 
           const isUser = msg.role === "user";
@@ -299,21 +317,16 @@ function MessagePartBubble({
   if (part.type === "tool") {
     return (
       <div className="rounded-lg px-3 py-2 text-xs font-mono w-full max-w-md">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {part.status === "running" ? (
-              <Loader2 className="w-3 h-3 animate-spin opacity-70" />
-            ) : part.status === "error" ? (
-              <span>❌</span>
-            ) : (
-              <span>✅</span>
-            )}
-            <span className="opacity-70">Tool Call:</span>
-            <span className="font-semibold">{part.tool}</span>
-          </div>
-          <span className="opacity-50 text-[10px] uppercase tracking-wider">
-            {part.status}
-          </span>
+        <div className="flex items-center gap-2">
+          {part.status === "running" ? (
+            <Loader2 className="w-3 h-3 animate-spin opacity-70" />
+          ) : part.status === "error" ? (
+            <span>❌</span>
+          ) : (
+            <span>✅</span>
+          )}
+          <span className="opacity-70">Tool Call:</span>
+          <span className="font-semibold">{part.tool}</span>
         </div>
         {part.title && (
           <div className="text-muted-foreground mt-1 truncate">
