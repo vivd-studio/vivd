@@ -57,7 +57,7 @@ export function MessageList() {
 
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
-      <div className="flex flex-col gap-6 px-6 py-6">
+      <div className="flex flex-col gap-6 px-6 pt-6 pb-20">
         {messages.length === 0 && (
           <EmptyStatePrompt
             onSuggestionClick={onSuggestionClick}
@@ -383,14 +383,20 @@ function ThinkingBlock({
           {label}
         </span>
       </button>
-      {isOpen && (
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-out ${
+          isOpen
+            ? "max-h-52 opacity-100 translate-y-0"
+            : "max-h-0 opacity-0 -translate-y-1"
+        }`}
+      >
         <div
           ref={scrollRef}
           className="mt-1 ml-1 pl-3 border border-muted rounded-md text-muted-foreground text-sm whitespace-pre-wrap py-2 px-3 h-40 overflow-y-auto bg-muted/30"
         >
           {text?.trim() || "..."}
         </div>
-      )}
+      </div>
     </div>
   );
 }
