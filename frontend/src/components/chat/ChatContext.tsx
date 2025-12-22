@@ -122,6 +122,13 @@ export function ChatProvider({
   version,
   onTaskComplete,
 }: ChatProviderProps) {
+  const debugEnabled = import.meta.env.VITE_DEBUG_CHAT === "true";
+  const debugLog = (...args: unknown[]) => {
+    if (debugEnabled) {
+      console.log(...args);
+    }
+  };
+
   // Access PreviewContext for element selection (may not be available outside preview page)
   let previewContext: ReturnType<typeof usePreview> | null = null;
   try {
@@ -274,7 +281,7 @@ export function ChatProvider({
       }
 
       if (isStreaming || isWaiting) {
-        console.log(
+        debugLog(
           "[ChatContext] Session status is idle but was streaming/waiting - resetting state"
         );
         setIsStreaming(false);
@@ -286,14 +293,14 @@ export function ChatProvider({
     } else if (currentSessionStatus.type === "busy") {
       // Session is active - ensure we're in streaming state
       if (!isStreaming && !isWaiting) {
-        console.log(
+        debugLog(
           "[ChatContext] Session status is busy but idle locally - marking waiting state"
         );
         setIsWaiting(true);
       }
     } else if (currentSessionStatus.type === "retry") {
       // Session is in retry state (quota error, etc.)
-      console.log(
+      debugLog(
         "[ChatContext] Session status is retry:",
         currentSessionStatus
       );
@@ -317,7 +324,7 @@ export function ChatProvider({
     {
       enabled: !!selectedSessionId,
       onStarted: () => {
-        console.log("[ChatContext] SSE subscription started");
+        debugLog("[ChatContext] SSE subscription started");
         setSseConnected(true);
       },
       onData: (trackedEvent) => {
@@ -519,7 +526,7 @@ export function ChatProvider({
           serverHasAgentResponse &&
           (localEndsWithUser || fetchedMessageCountHigher)
         ) {
-          console.log(
+          debugLog(
             "[ChatContext] Recovery: Task completed but state was stuck. Resetting."
           );
           setIsStreaming(false);
@@ -641,7 +648,7 @@ export function ChatProvider({
 
     setStreamingParts([]);
 
-    console.log("[Vivd] Sending prompt:", task);
+    debugLog("[Vivd] Sending prompt:", task);
 
     if (selectedSessionId) {
       setMessages((prev) => [...prev, { role: "user", content: task }]);

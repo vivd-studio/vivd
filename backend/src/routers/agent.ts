@@ -19,6 +19,13 @@ import {
 } from "../generator/versionUtils";
 import fs from "fs";
 
+const debugEnabled = process.env.OPENCODE_DEBUG === "true";
+const debugLog = (...args: unknown[]) => {
+  if (debugEnabled) {
+    console.log(...args);
+  }
+};
+
 export const agentRouter = router({
   runTask: protectedProcedure
     .input(
@@ -125,12 +132,12 @@ export const agentRouter = router({
           directory = getProjectDir(input.projectSlug);
         }
 
-        console.log(
+        debugLog(
           "[getSessionsStatus] Fetching status for directory:",
           directory
         );
         const statuses = await getSessionsStatus(directory);
-        console.log(
+        debugLog(
           "[getSessionsStatus] Statuses:",
           JSON.stringify(statuses, null, 2)
         );
@@ -272,7 +279,7 @@ export const agentRouter = router({
       })
     )
     .subscription(async function* ({ input, signal }) {
-      console.log(
+      debugLog(
         `[SessionEvents] Client subscribed to session: ${input.sessionId}`
       );
 
@@ -289,7 +296,7 @@ export const agentRouter = router({
           yield tracked(event.eventId, event);
         }
       } finally {
-        console.log(
+        debugLog(
           `[SessionEvents] Client unsubscribed from session: ${input.sessionId}`
         );
       }

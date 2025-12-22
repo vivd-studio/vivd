@@ -23,6 +23,12 @@ export { agentEventEmitter } from "./eventEmitter";
 export type { AgentEvent, AgentEventType } from "./eventEmitter";
 
 let serverUrl: string;
+const debugEnabled = process.env.OPENCODE_DEBUG === "true";
+const debugLog = (...args: unknown[]) => {
+  if (debugEnabled) {
+    console.log(...args);
+  }
+};
 
 export async function initOpencode() {
   console.log(
@@ -372,7 +378,7 @@ export async function getSessionsStatus(directory?: string) {
   const result = await client.session.status({
     query: directory ? { directory } : undefined,
   });
-  console.log(
+  debugLog(
     "[getSessionsStatus] Raw result from OpenCode:",
     JSON.stringify(result, null, 2)
   );
