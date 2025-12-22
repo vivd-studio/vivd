@@ -569,6 +569,8 @@ export function ChatProvider({
     setIsStreaming(false);
     setIsWaiting(false);
     setStreamingParts([]);
+    // Clear any error from previous session
+    setSessionError(null);
   };
 
   // Build debug state object

@@ -283,12 +283,22 @@ async function sendPromptAsync(
         parts: [{ type: "text", text: task }],
       },
     });
-    if (result.error)
+
+    if (result.error) {
+      console.error(
+        `[OpenCode] promptAsync returned error:`,
+        JSON.stringify(result.error, null, 2)
+      );
       throw new Error(
         `Failed to prompt session: ${JSON.stringify(result.error)}`
       );
+    }
   } catch (error: any) {
-    console.error(`[OpenCode] Error:`, error);
+    console.error(`[OpenCode] Error sending prompt:`, error);
+    console.error(
+      `[OpenCode] Error details:`,
+      JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+    );
     throw new Error(`OpenCode task failed: ${error.message}`);
   }
 }
