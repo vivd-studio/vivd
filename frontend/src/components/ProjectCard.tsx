@@ -24,6 +24,7 @@ import {
   Check,
   ChevronDown,
   RotateCcw,
+  Globe,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -38,11 +39,15 @@ export interface VersionInfo {
 export interface Project {
   slug: string;
   url: string;
+  source?: "url" | "scratch";
+  title?: string;
   status: string;
   createdAt: string;
   currentVersion?: number;
   totalVersions?: number;
   versions?: VersionInfo[];
+  publishedDomain?: string | null;
+  publishedVersion?: number | null;
 }
 
 interface ProjectCardProps {
@@ -120,6 +125,12 @@ export function ProjectCard({
   const isProcessing =
     !isCompleted && !isFailed && selectedVersionInfo?.status !== "unknown";
   const totalVersions = project.totalVersions || 1;
+  const isUrlProject = (project.source || "url") === "url";
+  const subtitle = isUrlProject
+    ? project.url
+    : project.title
+    ? `“${project.title}”`
+    : "Start-from-scratch project";
 
   // Calculate progress and label
   let statusLabel = "Pending";
@@ -129,6 +140,10 @@ export function ProjectCard({
   switch (project.status) {
     case "pending":
       statusLabel = "Pending";
+      break;
+    case "capturing_references":
+      statusLabel = "Capturing References";
+      statusColor = "default";
       break;
     case "scraping":
       statusLabel = "Scraping Website";
@@ -261,10 +276,34 @@ export function ProjectCard({
         </div>
         <div
           className="text-xs text-muted-foreground truncate"
-          title={project.url}
+          title={subtitle}
         >
-          {project.url}
+          {subtitle}
         </div>
+        {project.publishedDomain && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <Globe className="w-3 h-3 text-green-600 shrink-0" />
+            <a
+              href={`https://${project.publishedDomain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-green-600 hover:text-green-700 hover:underline truncate"
+              title={`Published at ${project.publishedDomain}${
+                project.publishedVersion
+                  ? ` (v${project.publishedVersion})`
+                  : ""
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {project.publishedDomain}
+              {project.publishedVersion && (
+                <span className="text-muted-foreground ml-1">
+                  (v{project.publishedVersion})
+                </span>
+              )}
+            </a>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="pb-3 grow flex items-center justify-center">
         {isProcessing && (
@@ -326,34 +365,42 @@ export function ProjectCard({
           >
             Open in new tab
           </Button>
-          <span className="text-muted-foreground/30">•</span>
+          {isUrlProject && project.url ? (
+            <>
+              <span className="text-muted-foreground/30">•</span>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-muted-foreground hover:text-primary"
+                disabled={!isCompleted}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(project.url, "_blank");
+                }}
+              >
+                Original Website
+              </Button>
+            </>
+          ) : null}
+        </div>
+        {isUrlProject && project.url ? (
           <Button
-            variant="link"
+            variant="outline"
             size="sm"
-            className="h-auto p-0 text-muted-foreground hover:text-primary"
-            disabled={!isCompleted}
+            className="ml-auto gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+            disabled={isProcessing || isRegenerating}
             onClick={(e) => {
               e.stopPropagation();
-              window.open(project.url, "_blank");
+              onRegenerate(project.slug, selectedVersion);
             }}
+            title="Create new version"
           >
-            Original Website
+            <Plus
+              className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`}
+            />
+            <span className="text-xs font-medium">New</span>
           </Button>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-          disabled={isProcessing || isRegenerating}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRegenerate(project.slug, selectedVersion);
-          }}
-          title="Create new version"
-        >
-          <Plus className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`} />
-          <span className="text-xs font-medium">New</span>
-        </Button>
+        ) : null}
       </CardFooter>
     </Card>
   );

@@ -1,31 +1,25 @@
 import * as fs from 'fs';
-import * as path from 'path';
-import { execa } from 'execa';
 import { log } from './logger';
 import { extractHtmlFromText } from './utils';
-import { OPENROUTER_API_KEY, GENERATION_MODEL, LOCAL_AGENT_COMMAND, LOCAL_GENERATION_MODEL } from './config';
+import { OPENROUTER_API_KEY, GENERATION_MODEL } from './config';
 import { openai } from './client';
 
 export interface GenerationAgent {
-    generate(
-        prompt: string,
-        screenshotPath: string,
-        outputDir: string
-    ): Promise<void>;
+    generate(input: {
+        prompt: string;
+        outputDir: string;
+        screenshotPath?: string;
+        referenceImagePaths?: string[];
+    }): Promise<void>;
 }
 
 export class OpenRouterAgent implements GenerationAgent {
-    async generate(prompt: string, screenshotPath: string, outputDir: string): Promise<void> {
+    async generate(input: { prompt: string; outputDir: string; screenshotPath?: string; referenceImagePaths?: string[]; }): Promise<void> {
         if (!OPENROUTER_API_KEY) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
 
-
-        const screenshotBuffer = fs.readFileSync(screenshotPath);
-        const screenshotBase64 = screenshotBuffer.toString('base64');
-
         log('Starting HTML generation with OpenRouter...');
-
 
         let attempts = 0;
         const maxRetries = 1;
@@ -37,25 +31,37 @@ export class OpenRouterAgent implements GenerationAgent {
                     log(`Attempt ${attempts}/${maxRetries + 1}: Retrying generation...`);
                 }
 
+                const contentParts: any[] = [{ type: 'text', text: input.prompt }];
+
+                if (input.screenshotPath && fs.existsSync(input.screenshotPath)) {
+                    const screenshotBuffer = fs.readFileSync(input.screenshotPath);
+                    const screenshotBase64 = screenshotBuffer.toString('base64');
+                    contentParts.push({
+                        type: 'image_url',
+                        image_url: { url: `data:image/png;base64,${screenshotBase64}` }
+                    });
+                }
+
+                for (const imgPath of input.referenceImagePaths || []) {
+                    if (!fs.existsSync(imgPath)) continue;
+                    const buffer = fs.readFileSync(imgPath);
+                    const base64 = buffer.toString('base64');
+                    const ext = imgPath.split('.').pop()?.toLowerCase() || 'png';
+                    const mime =
+                        ext === 'jpg' || ext === 'jpeg'
+                            ? 'jpeg'
+                            : ext === 'webp'
+                                ? 'webp'
+                                : 'png';
+                    contentParts.push({
+                        type: 'image_url',
+                        image_url: { url: `data:image/${mime};base64,${base64}` }
+                    });
+                }
+
                 const completion = await openai.chat.completions.create({
                     model: GENERATION_MODEL,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'text',
-                                    text: prompt
-                                },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: `data:image/png;base64,${screenshotBase64}`
-                                    }
-                                }
-                            ]
-                        }
-                    ],
+                    messages: [{ role: 'user', content: contentParts }],
                     reasoning_effort: 'high',
                 });
 
@@ -63,10 +69,10 @@ export class OpenRouterAgent implements GenerationAgent {
                 const html = this.extractContent(content);
 
                 if (html) {
-                    const outputPath = path.join(outputDir, 'index.html');
+                    const outputPath = `${input.outputDir}/index.html`;
                     const cleanHtml = extractHtmlFromText(html);
                     fs.writeFileSync(outputPath, cleanHtml);
-                    log(`Generated index.html in ${outputDir}`);
+                    log(`Generated index.html in ${input.outputDir}`);
                     return; // Success, exit the loop
                 } else {
                     log(`Warning: No HTML content extracted from response on attempt ${attempts}`);
@@ -100,39 +106,4 @@ export class OpenRouterAgent implements GenerationAgent {
         }
         return contentString;
     }
-}
-
-export class LocalCursorAgent implements GenerationAgent {
-    async generate(prompt: string, _screenshotPath: string, outputDir: string): Promise<void> {
-        log(`Executing local agent: ${LOCAL_AGENT_COMMAND}`);
-
-        try {
-            const subprocess = execa(LOCAL_AGENT_COMMAND, ['--model', LOCAL_GENERATION_MODEL, '-p'], {
-                cwd: outputDir,
-                env: process.env,
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-
-
-            if (subprocess.stdin) {
-                subprocess.stdin.write(prompt);
-                subprocess.stdin.end();
-            }
-
-            if (subprocess.stdout) {
-                subprocess.stdout.pipe(process.stdout);
-            }
-
-            if (subprocess.stderr) {
-                subprocess.stderr.pipe(process.stderr);
-            }
-
-            await subprocess;
-            log('Local agent finished execution.');
-        } catch (error: any) {
-            throw new Error(`Local agent process failed: ${error.message}`);
-        }
-    }
-
 }

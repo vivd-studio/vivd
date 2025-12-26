@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { VersionDialog } from "./VersionDialog";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Globe, Sparkles, ArrowLeft, AlertTriangle, Plus } from "lucide-react";
 
 type WizardStep = "choice" | "scratch" | "url";
@@ -43,6 +44,7 @@ interface ExistsData {
 }
 
 export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<WizardStep>("choice");
   const [isVersionDialogOpen, setIsVersionDialogOpen] = useState(false);
@@ -200,7 +202,10 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
           {step === "choice" && (
             <div className="space-y-3">
               <button
-                onClick={() => setStep("scratch")}
+                onClick={() => {
+                  setIsOpen(false);
+                  navigate("/vivd-studio/projects/new/scratch");
+                }}
                 className="w-full p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 text-left group"
               >
                 <div className="flex items-start gap-3">
@@ -240,12 +245,32 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
 
           {/* Scratch flow - coming soon */}
           {step === "scratch" && (
-            <div className="text-center py-8 text-muted-foreground">
-              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">Coming soon</p>
-              <p className="text-sm mt-2">
-                Describe your business and we'll create your site from scratch
-              </p>
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Scratch wizard</div>
+                    <div className="text-sm text-muted-foreground">
+                      Answer a few questions, pick a style direction, and
+                      generate your first draft.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                className="w-full gap-2"
+                onClick={() => {
+                  setIsOpen(false);
+                  navigate("/vivd-studio/projects/new/scratch");
+                }}
+              >
+                <Sparkles className="h-4 w-4" />
+                Start scratch wizard
+              </Button>
             </div>
           )}
 

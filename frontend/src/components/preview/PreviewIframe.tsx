@@ -18,7 +18,12 @@ const injectScrollbarStyles = (
   try {
     const doc = iframe.contentDocument;
     if (doc) {
+      // Remove existing scrollbar styles if present (avoid duplicates)
+      const existing = doc.getElementById("vivd-scrollbar-styles");
+      if (existing) existing.remove();
+
       const style = doc.createElement("style");
+      style.id = "vivd-scrollbar-styles";
       style.textContent = isMobile
         ? `
           /* Hide scrollbar for Chrome, Safari and Opera */

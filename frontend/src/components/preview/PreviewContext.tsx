@@ -351,14 +351,34 @@ export function PreviewProvider({
     toast.info("Edit Mode Enabled: Click text to edit");
   };
 
-  const cleanupEditMode = (doc: Document) => {
-    const style = doc.getElementById("edit-mode-styles");
-    if (style) style.remove();
+  /**
+   * Clean up ALL injected content from the iframe DOM before saving.
+   * This ensures no preview-specific scripts, styles, or attributes are persisted.
+   */
+  const cleanupInjectedContent = (doc: Document) => {
+    // 1. Remove injected scripts
+    const scriptsToRemove = ["vivd-highlight-script", "vivd-selector-script"];
+    scriptsToRemove.forEach((id) => {
+      const script = doc.getElementById(id);
+      if (script) script.remove();
+    });
 
+    // 2. Remove injected styles
+    const stylesToRemove = [
+      "edit-mode-styles",
+      "vivd-scrollbar-styles",
+      "image-drop-zone-styles",
+    ];
+    stylesToRemove.forEach((id) => {
+      const style = doc.getElementById(id);
+      if (style) style.remove();
+    });
+
+    // 3. Remove contenteditable attributes
     const editable = doc.querySelectorAll('[contenteditable="true"]');
     editable.forEach((el) => el.removeAttribute("contenteditable"));
 
-    // Restore links
+    // 4. Restore links (edit mode backup)
     const links = doc.querySelectorAll("a[data-href-backup]");
     links.forEach((linkElement) => {
       const link = linkElement as HTMLAnchorElement;
@@ -366,6 +386,18 @@ export function PreviewProvider({
       link.removeAttribute("data-href-backup");
       link.style.cursor = "";
     });
+
+    // 5. Remove image drop zone attributes
+    const imagesWithDropTarget = doc.querySelectorAll("img[data-drop-target]");
+    imagesWithDropTarget.forEach((img) => {
+      img.removeAttribute("data-drop-target");
+      img.removeAttribute("data-original-src");
+    });
+
+    // 6. Remove drag-mode-active class from body
+    if (doc.body) {
+      doc.body.classList.remove("drag-mode-active");
+    }
   };
 
   const handleSave = () => {
@@ -373,7 +405,7 @@ export function PreviewProvider({
     if (!iframe || !iframe.contentDocument || !projectSlug) return;
 
     const doc = iframe.contentDocument;
-    cleanupEditMode(doc);
+    cleanupInjectedContent(doc);
 
     const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 

@@ -1,5 +1,12 @@
+# Urgent fixes:
+
+- prevent injected scripts (selector hightlighting, edit text, drop images etc) in the preview to be saved into the actual html (when saving or publishing)
+- all options in the preview toolbar don't show the proper cursor when hovering over them, also the "v" logo icon in the top right
+- We need to be able to set a github-key and when we publish or save a project for the first time we should push the project to a github repository (with the given key). On save and on publish we should push the changes to the github repository. Also on opening the preview page we should pull the latest changes from the github repository (in case anyone else has made changes to the project).
+
 # Todos / Ideas for everything (features, ui, etc.)
 
+- for scratch workflow - add import from Linkedin, Facebook, Instagram, Twitter, etc.
 - add a "just improve" prompt, that will be asked to just improve the current version in any way (make a good prompt for this)
 - lets create the a landingpage for vivd with vivd-studio (with the new "start from scratch" feature)
 - make it possible to drop files in the agent chat. The files should be uploaded to the project. Images should go in assets/images, other files in assets/files. Also images dropped in the chat should be directly added to the opencode agent prompt

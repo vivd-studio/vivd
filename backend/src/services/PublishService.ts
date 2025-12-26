@@ -265,6 +265,26 @@ export class PublishService {
   }
 
   /**
+   * Get all published sites as a map keyed by project slug
+   */
+  async getAllPublishedSites(): Promise<Map<string, PublishedSiteInfo>> {
+    const results = await db.select().from(publishedSite);
+
+    const map = new Map<string, PublishedSiteInfo>();
+    for (const record of results) {
+      map.set(record.projectSlug, {
+        id: record.id,
+        domain: record.domain,
+        commitHash: record.commitHash,
+        publishedAt: record.publishedAt,
+        projectSlug: record.projectSlug,
+        projectVersion: record.projectVersion,
+      });
+    }
+    return map;
+  }
+
+  /**
    * Get published info for a project
    */
   async getPublishedInfo(

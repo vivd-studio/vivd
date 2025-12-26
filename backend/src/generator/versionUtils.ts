@@ -7,6 +7,9 @@ const PROJECTS_DIR = path.join(process.cwd(), "projects");
 // Project-level manifest (at projects/<slug>/manifest.json)
 export interface ProjectManifest {
   url: string;
+  source?: "url" | "scratch";
+  title?: string;
+  description?: string;
   createdAt: string;
   currentVersion: number;
   versions: VersionInfo[];
@@ -22,6 +25,9 @@ export interface VersionInfo {
 // Version-specific data (at projects/<slug>/v<N>/project.json)
 export interface VersionData {
   url: string;
+  source?: "url" | "scratch";
+  title?: string;
+  description?: string;
   createdAt: string;
   status: string;
   version: number;
@@ -34,6 +40,7 @@ export const PROCESSING_STATUSES = [
   "scraping",
   "analyzing_content",
   "analyzing_images",
+  "capturing_references",
   "creating_hero",
   "generating_html",
   "pending",

@@ -5,6 +5,7 @@ import Signup from "./pages/Signup";
 import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
 import PreviewPage from "./pages/PreviewPage";
+import ScratchWizard from "./pages/ScratchWizard";
 import { Layout } from "@/components/Layout";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -81,6 +82,12 @@ export default function App() {
           path="/vivd-studio/projects/:projectSlug"
           element={
             session ? <PreviewPage /> : <Navigate to="/vivd-studio/login" />
+          }
+        />
+        <Route
+          path="/vivd-studio/projects/new/scratch"
+          element={
+            session ? <ScratchWizard /> : <Navigate to="/vivd-studio/login" />
           }
         />
         <Route

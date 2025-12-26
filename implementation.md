@@ -229,16 +229,123 @@ flowchart TB
 
 > Generate site from business description (no source URL)
 
+**Goal**: Add a second generation pipeline (“scratch”) next to the existing URL scrape pipeline (“url”), with clean boundaries and shared core primitives so both can evolve independently.
+
+**Non-goals (v1)**:
+- No full template gallery yet (just a small set of style presets).
+- No “reference URL screenshot ingestion” yet (accept the input, but optionally ignore it until v2).
+- No multi-page generation yet (still a single `index.html`).
+
+---
+
+#### 3.1.1 Backend: Flow-based generator architecture (primary step)
+
+**Design principles**:
+- **Separate orchestration from steps**: a “flow” calls steps in order; steps are reusable building blocks.
+- **Single project artifact shape**: both flows produce the same on-disk structure under `projects/<slug>/v<N>/` so preview/editor stays identical.
+- **Backwards compatible**: keep `processUrl()` working and tolerant of old manifests.
+
+**Target structure** (initial):
+```
+backend/src/generator/
+  flows/
+    urlFlow.ts
+    scratchFlow.ts
+    types.ts
+  core/
+    context.ts           # create/load output dirs + status writer
+    html.ts              # html extraction + write helpers
+    prompts/
+      url.ts
+      scratch.ts
+  steps/
+    scrape.ts            # wraps existing scraper (url-only)
+    analyzeImages.ts
+    createHero.ts
+    generateHtml.ts      # agent wrapper (works with/without screenshot)
+```
+
 **Tasks**:
+- [ ] Introduce a `GenerationSource = 'url' | 'scratch'` and shared flow/step types (`backend/src/generator/flows/types.ts`)
+- [ ] Add a `createGenerationContext(...)` helper (`backend/src/generator/core/context.ts`) that:
+  - [ ] Computes slug + version outputDir
+  - [ ] Creates/updates `projects/<slug>/manifest.json` and `projects/<slug>/v<N>/project.json`
+  - [ ] Exposes `updateStatus(status)` to flows (single writer updates both manifest + project.json)
+  - [ ] Stores minimal metadata (`source`, `title` for scratch; `url` for url flow)
+- [ ] Refactor current URL pipeline to a dedicated `runUrlFlow(ctx, input)` without changing step behavior:
+  - [ ] `scrapeWebsite` → `analyzeImages` → `createHeroImage` → `generateLandingPage` → git init
+  - [ ] Keep `processUrl()` exported for compatibility, but delegate internally to `runUrlFlow`
+- [ ] Implement `runScratchFlow(ctx, input)`:
+  - [ ] Create `website_text.txt` derived from the brief (so downstream prompt building stays consistent)
+  - [ ] If the user provided assets, place them in `vN/images/` (same convention as URL flow) so `analyzeImages`/`createHeroImage` can be reused later
+  - [ ] Generate `index.html` from a scratch-specific prompt (no screenshot required)
+  - [ ] Initialize git repo for the version (same as URL flow)
+- [ ] Update agent interface to avoid optional-method branching:
+  - [ ] Prefer a single `generate({ prompt, outputDir, screenshotPath?: string })` API instead of `generateWithoutScreenshot?`
+- [ ] Make manifest reading tolerant of scratch projects:
+  - [ ] `manifest.url` may be empty/undefined for scratch; callers must not assume it exists
 
-- [ ] **Wizard steps**:
+**Acceptance criteria**:
+- URL flow still generates exactly as before (same statuses, same file outputs).
+- Scratch flow produces `projects/<slug>/v1/index.html` plus version metadata and reaches `completed`.
+- `project.status` returns a stable preview URL for scratch (`/projects/<slug>/v<N>/index.html`) once completed.
 
-  - [ ] Step 1: Business type, name, industry
-  - [ ] Step 2: Upload existing assets (logo, images) or generate
-  - [ ] Step 3: Color/style preferences
-  - [ ] Step 4: AI generates full site
+---
 
-- [ ] **Backend**: Adapt `processUrl` to `generateProject({ type: 'scratch' | 'url', ... })`
+#### 3.1.2 Backend API (tRPC): expose scratch generation
+
+**Option A (recommended long-term)**: unify under a single mutation with a discriminated union input:
+- `project.generate({ source: 'url', url, createNewVersion? })`
+- `project.generate({ source: 'scratch', title, description, ... })`
+
+**Option B (fastest)**: add `project.generateFromScratch` alongside existing `project.generate` and unify later.
+
+**Tasks**:
+- [ ] Add mutation for scratch generation (A or B) with minimal inputs:
+  - [ ] `title` (or `businessName`)
+  - [ ] `businessType` (optional in v1 if you want fewer fields)
+  - [ ] `description`
+- [ ] Implement slug collision handling (`acme`, `acme-2`, …) and “project exists” semantics (match URL behavior)
+- [ ] Ensure `project.list` surfaces a reasonable label for scratch projects (e.g. `title`) instead of only `url`
+
+---
+
+#### 3.1.3 Frontend v1: simple scratch wizard to test backend end-to-end (secondary step)
+
+**V1 scope**: keep it simple and shippable; focus on proving the backend flow.
+
+**Tasks**:
+- [ ] Add a new fullscreen route for scratch creation (recommended): `/vivd-studio/projects/new/scratch`
+  - [ ] Two-column layout: left = preview/style presets (static), right = guided form
+  - [ ] Use `react-hook-form` + `zod`
+- [ ] Update `ProjectWizard` “Start from scratch” choice to navigate to the new route
+- [ ] Call the new tRPC mutation and poll `project.status` until `completed`, then route into the editor/preview
+
+---
+
+#### 3.1.4 Frontend v2+: richer wizard & inputs (planned)
+
+**Wizard steps (target)**:
+- [ ] Step 1: Business basics (name, industry/type, description, goal/CTA)
+- [ ] Step 2: Brand direction (tone, style preset, suggested palettes)
+- [ ] Step 3: Assets (logo/images) + optional “design references”
+- [ ] Step 4: Generate + review initial preview + iterate
+
+**Enhancements**:
+- [ ] Asset drop/upload into scratch project (logo/images) and feed into image analysis + hero generation
+- [ ] Reference URLs: accept URLs → backend captures screenshots via puppeteer → feed as visual references to the generator
+- [ ] Style presets: small curated list, later expandable into a gallery
+
+---
+
+#### 3.1.5 Manual verification (dev)
+
+- [ ] URL flow still works via “New Project → existing website”
+- [ ] Scratch flow works via “New Project → scratch” and produces `index.html` + status progression
+- [ ] Confirm `manifest.json` + `project.json` written correctly for scratch and URL
+- [ ] Confirm preview URL resolves after completion
+ 
+> Note: Avoid running expensive end-to-end tests frequently; generator uses paid model calls.
 
 ---
 

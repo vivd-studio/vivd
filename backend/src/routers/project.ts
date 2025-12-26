@@ -13,6 +13,9 @@ import {
   PROCESSING_STATUSES,
 } from "../generator/versionUtils";
 import { initializeGitRepository } from "../generator/gitUtils";
+import { createGenerationContext } from "../generator/core/context";
+import { runScratchFlow } from "../generator/flows/scratchFlow";
+import { validateConfig } from "../generator/config";
 import path from "path";
 import fs from "fs";
 import { gitService } from "../services/GitService";
@@ -101,6 +104,74 @@ export const projectRouter = router({
         status: "processing",
         slug: domainSlug,
         version: 1,
+        message: "Generation started.",
+      };
+    }),
+
+  generateFromScratch: protectedProcedure
+    .input(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+        businessType: z.string().optional(),
+        stylePreset: z.string().optional(),
+        stylePalette: z.array(z.string().min(1)).optional(),
+        styleMode: z.enum(["exact", "reference"]).optional(),
+        siteTheme: z.enum(["dark", "light"]).optional(),
+        referenceUrls: z.array(z.string().min(1)).optional(),
+        assets: z
+          .array(
+            z.object({
+              filename: z.string().min(1),
+              base64: z.string().min(1),
+            })
+          )
+          .max(20)
+          .optional(),
+        referenceImages: z
+          .array(
+            z.object({
+              filename: z.string().min(1),
+              base64: z.string().min(1),
+            })
+          )
+          .max(20)
+          .optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      validateConfig();
+
+      const ctx = createGenerationContext({
+        source: "scratch",
+        title: input.title,
+        description: input.description,
+        allowSlugSuffix: true,
+        initialStatus: "pending",
+      });
+
+      runScratchFlow(ctx, input)
+        .then(() => {
+          console.log(
+            `Finished scratch generation for ${ctx.slug} (version ${ctx.version})`
+          );
+        })
+        .catch((err) => {
+          console.error(
+            `Error during scratch generation for ${ctx.slug}:`,
+            err
+          );
+          try {
+            ctx.updateStatus("failed");
+          } catch {
+            // ignore
+          }
+        });
+
+      return {
+        status: "processing",
+        slug: ctx.slug,
+        version: ctx.version,
         message: "Generation started.",
       };
     }),
@@ -201,6 +272,13 @@ export const projectRouter = router({
       const status = versionData?.status || "unknown";
       const originalUrl = versionData?.url || manifest.url || "";
       const createdAt = versionData?.createdAt || "";
+      const sourceRaw = (manifest as any).source as string | undefined;
+      const title =
+        (versionData as any)?.title ||
+        ((manifest as any).title as string | undefined) ||
+        "";
+      const source: "url" | "scratch" =
+        sourceRaw === "scratch" ? "scratch" : manifest.url ? "url" : "scratch";
 
       // Build the preview URL for the specific version
       const resultUrl =
@@ -212,6 +290,8 @@ export const projectRouter = router({
         status,
         url: resultUrl,
         originalUrl,
+        source,
+        title,
         createdAt,
         version: targetVersion,
         totalVersions: manifest.versions.length,
@@ -227,6 +307,9 @@ export const projectRouter = router({
     }
 
     try {
+      // Fetch all published sites upfront for efficient lookup
+      const publishedSites = await publishService.getAllPublishedSites();
+
       const files = fs.readdirSync(projectsDir, { withFileTypes: true });
       const projects = files
         .filter((dirent) => dirent.isDirectory())
@@ -243,15 +326,34 @@ export const projectRouter = router({
           // Get data from current version
           const currentVersion = manifest.currentVersion;
           const versionData = getVersionData(projectSlug, currentVersion);
+          const sourceRaw = (manifest as any).source as string | undefined;
+          const title =
+            (versionData as any)?.title ||
+            ((manifest as any).title as string | undefined) ||
+            "";
+          const source: "url" | "scratch" =
+            sourceRaw === "scratch"
+              ? "scratch"
+              : manifest.url
+              ? "url"
+              : "scratch";
+
+          // Get publish info for this project
+          const publishInfo = publishedSites.get(projectSlug);
 
           return {
             slug: projectSlug,
             status: versionData?.status || "unknown",
             url: manifest.url,
+            source,
+            title,
             createdAt: manifest.createdAt,
             currentVersion,
             totalVersions: manifest.versions.length,
             versions: manifest.versions,
+            // Add publish info
+            publishedDomain: publishInfo?.domain ?? null,
+            publishedVersion: publishInfo?.projectVersion ?? null,
           };
         })
         .filter(

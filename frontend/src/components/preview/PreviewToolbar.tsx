@@ -327,7 +327,7 @@ export function PreviewToolbar() {
         {/* Left Section: App Icon + Preview Identity */}
         <button
           onClick={handleClose}
-          className="hover:opacity-80 transition-opacity focus:outline-none"
+          className="hover:opacity-80 transition-opacity focus:outline-none cursor-pointer"
         >
           <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
         </button>
