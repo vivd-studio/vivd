@@ -90,6 +90,11 @@ export function PublishDialog({
   const publishMutation = trpc.project.publish.useMutation({
     onSuccess: (data) => {
       toast.success(data.message);
+      if (data.github?.attempted && !data.github.success) {
+        toast.error(
+          `GitHub sync failed (published anyway): ${data.github.error || "unknown error"}`
+        );
+      }
       utils.project.publishStatus.invalidate({ slug: projectSlug });
       onPublished?.();
     },

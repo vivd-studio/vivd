@@ -61,21 +61,26 @@ export function VersionHistoryPanel({
 }: VersionHistoryPanelProps) {
   const utils = trpc.useUtils();
 
-  const { data: historyData, isLoading: historyLoading } =
-    trpc.project.gitHistory.useQuery(
-      { slug: projectSlug, version },
-      { enabled: open && !!projectSlug }
-    );
-
-  const { data: changesData } = trpc.project.gitHasChanges.useQuery(
-    { slug: projectSlug, version },
-    { enabled: open && !!projectSlug, refetchInterval: 5000 }
-  );
-
-  const { data: workingCommitData } = trpc.project.gitWorkingCommit.useQuery(
+  const {
+    data: historyData,
+    isLoading: historyLoading,
+    isFetching: historyFetching,
+  } = trpc.project.gitHistory.useQuery(
     { slug: projectSlug, version },
     { enabled: open && !!projectSlug }
   );
+
+  const { data: changesData, isFetching: changesFetching } =
+    trpc.project.gitHasChanges.useQuery(
+      { slug: projectSlug, version },
+      { enabled: open && !!projectSlug, refetchInterval: 5000 }
+    );
+
+  const { data: workingCommitData, isFetching: workingCommitFetching } =
+    trpc.project.gitWorkingCommit.useQuery(
+      { slug: projectSlug, version },
+      { enabled: open && !!projectSlug }
+    );
 
   // Get publish status to show "Published" badge
   const { data: publishStatus } = trpc.project.publishStatus.useQuery(
@@ -108,8 +113,20 @@ export function VersionHistoryPanel({
 
       if (data.noChanges) {
         toast.info("No changes to save");
+        if (data.github?.attempted && !data.github.success) {
+          toast.error(
+            `GitHub sync failed (no changes saved): ${
+              data.github.error || "unknown error"
+            }`
+          );
+        }
       } else {
         toast.success(data.message);
+        if (data.github?.attempted && !data.github.success) {
+          toast.error(
+            `GitHub sync failed (saved locally): ${data.github.error || "unknown error"}`
+          );
+        }
         // Invalidate queries to refresh history
         utils.project.gitHistory.invalidate({ slug: projectSlug, version });
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version });
@@ -161,6 +178,9 @@ export function VersionHistoryPanel({
   const publishedCommitHash = publishStatus?.isPublished
     ? publishStatus.commitHash
     : null;
+  const isRefreshingAfterSave =
+    historyFetching || changesFetching || workingCommitFetching;
+  const isSaving = saveMutation.isPending || isRefreshingAfterSave;
 
   const handleDiscard = () => {
     if (
@@ -217,10 +237,10 @@ export function VersionHistoryPanel({
                 />
                 <Button
                   onClick={handleSave}
-                  disabled={saveMutation.isPending || !commitMessage.trim()}
+                  disabled={isSaving || !commitMessage.trim()}
                   size="icon"
                 >
-                  {saveMutation.isPending ? (
+                  {isSaving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Save className="h-4 w-4" />

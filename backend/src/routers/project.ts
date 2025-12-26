@@ -280,6 +280,19 @@ export const projectRouter = router({
       const source: "url" | "scratch" =
         sourceRaw === "scratch" ? "scratch" : manifest.url ? "url" : "scratch";
 
+      // On preview open, sync from GitHub (best-effort).
+      // Skips automatically if there are local uncommitted changes.
+      if (status === "completed") {
+        const versionDir = getVersionDir(slug, targetVersion);
+        if (fs.existsSync(versionDir)) {
+          await gitService.syncPullFromGitHub({
+            cwd: versionDir,
+            slug,
+            version: targetVersion,
+          });
+        }
+      }
+
       // Build the preview URL for the specific version
       const resultUrl =
         status === "completed"
@@ -849,12 +862,18 @@ export const projectRouter = router({
       }
 
       const result = await gitService.save(versionDir, message);
+      const github = await gitService.syncPushToGitHub({
+        cwd: versionDir,
+        slug,
+        version,
+      });
 
       if (result.noChanges) {
         return {
           success: true,
           hash: result.hash,
           noChanges: true,
+          github,
           message: "No changes to save",
         };
       }
@@ -863,6 +882,7 @@ export const projectRouter = router({
         success: result.success,
         hash: result.hash,
         noChanges: false,
+        github,
         message: `Saved version with commit ${result.hash.substring(0, 7)}`,
       };
     }),

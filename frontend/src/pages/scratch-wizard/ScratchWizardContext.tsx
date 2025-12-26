@@ -68,6 +68,14 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
+  // Set document title
+  useEffect(() => {
+    document.title = "vivd - Scratch Wizard";
+    return () => {
+      document.title = "vivd";
+    };
+  }, []);
+
   const [stylePreset, setStylePreset] = useState<StylePreset | null>(null);
   const [isStyleExact, setIsStyleExact] = useState(false);
   const [siteTheme, setSiteTheme] = useState<SiteTheme>(null);

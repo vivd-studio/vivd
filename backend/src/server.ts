@@ -14,6 +14,7 @@ import { auth } from "./auth";
 import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
 import { getVersionDir } from "./generator/versionUtils";
+import { createImportRouter } from "./routes/import";
 
 // ESM dirname replacement
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -162,6 +163,9 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     return res.status(500).json({ error: "Download failed" });
   }
 });
+
+// Import Projects endpoint(s)
+app.use("/vivd-studio/api", createImportRouter({ auth, upload }));
 
 // tRPC
 app.use(
