@@ -191,7 +191,15 @@ export function ColorPaletteSelector() {
           <SelectContent>
             <SelectItem value="auto">
               <div className="flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-muted-foreground" />
+                {/* Placeholder swatches to align with other options */}
+                <div className="flex gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <span
+                      key={i}
+                      className="h-4 w-4 rounded-full border border-dashed border-muted-foreground/40 bg-gradient-to-br from-primary/10 to-transparent"
+                    />
+                  ))}
+                </div>
                 <div>
                   <div className="font-medium">Auto</div>
                   <div className="text-xs text-muted-foreground">
