@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { trpc } from "@/lib/trpc";
+import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { toast } from "sonner";
 import {
   scratchSchema,
@@ -70,9 +71,9 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
   // Set document title
   useEffect(() => {
-    document.title = "vivd - Scratch Wizard";
+    document.title = formatDocumentTitle("Scratch Wizard");
     return () => {
-      document.title = "vivd";
+      document.title = BRAND_NAME;
     };
   }, []);
 

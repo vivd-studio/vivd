@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { PreviewContent } from "@/components/preview/PreviewContent";
 import { PreviewProvider } from "@/components/preview/PreviewContext";
 
@@ -33,10 +34,10 @@ export default function PreviewPage() {
   // Set document title to project name
   useEffect(() => {
     if (project?.slug) {
-      document.title = `vivd - ${project.slug}`;
+      document.title = formatDocumentTitle(project.slug);
     }
     return () => {
-      document.title = "vivd";
+      document.title = BRAND_NAME;
     };
   }, [project?.slug]);
 

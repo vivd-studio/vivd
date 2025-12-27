@@ -44,11 +44,7 @@ export const OPEN_ROUTER_SCRATCH_PAGE_PROMPT = (
         }\n`
       : "";
   const themeLine = siteTheme
-    ? `Theme preference: ${siteTheme.toUpperCase()} (build a ${siteTheme} themed website with ${
-        siteTheme === "dark"
-          ? "dark backgrounds and light text"
-          : "light backgrounds and dark text"
-      })\n`
+    ? `Theme preference: ${siteTheme.toUpperCase()}`
     : "";
   const styleBlock =
     styleLine || themeLine
