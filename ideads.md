@@ -42,13 +42,17 @@
 
 ### Distribution (GHCR)
 
-- create GitHub Actions workflow to build and push images to GHCR
+- create GitHub Actions workflow to build and push 3 images to `ghcr.io/vivd-studio/`:
+  - `vivd-server` (backend)
+  - `vivd-ui` (frontend/nginx)
+  - `vivd-caddy` (Caddy with Caddyfile baked in)
+- create `caddy/Dockerfile` to bake Caddyfile into image
 - create customer template docker-compose (uses `image:` not `build:`)
-- document customer onboarding (PAT generation, docker login)
+- images are PUBLIC (no auth needed for customers)
 
 ### Update Strategy
 
-- add Watchtower to template compose (opt-in) for auto-updates
+- manual redeploy via Dokploy UI or cron script
 - create `CHANGELOG.md` format
 - add version display in admin UI
 

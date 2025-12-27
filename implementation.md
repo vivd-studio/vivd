@@ -232,6 +232,7 @@ flowchart TB
 **Goal**: Add a second generation pipeline (“scratch”) next to the existing URL scrape pipeline (“url”), with clean boundaries and shared core primitives so both can evolve independently.
 
 **Non-goals (v1)**:
+
 - No full template gallery yet (just a small set of style presets).
 - No “reference URL screenshot ingestion” yet (accept the input, but optionally ignore it until v2).
 - No multi-page generation yet (still a single `index.html`).
@@ -241,11 +242,13 @@ flowchart TB
 #### 3.1.1 Backend: Flow-based generator architecture (primary step)
 
 **Design principles**:
+
 - **Separate orchestration from steps**: a “flow” calls steps in order; steps are reusable building blocks.
 - **Single project artifact shape**: both flows produce the same on-disk structure under `projects/<slug>/v<N>/` so preview/editor stays identical.
 - **Backwards compatible**: keep `processUrl()` working and tolerant of old manifests.
 
 **Target structure** (initial):
+
 ```
 backend/src/generator/
   flows/
@@ -266,6 +269,7 @@ backend/src/generator/
 ```
 
 **Tasks**:
+
 - [ ] Introduce a `GenerationSource = 'url' | 'scratch'` and shared flow/step types (`backend/src/generator/flows/types.ts`)
 - [ ] Add a `createGenerationContext(...)` helper (`backend/src/generator/core/context.ts`) that:
   - [ ] Computes slug + version outputDir
@@ -286,6 +290,7 @@ backend/src/generator/
   - [ ] `manifest.url` may be empty/undefined for scratch; callers must not assume it exists
 
 **Acceptance criteria**:
+
 - URL flow still generates exactly as before (same statuses, same file outputs).
 - Scratch flow produces `projects/<slug>/v1/index.html` plus version metadata and reaches `completed`.
 - `project.status` returns a stable preview URL for scratch (`/projects/<slug>/v<N>/index.html`) once completed.
@@ -295,12 +300,14 @@ backend/src/generator/
 #### 3.1.2 Backend API (tRPC): expose scratch generation
 
 **Option A (recommended long-term)**: unify under a single mutation with a discriminated union input:
+
 - `project.generate({ source: 'url', url, createNewVersion? })`
 - `project.generate({ source: 'scratch', title, description, ... })`
 
 **Option B (fastest)**: add `project.generateFromScratch` alongside existing `project.generate` and unify later.
 
 **Tasks**:
+
 - [ ] Add mutation for scratch generation (A or B) with minimal inputs:
   - [ ] `title` (or `businessName`)
   - [ ] `businessType` (optional in v1 if you want fewer fields)
@@ -315,6 +322,7 @@ backend/src/generator/
 **V1 scope**: keep it simple and shippable; focus on proving the backend flow.
 
 **Tasks**:
+
 - [ ] Add a new fullscreen route for scratch creation (recommended): `/vivd-studio/projects/new/scratch`
   - [ ] Two-column layout: left = preview/style presets (static), right = guided form
   - [ ] Use `react-hook-form` + `zod`
@@ -326,12 +334,14 @@ backend/src/generator/
 #### 3.1.4 Frontend v2+: richer wizard & inputs (planned)
 
 **Wizard steps (target)**:
+
 - [ ] Step 1: Business basics (name, industry/type, description, goal/CTA)
 - [ ] Step 2: Brand direction (tone, style preset, suggested palettes)
 - [ ] Step 3: Assets (logo/images) + optional “design references”
 - [ ] Step 4: Generate + review initial preview + iterate
 
 **Enhancements**:
+
 - [ ] Asset drop/upload into scratch project (logo/images) and feed into image analysis + hero generation
 - [ ] Reference URLs: accept URLs → backend captures screenshots via puppeteer → feed as visual references to the generator
 - [ ] Style presets: small curated list, later expandable into a gallery
@@ -344,7 +354,7 @@ backend/src/generator/
 - [ ] Scratch flow works via “New Project → scratch” and produces `index.html` + status progression
 - [ ] Confirm `manifest.json` + `project.json` written correctly for scratch and URL
 - [ ] Confirm preview URL resolves after completion
- 
+
 > Note: Avoid running expensive end-to-end tests frequently; generator uses paid model calls.
 
 ---
@@ -395,6 +405,12 @@ backend/src/generator/
 
 > Push images to GHCR for customer distribution
 
+**Images** (public on `ghcr.io/vivd-studio/`):
+
+- `vivd-server` - Backend (Node.js + OpenCode)
+- `vivd-ui` - Frontend (Nginx serving SPA)
+- `vivd-caddy` - Caddy with Caddyfile baked in
+
 **GitHub Actions workflow** (`.github/workflows/publish.yml`):
 
 ```yaml
@@ -416,25 +432,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push backend
+      - name: Build and push vivd-server
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/vivd:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}/vivd:latest
+            ghcr.io/vivd-studio/vivd-server:${{ github.ref_name }}
+            ghcr.io/vivd-studio/vivd-server:latest
 
-      # Similar for frontend
+      - name: Build and push vivd-ui
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          target: prod
+          push: true
+          tags: |
+            ghcr.io/vivd-studio/vivd-ui:${{ github.ref_name }}
+            ghcr.io/vivd-studio/vivd-ui:latest
+
+      - name: Build and push vivd-caddy
+        uses: docker/build-push-action@v5
+        with:
+          context: ./caddy
+          push: true
+          tags: |
+            ghcr.io/vivd-studio/vivd-caddy:${{ github.ref_name }}
+            ghcr.io/vivd-studio/vivd-caddy:latest
 ```
 
 **Tasks**:
 
+- [ ] Create `caddy/Dockerfile` (copies Caddyfile into image)
 - [ ] Create GitHub Actions workflow
-- [ ] Make images private in GHCR settings
-- [ ] Create "customer template" docker-compose (uses `image:` not `build:`)
-- [ ] Document customer onboarding (PAT generation, docker login)
-- [ ] Test full cycle: push → pull on clean server
+- [ ] Make images public in GHCR settings
+- [ ] Create `docker-compose.customer.yml` (uses `image:` not `build:`)
+- [ ] Test full cycle: push tag → pull on clean server
 
 ---
 
@@ -442,37 +476,17 @@ jobs:
 
 > How customers get updates
 
-**Options implemented**:
+**Options**:
 
 1. **Manual** (default): Pin to version tag, customer decides when to update
-2. **Watchtower** (optional): Auto-pull on schedule
-
-**Customer compose with Watchtower**:
-
-```yaml
-services:
-  watchtower:
-    image: containrrr/watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_POLL_INTERVAL=86400
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_INCLUDE_STOPPED=true
-    command: --label-enable
-
-  app:
-    image: ghcr.io/you/vivd:latest
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-```
+2. **Dokploy webhook**: GitHub Actions triggers redeploy on push
+3. **Cron script**: `docker compose pull && docker compose up -d`
 
 **Tasks**:
 
-- [ ] Add watchtower to template compose (commented, opt-in)
 - [ ] Create `CHANGELOG.md` format
 - [ ] Add version display in admin UI
-- [ ] Consider: Webhook to notify you when customer updates
+- [ ] Document update procedures for customers
 
 ---
 
