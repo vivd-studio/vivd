@@ -2,6 +2,8 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { ProjectCard } from "./ProjectCard";
 import { VersionDialog } from "./VersionDialog";
+import { DeleteProjectDialog } from "./DeleteProjectDialog";
+import { toast } from "sonner";
 
 interface VersionDialogData {
   slug: string;
@@ -21,9 +23,24 @@ export function ProjectsList() {
   const { mutateAsync: regenerateProject } =
     trpc.project.regenerate.useMutation();
   const { mutateAsync: generateProject } = trpc.project.generate.useMutation();
+  const deleteProjectMutation = trpc.project.delete.useMutation({
+    onSuccess: (data) => {
+      toast.success("Project Deleted", {
+        description: data.message,
+      });
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Delete Failed", {
+        description: error.message,
+      });
+    },
+  });
+  const utils = trpc.useUtils();
   const [regeneratingSlug, setRegeneratingSlug] = useState<string | null>(null);
   const [versionDialogData, setVersionDialogData] =
     useState<VersionDialogData | null>(null);
+  const [deleteDialogSlug, setDeleteDialogSlug] = useState<string | null>(null);
 
   const handleCreateNewClick = (slug: string, version?: number) => {
     // Find the project to get its URL and version info
@@ -70,6 +87,19 @@ export function ProjectsList() {
     }
   };
 
+  const handleDeleteClick = (slug: string) => {
+    setDeleteDialogSlug(slug);
+  };
+
+  const handleConfirmDelete = (confirmationText: string) => {
+    if (!deleteDialogSlug) return;
+    deleteProjectMutation.mutate({
+      slug: deleteDialogSlug,
+      confirmationText,
+    });
+    setDeleteDialogSlug(null);
+  };
+
   if (isLoading) {
     return (
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -102,6 +132,7 @@ export function ProjectsList() {
               key={project.slug}
               project={project}
               onRegenerate={handleCreateNewClick}
+              onDelete={handleDeleteClick}
               isRegenerating={regeneratingSlug === project.slug}
             />
           ))}
@@ -116,6 +147,14 @@ export function ProjectsList() {
         projectName={versionDialogData?.slug}
         currentVersion={versionDialogData?.currentVersion ?? 1}
         totalVersions={versionDialogData?.totalVersions ?? 1}
+      />
+
+      <DeleteProjectDialog
+        open={!!deleteDialogSlug}
+        onOpenChange={(open) => !open && setDeleteDialogSlug(null)}
+        onConfirmDelete={handleConfirmDelete}
+        projectName={deleteDialogSlug ?? ""}
+        isDeleting={deleteProjectMutation.isPending}
       />
     </div>
   );

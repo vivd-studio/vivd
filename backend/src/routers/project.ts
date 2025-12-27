@@ -1170,4 +1170,50 @@ export const projectRouter = router({
         error: available ? undefined : "Domain is already in use",
       };
     }),
+
+  /**
+   * Delete a project permanently.
+   * Requires typing the project name to confirm deletion (GitHub-style safety).
+   */
+  delete: protectedProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        confirmationText: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, confirmationText } = input;
+
+      // Safety check: confirmation text must match the project slug
+      if (confirmationText !== slug) {
+        throw new Error(
+          "Confirmation text does not match the project name. Deletion aborted."
+        );
+      }
+
+      const projectDir = getProjectDir(slug);
+
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
+      }
+
+      // Check if project is published - cannot delete published projects
+      const publishInfo = await publishService.getPublishedInfo(slug);
+      if (publishInfo) {
+        throw new Error(
+          `Cannot delete a published project. Please unpublish "${publishInfo.domain}" first.`
+        );
+      }
+
+      // Delete the entire project directory
+      fs.rmSync(projectDir, { recursive: true, force: true });
+      console.log(`[Delete] Permanently deleted project: ${slug}`);
+
+      return {
+        success: true,
+        slug,
+        message: `Project "${slug}" has been permanently deleted.`,
+      };
+    }),
 });

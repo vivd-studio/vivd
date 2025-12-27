@@ -25,6 +25,8 @@ import {
   ChevronDown,
   RotateCcw,
   Globe,
+  Trash2,
+  MoreVertical,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -53,12 +55,14 @@ export interface Project {
 interface ProjectCardProps {
   project: Project;
   onRegenerate: (slug: string, version?: number) => void;
+  onDelete: (slug: string) => void;
   isRegenerating: boolean;
 }
 
 export function ProjectCard({
   project,
   onRegenerate,
+  onDelete,
   isRegenerating,
 }: ProjectCardProps) {
   const navigate = useNavigate();
@@ -383,24 +387,52 @@ export function ProjectCard({
             </>
           ) : null}
         </div>
-        {isUrlProject && project.url ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-            disabled={isProcessing || isRegenerating}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRegenerate(project.slug, selectedVersion);
-            }}
-            title="Create new version"
-          >
-            <Plus
-              className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`}
-            />
-            <span className="text-xs font-medium">New</span>
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuLabel>Project Options</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => onDelete(project.slug)}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Project
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isUrlProject && project.url ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
+              disabled={isProcessing || isRegenerating}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRegenerate(project.slug, selectedVersion);
+              }}
+              title="Create new version"
+            >
+              <Plus
+                className={`w-4 h-4 ${isRegenerating ? "animate-spin" : ""}`}
+              />
+              <span className="text-xs font-medium">New</span>
+            </Button>
+          ) : null}
+        </div>
       </CardFooter>
     </Card>
   );

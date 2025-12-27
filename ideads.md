@@ -1,9 +1,5 @@
 # Urgent fixes:
 
-- prevent injected scripts (selector hightlighting, edit text, drop images etc) in the preview to be saved into the actual html (when saving or publishing)
-- all options in the preview toolbar don't show the proper cursor when hovering over them, also the "v" logo icon in the top right
-- We need to be able to set a github-key and when we publish or save a project for the first time we should push the project to a github repository (with the given key). On save and on publish we should push the changes to the github repository. Also on opening the preview page we should pull the latest changes from the github repository (in case anyone else has made changes to the project).
-
 # Todos / Ideas for everything (features, ui, etc.)
 
 - for scratch workflow - add import from Linkedin, Facebook, Instagram, Twitter, etc.
