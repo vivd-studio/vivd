@@ -16,7 +16,7 @@ Three images on `ghcr.io/<github-owner>/`:
 - `vivd-ui` - Frontend (Nginx serving SPA)
 - `vivd-caddy` - Caddy with Caddyfile baked in
 
-> **Note**: Image path is based on `github.repository_owner` (e.g., `ghcr.io/felixpahlke/`). Update `docker-compose.prod.yml` if using a different org.
+> **Note**: Images are published to `ghcr.io/vivd-studio/`. The workflow uses `github.repository_owner`, so ensure the repo is under the `vivd-studio` org.
 
 ## Files Created ✅
 

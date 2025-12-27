@@ -11,7 +11,7 @@
 
 services:
   caddy:
-    image: ghcr.io/felixpahlke/vivd-caddy:latest
+    image: ghcr.io/vivd-studio/vivd-caddy:latest
     restart: unless-stopped
     ports:
       - "80:80"
@@ -27,7 +27,7 @@ services:
       - vivd-network
 
   backend:
-    image: ghcr.io/felixpahlke/vivd-server:latest
+    image: ghcr.io/vivd-studio/vivd-server:latest
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -61,7 +61,7 @@ services:
       - vivd-network
 
   frontend:
-    image: ghcr.io/felixpahlke/vivd-ui:latest
+    image: ghcr.io/vivd-studio/vivd-ui:latest
     restart: unless-stopped
     depends_on:
       - backend

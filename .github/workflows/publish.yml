@@ -12,8 +12,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Change this to your GitHub org/user
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  # Hardcoded to vivd-studio org (repo is in personal account but images go to org)
+  IMAGE_PREFIX: ghcr.io/vivd-studio
 
 jobs:
   build-and-push:
