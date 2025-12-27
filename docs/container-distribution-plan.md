@@ -5,30 +5,32 @@ Move from Dokploy server-side builds to pre-built images on GitHub Container Reg
 ## Architecture
 
 ```
-GitHub Actions (build & push) → GHCR → Customer docker-compose (pull)
+GitHub Actions (build & push) → GHCR → docker-compose.prod.yml (pull)
 ```
 
 ## Images
 
-Three public images on `ghcr.io/vivd-studio/`:
+Three images on `ghcr.io/<github-owner>/`:
 
 - `vivd-server` - Backend (Node.js + OpenCode)
 - `vivd-ui` - Frontend (Nginx serving SPA)
 - `vivd-caddy` - Caddy with Caddyfile baked in
 
-## Files to Create
+> **Note**: Image path is based on `github.repository_owner` (e.g., `ghcr.io/felixpahlke/`). Update `docker-compose.prod.yml` if using a different org.
+
+## Files Created ✅
 
 ### GitHub Actions Workflow
 
-`.github/workflows/publish.yml` - Triggers on version tags (`v*`), builds and pushes all three images with multi-platform support (`linux/amd64`, `linux/arm64`).
+[`.github/workflows/publish.yml`](file://../.github/workflows/publish.yml) - Triggers on version tags (`v*`) or manual dispatch. Builds and pushes all three images with multi-platform support (`linux/amd64`, `linux/arm64`).
 
 ### Caddy Dockerfile
 
-`caddy/Dockerfile` - Simple Dockerfile that copies Caddyfile into official Caddy image.
+[`caddy/Dockerfile`](file://../caddy/Dockerfile) - Simple Dockerfile that copies Caddyfile into official Caddy image.
 
-### Customer Template
+### Production Compose
 
-`docker-compose.customer.yml` - Standalone compose using `image:` instead of `build:`, works with just `docker compose up -d`.
+[`docker-compose.prod.yml`](file://../docker-compose.prod.yml) - Standalone compose using `image:` instead of `build:`. Works for both your deployment and customers.
 
 ## Update Mechanism
 
