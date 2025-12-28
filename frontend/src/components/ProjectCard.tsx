@@ -27,6 +27,7 @@ import {
   Globe,
   Trash2,
   MoreVertical,
+  Download,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -404,6 +405,20 @@ export function ProjectCard({
               onClick={(e) => e.stopPropagation()}
             >
               <DropdownMenuLabel>Project Options</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                  window.open(
+                    `${baseUrl}/vivd-studio/api/download/${project.slug}/${selectedVersion}`,
+                    "_blank"
+                  );
+                }}
+                disabled={!isCompleted}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download as ZIP
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => onDelete(project.slug)}
