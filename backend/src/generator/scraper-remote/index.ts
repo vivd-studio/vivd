@@ -7,7 +7,6 @@ import {
   prioritizeNavigationLinks,
 } from "../scraper/navigation";
 import { deduplicateImages } from "../scraper/images";
-import { removeDuplicateContent } from "../scraper/deduplication";
 
 /**
  * Scrapes a website using the remote scraper service.
