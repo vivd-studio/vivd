@@ -1,0 +1,13 @@
+# Standalone deployment for production scraper service
+# Deploy this separately - one instance serves multiple vivd-studio instances
+
+services:
+  scraper:
+    image: ghcr.io/vivd-studio/vivd-scraper:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - MAX_BROWSERS=4
+      - PORT=3001
+      - SCRAPER_API_KEY=${SCRAPER_API_KEY}

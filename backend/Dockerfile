@@ -1,11 +1,6 @@
 # Stage 1: Base (Dependencies)
 FROM node:23 AS base
 WORKDIR /app
-# Install chrome dependencies for Puppeteer
-RUN apt-get update \
-    && apt-get install -y chromium fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 curl unzip wget gnupg ca-certificates \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
 RUN npm install -g opencode-ai
@@ -14,9 +9,6 @@ RUN npm install -g opencode-ai
 RUN git config --global user.email "generator@vivd.local" \
     && git config --global user.name "Vivd Generator"
 
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY package*.json ./
 RUN npm install
 COPY . .

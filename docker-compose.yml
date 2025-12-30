@@ -31,6 +31,8 @@ services:
       - PUBLISHED_DIR=/srv/published
       - CADDY_SITES_DIR=/etc/caddy/sites.d
       - CADDY_ADMIN_URL=http://caddy:2019
+      - SCRAPER_URL=http://scraper:3001
+      - SCRAPER_API_KEY=${SCRAPER_API_KEY}
       - GITHUB_SYNC_ENABLED=${GITHUB_SYNC_ENABLED:-false}
       - GITHUB_SYNC_STRICT=${GITHUB_SYNC_STRICT:-false}
       - GITHUB_ORG=${GITHUB_ORG:-}
@@ -49,6 +51,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      scraper:
+        condition: service_started
     networks:
       - vivd-network
 
@@ -75,6 +79,16 @@ services:
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - vivd-network
+
+  scraper:
+    build:
+      context: ./scraper
+    environment:
+      - PORT=3001
+      - MAX_BROWSERS=2
+      - SCRAPER_API_KEY=${SCRAPER_API_KEY}
     networks:
       - vivd-network
 

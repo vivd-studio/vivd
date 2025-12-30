@@ -4,7 +4,7 @@ import { initializeGitRepository } from "../gitUtils";
 import { log } from "../logger";
 import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
-import { captureReferenceScreenshots } from "../steps/captureReferenceScreenshots";
+import { scraperClient } from "../scraper-client";
 import { analyzeImages } from "../image_analyzer";
 
 export interface ScratchAssetInput {
@@ -96,10 +96,11 @@ export async function runScratchFlow(
 
   if (input.referenceUrls?.length) {
     ctx.updateStatus("capturing_references");
-    await captureReferenceScreenshots({
-      outputDir: ctx.outputDir,
-      referenceUrls: input.referenceUrls,
-    });
+    await scraperClient.captureScreenshots(
+      input.referenceUrls,
+      ctx.outputDir,
+      4
+    );
   }
 
   ctx.updateStatus("analyzing_images");

@@ -55,3 +55,18 @@ services:
   postgres:
     ports:
       - "5432:5432"
+
+  scraper:
+    platform: linux/amd64
+    ports:
+      - "3001:3001"
+    develop:
+      watch:
+        - action: sync
+          path: ./scraper
+          target: /app
+          ignore:
+            - node_modules/
+            - dist/
+        - action: rebuild
+          path: ./scraper/package.json

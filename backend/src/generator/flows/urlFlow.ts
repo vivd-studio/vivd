@@ -1,4 +1,4 @@
-import { scrapeWebsite } from "../scraper";
+import { scrapeWebsiteRemote } from "../scraper-remote";
 import { analyzeImages } from "../image_analyzer";
 import { createHeroImage } from "../hero_creator";
 import { initializeGitRepository } from "../gitUtils";
@@ -12,7 +12,7 @@ export interface UrlFlowInput {
 
 export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
   ctx.updateStatus("scraping");
-  await scrapeWebsite(input.url, ctx.outputDir);
+  await scrapeWebsiteRemote(input.url, ctx.outputDir);
 
   ctx.updateStatus("analyzing_images");
   await analyzeImages(ctx.outputDir);
