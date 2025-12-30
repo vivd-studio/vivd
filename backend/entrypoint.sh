@@ -2,8 +2,13 @@
 set -e
 
 # Run migrations
+# Use prod script if dist exists (production), otherwise use tsx (development)
 echo "Running database migrations..."
-npm run db:migrate
+if [ -f "./dist/migrate.js" ]; then
+  npm run db:migrate:prod
+else
+  npm run db:migrate
+fi
 
 # Setup OpenCode Auth
 if [ -n "$OPENROUTER_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
