@@ -12,6 +12,7 @@
 services:
   caddy:
     image: ghcr.io/vivd-studio/vivd-caddy:latest
+    pull_policy: always
     restart: unless-stopped
     volumes:
       - caddy_data:/data
@@ -25,6 +26,7 @@ services:
 
   backend:
     image: ghcr.io/vivd-studio/vivd-server:latest
+    pull_policy: always
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -61,6 +63,7 @@ services:
 
   frontend:
     image: ghcr.io/vivd-studio/vivd-ui:latest
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       - backend
