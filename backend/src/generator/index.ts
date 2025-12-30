@@ -1,4 +1,3 @@
-import { scrapeWebsite } from "./scraper/index";
 import { generateLandingPage } from "./generator";
 import { analyzeImages } from "./image_analyzer/index";
 import { createHeroImage } from "./hero_creator";
@@ -10,7 +9,6 @@ import { runUrlFlow } from "./flows/urlFlow";
 import { runScratchFlow } from "./flows/scratchFlow";
 
 export {
-  scrapeWebsite,
   generateLandingPage,
   analyzeImages,
   createHeroImage,
@@ -31,7 +29,9 @@ export async function processUrl(targetUrl: string, version?: number) {
     targetUrl = "https://" + targetUrl;
   }
 
-  const domainSlug = new URL(targetUrl).hostname.replace("www.", "").split(".")[0];
+  const domainSlug = new URL(targetUrl).hostname
+    .replace("www.", "")
+    .split(".")[0];
   const targetVersion = version ?? getNextVersion(domainSlug);
   const ctx = createGenerationContext({
     source: "url",
@@ -43,7 +43,12 @@ export async function processUrl(targetUrl: string, version?: number) {
 
   try {
     await runUrlFlow(ctx, { url: targetUrl });
-    return { success: true, outputDir: ctx.outputDir, domainSlug, version: targetVersion };
+    return {
+      success: true,
+      outputDir: ctx.outputDir,
+      domainSlug,
+      version: targetVersion,
+    };
   } catch (error) {
     log(`An error occurred: ${error}`);
     try {
