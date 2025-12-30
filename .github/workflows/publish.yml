@@ -91,9 +91,12 @@ jobs:
 
       - name: Trigger Dokploy deployment
         run: |
-          curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            --fail --silent --show-error
-        env:
-          # Webhook URL stored as secret for security
-          DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
+          # Reload each application via Dokploy API
+          for APP_ID in ${{ secrets.DOKPLOY_APP_IDS }}; do
+            echo "Reloading application: $APP_ID"
+            curl -X POST "${{ secrets.DOKPLOY_URL }}/api/application.reload" \
+              -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"applicationId\": \"$APP_ID\", \"appName\": \"\"}" \
+              --fail --silent --show-error
+          done
