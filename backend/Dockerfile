@@ -1,9 +1,9 @@
 # Stage 1: Development (for local dev with hot reload)
-FROM node:23-alpine AS dev
+FROM node:23-slim AS dev
 WORKDIR /app
 
 # Install git (required for version control features)
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
 RUN npm install -g opencode-ai
@@ -23,7 +23,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 # Stage 2: Build (compile TypeScript)
-FROM node:23-alpine AS builder
+FROM node:23-slim AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -31,11 +31,11 @@ COPY . .
 RUN npm run build
 
 # Stage 3: Production (minimal runtime image)
-FROM node:23-alpine AS prod
+FROM node:23-slim AS prod
 WORKDIR /app
 
 # Install git (required for version control features)
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
 RUN npm install -g opencode-ai
