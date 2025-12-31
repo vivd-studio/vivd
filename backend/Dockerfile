@@ -6,7 +6,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
-RUN npm install -g opencode-ai && npm cache clean --force
+# Clean up unused musl binary (saves ~120MB)
+RUN npm install -g opencode-ai \
+    && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
+    && npm cache clean --force
 
 # Configure git for automated commits (required for OpenCode undo/revert)
 RUN git config --global user.email "generator@vivd.local" \
@@ -38,7 +41,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
-RUN npm install -g opencode-ai && npm cache clean --force
+# Clean up unused musl binary (saves ~120MB)
+RUN npm install -g opencode-ai \
+    && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
+    && npm cache clean --force
 
 # Configure git for automated commits (required for OpenCode undo/revert)
 RUN git config --global user.email "generator@vivd.local" \

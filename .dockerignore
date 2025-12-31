@@ -1,19 +1,48 @@
-node_modules
-.git
+# Dependencies
+**/node_modules
+
+# Build & Generated
+**/dist
+**/build
+**/out
+**/.next
+**/generated
+*.tsbuildinfo
+
+# Environment & Secrets
 .env
-.DS_Store
-.cursor
+.env.*
+*.local
+**/.env
+
+# VCS
+.git
+.gitignore
+
+# IDE & OS
+.idea
 .vscode
-dist
-generated
+.cursor
+.DS_Store
+**/.DS_Store
 
-# Backend specific
-backend/node_modules
-backend/dist
-backend/generated
-backend/.env
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
 
-# Frontend specific
-frontend/node_modules
-frontend/dist
-frontend/.env
+# Cache
+.cache
+.npm
+.pnpm-store
+.yarn
+.yarn-cache
+
+# Testing
+coverage
+
+# Misc / Local
+data
+tmp
