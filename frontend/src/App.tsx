@@ -7,10 +7,35 @@ import Settings from "./pages/Settings";
 import PreviewPage from "./pages/PreviewPage";
 import ScratchWizard from "./pages/ScratchWizard";
 import { Layout } from "@/components/Layout";
+import { SingleProjectModeHandler } from "@/components/SingleProjectModeHandler";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { Toaster } from "@/components/ui/sonner";
-// ...
+
+/**
+ * Dashboard wrapper that handles single project mode routing.
+ * In single project mode: redirects to first project or shows creation wizard.
+ * In normal mode: shows the regular Dashboard.
+ */
+function DashboardRoute() {
+  const { config, isLoading } = useAppConfig();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  if (config.singleProjectMode) {
+    return <SingleProjectModeHandler />;
+  }
+
+  return <Dashboard />;
+}
+
 export default function App() {
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
@@ -64,7 +89,7 @@ export default function App() {
           path="/vivd-studio"
           element={session ? <Layout /> : <Navigate to="/vivd-studio/login" />}
         >
-          <Route index element={<Dashboard />} />
+          <Route index element={<DashboardRoute />} />
           <Route path="settings" element={<Settings />} />
           <Route
             path="admin"

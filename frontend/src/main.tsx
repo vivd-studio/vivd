@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, httpSubscriptionLink, splitLink } from "@trpc/client";
 import { trpc } from "@/lib/trpc";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppConfigProvider } from "@/lib/AppConfigContext";
 
 function Root() {
   const [queryClient] = useState(() => new QueryClient());
@@ -40,11 +41,13 @@ function Root() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-          <TooltipProvider>
-            <App />
-          </TooltipProvider>
-        </ThemeProvider>
+        <AppConfigProvider>
+          <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+            <TooltipProvider>
+              <App />
+            </TooltipProvider>
+          </ThemeProvider>
+        </AppConfigProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );

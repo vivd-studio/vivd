@@ -34,6 +34,7 @@ import {
   Download,
   LogOut,
   Settings,
+  Shield,
   X,
   Menu,
   Sun,
@@ -726,6 +727,14 @@ export function PreviewToolbar() {
                     <span>Settings</span>
                   </Link>
                 </DropdownMenuItem>
+                {session?.user?.role === "admin" && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/vivd-studio/admin" className="cursor-pointer">
+                      <Shield className="mr-2 h-4 w-4" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
