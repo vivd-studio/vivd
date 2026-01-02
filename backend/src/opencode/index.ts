@@ -1,8 +1,4 @@
-import {
-  createOpencode,
-  createOpencodeClient,
-  OpencodeClient,
-} from "@opencode-ai/sdk";
+import { OpencodeClient } from "@opencode-ai/sdk";
 import { useEvents, type ToolCall } from "./useEvents";
 import {
   agentEventEmitter,
@@ -17,38 +13,12 @@ import {
   type SessionErrorData,
   type SessionStatus,
 } from "./eventEmitter";
+import { serverManager } from "./serverManager";
 
 export { useEvents };
 export { agentEventEmitter } from "./eventEmitter";
 export type { AgentEvent, AgentEventType } from "./eventEmitter";
-
-let serverUrl: string;
-const debugEnabled = process.env.OPENCODE_DEBUG === "true";
-const debugLog = (...args: unknown[]) => {
-  if (debugEnabled) {
-    console.log(...args);
-  }
-};
-
-export async function initOpencode() {
-  console.log(
-    `[OpenCode] Starting internal server with model ${process.env.OPENCODE_MODEL}`
-  );
-  const opencode = await createOpencode({
-    config: {
-      model: process.env.OPENCODE_MODEL,
-      username: "Website Agent",
-      // TODO: This does not seem to work properly, Agent can see everything
-      permission: { external_directory: "deny", doom_loop: "deny" },
-    },
-  });
-  console.log(
-    `[OpenCode] Server Initialized. Server URL: ${opencode.server.url}`
-  );
-  serverUrl = opencode.server.url;
-
-  return opencode;
-}
+export { serverManager } from "./serverManager";
 
 export async function runTask(
   task: string,
@@ -61,14 +31,8 @@ export async function runTask(
     })`
   );
 
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-
-  const client = createOpencodeClient({
-    baseUrl: serverUrl,
-    directory: cwd,
-  });
+  // Lazily create/get server for this project directory
+  const client = await serverManager.getClient(cwd);
 
   const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
@@ -201,48 +165,36 @@ export async function runTask(
   return { sessionId: currentSessionId };
 }
 
-export async function listSessions(directory?: string) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl });
-  const query = directory ? { directory } : {};
-  const result = await client.session.list({ query });
+export async function listSessions(directory: string) {
+  const client = await serverManager.getClient(directory);
+  const result = await client.session.list({ query: { directory } });
   if (result.error) throw new Error(JSON.stringify(result.error));
 
   let sessions = result.data || [];
 
-  if (directory) {
-    // Manual filtering is necessary as the API might return all sessions
-    sessions = sessions.filter((s: any) => {
-      if (!s.directory) return false;
-      // Simple exact match or trailing slash agnostic match
-      return (
-        s.directory === directory ||
-        s.directory.replace(/\/$/, "") === directory.replace(/\/$/, "")
-      );
-    });
-  }
+  // Manual filtering is necessary as the API might return all sessions
+  sessions = sessions.filter((s: any) => {
+    if (!s.directory) return false;
+    // Simple exact match or trailing slash agnostic match
+    return (
+      s.directory === directory ||
+      s.directory.replace(/\/$/, "") === directory.replace(/\/$/, "")
+    );
+  });
 
   return sessions;
 }
 
-export async function listProjects() {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl });
+export async function listProjects(directory: string) {
+  const client = await serverManager.getClient(directory);
   // @ts-ignore
   const result = await client.project.list({});
   if (result.error) throw new Error(JSON.stringify(result.error));
   return result.data || [];
 }
 
-export async function getSessionContent(sessionId: string) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl });
+export async function getSessionContent(sessionId: string, directory: string) {
+  const client = await serverManager.getClient(directory);
   const result = await client.session.messages({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
   return result.data || [];
@@ -317,11 +269,8 @@ async function sendPromptAsync(
   }
 }
 
-export async function deleteSession(sessionId: string, directory?: string) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+export async function deleteSession(sessionId: string, directory: string) {
+  const client = await serverManager.getClient(directory);
   const result = await client.session.delete({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
   return true;
@@ -330,13 +279,10 @@ export async function deleteSession(sessionId: string, directory?: string) {
 export async function revertSession(
   sessionId: string,
   messageID: string,
-  directory?: string,
+  directory: string,
   partID?: string
 ) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+  const client = await serverManager.getClient(directory);
   const result = await client.session.revert({
     path: { id: sessionId },
     body: { messageID, partID },
@@ -345,11 +291,8 @@ export async function revertSession(
   return result.data;
 }
 
-export async function unrevertSession(sessionId: string, directory?: string) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+export async function unrevertSession(sessionId: string, directory: string) {
+  const client = await serverManager.getClient(directory);
   const result = await client.session.unrevert({
     path: { id: sessionId },
   });
@@ -369,25 +312,15 @@ export async function unrevertSession(sessionId: string, directory?: string) {
  * - { type: "busy" } - Session is actively processing
  * - { type: "retry", attempt, message, next } - Retrying after error
  */
-export async function getSessionsStatus(directory?: string) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+export async function getSessionsStatus(directory: string) {
+  const client = await serverManager.getClient(directory);
   const sessions = await listSessions(directory);
   const result = await client.session.status({
-    query: directory ? { directory } : undefined,
+    query: { directory },
   });
-  debugLog(
-    "[getSessionsStatus] Raw result from OpenCode:",
-    JSON.stringify(result, null, 2)
-  );
   if (result.error) throw new Error(JSON.stringify(result.error));
 
-  const normalizedStatuses = normalizeSessionStatuses(
-    result.data,
-    sessions
-  );
+  const normalizedStatuses = normalizeSessionStatuses(result.data, sessions);
   const emitterStatuses = agentEventEmitter.getSessionStatuses();
 
   const statusMap: Record<string, SessionStatus> = {};
@@ -434,7 +367,11 @@ function normalizeSessionStatuses(
 
     if (data.length === 1 && sessions.length === 1) {
       const onlyStatus = data[0] as SessionStatus;
-      if (onlyStatus && typeof onlyStatus === "object" && "type" in onlyStatus) {
+      if (
+        onlyStatus &&
+        typeof onlyStatus === "object" &&
+        "type" in onlyStatus
+      ) {
         return { [sessions[0].id]: onlyStatus };
       }
     }
@@ -443,9 +380,10 @@ function normalizeSessionStatuses(
   }
 
   if (data instanceof Map) {
-    return Object.fromEntries(
-      Array.from(data.entries())
-    ) as Record<string, SessionStatus>;
+    return Object.fromEntries(Array.from(data.entries())) as Record<
+      string,
+      SessionStatus
+    >;
   }
 
   if (typeof data === "object") {
@@ -458,13 +396,9 @@ function normalizeSessionStatuses(
 export async function revertToUserMessage(
   sessionId: string,
   userMessageId: string,
-  directory?: string
+  directory: string
 ) {
-  if (!serverUrl) {
-    throw new Error("OpenCode server not initialized");
-  }
-
-  const client = createOpencodeClient({ baseUrl: serverUrl, directory });
+  const client = await serverManager.getClient(directory);
 
   // Revert to the user message directly - OpenCode will revert all changes after this point
   console.log(`[Revert] Reverting to message: ${userMessageId}`);

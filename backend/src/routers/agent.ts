@@ -72,22 +72,20 @@ export const agentRouter = router({
   listSessions: adminProcedure
     .input(
       z.object({
-        projectSlug: z.string().optional(),
+        projectSlug: z.string(),
         version: z.number().optional(),
       })
     )
     .query(async ({ input }) => {
       try {
-        let directory: string | undefined;
-        if (input.projectSlug) {
-          // Determine version and get version-specific path
-          const targetVersion =
-            input.version ?? getCurrentVersion(input.projectSlug);
-          if (targetVersion > 0) {
-            directory = getVersionDir(input.projectSlug, targetVersion);
-          } else {
-            directory = getProjectDir(input.projectSlug);
-          }
+        // Determine version and get version-specific path
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        let directory: string;
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
         }
 
         const sessions = await listSessions(directory);
@@ -98,15 +96,30 @@ export const agentRouter = router({
       }
     }),
 
-  listProjects: adminProcedure.query(async () => {
-    try {
-      const projects = await listProjects();
-      return projects;
-    } catch (error: any) {
-      console.error("Failed to list projects:", error);
-      throw new Error(error.message || "Failed to list projects");
-    }
-  }),
+  listProjects: adminProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      try {
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        let directory: string;
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
+        }
+        const projects = await listProjects(directory);
+        return projects;
+      } catch (error: any) {
+        console.error("Failed to list projects:", error);
+        throw new Error(error.message || "Failed to list projects");
+      }
+    }),
 
   /**
    * Get the status of all sessions.
@@ -149,10 +162,24 @@ export const agentRouter = router({
     }),
 
   getSessionContent: adminProcedure
-    .input(z.object({ sessionId: z.string() }))
+    .input(
+      z.object({
+        sessionId: z.string(),
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      })
+    )
     .query(async ({ input }) => {
       try {
-        const content = await getSessionContent(input.sessionId);
+        const targetVersion =
+          input.version ?? getCurrentVersion(input.projectSlug);
+        let directory: string;
+        if (targetVersion > 0) {
+          directory = getVersionDir(input.projectSlug, targetVersion);
+        } else {
+          directory = getProjectDir(input.projectSlug);
+        }
+        const content = await getSessionContent(input.sessionId, directory);
         return content;
       } catch (error: any) {
         console.error("Failed to get session content:", error);
@@ -164,20 +191,18 @@ export const agentRouter = router({
     .input(
       z.object({
         sessionId: z.string(),
-        projectSlug: z.string().optional(),
+        projectSlug: z.string(),
         version: z.number().optional(),
       })
     )
     .mutation(async ({ input }) => {
-      let directory: string | undefined;
-      if (input.projectSlug) {
-        const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
-        if (targetVersion > 0) {
-          directory = getVersionDir(input.projectSlug, targetVersion);
-        } else {
-          directory = getProjectDir(input.projectSlug);
-        }
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      let directory: string;
+      if (targetVersion > 0) {
+        directory = getVersionDir(input.projectSlug, targetVersion);
+      } else {
+        directory = getProjectDir(input.projectSlug);
       }
 
       try {
@@ -194,7 +219,7 @@ export const agentRouter = router({
       z.object({
         sessionId: z.string(),
         messageId: z.string(),
-        projectSlug: z.string().optional(),
+        projectSlug: z.string(),
         version: z.number().optional(),
       })
     )
@@ -205,15 +230,13 @@ export const agentRouter = router({
         projectSlug: input.projectSlug,
       });
 
-      let directory: string | undefined;
-      if (input.projectSlug) {
-        const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
-        if (targetVersion > 0) {
-          directory = getVersionDir(input.projectSlug, targetVersion);
-        } else {
-          directory = getProjectDir(input.projectSlug);
-        }
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      let directory: string;
+      if (targetVersion > 0) {
+        directory = getVersionDir(input.projectSlug, targetVersion);
+      } else {
+        directory = getProjectDir(input.projectSlug);
       }
 
       try {
@@ -234,7 +257,7 @@ export const agentRouter = router({
     .input(
       z.object({
         sessionId: z.string(),
-        projectSlug: z.string().optional(),
+        projectSlug: z.string(),
         version: z.number().optional(),
       })
     )
@@ -244,15 +267,13 @@ export const agentRouter = router({
         input.sessionId
       );
 
-      let directory: string | undefined;
-      if (input.projectSlug) {
-        const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
-        if (targetVersion > 0) {
-          directory = getVersionDir(input.projectSlug, targetVersion);
-        } else {
-          directory = getProjectDir(input.projectSlug);
-        }
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      let directory: string;
+      if (targetVersion > 0) {
+        directory = getVersionDir(input.projectSlug, targetVersion);
+      } else {
+        directory = getProjectDir(input.projectSlug);
       }
 
       try {

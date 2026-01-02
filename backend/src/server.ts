@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import archiver from "archiver";
 
-import { initOpencode } from "./opencode";
+import { serverManager } from "./opencode";
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
@@ -182,25 +182,15 @@ app.get("/vivd-studio/api/health", (_req, res) => {
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`[OpenCode] Server manager ready (servers spawn on first task)`);
 
-  // Initialize OpenCode Server
-  try {
-    const opencode = await initOpencode();
+  // Graceful shutdown for all opencode servers
+  const cleanup = () => {
+    console.log("[OpenCode] Shutting down...");
+    serverManager.closeAll();
+  };
 
-    // Graceful shutdown
-    const cleanup = () => {
-      console.log("[OpenCode] Stopping server...");
-      try {
-        opencode.server.close();
-      } catch (e) {
-        // ignore
-      }
-    };
-
-    process.on("SIGTERM", cleanup);
-    process.on("SIGINT", cleanup);
-    process.on("exit", cleanup);
-  } catch (error) {
-    console.error("[OpenCode] Failed to start server:", error);
-  }
+  process.on("SIGTERM", cleanup);
+  process.on("SIGINT", cleanup);
+  process.on("exit", cleanup);
 });

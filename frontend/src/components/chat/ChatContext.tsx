@@ -299,6 +299,8 @@ export function ChatProvider({
     trpc.agent.getSessionContent.useQuery(
       {
         sessionId: selectedSessionId!,
+        projectSlug,
+        version,
       },
       {
         enabled: !!selectedSessionId,
@@ -342,10 +344,7 @@ export function ChatProvider({
       }
     } else if (currentSessionStatus.type === "retry") {
       // Session is in retry state (quota error, etc.)
-      debugLog(
-        "[ChatContext] Session status is retry:",
-        currentSessionStatus
-      );
+      debugLog("[ChatContext] Session status is retry:", currentSessionStatus);
       setSessionError({
         type: "retry",
         message: currentSessionStatus.message || "Session retrying",

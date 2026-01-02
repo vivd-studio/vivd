@@ -181,10 +181,12 @@ export function useEvents(
               }
             }
           } else if (event.type === "session.idle") {
-            if (eventCount <= 1) {
-              console.warn(
-                `[useEvents] Session went idle after only ${eventCount} event(s) - model may not have processed the task`
+            // Skip early idle events - a fresh session will emit idle before work starts
+            if (eventCount <= 2) {
+              console.log(
+                `[useEvents] Ignoring early session.idle (eventCount=${eventCount}) - waiting for actual work to complete`
               );
+              continue;
             }
             if (callbacks.onIdle) {
               callbacks.onIdle();
@@ -192,10 +194,12 @@ export function useEvents(
           } else if (event.type === "session.status") {
             const status = (event as any).properties?.status;
             if (status?.type === "idle") {
-              if (eventCount <= 1) {
-                console.warn(
-                  `[useEvents] Session status idle after only ${eventCount} event(s) - model may not have processed the task`
+              // Skip early idle status - a fresh session will emit idle before work starts
+              if (eventCount <= 2) {
+                console.log(
+                  `[useEvents] Ignoring early session.status idle (eventCount=${eventCount}) - waiting for actual work to complete`
                 );
+                continue;
               }
               if (callbacks.onIdle) {
                 callbacks.onIdle();
