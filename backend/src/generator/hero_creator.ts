@@ -10,6 +10,10 @@ import { log } from "./logger";
 import { cleanText, downloadImage, saveImageBuffer } from "./utils";
 import { getTopImages } from "./image_analyzer/utils";
 import { openai } from "./client";
+import {
+  ensureVivdInternalFilesDir,
+  getVivdInternalFilesPath,
+} from "./vivdPaths";
 
 export async function generateHeroPrompt(
   text: string,
@@ -197,7 +201,7 @@ async function saveImage(
 export async function createHeroImage(outputDir: string) {
   log("Starting Hero Image Creation...");
 
-  const textPath = path.join(outputDir, "website_text.txt");
+  const textPath = getVivdInternalFilesPath(outputDir, "website_text.txt");
   if (!fs.existsSync(textPath)) {
     log("No website text found, skipping hero creation.");
     return;
@@ -208,7 +212,10 @@ export async function createHeroImage(outputDir: string) {
   const topImages = getTopImages(outputDir);
   let imageDescriptions = "";
 
-  const descriptionPath = path.join(outputDir, "image-files-description.txt");
+  const descriptionPath = getVivdInternalFilesPath(
+    outputDir,
+    "image-files-description.txt"
+  );
   if (fs.existsSync(descriptionPath)) {
     imageDescriptions = fs.readFileSync(descriptionPath, "utf-8");
   } else {
@@ -257,7 +264,11 @@ export async function createHeroImage(outputDir: string) {
       log(`Saved hero image to ${filename}`);
 
       // Step 4: Update Description File
-      const descFile = path.join(outputDir, "image-files-description.txt");
+      ensureVivdInternalFilesDir(outputDir);
+      const descFile = getVivdInternalFilesPath(
+        outputDir,
+        "image-files-description.txt"
+      );
       const newEntry = `- ${filename} (Generated) - A professionally generated hero image based on the client's brand: ${heroPrompt.replace(
         /\n/g,
         " "

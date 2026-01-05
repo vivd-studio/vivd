@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { Shield, UserPlus, Loader2, AlertCircle } from "lucide-react";
+import { Shield, UserPlus, Loader2, AlertCircle, Wrench } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -23,6 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface User {
   id: string;
@@ -45,6 +47,8 @@ export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [error, setError] = useState("");
   const queryClient = useQueryClient();
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
 
   const form = useForm<AddUserFormValues>({
     resolver: zodResolver(addUserSchema),
@@ -99,6 +103,19 @@ export default function Admin() {
     setError("");
     addUserMutation.mutate(data);
   };
+
+  const migrateMutation = trpc.project.migrateVivdProcessFiles.useMutation({
+    onSuccess: (data) => {
+      toast.success("Migration completed", {
+        description: `Touched ${data.versionsTouched}/${data.versionsScanned} versions`,
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Migration failed", {
+        description: err?.message || "Unknown error",
+      });
+    },
+  });
 
   if (isLoading)
     return (
@@ -296,6 +313,67 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-blue-600" />
+              System Maintenance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Move vivd process files (like <code>project.json</code>,{" "}
+              <code>website_text.txt</code>, screenshots) into the hidden{" "}
+              <code>.vivd/</code> folder for all existing projects.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => {
+                  const ok = window.confirm(
+                    "Run migration for all projects? This will move files into .vivd/."
+                  );
+                  if (!ok) return;
+                  migrateMutation.mutate();
+                }}
+                disabled={migrateMutation.isPending}
+              >
+                {migrateMutation.isPending ? (
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                ) : null}
+                Run Migration
+              </Button>
+              {migrateMutation.data ? (
+                <span className="text-sm text-muted-foreground">
+                  Touched {migrateMutation.data.versionsTouched}/
+                  {migrateMutation.data.versionsScanned} versions
+                  {migrateMutation.data.errors.length
+                    ? ` • ${migrateMutation.data.errors.length} error(s)`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {migrateMutation.data?.errors.length ? (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium mb-2">Errors</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {migrateMutation.data.errors.slice(0, 5).map((e, idx) => (
+                    <li key={idx}>
+                      {e.slug}: {e.error}
+                    </li>
+                  ))}
+                </ul>
+                {migrateMutation.data.errors.length > 5 ? (
+                  <div className="text-muted-foreground mt-2">
+                    …and {migrateMutation.data.errors.length - 5} more
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

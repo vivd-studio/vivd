@@ -7,6 +7,7 @@ import type { Multer } from "multer";
 
 import { getProjectDir, getVersionDir } from "../generator/versionUtils";
 import { initializeGitRepository } from "../generator/gitUtils";
+import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../generator/vivdPaths";
 
 type AuthLike = {
   api: {
@@ -70,14 +71,17 @@ function containsSymlink(targetDir: string): boolean {
 }
 
 function findExtractRoot(extractedDir: string): string | null {
-  const rootProjectJson = path.join(extractedDir, "project.json");
-  if (fs.existsSync(rootProjectJson)) return extractedDir;
+  const hasProjectJson = (dir: string) =>
+    fs.existsSync(path.join(dir, "project.json")) ||
+    fs.existsSync(path.join(dir, ".vivd", "project.json"));
+
+  if (hasProjectJson(extractedDir)) return extractedDir;
 
   const entries = fs.readdirSync(extractedDir, { withFileTypes: true });
   const dirs = entries.filter((e) => e.isDirectory());
   if (dirs.length === 1) {
     const candidate = path.join(extractedDir, dirs[0].name);
-    if (fs.existsSync(path.join(candidate, "project.json"))) return candidate;
+    if (hasProjectJson(candidate)) return candidate;
   }
 
   return null;
@@ -124,7 +128,7 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
       if (!rootDir) {
         return res.status(400).json({
           error:
-            "Invalid ZIP structure: expected project.json at root (or inside a single top-level folder)",
+            "Invalid ZIP structure: expected project.json (or .vivd/project.json) at root (or inside a single top-level folder)",
         });
       }
 
@@ -135,8 +139,14 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         });
       }
 
+      const sourceProjectJsonPath = fs.existsSync(
+        path.join(rootDir, ".vivd", "project.json")
+      )
+        ? path.join(rootDir, ".vivd", "project.json")
+        : path.join(rootDir, "project.json");
+
       const rawProjectData = JSON.parse(
-        fs.readFileSync(path.join(rootDir, "project.json"), "utf-8")
+        fs.readFileSync(sourceProjectJsonPath, "utf-8")
       ) as Record<string, unknown>;
 
       const url =
@@ -201,7 +211,11 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
       createdProjectDir = projectDir;
       fs.cpSync(rootDir, versionDir, { recursive: true });
 
-      const importedProjectJsonPath = path.join(versionDir, "project.json");
+      ensureVivdInternalFilesDir(versionDir);
+      const importedProjectJsonPath = getVivdInternalFilesPath(
+        versionDir,
+        "project.json"
+      );
       const normalizedProjectData: Record<string, unknown> = {
         ...rawProjectData,
         source,
@@ -216,6 +230,15 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         importedProjectJsonPath,
         JSON.stringify(normalizedProjectData, null, 2)
       );
+
+      const legacyRootProjectJson = path.join(versionDir, "project.json");
+      if (fs.existsSync(legacyRootProjectJson)) {
+        try {
+          fs.rmSync(legacyRootProjectJson, { force: true });
+        } catch {
+          // ignore
+        }
+      }
 
       const manifest: Record<string, unknown> = {
         url,
@@ -273,4 +296,3 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
 
   return router;
 }
-

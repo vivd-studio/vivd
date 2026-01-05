@@ -8,8 +8,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import {
+  migrateVivdInternalArtifactsInVersion,
+  getVivdInternalFilesPath,
+} from "../generator/vivdPaths";
+import { getProjectsDir } from "../generator/versionUtils";
 
-const PROJECTS_DIR = path.join(process.cwd(), "projects");
+const PROJECTS_DIR = getProjectsDir();
 
 interface ProjectManifest {
   url: string;
@@ -82,8 +87,15 @@ function migrateProject(slug: string): boolean {
     console.log(`    Moved: ${item.name}`);
   }
 
+  // Move vivd process files into `.vivd/` inside v1
+  try {
+    migrateVivdInternalArtifactsInVersion(v1Dir);
+  } catch (e) {
+    console.error(`    Error migrating vivd files for ${slug}:`, e);
+  }
+
   // Update the project.json in v1 to include version number
-  const v1ProjectJsonPath = path.join(v1Dir, "project.json");
+  const v1ProjectJsonPath = getVivdInternalFilesPath(v1Dir, "project.json");
   if (fs.existsSync(v1ProjectJsonPath)) {
     try {
       const projectData = JSON.parse(

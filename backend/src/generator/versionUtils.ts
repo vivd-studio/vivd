@@ -1,8 +1,18 @@
 import * as path from "path";
 import * as fs from "fs";
+import { fileURLToPath } from "url";
+import {
+  migrateVivdInternalArtifactsInVersion,
+  getVivdInternalFilesPath,
+} from "./vivdPaths";
 
 // Base directory for all projects
-const PROJECTS_DIR = path.join(process.cwd(), "projects");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(__dirname, "../../projects");
+
+export function getProjectsDir(): string {
+  return PROJECTS_DIR;
+}
 
 // Project-level manifest (at projects/<slug>/manifest.json)
 export interface ProjectManifest {
@@ -22,7 +32,7 @@ export interface VersionInfo {
   startedAt?: string; // ISO timestamp when processing started
 }
 
-// Version-specific data (at projects/<slug>/v<N>/project.json)
+// Version-specific data (at projects/<slug>/v<N>/.vivd/project.json)
 export interface VersionData {
   url: string;
   source?: "url" | "scratch";
@@ -252,8 +262,15 @@ export function migrateProjectIfNeeded(slug: string): boolean {
     fs.renameSync(sourcePath, destPath);
   }
 
+  // Move vivd process files into `.vivd/` inside v1
+  try {
+    migrateVivdInternalArtifactsInVersion(v1Dir);
+  } catch (e) {
+    console.error(`[Version] Failed to migrate vivd files for ${slug}/v1:`, e);
+  }
+
   // Update the project.json in v1 to include version number
-  const v1ProjectJsonPath = path.join(v1Dir, "project.json");
+  const v1ProjectJsonPath = getVivdInternalFilesPath(v1Dir, "project.json");
   if (fs.existsSync(v1ProjectJsonPath)) {
     try {
       const projectData = JSON.parse(
@@ -378,7 +395,7 @@ export function getVersionData(
   version: number
 ): VersionData | null {
   const versionDir = getVersionDir(slug, version);
-  const projectJsonPath = path.join(versionDir, "project.json");
+  const projectJsonPath = getVivdInternalFilesPath(versionDir, "project.json");
 
   if (!fs.existsSync(projectJsonPath)) {
     return null;

@@ -3,6 +3,7 @@ import * as path from 'path';
 import sharp from 'sharp';
 import { imageSize as sizeOf } from 'image-size';
 import { log } from '../logger';
+import { getVivdInternalFilesPath } from '../vivdPaths';
 
 export function getImageDimensions(filePath: string): { width: number; height: number } {
     try {
@@ -17,7 +18,7 @@ export function getImageDimensions(filePath: string): { width: number; height: n
 }
 
 export function getTopImages(outputDir: string): string[] {
-    const descriptionPath = path.join(outputDir, 'image-files-description.txt');
+    const descriptionPath = getVivdInternalFilesPath(outputDir, 'image-files-description.txt');
     if (fs.existsSync(descriptionPath)) {
         const content = fs.readFileSync(descriptionPath, 'utf-8');
         // Parse lines like "- filename (WxH) - description"

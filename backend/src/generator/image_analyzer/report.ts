@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { log } from '../logger';
 import type { ImageInfo } from './types';
+import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from '../vivdPaths';
 
 export function generateImageDescriptionFile(images: ImageInfo[], outputDir: string) {
     let content = 'Image Files Description\n\nImages are in images/ folder.\n\n';
@@ -22,6 +22,10 @@ export function generateImageDescriptionFile(images: ImageInfo[], outputDir: str
         }
     }
 
-    fs.writeFileSync(path.join(outputDir, 'image-files-description.txt'), content);
+    ensureVivdInternalFilesDir(outputDir);
+    fs.writeFileSync(
+        getVivdInternalFilesPath(outputDir, 'image-files-description.txt'),
+        content
+    );
     log(`Generated image-files-description.txt`);
 }

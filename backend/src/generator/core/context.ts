@@ -1,5 +1,4 @@
 import * as fs from "fs";
-import * as path from "path";
 import {
   createVersionEntry,
   getManifest,
@@ -10,6 +9,7 @@ import {
   updateVersionStatus,
 } from "../versionUtils";
 import type { GenerationContext, GenerationSource } from "../flows/types";
+import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../vivdPaths";
 
 function slugifyTitle(title: string): string {
   const cleaned = title
@@ -93,7 +93,8 @@ export function createGenerationContext(
     saveManifest(slug, manifest);
   }
 
-  const projectJsonPath = path.join(outputDir, "project.json");
+  ensureVivdInternalFilesDir(outputDir);
+  const projectJsonPath = getVivdInternalFilesPath(outputDir, "project.json");
   const projectData: Record<string, unknown> = {
     source,
     url: input.url ?? "",
@@ -118,4 +119,3 @@ export function createGenerationContext(
 
   return { source, slug, version, outputDir, updateStatus };
 }
-

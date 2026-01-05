@@ -1,7 +1,10 @@
 import * as fs from "fs";
-import * as path from "path";
 import { log } from "../logger";
 import { scraperClient } from "../scraper-client";
+import {
+  ensureVivdInternalFilesDir,
+  getVivdInternalFilesPath,
+} from "../vivdPaths";
 import {
   extractNavigationLinks,
   prioritizeNavigationLinks,
@@ -20,7 +23,7 @@ export async function scrapeWebsiteRemote(url: string, outputDir: string) {
 
   // Read main page text for deduplication
   const mainPageText = fs.readFileSync(
-    path.join(outputDir, "website_text.txt"),
+    getVivdInternalFilesPath(outputDir, "website_text.txt"),
     "utf-8"
   );
 
@@ -62,7 +65,11 @@ export async function scrapeWebsiteRemote(url: string, outputDir: string) {
   // This would use scraperClient.scrapePage for each subpage
 
   // 6. Save Final Aggregated Text
-  fs.writeFileSync(path.join(outputDir, "website_text.txt"), aggregatedText);
+  ensureVivdInternalFilesDir(outputDir);
+  fs.writeFileSync(
+    getVivdInternalFilesPath(outputDir, "website_text.txt"),
+    aggregatedText
+  );
   log(`Saved aggregated text to website_text.txt`);
 
   // 7. Deduplicate Images (local)

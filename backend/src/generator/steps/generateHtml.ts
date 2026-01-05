@@ -3,6 +3,7 @@ import * as path from "path";
 import { log } from "../logger";
 import { cleanText } from "../utils";
 import { ENABLE_IMAGE_ANALYSIS } from "../config";
+import { getVivdInternalFilesPath } from "../vivdPaths";
 import {
   getImagesSection,
   OPEN_ROUTER_LANDING_PAGE_PROMPT,
@@ -76,7 +77,7 @@ export async function generateHtml(input: GenerateHtmlInput) {
   const textPath =
     input.source === "scratch"
       ? path.join(input.outputDir, "scratch_brief.txt")
-      : path.join(input.outputDir, "website_text.txt");
+      : getVivdInternalFilesPath(input.outputDir, "website_text.txt");
   if (!fs.existsSync(textPath)) {
     log(`${path.basename(textPath)} not found, skipping generation.`);
     return;
@@ -85,16 +86,18 @@ export async function generateHtml(input: GenerateHtmlInput) {
   const rawText = fs.readFileSync(textPath, "utf-8");
   const text = cleanText(rawText).substring(0, 30000);
 
-  const screenshotPath = path.join(input.outputDir, "screenshot.png");
+  const screenshotPath = getVivdInternalFilesPath(
+    input.outputDir,
+    "screenshot.png"
+  );
   const hasScreenshot = fs.existsSync(screenshotPath);
 
-  const imageList = fs.existsSync(
-    path.join(input.outputDir, "image-files-description.txt")
-  )
-    ? fs.readFileSync(
-        path.join(input.outputDir, "image-files-description.txt"),
-        "utf-8"
-      )
+  const descriptionPath = getVivdInternalFilesPath(
+    input.outputDir,
+    "image-files-description.txt"
+  );
+  const imageList = fs.existsSync(descriptionPath)
+    ? fs.readFileSync(descriptionPath, "utf-8")
     : fs.existsSync(path.join(input.outputDir, "images"))
     ? fs
         .readdirSync(path.join(input.outputDir, "images"))

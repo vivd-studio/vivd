@@ -18,6 +18,9 @@ import {
   getCurrentVersion,
 } from "../generator/versionUtils";
 import fs from "fs";
+import path from "path";
+import { CHECKLIST_PROMPT } from "../opencode/checklistTypes";
+import type { PrePublishChecklist, ChecklistItem } from "../opencode/checklistTypes";
 
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
 const debugLog = (...args: unknown[]) => {
@@ -283,6 +286,189 @@ export const agentRouter = router({
       } catch (error: any) {
         console.error("[Unrevert] Failed to unrevert session:", error);
         throw new Error(error.message || "Failed to unrevert session");
+      }
+    }),
+
+  /**
+   * Run pre-publish checklist analysis via the agent.
+   * The agent analyzes the project and returns a JSON checklist.
+   * Results are saved to .vivd/publish-checklist.json
+   */
+  runPrePublishChecklist: protectedProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const projectDir = getProjectDir(input.projectSlug);
+
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
+      }
+
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      if (targetVersion === 0) {
+        throw new Error("No versions found for this project");
+      }
+
+      const versionPath = getVersionDir(input.projectSlug, targetVersion);
+
+      if (!fs.existsSync(versionPath)) {
+        throw new Error(`Version ${targetVersion} not found for project`);
+      }
+
+      try {
+        console.log(
+          `[PrePublishChecklist] Running checklist for ${input.projectSlug} v${targetVersion}`
+        );
+
+        // Run the agent with the checklist prompt - always create a new session
+        const { sessionId } = await runTask(CHECKLIST_PROMPT, versionPath);
+
+        // Wait a bit for the agent to complete and then get the session content
+        // The agent should respond with JSON only
+        let attempts = 0;
+        const maxAttempts = 60; // 60 seconds max wait
+        let checklistData: { items: ChecklistItem[] } | null = null;
+
+        while (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          attempts++;
+
+          const messages = await getSessionContent(sessionId, versionPath);
+
+          // Look for the agent's response (assistant message with JSON)
+          const assistantMessages = messages?.filter(
+            (m: { info: { role: string } }) => m.info.role === "assistant"
+          );
+
+          if (assistantMessages && assistantMessages.length > 0) {
+            const lastMessage = assistantMessages[assistantMessages.length - 1];
+
+            // Extract text content from the message
+            let textContent = "";
+            if (lastMessage.parts) {
+              for (const part of lastMessage.parts) {
+                if (part.type === "text" && part.text) {
+                  textContent += part.text;
+                }
+              }
+            }
+
+            // Try to parse JSON from the response
+            if (textContent) {
+              try {
+                // Remove markdown code blocks if present
+                const jsonMatch = textContent.match(
+                  /```(?:json)?\s*([\s\S]*?)```/
+                );
+                const jsonStr = jsonMatch
+                  ? jsonMatch[1].trim()
+                  : textContent.trim();
+
+                checklistData = JSON.parse(jsonStr);
+                if (
+                  checklistData?.items &&
+                  Array.isArray(checklistData.items)
+                ) {
+                  console.log(
+                    `[PrePublishChecklist] Successfully parsed ${checklistData.items.length} items`
+                  );
+                  break;
+                }
+              } catch {
+                // JSON not ready yet or invalid, continue waiting
+                debugLog(
+                  "[PrePublishChecklist] Waiting for valid JSON response..."
+                );
+              }
+            }
+          }
+        }
+
+        if (!checklistData || !checklistData.items) {
+          throw new Error(
+            "Agent did not return a valid checklist. Please try again."
+          );
+        }
+
+        // Calculate summary
+        const summary = {
+          passed: checklistData.items.filter((i) => i.status === "pass").length,
+          failed: checklistData.items.filter((i) => i.status === "fail").length,
+          warnings: checklistData.items.filter((i) => i.status === "warning")
+            .length,
+          skipped: checklistData.items.filter((i) => i.status === "skip")
+            .length,
+        };
+
+        // Build the full checklist object
+        const checklist: PrePublishChecklist = {
+          projectSlug: input.projectSlug,
+          version: targetVersion,
+          runAt: new Date().toISOString(),
+          items: checklistData.items,
+          summary,
+        };
+
+        // Save to .vivd/publish-checklist.json
+        const vivdDir = path.join(versionPath, ".vivd");
+        if (!fs.existsSync(vivdDir)) {
+          fs.mkdirSync(vivdDir, { recursive: true });
+        }
+
+        const checklistPath = path.join(vivdDir, "publish-checklist.json");
+        fs.writeFileSync(checklistPath, JSON.stringify(checklist, null, 2));
+
+        console.log(
+          `[PrePublishChecklist] Saved checklist to ${checklistPath}`
+        );
+
+        return { success: true, checklist, sessionId };
+      } catch (error: any) {
+        console.error("[PrePublishChecklist] Error:", error);
+        throw new Error(error.message || "Failed to run pre-publish checklist");
+      }
+    }),
+
+  /**
+   * Get the saved pre-publish checklist for a project version.
+   */
+  getPrePublishChecklist: protectedProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+
+      if (targetVersion === 0) {
+        return { checklist: null };
+      }
+
+      const versionPath = getVersionDir(input.projectSlug, targetVersion);
+      const checklistPath = path.join(
+        versionPath,
+        ".vivd",
+        "publish-checklist.json"
+      );
+
+      if (!fs.existsSync(checklistPath)) {
+        return { checklist: null };
+      }
+
+      try {
+        const content = fs.readFileSync(checklistPath, "utf-8");
+        const checklist: PrePublishChecklist = JSON.parse(content);
+        return { checklist };
+      } catch {
+        return { checklist: null };
       }
     }),
 

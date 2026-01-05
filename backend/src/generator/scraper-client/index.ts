@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { log } from "../logger";
+import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../vivdPaths";
 
 const SCRAPER_URL = process.env.SCRAPER_URL || "http://scraper:3001";
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
@@ -87,20 +88,25 @@ export const scraperClient = {
       }
     );
 
+    ensureVivdInternalFilesDir(outputDir);
+
     // Save website text
     fs.writeFileSync(
-      path.join(outputDir, "website_text.txt"),
+      getVivdInternalFilesPath(outputDir, "website_text.txt"),
       response.websiteText
     );
     log(`[ScraperClient] Saved website_text.txt`);
 
     // Save main screenshot
     const screenshotBuffer = Buffer.from(response.screenshot, "base64");
-    fs.writeFileSync(path.join(outputDir, "screenshot.png"), screenshotBuffer);
+    fs.writeFileSync(
+      getVivdInternalFilesPath(outputDir, "screenshot.png"),
+      screenshotBuffer
+    );
     log(`[ScraperClient] Saved screenshot.png`);
 
     // Save header screenshot
-    const headerPath = path.join(outputDir, "header_screenshot.png");
+    const headerPath = getVivdInternalFilesPath(outputDir, "header_screenshot.png");
     const headerBuffer = Buffer.from(response.headerScreenshot, "base64");
     fs.writeFileSync(headerPath, headerBuffer);
     log(`[ScraperClient] Saved header_screenshot.png`);

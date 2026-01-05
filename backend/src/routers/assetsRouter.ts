@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../trpc";
 import { getVersionDir } from "../generator/versionUtils";
+import { hasDotSegment } from "../generator/vivdPaths";
 import path from "path";
 import fs from "fs";
 import axios from "axios";
@@ -52,6 +53,9 @@ export const assetsRouter = router({
     )
     .query(async ({ input }) => {
       const { slug, version, relativePath } = input;
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
       const versionDir = getVersionDir(slug, version);
       const targetDir = path.join(versionDir, relativePath);
 
@@ -131,6 +135,9 @@ export const assetsRouter = router({
     )
     .mutation(async ({ input }) => {
       const { slug, version, relativePath } = input;
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
       const versionDir = getVersionDir(slug, version);
       const targetPath = path.join(versionDir, relativePath);
 
@@ -175,6 +182,9 @@ export const assetsRouter = router({
     )
     .mutation(async ({ input }) => {
       const { slug, version, relativePath, folderName } = input;
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
       const versionDir = getVersionDir(slug, version);
 
       // Sanitize folder name
@@ -213,6 +223,9 @@ export const assetsRouter = router({
     )
     .mutation(async ({ input }) => {
       const { slug, version, relativePath, prompt } = input;
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
       const versionDir = getVersionDir(slug, version);
       const imagePath = path.join(versionDir, relativePath);
 

@@ -1,10 +1,10 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { generateHtml } from './steps/generateHtml';
 import { log } from './logger';
+import { getVivdInternalFilesPath } from './vivdPaths';
 
 export async function generateLandingPage(outputDir: string) {
-    if (!fs.existsSync(path.join(outputDir, 'website_text.txt'))) return;
+    if (!fs.existsSync(getVivdInternalFilesPath(outputDir, 'website_text.txt'))) return;
     try {
         await generateHtml({ outputDir, source: 'url' });
     } catch (error: any) {

@@ -15,6 +15,7 @@ import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
 import { getVersionDir } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
+import { hasDotSegment } from "./generator/vivdPaths";
 
 // ESM dirname replacement
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -72,6 +73,9 @@ app.post(
 
       const { slug, version } = req.params;
       const relativePath = (req.query.path as string) || "";
+      if (hasDotSegment(relativePath)) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
       const versionDir = getVersionDir(slug, parseInt(version));
 
       if (!fs.existsSync(versionDir)) {

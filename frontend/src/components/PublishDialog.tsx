@@ -12,12 +12,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Globe,
   Loader2,
   ExternalLink,
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  SkipForward,
+  ChevronDown,
+  ClipboardCheck,
+  RefreshCw,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -31,6 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { formatDistanceToNow } from "date-fns";
 
 interface PublishDialogProps {
   open: boolean;
@@ -39,6 +49,54 @@ interface PublishDialogProps {
   version: number;
   onPublished?: () => void;
 }
+
+type ChecklistStatus = "pass" | "fail" | "warning" | "skip";
+
+interface ChecklistItem {
+  id: string;
+  label: string;
+  status: ChecklistStatus;
+  note?: string;
+}
+
+interface PrePublishChecklist {
+  projectSlug: string;
+  version: number;
+  runAt: string;
+  items: ChecklistItem[];
+  summary: {
+    passed: number;
+    failed: number;
+    warnings: number;
+    skipped: number;
+  };
+}
+
+const statusConfig: Record<
+  ChecklistStatus,
+  { icon: typeof CheckCircle2; color: string; bgColor: string }
+> = {
+  pass: {
+    icon: CheckCircle2,
+    color: "text-green-600 dark:text-green-400",
+    bgColor: "bg-green-50 dark:bg-green-900/20",
+  },
+  fail: {
+    icon: XCircle,
+    color: "text-red-600 dark:text-red-400",
+    bgColor: "bg-red-50 dark:bg-red-900/20",
+  },
+  warning: {
+    icon: AlertTriangle,
+    color: "text-amber-600 dark:text-amber-400",
+    bgColor: "bg-amber-50 dark:bg-amber-900/20",
+  },
+  skip: {
+    icon: SkipForward,
+    color: "text-gray-500 dark:text-gray-400",
+    bgColor: "bg-gray-50 dark:bg-gray-800/50",
+  },
+};
 
 export function PublishDialog({
   open,
@@ -49,6 +107,8 @@ export function PublishDialog({
 }: PublishDialogProps) {
   const [domain, setDomain] = useState("");
   const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [isRunningChecklist, setIsRunningChecklist] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -64,6 +124,40 @@ export function PublishDialog({
     { slug: projectSlug },
     { enabled: open && !!projectSlug, retry: false }
   );
+
+  // Get saved checklist
+  const {
+    data: checklistData,
+    isLoading: isLoadingChecklist,
+    refetch: refetchChecklist,
+  } = trpc.agent.getPrePublishChecklist.useQuery(
+    { projectSlug, version },
+    { enabled: open && !!projectSlug }
+  );
+
+  // Run checklist mutation
+  const runChecklistMutation = trpc.agent.runPrePublishChecklist.useMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Checklist complete: ${data.checklist.summary.passed}/${data.checklist.items.length} passed`
+      );
+      refetchChecklist();
+      setIsRunningChecklist(false);
+      setChecklistOpen(true);
+    },
+    onError: (error) => {
+      toast.error(`Failed to run checklist: ${error.message}`);
+      setIsRunningChecklist(false);
+    },
+  });
+
+  const handleRunChecklist = () => {
+    setIsRunningChecklist(true);
+    runChecklistMutation.mutate({ projectSlug, version });
+  };
+
+  const checklist: PrePublishChecklist | null =
+    checklistData?.checklist ?? null;
 
   // Check domain availability (debounced)
   const { data: domainCheck, isLoading: isCheckingDomain } =
@@ -92,7 +186,9 @@ export function PublishDialog({
       toast.success(data.message);
       if (data.github?.attempted && !data.github.success) {
         toast.error(
-          `GitHub sync failed (published anyway): ${data.github.error || "unknown error"}`
+          `GitHub sync failed (published anyway): ${
+            data.github.error || "unknown error"
+          }`
         );
       }
       utils.project.publishStatus.invalidate({ slug: projectSlug });
@@ -149,10 +245,24 @@ export function PublishDialog({
 
   const domainStatus = getDomainStatus();
 
+  // Checklist summary for badge
+  const getChecklistBadge = () => {
+    if (!checklist) return null;
+    const { passed, failed, warnings } = checklist.summary;
+    const total = checklist.items.length;
+    if (failed > 0)
+      return { variant: "destructive" as const, text: `${failed} issues` };
+    if (warnings > 0)
+      return { variant: "secondary" as const, text: `${warnings} warnings` };
+    return { variant: "default" as const, text: `${passed}/${total} ✓` };
+  };
+
+  const checklistBadge = getChecklistBadge();
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-[520px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5" />
@@ -165,89 +275,194 @@ export function PublishDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {isLoadingStatus && !isStatusError ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="grid gap-4 py-4">
-              {/* Current Status Banner */}
-              {isPublished && (
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">
-                      Published
-                    </span>
-                  </div>
-                  <a
-                    href={publishStatus.url || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-green-600 hover:text-green-800 dark:text-green-400 flex items-center gap-1"
-                  >
-                    {publishStatus.domain}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-
-              {/* Domain Input */}
-              <div className="grid gap-2">
-                <Label htmlFor="domain">Domain</Label>
-                <div className="relative">
-                  <Input
-                    id="domain"
-                    placeholder="example.com"
-                    value={domain}
-                    onChange={(e) => setDomain(e.target.value.toLowerCase())}
-                    className="pr-10"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    {domainStatus === "checking" && (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
-                    {domainStatus === "available" && (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    )}
-                    {domainStatus === "unavailable" && (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {domainCheck?.normalizedDomain &&
-                    domainCheck.normalizedDomain !== domain && (
-                      <>
-                        <span>Will use:</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {domainCheck.normalizedDomain}
-                        </Badge>
-                      </>
-                    )}
-                  {domainStatus === "unavailable" && domainCheck?.error && (
-                    <span className="text-red-500">{domainCheck.error}</span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Both {domain || "example.com"} and www.
-                  {domain || "example.com"} will point to your site
-                </p>
+          <div className="flex-1 overflow-y-auto">
+            {isLoadingStatus && !isStatusError ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
+            ) : (
+              <div className="grid gap-4 py-4">
+                {/* Current Status Banner */}
+                {isPublished && (
+                  <div className="flex items-center justify-between p-3 rounded-lg border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                        Published
+                      </span>
+                    </div>
+                    <a
+                      href={publishStatus.url || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-green-600 hover:text-green-800 dark:text-green-400 flex items-center gap-1"
+                    >
+                      {publishStatus.domain}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
 
-              {/* Info Note */}
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
-                <div className="text-xs text-amber-700 dark:text-amber-400">
-                  <p className="font-medium">DNS Configuration Required</p>
-                  <p className="mt-1">
-                    Point your domain's DNS A record to your server's IP
-                    address. HTTPS will be automatically configured.
+                {/* Pre-Publish Checklist Section */}
+                <Collapsible
+                  open={checklistOpen}
+                  onOpenChange={setChecklistOpen}
+                >
+                  <CollapsibleTrigger asChild>
+                    <button className="flex items-center justify-between w-full p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors text-left">
+                      <div className="flex items-center gap-2">
+                        <ClipboardCheck className="h-4 w-4" />
+                        <span className="text-sm font-medium">
+                          Pre-Publish Checklist
+                        </span>
+                        {checklistBadge && (
+                          <Badge
+                            variant={checklistBadge.variant}
+                            className="text-xs"
+                          >
+                            {checklistBadge.text}
+                          </Badge>
+                        )}
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${
+                          checklistOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2 space-y-2">
+                    {isRunningChecklist ? (
+                      <div className="flex flex-col items-center justify-center py-6 gap-3">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        <div className="text-center">
+                          <p className="text-sm font-medium">
+                            Running production checks...
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            This may take up to a minute
+                          </p>
+                        </div>
+                      </div>
+                    ) : checklist ? (
+                      <>
+                        <p className="text-xs text-muted-foreground px-1">
+                          Last run{" "}
+                          {formatDistanceToNow(new Date(checklist.runAt))} ago
+                        </p>
+                        <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                          {checklist.items.map((item) => {
+                            const config = statusConfig[item.status];
+                            const Icon = config.icon;
+                            return (
+                              <div
+                                key={item.id}
+                                className={`flex items-start gap-2 p-2 rounded-md border text-sm ${config.bgColor}`}
+                              >
+                                <Icon
+                                  className={`w-4 h-4 mt-0.5 shrink-0 ${config.color}`}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-xs">
+                                    {item.label}
+                                  </p>
+                                  {item.note && (
+                                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                      {item.note}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRunChecklist}
+                          disabled={isRunningChecklist}
+                          className="w-full"
+                        >
+                          <RefreshCw className="w-3 h-3 mr-2" />
+                          Re-run Checks
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center py-4 gap-3">
+                        <p className="text-sm text-muted-foreground text-center">
+                          Run automated checks to verify your site is
+                          production-ready
+                        </p>
+                        <Button
+                          onClick={handleRunChecklist}
+                          disabled={isRunningChecklist || isLoadingChecklist}
+                          size="sm"
+                        >
+                          <ClipboardCheck className="w-4 h-4 mr-2" />
+                          Run Pre-Publish Checks
+                        </Button>
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Domain Input */}
+                <div className="grid gap-2">
+                  <Label htmlFor="domain">Domain</Label>
+                  <div className="relative">
+                    <Input
+                      id="domain"
+                      placeholder="example.com"
+                      value={domain}
+                      onChange={(e) => setDomain(e.target.value.toLowerCase())}
+                      className="pr-10"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {domainStatus === "checking" && (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                      {domainStatus === "available" && (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      )}
+                      {domainStatus === "unavailable" && (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {domainCheck?.normalizedDomain &&
+                      domainCheck.normalizedDomain !== domain && (
+                        <>
+                          <span>Will use:</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {domainCheck.normalizedDomain}
+                          </Badge>
+                        </>
+                      )}
+                    {domainStatus === "unavailable" && domainCheck?.error && (
+                      <span className="text-red-500">{domainCheck.error}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Both {domain || "example.com"} and www.
+                    {domain || "example.com"} will point to your site
                   </p>
                 </div>
+
+                {/* Info Note */}
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div className="text-xs text-amber-700 dark:text-amber-400">
+                    <p className="font-medium">DNS Configuration Required</p>
+                    <p className="mt-1">
+                      Point your domain's DNS A record to your server's IP
+                      address. HTTPS will be automatically configured.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
             {isPublished && (

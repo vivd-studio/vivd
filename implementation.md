@@ -31,24 +31,29 @@ Consolidated plan to get vivd ready for production deployments. The goal: enable
 
 **Checklist items**:
 
-- [ ] Impressum / Imprint page exists and is linked
-- [ ] Datenschutz / Privacy policy exists and is linked
-- [ ] Cookie banner (if cookies are used)
-- [ ] Sitemap.xml exists
-- [ ] Robots.txt exists
-- [ ] Favicon is set
-- [ ] Custom 404.html page exists
-- [ ] All navigation links work (no broken internal links)
-- [ ] Contact form is functional (if present)
-- [ ] SEO meta tags are set (title, description, OG tags)
-- [ ] Alt text on images
+- [x] Impressum / Imprint page exists and is linked
+- [x] Datenschutz / Privacy policy exists and is linked
+- [x] Cookie banner (if cookies are used)
+- [x] Sitemap.xml exists
+- [x] Robots.txt exists
+- [x] Favicon is set
+- [x] Custom 404.html page exists
+- [x] All navigation links work (no broken internal links)
+- [x] Contact form is functional (if present)
+- [x] SEO meta tags are set (title, description, OG tags)
+- [x] Alt text on images
 
 **Implementation**:
 
-- Create a `publish-checklist` procedure in backend
-- Add a pre-publish hook that runs the checklist
-- Display results in modal before publishing
-- Allow override with warning
+- [x] Create a `publish-checklist` procedure in backend
+- [ ] Add a pre-publish hook that runs the checklist (Implemented as dialog step instead)
+- [x] Display results in modal before publishing
+- [x] Allow override with warning
+
+**Follow-up Tasks**:
+
+- [ ] **Fix-it Prompt**: Add a "Fix this" button/prompt that asks the agent to resolve specific checklist deficiencies.
+- [ ] **File Migration**: Migrate all vivd-specific files (like `project.json`) to the `.vivd/` folder to keep the project root clean.
 
 ---
 
@@ -71,12 +76,12 @@ Consolidated plan to get vivd ready for production deployments. The goal: enable
 ```markdown
 # Project: {project_name}
 
-This is a live production website. Code changes will be deployed to the internet.
+Your name is vivd. You work in vivd-studio and are responsible for building the customers website. This is a live production website. Code changes will be deployed to the internet.
 
 ## Important Guidelines
 
 1. **Non-technical users**: You may be working with people unfamiliar with code.
-   Ask clarifying questions when instructions are ambiguous.
+   If necessary ask clarifying questions.
 2. **Production ready**: All code must be production-quality:
    - No console.logs left in production
    - No placeholder content

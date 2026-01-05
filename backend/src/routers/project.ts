@@ -11,6 +11,9 @@ import {
   isVersionStale,
   updateVersionStatus,
   PROCESSING_STATUSES,
+  isLegacyProject,
+  migrateProjectIfNeeded,
+  getProjectsDir,
 } from "../generator/versionUtils";
 import { createGenerationContext } from "../generator/core/context";
 import { runScratchFlow } from "../generator/flows/scratchFlow";
@@ -19,6 +22,13 @@ import path from "path";
 import fs from "fs";
 import { gitService } from "../services/GitService";
 import { publishService } from "../services/PublishService";
+import {
+  hasDotSegment,
+  ensureVivdInternalFilesDir,
+  getVivdInternalFilesPath,
+  migrateVivdInternalArtifactsInVersion,
+  VIVD_INTERNAL_ARTIFACT_FILENAMES,
+} from "../generator/vivdPaths";
 
 export const projectRouter = router({
   generate: protectedProcedure
@@ -312,7 +322,7 @@ export const projectRouter = router({
     }),
 
   list: protectedProcedure.query(async () => {
-    const projectsDir = path.join(process.cwd(), "projects");
+    const projectsDir = getProjectsDir();
 
     if (!fs.existsSync(projectsDir)) {
       return { projects: [] };
@@ -389,6 +399,9 @@ export const projectRouter = router({
     )
     .mutation(async ({ input }) => {
       const { slug, version, filePath, content } = input;
+      if (hasDotSegment(filePath)) {
+        throw new Error("Cannot edit hidden files");
+      }
       const versionDir = getVersionDir(slug, version);
 
       if (!fs.existsSync(versionDir)) {
@@ -493,12 +506,13 @@ export const projectRouter = router({
 
       // Also update the version-specific project.json if it exists
       const versionDir = getVersionDir(slug, targetVersion);
-      const projectJsonPath = path.join(versionDir, "project.json");
-      if (fs.existsSync(projectJsonPath)) {
+      const readPath = getVivdInternalFilesPath(versionDir, "project.json");
+      if (fs.existsSync(readPath)) {
         try {
-          const data = JSON.parse(fs.readFileSync(projectJsonPath, "utf-8"));
+          const data = JSON.parse(fs.readFileSync(readPath, "utf-8"));
           data.status = "failed";
-          fs.writeFileSync(projectJsonPath, JSON.stringify(data, null, 2));
+          ensureVivdInternalFilesDir(versionDir);
+          fs.writeFileSync(readPath, JSON.stringify(data, null, 2));
         } catch (e) {
           console.error(
             `Failed to update project.json for ${slug}/v${targetVersion}:`,
@@ -520,6 +534,108 @@ export const projectRouter = router({
         message: `Reset ${slug} v${targetVersion} from '${currentStatus}' to 'failed'`,
       };
     }),
+
+  /**
+   * Admin maintenance: move vivd process files into `.vivd/` for all versions.
+   * Keeps the version root clean and prevents accidental public access to process artifacts.
+   */
+  migrateVivdProcessFiles: adminProcedure.mutation(async () => {
+    const projectsDir = getProjectsDir();
+    if (!fs.existsSync(projectsDir)) {
+      return {
+        success: true,
+        projectsScanned: 0,
+        legacyProjectsMigrated: 0,
+        versionsScanned: 0,
+        versionsTouched: 0,
+        moved: Object.fromEntries(
+          VIVD_INTERNAL_ARTIFACT_FILENAMES.map((f) => [f, 0])
+        ),
+        movedToLegacy: Object.fromEntries(
+          VIVD_INTERNAL_ARTIFACT_FILENAMES.map((f) => [f, 0])
+        ),
+        errors: [] as Array<{ slug: string; versionDir: string; error: string }>,
+      };
+    }
+
+    const moved: Record<string, number> = Object.fromEntries(
+      VIVD_INTERNAL_ARTIFACT_FILENAMES.map((f) => [f, 0])
+    );
+    const movedToLegacy: Record<string, number> = Object.fromEntries(
+      VIVD_INTERNAL_ARTIFACT_FILENAMES.map((f) => [f, 0])
+    );
+
+    let projectsScanned = 0;
+    let legacyProjectsMigrated = 0;
+    let versionsScanned = 0;
+    let versionsTouched = 0;
+    const errors: Array<{ slug: string; versionDir: string; error: string }> =
+      [];
+
+    const projectDirs = fs
+      .readdirSync(projectsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+
+    for (const slug of projectDirs) {
+      projectsScanned++;
+
+      try {
+        if (isLegacyProject(slug)) {
+          const did = migrateProjectIfNeeded(slug);
+          if (did) legacyProjectsMigrated++;
+        }
+      } catch (e) {
+        errors.push({
+          slug,
+          versionDir: getProjectDir(slug),
+          error: e instanceof Error ? e.message : String(e),
+        });
+        continue;
+      }
+
+      const projectDir = getProjectDir(slug);
+      if (!fs.existsSync(projectDir)) continue;
+
+      // Only treat directories with a manifest as projects; legacy projects are handled above.
+      const manifest = getManifest(slug);
+      if (!manifest) continue;
+
+      const versionFolders = fs
+        .readdirSync(projectDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
+        .map((d) => d.name);
+
+      for (const folder of versionFolders) {
+        const versionDir = path.join(projectDir, folder);
+        versionsScanned++;
+
+        try {
+          const res = migrateVivdInternalArtifactsInVersion(versionDir);
+          if (res.moved.length || res.movedToLegacy.length) versionsTouched++;
+          for (const item of res.moved) moved[item.filename]++;
+          for (const item of res.movedToLegacy) movedToLegacy[item.filename]++;
+        } catch (e) {
+          errors.push({
+            slug,
+            versionDir,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      projectsScanned,
+      legacyProjectsMigrated,
+      versionsScanned,
+      versionsTouched,
+      moved,
+      movedToLegacy,
+      errors,
+    };
+  }),
 
   // ============================================
   // Git-Based Save System (Phase 2.1)
