@@ -67,3 +67,12 @@ Dedicated Volume (projects/)
 # Implementation Plan
 
 We are constantly keeping track of the implementation plan in the implementation.md file, it's kind of our main-quest. If you are tasked to work on it, ask if you can tick of certain elements so we can mark them as done.
+
+# Skills
+
+To get further information on certain topics, you can load extra information from the .skills folder.
+
+Available skills:
+
+- .skills/DOKPLOY.md (We deploy on Dokploy, here you can find all information on the platform)
+- .skills/OPENCODE.md (We use OpenCode as our AI coding agent, here you can find docs and configuration reference)
