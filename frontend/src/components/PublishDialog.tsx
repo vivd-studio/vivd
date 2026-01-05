@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { usePreview } from "@/components/preview/PreviewContext";
 import {
   Dialog,
   DialogContent,
@@ -134,14 +133,7 @@ export function PublishDialog({
   const [showPublishWarning, setShowPublishWarning] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(true);
   const [isRunningChecklist, setIsRunningChecklist] = useState(false);
-
-  // Access PreviewContext to send messages to chat (may not be available outside preview)
-  let previewContext: ReturnType<typeof usePreview> | null = null;
-  try {
-    previewContext = usePreview();
-  } catch {
-    // Not in a preview context
-  }
+  const [fixingItemId, setFixingItemId] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -189,33 +181,33 @@ export function PublishDialog({
     runChecklistMutation.mutate({ projectSlug, version });
   };
 
+  // Fix checklist item mutation
+  const fixItemMutation = trpc.agent.fixChecklistItem.useMutation({
+    onSuccess: () => {
+      toast.success(`Fixed: ${fixingItemId}`);
+      refetchChecklist();
+      setFixingItemId(null);
+    },
+    onError: (error) => {
+      toast.error(`Failed to fix: ${error.message}`);
+      setFixingItemId(null);
+    },
+  });
+
+  const handleFixItem = (item: ChecklistItem) => {
+    setFixingItemId(item.id);
+    fixItemMutation.mutate({
+      projectSlug,
+      version,
+      itemId: item.id,
+      itemLabel: item.label,
+      itemStatus: item.status as "fail" | "warning",
+      itemNote: item.note,
+    });
+  };
+
   const checklist: PrePublishChecklist | null =
     checklistData?.checklist ?? null;
-
-  // Generate fix prompt and send to chat
-  const handleFixItem = (item: ChecklistItem) => {
-    const fixPrompt = `Fix the following pre-publish checklist issue:
-
-**${item.label}** (${item.status})
-${item.note ? `Issue: ${item.note}` : ""}
-
-The checklist file is located at \`.vivd/publish-checklist.json\`.
-
-After you fix this issue, please update the checklist file:
-1. Find the item with id "${item.id}" in the items array
-2. Change its status from "${item.status}" to "fixed"
-3. Update the note to briefly describe what you fixed
-4. Update the summary counts (decrement ${
-      item.status === "fail" ? "failed" : "warnings"
-    }, increment fixed)
-
-This marks the issue as fixed but requiring re-verification. The user can then re-run the full checks to confirm everything is correct.`;
-
-    if (previewContext?.sendChatMessage) {
-      previewContext.sendChatMessage(fixPrompt, { startNewSession: true });
-      onOpenChange(false); // Close the publish dialog
-    }
-  };
 
   // Check domain availability (debounced)
   const { data: domainCheck, isLoading: isCheckingDomain } =
@@ -468,18 +460,24 @@ This marks the issue as fixed but requiring re-verification. The user can then r
                                   )}
                                 </div>
                                 {(item.status === "fail" ||
-                                  item.status === "warning") &&
-                                  previewContext?.sendChatMessage && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleFixItem(item)}
-                                      className="shrink-0 h-6 px-2 text-xs hover:bg-primary/10"
-                                    >
+                                  item.status === "warning") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleFixItem(item)}
+                                    disabled={fixingItemId !== null}
+                                    className="shrink-0 h-6 px-2 text-xs hover:bg-primary/10"
+                                  >
+                                    {fixingItemId === item.id ? (
+                                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    ) : (
                                       <Wrench className="w-3 h-3 mr-1" />
-                                      Fix
-                                    </Button>
-                                  )}
+                                    )}
+                                    {fixingItemId === item.id
+                                      ? "Fixing..."
+                                      : "Fix"}
+                                  </Button>
+                                )}
                               </div>
                             );
                           })}
@@ -489,7 +487,9 @@ This marks the issue as fixed but requiring re-verification. The user can then r
                             variant="outline"
                             size="sm"
                             onClick={handleRunChecklist}
-                            disabled={isRunningChecklist}
+                            disabled={
+                              isRunningChecklist || fixingItemId !== null
+                            }
                             className={`flex-1 ${
                               checklist.summary.failed > 0 ||
                               checklist.summary.warnings > 0
@@ -604,7 +604,7 @@ This marks the issue as fixed but requiring re-verification. The user can then r
               <Button
                 variant="outline"
                 onClick={handleUnpublish}
-                disabled={isPending}
+                disabled={isPending || fixingItemId !== null}
                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
               >
                 Unpublish
@@ -614,6 +614,7 @@ This marks the issue as fixed but requiring re-verification. The user can then r
               onClick={handlePublish}
               disabled={
                 isPending ||
+                fixingItemId !== null ||
                 !domain.trim() ||
                 (domainStatus === "unavailable" && !isPublished)
               }

@@ -23,6 +23,7 @@ import { CHECKLIST_PROMPT } from "../opencode/checklistTypes";
 import type {
   PrePublishChecklist,
   ChecklistItem,
+  ChecklistStatus,
 } from "../opencode/checklistTypes";
 
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
@@ -472,6 +473,131 @@ export const agentRouter = router({
         return { checklist };
       } catch {
         return { checklist: null };
+      }
+    }),
+
+  /**
+   * Fix a specific checklist item by running an agent task.
+   * Similar to runPrePublishChecklist but for fixing individual issues.
+   */
+  fixChecklistItem: protectedProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+        itemId: z.string(),
+        itemLabel: z.string(),
+        itemStatus: z.enum(["fail", "warning"]),
+        itemNote: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const projectDir = getProjectDir(input.projectSlug);
+
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
+      }
+
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      if (targetVersion === 0) {
+        throw new Error("No versions found for this project");
+      }
+
+      const versionPath = getVersionDir(input.projectSlug, targetVersion);
+
+      if (!fs.existsSync(versionPath)) {
+        throw new Error(`Version ${targetVersion} not found for project`);
+      }
+
+      // Build the fix prompt
+      const fixPrompt = `Fix the following pre-publish checklist issue:
+
+**${input.itemLabel}** (${input.itemStatus})
+${input.itemNote ? `Issue: ${input.itemNote}` : ""}
+
+The checklist file is located at \`.vivd/publish-checklist.json\`.
+
+After you fix this issue, please update the checklist file:
+1. Find the item with id "${input.itemId}" in the items array
+2. Change its status from "${input.itemStatus}" to "fixed"
+3. Update the note to briefly describe what you fixed
+4. Update the summary counts (decrement ${
+        input.itemStatus === "fail" ? "failed" : "warnings"
+      }, increment fixed)
+
+This marks the issue as fixed but requiring re-verification. The user can then re-run the full checks to confirm everything is correct.`;
+
+      try {
+        console.log(
+          `[FixChecklistItem] Fixing item "${input.itemId}" for ${input.projectSlug} v${targetVersion}`
+        );
+
+        // Run the agent with the fix prompt - always create a new session
+        const { sessionId } = await runTask(fixPrompt, versionPath);
+
+        // Wait for the agent to complete
+        let attempts = 0;
+        const maxAttempts = 120; // 120 seconds max wait for fixes (they can take longer)
+        let completed = false;
+
+        while (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          attempts++;
+
+          // Check the session status
+          const statuses = await getSessionsStatus(versionPath);
+          const sessionStatus = statuses[sessionId];
+
+          debugLog(
+            `[FixChecklistItem] Attempt ${attempts}, session status: ${sessionStatus}`
+          );
+
+          // Session is complete when it's idle (not busy)
+          if (!sessionStatus || sessionStatus.type === "idle") {
+            // Get the session content to verify it has a response
+            const messages = await getSessionContent(sessionId, versionPath);
+            const assistantMessages = messages?.filter(
+              (m: { info: { role: string } }) => m.info.role === "assistant"
+            );
+
+            if (assistantMessages && assistantMessages.length > 0) {
+              completed = true;
+              console.log(
+                `[FixChecklistItem] Fix completed for item "${input.itemId}"`
+              );
+              break;
+            }
+          }
+        }
+
+        if (!completed) {
+          throw new Error(
+            "Fix task timed out. The agent may still be working. Please check back later."
+          );
+        }
+
+        // Read the updated checklist to return
+        const checklistPath = path.join(
+          versionPath,
+          ".vivd",
+          "publish-checklist.json"
+        );
+        let updatedChecklist: PrePublishChecklist | null = null;
+
+        if (fs.existsSync(checklistPath)) {
+          try {
+            const content = fs.readFileSync(checklistPath, "utf-8");
+            updatedChecklist = JSON.parse(content);
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        return { success: true, checklist: updatedChecklist, sessionId };
+      } catch (error: any) {
+        console.error("[FixChecklistItem] Error:", error);
+        throw new Error(error.message || "Failed to fix checklist item");
       }
     }),
 
