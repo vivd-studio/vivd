@@ -258,6 +258,79 @@ export function ChatProvider({
     }
   }, [selectedElement, clearSelectedElement]);
 
+  // Handle pending chat messages from PreviewContext (e.g., from "Fix This" button in PublishDialog)
+  useEffect(() => {
+    const pending = previewContext?.pendingChatMessage;
+    const clearPending = previewContext?.clearPendingChatMessage;
+
+    if (pending && clearPending) {
+      // Clear immediately to prevent re-triggering
+      clearPending();
+
+      const { message: pendingMessage, startNewSession } = pending;
+
+      // Set the input
+      setInput(pendingMessage);
+
+      // If startNewSession is requested, clear the current session first
+      if (startNewSession) {
+        autoSelectLockedRef.current = true;
+        pendingSessionIdRef.current = null;
+        setSelectedSessionId(null);
+        setMessages([]);
+        setIsStreaming(false);
+        setIsWaiting(false);
+        setStreamingParts([]);
+        setSessionError(null);
+      }
+
+      // Trigger send after a short delay to ensure state is updated
+      setTimeout(() => {
+        // We need to call the mutation directly since handleSend reads from state
+        isWaitingForAgent.current = true;
+        setIsStreaming(false);
+        setIsWaiting(true);
+        setStreamingParts([]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "user", content: pendingMessage },
+        ]);
+        setInput("");
+
+        // Always start new session when startNewSession is true
+        if (startNewSession) {
+          runTaskMutation.mutate({
+            projectSlug,
+            task: pendingMessage,
+            version,
+          });
+        } else {
+          // Use current session if exists
+          const currentSessionId = selectedSessionId;
+          if (currentSessionId) {
+            runTaskMutation.mutate({
+              projectSlug,
+              task: pendingMessage,
+              sessionId: currentSessionId,
+              version,
+            });
+          } else {
+            runTaskMutation.mutate({
+              projectSlug,
+              task: pendingMessage,
+              version,
+            });
+          }
+        }
+      }, 100);
+    }
+  }, [
+    previewContext?.pendingChatMessage,
+    previewContext?.clearPendingChatMessage,
+    projectSlug,
+    version,
+  ]);
+
   useEffect(() => {
     if (sessionsData) {
       setSessions(sessionsData);

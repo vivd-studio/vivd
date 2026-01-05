@@ -20,7 +20,10 @@ import {
 import fs from "fs";
 import path from "path";
 import { CHECKLIST_PROMPT } from "../opencode/checklistTypes";
-import type { PrePublishChecklist, ChecklistItem } from "../opencode/checklistTypes";
+import type {
+  PrePublishChecklist,
+  ChecklistItem,
+} from "../opencode/checklistTypes";
 
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
 const debugLog = (...args: unknown[]) => {

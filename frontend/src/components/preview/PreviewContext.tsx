@@ -80,6 +80,14 @@ interface PreviewContextValue {
   handleCancelEdit: () => void;
   handleClose: () => void;
 
+  // Cross-component chat messaging
+  pendingChatMessage: { message: string; startNewSession?: boolean } | null;
+  sendChatMessage: (
+    message: string,
+    options?: { startNewSession?: boolean }
+  ) => void;
+  clearPendingChatMessage: () => void;
+
   // Mutations
   saveFileMutation: ReturnType<typeof trpc.project.saveFile.useMutation>;
 
@@ -132,6 +140,10 @@ export function PreviewProvider({
   const [selectorMode, setSelectorModeState] = useState(false);
   const [selectedElement, setSelectedElement] =
     useState<SelectedElement | null>(null);
+  const [pendingChatMessage, setPendingChatMessage] = useState<{
+    message: string;
+    startNewSession?: boolean;
+  } | null>(null);
   const mobileContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -482,6 +494,22 @@ export function PreviewProvider({
     setSelectedElement(null);
   }, []);
 
+  // Cross-component chat messaging: allows PublishDialog to send messages to chat
+  const sendChatMessage = useCallback(
+    (message: string, options?: { startNewSession?: boolean }) => {
+      setChatOpen(true);
+      setPendingChatMessage({
+        message,
+        startNewSession: options?.startNewSession,
+      });
+    },
+    []
+  );
+
+  const clearPendingChatMessage = useCallback(() => {
+    setPendingChatMessage(null);
+  }, []);
+
   // Listen for element selection from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -589,6 +617,11 @@ export function PreviewProvider({
     handleSave,
     handleCancelEdit,
     handleClose,
+
+    // Cross-component chat messaging
+    pendingChatMessage,
+    sendChatMessage,
+    clearPendingChatMessage,
 
     // Mutations
     saveFileMutation,
