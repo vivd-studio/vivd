@@ -453,8 +453,13 @@ This marks the issue as fixed but requiring re-verification. The user can then r
                                   className={`w-4 h-4 mt-0.5 shrink-0 ${config.color}`}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-xs">
+                                  <p className="font-medium text-xs flex items-center gap-1.5">
                                     {item.label}
+                                    {item.status === "fixed" && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                                        Fixed
+                                      </span>
+                                    )}
                                   </p>
                                   {item.note && (
                                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
