@@ -53,7 +53,7 @@ Consolidated plan to get vivd ready for production deployments. The goal: enable
 **Follow-up Tasks**:
 
 - [ ] **Fix-it Prompt**: Add a "Fix this" button/prompt that asks the agent to resolve specific checklist deficiencies.
-- [ ] **File Migration**: Migrate all vivd-specific files (like `project.json`) to the `.vivd/` folder to keep the project root clean.
+- [x] **File Migration**: Migrate all vivd-specific files (like `project.json`) to the `.vivd/` folder to keep the project root clean.
 
 ---
 
@@ -69,7 +69,6 @@ Consolidated plan to get vivd ready for production deployments. The goal: enable
 **Template files to create**:
 
 - `AGENTS.md` – project-specific agent context
-- `README.md` – project overview
 
 **AGENTS.md content should include**:
 
@@ -77,6 +76,8 @@ Consolidated plan to get vivd ready for production deployments. The goal: enable
 # Project: {project_name}
 
 Your name is vivd. You work in vivd-studio and are responsible for building the customers website. This is a live production website. Code changes will be deployed to the internet.
+This website might have been created from an old website - in that case the .vivd/ folder will contain screenshots, website-text and image descriptions of the old website. It is also possible that the website was created from scratch - in that case the .vivd/ folder will be empty.
+Currently you cannot create images on your own, if you need this, tell the user to open the assets sidebar and use "AI Edit" on existing images or use the "Create new Image with AI" tool, which can take in multiple existing images as reference.
 
 ## Important Guidelines
 
@@ -88,7 +89,6 @@ Your name is vivd. You work in vivd-studio and are responsible for building the 
    - Proper error handling
    - Mobile responsive
 3. **Available plugins**: {list of enabled plugins}
-
 4. **Custom tools available**:
    - Image generation: Use when user needs new images
 5. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.

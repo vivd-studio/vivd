@@ -117,6 +117,20 @@ export default function Admin() {
     },
   });
 
+  const templateFilesMutation =
+    trpc.project.migrateProjectTemplateFiles.useMutation({
+      onSuccess: (data) => {
+        toast.success("Template files updated", {
+          description: `Touched ${data.versionsTouched}/${data.versionsScanned} versions`,
+        });
+      },
+      onError: (err: any) => {
+        toast.error("Template migration failed", {
+          description: err?.message || "Unknown error",
+        });
+      },
+    });
+
   if (isLoading)
     return (
       <div className="flex justify-center p-10">
@@ -371,6 +385,76 @@ export default function Admin() {
                 ) : null}
               </div>
             ) : null}
+
+            <div className="border-t pt-3 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Ensure project template files (currently <code>AGENTS.md</code>)
+                exist in every project version. Use overwrite to update all
+                existing <code>AGENTS.md</code> files after changing the
+                template.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={() => {
+                    const ok = window.confirm(
+                      "Add missing template files for all projects/versions?"
+                    );
+                    if (!ok) return;
+                    templateFilesMutation.mutate({ overwrite: false });
+                  }}
+                  disabled={templateFilesMutation.isPending}
+                >
+                  {templateFilesMutation.isPending ? (
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  ) : null}
+                  Add Missing Template Files
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    const ok = window.confirm(
+                      "Overwrite template files for all projects/versions? This will replace existing AGENTS.md files."
+                    );
+                    if (!ok) return;
+                    templateFilesMutation.mutate({ overwrite: true });
+                  }}
+                  disabled={templateFilesMutation.isPending}
+                >
+                  {templateFilesMutation.isPending ? (
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  ) : null}
+                  Overwrite & Update Template Files
+                </Button>
+                {templateFilesMutation.data ? (
+                  <span className="text-sm text-muted-foreground">
+                    Wrote {templateFilesMutation.data.written["AGENTS.md"]}/
+                    {templateFilesMutation.data.versionsScanned} versions
+                    {templateFilesMutation.data.errors.length
+                      ? ` • ${templateFilesMutation.data.errors.length} error(s)`
+                      : ""}
+                  </span>
+                ) : null}
+              </div>
+              {templateFilesMutation.data?.errors.length ? (
+                <div className="rounded-md border p-3 text-sm">
+                  <div className="font-medium mb-2">Errors</div>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {templateFilesMutation.data.errors
+                      .slice(0, 5)
+                      .map((e, idx) => (
+                        <li key={idx}>
+                          {e.slug}: {e.error}
+                        </li>
+                      ))}
+                  </ul>
+                  {templateFilesMutation.data.errors.length > 5 ? (
+                    <div className="text-muted-foreground mt-2">
+                      …and {templateFilesMutation.data.errors.length - 5} more
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       )}

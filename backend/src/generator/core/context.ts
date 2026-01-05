@@ -10,6 +10,7 @@ import {
 } from "../versionUtils";
 import type { GenerationContext, GenerationSource } from "../flows/types";
 import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../vivdPaths";
+import { applyProjectTemplateFiles } from "../templateFiles";
 
 function slugifyTitle(title: string): string {
   const cleaned = title
@@ -105,6 +106,17 @@ export function createGenerationContext(
     version,
   };
   fs.writeFileSync(projectJsonPath, JSON.stringify(projectData, null, 2));
+
+  try {
+    applyProjectTemplateFiles({
+      versionDir: outputDir,
+      source,
+      projectName: input.title?.trim() || slug,
+      overwrite: false,
+    });
+  } catch (e) {
+    console.error(`[Templates] Failed to write template files for ${slug}/v${version}:`, e);
+  }
 
   const updateStatus = (status: string) => {
     try {

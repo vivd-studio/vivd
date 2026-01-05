@@ -29,6 +29,8 @@ import {
   migrateVivdInternalArtifactsInVersion,
   VIVD_INTERNAL_ARTIFACT_FILENAMES,
 } from "../generator/vivdPaths";
+import { applyProjectTemplateFiles } from "../generator/templateFiles";
+import type { GenerationSource } from "../generator/flows/types";
 
 export const projectRouter = router({
   generate: protectedProcedure
@@ -636,6 +638,131 @@ export const projectRouter = router({
       errors,
     };
   }),
+
+  /**
+   * Admin maintenance: ensure project template files (like AGENTS.md) exist in all versions.
+   * Can be re-run with overwrite=true to update templates across all projects.
+   */
+  migrateProjectTemplateFiles: adminProcedure
+    .input(
+      z
+        .object({
+          overwrite: z.boolean().optional(),
+        })
+        .optional()
+    )
+    .mutation(async ({ input }) => {
+      const projectsDir = getProjectsDir();
+      const overwrite = input?.overwrite ?? false;
+
+      const written: Record<string, number> = { "AGENTS.md": 0 };
+
+      let projectsScanned = 0;
+      let legacyProjectsMigrated = 0;
+      let versionsScanned = 0;
+      let versionsTouched = 0;
+      const errors: Array<{ slug: string; versionDir: string; error: string }> =
+        [];
+
+      if (!fs.existsSync(projectsDir)) {
+        return {
+          success: true,
+          projectsScanned,
+          legacyProjectsMigrated,
+          versionsScanned,
+          versionsTouched,
+          written,
+          errors,
+        };
+      }
+
+      const projectDirs = fs
+        .readdirSync(projectsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+
+      for (const slug of projectDirs) {
+        projectsScanned++;
+
+        try {
+          if (isLegacyProject(slug)) {
+            const did = migrateProjectIfNeeded(slug);
+            if (did) legacyProjectsMigrated++;
+          }
+        } catch (e) {
+          errors.push({
+            slug,
+            versionDir: getProjectDir(slug),
+            error: e instanceof Error ? e.message : String(e),
+          });
+          continue;
+        }
+
+        const manifest = getManifest(slug);
+        if (!manifest) continue;
+
+        const projectDir = getProjectDir(slug);
+        if (!fs.existsSync(projectDir)) continue;
+
+        const versionFolders = fs
+          .readdirSync(projectDir, { withFileTypes: true })
+          .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
+          .map((d) => d.name);
+
+        for (const folder of versionFolders) {
+          const versionDir = path.join(projectDir, folder);
+          versionsScanned++;
+
+          const versionNumber = Number(folder.slice(1));
+          const versionData =
+            Number.isFinite(versionNumber) && versionNumber > 0
+              ? getVersionData(slug, versionNumber)
+              : null;
+
+          const rawSource = (versionData?.source ??
+            (manifest as any).source) as unknown;
+          const source: GenerationSource =
+            rawSource === "scratch" || rawSource === "url"
+              ? rawSource
+              : manifest.url
+              ? "url"
+              : "scratch";
+
+          const projectName =
+            (versionData?.title || (manifest as any).title || slug)?.trim?.() ||
+            slug;
+
+          try {
+            const res = applyProjectTemplateFiles({
+              versionDir,
+              source,
+              projectName,
+              overwrite,
+            });
+            if (res.written.length) versionsTouched++;
+            for (const f of res.written) {
+              written[f] = (written[f] ?? 0) + 1;
+            }
+          } catch (e) {
+            errors.push({
+              slug,
+              versionDir,
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+      }
+
+      return {
+        success: true,
+        projectsScanned,
+        legacyProjectsMigrated,
+        versionsScanned,
+        versionsTouched,
+        written,
+        errors,
+      };
+    }),
 
   // ============================================
   // Git-Based Save System (Phase 2.1)
