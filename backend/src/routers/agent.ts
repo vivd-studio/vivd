@@ -23,7 +23,6 @@ import { CHECKLIST_PROMPT } from "../opencode/checklistTypes";
 import type {
   PrePublishChecklist,
   ChecklistItem,
-  ChecklistStatus,
 } from "../opencode/checklistTypes";
 
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
