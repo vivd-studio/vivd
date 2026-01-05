@@ -1,14 +1,22 @@
 import * as path from "path";
 import * as fs from "fs";
-import { fileURLToPath } from "url";
 import {
   migrateVivdInternalArtifactsInVersion,
   getVivdInternalFilesPath,
 } from "./vivdPaths";
 
+function detectProjectsDir(): string {
+  const env = process.env.PROJECTS_DIR?.trim();
+  if (env) return env;
+
+  // In Docker prod/dev, projects are mounted at `/app/projects`.
+  // Locally, we expect the backend to be started from `backend/` so `./projects` works.
+  if (fs.existsSync("/app/projects")) return "/app/projects";
+  return path.resolve(process.cwd(), "projects");
+}
+
 // Base directory for all projects
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(__dirname, "../../projects");
+const PROJECTS_DIR = detectProjectsDir();
 
 export function getProjectsDir(): string {
   return PROJECTS_DIR;
