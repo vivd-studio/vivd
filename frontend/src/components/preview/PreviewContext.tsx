@@ -26,6 +26,7 @@ interface SelectedElement {
   selector: string;
   tagName: string;
   text: string;
+  filename: string;
 }
 
 interface PreviewContextValue {
@@ -485,8 +486,15 @@ export function PreviewProvider({
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "vivd-element-selected") {
-        const { description, selector, tagName, text } = event.data.data;
-        setSelectedElement({ description, selector, tagName, text });
+        const { description, selector, tagName, text, filename } =
+          event.data.data;
+        setSelectedElement({
+          description,
+          selector,
+          tagName,
+          text,
+          filename: filename || "index.html",
+        });
         setSelectorModeState(false);
         // Open chat panel when element is selected
         setChatOpen(true);

@@ -64,11 +64,33 @@ export function ElementRefPill({ html }: { html: string }) {
 }
 
 // Format the message with the element ref tag for the LLM
+// Includes file and text excerpt for easier element identification
 export function formatMessageWithSelector(
   message: string,
-  selector: string
+  selector: string,
+  filename?: string,
+  text?: string
 ): string {
-  return `${message}\n\n<element-ref>${selector}</element-ref>`;
+  // Build a compact element reference with additional context
+  let ref = selector;
+  const parts: string[] = [];
+
+  if (filename) {
+    parts.push(`file: ${filename}`);
+  }
+  if (text) {
+    // Take first 30 chars of text, clean up whitespace
+    const cleanText = text.replace(/\s+/g, " ").trim().slice(0, 30);
+    if (cleanText) {
+      parts.push(`text: "${cleanText}${text.length > 30 ? "..." : ""}"`);
+    }
+  }
+
+  if (parts.length > 0) {
+    ref = `${selector} (${parts.join(", ")})`;
+  }
+
+  return `${message}\n\n<element-ref>${ref}</element-ref>`;
 }
 
 // Parse element ref from a message if it contains the tag

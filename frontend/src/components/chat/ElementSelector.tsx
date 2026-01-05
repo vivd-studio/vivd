@@ -163,6 +163,10 @@ export const ELEMENT_SELECTOR_SCRIPT = `
     const description = getElementDescription(el);
     const xpath = getXPath(el);
     
+    // Get current page filename from iframe's location
+    const pathname = window.location.pathname;
+    const filename = pathname.split('/').pop() || 'index.html';
+    
     window.parent.postMessage({
       type: 'vivd-element-selected',
       data: {
@@ -170,6 +174,7 @@ export const ELEMENT_SELECTOR_SCRIPT = `
         selector: xpath,
         tagName: el.tagName.toLowerCase(),
         text: el.textContent?.trim().slice(0, 100) || '',
+        filename,
       }
     }, '*');
     

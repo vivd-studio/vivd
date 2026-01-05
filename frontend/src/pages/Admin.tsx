@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { Shield, UserPlus, Loader2, AlertCircle, Database } from "lucide-react";
+import { Shield, UserPlus, Loader2, AlertCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -24,9 +24,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { OpencodeDebugPanel } from "@/components/OpencodeDebugPanel";
-import { trpc } from "@/lib/trpc";
-
 interface User {
   id: string;
   name: string;
@@ -43,214 +40,6 @@ const addUserSchema = z.object({
 });
 
 type AddUserFormValues = z.infer<typeof addUserSchema>;
-
-/**
- * One-time migration card component.
- * This can be removed after the migration is complete.
- */
-function MigrationCard() {
-  const [migrationResult, setMigrationResult] = useState<{
-    migrated: number;
-    skipped: number;
-    total: number;
-    message: string;
-  } | null>(null);
-
-  const [gitInitResult, setGitInitResult] = useState<{
-    initialized: number;
-    skipped: number;
-    failed: number;
-    total: number;
-    message: string;
-  } | null>(null);
-
-  const [folderMigrationResult, setFolderMigrationResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
-
-  const migrateMutation = trpc.project.migrateToVersions.useMutation({
-    onSuccess: (data) => {
-      setMigrationResult({
-        migrated: data.migrated,
-        skipped: data.skipped,
-        total: data.total,
-        message: data.message,
-      });
-    },
-  });
-
-  const gitInitMutation = trpc.project.initGitInProjects.useMutation({
-    onSuccess: (data) => {
-      setGitInitResult({
-        initialized: data.initialized,
-        skipped: data.skipped,
-        failed: data.failed,
-        total: data.total,
-        message: data.message,
-      });
-    },
-  });
-
-  const folderMigrationMutation =
-    trpc.project.migrateToProjectsFolder.useMutation({
-      onSuccess: (data) => {
-        setFolderMigrationResult({
-          success: data.success,
-          message: data.message,
-        });
-      },
-    });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5 text-orange-600" />
-          System Maintenance
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Version Migration */}
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-muted-foreground">
-            Run the one-time migration to convert legacy projects to the new
-            versioned folder structure (v1/, v2/, etc).
-          </p>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => migrateMutation.mutate()}
-              disabled={migrateMutation.isPending}
-            >
-              {migrateMutation.isPending ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  Running Migration...
-                </>
-              ) : (
-                "Run Version Migration"
-              )}
-            </Button>
-          </div>
-
-          {migrateMutation.isError && (
-            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
-              <AlertCircle className="h-4 w-4" />
-              {migrateMutation.error?.message || "Migration failed"}
-            </div>
-          )}
-
-          {migrationResult && (
-            <div className="mt-3 p-3 rounded-md bg-muted text-sm">
-              <p className="font-medium">{migrationResult.message}</p>
-              <p className="text-muted-foreground mt-1">
-                Migrated: {migrationResult.migrated} | Skipped:{" "}
-                {migrationResult.skipped} | Total: {migrationResult.total}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Git Init Migration */}
-        <div className="flex flex-col gap-2 pt-4 border-t">
-          <p className="text-sm text-muted-foreground">
-            Initialize git in all project versions. Required for the revert/undo
-            feature to work (OpenCode uses git under the hood).
-          </p>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => gitInitMutation.mutate()}
-              disabled={gitInitMutation.isPending}
-            >
-              {gitInitMutation.isPending ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  Initializing Git...
-                </>
-              ) : (
-                "Initialize Git in Projects"
-              )}
-            </Button>
-          </div>
-
-          {gitInitMutation.isError && (
-            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
-              <AlertCircle className="h-4 w-4" />
-              {gitInitMutation.error?.message || "Git initialization failed"}
-            </div>
-          )}
-
-          {gitInitResult && (
-            <div className="mt-3 p-3 rounded-md bg-muted text-sm">
-              <p className="font-medium">{gitInitResult.message}</p>
-              <p className="text-muted-foreground mt-1">
-                Initialized: {gitInitResult.initialized} | Skipped:{" "}
-                {gitInitResult.skipped} | Failed: {gitInitResult.failed} |
-                Total: {gitInitResult.total}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Folder Migration (generated/ -> projects/) */}
-        <div className="flex flex-col gap-2 pt-4 border-t">
-          <p className="text-sm text-muted-foreground">
-            Migrate from the old{" "}
-            <code className="px-1 py-0.5 rounded bg-muted">generated/</code>{" "}
-            folder to the new{" "}
-            <code className="px-1 py-0.5 rounded bg-muted">projects/</code>{" "}
-            folder. This is a one-time migration for existing deployments.
-          </p>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => folderMigrationMutation.mutate()}
-              disabled={folderMigrationMutation.isPending}
-            >
-              {folderMigrationMutation.isPending ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  Migrating Folder...
-                </>
-              ) : (
-                "Migrate to projects/ Folder"
-              )}
-            </Button>
-          </div>
-
-          {folderMigrationMutation.isError && (
-            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
-              <AlertCircle className="h-4 w-4" />
-              {folderMigrationMutation.error?.message ||
-                "Folder migration failed"}
-            </div>
-          )}
-
-          {folderMigrationResult && (
-            <div
-              className={`mt-3 p-3 rounded-md text-sm ${
-                folderMigrationResult.success
-                  ? "bg-muted"
-                  : "bg-red-50 dark:bg-red-950"
-              }`}
-            >
-              <p
-                className={`font-medium ${
-                  !folderMigrationResult.success &&
-                  "text-red-600 dark:text-red-400"
-                }`}
-              >
-                {folderMigrationResult.message}
-              </p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -507,11 +296,6 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
-
-      {/* System Maintenance Card */}
-      <MigrationCard />
-
-      <OpencodeDebugPanel />
     </div>
   );
 }

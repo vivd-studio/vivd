@@ -40,16 +40,6 @@
 - frontend: show usage stats in admin dashboard + graceful "limit reached" messaging
 - future: license server verification for non-managed customers
 
-### Distribution (GHCR)
-
-- create GitHub Actions workflow to build and push 3 images to `ghcr.io/vivd-studio/`:
-  - `vivd-server` (backend)
-  - `vivd-ui` (frontend/nginx)
-  - `vivd-caddy` (Caddy with Caddyfile baked in)
-- create `caddy/Dockerfile` to bake Caddyfile into image
-- create customer template docker-compose (uses `image:` not `build:`)
-- images are PUBLIC (no auth needed for customers)
-
 ### Update Strategy
 
 - manual redeploy via Dokploy UI or cron script
@@ -62,4 +52,3 @@
 - customer billing dashboard (for self-service)
 - license server (for non-managed deployments)
 - master dashboard: your view across all customer instances
-- chat refactoring: review and split chat panel into smaller components

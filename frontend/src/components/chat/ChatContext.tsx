@@ -31,6 +31,8 @@ interface Session {
 interface AttachedElement {
   selector: string;
   description: string;
+  text?: string;
+  filename?: string;
 }
 
 // Debug state for session monitoring
@@ -249,6 +251,8 @@ export function ChatProvider({
       setAttachedElement({
         selector: selectedElement.selector,
         description: selectedElement.description,
+        text: selectedElement.text,
+        filename: selectedElement.filename,
       });
       clearSelectedElement();
     }
@@ -677,7 +681,12 @@ export function ChatProvider({
 
     let task = input.trim() || "I want to change this element";
     if (attachedElement) {
-      task = formatMessageWithSelector(task, attachedElement.selector);
+      task = formatMessageWithSelector(
+        task,
+        attachedElement.selector,
+        attachedElement.filename,
+        attachedElement.text
+      );
     }
 
     setInput("");
