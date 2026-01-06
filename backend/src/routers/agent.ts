@@ -17,6 +17,7 @@ import {
   getVersionDir,
   getCurrentVersion,
 } from "../generator/versionUtils";
+import { gitService } from "../services/GitService";
 import fs from "fs";
 import path from "path";
 import { CHECKLIST_PROMPT } from "../opencode/checklistTypes";
@@ -328,6 +329,25 @@ export const agentRouter = router({
           `[PrePublishChecklist] Running checklist for ${input.projectSlug} v${targetVersion}`
         );
 
+        // Create a git snapshot before running the checklist
+        let snapshotCommitHash: string | undefined;
+        try {
+          const saveResult = await gitService.save(
+            versionPath,
+            "Pre-publish checklist snapshot"
+          );
+          snapshotCommitHash = saveResult.hash;
+          console.log(
+            `[PrePublishChecklist] Created snapshot commit: ${snapshotCommitHash}`
+          );
+        } catch (error) {
+          console.log(
+            "[PrePublishChecklist] No changes to commit, using current HEAD"
+          );
+          snapshotCommitHash =
+            (await gitService.getCurrentCommit(versionPath)) || undefined;
+        }
+
         // Run the agent with the checklist prompt - always create a new session
         const { sessionId } = await runTask(CHECKLIST_PROMPT, versionPath);
 
@@ -413,6 +433,7 @@ export const agentRouter = router({
           projectSlug: input.projectSlug,
           version: targetVersion,
           runAt: new Date().toISOString(),
+          snapshotCommitHash,
           items: checklistData.items,
           summary,
         };
@@ -452,7 +473,7 @@ export const agentRouter = router({
         input.version ?? getCurrentVersion(input.projectSlug);
 
       if (targetVersion === 0) {
-        return { checklist: null };
+        return { checklist: null, hasChangesSinceCheck: true };
       }
 
       const versionPath = getVersionDir(input.projectSlug, targetVersion);
@@ -463,15 +484,36 @@ export const agentRouter = router({
       );
 
       if (!fs.existsSync(checklistPath)) {
-        return { checklist: null };
+        return { checklist: null, hasChangesSinceCheck: true };
       }
 
       try {
         const content = fs.readFileSync(checklistPath, "utf-8");
         const checklist: PrePublishChecklist = JSON.parse(content);
-        return { checklist };
+
+        // Check if there have been changes since the checklist was run
+        let hasChangesSinceCheck = true; // Default to true if we can't determine
+        if (checklist.snapshotCommitHash) {
+          try {
+            const currentCommit = await gitService.getCurrentCommit(
+              versionPath
+            );
+            const hasUncommitted = await gitService.hasUncommittedChanges(
+              versionPath
+            );
+
+            // Changes exist if: current commit differs from snapshot OR there are uncommitted changes
+            hasChangesSinceCheck =
+              currentCommit !== checklist.snapshotCommitHash || hasUncommitted;
+          } catch {
+            // If we can't check, assume there are changes to be safe
+            hasChangesSinceCheck = true;
+          }
+        }
+
+        return { checklist, hasChangesSinceCheck };
       } catch {
-        return { checklist: null };
+        return { checklist: null, hasChangesSinceCheck: true };
       }
     }),
 

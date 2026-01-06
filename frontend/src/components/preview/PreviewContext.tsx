@@ -88,8 +88,8 @@ interface PreviewContextValue {
   ) => void;
   clearPendingChatMessage: () => void;
 
-  // Mutations
-  saveFileMutation: ReturnType<typeof trpc.project.saveFile.useMutation>;
+  // Status
+  isSaving: boolean;
 
   // Resizable panels
   assetPanel: ReturnType<typeof useResizablePanel>;
@@ -137,6 +137,16 @@ export function PreviewProvider({
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  type HtmlPatch =
+    | { type: "setTextNode"; selector: string; index: number; value: string }
+    | { type: "setAttr"; selector: string; name: "src"; value: string };
+
+  const pendingImagePatchesRef = useRef<
+    Map<string, Extract<HtmlPatch, { type: "setAttr" }>>
+  >(new Map());
+  const baselineSrcRef = useRef<Map<string, string | null>>(new Map());
+  const editModeCleanupRef = useRef<(() => void) | null>(null);
+
   const [selectorMode, setSelectorModeState] = useState(false);
   const [selectedElement, setSelectedElement] =
     useState<SelectedElement | null>(null);
@@ -148,6 +158,116 @@ export function PreviewProvider({
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const utils = trpc.useUtils();
+
+  const syncUnsavedChangesState = useCallback(() => {
+    setHasUnsavedChanges(pendingImagePatchesRef.current.size > 0);
+  }, []);
+
+  const clearPendingPatches = useCallback(() => {
+    pendingImagePatchesRef.current.clear();
+    baselineSrcRef.current.clear();
+    syncUnsavedChangesState();
+  }, [syncUnsavedChangesState]);
+
+  const cleanupEditModeListeners = useCallback(() => {
+    editModeCleanupRef.current?.();
+    editModeCleanupRef.current = null;
+  }, []);
+
+  const getEditableTarget = useCallback((target: EventTarget | null) => {
+    const asNode = target as Node | null;
+    const start =
+      target instanceof HTMLElement
+        ? target
+        : asNode?.parentElement instanceof HTMLElement
+        ? asNode.parentElement
+        : null;
+    if (!start) return null;
+    if (start.isContentEditable) return start;
+    const closest = start.closest?.('[contenteditable="true"]');
+    return closest instanceof HTMLElement ? closest : null;
+  }, []);
+
+  const getVivdSelector = useCallback((el: Element, doc: Document) => {
+    if (el instanceof HTMLElement && el.id) {
+      return `//*[@id="${el.id}"]`;
+    }
+
+    const parts: string[] = [];
+    let current: Element | null = el;
+    while (current && current !== doc.body) {
+      const parentElement: HTMLElement | null = current.parentElement;
+      if (!parentElement) break;
+
+      const currentTagName = current.tagName;
+      const tagName = currentTagName.toLowerCase();
+      const siblings = Array.from(parentElement.children).filter(
+        (sibling: Element) => sibling.tagName === currentTagName
+      );
+
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1;
+        parts.unshift(`${tagName}[${index}]`);
+      } else {
+        parts.unshift(tagName);
+      }
+
+      current = parentElement;
+    }
+
+    if (!parts.length) return null;
+    return `/${parts.join("/")}`;
+  }, []);
+
+  const getElementSelector = useCallback(
+    (el: Element, doc: Document) => {
+      const stored = el.getAttribute?.("data-vivd-selector");
+      if (stored) return stored;
+
+      const selector = getVivdSelector(el, doc);
+      if (selector) {
+        (el as HTMLElement).setAttribute?.("data-vivd-selector", selector);
+      }
+      return selector;
+    },
+    [getVivdSelector]
+  );
+
+  const collectTextPatchesFromDocument = useCallback(
+    (doc: Document): HtmlPatch[] => {
+      const patches: HtmlPatch[] = [];
+
+      const nodes = doc.querySelectorAll<HTMLElement>(
+        '[data-vivd-text-parent-selector][data-vivd-text-node-index]'
+      );
+      nodes.forEach((node) => {
+        const parentSelector = node.getAttribute(
+          "data-vivd-text-parent-selector"
+        );
+        const indexStr = node.getAttribute("data-vivd-text-node-index");
+        if (!parentSelector || !indexStr) return;
+
+        const index = Number(indexStr);
+        if (!Number.isFinite(index) || index < 1) return;
+
+        const baseline = node.getAttribute("data-vivd-text-baseline");
+        if (baseline === null) return;
+
+        const current = node.textContent ?? "";
+        if (current === baseline) return;
+
+        patches.push({
+          type: "setTextNode",
+          selector: parentSelector,
+          index,
+          value: current,
+        });
+      });
+
+      return patches;
+    },
+    []
+  );
 
   // Calculate scale to fit phone in container
   const calculateScale = useCallback(() => {
@@ -206,11 +326,13 @@ export function PreviewProvider({
   );
   const hasGitChanges = changesData?.hasChanges || false;
 
-  const setCurrentVersionMutation = trpc.project.setCurrentVersion.useMutation({
-    onSuccess: () => {
-      utils.project.list.invalidate();
-    },
-  });
+  const { mutate: setCurrentVersion } = trpc.project.setCurrentVersion.useMutation(
+    {
+      onSuccess: () => {
+        utils.project.list.invalidate();
+      },
+    }
+  );
 
   // Sync selectedVersion with incoming version prop
   useEffect(() => {
@@ -224,43 +346,80 @@ export function PreviewProvider({
     iframeRef,
     projectSlug,
     enabled: !!projectSlug && !editMode,
-    onImageDropped: () => {
-      // Mark as having unsaved changes when an image is dropped
-      setHasUnsavedChanges(true);
+    onImageDropped: (assetPath, targetImg, previousSrcAttr) => {
+      if (!iframeRef.current?.contentDocument) return;
+      const doc = iframeRef.current.contentDocument;
+      const selector = getElementSelector(targetImg, doc);
+      if (!selector) return;
+
+      const key = `setAttr:${selector}:src`;
+      if (!baselineSrcRef.current.has(key)) {
+        baselineSrcRef.current.set(key, previousSrcAttr);
+      }
+
+      const baseline = baselineSrcRef.current.get(key) ?? null;
+      if (baseline === assetPath) {
+        pendingImagePatchesRef.current.delete(key);
+      } else {
+        pendingImagePatchesRef.current.set(key, {
+          type: "setAttr",
+          selector,
+          name: "src",
+          value: assetPath,
+        });
+      }
+      syncUnsavedChangesState();
     },
   });
 
   const handleVersionSelect = (newVersion: number) => {
     setSelectedVersion(newVersion);
     if (projectSlug) {
-      setCurrentVersionMutation.mutate({
+      setCurrentVersion({
         slug: projectSlug,
         version: newVersion,
       });
     }
+    clearPendingPatches();
     // Refresh iframe to show new version
     setIframeLoading(true);
     setRefreshKey((prev) => prev + 1);
   };
 
-  const saveFileMutation = trpc.project.saveFile.useMutation({
-    onSuccess: () => {
-      toast.success("Changes saved successfully");
-      setEditMode(false);
-      setHasUnsavedChanges(false);
-      setHasUnsavedChanges(false);
-      setRefreshKey((prev) => prev + 1);
-      utils.project.gitHasChanges.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Failed to save changes: ${error.message}`);
-    },
-  });
+  const { mutate: applyHtmlPatches, isPending: isSaving } =
+    trpc.project.applyHtmlPatches.useMutation({
+      onSuccess: (data) => {
+        const errorCount = data.errors?.length ?? 0;
+        if (data.noChanges) {
+          if (errorCount > 0) {
+            toast.error(
+              "Couldn't apply changes. Try refreshing the preview and saving again."
+            );
+          } else {
+            toast.info("No changes to save");
+          }
+        } else if (errorCount > 0) {
+          toast.success("Saved (some edits were skipped)");
+        } else {
+          toast.success("Changes saved successfully");
+        }
+        setEditMode(false);
+        clearPendingPatches();
+        cleanupEditModeListeners();
+        setIframeLoading(true);
+        setRefreshKey((prev) => prev + 1);
+        utils.project.gitHasChanges.invalidate();
+      },
+      onError: (error) => {
+        toast.error(`Failed to save changes: ${error.message}`);
+      },
+    });
 
   const handleCancelEdit = () => {
     // Revert changes by reloading the iframe
     setEditMode(false);
-    setHasUnsavedChanges(false);
+    clearPendingPatches();
+    cleanupEditModeListeners();
     setRefreshKey((prev) => prev + 1);
     toast.info("Changes discarded");
     setIframeLoading(true);
@@ -283,6 +442,8 @@ export function PreviewProvider({
     const doc = iframe.contentDocument;
     setEditMode(true);
 
+    cleanupEditModeListeners();
+
     // Enable Edit Mode
     const style = doc.createElement("style");
     style.id = "edit-mode-styles";
@@ -299,58 +460,87 @@ export function PreviewProvider({
           outline: 2px solid #2563eb !important;
           background-color: rgba(59, 130, 246, 0.05);
         }
+        [data-vivd-editable-container="true"] {
+          cursor: text !important;
+        }
+        [data-vivd-editable-container="true"]:hover {
+          outline: 2px dashed #3b82f6 !important;
+          background-color: rgba(59, 130, 246, 0.06);
+        }
+        [data-vivd-editable-container="true"]:focus-within {
+          outline: 2px solid #2563eb !important;
+          background-color: rgba(59, 130, 246, 0.04);
+        }
     `;
     doc.head.appendChild(style);
 
-    // 1. Always editable text blocks
-    const textBlocks = doc.querySelectorAll(
-      "h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, cite"
-    );
-    textBlocks.forEach((el) => {
-      el.setAttribute("contenteditable", "true");
+    // Precompute selectors before we insert any helper spans. Our selector scheme uses sibling indexes,
+    // so inserting spans would otherwise change selectors for existing elements and break patching.
+    const allBodyElements = Array.from(doc.body.querySelectorAll("*"));
+    allBodyElements.forEach((el) => {
+      getElementSelector(el, doc);
     });
 
-    // 2. Conditionally editable containers
-    const structuralTags = [
-      "DIV",
-      "P",
-      "H1",
-      "H2",
-      "H3",
-      "H4",
-      "H5",
-      "H6",
-      "UL",
-      "OL",
-      "TABLE",
-      "IMG",
-      "SECTION",
-      "ARTICLE",
-      "HEADER",
-      "FOOTER",
-      "NAV",
-      "ASIDE",
-      "MAIN",
-    ];
-
-    const potentialTextContainers = doc.querySelectorAll(
-      "a, span, button, td, th, div, b, i, strong, em, small"
-    );
-
-    potentialTextContainers.forEach((element) => {
+    const SKIP_TAGS = new Set([
+      "script",
+      "style",
+      "noscript",
+      "svg",
+      "select",
+      "option",
+      "textarea",
+    ]);
+    const makeEditable = (element: Element) => {
       const el = element as HTMLElement;
-      if (el.isContentEditable) return;
+      if (!el || el.isContentEditable) return;
+      if (SKIP_TAGS.has(el.tagName.toLowerCase())) return;
+      if (el.closest?.("svg")) return;
 
-      const hasStructuralChildren = Array.from(el.children).some((child) =>
-        structuralTags.includes(child.tagName)
+      const selector = getElementSelector(el, doc);
+      if (!selector) return;
+
+      // Wrap direct non-whitespace text nodes in a contenteditable <span> and save via `setTextNode`.
+      // This preserves existing child markup (icons, <strong>, <span>, etc.) and keeps diffs small.
+      const directTextNodes = Array.from(el.childNodes).filter(
+        (node): node is Text =>
+          node.nodeType === Node.TEXT_NODE &&
+          typeof node.nodeValue === "string" &&
+          node.nodeValue.trim().length > 0
       );
 
-      if (!hasStructuralChildren) {
-        if (el.innerText.trim().length > 0 || el.children.length > 0) {
-          el.setAttribute("contenteditable", "true");
-        }
-      }
-    });
+      if (!directTextNodes.length) return;
+      el.setAttribute("data-vivd-editable-container", "true");
+
+      directTextNodes.forEach((node, idx) => {
+        const index = idx + 1;
+        const original = node.nodeValue ?? "";
+        const match = original.match(/^(\s*)([\s\S]*?)(\s*)$/);
+        const prefix = match?.[1] ?? "";
+        const suffix = match?.[3] ?? "";
+        const coreText = original.slice(
+          prefix.length,
+          original.length - suffix.length
+        );
+
+        const fragment = doc.createDocumentFragment();
+        if (prefix) fragment.appendChild(doc.createTextNode(prefix));
+
+        const span = doc.createElement("span");
+        span.setAttribute("data-vivd-text-parent-selector", selector);
+        span.setAttribute("data-vivd-text-node-index", String(index));
+        span.setAttribute("data-vivd-text-baseline", coreText);
+        span.setAttribute("contenteditable", "true");
+        span.textContent = coreText;
+
+        fragment.appendChild(span);
+        if (suffix) fragment.appendChild(doc.createTextNode(suffix));
+
+        node.parentNode?.replaceChild(fragment, node);
+      });
+    };
+
+    // Make all body elements with direct text editable (except skip tags).
+    allBodyElements.forEach(makeEditable);
 
     // Prevent link navigation
     const links = doc.querySelectorAll("a");
@@ -361,72 +551,79 @@ export function PreviewProvider({
       link.style.cursor = "text";
     });
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = getEditableTarget(event.target);
+      if (!target) return;
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+      }
+    };
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const target = getEditableTarget(event.target);
+      if (!target) return;
+
+      event.preventDefault();
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      doc.execCommand("insertText", false, text);
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      if (getEditableTarget(event.target)) return;
+
+      const start =
+        event.target instanceof HTMLElement
+          ? event.target
+          : (event.target as Node | null)?.parentElement instanceof HTMLElement
+          ? (event.target as Node).parentElement
+          : null;
+      if (!start) return;
+
+      const container = start.closest?.('[data-vivd-editable-container="true"]');
+      if (!(container instanceof HTMLElement)) return;
+
+      const firstEditable =
+        container.querySelector<HTMLElement>('[contenteditable="true"]');
+      if (!firstEditable) return;
+      firstEditable.focus();
+    };
+
+    doc.addEventListener("keydown", handleKeyDown, true);
+    doc.addEventListener("paste", handlePaste, true);
+    doc.addEventListener("click", handleClick, true);
+
+    editModeCleanupRef.current = () => {
+      doc.removeEventListener("keydown", handleKeyDown, true);
+      doc.removeEventListener("paste", handlePaste, true);
+      doc.removeEventListener("click", handleClick, true);
+    };
+
     toast.info("Edit Mode Enabled: Click text to edit");
   };
 
-  /**
-   * Clean up ALL injected content from the iframe DOM before saving.
-   * This ensures no preview-specific scripts, styles, or attributes are persisted.
-   */
-  const cleanupInjectedContent = (doc: Document) => {
-    // 1. Remove injected scripts
-    const scriptsToRemove = ["vivd-highlight-script", "vivd-selector-script"];
-    scriptsToRemove.forEach((id) => {
-      const script = doc.getElementById(id);
-      if (script) script.remove();
-    });
-
-    // 2. Remove injected styles
-    const stylesToRemove = [
-      "edit-mode-styles",
-      "vivd-scrollbar-styles",
-      "image-drop-zone-styles",
-    ];
-    stylesToRemove.forEach((id) => {
-      const style = doc.getElementById(id);
-      if (style) style.remove();
-    });
-
-    // 3. Remove contenteditable attributes
-    const editable = doc.querySelectorAll('[contenteditable="true"]');
-    editable.forEach((el) => el.removeAttribute("contenteditable"));
-
-    // 4. Restore links (edit mode backup)
-    const links = doc.querySelectorAll("a[data-href-backup]");
-    links.forEach((linkElement) => {
-      const link = linkElement as HTMLAnchorElement;
-      link.setAttribute("href", link.getAttribute("data-href-backup") || "");
-      link.removeAttribute("data-href-backup");
-      link.style.cursor = "";
-    });
-
-    // 5. Remove image drop zone attributes
-    const imagesWithDropTarget = doc.querySelectorAll("img[data-drop-target]");
-    imagesWithDropTarget.forEach((img) => {
-      img.removeAttribute("data-drop-target");
-      img.removeAttribute("data-original-src");
-    });
-
-    // 6. Remove drag-mode-active class from body
-    if (doc.body) {
-      doc.body.classList.remove("drag-mode-active");
-    }
-  };
-
   const handleSave = () => {
-    const iframe = iframeRef.current;
-    if (!iframe || !iframe.contentDocument || !projectSlug) return;
+    if (!projectSlug) return;
 
-    const doc = iframe.contentDocument;
-    cleanupInjectedContent(doc);
+    const iframeDoc = iframeRef.current?.contentDocument ?? null;
+    const textPatches = iframeDoc ? collectTextPatchesFromDocument(iframeDoc) : [];
+    const imagePatches = Array.from(pendingImagePatchesRef.current.values());
+    const patches = [...imagePatches, ...textPatches];
+    if (!patches.length) {
+      toast.info("No changes to save");
+      setEditMode(false);
+      clearPendingPatches();
+      cleanupEditModeListeners();
+      setIframeLoading(true);
+      setRefreshKey((prev) => prev + 1);
+      return;
+    }
 
-    const htmlContent = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
-
-    saveFileMutation.mutate({
+    applyHtmlPatches({
       slug: projectSlug,
       version: selectedVersion,
       filePath: "index.html",
-      content: htmlContent,
+      patches,
     });
   };
 
@@ -618,13 +815,12 @@ export function PreviewProvider({
     handleCancelEdit,
     handleClose,
 
+    isSaving,
+
     // Cross-component chat messaging
     pendingChatMessage,
     sendChatMessage,
     clearPendingChatMessage,
-
-    // Mutations
-    saveFileMutation,
 
     // Resizable panels
     assetPanel,

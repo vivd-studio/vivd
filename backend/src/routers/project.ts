@@ -22,6 +22,7 @@ import path from "path";
 import fs from "fs";
 import { gitService } from "../services/GitService";
 import { publishService } from "../services/PublishService";
+import { applyHtmlPatches } from "../services/HtmlPatchService";
 import {
   hasDotSegment,
   ensureVivdInternalFilesDir,
@@ -390,17 +391,34 @@ export const projectRouter = router({
     }
   }),
 
-  saveFile: protectedProcedure
+  applyHtmlPatches: protectedProcedure
     .input(
       z.object({
         slug: z.string(),
         version: z.number(),
         filePath: z.string().default("index.html"),
-        content: z.string(),
+        patches: z
+          .array(
+            z.discriminatedUnion("type", [
+              z.object({
+                type: z.literal("setTextNode"),
+                selector: z.string().min(1),
+                index: z.number().int().min(1),
+                value: z.string(),
+              }),
+              z.object({
+                type: z.literal("setAttr"),
+                selector: z.string().min(1),
+                name: z.literal("src"),
+                value: z.string(),
+              }),
+            ])
+          )
+          .min(1, "At least one patch is required"),
       })
     )
     .mutation(async ({ input }) => {
-      const { slug, version, filePath, content } = input;
+      const { slug, version, filePath, patches } = input;
       if (hasDotSegment(filePath)) {
         throw new Error("Cannot edit hidden files");
       }
@@ -422,9 +440,36 @@ export const projectRouter = router({
         throw new Error("Invalid file path");
       }
 
-      fs.writeFileSync(targetPath, content, "utf-8");
+      if (!filePath.endsWith(".html") && !filePath.endsWith(".htm")) {
+        throw new Error("Only HTML files can be patched");
+      }
 
-      return { success: true };
+      if (!fs.existsSync(targetPath)) {
+        throw new Error("File not found");
+      }
+
+      const original = fs.readFileSync(targetPath, "utf-8");
+      const result = applyHtmlPatches(original, patches);
+
+      if (result.html === original) {
+        return {
+          success: true,
+          noChanges: true,
+          applied: 0,
+          skipped: result.skipped,
+          errors: result.errors,
+        };
+      }
+
+      fs.writeFileSync(targetPath, result.html, "utf-8");
+
+      return {
+        success: true,
+        noChanges: false,
+        applied: result.applied,
+        skipped: result.skipped,
+        errors: result.errors,
+      };
     }),
 
   /**
@@ -556,7 +601,11 @@ export const projectRouter = router({
         movedToLegacy: Object.fromEntries(
           VIVD_INTERNAL_ARTIFACT_FILENAMES.map((f) => [f, 0])
         ),
-        errors: [] as Array<{ slug: string; versionDir: string; error: string }>,
+        errors: [] as Array<{
+          slug: string;
+          versionDir: string;
+          error: string;
+        }>,
       };
     }
 
@@ -640,7 +689,7 @@ export const projectRouter = router({
   }),
 
   /**
-   * Admin maintenance: ensure project template files (like AGENTS.md) exist in all versions.
+   * Admin maintenance: ensure project template files (like AGENTS.md, .gitignore) exist in all versions.
    * Can be re-run with overwrite=true to update templates across all projects.
    */
   migrateProjectTemplateFiles: adminProcedure
@@ -655,7 +704,10 @@ export const projectRouter = router({
       const projectsDir = getProjectsDir();
       const overwrite = input?.overwrite ?? false;
 
-      const written: Record<string, number> = { "AGENTS.md": 0 };
+      const written: Record<string, number> = {
+        "AGENTS.md": 0,
+        ".gitignore": 0,
+      };
 
       let projectsScanned = 0;
       let legacyProjectsMigrated = 0;

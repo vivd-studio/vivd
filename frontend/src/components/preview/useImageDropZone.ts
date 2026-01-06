@@ -5,7 +5,11 @@ interface UseImageDropZoneOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   projectSlug?: string;
   enabled?: boolean;
-  onImageDropped?: (imagePath: string, targetImg: HTMLImageElement) => void;
+  onImageDropped?: (
+    imagePath: string,
+    targetImg: HTMLImageElement,
+    previousSrcAttr: string | null
+  ) => void;
 }
 
 // CSS styles for drop zone highlighting
@@ -122,12 +126,13 @@ export function useImageDropZone({
           if (assetPath) {
             // Update the image source to the new asset
             const newSrc = buildRelativeImagePath(assetPath);
-            img.src = newSrc;
+            const previousSrcAttr = img.getAttribute("src");
+            img.setAttribute("src", newSrc);
 
             toast.success(`Image replaced with ${assetPath.split("/").pop()}`);
 
             if (onImageDropped) {
-              onImageDropped(assetPath, img);
+              onImageDropped(assetPath, img, previousSrcAttr);
             }
           }
         };

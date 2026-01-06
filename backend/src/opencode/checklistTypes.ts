@@ -16,6 +16,7 @@ export interface PrePublishChecklist {
   projectSlug: string;
   version: number;
   runAt: string; // ISO timestamp
+  snapshotCommitHash?: string; // Commit hash of the snapshot created before running checks
   items: ChecklistItem[];
   summary: {
     passed: number;

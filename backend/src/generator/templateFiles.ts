@@ -1,6 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { GenerationSource } from "./flows/types";
+
+// Get the directory of this module for resolving template paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const TEMPLATES_DIR = path.join(__dirname, "templates");
 
 export interface ApplyProjectTemplateFilesInput {
   versionDir: string;
@@ -15,50 +21,46 @@ export interface ApplyProjectTemplateFilesResult {
   skipped: string[];
 }
 
+// Template file names (for tracking and migration)
+export const TEMPLATE_FILES = ["AGENTS.md", ".gitignore"] as const;
+export type TemplateFileName = (typeof TEMPLATE_FILES)[number];
+
 function formatPlugins(enabledPlugins?: string[]): string {
   if (!enabledPlugins?.length) return "None";
   return enabledPlugins.map((p) => `- ${p}`).join("\n");
 }
 
-const AGENTS_MD_URL_TEMPLATE = `# Project: {project_name}
+// Load template content from template files
+function loadTemplate(filename: string): string {
+  const templatePath = path.join(TEMPLATES_DIR, filename);
+  return fs.readFileSync(templatePath, "utf-8");
+}
 
-Your name is vivd. You work in vivd-studio and are responsible for building the customer's website. This is a live production website. Code changes will be deployed to the internet.
+// Lazy-load templates to avoid issues during module initialization
+let AGENTS_MD_URL_TEMPLATE: string | null = null;
+let AGENTS_MD_SCRATCH_TEMPLATE: string | null = null;
+let GITIGNORE_TEMPLATE: string | null = null;
 
-This website was created from an existing website. The \`.vivd/\` folder contains screenshots, website text, and image descriptions of the old website.
+function getAgentsUrlTemplate(): string {
+  if (AGENTS_MD_URL_TEMPLATE === null) {
+    AGENTS_MD_URL_TEMPLATE = loadTemplate("agents-url.md");
+  }
+  return AGENTS_MD_URL_TEMPLATE;
+}
 
-Currently you cannot create images on your own. If you need new images, tell the user to open the assets sidebar and use "AI Edit" on existing images or use the "Create new Image with AI" tool, which can take in multiple existing images as reference.
+function getAgentsScratchTemplate(): string {
+  if (AGENTS_MD_SCRATCH_TEMPLATE === null) {
+    AGENTS_MD_SCRATCH_TEMPLATE = loadTemplate("agents-scratch.md");
+  }
+  return AGENTS_MD_SCRATCH_TEMPLATE;
+}
 
-## Important Guidelines
-
-1. **Non-technical users**: You may be working with people unfamiliar with code. If necessary, ask clarifying questions.
-2. **Production ready**: All code must be production-quality:
-   - No console.logs left in production
-   - No placeholder content
-   - Proper error handling
-   - Mobile responsive
-3. **Available plugins**:
-{enabled_plugins}
-4. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
-`;
-
-const AGENTS_MD_SCRATCH_TEMPLATE = `# Project: {project_name}
-
-Your name is vivd. You work in vivd-studio and are responsible for building the customer's website. This is a live production website. Code changes will be deployed to the internet.
-
-Currently you cannot create images on your own. If you need new images, tell the user to open the assets sidebar and use "AI Edit" on existing images or use the "Create new Image with AI" tool, which can take in multiple existing images as reference.
-
-## Important Guidelines
-
-1. **Non-technical users**: You may be working with people unfamiliar with code. If necessary, ask clarifying questions.
-2. **Production ready**: All code must be production-quality:
-   - No console.logs left in production
-   - No placeholder content
-   - Proper error handling
-   - Mobile responsive
-3. **Available plugins**:
-{enabled_plugins}
-4. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
-`;
+function getGitignoreTemplate(): string {
+  if (GITIGNORE_TEMPLATE === null) {
+    GITIGNORE_TEMPLATE = loadTemplate("gitignore.txt");
+  }
+  return GITIGNORE_TEMPLATE;
+}
 
 function renderAgentsMd(input: {
   projectName: string;
@@ -67,8 +69,8 @@ function renderAgentsMd(input: {
 }): string {
   const template =
     input.source === "scratch"
-      ? AGENTS_MD_SCRATCH_TEMPLATE
-      : AGENTS_MD_URL_TEMPLATE;
+      ? getAgentsScratchTemplate()
+      : getAgentsUrlTemplate();
 
   return template
     .replace(/{project_name}/g, input.projectName)
@@ -88,6 +90,7 @@ export function applyProjectTemplateFiles(
     throw new Error(`Version directory not found: ${input.versionDir}`);
   }
 
+  // Write AGENTS.md
   const agentsPath = path.join(input.versionDir, "AGENTS.md");
   if (fs.existsSync(agentsPath) && !overwrite) {
     skipped.push("AGENTS.md");
@@ -99,6 +102,16 @@ export function applyProjectTemplateFiles(
     });
     fs.writeFileSync(agentsPath, content, "utf-8");
     written.push("AGENTS.md");
+  }
+
+  // Write .gitignore
+  const gitignorePath = path.join(input.versionDir, ".gitignore");
+  if (fs.existsSync(gitignorePath) && !overwrite) {
+    skipped.push(".gitignore");
+  } else {
+    const gitignoreContent = getGitignoreTemplate();
+    fs.writeFileSync(gitignorePath, gitignoreContent, "utf-8");
+    written.push(".gitignore");
   }
 
   return { written, skipped };

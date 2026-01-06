@@ -42,6 +42,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatDistanceToNow } from "date-fns";
 
 interface PublishDialogProps {
@@ -132,7 +137,9 @@ export function PublishDialog({
   const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
   const [showPublishWarning, setShowPublishWarning] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(true);
-  const [isRunningChecklist, setIsRunningChecklist] = useState(false);
+  const [checklistPhase, setChecklistPhase] = useState<
+    "idle" | "saving" | "running"
+  >("idle");
   const [fixingItemId, setFixingItemId] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
@@ -167,17 +174,23 @@ export function PublishDialog({
         `Checklist complete: ${data.checklist.summary.passed}/${data.checklist.items.length} passed`
       );
       refetchChecklist();
-      setIsRunningChecklist(false);
+      setChecklistPhase("idle");
       setChecklistOpen(true);
     },
     onError: (error) => {
       toast.error(`Failed to run checklist: ${error.message}`);
-      setIsRunningChecklist(false);
+      setChecklistPhase("idle");
     },
   });
 
   const handleRunChecklist = () => {
-    setIsRunningChecklist(true);
+    setChecklistPhase("saving");
+    // Switch to running phase after a brief delay (only if still saving)
+    setTimeout(() => {
+      setChecklistPhase((current) =>
+        current === "saving" ? "running" : current
+      );
+    }, 500);
     runChecklistMutation.mutate({ projectSlug, version });
   };
 
@@ -208,6 +221,7 @@ export function PublishDialog({
 
   const checklist: PrePublishChecklist | null =
     checklistData?.checklist ?? null;
+  const hasChangesSinceCheck = checklistData?.hasChangesSinceCheck ?? true;
 
   // Check domain availability (debounced)
   const { data: domainCheck, isLoading: isCheckingDomain } =
@@ -414,15 +428,19 @@ export function PublishDialog({
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-2 space-y-2">
-                    {isRunningChecklist ? (
+                    {checklistPhase !== "idle" ? (
                       <div className="flex flex-col items-center justify-center py-6 gap-3">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         <div className="text-center">
                           <p className="text-sm font-medium">
-                            Running production checks...
+                            {checklistPhase === "saving"
+                              ? "Saving snapshot..."
+                              : "Running production checks..."}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            This may take up to a minute
+                            {checklistPhase === "saving"
+                              ? "Creating checkpoint before analysis"
+                              : "This may take up to a minute"}
                           </p>
                         </div>
                       </div>
@@ -483,23 +501,38 @@ export function PublishDialog({
                           })}
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleRunChecklist}
-                            disabled={
-                              isRunningChecklist || fixingItemId !== null
-                            }
-                            className={`flex-1 ${
-                              checklist.summary.failed > 0 ||
-                              checklist.summary.warnings > 0
-                                ? "border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                                : ""
-                            }`}
-                          >
-                            <RefreshCw className="w-3 h-3 mr-2" />
-                            Re-run Checks
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="flex-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleRunChecklist}
+                                  disabled={
+                                    checklistPhase !== "idle" ||
+                                    fixingItemId !== null ||
+                                    !hasChangesSinceCheck
+                                  }
+                                  className={`w-full ${
+                                    !hasChangesSinceCheck
+                                      ? "opacity-50 cursor-not-allowed"
+                                      : checklist.summary.failed > 0 ||
+                                        checklist.summary.warnings > 0
+                                      ? "border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                      : ""
+                                  }`}
+                                >
+                                  <RefreshCw className="w-3 h-3 mr-2" />
+                                  Re-run Checks
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {!hasChangesSinceCheck && (
+                              <TooltipContent>
+                                <p>No changes since last check</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
                         </div>
                       </>
                     ) : (
@@ -529,7 +562,9 @@ export function PublishDialog({
                         </div>
                         <Button
                           onClick={handleRunChecklist}
-                          disabled={isRunningChecklist || isLoadingChecklist}
+                          disabled={
+                            checklistPhase !== "idle" || isLoadingChecklist
+                          }
                           size="sm"
                           className="w-full bg-amber-600 hover:bg-amber-700 text-white"
                         >

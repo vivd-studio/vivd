@@ -8,7 +8,7 @@ export function UnsavedChangesBar() {
     editMode,
     handleSave,
     handleCancelEdit,
-    saveFileMutation,
+    isSaving,
   } = usePreview();
 
   // Show when there are unsaved changes OR in edit mode
@@ -35,7 +35,7 @@ export function UnsavedChangesBar() {
             size="sm"
             variant="secondary"
             onClick={handleSave}
-            disabled={saveFileMutation.isPending}
+            disabled={isSaving}
             className="h-7 px-2 sm:px-3 bg-white hover:bg-white/90 text-amber-700 font-medium rounded-full text-xs sm:text-sm"
           >
             <Save className="w-3.5 h-3.5 sm:mr-1.5" />
@@ -45,7 +45,7 @@ export function UnsavedChangesBar() {
             size="sm"
             variant="ghost"
             onClick={handleCancelEdit}
-            disabled={saveFileMutation.isPending}
+            disabled={isSaving}
             className="h-7 px-2 sm:px-3 text-white hover:bg-white/20 hover:text-white rounded-full text-xs sm:text-sm"
           >
             <X className="w-3.5 h-3.5 sm:mr-1" />
