@@ -114,7 +114,6 @@ export const publishedSite = pgTable(
     commitHash: text("commit_hash").notNull(),
     publishedAt: timestamp("published_at").notNull(),
     publishedById: text("published_by_id")
-      .notNull()
       .references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

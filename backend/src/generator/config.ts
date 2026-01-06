@@ -1,4 +1,4 @@
-export const OPENROUTER_API_KEY = process.env._OPENROUTER_API_KEY;
+export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const MAX_SCREENSHOT_HEIGHT = 2000; // Limit screenshot height to avoid huge files
 export const GENERATION_MODEL = "google/gemini-3-pro-preview"; // model to create index.html
 export const ANALYSIS_MODEL = "google/gemini-3-pro-preview"; // model for text analysis and planning operations
@@ -17,7 +17,7 @@ export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 export const OPENCODE_MODEL = process.env.OPENCODE_MODEL;
 
 export function validateConfig() {
-  if (!process.env._OPENROUTER_API_KEY) {
-    throw new Error("Please set _OPENROUTER_API_KEY in your .env file.");
+  if (!OPENROUTER_API_KEY) {
+    throw new Error("Please set OPENROUTER_API_KEY in your .env file.");
   }
 }

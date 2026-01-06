@@ -331,14 +331,29 @@ export class PublishService {
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
 
-      // Skip git-related files and our marker file
-      if (entry.name === ".git" || entry.name === ".vivd-working-commit") {
+      // Skip private/internal files and folders (publish should only include public site files)
+      // Allow `.well-known/` for common web conventions (e.g. security.txt).
+      if (
+        entry.name === ".git" ||
+        entry.name === ".vivd" ||
+        entry.name === ".vivd-working-commit" ||
+        (entry.name.startsWith(".") && entry.name !== ".well-known")
+      ) {
         continue;
       }
 
-      if (entry.isDirectory()) {
+      const st = fs.lstatSync(srcPath);
+      if (st.isSymbolicLink()) {
+        console.warn(`[Publish] Skipping symlink: ${srcPath}`);
+        continue;
+      }
+
+      if (st.isDirectory()) {
         this.copyDirectory(srcPath, destPath);
-      } else {
+        continue;
+      }
+
+      if (st.isFile()) {
         fs.copyFileSync(srcPath, destPath);
       }
     }
@@ -431,7 +446,9 @@ ${domainSpec} {
     handle @notVivdStudio {
         root * /srv/published/${projectSlug}
         try_files {path} {path}/index.html
-        file_server
+        file_server {
+            hide .vivd .git .vivd-working-commit
+        }
     }
 ${errorHandlerBlock}
 

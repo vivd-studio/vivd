@@ -1,0 +1,1 @@
+ALTER TABLE "published_site" ALTER COLUMN "published_by_id" DROP NOT NULL;

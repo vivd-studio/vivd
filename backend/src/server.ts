@@ -15,7 +15,7 @@ import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
 import { getVersionDir } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
-import { hasDotSegment } from "./generator/vivdPaths";
+import { safeJoin } from "./fs/safePaths";
 
 // ESM dirname replacement
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -72,21 +72,17 @@ app.post(
       }
 
       const { slug, version } = req.params;
-      const relativePath = (req.query.path as string) || "";
-      if (hasDotSegment(relativePath)) {
-        return res.status(400).json({ error: "Invalid path" });
-      }
+      const relativePath = typeof req.query.path === "string" ? req.query.path : "";
       const versionDir = getVersionDir(slug, parseInt(version));
 
       if (!fs.existsSync(versionDir)) {
         return res.status(404).json({ error: "Project version not found" });
       }
 
-      const targetDir = path.join(versionDir, relativePath);
-
-      // Security: ensure we're within the version directory
-      const realVersionDir = fs.realpathSync(versionDir);
-      if (!targetDir.startsWith(realVersionDir)) {
+      let targetDir: string;
+      try {
+        targetDir = safeJoin(versionDir, relativePath);
+      } catch {
         return res.status(400).json({ error: "Invalid path" });
       }
 
@@ -104,11 +100,23 @@ app.post(
           /[^a-zA-Z0-9._-]/g,
           "_"
         );
-        const filePath = path.join(targetDir, sanitizedName);
+        let filePath: string;
+        try {
+          const rel = relativePath
+            ? path.posix.join(relativePath.replace(/\\/g, "/"), sanitizedName)
+            : sanitizedName;
+          filePath = safeJoin(versionDir, rel);
+        } catch {
+          return res.status(400).json({ error: "Invalid filename" });
+        }
 
         // Write file
         fs.writeFileSync(filePath, file.buffer);
-        uploaded.push(path.join(relativePath, sanitizedName));
+        uploaded.push(
+          relativePath
+            ? path.posix.join(relativePath.replace(/\\/g, "/"), sanitizedName)
+            : sanitizedName
+        );
       }
 
       return res.json({ success: true, uploaded });
@@ -157,7 +165,7 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     // Pipe archive to response
     archive.pipe(res);
 
-    // Add the version directory contents to the archive
+    // Add the version directory contents to the archive (including internals)
     archive.directory(versionDir, false);
 
     // Finalize the archive

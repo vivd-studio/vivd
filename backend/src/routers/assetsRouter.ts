@@ -12,6 +12,7 @@ import {
   HERO_GENERATION_MODEL,
 } from "../generator/config";
 import { downloadImage, saveImageBuffer } from "../generator/utils";
+import { safeJoin } from "../fs/safePaths";
 
 // Get MIME type from extension
 function getMimeType(filename: string): string {
@@ -189,12 +190,10 @@ export const assetsRouter = router({
 
       // Sanitize folder name
       const sanitizedName = folderName.replace(/[^a-zA-Z0-9_-]/g, "_");
-      const sanitizedPath = path.join(versionDir, relativePath, sanitizedName);
-
-      // Security: ensure we're still within the version directory
-      if (!sanitizedPath.startsWith(versionDir)) {
-        throw new Error("Invalid path");
-      }
+      const rel = relativePath
+        ? path.posix.join(relativePath.replace(/\\/g, "/"), sanitizedName)
+        : sanitizedName;
+      const sanitizedPath = safeJoin(versionDir, rel);
 
       if (fs.existsSync(sanitizedPath)) {
         throw new Error("Folder already exists");
@@ -409,6 +408,13 @@ export const assetsRouter = router({
         throw new Error("Project version not found");
       }
 
+      let saveDir: string;
+      try {
+        saveDir = safeJoin(versionDir, targetPath);
+      } catch {
+        throw new Error("Invalid path");
+      }
+
       // Build the messages array with prompt and optional reference images
       const messages: any[] = [
         {
@@ -419,7 +425,12 @@ export const assetsRouter = router({
 
       // Add reference images
       for (const imgPath of referenceImages) {
-        const fullPath = path.join(versionDir, imgPath);
+        let fullPath: string;
+        try {
+          fullPath = safeJoin(versionDir, imgPath);
+        } catch {
+          throw new Error("Invalid path");
+        }
         if (fs.existsSync(fullPath) && isImageFile(fullPath)) {
           const buffer = fs.readFileSync(fullPath);
           const base64 = buffer.toString("base64");
@@ -507,7 +518,6 @@ export const assetsRouter = router({
         const newFileName = `ai-${sanitizedPrompt}-${timestamp}.webp`;
 
         // Determine save path
-        const saveDir = path.join(versionDir, targetPath);
         if (!fs.existsSync(saveDir)) {
           fs.mkdirSync(saveDir, { recursive: true });
         }
@@ -529,7 +539,10 @@ export const assetsRouter = router({
           await saveImageBuffer(buffer, newFilePath);
         }
 
-        const newRelativePath = path.join(targetPath, newFileName);
+        const normalizedTarget = targetPath.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+        const newRelativePath = normalizedTarget
+          ? path.posix.join(normalizedTarget, newFileName)
+          : newFileName;
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
 
         return {

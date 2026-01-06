@@ -15,6 +15,13 @@
       "when": 1766236254796,
       "tag": "0001_add_published_site",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1767730708381,
+      "tag": "0002_published_by_nullable",
+      "breakpoints": true
     }
   ]
 }
