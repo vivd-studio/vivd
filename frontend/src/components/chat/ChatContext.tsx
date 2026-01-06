@@ -4,11 +4,22 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
 import { usePreview } from "../preview/PreviewContext";
 import { formatMessageWithSelector } from "./SelectedElementPill";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Types
 export interface Message {
@@ -187,6 +198,38 @@ export function ChatProvider({
   // Session error state (for quota limits, API errors, etc.)
   const [sessionError, setSessionError] = useState<SessionError | null>(null);
   const clearSessionError = () => setSessionError(null);
+
+  const confirmResolverRef = useRef<((result: boolean) => void) | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    destructive?: boolean;
+  }>({ open: false, title: "" });
+
+  const requestConfirm = useCallback(
+    (options: {
+      title: string;
+      description?: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      destructive?: boolean;
+    }) => {
+      return new Promise<boolean>((resolve) => {
+        confirmResolverRef.current = resolve;
+        setConfirmDialog({ open: true, ...options });
+      });
+    },
+    []
+  );
+
+  const resolveConfirm = useCallback((result: boolean) => {
+    confirmResolverRef.current?.(result);
+    confirmResolverRef.current = null;
+    setConfirmDialog((prev) => ({ ...prev, open: false }));
+  }, []);
 
   // Poll for sessions to keep the list and status updated
   const { data: sessionsData, refetch: refetchSessions } =
@@ -698,16 +741,22 @@ export function ChatProvider({
     sessionId: string
   ) => {
     e.stopPropagation();
-    if (confirm("Are you sure you want to delete this session?")) {
-      await deleteSessionMutation.mutateAsync({
-        sessionId,
-        projectSlug,
-        version,
-      });
-      if (selectedSessionId === sessionId) {
-        setSelectedSessionId(null);
-        setMessages([]);
-      }
+    const ok = await requestConfirm({
+      title: "Delete this session?",
+      description: "This will permanently delete the session and its messages.",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      destructive: true,
+    });
+    if (!ok) return;
+    await deleteSessionMutation.mutateAsync({
+      sessionId,
+      projectSlug,
+      version,
+    });
+    if (selectedSessionId === sessionId) {
+      setSelectedSessionId(null);
+      setMessages([]);
     }
   };
 
@@ -727,16 +776,20 @@ export function ChatProvider({
 
   const handleRevert = async (messageId: string) => {
     if (!selectedSessionId) return;
-    if (
-      confirm("Revert changes from this task? This will undo file changes.")
-    ) {
-      await revertMutation.mutateAsync({
-        sessionId: selectedSessionId,
-        messageId,
-        projectSlug,
-        version,
-      });
-    }
+    const ok = await requestConfirm({
+      title: "Revert changes from this task?",
+      description: "This will undo file changes made by the agent.",
+      confirmLabel: "Revert",
+      cancelLabel: "Cancel",
+      destructive: true,
+    });
+    if (!ok) return;
+    await revertMutation.mutateAsync({
+      sessionId: selectedSessionId,
+      messageId,
+      projectSlug,
+      version,
+    });
   };
 
   const handleUnrevert = async () => {
@@ -848,5 +901,43 @@ export function ChatProvider({
     handleUnrevert,
   };
 
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+  return (
+    <>
+      <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+      <AlertDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => {
+          if (!open && confirmResolverRef.current) {
+            resolveConfirm(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            {confirmDialog.description ? (
+              <AlertDialogDescription>
+                {confirmDialog.description}
+              </AlertDialogDescription>
+            ) : null}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => resolveConfirm(false)}>
+              {confirmDialog.cancelLabel ?? "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                confirmDialog.destructive
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : undefined
+              }
+              onClick={() => resolveConfirm(true)}
+            >
+              {confirmDialog.confirmLabel ?? "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }

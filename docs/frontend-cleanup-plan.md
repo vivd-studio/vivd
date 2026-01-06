@@ -20,10 +20,10 @@ This document captures the agreed refactor/cleanup work for the frontend to redu
 
 ### 1) Shared VersionSelector component
 
-- [ ] Create a shared `VersionSelector` to eliminate duplication between:
+- [x] Create a shared `VersionSelector` to eliminate duplication between:
   - `frontend/src/components/preview/PreviewToolbar.tsx`
   - `frontend/src/components/ProjectCard.tsx`
-- [ ] Keep it flexible enough for both contexts (callbacks + optional “status marker” rendering).
+- [x] Keep it flexible enough for both contexts (callbacks + optional “status marker” rendering).
 
 ### 2) Unify project creation flows (wizard + single-project)
 
@@ -35,10 +35,10 @@ This document captures the agreed refactor/cleanup work for the frontend to redu
 
 ### 3) Replace `alert` / `confirm` with shadcn dialogs + toasts
 
-- [ ] Replace `alert(...)` and `confirm(...)` usage with:
+- [x] Replace `alert(...)` and `confirm(...)` usage with:
   - shadcn `AlertDialog` for confirmation flows
   - `sonner` toasts for success/error feedback
-- [ ] Target files (initial pass):
+- [x] Target files (initial pass):
   - `frontend/src/components/ProjectsList.tsx`
   - `frontend/src/components/asset-explorer/AssetExplorer.tsx`
   - `frontend/src/components/ProjectCard.tsx`

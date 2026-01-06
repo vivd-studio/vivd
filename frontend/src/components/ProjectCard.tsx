@@ -20,9 +20,6 @@ import {
 import {
   Plus,
   Loader2,
-  Layers,
-  Check,
-  ChevronDown,
   RotateCcw,
   Globe,
   Trash2,
@@ -32,6 +29,17 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { VersionSelector } from "@/components/VersionSelector";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export interface VersionInfo {
   version: number;
@@ -99,6 +107,7 @@ export function ProjectCard({
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1
   );
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Sync selectedVersion with project.currentVersion when it changes
   // This ensures we switch to the new version when one is created
@@ -182,18 +191,19 @@ export function ProjectCard({
   const previewUrl = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/index.html`;
 
   return (
-    <Card
-      className={`flex flex-col h-full overflow-hidden transition-all hover:shadow-md min-h-[190px] ${
-        isProcessing
-          ? "border-primary ring-1 ring-primary/20 animate-pulse duration-3000"
-          : ""
-      } ${isCompleted ? "cursor-pointer hover:border-primary/50" : ""}`}
-      onClick={() => {
-        if (isCompleted) {
-          navigate(`/vivd-studio/projects/${project.slug}`);
-        }
-      }}
-    >
+    <>
+      <Card
+        className={`flex flex-col h-full overflow-hidden transition-all hover:shadow-md min-h-[190px] ${
+          isProcessing
+            ? "border-primary ring-1 ring-primary/20 animate-pulse duration-3000"
+            : ""
+        } ${isCompleted ? "cursor-pointer hover:border-primary/50" : ""}`}
+        onClick={() => {
+          if (isCompleted) {
+            navigate(`/vivd-studio/projects/${project.slug}`);
+          }
+        }}
+      >
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -203,69 +213,29 @@ export function ProjectCard({
             >
               {project.slug}
             </CardTitle>
-            {totalVersions > 0 &&
+              {totalVersions > 0 &&
               (hasMultipleVersions ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Badge
-                      variant="secondary"
-                      className="shrink-0 text-xs px-1.5 py-0 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
-                      title={`Click to select from ${totalVersions} versions`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
-                      <ChevronDown className="w-3 h-3 ml-1" />
-                    </Badge>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <DropdownMenuLabel>Select Version</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {versions.map((v) => (
-                      <DropdownMenuItem
-                        key={v.version}
-                        onClick={() => handleVersionSelect(v.version)}
-                        className={
-                          selectedVersion === v.version ? "bg-accent" : ""
-                        }
-                      >
-                        <Check
-                          className={`w-4 h-4 mr-2 ${
-                            selectedVersion === v.version
-                              ? "opacity-100"
-                              : "opacity-0"
-                          }`}
-                        />
-                        <span>v{v.version}</span>
-                        <span
-                          className={`ml-auto text-xs ${
-                            v.status === "completed"
-                              ? "text-green-600"
-                              : v.status === "failed"
-                              ? "text-red-500"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          {v.status === "completed"
-                            ? "✓"
-                            : v.status === "failed"
-                            ? "✗"
-                            : "..."}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <VersionSelector
+                  selectedVersion={selectedVersion}
+                  versions={versions}
+                  onSelect={handleVersionSelect}
+                  stopPropagation
+                  triggerVariant="secondary"
+                  triggerClassName="shrink-0 text-xs px-1.5 py-0 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
+                  triggerTitle={`Click to select from ${totalVersions} versions`}
+                  align="start"
+                  label="Select Version"
+                />
               ) : (
-                <Badge
-                  variant="secondary"
-                  className="shrink-0 text-xs px-1.5 py-0 font-normal"
-                  title={`${totalVersions} version`}
-                >
-                  <Layers className="w-3 h-3 mr-1" />v{selectedVersion}
-                </Badge>
+                <VersionSelector
+                  selectedVersion={selectedVersion}
+                  versions={versions}
+                  onSelect={handleVersionSelect}
+                  stopPropagation
+                  triggerVariant="secondary"
+                  triggerClassName="shrink-0 text-xs px-1.5 py-0 font-normal"
+                  triggerTitle={`${totalVersions} version`}
+                />
               ))}
           </div>
           <Badge
@@ -324,16 +294,7 @@ export function ProjectCard({
                 className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (
-                    confirm(
-                      `Force reset ${project.slug} v${selectedVersion} to 'failed' status?`
-                    )
-                  ) {
-                    resetMutation.mutate({
-                      slug: project.slug,
-                      version: selectedVersion,
-                    });
-                  }
+                  setShowResetConfirm(true);
                 }}
                 disabled={resetMutation.isPending}
               >
@@ -449,6 +410,37 @@ export function ProjectCard({
           ) : null}
         </div>
       </CardFooter>
-    </Card>
+      </Card>
+
+      <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Force Reset Project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Force reset {project.slug} v{selectedVersion} to <code>failed</code>
+              ? This is an admin-only action.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={resetMutation.isPending}
+              onClick={() => {
+                resetMutation.mutate({
+                  slug: project.slug,
+                  version: selectedVersion,
+                });
+                setShowResetConfirm(false);
+              }}
+            >
+              Force Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

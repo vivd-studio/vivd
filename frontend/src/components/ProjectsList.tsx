@@ -65,7 +65,9 @@ export function ProjectsList() {
       await generateProject({ url, createNewVersion: true });
     } catch (error) {
       console.error(error);
-      alert(`Failed to create new version: ${(error as Error).message}`);
+      toast.error("Failed to create new version", {
+        description: (error as Error).message,
+      });
     } finally {
       setRegeneratingSlug(null);
     }
@@ -81,7 +83,9 @@ export function ProjectsList() {
       await regenerateProject({ slug, version: currentVersion });
     } catch (error) {
       console.error(error);
-      alert(`Failed to regenerate ${slug}: ${(error as Error).message}`);
+      toast.error(`Failed to regenerate ${slug}`, {
+        description: (error as Error).message,
+      });
     } finally {
       setRegeneratingSlug(null);
     }

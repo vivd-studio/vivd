@@ -90,6 +90,7 @@ export function VersionHistoryPanel({
 
   const [showLoadWarning, setShowLoadWarning] = useState(false);
   const [pendingLoadHash, setPendingLoadHash] = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Save State
   const [commitMessage, setCommitMessage] = useState("");
@@ -183,13 +184,7 @@ export function VersionHistoryPanel({
   const isSaving = saveMutation.isPending || isRefreshingAfterSave;
 
   const handleDiscard = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to discard all unsaved changes? This cannot be undone."
-      )
-    ) {
-      discardMutation.mutate({ slug: projectSlug, version });
-    }
+    setShowDiscardConfirm(true);
   };
 
   const formatDate = (dateStr: string) => {
@@ -418,6 +413,36 @@ export function VersionHistoryPanel({
               }}
             >
               Discard & Load
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showDiscardConfirm}
+        onOpenChange={setShowDiscardConfirm}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Discard all unsaved changes in this version. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={discardMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={discardMutation.isPending}
+              onClick={() => {
+                discardMutation.mutate({ slug: projectSlug, version });
+                setShowDiscardConfirm(false);
+              }}
+            >
+              Discard
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

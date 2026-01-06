@@ -3,6 +3,17 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import type { AssetItem } from "./types";
 import { buildImageUrl } from "./utils";
@@ -40,6 +51,9 @@ export function AssetExplorer({
   const [selectedImageItem, setSelectedImageItem] = useState<AssetItem | null>(
     null
   );
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<AssetItem | null>(
+    null
+  );
 
   // AI Edit state
   const [editingImage, setEditingImage] = useState<AssetItem | null>(null);
@@ -71,7 +85,13 @@ export function AssetExplorer({
 
   // Mutations
   const deleteMutation = trpc.assets.deleteAsset.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      toast.success("Asset deleted");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error("Failed to delete asset", { description: error.message });
+    },
   });
 
   const createFolderMutation = trpc.assets.createFolder.useMutation({
@@ -90,7 +110,7 @@ export function AssetExplorer({
       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.newPath));
     },
     onError: (error) => {
-      alert(`Failed to edit image: ${error.message}`);
+      toast.error("Failed to edit image", { description: error.message });
     },
   });
 
@@ -103,7 +123,7 @@ export function AssetExplorer({
       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.path));
     },
     onError: (error) => {
-      alert(`Failed to create image: ${error.message}`);
+      toast.error("Failed to create image", { description: error.message });
     },
   });
 
@@ -125,12 +145,21 @@ export function AssetExplorer({
 
   const handleDelete = (item: AssetItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm(`Delete "${item.name}"?`)) {
-      deleteMutation.mutate({
-        slug: projectSlug,
-        version,
-        relativePath: item.path,
-      });
+    setPendingDeleteItem(item);
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDeleteItem) return;
+    const deletedPath = pendingDeleteItem.path;
+    deleteMutation.mutate({
+      slug: projectSlug,
+      version,
+      relativePath: deletedPath,
+    });
+    setPendingDeleteItem(null);
+    if (selectedImageItem?.path === deletedPath) {
+      setSelectedImageUrl(null);
+      setSelectedImageItem(null);
     }
   };
 
@@ -205,7 +234,7 @@ export function AssetExplorer({
       refetch();
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Failed to upload files");
+      toast.error("Failed to upload files");
     } finally {
       setIsUploading(false);
     }
@@ -351,17 +380,8 @@ export function AssetExplorer({
           }
         }}
         onDelete={() => {
-          if (
-            selectedImageItem &&
-            confirm(`Delete "${selectedImageItem.name}"?`)
-          ) {
-            deleteMutation.mutate({
-              slug: projectSlug,
-              version,
-              relativePath: selectedImageItem.path,
-            });
-            setSelectedImageUrl(null);
-            setSelectedImageItem(null);
+          if (selectedImageItem) {
+            setPendingDeleteItem(selectedImageItem);
           }
         }}
         onDownload={() => {
@@ -411,6 +431,46 @@ export function AssetExplorer({
         projectSlug={projectSlug}
         version={version}
       />
+
+      <AlertDialog
+        open={!!pendingDeleteItem}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteItem(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete asset?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteItem ? (
+                <>
+                  Delete <code>{pendingDeleteItem.name}</code>? This cannot be
+                  undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={confirmDelete}
+            >
+              {deleteMutation.isPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </span>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

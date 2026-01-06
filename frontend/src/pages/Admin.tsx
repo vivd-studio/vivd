@@ -23,6 +23,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -46,6 +56,9 @@ type AddUserFormValues = z.infer<typeof addUserSchema>;
 export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [error, setError] = useState("");
+  const [maintenanceConfirm, setMaintenanceConfirm] = useState<
+    null | "migrateProcessFiles" | "templateAddMissing" | "templateOverwrite"
+  >(null);
   const queryClient = useQueryClient();
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user?.role === "admin";
@@ -130,6 +143,40 @@ export default function Admin() {
         });
       },
     });
+
+  const confirmConfig = (() => {
+    switch (maintenanceConfirm) {
+      case "migrateProcessFiles":
+        return {
+          title: "Run migration for all projects?",
+          description:
+            "This will move vivd process files into .vivd/ for all existing project versions.",
+          confirmLabel: "Run Migration",
+          isPending: migrateMutation.isPending,
+          onConfirm: () => migrateMutation.mutate(),
+        };
+      case "templateAddMissing":
+        return {
+          title: "Add missing template files?",
+          description:
+            "This will add missing template files for all projects/versions.",
+          confirmLabel: "Add Missing Files",
+          isPending: templateFilesMutation.isPending,
+          onConfirm: () => templateFilesMutation.mutate({ overwrite: false }),
+        };
+      case "templateOverwrite":
+        return {
+          title: "Overwrite template files?",
+          description:
+            "This will overwrite template files for all projects/versions and replace existing AGENTS.md files.",
+          confirmLabel: "Overwrite Files",
+          isPending: templateFilesMutation.isPending,
+          onConfirm: () => templateFilesMutation.mutate({ overwrite: true }),
+        };
+      default:
+        return null;
+    }
+  })();
 
   if (isLoading)
     return (
@@ -343,16 +390,12 @@ export default function Admin() {
               <code>.vivd/</code> folder for all existing projects.
             </p>
             <div className="flex items-center gap-3">
-              <Button
-                onClick={() => {
-                  const ok = window.confirm(
-                    "Run migration for all projects? This will move files into .vivd/."
-                  );
-                  if (!ok) return;
-                  migrateMutation.mutate();
-                }}
-                disabled={migrateMutation.isPending}
-              >
+                <Button
+                  onClick={() => {
+                    setMaintenanceConfirm("migrateProcessFiles");
+                  }}
+                  disabled={migrateMutation.isPending}
+                >
                 {migrateMutation.isPending ? (
                   <Loader2 className="animate-spin h-4 w-4 mr-2" />
                 ) : null}
@@ -396,11 +439,7 @@ export default function Admin() {
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   onClick={() => {
-                    const ok = window.confirm(
-                      "Add missing template files for all projects/versions?"
-                    );
-                    if (!ok) return;
-                    templateFilesMutation.mutate({ overwrite: false });
+                    setMaintenanceConfirm("templateAddMissing");
                   }}
                   disabled={templateFilesMutation.isPending}
                 >
@@ -412,11 +451,7 @@ export default function Admin() {
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    const ok = window.confirm(
-                      "Overwrite template files for all projects/versions? This will replace existing AGENTS.md files."
-                    );
-                    if (!ok) return;
-                    templateFilesMutation.mutate({ overwrite: true });
+                    setMaintenanceConfirm("templateOverwrite");
                   }}
                   disabled={templateFilesMutation.isPending}
                 >
@@ -458,6 +493,44 @@ export default function Admin() {
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog
+        open={maintenanceConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setMaintenanceConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmConfig?.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmConfig?.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={confirmConfig?.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={confirmConfig?.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                confirmConfig?.onConfirm();
+                setMaintenanceConfirm(null);
+              }}
+            >
+              {confirmConfig?.isPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Working...
+                </span>
+              ) : (
+                confirmConfig?.confirmLabel
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
