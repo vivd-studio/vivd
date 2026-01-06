@@ -113,7 +113,7 @@ export function PreviewContent() {
           {/* Chat Panel - Right side */}
           {projectSlug && chatOpen && (
             <div
-              className="relative border-l bg-background flex flex-col h-full shadow-xl z-20"
+              className="relative min-w-0 overflow-hidden border-l bg-background flex flex-col h-full shadow-xl z-20"
               style={{ width: chatPanel.width }}
             >
               <ResizeHandle

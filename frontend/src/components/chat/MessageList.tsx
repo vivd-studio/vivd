@@ -132,7 +132,7 @@ export function MessageList() {
                     msg.content
                   );
                   return (
-                    <div className="rounded-lg px-4 py-2 max-w-[90%] bg-muted text-foreground">
+                    <div className="rounded-lg px-4 py-2 max-w-[90%] min-w-0 overflow-x-hidden bg-muted text-foreground">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -147,16 +147,25 @@ export function MessageList() {
                               rel="noopener noreferrer"
                             />
                           ),
-                          code: ({ node, ...props }) => (
-                            <code
-                              {...props}
-                              className="bg-foreground/10 rounded px-1"
-                            />
-                          ),
-                          pre: ({ node, ...props }) => (
+                          code: (props: any) => {
+                            const { inline, className, ...rest } = props;
+                            return (
+                              <code
+                                {...rest}
+                                className={`${
+                                  inline
+                                    ? "bg-foreground/10 rounded px-1 break-words"
+                                    : "whitespace-pre-wrap break-words"
+                                } ${className ?? ""}`}
+                              />
+                            );
+                          },
+                          pre: ({ node, className, ...props }) => (
                             <pre
                               {...props}
-                              className="bg-foreground/10 p-2 rounded overflow-x-auto"
+                              className={`bg-foreground/10 p-2 rounded max-w-full overflow-x-auto whitespace-pre-wrap break-words ${
+                                className ?? ""
+                              }`}
                             />
                           ),
                         }}
@@ -180,8 +189,20 @@ export function MessageList() {
                     ))
                   ) : (
                     /* Fallback for legacy messages */
-                    <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word overflow-x-auto">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <div className="rounded-lg px-4 py-2 w-full min-w-0 prose prose-sm dark:prose-invert max-w-none break-words overflow-x-hidden">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          pre: ({ node, className, ...props }) => (
+                            <pre
+                              {...props}
+                              className={`max-w-full overflow-x-auto whitespace-pre-wrap break-words ${
+                                className ?? ""
+                              }`}
+                            />
+                          ),
+                        }}
+                      >
                         {msg.content}
                       </ReactMarkdown>
                     </div>
@@ -332,8 +353,22 @@ function MessagePartBubble({
   }
   if (part.type === "text") {
     return (
-      <div className="rounded-lg px-4 py-2 w-full prose prose-sm dark:prose-invert max-w-none wrap-break-word overflow-x-auto">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+      <div className="rounded-lg px-4 py-2 w-full min-w-0 prose prose-sm dark:prose-invert max-w-none break-words overflow-x-hidden">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            pre: ({ node, className, ...props }) => (
+              <pre
+                {...props}
+                className={`max-w-full overflow-x-auto whitespace-pre-wrap break-words ${
+                  className ?? ""
+                }`}
+              />
+            ),
+          }}
+        >
+          {part.text}
+        </ReactMarkdown>
       </div>
     );
   }
