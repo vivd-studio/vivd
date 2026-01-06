@@ -64,6 +64,12 @@ export function ModeToggle() {
         >
           Vivd Sharp
         </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setColorTheme("ocean")}
+          className={colorTheme === "ocean" ? "bg-accent" : ""}
+        >
+          Ocean
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

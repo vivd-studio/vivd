@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "dark" | "light" | "system";
-type ColorTheme = "clean" | "natural" | "vivd-green" | "vivd-sharp";
+type ColorTheme = "clean" | "natural" | "vivd-green" | "vivd-sharp" | "ocean";
 
 type ThemeProviderProps = {
   children: React.ReactNode;

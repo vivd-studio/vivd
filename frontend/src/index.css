@@ -385,6 +385,102 @@
     --chat-user: 0 0% 16%;
     --chat-user-foreground: 0 0% 98%;
   }
+
+  /* ============================================
+     OCEAN Theme (Calming Blue/Teal)
+     ============================================ */
+  [data-color-theme="ocean"] {
+    /* Ocean Light Theme - Fresh & Breezy */
+    --background: 210 40% 98%; /* Very pale blue */
+    --foreground: 222 47% 11%; /* Deep navy */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary: Ocean Blue */
+    --primary: 199 89% 48%; /* Bright cerulean */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Soft foam */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted: Mist */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent: Coral/Teal */
+    --accent: 172 66% 50%; /* Teal/Turquoise */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 199 89% 48%;
+
+    /* Charts */
+    --chart-1: 199 89% 48%; /* Blue */
+    --chart-2: 172 66% 50%; /* Teal */
+    --chart-3: 262 83% 58%; /* Purple */
+    --chart-4: 43 96% 56%; /* Yellow */
+    --chart-5: 0 84% 60%; /* Red */
+
+    /* Chat user bubble: soft blue */
+    --chat-user: 210 40% 96%;
+    --chat-user-foreground: 222 47% 11%;
+  }
+
+  [data-color-theme="ocean"].dark,
+  .dark[data-color-theme="ocean"] {
+    /* Ocean Dark Theme - Deep Sea */
+    --background: 222 47% 11%; /* Deep Navy */
+    --foreground: 210 40% 98%; /* Pale blue text */
+
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 217 33% 15%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary: Bright Ocean Blue */
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Deep blue-gray */
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    /* Muted: Deep blue-gray */
+    --muted: 217 33% 20%;
+    --muted-foreground: 215 20% 65%;
+
+    /* Accent: Bright Cyan/Teal */
+    --accent: 172 66% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 199 89% 48%;
+
+    /* Charts */
+    --chart-1: 199 89% 48%;
+    --chart-2: 172 66% 50%;
+    --chart-3: 262 83% 58%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 0 84% 60%;
+
+    /* Chat user bubble: deep blue */
+    --chat-user: 217 33% 25%;
+    --chat-user-foreground: 210 40% 98%;
+  }
 }
 
 @layer base {
