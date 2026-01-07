@@ -1,9 +1,7 @@
 export const BRAND_NAME = "vivd";
 
 const ENV_PREFIX = (() => {
-  const env = (
-    import.meta.env.VITE_APP_ENV || import.meta.env.MODE
-  )?.toLowerCase();
+  const env = import.meta.env.VITE_APP_ENV?.toLowerCase();
   if (env?.includes("staging")) return "(staging) ";
   if (env?.includes("local") || env?.includes("dev")) return "(local) ";
   return "";

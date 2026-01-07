@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
+import { formatDocumentTitle } from "@/lib/brand";
 import { PreviewContent } from "@/components/preview/PreviewContent";
 import { PreviewProvider } from "@/components/preview/PreviewContext";
 
