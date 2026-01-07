@@ -61,7 +61,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  listSessions: adminProcedure
+  listSessions: protectedProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -88,7 +88,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  listProjects: adminProcedure
+  listProjects: protectedProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -118,7 +118,7 @@ export const agentSessionProcedures = {
    * Returns a map of sessionId -> SessionStatus (idle/busy/retry)
    * Used by frontend to determine if a session is actively processing.
    */
-  getSessionsStatus: adminProcedure
+  getSessionsStatus: protectedProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -153,7 +153,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  getSessionContent: adminProcedure
+  getSessionContent: protectedProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -179,7 +179,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  deleteSession: adminProcedure
+  deleteSession: protectedProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -206,7 +206,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  revertToMessage: adminProcedure
+  revertToMessage: protectedProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -245,7 +245,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  unrevertSession: adminProcedure
+  unrevertSession: protectedProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -278,4 +278,3 @@ export const agentSessionProcedures = {
       }
     }),
 };
-
