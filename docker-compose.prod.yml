@@ -65,6 +65,8 @@ services:
     image: ghcr.io/vivd-studio/vivd-ui:latest
     pull_policy: always
     restart: unless-stopped
+    environment:
+      - VITE_APP_ENV=${VITE_APP_ENV}
     depends_on:
       - backend
     networks:

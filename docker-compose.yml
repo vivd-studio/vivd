@@ -59,6 +59,8 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       target: prod
+      args:
+        - VITE_APP_ENV=${VITE_APP_ENV}
     depends_on:
       - backend
     networks:

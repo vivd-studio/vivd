@@ -45,6 +45,7 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_API_PROXY_TARGET=http://backend:3000
+      - VITE_APP_ENV=${VITE_APP_ENV}
     develop:
       watch:
         - action: sync
