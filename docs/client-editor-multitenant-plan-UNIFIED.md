@@ -13,7 +13,7 @@ Enable a multi-tenant mode where multiple websites are hosted in one Vivd instan
 | ----------------- | ------------------ | ----------- | -------------------------------------------------- |
 | **admin**         | All projects       | ✅ Full     | Instance owner. Full access including maintenance  |
 | **user**          | All projects       | ✅ Full     | Team members. Full editing, no user management     |
-| **client_editor** | Assigned site only | ❌ None     | Customer. Text editing, file uploads, save/publish |
+| **client_editor** | Assigned project   | ❌ None     | Customer. Text editing, file uploads, save/publish |
 
 > [!TIP]
 > No breaking changes — adds `client_editor` role without renaming existing roles.
@@ -23,7 +23,7 @@ Enable a multi-tenant mode where multiple websites are hosted in one Vivd instan
 | Capability             | admin | user | client_editor |
 | ---------------------- | ----- | ---- | ------------- |
 | Access all projects    | ✅    | ✅   | ❌            |
-| Access assigned site   | ✅    | ✅   | ✅            |
+| Access assigned project| ✅    | ✅   | ✅            |
 | Create/delete projects | ✅    | ✅   | ❌            |
 | Edit text (inline)     | ✅    | ✅   | ✅            |
 | Upload files/images    | ✅    | ✅   | ✅            |
@@ -42,32 +42,30 @@ Enable a multi-tenant mode where multiple websites are hosted in one Vivd instan
 
 ### Database Schema
 
-#### [NEW] [schema.ts](file:///Users/felixpahlke/code/vivd/backend/src/db/schema.ts) — `site_member` table
+#### [NEW] [schema.ts](file:///Users/felixpahlke/code/vivd/backend/src/db/schema.ts) — `project_member` table
 
-Bind users to a published site via FK to `published_site`:
+Bind `client_editor` users to a project **even before the site is published**:
 
 ```typescript
-export const siteMember = pgTable(
-  "site_member",
+export const projectMember = pgTable(
+  "project_member",
   {
     id: text("id").primaryKey(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    publishedSiteId: text("published_site_id")
-      .notNull()
-      .references(() => publishedSite.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
-    index("site_member_user_idx").on(table.userId),
-    index("site_member_site_idx").on(table.publishedSiteId),
+    index("project_member_user_idx").on(table.userId),
+    index("project_member_project_idx").on(table.projectSlug),
   ]
 );
 ```
 
 > [!NOTE]
-> Using `publishedSiteId` (FK) instead of raw `projectSlug + version` ensures referential integrity and handles republishing correctly.
+> v1 constraint: a `client_editor` is assigned to exactly one project (enforced with a unique constraint/index on `project_member.user_id`).
 
 ---
 
@@ -113,7 +111,7 @@ export class PermissionService {
   async canAccessProject(
     userId: string,
     role: UserRole,
-    domain: string // from request host
+    projectSlug: string
   ): Promise<boolean>;
 }
 ```
@@ -125,7 +123,7 @@ export class PermissionService {
 Add new procedure middlewares and preserve request context:
 
 ```diff
-+ // Preserve request for host-based scoping
++ // (Optional) Preserve request host if you want customer-domain auto-scoping
 + export const protectedProcedure = t.procedure.use(async (opts) => {
 +   // ... existing auth check ...
 +   return opts.next({
@@ -149,7 +147,7 @@ Add new procedure middlewares and preserve request context:
 
 + // Project-scoped — validates client_editor access
 + export const projectScopedProcedure = protectedProcedure.use(async (opts) => {
-+   // For client_editor: validate host matches assigned site
++   // For client_editor: validate the input projectSlug matches assigned project
 +   // For admin/user: allow all
 + });
 ```
@@ -158,8 +156,14 @@ Helper function:
 
 ```typescript
 // backend/src/utils/requestHost.ts
+import type { Request } from "express";
+
 export function getRequestHost(req: Request): string {
-  return req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const forwarded = req.headers["x-forwarded-host"];
+  const hostHeader = Array.isArray(forwarded) ? forwarded[0] : forwarded ?? req.headers.host ?? "";
+  const first = hostHeader.split(",")[0]?.trim() ?? "";
+  const withoutPort = first.includes(":") ? first.split(":")[0] : first;
+  return withoutPort.toLowerCase();
 }
 ```
 
@@ -187,7 +191,10 @@ export function getRequestHost(req: Request): string {
 > [!CAUTION]
 > Current static file serving allows any authenticated user to access any project by URL. Must fix for multi-tenant security.
 
-Replace static mounts with authenticated handlers:
+Replace the studio static mount with an authenticated handler that validates `client_editor` project access.
+
+> [!NOTE]
+> `/vivd-studio/api/preview/*` stays public intentionally (shareable preview link).
 
 ```typescript
 // BEFORE: Vulnerable to cross-tenant access
@@ -200,7 +207,6 @@ app.get("/vivd-studio/api/projects/:slug/:version/*", async (req, res) => {
 
   await assertProjectAccess({
     session,
-    host: getRequestHost(req),
     projectSlug: slug,
   });
 
@@ -252,14 +258,11 @@ export function usePermissions() {
 
 ---
 
-### Domain-Based Auto-Scoping
+### Auto-Scoping (Option B)
 
-When a `client_editor` accesses `theirdomain.com/vivd-studio`:
+Primary flow: `client_editor` logs in via the instance URL (no domain mapping required), then the UI auto-opens their assigned project.
 
-1. Backend extracts host from request headers
-2. Looks up `published_site` by domain → gets `projectSlug`/`version`
-3. Validates user has `site_member` row for that `publishedSiteId`
-4. Auto-scopes all subsequent requests to that project
+Optional: if the customer domain points to the same instance, `customer.com/vivd-studio` can behave the same (still project-scoped via membership). If you want an extra safety check, you can additionally assert that `requestHost` maps (via `published_site.domain`) to the same `projectSlug`.
 
 For `admin`/`user` roles: no scoping, full access as today.
 
@@ -270,8 +273,8 @@ For `admin`/`user` roles: no scoping, full access as today.
 Simple flow via existing admin panel:
 
 1. Admin creates user with role = `client_editor`
-2. Admin assigns user to a published site (creates `site_member` row)
-3. Admin shares login URL: `https://customer-domain.com/vivd-studio`
+2. Admin assigns user to a project (creates `project_member` row)
+3. Admin shares login URL (recommended): `https://<your-instance-domain>/vivd-studio`
 
 ---
 
@@ -293,7 +296,7 @@ Simple flow via existing admin panel:
 
 ### Manual Verification
 
-1. **Editor flow**: Create editor → assign to site → verify text edit works → verify AI hidden
+1. **Editor flow**: Create editor → assign to project → verify text edit works → verify AI hidden
 2. **Cross-tenant test**: Editor tries to access `/vivd-studio/api/projects/OTHER-SLUG/...` → 403
 3. **Admin flow**: Verify full access, user management works
 
@@ -302,16 +305,19 @@ Simple flow via existing admin panel:
 ## Migration
 
 ```sql
--- Add site_member table
-CREATE TABLE site_member (
+-- Add project_member table
+CREATE TABLE project_member (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-  published_site_id TEXT NOT NULL REFERENCES published_site(id) ON DELETE CASCADE,
+  project_slug TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT NOW() NOT NULL
 );
 
-CREATE INDEX site_member_user_idx ON site_member(user_id);
-CREATE INDEX site_member_site_idx ON site_member(published_site_id);
+-- v1: exactly one project per client_editor
+CREATE UNIQUE INDEX project_member_user_unique ON project_member(user_id);
+
+CREATE INDEX project_member_user_idx ON project_member(user_id);
+CREATE INDEX project_member_project_idx ON project_member(project_slug);
 ```
 
 No changes to existing users or roles required.
