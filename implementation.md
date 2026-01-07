@@ -52,7 +52,7 @@ Consolidated plan to get vivd ready for production deployments. The goal: enable
 
 **Follow-up Tasks**:
 
-- [ ] **Fix-it Prompt**: Add a "Fix this" button/prompt that asks the agent to resolve specific checklist deficiencies.
+- [x] **Fix-it Prompt**: Add a "Fix this" button/prompt that asks the agent to resolve specific checklist deficiencies.
 - [x] **File Migration**: Migrate all vivd-specific files (like `project.json`) to the `.vivd/` folder to keep the project root clean.
 
 ---
