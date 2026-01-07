@@ -51,8 +51,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      scraper:
-        condition: service_started
     networks:
       - vivd-network
 
@@ -79,16 +77,6 @@ services:
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - vivd-network
-
-  scraper:
-    build:
-      context: ./scraper
-    environment:
-      - PORT=3001
-      - MAX_BROWSERS=2
-      - SCRAPER_API_KEY=${SCRAPER_API_KEY}
     networks:
       - vivd-network
 

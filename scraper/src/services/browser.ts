@@ -40,6 +40,9 @@ class BrowserPool {
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
+        // Prevent Chromium from auto-upgrading HTTP navigations to HTTPS
+        // (breaks HTTP-only sites and shows up as net::ERR_BLOCKED_BY_CLIENT).
+        "--disable-features=HttpsFirstBalancedMode,HttpsUpgrades",
       ],
     });
   }

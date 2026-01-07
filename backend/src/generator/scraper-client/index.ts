@@ -25,6 +25,13 @@ interface ScreenshotResponse {
   }>;
 }
 
+interface FindLinksResponse {
+  links: Array<{
+    text: string;
+    url: string;
+  }>;
+}
+
 async function fetchWithRetry<T>(
   url: string,
   options: RequestInit,
@@ -194,5 +201,28 @@ export const scraperClient = {
 
     log(`[ScraperClient] Scraped page with ${savedImages.length} images`);
     return { text: response.text, images: savedImages };
+  },
+
+  /**
+   * Finds link URLs on a page matching a list of navigation terms.
+   */
+  async findLinks(
+    url: string,
+    texts: string[],
+    maxLinks = 50
+  ): Promise<Array<{ text: string; url: string }>> {
+    log(
+      `[ScraperClient] Requesting find-links: ${url} (${texts.length} terms)`
+    );
+
+    const response = await fetchWithRetry<FindLinksResponse>(
+      `${SCRAPER_URL}/find-links`,
+      {
+        method: "POST",
+        body: JSON.stringify({ url, texts, maxLinks }),
+      }
+    );
+
+    return response.links || [];
   },
 };

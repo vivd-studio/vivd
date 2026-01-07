@@ -2,6 +2,7 @@ import express from "express";
 import { fullScrapeRouter } from "./routes/fullScrape.js";
 import { screenshotRouter } from "./routes/screenshot.js";
 import { scrapePageRouter } from "./routes/scrapePage.js";
+import { findLinksRouter } from "./routes/findLinks.js";
 import { authMiddleware } from "./middleware/auth.js";
 
 const app = express();
@@ -18,6 +19,7 @@ app.get("/health", (_req, res) => {
 app.use("/full-scrape", authMiddleware, fullScrapeRouter);
 app.use("/screenshot", authMiddleware, screenshotRouter);
 app.use("/scrape-page", authMiddleware, scrapePageRouter);
+app.use("/find-links", authMiddleware, findLinksRouter);
 
 app.listen(PORT, () => {
   console.log(`Scraper service listening on port ${PORT}`);

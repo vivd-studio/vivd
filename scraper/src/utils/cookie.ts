@@ -87,7 +87,9 @@ export async function autoScroll(page: any): Promise<void> {
 
 export function cleanText(text: string): string {
   return text
-    .replace(/\s+/g, " ")
+    .replace(/\r\n/g, "\n")
+    .replace(/[\t\f\v ]+/g, " ")
+    .replace(/\n[\t ]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

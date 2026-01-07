@@ -28,16 +28,21 @@ export interface DownloadedImage {
 }
 
 export async function downloadImage(
-  url: string
+  url: string,
+  preloaded?: { buffer: Buffer; mimeType: string }
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-
-    const contentType = response.headers.get("content-type") || "image/jpeg";
-    const arrayBuffer = await response.arrayBuffer();
+    const contentType = preloaded?.mimeType || "image/jpeg";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let buffer: any = Buffer.from(arrayBuffer);
+    let buffer: any = preloaded?.buffer;
+
+    if (!buffer) {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const arrayBuffer = await response.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    }
+
     let mimeType = contentType;
 
     // Convert to WebP for raster images

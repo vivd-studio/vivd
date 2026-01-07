@@ -35,6 +35,9 @@ services:
           path: ./backend/package.json
     command: npm run dev
 
+    depends_on:
+      - scraper
+
   frontend:
     build:
       target: dev
@@ -57,6 +60,15 @@ services:
       - "5432:5432"
 
   scraper:
+    build:
+      context: ./scraper
+    environment:
+      - PORT=3001
+      - MAX_BROWSERS=2
+      - SCRAPER_API_KEY=${SCRAPER_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    networks:
+      - vivd-network
     platform: linux/amd64
     ports:
       - "3001:3001"
