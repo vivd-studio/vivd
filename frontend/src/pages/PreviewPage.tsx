@@ -37,7 +37,7 @@ export default function PreviewPage() {
       document.title = formatDocumentTitle(project.slug);
     }
     return () => {
-      document.title = BRAND_NAME;
+      document.title = formatDocumentTitle();
     };
   }, [project?.slug]);
 

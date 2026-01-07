@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Signup from "./pages/Signup";
@@ -11,6 +12,7 @@ import { SingleProjectModeHandler } from "@/components/SingleProjectModeHandler"
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import { formatDocumentTitle } from "@/lib/brand";
 import { Toaster } from "@/components/ui/sonner";
 
 /**
@@ -39,6 +41,10 @@ function DashboardRoute() {
 export default function App() {
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
+
+  useEffect(() => {
+    document.title = formatDocumentTitle();
+  }, []);
 
   const {
     data: hasUsersData,
