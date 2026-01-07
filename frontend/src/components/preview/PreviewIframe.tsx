@@ -154,6 +154,10 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
     },
     ref
   ) {
+    const cacheBustedSrc = src
+      ? `${src}${src.includes("?") ? "&" : "?"}_vivd=${refreshKey}`
+      : src;
+
     const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
       injectScrollbarStyles(e.currentTarget, isMobile);
       injectHighlightListener(e.currentTarget);
@@ -171,7 +175,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       <iframe
         key={refreshKey}
         ref={ref}
-        src={src}
+        src={cacheBustedSrc}
         className={`w-full h-full border-0 ${className}`}
         title="Preview"
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups"

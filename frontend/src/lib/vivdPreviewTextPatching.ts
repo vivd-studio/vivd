@@ -1,0 +1,159 @@
+export type VivdTextNodePatch = {
+  type: "setTextNode";
+  selector: string;
+  index: number;
+  value: string;
+};
+
+export type VivdI18nPatch = {
+  type: "setI18n";
+  key: string;
+  lang: string;
+  value: string;
+};
+
+const normalizeLang = (lang: string) => lang.trim().toLowerCase();
+const isLanguageCode = (value: string) => /^[a-z]{2}(-[a-z]{2})?$/.test(value);
+
+export function detectActiveLanguage(doc: Document): string {
+  try {
+    const view = doc.defaultView ?? null;
+    const storage = view?.localStorage ?? null;
+    if (storage) {
+      const candidates: string[] = [];
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (!key) continue;
+        if (!key.endsWith("_lang") && key !== "lang") continue;
+        const value = storage.getItem(key);
+        if (!value) continue;
+        const normalized = normalizeLang(value);
+        if (isLanguageCode(normalized)) candidates.push(normalized.split("-")[0]!);
+      }
+      if (candidates.length === 1) return candidates[0]!;
+    }
+  } catch {
+    // ignore
+  }
+
+  const langToggle = Array.from(
+    doc.querySelectorAll<HTMLElement>('[id^="lang-"]')
+  ).find(
+    (el) => el.classList.contains("font-bold") || el.getAttribute("aria-current") === "true"
+  );
+  if (langToggle) {
+    const id = langToggle.id ?? "";
+    const match = id.match(/^lang-([a-z]{2})$/i);
+    if (match?.[1]) return normalizeLang(match[1]);
+  }
+
+  const htmlLang = doc.documentElement.getAttribute("lang") ?? "";
+  if (htmlLang && isLanguageCode(normalizeLang(htmlLang))) {
+    return normalizeLang(htmlLang).split("-")[0]!;
+  }
+
+  return "en";
+}
+
+export function getI18nKeyForEditableElement(el: HTMLElement): string | null {
+  return (
+    el.getAttribute("data-i18n") ??
+    (el.closest?.("[data-i18n]") as HTMLElement | null)?.getAttribute("data-i18n") ??
+    null
+  );
+}
+
+export function serializeI18nElementValue(i18nEl: HTMLElement): string {
+  const clone = i18nEl.cloneNode(true) as HTMLElement;
+
+  const helperSpans = clone.querySelectorAll<HTMLElement>(
+    "[data-vivd-text-parent-selector][data-vivd-text-node-index]"
+  );
+  helperSpans.forEach((span) => {
+    const text = span.textContent ?? "";
+    span.replaceWith(clone.ownerDocument.createTextNode(text));
+  });
+
+  clone.querySelectorAll<HTMLElement>("[contenteditable]").forEach((el) => {
+    el.removeAttribute("contenteditable");
+  });
+  clone.querySelectorAll<HTMLElement>("[data-vivd-editable-container]").forEach((el) => {
+    el.removeAttribute("data-vivd-editable-container");
+  });
+
+  const hasMarkup = clone.querySelector("*") !== null;
+  return hasMarkup ? clone.innerHTML : clone.textContent ?? "";
+}
+
+export function collectVivdTextPatchesFromDocument(
+  doc: Document
+): Array<VivdTextNodePatch | VivdI18nPatch> {
+  const patches: Array<VivdTextNodePatch | VivdI18nPatch> = [];
+  const i18nEdits = new Map<string, HTMLElement>();
+
+  const selectorIndex = new Map<string, HTMLElement>();
+  doc.querySelectorAll<HTMLElement>("[data-vivd-selector]").forEach((el) => {
+    const selector = el.getAttribute("data-vivd-selector");
+    if (selector) selectorIndex.set(selector, el);
+  });
+
+  const activeLang = detectActiveLanguage(doc);
+
+  const nodes = doc.querySelectorAll<HTMLElement>(
+    '[data-vivd-text-parent-selector][data-vivd-text-node-index]'
+  );
+  nodes.forEach((node) => {
+    const i18nKeyFromNode = node.getAttribute("data-vivd-i18n-key");
+    const parentSelector = node.getAttribute("data-vivd-text-parent-selector");
+    const indexStr = node.getAttribute("data-vivd-text-node-index");
+    if (!parentSelector || !indexStr) return;
+
+    const index = Number(indexStr);
+    if (!Number.isFinite(index) || index < 1) return;
+
+    const baseline = node.getAttribute("data-vivd-text-baseline");
+    if (baseline === null) return;
+
+    const current = node.textContent ?? "";
+    if (current === baseline) return;
+
+    if (i18nKeyFromNode) {
+      const selector = `[data-i18n="${i18nKeyFromNode.replace(/"/g, '\\"')}"]`;
+      const i18nEl =
+        (node.closest?.(selector) as HTMLElement | null) ??
+        (doc.querySelector(selector) as HTMLElement | null);
+      if (i18nEl) {
+        i18nEdits.set(i18nKeyFromNode, i18nEl);
+        return;
+      }
+    }
+
+    const parentEl = selectorIndex.get(parentSelector) ?? null;
+    const resolvedI18nEl = parentEl?.closest?.("[data-i18n]") ?? null;
+    const i18nEl = resolvedI18nEl || node.closest?.("[data-i18n]");
+    if (i18nEl instanceof HTMLElement) {
+      const key = i18nEl.getAttribute("data-i18n") ?? "";
+      if (key) i18nEdits.set(key, i18nEl);
+      return;
+    }
+
+    patches.push({
+      type: "setTextNode",
+      selector: parentSelector,
+      index,
+      value: current,
+    });
+  });
+
+  i18nEdits.forEach((el, key) => {
+    patches.push({
+      type: "setI18n",
+      key,
+      lang: activeLang,
+      value: serializeI18nElementValue(el),
+    });
+  });
+
+  return patches;
+}
+

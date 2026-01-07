@@ -42,6 +42,12 @@ export const projectMaintenanceProcedures = {
                 value: z.string(),
               }),
               z.object({
+                type: z.literal("setI18n"),
+                key: z.string().min(1),
+                lang: z.string().min(2),
+                value: z.string(),
+              }),
+              z.object({
                 type: z.literal("setAttr"),
                 selector: z.string().min(1),
                 name: z.literal("src"),
@@ -464,4 +470,3 @@ export const projectMaintenanceProcedures = {
       };
     }),
 };
-

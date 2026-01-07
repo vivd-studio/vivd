@@ -1,5 +1,6 @@
 import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
+import { applyI18nPatchesToInlineScripts } from "./htmlPatching/i18nInlinePatches";
 
 type HtmlDocument = DefaultTreeAdapterMap["document"];
 type HtmlParentNode = DefaultTreeAdapterMap["parentNode"];
@@ -12,6 +13,12 @@ export type HtmlPatch =
       type: "setTextNode";
       selector: string;
       index: number;
+      value: string;
+    }
+  | {
+      type: "setI18n";
+      key: string;
+      lang: string;
       value: string;
     }
   | {
@@ -164,13 +171,13 @@ function resolveSelector(
 
 function escapeHtmlText(text: string): string {
   return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function escapeAttributeValue(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
 function replaceAttributeSource(
@@ -181,7 +188,9 @@ function replaceAttributeSource(
   const quoteMatch = previousSource.match(/=(['"])/);
   const quote = quoteMatch?.[1] ?? '"';
   const escapedValue =
-    quote === '"' ? escapeAttributeValue(newValue) : newValue.replaceAll("&", "&amp;").replaceAll("'", "&#39;");
+    quote === '"'
+      ? escapeAttributeValue(newValue)
+      : newValue.replace(/&/g, "&amp;").replace(/'/g, "&#39;");
   return `${attrName}=${quote}${escapedValue}${quote}`;
 }
 
@@ -222,11 +231,30 @@ export function applyHtmlPatches(
     const key =
       patch.type === "setAttr"
         ? `${patch.type}:${patch.selector}:${patch.name}`
+        : patch.type === "setI18n"
+        ? `${patch.type}:${patch.key}:${patch.lang}`
         : `${patch.type}:${patch.selector}:${patch.index}`;
     uniquePatches.set(key, patch);
   }
 
+  // Apply i18n patches to inline scripts (if present).
+  const i18nPatches = Array.from(uniquePatches.values()).filter(
+    (p): p is Extract<HtmlPatch, { type: "setI18n" }> => p.type === "setI18n"
+  );
+
+  if (i18nPatches.length) {
+    const i18nResult = applyI18nPatchesToInlineScripts(
+      html,
+      doc,
+      i18nPatches.map((p) => ({ key: p.key, lang: p.lang, value: p.value }))
+    );
+    skipped += i18nResult.skipped;
+    errors.push(...i18nResult.errors);
+    edits.push(...i18nResult.edits);
+  }
+
   for (const patch of uniquePatches.values()) {
+    if (patch.type === "setI18n") continue;
     const element = resolveSelector(doc, patch.selector);
     if (!element) {
       skipped++;
