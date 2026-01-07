@@ -1,4 +1,4 @@
-import { protectedProcedure, adminProcedure } from "../../trpc";
+import { protectedProcedure } from "../../trpc";
 import { z } from "zod";
 import {
   runTask,
