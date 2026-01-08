@@ -23,7 +23,7 @@ The frontend is a React with Vite application that provides a user interface for
 The backend is a Node.js application that provides an API for interacting with the frontend. The backend statically serves all the generated index.htmls from the projects/ folder
 
 - express.js
-- drizzle-orm with migrations for database
+- drizzle-orm with migrations for database (DON't EVER RUN DB PUSH, allways apply migrations)
 - better-auth for authentication
 - puppeteer for scraping
 - trpc for api-calls

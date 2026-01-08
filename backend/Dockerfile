@@ -60,6 +60,10 @@ COPY --from=builder /app/dist ./dist
 # Copy drizzle migrations (needed at runtime)
 COPY --from=builder /app/drizzle ./drizzle
 
+# Create Caddy config directory and copy Caddyfile
+# This is needed for the publish service to reload Caddy's configuration
+RUN mkdir -p /etc/caddy
+
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh

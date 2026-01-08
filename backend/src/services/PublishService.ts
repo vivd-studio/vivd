@@ -483,19 +483,39 @@ ${errorHandlerBlock}
   }
 
   /**
-   * Trigger Caddy to reload its configuration by posting the Caddyfile
+   * Trigger Caddy to reload its configuration by posting the Caddyfile.
+   *
+   * The Caddyfile must be accessible to this container at /etc/caddy/Caddyfile.
+   * In local dev, this is mounted from ./Caddyfile.
+   * In production, a shared volume or copy of the Caddyfile must be available.
    */
   private async reloadCaddy(): Promise<void> {
     try {
       // Read the Caddyfile content - Caddy will process imports
-      const caddyfilePath = "/etc/caddy/Caddyfile";
-      let caddyfileContent: string;
+      // Try multiple paths: local dev mount vs production shared volume
+      const caddyfilePaths = [
+        "/etc/caddy/Caddyfile", // Local dev (mounted from host)
+        "/etc/caddy_shared/Caddyfile", // Production (shared volume from Caddy container)
+      ];
 
-      try {
-        caddyfileContent = fs.readFileSync(caddyfilePath, "utf-8");
-      } catch {
-        // In development without Caddy, the file won't exist
-        console.warn("Caddyfile not found, skipping reload");
+      let caddyfileContent: string | null = null;
+
+      for (const caddyfilePath of caddyfilePaths) {
+        try {
+          caddyfileContent = fs.readFileSync(caddyfilePath, "utf-8");
+          console.log(`Found Caddyfile at ${caddyfilePath}`);
+          break;
+        } catch {
+          // Try next path
+        }
+      }
+
+      if (!caddyfileContent) {
+        // Caddyfile not found - this is a configuration issue
+        console.warn(
+          "Caddyfile not found at any expected location - Caddy reload skipped. " +
+            "Ensure the Caddyfile is mounted or shared with the backend container."
+        );
         return;
       }
 
@@ -511,7 +531,9 @@ ${errorHandlerBlock}
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.warn(`Caddy reload returned ${response.status}: ${errorText}`);
+        console.error(
+          `Caddy reload failed with status ${response.status}: ${errorText}`
+        );
       } else {
         console.log("Caddy configuration reloaded successfully");
       }
