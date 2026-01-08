@@ -95,6 +95,10 @@ interface PreviewContextValue {
   // Status
   isSaving: boolean;
 
+  // Text Editor in preview area
+  editingTextFile: string | null;
+  setEditingTextFile: (path: string | null) => void;
+
   // Resizable panels
   assetPanel: ReturnType<typeof useResizablePanel>;
   chatPanel: ReturnType<typeof useResizablePanel>;
@@ -159,6 +163,7 @@ export function PreviewProvider({
     message: string;
     startNewSession?: boolean;
   } | null>(null);
+  const [editingTextFile, setEditingTextFile] = useState<string | null>(null);
   const mobileContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -302,13 +307,12 @@ export function PreviewProvider({
   );
   const hasGitChanges = changesData?.hasChanges || false;
 
-  const { mutate: setCurrentVersion } = trpc.project.setCurrentVersion.useMutation(
-    {
+  const { mutate: setCurrentVersion } =
+    trpc.project.setCurrentVersion.useMutation({
       onSuccess: () => {
         utils.project.list.invalidate();
       },
-    }
-  );
+    });
 
   // Sync selectedVersion with incoming version prop
   useEffect(() => {
@@ -564,11 +568,14 @@ export function PreviewProvider({
           : null;
       if (!start) return;
 
-      const container = start.closest?.('[data-vivd-editable-container="true"]');
+      const container = start.closest?.(
+        '[data-vivd-editable-container="true"]'
+      );
       if (!(container instanceof HTMLElement)) return;
 
-      const firstEditable =
-        container.querySelector<HTMLElement>('[contenteditable="true"]');
+      const firstEditable = container.querySelector<HTMLElement>(
+        '[contenteditable="true"]'
+      );
       if (!firstEditable) return;
       firstEditable.focus();
     };
@@ -590,7 +597,9 @@ export function PreviewProvider({
     if (!projectSlug) return;
 
     const iframeDoc = iframeRef.current?.contentDocument ?? null;
-    const textPatches = iframeDoc ? collectTextPatchesFromDocument(iframeDoc) : [];
+    const textPatches = iframeDoc
+      ? collectTextPatchesFromDocument(iframeDoc)
+      : [];
     const imagePatches = Array.from(pendingImagePatchesRef.current.values());
     const patches = [...imagePatches, ...textPatches];
     if (!patches.length) {
@@ -805,6 +814,10 @@ export function PreviewProvider({
     pendingChatMessage,
     sendChatMessage,
     clearPendingChatMessage,
+
+    // Text Editor in preview area
+    editingTextFile,
+    setEditingTextFile,
 
     // Resizable panels
     assetPanel,

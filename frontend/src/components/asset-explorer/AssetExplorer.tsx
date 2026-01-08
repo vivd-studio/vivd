@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import type { AssetItem } from "./types";
-import { buildImageUrl } from "./utils";
+import { buildImageUrl, isTextFile } from "./utils";
 import { AssetItemCard } from "./AssetItemCard";
 import { AssetToolbar } from "./AssetToolbar";
 import { CreateFolderInput } from "./CreateFolderInput";
@@ -24,6 +24,7 @@ import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { AIEditDialog } from "./AIEditDialog";
 import { CreateImageDialog } from "./CreateImageDialog";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePreview } from "@/components/preview/PreviewContext";
 
 interface AssetExplorerProps {
   projectSlug: string;
@@ -67,6 +68,9 @@ export function AssetExplorer({
   const [selectedReferenceImages, setSelectedReferenceImages] = useState<
     string[]
   >([]);
+
+  // Use context for text editor (rendered in PreviewContent)
+  const { setEditingTextFile } = usePreview();
 
   // Queries
   const { data, isLoading, refetch } = trpc.assets.listAssets.useQuery({
@@ -142,6 +146,8 @@ export function AssetExplorer({
     } else if (item.isImage) {
       setSelectedImageUrl(buildImageUrl(projectSlug, version, item.path));
       setSelectedImageItem(item);
+    } else if (item.type === "file" && isTextFile(item.name)) {
+      setEditingTextFile(item.path);
     }
   };
 

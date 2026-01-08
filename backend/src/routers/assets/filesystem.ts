@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import sizeOf from "image-size";
 import { safeJoin } from "../../fs/safePaths";
-import { getMimeType, isImageFile } from "./shared";
+import { getMimeType, isImageFile, isTextFile } from "./shared";
 
 export const assetsFilesystemProcedures = {
   /**
@@ -174,5 +174,95 @@ export const assetsFilesystemProcedures = {
         path: path.join(relativePath, sanitizedName),
         name: sanitizedName,
       };
+    }),
+
+  /**
+   * Read the content of a text file
+   */
+  readTextFile: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        relativePath: z.string(),
+      })
+    )
+    .query(async ({ input }) => {
+      const { slug, version, relativePath } = input;
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
+      const versionDir = getVersionDir(slug, version);
+      const targetPath = path.join(versionDir, relativePath);
+
+      if (!fs.existsSync(targetPath)) {
+        throw new Error("File not found");
+      }
+
+      // Security: ensure we're still within the version directory
+      const realVersionDir = fs.realpathSync(versionDir);
+      const realTargetPath = fs.realpathSync(targetPath);
+      if (!realTargetPath.startsWith(realVersionDir)) {
+        throw new Error("Invalid path");
+      }
+
+      const stats = fs.statSync(targetPath);
+      if (stats.isDirectory()) {
+        throw new Error("Cannot read a directory");
+      }
+
+      // Check if it's a text file
+      if (!isTextFile(relativePath)) {
+        throw new Error("File is not a text file");
+      }
+
+      // Limit file size to 1MB for text editing
+      if (stats.size > 1024 * 1024) {
+        throw new Error("File is too large to edit (max 1MB)");
+      }
+
+      const content = fs.readFileSync(targetPath, "utf-8");
+      return { content, encoding: "utf-8" };
+    }),
+
+  /**
+   * Save content to a text file
+   */
+  saveTextFile: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        relativePath: z.string(),
+        content: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version, relativePath, content } = input;
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
+      const versionDir = getVersionDir(slug, version);
+      const targetPath = path.join(versionDir, relativePath);
+
+      // Security: ensure we're still within the version directory
+      // For new files, check the parent directory
+      const parentDir = path.dirname(targetPath);
+      if (!fs.existsSync(parentDir)) {
+        throw new Error("Parent directory does not exist");
+      }
+      const realVersionDir = fs.realpathSync(versionDir);
+      const realParentDir = fs.realpathSync(parentDir);
+      if (!realParentDir.startsWith(realVersionDir)) {
+        throw new Error("Invalid path");
+      }
+
+      // Check if it's a text file
+      if (!isTextFile(relativePath)) {
+        throw new Error("File is not a text file");
+      }
+
+      fs.writeFileSync(targetPath, content, "utf-8");
+      return { success: true, path: relativePath };
     }),
 };

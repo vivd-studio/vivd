@@ -6,6 +6,7 @@ import { PreviewToolbar } from "./PreviewToolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
+import { TextEditorPanel } from "../asset-explorer/TextEditorPanel";
 
 import { Loader2 } from "lucide-react";
 
@@ -30,6 +31,9 @@ export function PreviewContent() {
     iframeLoading,
     onIframeLoad,
     selectorMode,
+    editingTextFile,
+    setEditingTextFile,
+    selectedVersion,
   } = usePreview();
 
   return (
@@ -46,7 +50,7 @@ export function PreviewContent() {
             >
               <AssetExplorer
                 projectSlug={projectSlug}
-                version={version}
+                version={selectedVersion}
                 onClose={() => setAssetsOpen(false)}
               />
               <ResizeHandle
@@ -78,7 +82,7 @@ export function PreviewContent() {
               </div>
             </div>
 
-            {/* Iframe container with fade-in */}
+            {/* Iframe container - always rendered to preserve state */}
             <div
               className={`transition-opacity duration-150 ${
                 iframeLoading ? "opacity-0" : "opacity-100"
@@ -108,6 +112,16 @@ export function PreviewContent() {
             </div>
 
             <UnsavedChangesBar />
+
+            {/* Text Editor - overlay on top of iframe to preserve iframe state */}
+            {projectSlug && editingTextFile && (
+              <TextEditorPanel
+                projectSlug={projectSlug}
+                version={selectedVersion}
+                filePath={editingTextFile}
+                onClose={() => setEditingTextFile(null)}
+              />
+            )}
           </div>
 
           {/* Chat Panel - Right side */}
