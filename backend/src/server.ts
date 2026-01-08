@@ -44,7 +44,7 @@ async function getAssignedProjectSlug(userId: string): Promise<string | null> {
 }
 
 async function enforceProjectAccess(
-  req: express.Request,
+  _req: express.Request,
   res: express.Response,
   session: any,
   slug: string
