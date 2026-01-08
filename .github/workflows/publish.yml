@@ -89,11 +89,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trigger Dokploy deployment
+      - name: Trigger Dokploy deployments
         run: |
-          echo "Triggering compose redeploy..."
-          curl -X POST "${{ secrets.DOKPLOY_URL }}/api/compose.redeploy" \
-            -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"composeId": "${{ secrets.DOKPLOY_COMPOSE_ID }}"}' \
-            --fail --silent --show-error
+          # Support multiple compose IDs (comma-separated)
+          # e.g., DOKPLOY_COMPOSE_IDS="abc123,def456,ghi789"
+          IFS=',' read -ra COMPOSE_IDS <<< "${{ secrets.DOKPLOY_COMPOSE_IDS }}"
+
+          for COMPOSE_ID in "${COMPOSE_IDS[@]}"; do
+            COMPOSE_ID=$(echo "$COMPOSE_ID" | xargs)  # Trim whitespace
+            if [ -n "$COMPOSE_ID" ]; then
+              echo "Triggering redeploy for compose: $COMPOSE_ID"
+              curl -X POST "${{ secrets.DOKPLOY_URL }}/api/compose.redeploy" \
+                -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
+                -H "Content-Type: application/json" \
+                -d "{\"composeId\": \"$COMPOSE_ID\"}" \
+                --fail --silent --show-error
+              echo "✓ Deployment triggered for $COMPOSE_ID"
+            fi
+          done
