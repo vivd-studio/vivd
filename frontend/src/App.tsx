@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -7,6 +7,7 @@ import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
 import PreviewPage from "./pages/PreviewPage";
 import ScratchWizard from "./pages/ScratchWizard";
+import NoProjectAssigned from "./pages/NoProjectAssigned";
 import { Layout } from "@/components/Layout";
 import { SingleProjectModeHandler } from "@/components/SingleProjectModeHandler";
 import { authClient } from "@/lib/auth-client";
@@ -14,6 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { formatDocumentTitle } from "@/lib/brand";
 import { Toaster } from "@/components/ui/sonner";
+import { usePermissions } from "@/hooks/usePermissions";
 
 /**
  * Dashboard wrapper that handles single project mode routing.
@@ -22,8 +24,13 @@ import { Toaster } from "@/components/ui/sonner";
  */
 function DashboardRoute() {
   const { config, isLoading } = useAppConfig();
+  const { isClientEditor } = usePermissions();
+  const { data: assignedProject, isLoading: isProjectLoading } =
+    trpc.user.getMyAssignedProject.useQuery(undefined, {
+      enabled: isClientEditor,
+    });
 
-  if (isLoading) {
+  if (isLoading || (isClientEditor && isProjectLoading)) {
     return (
       <div className="flex h-screen items-center justify-center">
         Loading...
@@ -31,11 +38,84 @@ function DashboardRoute() {
     );
   }
 
+  // Auto-redirect client editors to their assigned project
+  if (isClientEditor && assignedProject?.projectSlug) {
+    return (
+      <Navigate
+        to={`/vivd-studio/projects/${assignedProject.projectSlug}`}
+        replace
+      />
+    );
+  }
+
+  // Client editors must have an assigned project
+  if (isClientEditor && !assignedProject?.projectSlug) {
+    return <Navigate to="/vivd-studio/no-project" replace />;
+  }
+
   if (config.singleProjectMode) {
     return <SingleProjectModeHandler />;
   }
 
   return <Dashboard />;
+}
+
+function ProjectRoute() {
+  const { isClientEditor } = usePermissions();
+  const params = useParams();
+  const projectSlug = params.projectSlug ?? "";
+
+  const { data: assignedProject, isLoading } =
+    trpc.user.getMyAssignedProject.useQuery(undefined, {
+      enabled: isClientEditor,
+    });
+
+  if (!isClientEditor) return <PreviewPage />;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">Loading...</div>
+    );
+  }
+
+  if (!assignedProject?.projectSlug) {
+    return <Navigate to="/vivd-studio/no-project" replace />;
+  }
+
+  if (projectSlug && assignedProject.projectSlug !== projectSlug) {
+    return (
+      <Navigate
+        to={`/vivd-studio/projects/${assignedProject.projectSlug}`}
+        replace
+      />
+    );
+  }
+
+  return <PreviewPage />;
+}
+
+function ScratchWizardRoute() {
+  const { isClientEditor } = usePermissions();
+  const { data: assignedProject, isLoading } =
+    trpc.user.getMyAssignedProject.useQuery(undefined, {
+      enabled: isClientEditor,
+    });
+
+  if (!isClientEditor) return <ScratchWizard />;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">Loading...</div>
+    );
+  }
+
+  if (!assignedProject?.projectSlug) {
+    return <Navigate to="/vivd-studio/no-project" replace />;
+  }
+
+  return (
+    <Navigate to={`/vivd-studio/projects/${assignedProject.projectSlug}`} replace />
+  );
 }
 
 export default function App() {
@@ -97,6 +177,7 @@ export default function App() {
         >
           <Route index element={<DashboardRoute />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="no-project" element={<NoProjectAssigned />} />
           <Route
             path="admin"
             element={
@@ -112,13 +193,13 @@ export default function App() {
         <Route
           path="/vivd-studio/projects/:projectSlug"
           element={
-            session ? <PreviewPage /> : <Navigate to="/vivd-studio/login" />
+            session ? <ProjectRoute /> : <Navigate to="/vivd-studio/login" />
           }
         />
         <Route
           path="/vivd-studio/projects/new/scratch"
           element={
-            session ? <ScratchWizard /> : <Navigate to="/vivd-studio/login" />
+            session ? <ScratchWizardRoute /> : <Navigate to="/vivd-studio/login" />
           }
         />
         <Route

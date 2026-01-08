@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure } from "../../trpc";
+import { projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { hasDotSegment } from "../../generator/vivdPaths";
 import path from "path";
@@ -12,7 +12,7 @@ export const assetsFilesystemProcedures = {
   /**
    * List files and folders in a project directory
    */
-  listAssets: protectedProcedure
+  listAssets: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -94,7 +94,7 @@ export const assetsFilesystemProcedures = {
   /**
    * Delete a file or folder
    */
-  deleteAsset: protectedProcedure
+  deleteAsset: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -140,7 +140,7 @@ export const assetsFilesystemProcedures = {
   /**
    * Create a new folder
    */
-  createFolder: protectedProcedure
+  createFolder: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -176,4 +176,3 @@ export const assetsFilesystemProcedures = {
       };
     }),
 };
-

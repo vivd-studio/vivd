@@ -13,7 +13,7 @@ interface AssetToolbarProps {
   isUploading: boolean;
   onBack: () => void;
   onCreateFolder: () => void;
-  onCreateImage: () => void;
+  onCreateImage?: () => void;
   onFilesSelected: (files: FileList) => void;
 }
 
@@ -50,15 +50,17 @@ export function AssetToolbar({
         /{pathParts.join("/")}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onCreateImage}
-          title="Create Image with AI"
-        >
-          <ImagePlus className="h-4 w-4" />
-        </Button>
+        {onCreateImage && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onCreateImage}
+            title="Create Image with AI"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
+        )}
         <Button
           variant="outline"
           size="icon"

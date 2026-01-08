@@ -1,10 +1,6 @@
-import { protectedProcedure } from "../../trpc";
+import { adminProcedure } from "../../trpc";
 import { z } from "zod";
-import {
-  runTask,
-  getSessionContent,
-  getSessionsStatus,
-} from "../../opencode";
+import { runTask, getSessionContent, getSessionsStatus } from "../../opencode";
 import {
   getProjectDir,
   getVersionDir,
@@ -26,7 +22,7 @@ export const agentChecklistProcedures = {
    * The agent analyzes the project and returns a JSON checklist.
    * Results are saved to .vivd/publish-checklist.json
    */
-  runPrePublishChecklist: protectedProcedure
+  runPrePublishChecklist: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -189,7 +185,7 @@ export const agentChecklistProcedures = {
   /**
    * Get the saved pre-publish checklist for a project version.
    */
-  getPrePublishChecklist: protectedProcedure
+  getPrePublishChecklist: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -223,7 +219,9 @@ export const agentChecklistProcedures = {
         let hasChangesSinceCheck = true; // Default to true if we can't determine
         if (checklist.snapshotCommitHash) {
           try {
-            const currentCommit = await gitService.getCurrentCommit(versionPath);
+            const currentCommit = await gitService.getCurrentCommit(
+              versionPath
+            );
             const hasUncommitted = await gitService.hasUncommittedChanges(
               versionPath
             );
@@ -247,7 +245,7 @@ export const agentChecklistProcedures = {
    * Fix a specific checklist item by running an agent task.
    * Similar to runPrePublishChecklist but for fixing individual issues.
    */
-  fixChecklistItem: protectedProcedure
+  fixChecklistItem: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -368,4 +366,3 @@ This marks the issue as fixed but requiring re-verification. The user can then r
       }
     }),
 };
-

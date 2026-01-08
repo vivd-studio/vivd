@@ -3,8 +3,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
-import { Shield, UserPlus, Loader2, AlertCircle, Wrench } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Shield,
+  UserPlus,
+  Loader2,
+  AlertCircle,
+  Wrench,
+  Pencil,
+  Trash2,
+  MoreVertical,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -33,6 +42,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -40,28 +62,80 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "user" | "admin";
+  role: "user" | "admin" | "client_editor";
   createdAt: string;
 }
 
-const addUserSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["user", "admin"]),
-});
+const addUserSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    role: z.enum(["user", "admin", "client_editor"]),
+    projectSlug: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.role === "client_editor" && !data.projectSlug) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Project is required for Client Editor",
+      path: ["projectSlug"],
+    }
+  );
 
 type AddUserFormValues = z.infer<typeof addUserSchema>;
 
+const updateUserSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
+  role: z.enum(["user", "admin", "client_editor"]),
+  projectSlug: z
+    .string()
+    .transform((val) =>
+      val === "" || val === "__unassigned__" ? undefined : val
+    )
+    .optional(),
+  newPassword: z
+    .string()
+    .transform((val) => {
+      const trimmed = val?.trim();
+      return trimmed?.length ? trimmed : undefined;
+    })
+    .refine((val) => !val || val.length >= 8, {
+      message: "Password must be at least 8 characters",
+    })
+    .optional(),
+});
+
+type UpdateUserFormValues = z.infer<typeof updateUserSchema>;
+
 export default function Admin() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
   const [error, setError] = useState("");
   const [maintenanceConfirm, setMaintenanceConfirm] = useState<
     null | "migrateProcessFiles" | "templateAddMissing" | "templateOverwrite"
   >(null);
   const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user?.role === "admin";
+
+  const { data: projectsData } = trpc.project.list.useQuery();
+  const { mutateAsync: assignUserToProject } =
+    trpc.user.assignUserToProject.useMutation();
+  const { mutateAsync: unassignUserFromProject } =
+    trpc.user.unassignUserFromProject.useMutation();
+  const { data: membersData } = trpc.user.listProjectMembers.useQuery();
+
+  const projectMap = new Map(
+    membersData?.members.map((m) => [m.userId, m.projectSlug]) || []
+  );
 
   const form = useForm<AddUserFormValues>({
     resolver: zodResolver(addUserSchema),
@@ -72,6 +146,34 @@ export default function Admin() {
       role: "user",
     },
   });
+
+  const selectedRole = form.watch("role");
+
+  const editForm = useForm<UpdateUserFormValues>({
+    resolver: zodResolver(updateUserSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      role: "user",
+      projectSlug: "__unassigned__",
+      newPassword: "",
+    },
+  });
+  const editSelectedRole = editForm.watch("role");
+
+  useEffect(() => {
+    if (!editingUser) return;
+    const assignedSlug =
+      membersData?.members.find((m) => m.userId === editingUser.id)
+        ?.projectSlug ?? null;
+    editForm.reset({
+      name: editingUser.name,
+      email: editingUser.email,
+      role: editingUser.role,
+      projectSlug: assignedSlug ?? "__unassigned__",
+      newPassword: "",
+    });
+  }, [editingUser, editForm, membersData?.members]);
 
   const {
     data: users,
@@ -90,15 +192,97 @@ export default function Admin() {
     },
   });
 
+  const updateUserMutation = useMutation({
+    mutationFn: async (data: UpdateUserFormValues) => {
+      if (!editingUser) throw new Error("No user selected");
+
+      const res = await authClient.admin.updateUser({
+        userId: editingUser.id,
+        data: {
+          name: data.name,
+          email: data.email,
+          role: data.role as any,
+        },
+      });
+      if (res.error) throw res.error;
+
+      if (data.newPassword) {
+        const pwRes = await authClient.admin.setUserPassword({
+          userId: editingUser.id,
+          newPassword: data.newPassword,
+        });
+        if (pwRes.error) throw pwRes.error;
+      }
+
+      if (data.role === "client_editor") {
+        if (data.projectSlug) {
+          await assignUserToProject({
+            userId: editingUser.id,
+            projectSlug: data.projectSlug,
+          });
+        } else {
+          await unassignUserFromProject({ userId: editingUser.id });
+        }
+      } else {
+        await unassignUserFromProject({ userId: editingUser.id });
+      }
+
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("User updated");
+      setEditingUser(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      utils.user.listProjectMembers.invalidate();
+    },
+    onError: (err: Error) => {
+      toast.error("Failed to update user", {
+        description: err.message || "Unknown error",
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await authClient.admin.removeUser({ userId });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("User deleted");
+      setDeleteConfirmUser(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      utils.user.listProjectMembers.invalidate();
+    },
+    onError: (err: Error) => {
+      toast.error("Failed to delete user", {
+        description: err.message || "Unknown error",
+      });
+    },
+  });
+
   const addUserMutation = useMutation({
     mutationFn: async (data: AddUserFormValues) => {
       const res = await authClient.admin.createUser({
         name: data.name,
         email: data.email,
         password: data.password,
-        role: data.role,
+        // Cast to any to support client_editor role (stored as text in DB)
+        role: data.role as any,
       });
       if (res.error) throw res.error;
+
+      // If client_editor, assign project
+      if (data.role === "client_editor" && data.projectSlug) {
+        if (!res.data?.user?.id) {
+          throw new Error("Failed to get user ID for project assignment");
+        }
+        await assignUserToProject({
+          userId: res.data.user.id,
+          projectSlug: data.projectSlug,
+        });
+      }
+
       return res.data;
     },
     onSuccess: () => {
@@ -106,6 +290,7 @@ export default function Admin() {
       form.reset();
       setError("");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      utils.user.listProjectMembers.invalidate();
     },
     onError: (err: Error) => {
       setError(err.message || "Failed to create user");
@@ -286,12 +471,47 @@ export default function Admin() {
                           <SelectContent>
                             <SelectItem value="user">User</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="client_editor">
+                              Client Editor
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  {selectedRole === "client_editor" && (
+                    <FormField
+                      control={form.control}
+                      name="projectSlug"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assigned Project</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a project" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {projectsData?.projects.map((project) => (
+                                <SelectItem
+                                  key={project.slug}
+                                  value={project.slug}
+                                >
+                                  {project.title || project.slug}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
 
                 {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -339,7 +559,13 @@ export default function Admin() {
                     Role
                   </th>
                   <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
+                    Assigned Project
+                  </th>
+                  <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
                     Created At
+                  </th>
+                  <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -357,15 +583,58 @@ export default function Admin() {
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
                           user.role === "admin"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-slate-100 text-slate-800"
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                            : user.role === "client_editor"
+                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                            : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                         }`}
                       >
-                        {user.role}
+                        {user.role === "client_editor"
+                          ? "Client Editor"
+                          : user.role}
                       </span>
+                    </td>
+                    <td className="p-4 align-middle">
+                      {user.role === "client_editor" ? (
+                        <span className="text-sm font-medium">
+                          {projectMap.get(user.id) || "—"}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="p-4 align-middle text-muted-foreground">
                       {new Date(user.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="p-4 align-middle">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Actions for ${user.email}`}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setEditingUser(user)}
+                            className="gap-2"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={session?.user?.id === user.id}
+                            onClick={() => setDeleteConfirmUser(user)}
+                            className="gap-2 text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))}
@@ -390,12 +659,12 @@ export default function Admin() {
               <code>.vivd/</code> folder for all existing projects.
             </p>
             <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => {
-                    setMaintenanceConfirm("migrateProcessFiles");
-                  }}
-                  disabled={migrateMutation.isPending}
-                >
+              <Button
+                onClick={() => {
+                  setMaintenanceConfirm("migrateProcessFiles");
+                }}
+                disabled={migrateMutation.isPending}
+              >
                 {migrateMutation.isPending ? (
                   <Loader2 className="animate-spin h-4 w-4 mr-2" />
                 ) : null}
@@ -526,6 +795,189 @@ export default function Admin() {
                 </span>
               ) : (
                 confirmConfig?.confirmLabel
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={!!editingUser}
+        onOpenChange={(open) => {
+          if (!open) setEditingUser(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form
+              onSubmit={editForm.handleSubmit((data) => {
+                updateUserMutation.mutate(data);
+              })}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="client_editor">Client Editor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {editSelectedRole === "client_editor" ? (
+                  <FormField
+                    control={editForm.control}
+                    name="projectSlug"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Assigned Project</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={
+                            ((field.value as string | undefined) ??
+                              "__unassigned__") as string
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a project (optional)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__unassigned__">
+                              Unassigned
+                            </SelectItem>
+                            {projectsData?.projects.map((project) => (
+                              <SelectItem key={project.slug} value={project.slug}>
+                                {project.title || project.slug}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+                <FormField
+                  control={editForm.control}
+                  name="newPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="Leave empty to keep"
+                          value={(field.value as string | undefined) ?? ""}
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setEditingUser(null)}
+                  disabled={updateUserMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateUserMutation.isPending}>
+                  {updateUserMutation.isPending ? (
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  ) : null}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={!!deleteConfirmUser}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmUser(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete{" "}
+              <span className="font-medium text-foreground">
+                {deleteConfirmUser?.email}
+              </span>{" "}
+              and all their sessions. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteUserMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteUserMutation.isPending || !deleteConfirmUser}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!deleteConfirmUser) return;
+                deleteUserMutation.mutate(deleteConfirmUser.id);
+              }}
+            >
+              {deleteUserMutation.isPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </span>
+              ) : (
+                "Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

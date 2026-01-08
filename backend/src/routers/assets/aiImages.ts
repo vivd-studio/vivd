@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure } from "../../trpc";
+import { adminProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { hasDotSegment } from "../../generator/vivdPaths";
 import path from "path";
@@ -18,7 +18,7 @@ export const assetsAiImageProcedures = {
   /**
    * Edit an image with AI - sends the image to the generation model with edit instructions
    */
-  editImageWithAI: protectedProcedure
+  editImageWithAI: adminProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -56,8 +56,7 @@ export const assetsAiImageProcedures = {
       const imageBuffer = fs.readFileSync(imagePath);
       const base64Image = imageBuffer.toString("base64");
       const ext = path.extname(imagePath).substring(1).toLowerCase();
-      const mimeType =
-        ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
+      const mimeType = ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
 
       // Build the prompt for editing
       const editPrompt = `Edit this image according to the following instructions: ${prompt}`;
@@ -165,10 +164,7 @@ export const assetsAiImageProcedures = {
           // Handle base64
           let buffer: Buffer;
           if (imageUrl.startsWith("data:image")) {
-            const base64Data = imageUrl.replace(
-              /^data:image\/\w+;base64,/,
-              ""
-            );
+            const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, "");
             buffer = Buffer.from(base64Data, "base64");
           } else {
             buffer = Buffer.from(imageUrl, "base64");
@@ -200,7 +196,7 @@ export const assetsAiImageProcedures = {
   /**
    * Create a new image with AI - generates an image from a prompt with optional reference images
    */
-  createImageWithAI: protectedProcedure
+  createImageWithAI: adminProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -342,10 +338,7 @@ export const assetsAiImageProcedures = {
           // Handle base64
           let buffer: Buffer;
           if (imageUrl.startsWith("data:image")) {
-            const base64Data = imageUrl.replace(
-              /^data:image\/\w+;base64,/,
-              ""
-            );
+            const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, "");
             buffer = Buffer.from(base64Data, "base64");
           } else {
             buffer = Buffer.from(imageUrl, "base64");
@@ -379,4 +372,3 @@ export const assetsAiImageProcedures = {
       }
     }),
 };
-

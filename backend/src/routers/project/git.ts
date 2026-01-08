@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure } from "../../trpc";
+import { projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { gitService } from "../../services/GitService";
 import fs from "fs";
@@ -8,7 +8,7 @@ export const projectGitProcedures = {
   /**
    * Save current changes as a git commit.
    */
-  gitSave: protectedProcedure
+  gitSave: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -53,7 +53,7 @@ export const projectGitProcedures = {
   /**
    * Get git commit history for a project version.
    */
-  gitHistory: protectedProcedure
+  gitHistory: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -75,7 +75,7 @@ export const projectGitProcedures = {
   /**
    * Load/restore files from a specific git commit.
    */
-  gitLoadVersion: protectedProcedure
+  gitLoadVersion: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -101,7 +101,7 @@ export const projectGitProcedures = {
   /**
    * Check if there are uncommitted changes in a project version.
    */
-  gitHasChanges: protectedProcedure
+  gitHasChanges: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -123,7 +123,7 @@ export const projectGitProcedures = {
   /**
    * Get the current HEAD commit hash for a project version.
    */
-  gitCurrentCommit: protectedProcedure
+  gitCurrentCommit: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -146,7 +146,7 @@ export const projectGitProcedures = {
    * Get the working commit (the commit whose files are in the working directory).
    * This may differ from HEAD if an older version was loaded.
    */
-  gitWorkingCommit: protectedProcedure
+  gitWorkingCommit: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -176,7 +176,7 @@ export const projectGitProcedures = {
   /**
    * Discard all uncommitted changes for a project version.
    */
-  gitDiscardChanges: protectedProcedure
+  gitDiscardChanges: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -198,4 +198,3 @@ export const projectGitProcedures = {
       };
     }),
 };
-

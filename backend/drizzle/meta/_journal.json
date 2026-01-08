@@ -22,6 +22,13 @@
       "when": 1767730708381,
       "tag": "0002_published_by_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1767874907212,
+      "tag": "0003_add_project_member",
+      "breakpoints": true
     }
   ]
 }

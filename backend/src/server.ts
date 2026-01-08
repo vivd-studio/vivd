@@ -16,12 +16,73 @@ import { createContext } from "./trpc";
 import { getVersionDir } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
 import { safeJoin } from "./fs/safePaths";
+import { db } from "./db";
+import { projectMember } from "./db/schema";
+import { eq } from "drizzle-orm";
 
 // ESM dirname replacement
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+async function getSessionFromRequest(req: express.Request) {
+  return auth.api.getSession({
+    headers: req.headers as any,
+  });
+}
+
+function getSessionUserRole(session: any): string {
+  return session?.user?.role ?? "user";
+}
+
+async function getAssignedProjectSlug(userId: string): Promise<string | null> {
+  const membership = await db.query.projectMember.findFirst({
+    where: eq(projectMember.userId, userId),
+  });
+  return membership?.projectSlug ?? null;
+}
+
+async function enforceProjectAccess(
+  req: express.Request,
+  res: express.Response,
+  session: any,
+  slug: string
+): Promise<boolean> {
+  const role = getSessionUserRole(session);
+  if (role !== "client_editor") return true;
+
+  const assigned = await getAssignedProjectSlug(session.user.id);
+  if (!assigned) {
+    res.status(403).json({ error: "No project assigned to your account" });
+    return false;
+  }
+  if (assigned !== slug) {
+    res.status(403).json({ error: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+
+function createProtectedProjectsStaticMiddleware() {
+  return async (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    const session = await getSessionFromRequest(req);
+    if (!session) return res.status(401).json({ error: "Unauthorized" });
+
+    const segments = req.path.split("/").filter(Boolean);
+    const slug = segments[0];
+    if (!slug) return res.status(400).json({ error: "Invalid path" });
+
+    const ok = await enforceProjectAccess(req, res, session, slug);
+    if (!ok) return;
+
+    return next();
+  };
+}
 
 // Configure multer for memory storage
 const upload = multer({
@@ -49,11 +110,12 @@ app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
 // Static files
 app.use(
   "/vivd-studio/api/projects",
-  express.static(path.join(__dirname, "../projects"))
+  createProtectedProjectsStaticMiddleware(),
+  express.static(path.join(__dirname, "../projects"), { dotfiles: "deny" })
 );
 app.use(
   "/vivd-studio/api/preview",
-  express.static(path.join(__dirname, "../projects"))
+  express.static(path.join(__dirname, "../projects"), { dotfiles: "deny" })
 );
 
 // File upload endpoint
@@ -62,18 +124,22 @@ app.post(
   upload.array("files", 20),
   async (req, res) => {
     try {
-      // Verify auth using better-auth
-      const session = await auth.api.getSession({
-        headers: req.headers as any,
-      });
+      const session = await getSessionFromRequest(req);
 
       if (!session) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
       const { slug, version } = req.params;
+      const ok = await enforceProjectAccess(req, res, session, slug);
+      if (!ok) return;
+
+      const versionNumber = Number.parseInt(version, 10);
+      if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+        return res.status(400).json({ error: "Invalid version" });
+      }
       const relativePath = typeof req.query.path === "string" ? req.query.path : "";
-      const versionDir = getVersionDir(slug, parseInt(version));
+      const versionDir = getVersionDir(slug, versionNumber);
 
       if (!fs.existsSync(versionDir)) {
         return res.status(404).json({ error: "Project version not found" });
@@ -130,17 +196,21 @@ app.post(
 // Download project version as ZIP
 app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
   try {
-    // Verify auth using better-auth
-    const session = await auth.api.getSession({
-      headers: req.headers as any,
-    });
+    const session = await getSessionFromRequest(req);
 
     if (!session) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { slug, version } = req.params;
-    const versionDir = getVersionDir(slug, parseInt(version));
+    const ok = await enforceProjectAccess(req, res, session, slug);
+    if (!ok) return;
+
+    const versionNumber = Number.parseInt(version, 10);
+    if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+      return res.status(400).json({ error: "Invalid version" });
+    }
+    const versionDir = getVersionDir(slug, versionNumber);
 
     if (!fs.existsSync(versionDir)) {
       return res.status(404).json({ error: "Project version not found" });

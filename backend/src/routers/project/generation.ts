@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure } from "../../trpc";
+import { protectedProcedure, adminProcedure, projectMemberProcedure } from "../../trpc";
 import { processUrl } from "../../generator/index";
 import {
   getProjectDir,
@@ -19,9 +19,12 @@ import fs from "fs";
 import path from "path";
 import { gitService } from "../../services/GitService";
 import { publishService } from "../../services/PublishService";
+import { db } from "../../db";
+import { projectMember } from "../../db/schema";
+import { eq } from "drizzle-orm";
 
 export const projectGenerationProcedures = {
-  generate: protectedProcedure
+  generate: adminProcedure
     .input(
       z.object({
         url: z.string().min(1),
@@ -107,7 +110,7 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  generateFromScratch: protectedProcedure
+  generateFromScratch: adminProcedure
     .input(
       z.object({
         title: z.string().min(1),
@@ -175,7 +178,7 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  regenerate: protectedProcedure
+  regenerate: adminProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -231,7 +234,7 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  status: protectedProcedure
+  status: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -311,8 +314,24 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  list: protectedProcedure.query(async () => {
+  list: protectedProcedure.query(async ({ ctx }) => {
     const projectsDir = getProjectsDir();
+
+    // Check if user is a client_editor
+    const isClientEditor = ctx.session.user.role === "client_editor";
+    let assignedProjectSlug: string | null = null;
+
+    if (isClientEditor) {
+      const membership = await db.query.projectMember.findFirst({
+        where: eq(projectMember.userId, ctx.session.user.id),
+      });
+      assignedProjectSlug = membership?.projectSlug ?? null;
+
+      // If client editor has no assigned project, return empty list
+      if (!assignedProjectSlug) {
+        return { projects: [] };
+      }
+    }
 
     if (!fs.existsSync(projectsDir)) {
       return { projects: [] };
@@ -325,6 +344,13 @@ export const projectGenerationProcedures = {
       const files = fs.readdirSync(projectsDir, { withFileTypes: true });
       const projects = files
         .filter((dirent) => dirent.isDirectory())
+        .filter((dirent) => {
+          // Filter by assigned project if user is client_editor
+          if (isClientEditor) {
+            return dirent.name === assignedProjectSlug;
+          }
+          return true;
+        })
         .map((dirent) => {
           const projectSlug = dirent.name;
 
@@ -381,7 +407,7 @@ export const projectGenerationProcedures = {
   /**
    * Set the current version for a project (persists to manifest.json)
    */
-  setCurrentVersion: protectedProcedure
+  setCurrentVersion: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -422,4 +448,3 @@ export const projectGenerationProcedures = {
       };
     }),
 };
-

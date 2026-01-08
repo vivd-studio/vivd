@@ -54,11 +54,13 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import faviconSvg from "/favicon-transparent.svg";
 import { VersionSelector } from "@/components/VersionSelector";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export function PreviewToolbar() {
   const { data: session } = authClient.useSession();
   const navigate = useNavigate();
   const { setTheme, theme } = useTheme();
+  const { canUseAgent, isClientEditor } = usePermissions();
   const utils = trpc.useUtils();
 
   // Save/History dialog states
@@ -203,10 +205,12 @@ export function PreviewToolbar() {
               <FolderOpen className="w-4 h-4 mr-2" />
               {assetsOpen ? "Hide Assets" : "Show Assets"}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setChatOpen(!chatOpen)}>
-              <MessageSquare className="w-4 h-4 mr-2" />
-              {chatOpen ? "Hide Agent" : "Show Agent"}
-            </DropdownMenuItem>
+            {canUseAgent && (
+              <DropdownMenuItem onClick={() => setChatOpen(!chatOpen)}>
+                <MessageSquare className="w-4 h-4 mr-2" />
+                {chatOpen ? "Hide Agent" : "Show Agent"}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={toggleEditMode}
               disabled={hasUnsavedChanges && !editMode}
@@ -325,12 +329,19 @@ export function PreviewToolbar() {
     <>
       <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
         {/* Left Section: App Icon + Preview Identity */}
-        <button
-          onClick={handleClose}
-          className="hover:opacity-80 transition-opacity focus:outline-none cursor-pointer"
-        >
-          <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
-        </button>
+        {/* Left Section: App Icon + Preview Identity */}
+        {isClientEditor ? (
+          <div className="flex items-center">
+            <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
+          </div>
+        ) : (
+          <button
+            onClick={handleClose}
+            className="hover:opacity-80 transition-opacity focus:outline-none cursor-pointer"
+          >
+            <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
+          </button>
+        )}
 
         {/* Separator - hidden on mobile */}
         <div className="hidden sm:block h-5 w-px bg-border mx-1" />
@@ -493,7 +504,7 @@ export function PreviewToolbar() {
         {/* Right Section: Panel Toggles + Quick Actions (pushed to right) */}
         <div className="flex items-center gap-1 ml-auto shrink-0">
           {/* Panel Toggles - hidden on mobile */}
-          {projectSlug && (
+          {projectSlug && canUseAgent && (
             <>
               <Button
                 variant={chatOpen ? "secondary" : "outline"}
@@ -713,19 +724,21 @@ export function PreviewToolbar() {
           <MobileActionsMenu />
 
           {/* Close/Back Button - always visible */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClose}
-                className="h-8 w-8 p-0"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Back to Dashboard</TooltipContent>
-          </Tooltip>
+          {!isClientEditor && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClose}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Back to Dashboard</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </header>
 

@@ -1,4 +1,4 @@
-import { protectedProcedure } from "../../trpc";
+import { adminProcedure } from "../../trpc";
 import { z } from "zod";
 import { tracked } from "@trpc/server";
 import { agentEventEmitter } from "../../opencode";
@@ -10,7 +10,7 @@ export const agentSubscriptionProcedures = {
    * Uses tRPC's async generator pattern for SSE support.
    * Clients can reconnect using lastEventId to resume from where they left off.
    */
-  sessionEvents: protectedProcedure
+  sessionEvents: adminProcedure
     .input(
       z.object({
         sessionId: z.string(),

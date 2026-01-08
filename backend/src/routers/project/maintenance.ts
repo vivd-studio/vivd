@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { protectedProcedure, adminProcedure } from "../../trpc";
+import {
+  protectedProcedure,
+  adminProcedure,
+  ownerProcedure,
+  projectMemberProcedure,
+} from "../../trpc";
 import {
   getProjectDir,
   getVersionDir,
@@ -26,7 +31,7 @@ import { applyProjectTemplateFiles } from "../../generator/templateFiles";
 import type { GenerationSource } from "../../generator/flows/types";
 
 export const projectMaintenanceProcedures = {
-  applyHtmlPatches: protectedProcedure
+  applyHtmlPatches: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -117,7 +122,7 @@ export const projectMaintenanceProcedures = {
    * Admin endpoint to hard reset a stuck project's status.
    * Use this when a project is stuck in a processing state.
    */
-  resetStatus: adminProcedure
+  resetStatus: ownerProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -183,7 +188,7 @@ export const projectMaintenanceProcedures = {
    * Admin maintenance: move vivd process files into `.vivd/` for all versions.
    * Keeps the version root clean and prevents accidental public access to process artifacts.
    */
-  migrateVivdProcessFiles: adminProcedure.mutation(async () => {
+  migrateVivdProcessFiles: ownerProcedure.mutation(async () => {
     const projectsDir = getProjectsDir();
     if (!fs.existsSync(projectsDir)) {
       return {
@@ -289,7 +294,7 @@ export const projectMaintenanceProcedures = {
    * Admin maintenance: ensure project template files (like AGENTS.md, .gitignore) exist in all versions.
    * Can be re-run with overwrite=true to update templates across all projects.
    */
-  migrateProjectTemplateFiles: adminProcedure
+  migrateProjectTemplateFiles: ownerProcedure
     .input(
       z
         .object({
@@ -428,7 +433,7 @@ export const projectMaintenanceProcedures = {
    * Delete a project permanently.
    * Requires typing the project name to confirm deletion (GitHub-style safety).
    */
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(
       z.object({
         slug: z.string(),

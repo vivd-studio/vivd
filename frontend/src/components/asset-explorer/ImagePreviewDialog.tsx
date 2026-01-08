@@ -13,7 +13,7 @@ interface ImagePreviewDialogProps {
   imageUrl: string | null;
   imageItem: AssetItem | null;
   onClose: () => void;
-  onAiEdit: () => void;
+  onAiEdit?: () => void;
   onDelete: () => void;
   onDownload: () => void;
 }
@@ -45,15 +45,17 @@ export function ImagePreviewDialog({
                 <Download className="h-4 w-4 mr-2" />
                 Download
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onAiEdit}
-                title="Edit with AI"
-              >
-                <Wand2 className="h-4 w-4 mr-2" />
-                AI Edit
-              </Button>
+              {onAiEdit && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onAiEdit}
+                  title="Edit with AI"
+                >
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  AI Edit
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 size="sm"

@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { protectedProcedure } from "../../trpc";
+import { projectMemberProcedure } from "../../trpc";
 import { publishService } from "../../services/PublishService";
 
 export const projectPublishProcedures = {
   /**
    * Publish a project version to a custom domain
    */
-  publish: protectedProcedure
+  publish: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -31,7 +31,7 @@ export const projectPublishProcedures = {
   /**
    * Unpublish a project (remove from domain)
    */
-  unpublish: protectedProcedure
+  unpublish: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -51,7 +51,7 @@ export const projectPublishProcedures = {
   /**
    * Get publish status for a project
    */
-  publishStatus: protectedProcedure
+  publishStatus: projectMemberProcedure
     .input(
       z.object({
         slug: z.string(),
@@ -90,7 +90,7 @@ export const projectPublishProcedures = {
   /**
    * Check if a domain is available for publishing
    */
-  checkDomain: protectedProcedure
+  checkDomain: projectMemberProcedure
     .input(
       z.object({
         domain: z.string(),
@@ -121,4 +121,3 @@ export const projectPublishProcedures = {
       };
     }),
 };
-

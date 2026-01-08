@@ -23,6 +23,7 @@ import { CreateFolderInput } from "./CreateFolderInput";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { AIEditDialog } from "./AIEditDialog";
 import { CreateImageDialog } from "./CreateImageDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface AssetExplorerProps {
   projectSlug: string;
@@ -35,6 +36,7 @@ export function AssetExplorer({
   version,
   onClose,
 }: AssetExplorerProps) {
+  const { canUseAiImages } = usePermissions();
   // Navigation state
   const [currentPath, setCurrentPath] = useState("images");
 
@@ -281,11 +283,15 @@ export function AssetExplorer({
         isUploading={isUploading}
         onBack={handleBack}
         onCreateFolder={() => setIsCreatingFolder(true)}
-        onCreateImage={() => {
-          setIsCreateImageOpen(true);
-          setCreateImagePrompt("");
-          setSelectedReferenceImages([]);
-        }}
+        onCreateImage={
+          canUseAiImages
+            ? () => {
+                setIsCreateImageOpen(true);
+                setCreateImagePrompt("");
+                setSelectedReferenceImages([]);
+              }
+            : undefined
+        }
         onFilesSelected={uploadFiles}
       />
 
@@ -333,7 +339,7 @@ export function AssetExplorer({
                   onClick={() => handleItemClick(item)}
                   onDelete={(e) => handleDelete(item, e)}
                   onAiEdit={
-                    item.type === "file" && item.isImage
+                    canUseAiImages && item.type === "file" && item.isImage
                       ? (e) => handleAiEdit(item, e)
                       : undefined
                   }
@@ -371,14 +377,18 @@ export function AssetExplorer({
           setSelectedImageUrl(null);
           setSelectedImageItem(null);
         }}
-        onAiEdit={() => {
-          if (selectedImageItem) {
-            setEditingImage(selectedImageItem);
-            setEditPrompt("");
-            setSelectedImageUrl(null);
-            setSelectedImageItem(null);
-          }
-        }}
+        onAiEdit={
+          canUseAiImages
+            ? () => {
+                if (selectedImageItem) {
+                  setEditingImage(selectedImageItem);
+                  setEditPrompt("");
+                  setSelectedImageUrl(null);
+                  setSelectedImageItem(null);
+                }
+              }
+            : undefined
+        }
         onDelete={() => {
           if (selectedImageItem) {
             setPendingDeleteItem(selectedImageItem);

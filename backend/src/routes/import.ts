@@ -104,6 +104,11 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const role = (session as any)?.user?.role ?? "user";
+      if (role === "client_editor") {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       const file = req.file as Express.Multer.File | undefined;
       if (!file) {
         return res.status(400).json({ error: "Missing file" });

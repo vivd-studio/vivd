@@ -1,4 +1,4 @@
-import { protectedProcedure } from "../../trpc";
+import { adminProcedure } from "../../trpc";
 import { z } from "zod";
 import {
   runTask,
@@ -19,7 +19,7 @@ import fs from "fs";
 import { debugLog } from "./debug";
 
 export const agentSessionProcedures = {
-  runTask: protectedProcedure
+  runTask: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -61,7 +61,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  listSessions: protectedProcedure
+  listSessions: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -88,7 +88,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  listProjects: protectedProcedure
+  listProjects: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -118,7 +118,7 @@ export const agentSessionProcedures = {
    * Returns a map of sessionId -> SessionStatus (idle/busy/retry)
    * Used by frontend to determine if a session is actively processing.
    */
-  getSessionsStatus: protectedProcedure
+  getSessionsStatus: adminProcedure
     .input(
       z.object({
         projectSlug: z.string(),
@@ -153,7 +153,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  getSessionContent: protectedProcedure
+  getSessionContent: adminProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -179,7 +179,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  deleteSession: protectedProcedure
+  deleteSession: adminProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -206,7 +206,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  revertToMessage: protectedProcedure
+  revertToMessage: adminProcedure
     .input(
       z.object({
         sessionId: z.string(),
@@ -245,7 +245,7 @@ export const agentSessionProcedures = {
       }
     }),
 
-  unrevertSession: protectedProcedure
+  unrevertSession: adminProcedure
     .input(
       z.object({
         sessionId: z.string(),

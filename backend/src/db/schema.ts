@@ -84,9 +84,27 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)]
 );
 
+// Project members - binds client_editors to specific projects
+export const projectMember = pgTable(
+  "project_member",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("project_member_user_idx").on(table.userId),
+    index("project_member_project_idx").on(table.projectSlug),
+  ]
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  projectMembers: many(projectMember),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -103,6 +121,13 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }));
 
+export const projectMemberRelations = relations(projectMember, ({ one }) => ({
+  user: one(user, {
+    fields: [projectMember.userId],
+    references: [user.id],
+  }),
+}));
+
 // Published sites - tracks domain to project mapping for Caddy routing
 export const publishedSite = pgTable(
   "published_site",
@@ -113,8 +138,9 @@ export const publishedSite = pgTable(
     domain: text("domain").notNull().unique(), // Normalized (no www.)
     commitHash: text("commit_hash").notNull(),
     publishedAt: timestamp("published_at").notNull(),
-    publishedById: text("published_by_id")
-      .references(() => user.id, { onDelete: "set null" }),
+    publishedById: text("published_by_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
