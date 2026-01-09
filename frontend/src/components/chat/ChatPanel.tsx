@@ -85,6 +85,32 @@ function SessionDebugDisplay({ debug }: { debug: SessionDebugState }) {
                 ? new Date(debug.lastEventTime).toLocaleTimeString()
                 : "never"}
             </span>
+
+            {debug.usage && (
+              <>
+                <div className="col-span-2 my-1 border-t border-dashed border-border/50" />
+
+                <span>Cost:</span>
+                <span className="font-semibold text-green-600">
+                  ${debug.usage.cost.toFixed(4)}
+                </span>
+
+                <span>Input Tokens:</span>
+                <span>{debug.usage.tokens.input}</span>
+
+                <span>Output Tokens:</span>
+                <span>{debug.usage.tokens.output}</span>
+
+                <span>Reasoning:</span>
+                <span>{debug.usage.tokens.reasoning}</span>
+
+                <span>Cache Read:</span>
+                <span>{debug.usage.tokens.cache.read}</span>
+
+                <span>Cache Write:</span>
+                <span>{debug.usage.tokens.cache.write}</span>
+              </>
+            )}
           </div>
         </div>
       )}

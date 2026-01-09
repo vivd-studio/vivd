@@ -10,7 +10,8 @@ export type AgentEventType =
   | "tool.error"
   | "message.updated"
   | "session.completed"
-  | "session.error";
+  | "session.error"
+  | "usage.updated";
 
 export interface AgentEventInput {
   type: AgentEventType;
@@ -38,7 +39,8 @@ export type AgentEventData =
   | ToolErrorData
   | MessageUpdatedData
   | SessionCompletedData
-  | SessionErrorData;
+  | SessionErrorData
+  | UsageUpdatedData;
 
 export interface ThinkingStartedData {
   kind: "thinking.started";
@@ -92,6 +94,20 @@ export interface SessionErrorData {
   message: string;
   attempt?: number;
   nextRetryAt?: number; // Unix timestamp in ms for next retry
+}
+
+export interface UsageUpdatedData {
+  kind: "usage.updated";
+  cost: number;
+  tokens: {
+    input: number;
+    output: number;
+    reasoning: number;
+    cache: {
+      read: number;
+      write: number;
+    };
+  };
 }
 
 /**

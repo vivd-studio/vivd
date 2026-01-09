@@ -12,6 +12,19 @@ export interface ToolCall {
   };
 }
 
+export interface UsageData {
+  cost: number;
+  tokens: {
+    input: number;
+    output: number;
+    reasoning: number;
+    cache: {
+      read: number;
+      write: number;
+    };
+  };
+}
+
 export interface EventCallbacks {
   sessionId?: string;
   onEvent?: (event: any) => void;
@@ -20,6 +33,7 @@ export interface EventCallbacks {
   onText?: (content: string, partId: string) => void;
   onToolCall?: (toolCall: ToolCall) => void;
   onToolCallFinished?: (toolCall: ToolCall) => void;
+  onUsageUpdated?: (data: UsageData) => void;
   onIdle?: () => void;
   onSessionError?: (error: {
     type: string;
@@ -106,6 +120,17 @@ export function useEvents(
             const { info } = (event as any).properties;
             if (info?.role === "assistant") {
               assistantMessageIds.add(info.id);
+
+              if (
+                info.cost !== undefined &&
+                info.tokens &&
+                callbacks.onUsageUpdated
+              ) {
+                callbacks.onUsageUpdated({
+                  cost: info.cost,
+                  tokens: info.tokens,
+                });
+              }
             }
           }
 
@@ -116,7 +141,19 @@ export function useEvents(
             // User messages should not emit text deltas to the streaming UI
             const isAssistantMessage = assistantMessageIds.has(part.messageID);
 
-            if (part.type === "reasoning") {
+            // Handle step-finish for usage updates
+            if (part.type === "step-finish") {
+              if (
+                part.cost !== undefined &&
+                part.tokens &&
+                callbacks.onUsageUpdated
+              ) {
+                callbacks.onUsageUpdated({
+                  cost: part.cost,
+                  tokens: part.tokens,
+                });
+              }
+            } else if (part.type === "reasoning") {
               // Reasoning parts are only from assistant messages, but double-check
               if (!isAssistantMessage) continue;
 

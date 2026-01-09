@@ -11,6 +11,7 @@ import {
   type SessionCompletedData,
   type ThinkingStartedData,
   type SessionErrorData,
+  type UsageUpdatedData,
   type SessionStatus,
 } from "./eventEmitter";
 import { serverManager } from "./serverManager";
@@ -117,6 +118,17 @@ export async function runTask(
           } as ToolCompletedData)
         );
       }
+    },
+    onUsageUpdated: (data) => {
+      // Emit usage updated event to frontend
+      agentEventEmitter.emitSessionEvent(
+        currentSessionId,
+        createAgentEvent(currentSessionId, "usage.updated", {
+          kind: "usage.updated",
+          cost: data.cost,
+          tokens: data.tokens,
+        } as UsageUpdatedData)
+      );
     },
     onIdle: () => {
       console.log(`[OpenCode] Task execution completed`);
