@@ -52,5 +52,3 @@ import /etc/caddy/sites.d/*.caddy
         }
     }
 }
-
-

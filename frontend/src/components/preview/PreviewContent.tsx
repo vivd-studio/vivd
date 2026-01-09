@@ -8,7 +8,7 @@ import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
 import { TextEditorPanel } from "../asset-explorer/TextEditorPanel";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 export function PreviewContent() {
   const {
@@ -34,7 +34,37 @@ export function PreviewContent() {
     editingTextFile,
     setEditingTextFile,
     selectedVersion,
+    devServerStatus,
+    devServerError,
+    previewMode,
+    isPreviewLoading,
   } = usePreview();
+
+  // For dev server projects, don't render iframe until ready
+  const isDevServerReady =
+    !isPreviewLoading && (previewMode === "static" || devServerStatus === "ready");
+
+  // Show loading for both iframe loading AND dev server starting
+  const isLoading =
+    iframeLoading ||
+    isPreviewLoading ||
+    devServerStatus === "starting" ||
+    devServerStatus === "installing";
+  const isDevServerError = devServerStatus === "error";
+
+  // Determine loading message
+  const getLoadingMessage = () => {
+    if (isPreviewLoading) {
+      return "Loading preview...";
+    }
+    if (devServerStatus === "installing") {
+      return "Installing dependencies...";
+    }
+    if (devServerStatus === "starting") {
+      return "Starting dev server...";
+    }
+    return "Loading preview...";
+  };
 
   return (
     <>
@@ -68,48 +98,66 @@ export function PreviewContent() {
                 : ""
             }`}
           >
-            {/* Loading Overlay - fades out when done */}
+            {/* Loading/Error Overlay */}
             <div
               className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
-                iframeLoading ? "opacity-100" : "opacity-0 pointer-events-none"
+                isLoading || isDevServerError
+                  ? "opacity-100"
+                  : "opacity-0 pointer-events-none"
               }`}
             >
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  Loading preview...
-                </span>
-              </div>
+              {isDevServerError ? (
+                <div className="flex flex-col items-center gap-3 max-w-md text-center px-4">
+                  <AlertCircle className="h-8 w-8 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">
+                    Dev server failed to start
+                  </span>
+                  {devServerError && (
+                    <span className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded max-h-32 overflow-auto">
+                      {devServerError}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    {getLoadingMessage()}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Iframe container - always rendered to preserve state */}
-            <div
-              className={`transition-opacity duration-150 ${
-                iframeLoading ? "opacity-0" : "opacity-100"
-              } ${mobileView ? "" : "w-full h-full"}`}
-            >
-              {mobileView ? (
-                <MobileFrame device={selectedDevice} scale={mobileScale}>
+            {/* Iframe container - only rendered when dev server is ready */}
+            {isDevServerReady && (
+              <div
+                className={`transition-opacity duration-150 ${
+                  iframeLoading ? "opacity-0" : "opacity-100"
+                } ${mobileView ? "" : "w-full h-full"}`}
+              >
+                {mobileView ? (
+                  <MobileFrame device={selectedDevice} scale={mobileScale}>
+                    <PreviewIframe
+                      ref={iframeRef}
+                      src={fullUrl}
+                      refreshKey={refreshKey}
+                      isMobile={true}
+                      onLoad={onIframeLoad}
+                      selectorMode={selectorMode}
+                    />
+                  </MobileFrame>
+                ) : (
                   <PreviewIframe
                     ref={iframeRef}
                     src={fullUrl}
                     refreshKey={refreshKey}
-                    isMobile={true}
+                    isMobile={false}
                     onLoad={onIframeLoad}
                     selectorMode={selectorMode}
                   />
-                </MobileFrame>
-              ) : (
-                <PreviewIframe
-                  ref={iframeRef}
-                  src={fullUrl}
-                  refreshKey={refreshKey}
-                  isMobile={false}
-                  onLoad={onIframeLoad}
-                  selectorMode={selectorMode}
-                />
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             <UnsavedChangesBar />
 

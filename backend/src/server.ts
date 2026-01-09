@@ -6,8 +6,13 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import archiver from "archiver";
+import {
+  createProxyMiddleware,
+  responseInterceptor,
+} from "http-proxy-middleware";
 
 import { serverManager } from "./opencode";
+import { devServerManager } from "./devserver";
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
@@ -25,6 +30,54 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
+  const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+  const prefixGroups = [
+    "images",
+    "_astro",
+    "@vite",
+    "@id",
+    "src",
+    "node_modules",
+    "@fs",
+    "assets",
+  ].join("|");
+
+  // Only rewrites known asset-like prefixes; does not touch page routes (e.g. "/ueber-uns").
+  return (
+    text
+      .replace(
+        new RegExp(`(^|[^\\w/])\\/(${prefixGroups})\\/`, "g"),
+        `$1${base}/$2/`
+      )
+      // favicon-like root assets
+      .replace(
+        /(^|[^\w/])\/(favicon(?:-[^"'`()\s,]+)?\.(?:ico|png|svg))\b/g,
+        `$1${base}/$2`
+      )
+  );
+}
+
+function stripDevServerToolingFromHtml(html: string): string {
+  return html
+    .replace(
+      /<script\b[^>]*\bsrc=(["'])([^"']*\/@vite\/client[^"']*)\1[^>]*>\s*<\/script>/gi,
+      ""
+    )
+    .replace(
+      /<script\b[^>]*\bsrc=(["'])([^"']*dev-toolbar\/entrypoint\.js[^"']*)\1[^>]*>\s*<\/script>/gi,
+      ""
+    )
+    .replace(
+      /<link\b[^>]*\bhref=(["'])([^"']*\/@vite\/client[^"']*)\1[^>]*>/gi,
+      ""
+    )
+    .replace(
+      /<link\b[^>]*\bhref=(["'])([^"']*dev-toolbar\/[^"']*)\1[^>]*>/gi,
+      ""
+    );
+}
 
 async function getSessionFromRequest(req: express.Request) {
   return auth.api.getSession({
@@ -118,6 +171,141 @@ app.use(
   express.static(path.join(__dirname, "../projects"), { dotfiles: "deny" })
 );
 
+// Dev server proxy for framework projects (Astro, Vite, etc.)
+app.use(
+  "/vivd-studio/api/devpreview/:slug/v:version",
+  async (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    const session = await getSessionFromRequest(req);
+    if (!session) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { slug, version } = req.params;
+    const versionNumber = Number.parseInt(version, 10);
+    if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+      return res.status(400).json({ error: "Invalid version" });
+    }
+
+    const ok = await enforceProjectAccess(req, res, session, slug);
+    if (!ok) return;
+
+    const versionDir = getVersionDir(slug, versionNumber);
+    const devServerUrl = devServerManager.getDevServerUrl(versionDir);
+
+    if (!devServerUrl) {
+      const status = devServerManager.getDevServerStatus(versionDir);
+      if (status === "starting" || status === "installing") {
+        return res
+          .status(503)
+          .json({ error: "Dev server is starting...", status });
+      }
+      return res.status(503).json({ error: "Dev server not running", status });
+    }
+
+    // Intercept Vite HMR client and dev toolbar requests - return no-op modules
+    // This prevents the WebSocket connection attempts since HMR doesn't work through our proxy
+    if (req.originalUrl.includes("/@vite/client")) {
+      res.setHeader("Content-Type", "application/javascript");
+      // Provide no-op implementations of all Vite HMR client exports
+      return res.send(`// Vite HMR disabled in preview mode
+export const createHotContext = () => ({
+  accept: () => {},
+  acceptExports: () => {},
+  dispose: () => {},
+  prune: () => {},
+  invalidate: () => {},
+  on: () => {},
+  send: () => {},
+  data: {},
+});
+export const updateStyle = () => {};
+export const removeStyle = () => {};
+export const injectQuery = (url) => url;
+export default {};
+`);
+    }
+    if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
+      res.setHeader("Content-Type", "application/javascript");
+      return res.send(
+        "// Dev toolbar disabled in preview mode\nexport default {};\n"
+      );
+    }
+
+    // Restore the full URL - Express modifies req.url to strip the matched route prefix
+    // but Astro expects the full path since it's configured with --base
+    if (process.env.DEVSERVER_DEBUG === "1") {
+      console.log(`[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`);
+    }
+    req.url = req.originalUrl;
+
+    const basePath = `/vivd-studio/api/devpreview/${slug}/v${versionNumber}`;
+
+    // Proxy to the actual dev server
+    // Don't rewrite paths - Astro is configured with --base to expect the full path
+    const proxy = createProxyMiddleware({
+      target: devServerUrl,
+      changeOrigin: true,
+      ws: true, // Enable WebSocket support for HMR
+      selfHandleResponse: true,
+      on: {
+        proxyRes: responseInterceptor(
+          async (responseBuffer, proxyRes, proxyReq, _res) => {
+            const contentType = String(proxyRes.headers["content-type"] || "");
+            const ct = contentType.toLowerCase();
+            const reqUrl = String(proxyReq?.url || "");
+
+            const looksLikeTextByUrl =
+              reqUrl.includes("/@id/") ||
+              reqUrl.includes("/@vite/") ||
+              reqUrl.includes("/@fs/") ||
+              /\.(?:html|css|js|mjs|cjs|ts|tsx|jsx)(?:\?|$)/i.test(reqUrl) ||
+              reqUrl.includes("?astro&type=script") ||
+              reqUrl.includes("?astro&type=style");
+
+            const isTextLike =
+              ct.includes("text/html") ||
+              ct.includes("text/css") ||
+              ct.includes("application/javascript") ||
+              ct.includes("text/javascript") ||
+              ct.includes("application/x-javascript") ||
+              ct.includes("application/ecmascript") ||
+              ct.includes("text/ecmascript") ||
+              looksLikeTextByUrl;
+            if (!isTextLike) {
+              return responseBuffer;
+            }
+
+            const text = responseBuffer.toString("utf8");
+            const rewritten = rewriteRootAssetUrlsInText(text, basePath);
+            // Strip dev tooling (HMR client, dev toolbar) from all HTML responses
+            // since the preview iframe is display-only and HMR won't work through our proxy
+            const shouldStripTooling = ct.includes("text/html");
+            const finalText = shouldStripTooling
+              ? stripDevServerToolingFromHtml(rewritten)
+              : rewritten;
+
+            return Buffer.from(finalText, "utf8");
+          }
+        ),
+        error: (err, _req, res) => {
+          console.error("[DevServer] Proxy error:", err.message);
+          if ("status" in res) {
+            (res as express.Response)
+              .status(502)
+              .json({ error: "Dev server proxy error" });
+          }
+        },
+      },
+    });
+
+    return proxy(req, res, next);
+  }
+);
+
 // File upload endpoint
 app.post(
   "/vivd-studio/api/upload/:slug/:version",
@@ -138,7 +326,8 @@ app.post(
       if (!Number.isFinite(versionNumber) || versionNumber < 1) {
         return res.status(400).json({ error: "Invalid version" });
       }
-      const relativePath = typeof req.query.path === "string" ? req.query.path : "";
+      const relativePath =
+        typeof req.query.path === "string" ? req.query.path : "";
       const versionDir = getVersionDir(slug, versionNumber);
 
       if (!fs.existsSync(versionDir)) {
@@ -265,11 +454,13 @@ app.get("/vivd-studio/api/health", (_req, res) => {
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`[OpenCode] Server manager ready (servers spawn on first task)`);
+  console.log(`[DevServer] Dev server manager ready`);
 
-  // Graceful shutdown for all opencode servers
+  // Graceful shutdown for all servers
   const cleanup = () => {
-    console.log("[OpenCode] Shutting down...");
+    console.log("[Server] Shutting down...");
     serverManager.closeAll();
+    devServerManager.closeAll();
   };
 
   process.on("SIGTERM", cleanup);

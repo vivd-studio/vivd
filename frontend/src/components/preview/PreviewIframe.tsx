@@ -159,17 +159,24 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       : src;
 
     const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
-      injectScrollbarStyles(e.currentTarget, isMobile);
-      injectHighlightListener(e.currentTarget);
+      // Some previewed sites ship strict CSP which blocks inline script/style injection.
+      // Only inject editor helpers when we actually need them (selector mode).
+      if (selectorMode) {
+        injectScrollbarStyles(e.currentTarget, isMobile);
+        injectHighlightListener(e.currentTarget);
+      }
       onLoad?.();
     };
 
     // Inject selector script when selectorMode becomes active
     useEffect(() => {
-      if (selectorMode && ref && typeof ref !== "function" && ref.current) {
+      if (!selectorMode) return;
+      if (ref && typeof ref !== "function" && ref.current) {
+        injectScrollbarStyles(ref.current, isMobile);
+        injectHighlightListener(ref.current);
         injectSelectorScript(ref.current);
       }
-    }, [selectorMode, ref]);
+    }, [selectorMode, ref, isMobile]);
 
     return (
       <iframe

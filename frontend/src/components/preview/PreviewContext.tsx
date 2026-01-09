@@ -55,6 +55,7 @@ interface PreviewContextValue {
   mobileScale: number;
   editMode: boolean;
   iframeLoading: boolean;
+  isPreviewLoading: boolean;
   hasUnsavedChanges: boolean;
 
   // Element Selector
@@ -70,6 +71,9 @@ interface PreviewContextValue {
 
   // Computed
   fullUrl: string;
+  previewMode: "static" | "devserver";
+  devServerStatus: "ready" | "starting" | "installing" | "error" | "none";
+  devServerError?: string;
   versions: VersionInfo[];
   totalVersions: number;
   hasMultipleVersions: boolean;
@@ -320,6 +324,37 @@ export function PreviewProvider({
       setSelectedVersion(version);
     }
   }, [version]);
+
+  // Query for preview info (mode + URL)
+  const { data: previewInfo, isLoading: isPreviewLoading } =
+    trpc.project.getPreviewInfo.useQuery(
+      { slug: projectSlug!, version: selectedVersion },
+      {
+        enabled: !!projectSlug,
+        refetchInterval: (query) => {
+          // Keep polling while dev server is starting
+          const status = query.state.data?.status;
+          if (status === "starting" || status === "installing") {
+            return 2000;
+          }
+          return false;
+        },
+      }
+    );
+
+  // Before query returns, assume we're loading (prevents flash of static content)
+  const previewMode = previewInfo?.mode ?? "static";
+  const devServerStatus = isPreviewLoading
+    ? "starting"
+    : previewInfo?.status ?? "ready";
+  const devServerError =
+    previewInfo?.mode === "devserver" ? previewInfo.error : undefined;
+
+  // Mutation to stop dev server (available for explicit use, but not called on close)
+  const { mutate: _stopDevServer } = trpc.project.stopDevServer.useMutation();
+
+  // Dev server cleanup is handled by the backend's idle timeout (5 minutes)
+  // This avoids restarting the server every time the panel is toggled
 
   // Enable image drag-and-drop from Asset Explorer (disabled during text editing)
   useImageDropZone({
@@ -636,8 +671,12 @@ export function PreviewProvider({
     side: "right",
   });
 
-  // Build version-aware URL
-  const baseUrl = projectSlug
+  // Build version-aware URL - use dynamic URL from previewInfo if available
+  const baseUrl = previewInfo?.url
+    ? previewInfo.url
+    : isPreviewLoading
+    ? ""
+    : projectSlug
     ? `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/index.html`
     : url?.startsWith("http") || url?.startsWith("/vivd-studio/api")
     ? url
@@ -779,6 +818,7 @@ export function PreviewProvider({
     mobileScale,
     editMode,
     iframeLoading,
+    isPreviewLoading,
     hasUnsavedChanges,
 
     // Element Selector
@@ -794,6 +834,9 @@ export function PreviewProvider({
 
     // Computed
     fullUrl,
+    previewMode,
+    devServerStatus,
+    devServerError,
     versions,
     totalVersions,
     hasMultipleVersions,

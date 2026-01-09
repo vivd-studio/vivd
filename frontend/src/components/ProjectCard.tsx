@@ -187,8 +187,7 @@ export function ProjectCard({
       statusLabel = project.status;
   }
 
-  // Version-aware preview URL
-  const previewUrl = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/index.html`;
+  const projectEditorUrl = `/vivd-studio/projects/${project.slug}`;
 
   return (
     <>
@@ -326,7 +325,7 @@ export function ProjectCard({
             disabled={!isCompleted}
             onClick={(e) => {
               e.stopPropagation();
-              window.open(previewUrl, "_blank");
+              window.open(projectEditorUrl, "_blank");
             }}
           >
             Open in new tab
