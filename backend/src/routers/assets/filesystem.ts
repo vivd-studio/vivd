@@ -265,4 +265,151 @@ export const assetsFilesystemProcedures = {
       fs.writeFileSync(targetPath, content, "utf-8");
       return { success: true, path: relativePath };
     }),
+
+  /**
+   * Move a file or folder to a new location
+   */
+  moveAsset: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        sourcePath: z.string(),
+        destinationPath: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version, sourcePath, destinationPath } = input;
+
+      // Validate paths
+      if (hasDotSegment(sourcePath) || hasDotSegment(destinationPath)) {
+        throw new Error("Invalid path");
+      }
+
+      const versionDir = getVersionDir(slug, version);
+      const sourceFullPath = path.join(versionDir, sourcePath);
+      const destFullPath = path.join(versionDir, destinationPath);
+
+      // Check source exists
+      if (!fs.existsSync(sourceFullPath)) {
+        throw new Error("Source file or folder not found");
+      }
+
+      // Security: ensure paths stay within version directory
+      const realVersionDir = fs.realpathSync(versionDir);
+      const realSourcePath = fs.realpathSync(sourceFullPath);
+      if (!realSourcePath.startsWith(realVersionDir)) {
+        throw new Error("Invalid source path");
+      }
+
+      // Check destination parent exists
+      const destParentDir = path.dirname(destFullPath);
+      if (!fs.existsSync(destParentDir)) {
+        throw new Error("Destination directory does not exist");
+      }
+      const realDestParentDir = fs.realpathSync(destParentDir);
+      if (!realDestParentDir.startsWith(realVersionDir)) {
+        throw new Error("Invalid destination path");
+      }
+
+      // Prevent moving protected files
+      const basename = path.basename(sourcePath);
+      if (["index.html", "project.json", "manifest.json"].includes(basename)) {
+        throw new Error("Cannot move protected files");
+      }
+
+      // Check if destination already exists
+      if (fs.existsSync(destFullPath)) {
+        throw new Error("A file or folder already exists at the destination");
+      }
+
+      // Move the file/folder
+      fs.renameSync(sourceFullPath, destFullPath);
+
+      return { success: true, oldPath: sourcePath, newPath: destinationPath };
+    }),
+
+  /**
+   * List all files and folders recursively for tree view
+   */
+  listAllAssets: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        rootPath: z.string().optional().default(""),
+      })
+    )
+    .query(async ({ input }) => {
+      const { slug, version, rootPath } = input;
+      if (hasDotSegment(rootPath)) {
+        throw new Error("Invalid path");
+      }
+      const versionDir = getVersionDir(slug, version);
+      const targetDir = path.join(versionDir, rootPath);
+
+      if (!fs.existsSync(targetDir)) {
+        return { tree: [], rootPath };
+      }
+
+      // Security check
+      const realVersionDir = fs.realpathSync(versionDir);
+      const realTargetDir = fs.realpathSync(targetDir);
+      if (!realTargetDir.startsWith(realVersionDir)) {
+        throw new Error("Invalid path");
+      }
+
+      interface TreeNode {
+        name: string;
+        type: "file" | "folder";
+        path: string;
+        children?: TreeNode[];
+        size?: number;
+        mimeType?: string;
+        isImage?: boolean;
+      }
+
+      const buildTree = (dir: string, relativeTo: string): TreeNode[] => {
+        if (!fs.existsSync(dir)) return [];
+
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        const nodes: TreeNode[] = [];
+
+        for (const entry of entries) {
+          if (entry.name.startsWith(".")) continue; // Skip hidden files
+
+          const fullPath = path.join(dir, entry.name);
+          const relPath = path.join(relativeTo, entry.name);
+
+          if (entry.isDirectory()) {
+            nodes.push({
+              name: entry.name,
+              type: "folder",
+              path: relPath,
+              children: buildTree(fullPath, relPath),
+            });
+          } else {
+            const stats = fs.statSync(fullPath);
+            const isImage = isImageFile(entry.name);
+            nodes.push({
+              name: entry.name,
+              type: "file",
+              path: relPath,
+              size: stats.size,
+              mimeType: getMimeType(entry.name),
+              isImage,
+            });
+          }
+        }
+
+        // Sort: folders first, then files, both alphabetically
+        return nodes.sort((a, b) => {
+          if (a.type === b.type) return a.name.localeCompare(b.name);
+          return a.type === "folder" ? -1 : 1;
+        });
+      };
+
+      const tree = buildTree(targetDir, rootPath);
+      return { tree, rootPath };
+    }),
 };

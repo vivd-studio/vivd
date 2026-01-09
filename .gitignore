@@ -9,3 +9,7 @@ generated/
 generated_backup*/
 published/
 caddy-sites/
+
+# Test artifacts
+**/test/**/*.png
+**/scripts/**/*.png

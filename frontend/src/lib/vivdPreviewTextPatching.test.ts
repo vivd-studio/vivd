@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { JSDOM } from "jsdom";
 import {
   detectActiveLanguage,
@@ -56,6 +56,39 @@ describe("detectActiveLanguage", () => {
     `);
     const result = detectActiveLanguage(dom.window.document);
     expect(result).toBe("fr");
+  });
+
+  it("detects language from localStorage when single 'lang' key exists", () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, {
+      url: "http://localhost",
+    });
+    // Set localStorage lang key
+    dom.window.localStorage.setItem("lang", "es");
+    const result = detectActiveLanguage(dom.window.document);
+    expect(result).toBe("es");
+  });
+
+  it("detects language from localStorage with '*_lang' suffix key", () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, {
+      url: "http://localhost",
+    });
+    dom.window.localStorage.setItem("user_lang", "it");
+    const result = detectActiveLanguage(dom.window.document);
+    expect(result).toBe("it");
+  });
+
+  it("falls back to html lang when multiple localStorage lang keys exist", () => {
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html lang="pt"><body></body></html>`,
+      {
+        url: "http://localhost",
+      }
+    );
+    // Multiple lang keys - ambiguous, so should fall back
+    dom.window.localStorage.setItem("lang", "es");
+    dom.window.localStorage.setItem("app_lang", "it");
+    const result = detectActiveLanguage(dom.window.document);
+    expect(result).toBe("pt");
   });
 });
 
@@ -137,6 +170,21 @@ describe("serializeI18nElementValue", () => {
     const result = serializeI18nElementValue(el);
     expect(result).not.toContain("data-vivd-text-parent-selector");
     expect(result).toContain("Wrapped");
+  });
+
+  it("removes data-vivd-editable-container attribute during serialization", () => {
+    const dom = new JSDOM(`
+      <html><body>
+        <div id="target" data-vivd-editable-container="true">
+          <strong>Bold</strong> text
+        </div>
+      </body></html>
+    `);
+    const el = dom.window.document.getElementById("target") as HTMLElement;
+    const result = serializeI18nElementValue(el);
+    expect(result).not.toContain("data-vivd-editable-container");
+    expect(result).toContain("<strong>Bold</strong>");
+    expect(result).toContain("text");
   });
 });
 

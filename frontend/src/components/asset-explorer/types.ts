@@ -9,6 +9,18 @@ export interface AssetItem {
   height?: number;
 }
 
+export type ViewMode = "gallery" | "files";
+
+export interface FileTreeNode {
+  name: string;
+  type: "file" | "folder";
+  path: string;
+  children?: FileTreeNode[];
+  size?: number;
+  mimeType?: string;
+  isImage?: boolean;
+}
+
 export interface AssetExplorerContextProps {
   projectSlug: string;
   version: number;

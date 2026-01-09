@@ -261,6 +261,42 @@ describe("HtmlPatchService", () => {
         expect(result.html).toContain("new.jpg");
       });
 
+      it("inserts new attribute on self-closing tag (attribute not present)", () => {
+        const html = `<!DOCTYPE html><html><body><img src="image.jpg" /></body></html>`;
+        const patches: HtmlPatch[] = [
+          {
+            type: "setAttr",
+            selector: "/img[1]",
+            name: "alt",
+            value: "A description",
+          },
+        ];
+
+        const result = applyHtmlPatches(html, patches);
+
+        expect(result.applied).toBe(1);
+        expect(result.html).toContain('alt="A description"');
+        // Verify the self-closing syntax is preserved
+        expect(result.html).toMatch(/<img[^>]*\/>/);
+      });
+
+      it("inserts new attribute on void element without trailing slash", () => {
+        const html = `<!DOCTYPE html><html><body><img src="image.jpg"></body></html>`;
+        const patches: HtmlPatch[] = [
+          {
+            type: "setAttr",
+            selector: "/img[1]",
+            name: "loading",
+            value: "lazy",
+          },
+        ];
+
+        const result = applyHtmlPatches(html, patches);
+
+        expect(result.applied).toBe(1);
+        expect(result.html).toContain('loading="lazy"');
+      });
+
       it("handles invalid selector gracefully", () => {
         const html = `<!DOCTYPE html><html><body><p>Text</p></body></html>`;
         const patches: HtmlPatch[] = [

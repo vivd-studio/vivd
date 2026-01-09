@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,14 +15,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-import type { AssetItem } from "./types";
-import { buildImageUrl, isTextFile } from "./utils";
-import { AssetItemCard } from "./AssetItemCard";
+import type { AssetItem, ViewMode, FileTreeNode } from "./types";
+import { buildImageUrl } from "./utils";
 import { AssetToolbar } from "./AssetToolbar";
 import { CreateFolderInput } from "./CreateFolderInput";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { AIEditDialog } from "./AIEditDialog";
 import { CreateImageDialog } from "./CreateImageDialog";
+import { ViewModeToggle } from "./ViewModeToggle";
+import { ImageGalleryView } from "./ImageGalleryView";
+import { FileTreeView } from "./FileTreeView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 
@@ -38,8 +40,14 @@ export function AssetExplorer({
   onClose,
 }: AssetExplorerProps) {
   const { canUseAiImages } = usePermissions();
-  // Navigation state
-  const [currentPath, setCurrentPath] = useState("images");
+  const utils = trpc.useUtils();
+
+  // View mode state
+  const [viewMode, setViewMode] = useState<ViewMode>("gallery");
+
+  // Navigation state (for gallery mode) - will be initialized based on folder detection
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [initialPathDetected, setInitialPathDetected] = useState(false);
 
   // Folder creation state
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -51,15 +59,17 @@ export function AssetExplorer({
 
   // Image preview state
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
-  const [selectedImageItem, setSelectedImageItem] = useState<AssetItem | null>(
-    null
-  );
-  const [pendingDeleteItem, setPendingDeleteItem] = useState<AssetItem | null>(
-    null
-  );
+  const [selectedImageItem, setSelectedImageItem] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
 
   // AI Edit state
-  const [editingImage, setEditingImage] = useState<AssetItem | null>(null);
+  const [editingImage, setEditingImage] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
   const [editPrompt, setEditPrompt] = useState("");
 
   // Create Image state
@@ -72,13 +82,56 @@ export function AssetExplorer({
   // Use context for text editor (rendered in PreviewContent)
   const { setEditingTextFile } = usePreview();
 
-  // Queries
-  const { data, isLoading, refetch } = trpc.assets.listAssets.useQuery({
-    slug: projectSlug,
-    version,
-    relativePath: currentPath,
-  });
+  // Check for public/images first, then fall back to images
+  const publicImagesCheck = trpc.assets.listAssets.useQuery(
+    { slug: projectSlug, version, relativePath: "public/images" },
+    { enabled: !initialPathDetected }
+  );
+  const imagesCheck = trpc.assets.listAssets.useQuery(
+    { slug: projectSlug, version, relativePath: "images" },
+    { enabled: !initialPathDetected && publicImagesCheck.isFetched }
+  );
 
+  // Detect initial path
+  useEffect(() => {
+    if (initialPathDetected) return;
+
+    // Check public/images first
+    if (publicImagesCheck.isFetched) {
+      if (
+        publicImagesCheck.data?.items &&
+        publicImagesCheck.data.items.length > 0
+      ) {
+        setCurrentPath("public/images");
+        setInitialPathDetected(true);
+        return;
+      }
+
+      // Then check images
+      if (imagesCheck.isFetched) {
+        // Use images even if empty (it's the fallback)
+        setCurrentPath("images");
+        setInitialPathDetected(true);
+      }
+    }
+  }, [
+    publicImagesCheck.isFetched,
+    publicImagesCheck.data,
+    imagesCheck.isFetched,
+    initialPathDetected,
+  ]);
+
+  // Query for gallery mode list
+  const galleryQuery = trpc.assets.listAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      relativePath: currentPath ?? "images",
+    },
+    { enabled: viewMode === "gallery" && currentPath !== null }
+  );
+
+  // Query for create image dialog
   const allImagesQuery = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "images" },
     { enabled: isCreateImageOpen }
@@ -93,7 +146,8 @@ export function AssetExplorer({
   const deleteMutation = trpc.assets.deleteAsset.useMutation({
     onSuccess: () => {
       toast.success("Asset deleted");
-      refetch();
+      // Invalidate all asset queries to refresh both gallery and explorer views
+      utils.assets.invalidate();
     },
     onError: (error) => {
       toast.error("Failed to delete asset", { description: error.message });
@@ -104,7 +158,7 @@ export function AssetExplorer({
     onSuccess: () => {
       setIsCreatingFolder(false);
       setNewFolderName("");
-      refetch();
+      galleryQuery.refetch();
     },
   });
 
@@ -112,7 +166,7 @@ export function AssetExplorer({
     onSuccess: (data) => {
       setEditingImage(null);
       setEditPrompt("");
-      refetch();
+      galleryQuery.refetch();
       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.newPath));
     },
     onError: (error) => {
@@ -125,7 +179,7 @@ export function AssetExplorer({
       setIsCreateImageOpen(false);
       setCreateImagePrompt("");
       setSelectedReferenceImages([]);
-      refetch();
+      galleryQuery.refetch();
       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.path));
     },
     onError: (error) => {
@@ -135,24 +189,23 @@ export function AssetExplorer({
 
   // Handlers
   const handleBack = () => {
+    if (!currentPath) return; // Already at root or no path set
     const parts = currentPath.split("/").filter(Boolean);
     parts.pop();
+    // Navigate to parent, or stay at empty string for root
     setCurrentPath(parts.join("/"));
   };
 
-  const handleItemClick = (item: AssetItem) => {
-    if (item.type === "folder") {
-      setCurrentPath(item.path);
-    } else if (item.isImage) {
-      setSelectedImageUrl(buildImageUrl(projectSlug, version, item.path));
-      setSelectedImageItem(item);
-    } else if (item.type === "file" && isTextFile(item.name)) {
-      setEditingTextFile(item.path);
-    }
+  const handleNavigate = (path: string) => {
+    setCurrentPath(path);
   };
 
-  const handleDelete = (item: AssetItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleImagePreview = (url: string, item: AssetItem | FileTreeNode) => {
+    setSelectedImageUrl(url);
+    setSelectedImageItem(item);
+  };
+
+  const handleDelete = (item: AssetItem | FileTreeNode) => {
     setPendingDeleteItem(item);
   };
 
@@ -171,8 +224,7 @@ export function AssetExplorer({
     }
   };
 
-  const handleAiEdit = (item: AssetItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleAiEdit = (item: AssetItem | FileTreeNode) => {
     setEditingImage(item);
     setEditPrompt("");
   };
@@ -192,7 +244,7 @@ export function AssetExplorer({
       createFolderMutation.mutate({
         slug: projectSlug,
         version,
-        relativePath: currentPath,
+        relativePath: viewMode === "gallery" ? currentPath ?? "" : "",
         folderName: newFolderName.trim(),
       });
     }
@@ -205,7 +257,7 @@ export function AssetExplorer({
       version,
       prompt: createImagePrompt.trim(),
       referenceImages: selectedReferenceImages,
-      targetPath: currentPath,
+      targetPath: viewMode === "gallery" ? currentPath ?? "" : "images",
     });
   };
 
@@ -215,9 +267,22 @@ export function AssetExplorer({
     );
   };
 
+  // Download handler for explorer view
+  const handleDownloadFile = (item: AssetItem | FileTreeNode) => {
+    const url = buildImageUrl(projectSlug, version, item.path);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = item.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // File upload handlers
-  const uploadFiles = async (files: FileList | File[]) => {
+  const uploadFiles = async (files: FileList | File[], targetPath?: string) => {
     setIsUploading(true);
+    const uploadPath =
+      targetPath ?? (viewMode === "gallery" ? currentPath ?? "" : "images");
     try {
       const formData = new FormData();
       Array.from(files).forEach((file) => {
@@ -226,7 +291,7 @@ export function AssetExplorer({
 
       const response = await fetch(
         `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(
-          currentPath
+          uploadPath
         )}`,
         {
           method: "POST",
@@ -239,7 +304,7 @@ export function AssetExplorer({
         throw new Error("Upload failed");
       }
 
-      refetch();
+      galleryQuery.refetch();
     } catch (error) {
       console.error("Upload error:", error);
       toast.error("Failed to upload files");
@@ -266,15 +331,16 @@ export function AssetExplorer({
         uploadFiles(e.dataTransfer.files);
       }
     },
-    [currentPath]
+    [currentPath, viewMode]
   );
 
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="px-4 py-3 border-b flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Assets</h2>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
         {onClose && (
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -283,23 +349,43 @@ export function AssetExplorer({
         )}
       </div>
 
-      {/* Toolbar */}
-      <AssetToolbar
-        currentPath={currentPath}
-        isUploading={isUploading}
-        onBack={handleBack}
-        onCreateFolder={() => setIsCreatingFolder(true)}
-        onCreateImage={
-          canUseAiImages
-            ? () => {
-                setIsCreateImageOpen(true);
-                setCreateImagePrompt("");
-                setSelectedReferenceImages([]);
-              }
-            : undefined
-        }
-        onFilesSelected={uploadFiles}
-      />
+      {/* Toolbar - only shown in gallery mode */}
+      {viewMode === "gallery" && (
+        <AssetToolbar
+          currentPath={currentPath ?? ""}
+          isUploading={isUploading}
+          onBack={handleBack}
+          onCreateFolder={() => setIsCreatingFolder(true)}
+          onCreateImage={
+            canUseAiImages
+              ? () => {
+                  setIsCreateImageOpen(true);
+                  setCreateImagePrompt("");
+                  setSelectedReferenceImages([]);
+                }
+              : undefined
+          }
+          onFilesSelected={uploadFiles}
+        />
+      )}
+
+      {/* Toolbar for files mode (no navigation, just action buttons) */}
+      {viewMode === "files" && (
+        <AssetToolbar
+          isUploading={isUploading}
+          onCreateFolder={() => setIsCreatingFolder(true)}
+          onCreateImage={
+            canUseAiImages
+              ? () => {
+                  setIsCreateImageOpen(true);
+                  setCreateImagePrompt("");
+                  setSelectedReferenceImages([]);
+                }
+              : undefined
+          }
+          onFilesSelected={uploadFiles}
+        />
+      )}
 
       {/* Create Folder Input */}
       {isCreatingFolder && (
@@ -315,70 +401,42 @@ export function AssetExplorer({
         />
       )}
 
-      {/* File List */}
+      {/* Main Content Area */}
       <ScrollArea className="flex-1">
-        <div
-          className={`p-4 min-h-full ${
-            isDragging ? "bg-primary/10 ring-2 ring-primary ring-inset" : ""
-          }`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : !data?.items?.length ? (
-            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-              <p>No files yet</p>
-              <p className="text-sm">Drop files here or click Upload</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {data.items.map((item) => (
-                <AssetItemCard
-                  key={item.path}
-                  item={item}
-                  projectSlug={projectSlug}
-                  version={version}
-                  onClick={() => handleItemClick(item)}
-                  onDelete={(e) => handleDelete(item, e)}
-                  onAiEdit={
-                    canUseAiImages && item.type === "file" && item.isImage
-                      ? (e) => handleAiEdit(item, e)
-                      : undefined
-                  }
-                  onDownload={
-                    item.type === "file"
-                      ? (e) => {
-                          e.stopPropagation();
-                          const url = buildImageUrl(
-                            projectSlug,
-                            version,
-                            item.path
-                          );
-                          const link = document.createElement("a");
-                          link.href = url;
-                          link.download = item.name;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        }
-                      : undefined
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {viewMode === "gallery" ? (
+          <ImageGalleryView
+            projectSlug={projectSlug}
+            version={version}
+            currentPath={currentPath ?? ""}
+            onNavigate={handleNavigate}
+            onImagePreview={handleImagePreview}
+            onAiEdit={canUseAiImages ? handleAiEdit : undefined}
+            onDelete={handleDelete}
+            onTextEdit={setEditingTextFile}
+            isDragging={isDragging}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          />
+        ) : (
+          <FileTreeView
+            projectSlug={projectSlug}
+            version={version}
+            onImagePreview={handleImagePreview}
+            onRefetch={() => galleryQuery.refetch()}
+            onFilesUpload={uploadFiles}
+            onDelete={handleDelete}
+            onDownload={handleDownloadFile}
+            onAiEdit={canUseAiImages ? handleAiEdit : undefined}
+          />
+        )}
       </ScrollArea>
 
       {/* Image Preview Dialog */}
       <ImagePreviewDialog
         open={!!selectedImageUrl}
         imageUrl={selectedImageUrl}
-        imageItem={selectedImageItem}
+        imageItem={selectedImageItem as AssetItem | null}
         onClose={() => {
           setSelectedImageUrl(null);
           setSelectedImageItem(null);
@@ -415,7 +473,7 @@ export function AssetExplorer({
       {/* AI Edit Dialog */}
       <AIEditDialog
         open={!!editingImage}
-        editingImage={editingImage}
+        editingImage={editingImage as AssetItem | null}
         prompt={editPrompt}
         onPromptChange={setEditPrompt}
         onClose={() => {
