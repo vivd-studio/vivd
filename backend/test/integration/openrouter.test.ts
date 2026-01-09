@@ -1,0 +1,81 @@
+/**
+ * OpenRouter Integration Test
+ *
+ * This test makes a real API call to OpenRouter using a cheap/free model
+ * to verify the integration is working correctly.
+ *
+ * Run with: npm run test:run -- test/integration/openrouter.test.ts
+ *
+ * Note: Requires OPENROUTER_API_KEY to be set in environment.
+ * Skips automatically if API key is not available.
+ */
+import { describe, it, expect, beforeAll } from "vitest";
+import OpenAI from "openai";
+
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const TEST_MODEL = "google/gemma-3-12b-it:free"; // Free model for testing
+
+describe("OpenRouter Integration", () => {
+  let openai: OpenAI;
+
+  beforeAll(() => {
+    if (!OPENROUTER_API_KEY) {
+      console.log("Skipping OpenRouter tests: OPENROUTER_API_KEY not set");
+    }
+  });
+
+  it.skipIf(!OPENROUTER_API_KEY)(
+    "connects to OpenRouter and gets a response",
+    async () => {
+      openai = new OpenAI({
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKey: OPENROUTER_API_KEY,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: TEST_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: 'Reply with exactly the word "pong" and nothing else.',
+          },
+        ],
+        max_tokens: 10,
+      });
+
+      expect(completion.choices).toBeDefined();
+      expect(completion.choices.length).toBeGreaterThan(0);
+      expect(completion.choices[0]!.message.content).toBeDefined();
+
+      const response =
+        completion.choices[0]!.message.content?.toLowerCase() ?? "";
+      expect(response).toContain("pong");
+    },
+    { timeout: 30000 }
+  );
+
+  it.skipIf(!OPENROUTER_API_KEY)(
+    "handles structured prompt correctly",
+    async () => {
+      openai = new OpenAI({
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKey: OPENROUTER_API_KEY,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: TEST_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: "What is 2 + 2? Reply with just the number.",
+          },
+        ],
+        max_tokens: 10,
+      });
+
+      const response = completion.choices[0]!.message.content ?? "";
+      expect(response).toContain("4");
+    },
+    { timeout: 30000 }
+  );
+});

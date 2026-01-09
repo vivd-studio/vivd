@@ -17,3 +17,7 @@ Currently you cannot create images on your own. If you need new images, tell the
 3. **Available plugins**:
    {enabled_plugins}
 4. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
+5. **Multi-language support**: When adding multiple languages, use JSON files:
+   - Location: `locales/{lang}.json` (e.g., `locales/en.json`, `locales/de.json`)
+   - Format: Flat key-value pairs `{ "hero.title": "Welcome", "nav.home": "Home" }`
+   - Use `data-i18n="key"` attributes on translatable elements

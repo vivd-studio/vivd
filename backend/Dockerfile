@@ -3,7 +3,7 @@ FROM node:23-slim AS dev
 WORKDIR /app
 
 # Install git and ca-certificates (required for version control features and SSL)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
 # Clean up unused musl binary (saves ~120MB)
@@ -38,7 +38,7 @@ FROM node:23-slim AS prod
 WORKDIR /app
 
 # Install git and ca-certificates (required for version control features and SSL)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
 # Clean up unused musl binary (saves ~120MB)

@@ -28,6 +28,10 @@ import {
   type AstroTextPatch,
 } from "../../services/AstroPatchService";
 import {
+  applyI18nJsonPatches,
+  type I18nJsonPatch,
+} from "../../services/I18nJsonPatchService";
+import {
   hasDotSegment,
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
@@ -88,13 +92,27 @@ export const projectMaintenanceProcedures = {
 
       const absoluteVersionDir = path.resolve(versionDir);
 
-      // Separate Astro patches from HTML patches
+      // Separate patches by type
       const astroPatches = patches.filter(
         (p): p is AstroTextPatch => p.type === "setAstroText"
       );
-      // Filter out Astro patches and cast to HtmlPatch[]
+      const i18nPatches = patches
+        .filter(
+          (
+            p
+          ): p is {
+            type: "setI18n";
+            key: string;
+            lang: string;
+            value: string;
+          } => p.type === "setI18n"
+        )
+        .map(
+          (p): I18nJsonPatch => ({ key: p.key, lang: p.lang, value: p.value })
+        );
+      // Filter out Astro and i18n patches, keep only HTML patches
       const htmlPatches = patches.filter(
-        (p) => p.type !== "setAstroText"
+        (p) => p.type !== "setAstroText" && p.type !== "setI18n"
       ) as HtmlPatch[];
 
       let totalApplied = 0;
@@ -123,6 +141,19 @@ export const projectMaintenanceProcedures = {
         totalSkipped += astroResult.skipped;
         allErrors.push(
           ...astroResult.errors.map((e) => ({ file: e.file, reason: e.reason }))
+        );
+      }
+
+      // Apply i18n JSON patches if any
+      if (i18nPatches.length > 0) {
+        const i18nResult = applyI18nJsonPatches(versionDir, i18nPatches);
+        totalApplied += i18nResult.applied;
+        totalSkipped += i18nResult.skipped;
+        allErrors.push(
+          ...i18nResult.errors.map((e) => ({
+            selector: `i18n:${e.key}`,
+            reason: e.reason,
+          }))
         );
       }
 
@@ -314,7 +345,7 @@ export const projectMaintenanceProcedures = {
 
       const versionFolders = fs
         .readdirSync(projectDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && /^v\\d+$/.test(d.name))
+        .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
         .map((d) => d.name);
 
       for (const folder of versionFolders) {
@@ -418,7 +449,7 @@ export const projectMaintenanceProcedures = {
 
         const versionFolders = fs
           .readdirSync(projectDir, { withFileTypes: true })
-          .filter((d) => d.isDirectory() && /^v\\d+$/.test(d.name))
+          .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
           .map((d) => d.name);
 
         for (const folder of versionFolders) {

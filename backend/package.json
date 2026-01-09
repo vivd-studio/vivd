@@ -8,7 +8,9 @@
     "dev": "nodemon",
     "build": "tsup",
     "start": "node dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
@@ -44,23 +46,21 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/chai": "^5.2.3",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/image-size": "^0.8.0",
-    "@types/mocha": "^10.0.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.10.2",
     "@types/pg": "^8.15.6",
     "@types/sharp": "^0.32.0",
-    "chai": "^6.2.1",
+    "@vitest/coverage-v8": "^4.0.16",
     "drizzle-kit": "^0.31.8",
-    "mocha": "^11.7.5",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
     "tslab": "^1.0.22",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

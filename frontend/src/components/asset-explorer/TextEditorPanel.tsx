@@ -1,9 +1,16 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, X, FileCode } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Loader2, Save, X, FileCode, WrapText } from "lucide-react";
 import { toast } from "sonner";
 import CodeMirror from "@uiw/react-codemirror";
+import { EditorView } from "@codemirror/view";
+import { type Extension } from "@codemirror/state";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { javascript } from "@codemirror/lang-javascript";
@@ -68,6 +75,7 @@ export function TextEditorPanel({
 }: TextEditorPanelProps) {
   const [content, setContent] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
+  const [lineWrap, setLineWrap] = useState(true);
 
   // Query to load file content
   const { data, isLoading, error } = trpc.assets.readTextFile.useQuery(
@@ -152,6 +160,15 @@ export function TextEditorPanel({
   const filename = filePath.split("/").pop() || filePath;
   const languageExtension = getLanguageExtension(filename);
 
+  // Build extensions array with optional line wrapping
+  const extensions = useMemo(() => {
+    const exts: Extension[] = [languageExtension];
+    if (lineWrap) {
+      exts.push(EditorView.lineWrapping);
+    }
+    return exts;
+  }, [languageExtension, lineWrap]);
+
   return (
     <div className="absolute inset-0 z-10 bg-background flex flex-col">
       {/* Header */}
@@ -168,33 +185,62 @@ export function TextEditorPanel({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClose}
-            disabled={saveMutation.isPending}
-          >
-            <X className="h-4 w-4 mr-1" />
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={!hasChanges || saveMutation.isPending}
-          >
-            {saveMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-1" />
-                Save
-              </>
-            )}
-          </Button>
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={lineWrap ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setLineWrap((prev) => !prev)}
+                className="h-8 w-8 p-0"
+              >
+                <WrapText className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {lineWrap ? "Disable line wrap" : "Enable line wrap"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSave}
+                disabled={!hasChanges || saveMutation.isPending}
+                className="h-8 w-8 p-0"
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {saveMutation.isPending
+                ? "Saving..."
+                : hasChanges
+                ? "Save (⌘S)"
+                : "No changes"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                disabled={saveMutation.isPending}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Close (Esc)</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -220,7 +266,7 @@ export function TextEditorPanel({
           <CodeMirror
             value={content}
             onChange={handleChange}
-            extensions={[languageExtension]}
+            extensions={extensions}
             height="100%"
             theme="dark"
             className="h-full text-sm"
