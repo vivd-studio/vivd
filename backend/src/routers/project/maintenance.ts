@@ -19,7 +19,14 @@ import {
 import path from "path";
 import fs from "fs";
 import { publishService } from "../../services/PublishService";
-import { applyHtmlPatches } from "../../services/HtmlPatchService";
+import {
+  applyHtmlPatches,
+  type HtmlPatch,
+} from "../../services/HtmlPatchService";
+import {
+  applyAstroPatches,
+  type AstroTextPatch,
+} from "../../services/AstroPatchService";
 import {
   hasDotSegment,
   ensureVivdInternalFilesDir,
@@ -58,6 +65,14 @@ export const projectMaintenanceProcedures = {
                 name: z.literal("src"),
                 value: z.string(),
               }),
+              // Astro component text patches - uses source file info from dev server
+              z.object({
+                type: z.literal("setAstroText"),
+                sourceFile: z.string().min(1),
+                sourceLoc: z.string().optional(),
+                oldValue: z.string(),
+                newValue: z.string(),
+              }),
             ])
           )
           .min(1, "At least one patch is required"),
@@ -65,56 +80,99 @@ export const projectMaintenanceProcedures = {
     )
     .mutation(async ({ input }) => {
       const { slug, version, filePath, patches } = input;
-      if (hasDotSegment(filePath)) {
-        throw new Error("Cannot edit hidden files");
-      }
       const versionDir = getVersionDir(slug, version);
 
       if (!fs.existsSync(versionDir)) {
         throw new Error("Project version not found");
       }
 
-      // Security check to prevent directory traversal
-      const targetPath = path.join(versionDir, filePath);
-
-      // Ensure the version directory path is resolved to handle potential symlinks/relative paths correctly for comparison
-      // limiting scope to the version directory
       const absoluteVersionDir = path.resolve(versionDir);
-      const resolvedPath = path.resolve(targetPath);
 
-      if (!resolvedPath.startsWith(absoluteVersionDir)) {
-        throw new Error("Invalid file path");
+      // Separate Astro patches from HTML patches
+      const astroPatches = patches.filter(
+        (p): p is AstroTextPatch => p.type === "setAstroText"
+      );
+      // Filter out Astro patches and cast to HtmlPatch[]
+      const htmlPatches = patches.filter(
+        (p) => p.type !== "setAstroText"
+      ) as HtmlPatch[];
+
+      let totalApplied = 0;
+      let totalSkipped = 0;
+      const allErrors: Array<{
+        selector?: string;
+        file?: string;
+        reason: string;
+      }> = [];
+
+      // Apply Astro patches if any
+      if (astroPatches.length > 0) {
+        // Validate source file paths (security check)
+        for (const patch of astroPatches) {
+          if (hasDotSegment(patch.sourceFile)) {
+            throw new Error("Cannot edit hidden files");
+          }
+          const resolvedPath = path.resolve(versionDir, patch.sourceFile);
+          if (!resolvedPath.startsWith(absoluteVersionDir)) {
+            throw new Error("Invalid source file path");
+          }
+        }
+
+        const astroResult = applyAstroPatches(versionDir, astroPatches);
+        totalApplied += astroResult.applied;
+        totalSkipped += astroResult.skipped;
+        allErrors.push(
+          ...astroResult.errors.map((e) => ({ file: e.file, reason: e.reason }))
+        );
       }
 
-      if (!filePath.endsWith(".html") && !filePath.endsWith(".htm")) {
-        throw new Error("Only HTML files can be patched");
+      // Apply HTML patches if any
+      if (htmlPatches.length > 0) {
+        if (hasDotSegment(filePath)) {
+          throw new Error("Cannot edit hidden files");
+        }
+
+        // Security check to prevent directory traversal
+        const targetPath = path.join(versionDir, filePath);
+        const resolvedPath = path.resolve(targetPath);
+
+        if (!resolvedPath.startsWith(absoluteVersionDir)) {
+          throw new Error("Invalid file path");
+        }
+
+        if (!filePath.endsWith(".html") && !filePath.endsWith(".htm")) {
+          throw new Error("Only HTML files can be patched");
+        }
+
+        if (!fs.existsSync(targetPath)) {
+          throw new Error("File not found");
+        }
+
+        const original = fs.readFileSync(targetPath, "utf-8");
+        const result = applyHtmlPatches(original, htmlPatches);
+
+        if (result.html !== original) {
+          fs.writeFileSync(targetPath, result.html, "utf-8");
+        }
+
+        totalApplied += result.applied;
+        totalSkipped += result.skipped;
+        allErrors.push(
+          ...result.errors.map((e) => ({
+            selector: e.selector,
+            reason: e.reason,
+          }))
+        );
       }
 
-      if (!fs.existsSync(targetPath)) {
-        throw new Error("File not found");
-      }
-
-      const original = fs.readFileSync(targetPath, "utf-8");
-      const result = applyHtmlPatches(original, patches);
-
-      if (result.html === original) {
-        return {
-          success: true,
-          noChanges: true,
-          applied: 0,
-          skipped: result.skipped,
-          errors: result.errors,
-        };
-      }
-
-      fs.writeFileSync(targetPath, result.html, "utf-8");
+      const noChanges = totalApplied === 0;
 
       return {
         success: true,
-        noChanges: false,
-        applied: result.applied,
-        skipped: result.skipped,
-        errors: result.errors,
+        noChanges,
+        applied: totalApplied,
+        skipped: totalSkipped,
+        errors: allErrors,
       };
     }),
 

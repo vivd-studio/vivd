@@ -521,6 +521,16 @@ export function PreviewProvider({
       if (!selector) return;
       const i18nKey = getI18nKeyForEditableElement(el);
 
+      // Capture Astro source file info if available (from Astro dev server)
+      // Walk up to find the nearest element with source info
+      const astroSourceEl = el.closest(
+        "[data-astro-source-file]"
+      ) as HTMLElement | null;
+      const astroSourceFile =
+        astroSourceEl?.getAttribute("data-astro-source-file") ?? null;
+      const astroSourceLoc =
+        astroSourceEl?.getAttribute("data-astro-source-loc") ?? null;
+
       // Wrap direct non-whitespace text nodes in a contenteditable <span> and save via `setTextNode`.
       // This preserves existing child markup (icons, <strong>, <span>, etc.) and keeps diffs small.
       const directTextNodes = Array.from(el.childNodes).filter(
@@ -552,6 +562,24 @@ export function PreviewProvider({
         span.setAttribute("data-vivd-text-node-index", String(index));
         span.setAttribute("data-vivd-text-baseline", coreText);
         if (i18nKey) span.setAttribute("data-vivd-i18n-key", i18nKey);
+
+        // Store Astro source info if available (for setAstroText patches)
+        if (astroSourceFile) {
+          // Convert absolute path to relative path from project root
+          // The path from Astro is absolute, e.g. "/app/projects/a7koop/v1/src/components/Hero.astro"
+          // We need to extract the relative part starting from "src/"
+          const srcMatch = astroSourceFile.match(/\/(src\/.*\.astro)$/i);
+          if (srcMatch) {
+            span.setAttribute("data-vivd-source-file", srcMatch[1]);
+          } else {
+            // Fallback: just use the filename if we can't extract path
+            span.setAttribute("data-vivd-source-file", astroSourceFile);
+          }
+          if (astroSourceLoc) {
+            span.setAttribute("data-vivd-source-loc", astroSourceLoc);
+          }
+        }
+
         span.setAttribute("contenteditable", "true");
         span.textContent = coreText;
 

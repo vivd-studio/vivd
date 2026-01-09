@@ -12,6 +12,24 @@ export type VivdI18nPatch = {
   value: string;
 };
 
+/**
+ * Patch type for Astro components - uses source file info from dev server.
+ * This allows direct patching of .astro source files instead of built HTML.
+ */
+export type AstroTextPatch = {
+  type: "setAstroText";
+  /** Relative path from project root, e.g. "src/components/Hero.astro" */
+  sourceFile: string;
+  /** Line:column hint from Astro dev server, e.g. "18:8" */
+  sourceLoc?: string;
+  /** Original text for matching in source file */
+  oldValue: string;
+  /** New text to replace with */
+  newValue: string;
+};
+
+export type VivdPatch = VivdTextNodePatch | VivdI18nPatch | AstroTextPatch;
+
 const normalizeLang = (lang: string) => lang.trim().toLowerCase();
 const isLanguageCode = (value: string) => /^[a-z]{2}(-[a-z]{2})?$/.test(value);
 
@@ -28,7 +46,8 @@ export function detectActiveLanguage(doc: Document): string {
         const value = storage.getItem(key);
         if (!value) continue;
         const normalized = normalizeLang(value);
-        if (isLanguageCode(normalized)) candidates.push(normalized.split("-")[0]!);
+        if (isLanguageCode(normalized))
+          candidates.push(normalized.split("-")[0]!);
       }
       if (candidates.length === 1) return candidates[0]!;
     }
@@ -39,7 +58,9 @@ export function detectActiveLanguage(doc: Document): string {
   const langToggle = Array.from(
     doc.querySelectorAll<HTMLElement>('[id^="lang-"]')
   ).find(
-    (el) => el.classList.contains("font-bold") || el.getAttribute("aria-current") === "true"
+    (el) =>
+      el.classList.contains("font-bold") ||
+      el.getAttribute("aria-current") === "true"
   );
   if (langToggle) {
     const id = langToggle.id ?? "";
@@ -58,7 +79,9 @@ export function detectActiveLanguage(doc: Document): string {
 export function getI18nKeyForEditableElement(el: HTMLElement): string | null {
   return (
     el.getAttribute("data-i18n") ??
-    (el.closest?.("[data-i18n]") as HTMLElement | null)?.getAttribute("data-i18n") ??
+    (el.closest?.("[data-i18n]") as HTMLElement | null)?.getAttribute(
+      "data-i18n"
+    ) ??
     null
   );
 }
@@ -77,19 +100,29 @@ export function serializeI18nElementValue(i18nEl: HTMLElement): string {
   clone.querySelectorAll<HTMLElement>("[contenteditable]").forEach((el) => {
     el.removeAttribute("contenteditable");
   });
-  clone.querySelectorAll<HTMLElement>("[data-vivd-editable-container]").forEach((el) => {
-    el.removeAttribute("data-vivd-editable-container");
-  });
+  clone
+    .querySelectorAll<HTMLElement>("[data-vivd-editable-container]")
+    .forEach((el) => {
+      el.removeAttribute("data-vivd-editable-container");
+    });
 
   const hasMarkup = clone.querySelector("*") !== null;
   return hasMarkup ? clone.innerHTML : clone.textContent ?? "";
 }
 
-export function collectVivdTextPatchesFromDocument(
-  doc: Document
-): Array<VivdTextNodePatch | VivdI18nPatch> {
-  const patches: Array<VivdTextNodePatch | VivdI18nPatch> = [];
+export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
+  const patches: VivdPatch[] = [];
   const i18nEdits = new Map<string, HTMLElement>();
+  // Track Astro edits by source file + location to dedupe
+  const astroEdits = new Map<
+    string,
+    {
+      sourceFile: string;
+      sourceLoc?: string;
+      oldValue: string;
+      newValue: string;
+    }
+  >();
 
   const selectorIndex = new Map<string, HTMLElement>();
   doc.querySelectorAll<HTMLElement>("[data-vivd-selector]").forEach((el) => {
@@ -100,7 +133,7 @@ export function collectVivdTextPatchesFromDocument(
   const activeLang = detectActiveLanguage(doc);
 
   const nodes = doc.querySelectorAll<HTMLElement>(
-    '[data-vivd-text-parent-selector][data-vivd-text-node-index]'
+    "[data-vivd-text-parent-selector][data-vivd-text-node-index]"
   );
   nodes.forEach((node) => {
     const i18nKeyFromNode = node.getAttribute("data-vivd-i18n-key");
@@ -117,6 +150,23 @@ export function collectVivdTextPatchesFromDocument(
     const current = node.textContent ?? "";
     if (current === baseline) return;
 
+    // Check for Astro source file info (set during edit mode from data-astro-source-*)
+    const sourceFile = node.getAttribute("data-vivd-source-file");
+    const sourceLoc = node.getAttribute("data-vivd-source-loc");
+
+    if (sourceFile) {
+      // Astro component - emit setAstroText patch
+      const key = `${sourceFile}:${baseline}`;
+      astroEdits.set(key, {
+        sourceFile,
+        sourceLoc: sourceLoc ?? undefined,
+        oldValue: baseline,
+        newValue: current,
+      });
+      return;
+    }
+
+    // Standard HTML patching
     if (i18nKeyFromNode) {
       const selector = `[data-i18n="${i18nKeyFromNode.replace(/"/g, '\\"')}"]`;
       const i18nEl =
@@ -145,6 +195,7 @@ export function collectVivdTextPatchesFromDocument(
     });
   });
 
+  // Add i18n patches
   i18nEdits.forEach((el, key) => {
     patches.push({
       type: "setI18n",
@@ -154,6 +205,16 @@ export function collectVivdTextPatchesFromDocument(
     });
   });
 
+  // Add Astro patches
+  astroEdits.forEach((edit) => {
+    patches.push({
+      type: "setAstroText",
+      sourceFile: edit.sourceFile,
+      sourceLoc: edit.sourceLoc,
+      oldValue: edit.oldValue,
+      newValue: edit.newValue,
+    });
+  });
+
   return patches;
 }
-
