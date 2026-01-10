@@ -1,4 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useParams,
+} from "react-router-dom";
 import { useEffect } from "react";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -21,6 +27,9 @@ import { usePermissions } from "@/hooks/usePermissions";
  * Dashboard wrapper that handles single project mode routing.
  * In single project mode: redirects to first project or shows creation wizard.
  * In normal mode: shows the regular Dashboard.
+ *
+ * NOTE: Single project mode is now handled separately at the route level
+ * to bypass the Layout component entirely. See SingleProjectDashboardRoute.
  */
 function DashboardRoute() {
   const { config, isLoading } = useAppConfig();
@@ -53,11 +62,20 @@ function DashboardRoute() {
     return <Navigate to="/vivd-studio/no-project" replace />;
   }
 
+  // In single project mode, redirect to the dedicated route that bypasses Layout
   if (config.singleProjectMode) {
-    return <SingleProjectModeHandler />;
+    return <Navigate to="/vivd-studio/single-project" replace />;
   }
 
   return <Dashboard />;
+}
+
+/**
+ * Dedicated route for single project mode that bypasses the Layout.
+ * Redirects to studio if project exists, or shows creation wizard.
+ */
+function SingleProjectDashboardRoute() {
+  return <SingleProjectModeHandler />;
 }
 
 function ProjectRoute() {
@@ -74,7 +92,9 @@ function ProjectRoute() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">Loading...</div>
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
     );
   }
 
@@ -105,7 +125,9 @@ function ScratchWizardRoute() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">Loading...</div>
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
     );
   }
 
@@ -114,7 +136,10 @@ function ScratchWizardRoute() {
   }
 
   return (
-    <Navigate to={`/vivd-studio/projects/${assignedProject.projectSlug}`} replace />
+    <Navigate
+      to={`/vivd-studio/projects/${assignedProject.projectSlug}`}
+      replace
+    />
   );
 }
 
@@ -170,6 +195,17 @@ export default function App() {
           path="/vivd-studio/login"
           element={!session ? <Login /> : <Navigate to="/vivd-studio" />}
         />
+        {/* Single project mode route - outside Layout to avoid project overview */}
+        <Route
+          path="/vivd-studio/single-project"
+          element={
+            session ? (
+              <SingleProjectDashboardRoute />
+            ) : (
+              <Navigate to="/vivd-studio/login" />
+            )
+          }
+        />
         {/* Nested routes under /vivd-studio with Layout */}
         <Route
           path="/vivd-studio"
@@ -199,7 +235,11 @@ export default function App() {
         <Route
           path="/vivd-studio/projects/new/scratch"
           element={
-            session ? <ScratchWizardRoute /> : <Navigate to="/vivd-studio/login" />
+            session ? (
+              <ScratchWizardRoute />
+            ) : (
+              <Navigate to="/vivd-studio/login" />
+            )
           }
         />
         <Route

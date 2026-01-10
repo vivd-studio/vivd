@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { protectedProcedure, adminProcedure, projectMemberProcedure } from "../../trpc";
+import {
+  protectedProcedure,
+  adminProcedure,
+  projectMemberProcedure,
+} from "../../trpc";
 import { processUrl } from "../../generator/index";
 import {
   getProjectDir,
@@ -23,6 +27,36 @@ import { db } from "../../db";
 import { projectMember } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
+/**
+ * Check if single project mode is enabled and a project already exists.
+ * In single project mode, only one project is allowed.
+ */
+function checkSingleProjectModeLimit(): void {
+  if (process.env.SINGLE_PROJECT_MODE !== "true") {
+    return; // Not in single project mode
+  }
+
+  const projectsDir = getProjectsDir();
+  if (!fs.existsSync(projectsDir)) {
+    return; // No projects exist yet
+  }
+
+  const files = fs.readdirSync(projectsDir, { withFileTypes: true });
+  const projectDirs = files.filter((dirent) => {
+    if (!dirent.isDirectory()) return false;
+    // Check if it's a valid project (has manifest.json)
+    const manifest = getManifest(dirent.name);
+    return manifest !== null;
+  });
+
+  if (projectDirs.length > 0) {
+    throw new Error(
+      "Single project mode is enabled and a project already exists. " +
+        "Delete the existing project before creating a new one."
+    );
+  }
+}
+
 export const projectGenerationProcedures = {
   generate: adminProcedure
     .input(
@@ -32,7 +66,24 @@ export const projectGenerationProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Enforce single project mode limit (only for new projects)
       const { url, createNewVersion } = input;
+
+      // Only check limit if this is a brand new project (not a new version of existing)
+      if (!createNewVersion) {
+        // We need to check if project exists first before enforcing the limit
+        let targetUrl = url;
+        if (!targetUrl.startsWith("http")) targetUrl = "https://" + targetUrl;
+        const domainSlug = new URL(targetUrl).hostname
+          .replace("www.", "")
+          .split(".")[0];
+        const projectDir = getProjectDir(domainSlug);
+
+        // Only enforce limit if this would be a new project
+        if (!fs.existsSync(projectDir)) {
+          checkSingleProjectModeLimit();
+        }
+      }
 
       // Ensure consistent slug generation
       let targetUrl = url;
@@ -142,6 +193,9 @@ export const projectGenerationProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Enforce single project mode limit
+      checkSingleProjectModeLimit();
+
       validateConfig();
 
       const ctx = createGenerationContext({
