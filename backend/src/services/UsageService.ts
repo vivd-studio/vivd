@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { usageRecord, usagePeriod } from "../db/schema";
 import { and, eq, gte, sql, desc } from "drizzle-orm";
+import type { PgTransaction } from "drizzle-orm/pg-core";
 import { randomUUID } from "crypto";
 
 export type PeriodType = "daily" | "weekly" | "monthly";
@@ -154,7 +155,9 @@ class UsageService {
   async recordImageGeneration(projectSlug?: string): Promise<void> {
     const now = new Date();
     // Generate a unique idempotency key for image gen (timestamp-based since no partId)
-    const idempotencyKey = `image_gen:${projectSlug || "unknown"}:${now.getTime()}`;
+    const idempotencyKey = `image_gen:${
+      projectSlug || "unknown"
+    }:${now.getTime()}`;
 
     try {
       const didInsert = await db.transaction(async (tx) => {
@@ -193,23 +196,11 @@ class UsageService {
   }
 
   /**
-   * Update or create period aggregate records (standalone - not in transaction)
-   * Prefer using updatePeriodAggregatesInTx for transactional updates
-   */
-  private async updatePeriodAggregates(
-    costDelta: number,
-    imageDelta: number,
-    now: Date
-  ): Promise<void> {
-    await this.updatePeriodAggregatesInTx(db, costDelta, imageDelta, now);
-  }
-
-  /**
    * Update or create period aggregate records within a transaction
    * This ensures atomicity when recording usage + updating aggregates
    */
   private async updatePeriodAggregatesInTx(
-    tx: typeof db,
+    tx: typeof db | PgTransaction<any, any, any>,
     costDelta: number,
     imageDelta: number,
     now: Date

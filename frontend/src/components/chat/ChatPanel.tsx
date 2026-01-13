@@ -90,9 +90,9 @@ function SessionDebugDisplay({ debug }: { debug: SessionDebugState }) {
               <>
                 <div className="col-span-2 my-1 border-t border-dashed border-border/50" />
 
-                <span>Cost:</span>
+                <span>Credits:</span>
                 <span className="font-semibold text-green-600">
-                  ${debug.usage.cost.toFixed(4)}
+                  {Math.round(debug.usage.cost * 100)} ⬡
                 </span>
 
                 <span>Input Tokens:</span>

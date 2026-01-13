@@ -171,7 +171,7 @@ export const usageRecord = pgTable(
   {
     id: text("id").primaryKey(),
     eventType: text("event_type").notNull(), // 'ai_cost' | 'image_gen'
-    cost: numeric("cost", { precision: 10, scale: 6 }).notNull(), // dollars (6 decimal places for micro-costs)
+    cost: numeric("cost", { precision: 10, scale: 6 }).notNull(), // stored in dollars, displayed as credits (×100) in frontend
     tokens: jsonb("tokens"), // token breakdown if available
     sessionId: text("session_id"), // OpenCode session ID
     projectSlug: text("project_slug"),

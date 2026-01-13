@@ -1,11 +1,12 @@
 import { usageService } from "./UsageService";
 
-// Default configuration values
+// Default configuration values (in credits, where 1 credit = 1 cent)
+// Original dollar defaults halved, then multiplied by 100
 const DEFAULTS = {
-  dailyCostLimit: 20,
-  weeklyCostLimit: 50,
-  monthlyCostLimit: 100,
-  imageGenPerMonth: 50,
+  dailyCreditLimit: 1000, // was $20 → $10 → 1000 credits
+  weeklyCreditLimit: 2500, // was $50 → $25 → 2500 credits
+  monthlyCreditLimit: 5000, // was $100 → $50 → 5000 credits
+  imageGenPerMonth: 25, // halved from 50
   warningThreshold: 0.8,
 } as const;
 
@@ -53,18 +54,19 @@ function parseEnvNumber(
 }
 
 // Configuration from environment variables with validated defaults
+// All credit limits are in credits (1 credit = 1 cent)
 const getConfig = () => ({
-  dailyCostLimit: parseEnvNumber(
-    process.env.LICENSE_DAILY_COST_LIMIT,
-    DEFAULTS.dailyCostLimit
+  dailyCreditLimit: parseEnvNumber(
+    process.env.LICENSE_DAILY_CREDIT_LIMIT,
+    DEFAULTS.dailyCreditLimit
   ),
-  weeklyCostLimit: parseEnvNumber(
-    process.env.LICENSE_WEEKLY_COST_LIMIT,
-    DEFAULTS.weeklyCostLimit
+  weeklyCreditLimit: parseEnvNumber(
+    process.env.LICENSE_WEEKLY_CREDIT_LIMIT,
+    DEFAULTS.weeklyCreditLimit
   ),
-  monthlyCostLimit: parseEnvNumber(
-    process.env.LICENSE_MONTHLY_COST_LIMIT,
-    DEFAULTS.monthlyCostLimit
+  monthlyCreditLimit: parseEnvNumber(
+    process.env.LICENSE_MONTHLY_CREDIT_LIMIT,
+    DEFAULTS.monthlyCreditLimit
   ),
   imageGenPerMonth: Math.floor(
     parseEnvNumber(
@@ -93,7 +95,7 @@ export interface UsageInfo {
 }
 
 export interface LimitStatus {
-  blocked: boolean; // True if cost limits exceeded (blocks agent/generation)
+  blocked: boolean; // True if credit limits exceeded (blocks agent/generation)
   imageGenBlocked: boolean; // True if image generation limit exceeded (blocks only images)
   warnings: string[];
   usage: {
@@ -153,7 +155,7 @@ class LimitsService {
     const now = new Date();
 
     const warnings: string[] = [];
-    let blocked = false; // Cost limits exceeded (blocks agent/generation)
+    let blocked = false; // Credit limits exceeded (blocks agent/generation)
     let imageGenBlocked = false; // Image limit exceeded (blocks only images)
 
     // Helper to calculate usage info
@@ -164,44 +166,47 @@ class LimitsService {
       percentage: limit > 0 ? current / limit : 0, // 0 limit = unlimited = 0%
     });
 
-    // Check each period
-    const daily = calculateInfo(currentUsage.daily.cost, config.dailyCostLimit);
+    // Check each period - convert dollar costs to credits (×100)
+    const daily = calculateInfo(
+      currentUsage.daily.cost * 100,
+      config.dailyCreditLimit
+    );
     const weekly = calculateInfo(
-      currentUsage.weekly.cost,
-      config.weeklyCostLimit
+      currentUsage.weekly.cost * 100,
+      config.weeklyCreditLimit
     );
     const monthly = calculateInfo(
-      currentUsage.monthly.cost,
-      config.monthlyCostLimit
+      currentUsage.monthly.cost * 100,
+      config.monthlyCreditLimit
     );
     const imageGen = calculateInfo(
       currentUsage.monthly.imageCount,
       config.imageGenPerMonth
     );
 
-    // Check for cost limit blocks (100%+) - these block agent/generation
+    // Check for credit limit blocks (100%+) - these block agent/generation
     if (daily.percentage >= 1) {
       blocked = true;
       warnings.push(
-        `Daily usage limit reached ($${daily.current.toFixed(
-          2
-        )}/$${daily.limit.toFixed(2)}). Resets at midnight UTC.`
+        `Daily usage limit reached (${Math.round(daily.current)}/${Math.round(
+          daily.limit
+        )} credits). Resets at midnight UTC.`
       );
     }
     if (weekly.percentage >= 1) {
       blocked = true;
       warnings.push(
-        `Weekly usage limit reached ($${weekly.current.toFixed(
-          2
-        )}/$${weekly.limit.toFixed(2)}). Resets Sunday UTC.`
+        `Weekly usage limit reached (${Math.round(weekly.current)}/${Math.round(
+          weekly.limit
+        )} credits). Resets Sunday UTC.`
       );
     }
     if (monthly.percentage >= 1) {
       blocked = true;
       warnings.push(
-        `Monthly usage limit reached ($${monthly.current.toFixed(
-          2
-        )}/$${monthly.limit.toFixed(2)}). Resets on the 1st.`
+        `Monthly usage limit reached (${Math.round(
+          monthly.current
+        )}/${Math.round(monthly.limit)} credits). Resets on the 1st.`
       );
     }
 
@@ -214,15 +219,13 @@ class LimitsService {
     }
 
     // Check for warnings (80%+ but less than 100%)
-    // Show cost warnings if not blocked
+    // Show credit warnings if not blocked
     if (!blocked) {
       if (daily.percentage >= config.warningThreshold && daily.percentage < 1) {
         warnings.push(
-          `Approaching daily limit: $${daily.current.toFixed(
-            2
-          )}/$${daily.limit.toFixed(2)} (${Math.round(
-            daily.percentage * 100
-          )}%)`
+          `Approaching daily limit: ${Math.round(daily.current)}/${Math.round(
+            daily.limit
+          )} credits (${Math.round(daily.percentage * 100)}%)`
         );
       }
       if (
@@ -230,11 +233,9 @@ class LimitsService {
         weekly.percentage < 1
       ) {
         warnings.push(
-          `Approaching weekly limit: $${weekly.current.toFixed(
-            2
-          )}/$${weekly.limit.toFixed(2)} (${Math.round(
-            weekly.percentage * 100
-          )}%)`
+          `Approaching weekly limit: ${Math.round(weekly.current)}/${Math.round(
+            weekly.limit
+          )} credits (${Math.round(weekly.percentage * 100)}%)`
         );
       }
       if (
@@ -242,9 +243,9 @@ class LimitsService {
         monthly.percentage < 1
       ) {
         warnings.push(
-          `Approaching monthly limit: $${monthly.current.toFixed(
-            2
-          )}/$${monthly.limit.toFixed(2)} (${Math.round(
+          `Approaching monthly limit: ${Math.round(
+            monthly.current
+          )}/${Math.round(monthly.limit)} credits (${Math.round(
             monthly.percentage * 100
           )}%)`
         );

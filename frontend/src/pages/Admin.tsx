@@ -16,7 +16,7 @@ import {
   Activity,
   TrendingUp,
   Image as ImageIcon,
-  DollarSign,
+  Coins,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -59,12 +59,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -562,7 +557,10 @@ export default function Admin() {
                         >
                           Cancel
                         </Button>
-                        <Button type="submit" disabled={addUserMutation.isPending}>
+                        <Button
+                          type="submit"
+                          disabled={addUserMutation.isPending}
+                        >
                           {addUserMutation.isPending ? (
                             <Loader2 className="animate-spin h-4 w-4 mr-2" />
                           ) : null}
@@ -629,7 +627,9 @@ export default function Admin() {
                               {projectMap.get(user.id) || "—"}
                             </span>
                           ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
+                            <span className="text-sm text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                         <td className="p-4 align-middle text-muted-foreground">
@@ -737,10 +737,10 @@ export default function Admin() {
 
                 <div className="border-t pt-3 space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Ensure project template files (currently <code>AGENTS.md</code>)
-                    exist in every project version. Use overwrite to update all
-                    existing <code>AGENTS.md</code> files after changing the
-                    template.
+                    Ensure project template files (currently{" "}
+                    <code>AGENTS.md</code>) exist in every project version. Use
+                    overwrite to update all existing <code>AGENTS.md</code>{" "}
+                    files after changing the template.
                   </p>
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
@@ -790,7 +790,8 @@ export default function Admin() {
                       </ul>
                       {templateFilesMutation.data.errors.length > 5 ? (
                         <div className="text-muted-foreground mt-2">
-                          …and {templateFilesMutation.data.errors.length - 5} more
+                          …and {templateFilesMutation.data.errors.length - 5}{" "}
+                          more
                         </div>
                       ) : null}
                     </div>
@@ -1068,7 +1069,11 @@ function UsageStatsCard() {
     return null;
   }
 
-  const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
+  // Format credit values (backend already provides values in credits)
+  const formatCredits = (credits: number) => `${Math.round(credits)} ⬡`;
+  // Format raw dollar values as credits (for chart data from database)
+  const formatDollarsAsCredits = (dollars: number) =>
+    `${Math.round(dollars * 100)} ⬡`;
   const formatDate = (date: unknown) => {
     if (!date) return "—";
     try {
@@ -1113,20 +1118,20 @@ function UsageStatsCard() {
       <CardContent className="space-y-6">
         {/* Current Usage Summary */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Daily Cost */}
+          {/* Daily Credits */}
           <div className="rounded-lg border p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
-                Daily Cost
+                Daily Credits
               </span>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <Coins className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold">
-              {formatCurrency(usageStatus.usage.daily.current)}
+              {formatCredits(usageStatus.usage.daily.current)}
             </div>
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>of {formatCurrency(usageStatus.usage.daily.limit)}</span>
+                <span>of {formatCredits(usageStatus.usage.daily.limit)}</span>
                 <span>
                   {Math.round(usageStatus.usage.daily.percentage * 100)}%
                 </span>
@@ -1154,20 +1159,20 @@ function UsageStatsCard() {
             </div>
           </div>
 
-          {/* Weekly Cost */}
+          {/* Weekly Credits */}
           <div className="rounded-lg border p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
-                Weekly Cost
+                Weekly Credits
               </span>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold">
-              {formatCurrency(usageStatus.usage.weekly.current)}
+              {formatCredits(usageStatus.usage.weekly.current)}
             </div>
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>of {formatCurrency(usageStatus.usage.weekly.limit)}</span>
+                <span>of {formatCredits(usageStatus.usage.weekly.limit)}</span>
                 <span>
                   {Math.round(usageStatus.usage.weekly.percentage * 100)}%
                 </span>
@@ -1195,22 +1200,20 @@ function UsageStatsCard() {
             </div>
           </div>
 
-          {/* Monthly Cost */}
+          {/* Monthly Credits */}
           <div className="rounded-lg border p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
-                Monthly Cost
+                Monthly Credits
               </span>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <Coins className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold">
-              {formatCurrency(usageStatus.usage.monthly.current)}
+              {formatCredits(usageStatus.usage.monthly.current)}
             </div>
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>
-                  of {formatCurrency(usageStatus.usage.monthly.limit)}
-                </span>
+                <span>of {formatCredits(usageStatus.usage.monthly.limit)}</span>
                 <span>
                   {Math.round(usageStatus.usage.monthly.percentage * 100)}%
                 </span>
@@ -1321,7 +1324,7 @@ function UsageStatsCard() {
                   className="flex-1 flex flex-col items-center gap-1"
                 >
                   <div className="text-xs text-muted-foreground">
-                    {formatCurrency(cost)}
+                    {formatDollarsAsCredits(cost)}
                   </div>
                   <div className="w-full bg-muted rounded-t flex-1 flex items-end">
                     <div
@@ -1366,7 +1369,9 @@ function UsageStatsCard() {
 function SessionUsageTable({ days }: { days: number }) {
   const { data: sessions, isLoading } = trpc.usage.sessions.useQuery({ days });
 
-  const formatCurrency = (value: number) => `$${value.toFixed(4)}`;
+  // Format dollar values as credits (session data comes from database in dollars)
+  const formatDollarsAsCredits = (dollars: number) =>
+    `${Math.round(dollars * 100)} ⬡`;
   const formatDate = (date: unknown) => {
     if (!date) return "—";
     try {
@@ -1411,7 +1416,7 @@ function SessionUsageTable({ days }: { days: number }) {
               Session ID
             </th>
             <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Cost
+              Credits
             </th>
             <th className="px-4 py-2 text-left font-medium text-muted-foreground">
               Project
@@ -1431,7 +1436,7 @@ function SessionUsageTable({ days }: { days: number }) {
                 {session.sessionId?.slice(0, 8)}...
               </td>
               <td className="px-4 py-2 font-mono font-medium">
-                {formatCurrency(session.totalCost)}
+                {formatDollarsAsCredits(session.totalCost)}
               </td>
               <td className="px-4 py-2 text-muted-foreground">
                 {session.projectSlug || "—"}
