@@ -120,18 +120,44 @@ export async function runTask(
         );
       }
     },
-    onUsageUpdated: (data) => {
+    onUsageUpdated: async (data) => {
+      // Extract project slug from the directory path
+      // The cwd is typically like /path/to/projects/{projectSlug}/v{version}
+      const pathParts = cwd.split("/");
+      // Find the version folder (vN) and get the slug before it
+      const versionIndex = pathParts.findIndex((p) => /^v\d+$/.test(p));
+      const projectSlug =
+        versionIndex > 0 ? pathParts[versionIndex - 1] : undefined;
+
+      // Try to get the session title
+      let sessionTitle: string | undefined;
+      try {
+        const sessions = await listSessions(cwd);
+        const currentSession = sessions.find(
+          (s: any) => s.id === currentSessionId
+        );
+        sessionTitle =
+          typeof currentSession?.title === "string"
+            ? currentSession.title
+            : undefined;
+      } catch (err) {
+        // Ignore errors when fetching session title
+      }
+
       // Record usage to database for tracking limits
       // Pass partId for idempotency to prevent duplicate recordings
-      usageService.recordAiCost(
-        data.cost,
-        data.tokens,
-        currentSessionId,
-        undefined, // projectSlug - not available here
-        data.partId
-      ).catch((err) => {
-        console.error("[OpenCode] Failed to record AI cost:", err);
-      });
+      usageService
+        .recordAiCost(
+          data.cost,
+          data.tokens,
+          currentSessionId,
+          sessionTitle,
+          projectSlug,
+          data.partId
+        )
+        .catch((err) => {
+          console.error("[OpenCode] Failed to record AI cost:", err);
+        });
 
       // Emit usage updated event to frontend
       agentEventEmitter.emitSessionEvent(

@@ -22,6 +22,7 @@ export interface UsageRecord {
   cost: string;
   tokens: TokenData | null;
   sessionId: string | null;
+  sessionTitle: string | null;
   projectSlug: string | null;
   createdAt: Date;
 }
@@ -101,6 +102,7 @@ class UsageService {
     cost: number,
     tokens?: TokenData,
     sessionId?: string,
+    sessionTitle?: string,
     projectSlug?: string,
     partId?: string
   ): Promise<void> {
@@ -120,6 +122,7 @@ class UsageService {
             cost: cost.toString(),
             tokens: tokens ?? null,
             sessionId: sessionId ?? null,
+            sessionTitle: sessionTitle ?? null,
             projectSlug: projectSlug ?? null,
             idempotencyKey: idempotencyKey ?? null,
             createdAt: now,
@@ -169,6 +172,7 @@ class UsageService {
             cost: "0",
             tokens: null,
             sessionId: null,
+            sessionTitle: null,
             projectSlug: projectSlug ?? null,
             idempotencyKey,
             createdAt: now,
@@ -309,6 +313,7 @@ class UsageService {
     const records = await db
       .select({
         sessionId: usageRecord.sessionId,
+        sessionTitle: sql<string | null>`max(${usageRecord.sessionTitle})`,
         projectSlug: usageRecord.projectSlug,
         totalCost: sql<string>`sum(${usageRecord.cost})`,
         count: sql<number>`count(*)`,
@@ -326,6 +331,7 @@ class UsageService {
 
     return records.map((r) => ({
       sessionId: r.sessionId,
+      sessionTitle: r.sessionTitle,
       projectSlug: r.projectSlug,
       totalCost: parseFloat(r.totalCost),
       eventCount: Number(r.count),

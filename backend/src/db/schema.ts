@@ -174,6 +174,7 @@ export const usageRecord = pgTable(
     cost: numeric("cost", { precision: 10, scale: 6 }).notNull(), // stored in dollars, displayed as credits (×100) in frontend
     tokens: jsonb("tokens"), // token breakdown if available
     sessionId: text("session_id"), // OpenCode session ID
+    sessionTitle: text("session_title"), // OpenCode session title for display
     projectSlug: text("project_slug"),
     // Idempotency key to prevent duplicate recordings (e.g., "session123:part456")
     idempotencyKey: text("idempotency_key").unique(),

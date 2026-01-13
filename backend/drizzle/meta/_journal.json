@@ -43,6 +43,13 @@
       "when": 1768326788598,
       "tag": "0005_bent_warbird",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1768334562903,
+      "tag": "0006_pink_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

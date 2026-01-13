@@ -1413,7 +1413,7 @@ function SessionUsageTable({ days }: { days: number }) {
               Last Active
             </th>
             <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-              Session ID
+              Session
             </th>
             <th className="px-4 py-2 text-left font-medium text-muted-foreground">
               Credits
@@ -1432,8 +1432,24 @@ function SessionUsageTable({ days }: { days: number }) {
               <td className="px-4 py-2 text-muted-foreground">
                 {formatDate(session.lastActive)}
               </td>
-              <td className="px-4 py-2 font-mono text-xs">
-                {session.sessionId?.slice(0, 8)}...
+              <td className="px-4 py-2">
+                {session.sessionTitle ? (
+                  <div className="flex flex-col">
+                    <span
+                      className="font-medium truncate max-w-48"
+                      title={session.sessionTitle}
+                    >
+                      {session.sessionTitle}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {session.sessionId?.slice(0, 8)}...
+                    </span>
+                  </div>
+                ) : (
+                  <span className="font-mono text-xs">
+                    {session.sessionId?.slice(0, 8)}...
+                  </span>
+                )}
               </td>
               <td className="px-4 py-2 font-mono font-medium">
                 {formatDollarsAsCredits(session.totalCost)}

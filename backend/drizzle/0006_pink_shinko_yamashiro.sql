@@ -1,0 +1,1 @@
+ALTER TABLE "usage_record" ADD COLUMN "session_title" text;
