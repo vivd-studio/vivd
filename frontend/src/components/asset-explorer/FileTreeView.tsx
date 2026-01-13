@@ -17,6 +17,7 @@ interface FileTreeViewProps {
   onDelete?: (item: FileTreeNode) => void;
   onDownload?: (item: FileTreeNode) => void;
   onAiEdit?: (item: FileTreeNode) => void;
+  onCreateFolder?: (parentPath: string) => void;
 }
 
 export function FileTreeView({
@@ -28,10 +29,12 @@ export function FileTreeView({
   onDelete,
   onDownload,
   onAiEdit,
+  onCreateFolder,
 }: FileTreeViewProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
   const [isExternalDrag, setIsExternalDrag] = useState(false);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const { setEditingTextFile } = usePreview();
 
   // Global dragend listener to clean up state when drag is cancelled
@@ -57,6 +60,19 @@ export function FileTreeView({
     },
     onError: (error) => {
       toast.error("Failed to move file", { description: error.message });
+    },
+  });
+
+  const renameMutation = trpc.assets.moveAsset.useMutation({
+    onSuccess: () => {
+      toast.success("Renamed successfully");
+      setRenamingPath(null);
+      refetch();
+      onRefetch?.();
+    },
+    onError: (error) => {
+      toast.error("Failed to rename", { description: error.message });
+      setRenamingPath(null);
     },
   });
 
@@ -98,6 +114,57 @@ export function FileTreeView({
       sourcePath: draggedPath,
       destinationPath: newPath,
     });
+  };
+
+  const handleRename = async (item: FileTreeNode, newName: string) => {
+    // Compute new path by replacing the filename
+    const pathParts = item.path.split("/");
+    const oldName = pathParts[pathParts.length - 1];
+    pathParts[pathParts.length - 1] = newName;
+    const newPath = pathParts.join("/");
+
+    if (item.path === newPath) {
+      setRenamingPath(null);
+      return;
+    }
+
+    // Check if this is a case-only rename (e.g., "Files" -> "files")
+    // macOS filesystem is case-insensitive, so we need a two-step rename
+    const isCaseOnlyRename = oldName.toLowerCase() === newName.toLowerCase() && oldName !== newName;
+
+    if (isCaseOnlyRename) {
+      // Two-step rename: first to temp name, then to final name
+      const tempName = `${newName}_temp_${Date.now()}`;
+      const tempPathParts = [...item.path.split("/")];
+      tempPathParts[tempPathParts.length - 1] = tempName;
+      const tempPath = tempPathParts.join("/");
+
+      try {
+        // Step 1: Rename to temp
+        await renameMutation.mutateAsync({
+          slug: projectSlug,
+          version,
+          sourcePath: item.path,
+          destinationPath: tempPath,
+        });
+        // Step 2: Rename to final (handled by onSuccess refetch)
+        await renameMutation.mutateAsync({
+          slug: projectSlug,
+          version,
+          sourcePath: tempPath,
+          destinationPath: newPath,
+        });
+      } catch {
+        // Error already handled by mutation's onError
+      }
+    } else {
+      renameMutation.mutate({
+        slug: projectSlug,
+        version,
+        sourcePath: item.path,
+        destinationPath: newPath,
+      });
+    }
   };
 
   // Wrapper for file upload that refetches after upload
@@ -195,6 +262,11 @@ export function FileTreeView({
           onDelete={onDelete}
           onDownload={onDownload}
           onAiEdit={onAiEdit}
+          onCreateFolder={onCreateFolder}
+          onRename={handleRename}
+          isRenaming={renamingPath === node.path}
+          onStartRename={(item) => setRenamingPath(item.path)}
+          onCancelRename={() => setRenamingPath(null)}
         />
         {node.type === "folder" &&
           node.children &&

@@ -60,6 +60,7 @@ export function AssetExplorer({
   // Folder creation state
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [folderCreationPath, setFolderCreationPath] = useState<string | null>(null);
 
   // File upload state
   const [isDragging, setIsDragging] = useState(false);
@@ -166,7 +167,8 @@ export function AssetExplorer({
     onSuccess: () => {
       setIsCreatingFolder(false);
       setNewFolderName("");
-      galleryQuery.refetch();
+      setFolderCreationPath(null);
+      utils.assets.invalidate();
     },
   });
 
@@ -249,13 +251,21 @@ export function AssetExplorer({
 
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
+      // Use folderCreationPath if set (from context menu), otherwise use currentPath for gallery mode
+      const targetPath = folderCreationPath ?? (viewMode === "gallery" ? currentPath ?? "" : "");
       createFolderMutation.mutate({
         slug: projectSlug,
         version,
-        relativePath: viewMode === "gallery" ? currentPath ?? "" : "",
+        relativePath: targetPath,
         folderName: newFolderName.trim(),
       });
     }
+  };
+
+  const handleCreateFolderInPath = (parentPath: string) => {
+    setFolderCreationPath(parentPath);
+    setIsCreatingFolder(true);
+    setNewFolderName("");
   };
 
   const handleCreateImage = () => {
@@ -363,7 +373,10 @@ export function AssetExplorer({
           currentPath={currentPath ?? ""}
           isUploading={isUploading}
           onBack={handleBack}
-          onCreateFolder={() => setIsCreatingFolder(true)}
+          onCreateFolder={() => {
+            setFolderCreationPath(null);
+            setIsCreatingFolder(true);
+          }}
           onCreateImage={
             canUseAiImages
               ? () => {
@@ -381,7 +394,10 @@ export function AssetExplorer({
       {viewMode === "files" && (
         <AssetToolbar
           isUploading={isUploading}
-          onCreateFolder={() => setIsCreatingFolder(true)}
+          onCreateFolder={() => {
+            setFolderCreationPath(null);
+            setIsCreatingFolder(true);
+          }}
           onCreateImage={
             canUseAiImages
               ? () => {
@@ -404,8 +420,10 @@ export function AssetExplorer({
           onCancel={() => {
             setIsCreatingFolder(false);
             setNewFolderName("");
+            setFolderCreationPath(null);
           }}
           isPending={createFolderMutation.isPending}
+          parentPath={folderCreationPath}
         />
       )}
 
@@ -436,6 +454,7 @@ export function AssetExplorer({
             onDelete={handleDelete}
             onDownload={handleDownloadFile}
             onAiEdit={canUseAiImages ? handleAiEdit : undefined}
+            onCreateFolder={handleCreateFolderInPath}
           />
         )}
       </ScrollArea>

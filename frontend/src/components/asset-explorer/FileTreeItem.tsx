@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ChevronRight,
   ChevronDown,
   Download,
+  FolderPlus,
+  Pencil,
   Trash2,
   Wand2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import type { FileTreeNode } from "./types";
 import { getFileIconComponent } from "./utils";
 import {
@@ -37,6 +40,11 @@ interface FileTreeItemProps {
   onDelete?: (item: FileTreeNode) => void;
   onDownload?: (item: FileTreeNode) => void;
   onAiEdit?: (item: FileTreeNode) => void;
+  onCreateFolder?: (parentPath: string) => void;
+  onRename?: (item: FileTreeNode, newName: string) => void;
+  isRenaming?: boolean;
+  onStartRename?: (item: FileTreeNode) => void;
+  onCancelRename?: () => void;
 }
 
 export function FileTreeItem({
@@ -50,11 +58,56 @@ export function FileTreeItem({
   onDelete,
   onDownload,
   onAiEdit,
+  onCreateFolder,
+  onRename,
+  isRenaming,
+  onStartRename,
+  onCancelRename,
 }: FileTreeItemProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [renameValue, setRenameValue] = useState(item.name);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { icon: Icon, className: iconClassName } = getFileIconComponent(item);
 
   const isGrayed = item.type === "folder" && GRAYED_FOLDERS.includes(item.name);
+
+  // Focus input when entering rename mode
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      setRenameValue(item.name);
+      const input = inputRef.current;
+      // Use requestAnimationFrame to ensure selection happens after React updates the value
+      requestAnimationFrame(() => {
+        input.focus();
+        // Select the name without extension for files
+        const dotIndex = item.name.lastIndexOf(".");
+        if (item.type === "file" && dotIndex > 0) {
+          input.setSelectionRange(0, dotIndex);
+        } else {
+          input.select();
+        }
+      });
+    }
+  }, [isRenaming, item.name, item.type]);
+
+  const handleRenameSubmit = () => {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== item.name && onRename) {
+      onRename(item, trimmed);
+    } else {
+      onCancelRename?.();
+    }
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCancelRename?.();
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent) => {
     // Set path for internal file moving
@@ -138,8 +191,8 @@ export function FileTreeItem({
         isDragOver ? "bg-primary/10 ring-1 ring-primary" : ""
       } ${isGrayed ? "opacity-50" : ""}`}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      onClick={onClick}
-      draggable={item.type === "file"}
+      onClick={isRenaming ? undefined : onClick}
+      draggable={item.type === "file" && !isRenaming}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -161,13 +214,25 @@ export function FileTreeItem({
       {/* File/folder icon */}
       <Icon className={`${iconClassName} w-4! h-4! shrink-0`} />
 
-      {/* Name */}
-      <span className="text-sm truncate">{item.name}</span>
+      {/* Name or rename input */}
+      {isRenaming ? (
+        <Input
+          ref={inputRef}
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onKeyDown={handleRenameKeyDown}
+          onBlur={handleRenameSubmit}
+          onClick={(e) => e.stopPropagation()}
+          className="h-6 py-0 px-1 text-sm"
+        />
+      ) : (
+        <span className="text-sm truncate">{item.name}</span>
+      )}
     </div>
   );
 
   // Only show context menu if we have any handlers
-  if (!onDelete && !onDownload && !onAiEdit) {
+  if (!onDelete && !onDownload && !onAiEdit && !onCreateFolder && !onStartRename) {
     return itemContent;
   }
 
@@ -175,6 +240,22 @@ export function FileTreeItem({
     <ContextMenu>
       <ContextMenuTrigger asChild>{itemContent}</ContextMenuTrigger>
       <ContextMenuContent className="w-48">
+        {/* New Folder - only for folders */}
+        {item.type === "folder" && onCreateFolder && (
+          <ContextMenuItem onClick={() => onCreateFolder(item.path)}>
+            <FolderPlus className="mr-2 h-4 w-4" />
+            New Folder
+          </ContextMenuItem>
+        )}
+
+        {/* Rename - for all items */}
+        {onStartRename && (
+          <ContextMenuItem onClick={() => onStartRename(item)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Rename
+          </ContextMenuItem>
+        )}
+
         {/* Download - only for files */}
         {item.type === "file" && onDownload && (
           <ContextMenuItem onClick={() => onDownload(item)}>
@@ -193,8 +274,9 @@ export function FileTreeItem({
 
         {/* Separator before delete if there are other items */}
         {onDelete &&
-          item.type === "file" &&
-          (onDownload || (item.isImage && onAiEdit)) && (
+          (onStartRename ||
+            (item.type === "file" && (onDownload || (item.isImage && onAiEdit))) ||
+            (item.type === "folder" && onCreateFolder)) && (
             <ContextMenuSeparator />
           )}
 

@@ -19,6 +19,7 @@ Currently you cannot create images on your own. If you need new images, tell the
    - Location: `locales/{lang}.json` (e.g., `locales/en.json`, `locales/de.json`)
    - Format: Flat key-value pairs `{ "hero.title": "Welcome", "nav.home": "Home" }`
    - Use `data-i18n="key"` attributes on translatable elements
+6. **Clarify questions**: Do not assume anything or make changes when the user asks a question. Questions should be clarified before editing.
 
 ## Internal Tags
 

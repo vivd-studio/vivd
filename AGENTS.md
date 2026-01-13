@@ -66,7 +66,7 @@ Dedicated Volume (projects/)
 
 # Implementation Plan
 
-We are constantly keeping track of the implementation plan in the implementation.md file, it's kind of our main-quest. If you are tasked to work on it, ask if you can tick of certain elements so we can mark them as done.
+We are constantly keeping track of the implementation plan in the docs/implementation.md file, it's kind of our main-quest. If you are tasked to work on it, ask if you can tick of certain elements so we can mark them as done.
 
 # Skills
 

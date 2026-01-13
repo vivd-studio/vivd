@@ -7,6 +7,7 @@ interface CreateFolderInputProps {
   onSubmit: () => void;
   onCancel: () => void;
   isPending: boolean;
+  parentPath?: string | null;
 }
 
 export function CreateFolderInput({
@@ -15,9 +16,15 @@ export function CreateFolderInput({
   onSubmit,
   onCancel,
   isPending,
+  parentPath,
 }: CreateFolderInputProps) {
   return (
     <div className="px-4 py-2 border-b flex items-center gap-2 shrink-0">
+      {parentPath && (
+        <span className="text-xs text-muted-foreground shrink-0">
+          in {parentPath}/
+        </span>
+      )}
       <Input
         placeholder="Folder name..."
         value={value}
