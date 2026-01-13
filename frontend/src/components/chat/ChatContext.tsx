@@ -235,6 +235,8 @@ export function ChatProvider({
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
   const [input, setInput] = useState("");
+  // Track if we're in the process of sending (includes image upload phase)
+  const [isSending, setIsSending] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
@@ -969,9 +971,13 @@ export function ChatProvider({
   const handleSend = async () => {
     if (
       (!input.trim() && !attachedElement && attachedImages.length === 0) ||
-      runTaskMutation.isPending
+      runTaskMutation.isPending ||
+      isSending
     )
       return;
+
+    // Set sending state immediately to prevent duplicate submissions
+    setIsSending(true);
 
     let task = input.trim() || "I want to change this element";
     if (attachedElement) {
@@ -1039,15 +1045,25 @@ export function ChatProvider({
 
     if (selectedSessionId) {
       setMessages((prev) => [...prev, { role: "user", content: task }]);
-      runTaskMutation.mutate({
-        projectSlug,
-        task,
-        sessionId: selectedSessionId,
-        version,
-      });
+      runTaskMutation.mutate(
+        {
+          projectSlug,
+          task,
+          sessionId: selectedSessionId,
+          version,
+        },
+        {
+          onSettled: () => setIsSending(false),
+        }
+      );
     } else {
       setMessages((prev) => [...prev, { role: "user", content: task }]);
-      runTaskMutation.mutate({ projectSlug, task, version });
+      runTaskMutation.mutate(
+        { projectSlug, task, version },
+        {
+          onSettled: () => setIsSending(false),
+        }
+      );
     }
   };
 
@@ -1106,7 +1122,7 @@ export function ChatProvider({
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,
     isReverted,
-    isLoading: runTaskMutation.isPending,
+    isLoading: runTaskMutation.isPending || isSending,
     sessionDebugState,
     sessionError,
     clearSessionError,
