@@ -30,19 +30,38 @@ export interface PrePublishChecklist {
 /**
  * The checklist items to check for production readiness.
  * Based on implementation.md Production Checklist.
+ *
+ * Items marked as `optional: true` can be skipped if genuinely not needed.
+ * Items without `optional` are mandatory and should fail if missing.
  */
 export const CHECKLIST_ITEMS = [
-  { id: "impressum", label: "Impressum/Imprint page exists and is linked" },
-  { id: "privacy", label: "Datenschutz/Privacy policy exists and is linked" },
-  { id: "cookie_banner", label: "Cookie consent banner (if cookies are used)" },
-  { id: "sitemap", label: "sitemap.xml file exists" },
-  { id: "robots", label: "robots.txt file exists" },
+  // Mandatory items - legally required or essential
+  { id: "imprint", label: "Imprint (Impressum) page exists and is linked" },
+  { id: "privacy", label: "Privacy policy (Datenschutz) exists and is linked" },
   { id: "favicon", label: "Favicon is set" },
-  { id: "404_page", label: "Custom 404.html error page exists" },
-  { id: "navigation", label: "All navigation links work (no broken links)" },
-  { id: "contact_form", label: "Contact form is functional (if present)" },
   { id: "seo_meta", label: "SEO meta tags (title, description, OG tags)" },
+  { id: "navigation", label: "All navigation links work (no broken links)" },
   { id: "alt_text", label: "Images have alt text attributes" },
+  // Conditionally optional items - can be skipped with valid reason
+  {
+    id: "cookie_banner",
+    label: "Cookie consent banner (if cookies are used)",
+    optional: true,
+  },
+  { id: "sitemap", label: "sitemap.xml file exists", optional: true },
+  { id: "robots", label: "robots.txt file exists", optional: true },
+  {
+    id: "404_page",
+    label: "Custom 404.html error page exists",
+    optional: true,
+  },
+  {
+    id: "contact_form",
+    label: "Contact form is functional (if present)",
+    optional: true,
+  },
+  // Catch-all for other issues
+  { id: "other_issues", label: "Other urgent issues", optional: true },
 ] as const;
 
 /**
@@ -52,33 +71,53 @@ export const CHECKLIST_PROMPT = `You are a rigorous website QA auditor reviewing
 
 Your job is to CAREFULLY analyze the project files and verify each item. Be SKEPTICAL - don't assume something exists just because there's a reference to it. Actually verify the content.
 
-## Checklist Items to Verify
+## MANDATORY Items (must pass or fail - skip only if page explicitly links to external legal pages)
 
-1. **impressum** - Does an Impressum/Imprint page EXIST as a separate HTML file (e.g., impressum.html, imprint.html)? Is it linked from the main navigation or footer? Does it contain ACTUAL contact information (not placeholder text)?
+1. **imprint** - Does an Imprint/Impressum page EXIST as a separate HTML file (e.g., imprint.html, impressum.html)? Is it linked from the main navigation or footer? Does it contain ACTUAL contact information (not placeholder text)? Mark as "skip" ONLY if you find links to an external imprint page (e.g., on a parent domain).
 
-2. **privacy** - Does a Datenschutz/Privacy policy page EXIST as a separate HTML file? Is it linked? Does it contain REAL privacy policy content (not lorem ipsum)?
+2. **privacy** - Does a Privacy Policy/Datenschutz page EXIST as a separate HTML file? Is it linked? Does it contain REAL privacy policy content (not lorem ipsum)? Mark as "skip" ONLY if you find links to an external privacy page.
 
-3. **cookie_banner** - ONLY mark as "pass" if you find:
+3. **favicon** - Is there a favicon.ico file OR a <link rel="icon"> tag in the HTML <head>?
+
+4. **seo_meta** - Are these present in the HTML <head>: <title>, <meta name="description">, Open Graph tags (og:title, og:description)?
+
+5. **navigation** - Check all internal links (<a href="...">). Do all linked files exist? Are there any broken links?
+
+6. **alt_text** - Do ALL <img> tags have meaningful alt attributes (not empty, not generic)?
+
+## OPTIONAL Items (can be skipped with valid reason)
+
+7. **cookie_banner** - ONLY mark as "pass" if you find:
    - An actual cookie consent UI element (banner, modal, popup) in the HTML
    - JavaScript code that handles consent (not just a reference to cookies)
    - Mark as "skip" if no cookies/analytics scripts are used at all
    - Mark as "fail" if cookies ARE used but no consent mechanism exists
 
-4. **sitemap** - Does sitemap.xml file exist? Does it contain valid URLs for the site's pages?
+8. **sitemap** - Does sitemap.xml file exist? Does it contain valid URLs for the site's pages?
+   - Mark as "pass" if present and contains valid URLs
+   - Mark as "skip" ONLY for single-page sites
+   - Mark as "warning" if missing and there is more than one page
 
-5. **robots** - Does robots.txt file exist? Is it properly formatted?
+9. **robots** - Does robots.txt file exist? Is it properly formatted?
+   - Mark as "pass" if present and properly formatted
+   - Mark as "warning" if not present - it's recommended for production sites to control crawling and protect sensitive directories
+   - Mark as "fail" if it exists but is malformed or accidentally blocks important content
 
-6. **favicon** - Is there a favicon.ico file OR a <link rel="icon"> tag in the HTML <head>?
+10. **404_page** - Does a custom 404.html error page exist? Is it styled and user-friendly?
+    - Mark as "pass" if a custom 404 page exists
+    - Mark as "warning" if missing - a custom 404 page is recommended for production sites
 
-7. **404_page** - Does a custom 404.html error page exist? Is it styled and user-friendly?
+11. **contact_form** - If a contact form exists, does it have proper form handling (action URL, email submission)?
+    - Mark as "skip" if no contact form is present on the site
 
-8. **navigation** - Check all internal links (<a href="...">). Do all linked files exist? Are there any broken links?
-
-9. **contact_form** - If a contact form exists, does it have proper form handling (action URL, email submission)?
-
-10. **seo_meta** - Are these present in the HTML <head>: <title>, <meta name="description">, Open Graph tags (og:title, og:description)?
-
-11. **alt_text** - Do ALL <img> tags have meaningful alt attributes (not empty, not generic)?
+12. **other_issues** - Note any OTHER urgent issues you notice that aren't covered above, such as:
+    - Mixed content warnings (HTTP resources on HTTPS page)
+    - Exposed sensitive files (.env, config files with secrets)
+    - JavaScript console errors
+    - Missing <html lang="..."> attribute
+    - Severe accessibility issues
+    - Broken external resources (fonts, CDN links)
+    - Mark as "pass" if no other issues found, "fail" or "warning" with details if issues exist
 
 ## Response Requirements
 
@@ -88,10 +127,27 @@ Respond with ONLY a valid JSON object (no markdown, no explanation outside JSON)
 
 {
   "items": [
-    {"id": "impressum", "label": "Impressum page", "status": "pass|fail|warning|skip", "note": "Specific evidence or what's missing"},
-    ...for all 11 items...
+    {"id": "imprint", "label": "Imprint page", "status": "pass|fail|warning|skip", "note": "Specific evidence or what's missing"},
+    {"id": "privacy", "label": "Privacy policy", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "favicon", "label": "Favicon", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "seo_meta", "label": "SEO meta tags", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "navigation", "label": "Navigation links", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "alt_text", "label": "Image alt text", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "cookie_banner", "label": "Cookie banner", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "sitemap", "label": "sitemap.xml", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "robots", "label": "robots.txt", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "404_page", "label": "404 error page", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "contact_form", "label": "Contact form", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "other_issues", "label": "Other issues", "status": "pass|fail|warning|skip", "note": "..."}
   ]
 }
+
+**JSON FORMATTING RULES (CRITICAL):**
+- Use ONLY straight double quotes (") - never curly/smart quotes (" ")
+- If your note contains quotes, ESCAPE them with backslash: \\"
+- Example: "note": "Found <link rel=\\"icon\\"> in head"
+- Do not include any text before or after the JSON object
+- Ensure the JSON is valid and parseable by JSON.parse()
 
 Status guide:
 - "pass": Verified the item exists AND is correct/complete

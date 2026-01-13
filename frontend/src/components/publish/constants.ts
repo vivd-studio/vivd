@@ -1,4 +1,9 @@
-import { AlertTriangle, CheckCircle2, SkipForward, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  SkipForward,
+  XCircle,
+} from "lucide-react";
 import type { ChecklistStatus, PreviewChecklistItem } from "./types";
 
 type ChecklistIcon = typeof CheckCircle2;
@@ -35,16 +40,18 @@ export const CHECKLIST_STATUS_CONFIG: Record<
 };
 
 export const PREVIEW_CHECKLIST_ITEMS: PreviewChecklistItem[] = [
-  { id: "impressum", label: "Impressum/Imprint page" },
+  // Mandatory items
+  { id: "imprint", label: "Imprint (Impressum) page" },
   { id: "privacy", label: "Privacy policy page" },
+  { id: "favicon", label: "Favicon" },
+  { id: "seo_meta", label: "SEO meta tags" },
+  { id: "navigation", label: "Working navigation links" },
+  { id: "alt_text", label: "Image alt text" },
+  // Optional items
   { id: "cookie_banner", label: "Cookie consent banner" },
   { id: "sitemap", label: "sitemap.xml file" },
   { id: "robots", label: "robots.txt file" },
-  { id: "favicon", label: "Favicon" },
   { id: "404_page", label: "Custom 404 error page" },
-  { id: "navigation", label: "Working navigation links" },
   { id: "contact_form", label: "Contact form functionality" },
-  { id: "seo_meta", label: "SEO meta tags" },
-  { id: "alt_text", label: "Image alt text" },
+  { id: "other_issues", label: "Other issues" },
 ];
-
