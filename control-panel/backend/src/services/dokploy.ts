@@ -1,28 +1,33 @@
 import { z } from "zod";
 
 // Dokploy API response types
+// Note: Dokploy returns inconsistent ID field names (projectId vs id), so we include both
 export interface DokployProject {
-  projectId: string;
+  projectId?: string;
+  id?: string;
   name: string;
   description: string | null;
-  createdAt: string;
+  createdAt?: string;
+  environments?: DokployEnvironment[];
 }
 
 export interface DokployEnvironment {
-  environmentId: string;
+  environmentId?: string;
+  id?: string;
   name: string;
-  projectId: string;
+  projectId?: string;
 }
 
 export interface DokployCompose {
-  composeId: string;
+  composeId?: string;
+  id?: string;
   name: string;
   appName: string;
   description: string | null;
   composeFile: string;
   composeStatus: "idle" | "running" | "done" | "error";
-  projectId: string;
-  createdAt: string;
+  projectId?: string;
+  createdAt?: string;
 }
 
 export interface DokployDomain {
@@ -32,6 +37,19 @@ export interface DokployDomain {
   https: boolean;
   composeId?: string;
   serviceName?: string;
+}
+
+/** Extract ID from Dokploy response (handles inconsistent field names) */
+export function extractProjectId(project: DokployProject): string | null {
+  return project.projectId || project.id || null;
+}
+
+export function extractComposeId(compose: DokployCompose): string | null {
+  return compose.composeId || compose.id || null;
+}
+
+export function extractEnvironmentId(env: DokployEnvironment): string | null {
+  return env.environmentId || env.id || null;
 }
 
 // Request schemas
@@ -159,7 +177,10 @@ export class DokployService {
     return process.env.DOKPLOY_SOURCE_TYPE?.trim() || "raw";
   }
 
-  private async updateCompose(composeId: string, patch: Record<string, unknown>) {
+  private async updateCompose(
+    composeId: string,
+    patch: Record<string, unknown>
+  ) {
     await this.request("compose.update", {
       method: "POST",
       body: JSON.stringify({ composeId, ...patch }),

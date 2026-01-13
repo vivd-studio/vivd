@@ -7,6 +7,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
+# Development (includes source for local dev with docker compose watch)
+FROM backend-deps AS dev
+COPY . .
+CMD ["npm", "run", "dev"]
+
 # Build
 FROM backend-deps AS backend-build
 COPY . .

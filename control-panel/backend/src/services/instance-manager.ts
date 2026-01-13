@@ -6,7 +6,13 @@ import {
   type VivdInstance,
   type NewVivdInstance,
 } from "../db/schema.js";
-import { getDokployService } from "./dokploy.js";
+import {
+  getDokployService,
+  extractProjectId,
+  extractComposeId,
+  extractEnvironmentId,
+  type DokployEnvironment,
+} from "./dokploy.js";
 import {
   generateComposeFile,
   type InstanceConfig,
@@ -21,6 +27,62 @@ function getDokployErrorStatus(error: unknown): number | null {
   if (!(error instanceof Error)) return null;
   const match = error.message.match(/Dokploy API error \((\d+)\):/);
   return match ? Number(match[1]) : null;
+}
+
+/**
+ * Wait for Dokploy to populate environments for a project.
+ * Returns the selected environment based on preference or falls back to first available.
+ */
+async function waitForEnvironment(
+  projectId: string,
+  initialEnvironments: DokployEnvironment[] = []
+): Promise<DokployEnvironment> {
+  const dokploy = getDokployService();
+  let environments = initialEnvironments;
+  let lastError: unknown = null;
+  let delayMs = 300;
+
+  // Poll until environments are available (max 10 attempts)
+  for (let attempt = 1; attempt <= 10 && environments.length === 0; attempt++) {
+    try {
+      const project = await dokploy.getProject(projectId);
+      environments = project.environments ?? [];
+      if (environments.length > 0) break;
+    } catch (error) {
+      lastError = error;
+      const status = getDokployErrorStatus(error);
+      // Only retry on transient errors
+      if (status && ![404, 502, 503].includes(status)) throw error;
+    }
+    await sleep(delayMs);
+    delayMs = Math.min(delayMs * 2, 3000);
+  }
+
+  if (environments.length === 0) {
+    const msg =
+      lastError instanceof Error
+        ? lastError.message
+        : String(lastError ?? "Unknown error");
+    throw new Error(
+      `Failed to resolve environments for project ${projectId}: ${msg}`
+    );
+  }
+
+  // Select environment: prefer configured name, then "prod", then first
+  const preferredName =
+    process.env.DOKPLOY_ENVIRONMENT_NAME?.trim().toLowerCase();
+  const selected =
+    (preferredName &&
+      environments.find((e) => e.name.toLowerCase() === preferredName)) ||
+    environments.find((e) => e.name.toLowerCase().includes("prod")) ||
+    environments[0];
+
+  const envId = extractEnvironmentId(selected);
+  if (!envId) {
+    throw new Error(`Selected environment has no ID (name: ${selected.name})`);
+  }
+
+  return selected;
 }
 
 /**
@@ -170,107 +232,37 @@ export class InstanceManager {
     try {
       // Step 1: Create Dokploy project
       console.log(`Creating Dokploy project for ${request.name}...`);
+      const projectName = `vivd-${slug}`;
       const createdProject = await dokploy.createProject({
-        name: `vivd-${slug}`,
+        name: projectName,
         description: `Vivd instance: ${request.name}`,
       });
 
-      const createdProjectName = (createdProject as { name?: string }).name;
-
-      dokployProjectId =
-        (createdProject as { projectId?: string; id?: string }).projectId ||
-        (createdProject as { projectId?: string; id?: string }).id ||
-        null;
-
+      // Extract project ID (Dokploy returns inconsistent field names)
+      dokployProjectId = extractProjectId(createdProject);
       if (!dokployProjectId) {
+        // Fallback: search in project list
         const projects = await dokploy.listProjects();
         const match = projects.find(
-          (p) => p.name === (createdProjectName || `vivd-${slug}`)
+          (p) => p.name === (createdProject.name || projectName)
         );
-        dokployProjectId =
-          (match as { projectId?: string; id?: string } | undefined)?.projectId ||
-          (match as { projectId?: string; id?: string } | undefined)?.id ||
-          null;
+        dokployProjectId = match ? extractProjectId(match) : null;
       }
-
       if (!dokployProjectId) {
         throw new Error(
-          `Dokploy did not return a usable project id for project ${createdProjectName || `vivd-${slug}`}`
+          `Dokploy did not return a project ID for ${projectName}`
         );
       }
 
-      // Dokploy requires an environmentId when creating compose services
+      // Step 2: Wait for environment (Dokploy creates these async)
       console.log(`Resolving Dokploy environment...`);
-      let environments: { environmentId?: string; id?: string; name: string }[] =
-        (createdProject as { environments?: { environmentId?: string; id?: string; name: string }[] })
-          .environments ?? [];
+      const environment = await waitForEnvironment(
+        dokployProjectId,
+        createdProject.environments
+      );
+      const environmentId = extractEnvironmentId(environment)!;
 
-      let lastProjectFetchError: unknown = null;
-      let delayMs = 300;
-      for (let attempt = 1; attempt <= 10; attempt++) {
-        if (environments.length > 0) break;
-        try {
-          const projectWithEnvironments = await dokploy.getProject(dokployProjectId);
-          environments =
-            (projectWithEnvironments as { environments?: typeof environments })
-              .environments ?? [];
-          if (environments.length > 0) break;
-        } catch (error) {
-          lastProjectFetchError = error;
-          const status = getDokployErrorStatus(error);
-          if (status && ![404, 502, 503].includes(status)) {
-            throw error;
-          }
-        }
-
-        await sleep(delayMs);
-        delayMs = Math.min(delayMs * 2, 3000);
-      }
-
-      if (environments.length === 0) {
-        const errorMessage =
-          lastProjectFetchError instanceof Error
-            ? lastProjectFetchError.message
-            : lastProjectFetchError
-              ? String(lastProjectFetchError)
-              : "Unknown error";
-        throw new Error(
-          `Failed to resolve environments for Dokploy project ${dokployProjectId}: ${errorMessage}`
-        );
-      }
-
-      const preferredEnvironmentName =
-        process.env.DOKPLOY_ENVIRONMENT_NAME?.trim().toLowerCase() || null;
-
-      let environment =
-        preferredEnvironmentName
-          ? environments.find(
-              (env) => env.name.toLowerCase() === preferredEnvironmentName
-            )
-          : undefined;
-
-      if (!environment) {
-        environment = environments.find((env) =>
-          env.name.toLowerCase().includes("prod")
-        );
-      }
-
-      if (!environment) {
-        environment = environments[0];
-      }
-
-      const environmentId =
-        (environment as { environmentId?: string; id?: string }).environmentId ||
-        (environment as { environmentId?: string; id?: string }).id ||
-        null;
-
-      if (!environmentId) {
-        throw new Error(
-          `Selected Dokploy environment has no environmentId (name: ${environment.name})`
-        );
-      }
-
-      // Step 2: Create compose service
+      // Step 3: Create compose service
       console.log(`Creating compose service...`);
       const composeFile = generateComposeFile(instanceConfig);
       const compose = await dokploy.createCompose({
@@ -281,18 +273,14 @@ export class InstanceManager {
         appName: `vivd-${slug}`,
       });
 
-      dokployComposeId =
-        (compose as { composeId?: string; id?: string }).composeId ||
-        (compose as { composeId?: string; id?: string }).id ||
-        null;
-
+      dokployComposeId = extractComposeId(compose);
       if (!dokployComposeId) {
         throw new Error(
-          `Dokploy did not return a usable compose id for instance ${request.name}`
+          `Dokploy did not return a compose ID for ${request.name}`
         );
       }
 
-      // Step 3: Set environment variables
+      // Step 4: Set environment variables
       console.log(`Setting environment variables...`);
       const envVars = this.buildEnvironmentVariables(instanceConfig);
       await dokploy.setEnvironmentVariables(dokployComposeId, envVars, {
@@ -301,7 +289,7 @@ export class InstanceManager {
         composeFile,
       });
 
-      // Step 4: Create domain (pointing to caddy on port 80)
+      // Step 5: Create domain (pointing to caddy on port 80)
       console.log(`Creating domain ${request.domain}...`);
       await dokploy.createDomain({
         host: request.domain,
@@ -312,7 +300,7 @@ export class InstanceManager {
         domainType: "compose",
       });
 
-      // Step 5: Save to database
+      // Step 6: Save to database
       console.log(`Saving instance to database...`);
       const newInstance: NewVivdInstance = {
         id: instanceId,
@@ -334,7 +322,7 @@ export class InstanceManager {
 
       await db.insert(vivdInstances).values(newInstance);
 
-      // Step 6: Create deployment record
+      // Step 7: Create deployment record
       const deploymentId = generateId();
       await db.insert(deployments).values({
         id: deploymentId,
@@ -344,7 +332,7 @@ export class InstanceManager {
         triggeredBy: "system",
       });
 
-      // Step 7: Trigger deployment
+      // Step 8: Trigger deployment
       console.log(`Triggering deployment...`);
       await dokploy.redeployCompose(dokployComposeId);
 

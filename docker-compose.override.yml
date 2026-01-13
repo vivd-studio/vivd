@@ -106,8 +106,7 @@ services:
     build:
       context: ./control-panel/backend
       dockerfile: Dockerfile
-      target: backend-deps
-    command: npm run dev
+      target: dev
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@control-panel-postgres:5432/control_panel
       - PORT=3100
@@ -121,9 +120,7 @@ services:
       - SHARED_OPENCODE_MODEL=${OPENCODE_MODEL}
       - DEFAULT_SCRAPER_URL=http://scraper:3001
       - DEFAULT_SCRAPER_API_KEY=${SCRAPER_API_KEY}
-    volumes:
-      - ./control-panel/backend:/app
-      - /app/node_modules
+
     ports:
       - "3100:3100"
     networks:
@@ -146,14 +143,11 @@ services:
     build:
       context: ./control-panel/frontend
       dockerfile: Dockerfile
-      target: build
-    command: npm run dev -- --host
+      target: dev
     environment:
       - NODE_ENV=development
       - VITE_API_URL=http://control-panel-backend:3100
-    volumes:
-      - ./control-panel/frontend:/app
-      - /app/node_modules
+
     ports:
       - "5174:5174"
     networks:
