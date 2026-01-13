@@ -15,6 +15,7 @@ import {
   type SessionStatus,
 } from "./eventEmitter";
 import { serverManager } from "./serverManager";
+import { usageService } from "../services/UsageService";
 
 export { useEvents };
 export { agentEventEmitter } from "./eventEmitter";
@@ -120,6 +121,18 @@ export async function runTask(
       }
     },
     onUsageUpdated: (data) => {
+      // Record usage to database for tracking limits
+      // Pass partId for idempotency to prevent duplicate recordings
+      usageService.recordAiCost(
+        data.cost,
+        data.tokens,
+        currentSessionId,
+        undefined, // projectSlug - not available here
+        data.partId
+      ).catch((err) => {
+        console.error("[OpenCode] Failed to record AI cost:", err);
+      });
+
       // Emit usage updated event to frontend
       agentEventEmitter.emitSessionEvent(
         currentSessionId,

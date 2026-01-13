@@ -23,6 +23,7 @@ const debugLog = (...args: unknown[]) => {
  */
 class OpencodeServerManager {
   private servers = new Map<string, OpencodeServerInfo>();
+  private startingServers = new Map<string, Promise<OpencodeServerInfo>>();
   private nextPort = 4096;
   private cleanupInterval: NodeJS.Timeout | null = null;
 
@@ -38,18 +39,38 @@ class OpencodeServerManager {
    * Returns the server URL.
    */
   async getOrCreateServer(projectDir: string): Promise<string> {
-    const existing = this.servers.get(projectDir);
+    const dirKey = this.normalizeProjectDir(projectDir);
+
+    const existing = this.servers.get(dirKey);
     if (existing) {
       existing.lastActivity = Date.now();
-      debugLog(`Reusing existing server for ${projectDir}`);
+      debugLog(`Reusing existing server for ${dirKey}`);
       return existing.url;
     }
 
-    const port = this.nextPort++;
-    console.log(`[OpenCode] Spawning server for ${projectDir} on port ${port}`);
+    const starting = this.startingServers.get(dirKey);
+    if (starting) {
+      const server = await starting;
+      server.lastActivity = Date.now();
+      debugLog(`Awaited starting server for ${dirKey}`);
+      return server.url;
+    }
 
-    const server = await this.spawnServer(projectDir, port);
-    this.servers.set(projectDir, server);
+    const port = this.nextPort++;
+    console.log(`[OpenCode] Spawning server for ${dirKey} on port ${port}`);
+
+    const startPromise = this.spawnServer(dirKey, port)
+      .then((server) => {
+        this.servers.set(dirKey, server);
+        return server;
+      })
+      .finally(() => {
+        this.startingServers.delete(dirKey);
+      });
+
+    this.startingServers.set(dirKey, startPromise);
+
+    const server = await startPromise;
     return server.url;
   }
 
@@ -61,7 +82,7 @@ class OpencodeServerManager {
     const serverUrl = await this.getOrCreateServer(projectDir);
     return createOpencodeClient({
       baseUrl: serverUrl,
-      directory: projectDir,
+      directory: this.normalizeProjectDir(projectDir),
     });
   }
 
@@ -69,10 +90,14 @@ class OpencodeServerManager {
    * Update last activity time for a project to prevent idle cleanup.
    */
   touchProject(projectDir: string): void {
-    const server = this.servers.get(projectDir);
+    const server = this.servers.get(this.normalizeProjectDir(projectDir));
     if (server) {
       server.lastActivity = Date.now();
     }
+  }
+
+  private normalizeProjectDir(projectDir: string): string {
+    return projectDir.replace(/[\\/]+$/, "");
   }
 
   private async spawnServer(
@@ -198,7 +223,7 @@ class OpencodeServerManager {
    * Check if a server exists for a directory.
    */
   hasServer(projectDir: string): boolean {
-    return this.servers.has(projectDir);
+    return this.servers.has(this.normalizeProjectDir(projectDir));
   }
 
   /**

@@ -185,7 +185,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
         src={cacheBustedSrc}
         className={`w-full h-full border-0 ${className}`}
         title="Preview"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
         onLoad={handleLoad}
       />
     );

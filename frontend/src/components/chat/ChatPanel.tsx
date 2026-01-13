@@ -122,6 +122,7 @@ function SessionDebugDisplay({ debug }: { debug: SessionDebugState }) {
 function ChatPanelContent({ onClose }: { onClose?: () => void }) {
   const {
     sessions,
+    sessionsLoading,
     selectedSessionId,
     setSelectedSessionId,
     handleDeleteSession,
@@ -145,6 +146,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
           </div>
           <SessionList
             sessions={sessions}
+            sessionsLoading={sessionsLoading}
             selectedSessionId={selectedSessionId}
             onSelectSession={setSelectedSessionId}
             onDeleteSession={handleDeleteSession}

@@ -26,6 +26,7 @@ import { publishService } from "../../services/PublishService";
 import { db } from "../../db";
 import { projectMember } from "../../db/schema";
 import { eq } from "drizzle-orm";
+import { limitsService } from "../../services/LimitsService";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -66,6 +67,9 @@ export const projectGenerationProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Check usage limits before allowing generation (costs LLM tokens)
+      await limitsService.assertNotBlocked();
+
       // Enforce single project mode limit (only for new projects)
       const { url, createNewVersion } = input;
 
@@ -193,6 +197,9 @@ export const projectGenerationProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Check usage limits before allowing scratch generation (costs LLM tokens)
+      await limitsService.assertNotBlocked();
+
       // Enforce single project mode limit
       checkSingleProjectModeLimit();
 
@@ -240,6 +247,9 @@ export const projectGenerationProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Check usage limits before allowing regeneration (costs LLM tokens)
+      await limitsService.assertNotBlocked();
+
       const { slug, version } = input;
       const projectDir = getProjectDir(slug);
 

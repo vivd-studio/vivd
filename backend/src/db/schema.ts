@@ -6,6 +6,8 @@ import {
   boolean,
   index,
   integer,
+  numeric,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
@@ -162,3 +164,45 @@ export const publishedSiteRelations = relations(publishedSite, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// Usage tracking - individual usage events for audit trail
+export const usageRecord = pgTable(
+  "usage_record",
+  {
+    id: text("id").primaryKey(),
+    eventType: text("event_type").notNull(), // 'ai_cost' | 'image_gen'
+    cost: numeric("cost", { precision: 10, scale: 6 }).notNull(), // dollars (6 decimal places for micro-costs)
+    tokens: jsonb("tokens"), // token breakdown if available
+    sessionId: text("session_id"), // OpenCode session ID
+    projectSlug: text("project_slug"),
+    // Idempotency key to prevent duplicate recordings (e.g., "session123:part456")
+    idempotencyKey: text("idempotency_key").unique(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("usage_record_created_at_idx").on(table.createdAt),
+    index("usage_record_event_type_idx").on(table.eventType),
+  ]
+);
+
+// Usage tracking - rolling period aggregates for fast limit checking
+export const usagePeriod = pgTable(
+  "usage_period",
+  {
+    id: text("id").primaryKey(), // e.g., "daily:2026-01-13", "weekly:2026-W03", "monthly:2026-01"
+    periodType: text("period_type").notNull(), // 'daily' | 'weekly' | 'monthly'
+    periodStart: timestamp("period_start").notNull(),
+    totalCost: numeric("total_cost", { precision: 10, scale: 6 })
+      .notNull()
+      .default("0"),
+    imageCount: integer("image_count").notNull().default(0),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("usage_period_type_idx").on(table.periodType),
+    index("usage_period_start_idx").on(table.periodStart),
+  ]
+);

@@ -4,14 +4,22 @@ import { X } from "lucide-react";
 
 interface SessionListProps {
   sessions: { id: string; title?: string }[];
+  sessionsLoading?: boolean;
   selectedSessionId: string | null;
   onSelectSession: (sessionId: string | null) => void;
   onDeleteSession: (e: React.MouseEvent, sessionId: string) => void;
   onNewSession: () => void;
 }
 
+function SessionSkeleton() {
+  return (
+    <div className="h-7 w-24 bg-muted animate-pulse rounded-md" />
+  );
+}
+
 export function SessionList({
   sessions,
+  sessionsLoading,
   selectedSessionId,
   onSelectSession,
   onDeleteSession,
@@ -29,6 +37,13 @@ export function SessionList({
           >
             + New Session
           </Button>
+          {sessionsLoading && sessions.length === 0 && (
+            <>
+              <SessionSkeleton />
+              <SessionSkeleton />
+              <SessionSkeleton />
+            </>
+          )}
           {sessions.map((session) => {
             const title = session.title?.trim();
             const label =

@@ -13,6 +13,8 @@ import {
 import { downloadImage, saveImageBuffer } from "../../generator/utils";
 import { safeJoin } from "../../fs/safePaths";
 import { isImageFile } from "./shared";
+import { limitsService } from "../../services/LimitsService";
+import { usageService } from "../../services/UsageService";
 
 export const assetsAiImageProcedures = {
   /**
@@ -29,6 +31,10 @@ export const assetsAiImageProcedures = {
     )
     .mutation(async ({ input }) => {
       const { slug, version, relativePath, prompt } = input;
+
+      // Check usage limits before proceeding
+      await limitsService.assertImageGenNotBlocked();
+
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
@@ -175,6 +181,9 @@ export const assetsAiImageProcedures = {
         const newRelativePath = path.join(originalDir, newFileName);
         console.log(`[AI Edit] Saved edited image to: ${newRelativePath}`);
 
+        // Record image generation for usage tracking
+        await usageService.recordImageGeneration(slug);
+
         return {
           success: true,
           originalPath: relativePath,
@@ -208,6 +217,10 @@ export const assetsAiImageProcedures = {
     )
     .mutation(async ({ input }) => {
       const { slug, version, prompt, referenceImages, targetPath } = input;
+
+      // Check usage limits before proceeding
+      await limitsService.assertImageGenNotBlocked();
+
       const versionDir = getVersionDir(slug, version);
 
       // Validate versionDir exists
@@ -354,6 +367,9 @@ export const assetsAiImageProcedures = {
           ? path.posix.join(normalizedTarget, newFileName)
           : newFileName;
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
+
+        // Record image generation for usage tracking
+        await usageService.recordImageGeneration(slug);
 
         return {
           success: true,

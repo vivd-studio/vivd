@@ -91,6 +91,24 @@ export interface SessionError {
   nextRetryAt?: number;
 }
 
+// Usage limit status from backend
+export interface UsageLimitStatus {
+  blocked: boolean; // True if cost limits exceeded (blocks agent/generation)
+  imageGenBlocked: boolean; // True if image generation limit exceeded (blocks only images)
+  warnings: string[];
+  usage: {
+    daily: { current: number; limit: number; percentage: number };
+    weekly: { current: number; limit: number; percentage: number };
+    monthly: { current: number; limit: number; percentage: number };
+    imageGen: { current: number; limit: number; percentage: number };
+  };
+  nextReset: {
+    daily: Date | string;
+    weekly: Date | string;
+    monthly: Date | string;
+  };
+}
+
 interface ChatContextValue {
   // Project info
   projectSlug: string;
@@ -98,6 +116,7 @@ interface ChatContextValue {
 
   // Session state
   sessions: Session[];
+  sessionsLoading: boolean;
   selectedSessionId: string | null;
   setSelectedSessionId: (id: string | null) => void;
 
@@ -134,6 +153,10 @@ interface ChatContextValue {
   // Error state
   sessionError: SessionError | null;
   clearSessionError: () => void;
+
+  // Usage limits
+  usageLimitStatus: UsageLimitStatus | null;
+  isUsageBlocked: boolean;
 
   // Actions
   handleSend: () => void;
@@ -243,6 +266,16 @@ export function ChatProvider({
   const [sessionError, setSessionError] = useState<SessionError | null>(null);
   const clearSessionError = () => setSessionError(null);
 
+  // Poll usage limits - refetch every 30s or when session completes
+  const { data: usageLimitStatus, refetch: refetchUsageStatus } =
+    trpc.usage.status.useQuery(undefined, {
+      refetchInterval: 30000, // Poll every 30 seconds
+      staleTime: 10000, // Consider data stale after 10 seconds
+    });
+
+  // Derive if usage is blocked
+  const isUsageBlocked = usageLimitStatus?.blocked ?? false;
+
   const confirmResolverRef = useRef<((result: boolean) => void) | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -276,15 +309,18 @@ export function ChatProvider({
   }, []);
 
   // Poll for sessions to keep the list and status updated
-  const { data: sessionsData, refetch: refetchSessions } =
-    trpc.agent.listSessions.useQuery(
-      { projectSlug, version },
-      {
-        refetchOnMount: true,
-        // Poll every 2 seconds when waiting or streaming to keep session status in sync
-        refetchInterval: isWaiting || isStreaming ? 2000 : false,
-      }
-    );
+  const {
+    data: sessionsData,
+    refetch: refetchSessions,
+    isLoading: sessionsLoading,
+  } = trpc.agent.listSessions.useQuery(
+    { projectSlug, version },
+    {
+      refetchOnMount: true,
+      // Poll every 2 seconds when waiting or streaming to keep session status in sync
+      refetchInterval: isWaiting || isStreaming ? 2000 : false,
+    }
+  );
 
   // Poll for session statuses - this is the source of truth for whether a session is active
   const { data: sessionStatuses } = trpc.agent.getSessionsStatus.useQuery(
@@ -477,6 +513,13 @@ export function ChatProvider({
       }
     );
 
+  const shouldSubscribeToSessionEvents =
+    !!selectedSessionId &&
+    (isWaiting ||
+      isStreaming ||
+      currentSessionStatus?.type === "busy" ||
+      currentSessionStatus?.type === "retry");
+
   // Sync local streaming state with the polled session status (source of truth)
   // This handles cases where SSE events were missed (reconnection, session switch, page refresh)
   useEffect(() => {
@@ -530,7 +573,7 @@ export function ChatProvider({
       sessionId: selectedSessionId ?? "",
     },
     {
-      enabled: !!selectedSessionId,
+      enabled: shouldSubscribeToSessionEvents,
       onStarted: () => {
         debugLog("[ChatContext] SSE subscription started");
         setSseConnected(true);
@@ -660,6 +703,8 @@ export function ChatProvider({
             setIsWaiting(false);
             setSessionError(null); // Clear any previous errors on success
             refetchMessages();
+            // Refetch usage status immediately to get accurate limits after task completion
+            refetchUsageStatus();
             onTaskComplete?.();
             break;
 
@@ -679,49 +724,14 @@ export function ChatProvider({
             break;
 
           case "usage.updated":
+            // Real-time usage updates during streaming.
+            // These are delta values for individual steps.
+            // The history calculation from sessionMessages is the source of truth
+            // and will correct any accumulated values on next poll (every 2s).
+            // Server-side idempotency prevents duplicate recording, so this is
+            // purely for UI responsiveness during active streaming.
             if ("cost" in innerData && "tokens" in innerData) {
               setUsage((prev) => {
-                // If we have previous usage, we should be careful not to double count.
-                // However, usage.updated usually comes before the polled history updates.
-                // A simple strategy is:
-                // 1. If we have a base from history, we might be adding the *current* step.
-                // But since history polling happens frequently (every 2s), the history calc will overwrite this soon.
-                // The history calc is the source of truth.
-                // The usage.updated event is ephemeral for the active stream.
-                //
-                // Problem: If we just overwrite here, we lose the history sum until next poll.
-                // Solution: We should rely on the history calculation for the base,
-                // and THIS event should only update if we can identify it's new?
-                //
-                // Actually, simplest is to let the history poll handle the aggregation,
-                // and maybe ignore this event OR only use it if we want super real-time
-                // stats for the *current* token generation.
-                //
-                // Given the user wants history, the history calculation above is the most important fix.
-                // We'll leave this to overwrite for now, as the history poll will correct it
-                // within 2s, and this provides the "live" view of the current step.
-                //
-                // BETTER: Accumulate? No, receive delta?
-                // innerData is likely the usage for the *completed step/message*.
-                //
-                // Let's rely on the history polling primarily.
-                // But to prevent flickering to 0 (or low value) when a new step finishes
-                // (and overwrites the huge history total), we should probably
-                // ADD this to the previous TOTAL if the previous total exists.
-                //
-                // But "cost" in innerData is likely just for that step.
-                // So: Current Total + New Step Cost.
-                // But history poll will eventually include this step.
-                // We might double count if we just keep adding.
-                //
-                // SAFE BET: Just let the history poll do the work. The user's main complaint
-                // is "It is only visible for our new sessions". The history fix solves that.
-                // Real-time updates are less critical if polling is fast (2s).
-                // I will keep this here but maybe try to merge it intelligently?
-                // Actually, if I COMMENT OUT this handler or make it a no-op,
-                // the history calculator will pick it up on next poll (max 2s delay).
-                //
-                // Let's try to add it to previous keys to avoid the "reset to small number" artifact.
                 const prevCost = prev?.cost || 0;
                 const prevTokens = prev?.tokens || {
                   input: 0,
@@ -730,11 +740,7 @@ export function ChatProvider({
                   cache: { read: 0, write: 0 },
                 };
 
-                // Heuristic: If the new cost is significantly smaller than previous,
-                // it's likely a single step update vs the whole session total.
-                // We add it.
-                // If it's similar/larger, maybe it's a total update? (Unlikely given API).
-
+                // Add delta to previous total for real-time feedback
                 return {
                   cost: prevCost + (innerData.cost as number),
                   tokens: {
@@ -1078,6 +1084,7 @@ export function ChatProvider({
     projectSlug,
     version,
     sessions,
+    sessionsLoading,
     selectedSessionId,
     setSelectedSessionId: (sessionId) => {
       autoSelectLockedRef.current = true;
@@ -1103,6 +1110,8 @@ export function ChatProvider({
     sessionDebugState,
     sessionError,
     clearSessionError,
+    usageLimitStatus: usageLimitStatus ?? null,
+    isUsageBlocked,
     handleSend,
     handleNewSession,
     handleDeleteSession,

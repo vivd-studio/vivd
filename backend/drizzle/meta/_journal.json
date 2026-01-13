@@ -29,6 +29,20 @@
       "when": 1767874907212,
       "tag": "0003_add_project_member",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1768311935600,
+      "tag": "0004_whole_mariko_yashida",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1768326788598,
+      "tag": "0005_bent_warbird",
+      "breakpoints": true
     }
   ]
 }

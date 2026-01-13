@@ -17,6 +17,7 @@ import {
 } from "../../generator/versionUtils";
 import fs from "fs";
 import { debugLog } from "./debug";
+import { limitsService } from "../../services/LimitsService";
 
 export const agentSessionProcedures = {
   runTask: adminProcedure
@@ -29,6 +30,9 @@ export const agentSessionProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Check usage limits before allowing agent task to run
+      await limitsService.assertNotBlocked();
+
       const projectDir = getProjectDir(input.projectSlug);
 
       if (!fs.existsSync(projectDir)) {

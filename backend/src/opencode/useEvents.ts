@@ -23,6 +23,8 @@ export interface UsageData {
       write: number;
     };
   };
+  // Part ID for idempotency tracking
+  partId?: string;
 }
 
 export interface EventCallbacks {
@@ -91,6 +93,7 @@ export function useEvents(
         const toolStates = new Map<string, string>();
         const reasoningState = new Map<string, number>();
         const textState = new Map<string, number>();
+        const usageState = new Map<string, number>();
         // Track which messages are assistant messages (not user messages)
         const assistantMessageIds = new Set<string>();
         let eventCount = 0;
@@ -120,17 +123,6 @@ export function useEvents(
             const { info } = (event as any).properties;
             if (info?.role === "assistant") {
               assistantMessageIds.add(info.id);
-
-              if (
-                info.cost !== undefined &&
-                info.tokens &&
-                callbacks.onUsageUpdated
-              ) {
-                callbacks.onUsageUpdated({
-                  cost: info.cost,
-                  tokens: info.tokens,
-                });
-              }
             }
           }
 
@@ -143,15 +135,28 @@ export function useEvents(
 
             // Handle step-finish for usage updates
             if (part.type === "step-finish") {
-              if (
-                part.cost !== undefined &&
-                part.tokens &&
-                callbacks.onUsageUpdated
-              ) {
-                callbacks.onUsageUpdated({
-                  cost: part.cost,
-                  tokens: part.tokens,
-                });
+              // Record cost even if tokens are missing - cost data is critical for limits
+              if (part.cost !== undefined && callbacks.onUsageUpdated) {
+                // Calculate delta for steps too
+                const lastCost = usageState.get(part.id) || 0;
+                const currentCost = part.cost;
+                const delta = currentCost - lastCost;
+
+                if (delta > 0) {
+                  usageState.set(part.id, currentCost);
+                  callbacks.onUsageUpdated({
+                    cost: delta,
+                    // Provide tokens if available, otherwise use zeros
+                    tokens: part.tokens || {
+                      input: 0,
+                      output: 0,
+                      reasoning: 0,
+                      cache: { read: 0, write: 0 },
+                    },
+                    // Include partId for idempotency tracking
+                    partId: part.id,
+                  });
+                }
               }
             } else if (part.type === "reasoning") {
               // Reasoning parts are only from assistant messages, but double-check

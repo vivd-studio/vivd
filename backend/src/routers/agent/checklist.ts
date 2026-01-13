@@ -15,6 +15,7 @@ import type {
   ChecklistItem,
 } from "../../opencode/checklistTypes";
 import { debugLog } from "./debug";
+import { limitsService } from "../../services/LimitsService";
 
 export const agentChecklistProcedures = {
   /**
@@ -30,6 +31,9 @@ export const agentChecklistProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Check usage limits before running checklist (costs LLM tokens)
+      await limitsService.assertNotBlocked();
+
       const projectDir = getProjectDir(input.projectSlug);
 
       if (!fs.existsSync(projectDir)) {
@@ -257,6 +261,9 @@ export const agentChecklistProcedures = {
       })
     )
     .mutation(async ({ input }) => {
+      // Check usage limits before running fix task (costs LLM tokens)
+      await limitsService.assertNotBlocked();
+
       const projectDir = getProjectDir(input.projectSlug);
 
       if (!fs.existsSync(projectDir)) {

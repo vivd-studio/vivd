@@ -32,6 +32,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+type DevPreviewProxyRequest = express.Request & {
+  vivdDevPreviewTarget?: string;
+  vivdDevPreviewBasePath?: string;
+};
+
 function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
   const prefixGroups = [
@@ -79,6 +84,69 @@ function stripDevServerToolingFromHtml(html: string): string {
       ""
     );
 }
+
+// Single proxy instance to avoid adding EventEmitter listeners per request.
+// The route handler sets `vivdDevPreviewTarget` and `vivdDevPreviewBasePath` on the request.
+const devPreviewProxy = createProxyMiddleware({
+  target: "http://127.0.0.1:0", // Overridden by `router` per request
+  changeOrigin: true,
+  ws: true,
+  selfHandleResponse: true,
+  router: (req) => {
+    const target = (req as DevPreviewProxyRequest).vivdDevPreviewTarget;
+    return typeof target === "string" && target.length > 0
+      ? target
+      : "http://127.0.0.1:0";
+  },
+  on: {
+    proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req) => {
+      const basePath =
+        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath || "";
+
+      const contentType = String(proxyRes.headers["content-type"] || "");
+      const ct = contentType.toLowerCase();
+      const reqUrl = String(req?.url || "");
+
+      const looksLikeTextByUrl =
+        reqUrl.includes("/@id/") ||
+        reqUrl.includes("/@vite/") ||
+        reqUrl.includes("/@fs/") ||
+        /\.(?:html|css|js|mjs|cjs|ts|tsx|jsx)(?:\?|$)/i.test(reqUrl) ||
+        reqUrl.includes("?astro&type=script") ||
+        reqUrl.includes("?astro&type=style");
+
+      const isTextLike =
+        ct.includes("text/html") ||
+        ct.includes("text/css") ||
+        ct.includes("application/javascript") ||
+        ct.includes("text/javascript") ||
+        ct.includes("application/x-javascript") ||
+        ct.includes("application/ecmascript") ||
+        ct.includes("text/ecmascript") ||
+        looksLikeTextByUrl;
+      if (!isTextLike || !basePath) {
+        return responseBuffer;
+      }
+
+      const text = responseBuffer.toString("utf8");
+      const rewritten = rewriteRootAssetUrlsInText(text, basePath);
+      const shouldStripTooling = ct.includes("text/html");
+      const finalText = shouldStripTooling
+        ? stripDevServerToolingFromHtml(rewritten)
+        : rewritten;
+
+      return Buffer.from(finalText, "utf8");
+    }),
+    error: (err, _req, res) => {
+      console.error("[DevServer] Proxy error:", err.message);
+      if ("status" in res) {
+        (res as express.Response).status(502).json({
+          error: "Dev server proxy error",
+        });
+      }
+    },
+  },
+});
 
 async function getSessionFromRequest(req: express.Request) {
   return auth.api.getSession({
@@ -244,66 +312,12 @@ export default {};
     req.url = req.originalUrl;
 
     const basePath = `/vivd-studio/api/devpreview/${slug}/v${versionNumber}`;
+    (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
+    (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = basePath;
 
-    // Proxy to the actual dev server
-    // Don't rewrite paths - Astro is configured with --base to expect the full path
-    const proxy = createProxyMiddleware({
-      target: devServerUrl,
-      changeOrigin: true,
-      ws: true, // Enable WebSocket support for HMR
-      selfHandleResponse: true,
-      on: {
-        proxyRes: responseInterceptor(
-          async (responseBuffer, proxyRes, proxyReq, _res) => {
-            const contentType = String(proxyRes.headers["content-type"] || "");
-            const ct = contentType.toLowerCase();
-            const reqUrl = String(proxyReq?.url || "");
-
-            const looksLikeTextByUrl =
-              reqUrl.includes("/@id/") ||
-              reqUrl.includes("/@vite/") ||
-              reqUrl.includes("/@fs/") ||
-              /\.(?:html|css|js|mjs|cjs|ts|tsx|jsx)(?:\?|$)/i.test(reqUrl) ||
-              reqUrl.includes("?astro&type=script") ||
-              reqUrl.includes("?astro&type=style");
-
-            const isTextLike =
-              ct.includes("text/html") ||
-              ct.includes("text/css") ||
-              ct.includes("application/javascript") ||
-              ct.includes("text/javascript") ||
-              ct.includes("application/x-javascript") ||
-              ct.includes("application/ecmascript") ||
-              ct.includes("text/ecmascript") ||
-              looksLikeTextByUrl;
-            if (!isTextLike) {
-              return responseBuffer;
-            }
-
-            const text = responseBuffer.toString("utf8");
-            const rewritten = rewriteRootAssetUrlsInText(text, basePath);
-            // Strip dev tooling (HMR client, dev toolbar) from all HTML responses
-            // since the preview iframe is display-only and HMR won't work through our proxy
-            const shouldStripTooling = ct.includes("text/html");
-            const finalText = shouldStripTooling
-              ? stripDevServerToolingFromHtml(rewritten)
-              : rewritten;
-
-            return Buffer.from(finalText, "utf8");
-          }
-        ),
-        error: (err, _req, res) => {
-          console.error("[DevServer] Proxy error:", err.message);
-          if ("status" in res) {
-            (res as express.Response)
-              .status(502)
-              .json({ error: "Dev server proxy error" });
-          }
-        },
-      },
-    });
-
-    return proxy(req, res, next);
+    // Proxy to the actual dev server (reused proxy instance to avoid listener leaks).
+    // Don't rewrite paths - Astro is configured with --base to expect the full path.
+    return devPreviewProxy(req, res, next);
   }
 );
 

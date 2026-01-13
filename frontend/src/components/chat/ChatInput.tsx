@@ -19,7 +19,11 @@ export function ChatInput() {
     selectorMode,
     setSelectorMode,
     isLoading,
+    isUsageBlocked,
   } = useChatContext();
+
+  // Combine loading and blocked states for disabling
+  const isDisabled = isLoading || isUsageBlocked;
 
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -163,7 +167,7 @@ export function ChatInput() {
           variant="ghost"
           size="icon"
           onClick={() => fileInputRef.current?.click()}
-          disabled={isLoading}
+          disabled={isDisabled}
           className="h-10 w-10 text-muted-foreground hover:text-foreground"
           title="Upload image"
         >
@@ -173,16 +177,18 @@ export function ChatInput() {
           <ElementSelector
             isActive={selectorMode}
             onToggle={() => setSelectorMode(!selectorMode)}
-            disabled={isLoading}
+            disabled={isDisabled}
           />
         )}
         <div className="flex-1 flex gap-2 items-end">
           <textarea
             className={`flex min-h-[40px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none max-h-[200px] ${
               isDragOver ? "border-primary" : ""
-            }`}
+            } ${isUsageBlocked ? "border-destructive/50" : ""}`}
             placeholder={
-              selectorMode
+              isUsageBlocked
+                ? "Usage limit reached. Please wait for the limit to reset."
+                : selectorMode
                 ? "Click an element in the preview..."
                 : attachedElement || attachedImages.length > 0
                 ? "Describe what you want to change..."
@@ -197,17 +203,19 @@ export function ChatInput() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                handleSend();
+                if (!isUsageBlocked) {
+                  handleSend();
+                }
               }
             }}
             onPaste={handlePaste}
-            disabled={isLoading}
+            disabled={isDisabled}
             rows={1}
           />
           <Button
             onClick={handleSend}
             disabled={
-              isLoading ||
+              isDisabled ||
               (!input.trim() && !attachedElement && attachedImages.length === 0)
             }
             size="icon"

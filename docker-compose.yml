@@ -42,6 +42,11 @@ services:
       - GITHUB_REPO_VISIBILITY=${GITHUB_REPO_VISIBILITY:-private}
       - GITHUB_API_URL=${GITHUB_API_URL:-https://api.github.com}
       - GITHUB_GIT_HOST=${GITHUB_GIT_HOST:-github.com}
+      - LICENSE_DAILY_COST_LIMIT=${LICENSE_DAILY_COST_LIMIT:-20}
+      - LICENSE_WEEKLY_COST_LIMIT=${LICENSE_WEEKLY_COST_LIMIT:-50}
+      - LICENSE_MONTHLY_COST_LIMIT=${LICENSE_MONTHLY_COST_LIMIT:-100}
+      - LICENSE_IMAGE_GEN_PER_MONTH=${LICENSE_IMAGE_GEN_PER_MONTH:-50}
+      - LICENSE_WARNING_THRESHOLD=${LICENSE_WARNING_THRESHOLD:-0.8}
     volumes:
       - backend_data:/app/projects
       - opencode_data:/root/.local/share/opencode/storage
