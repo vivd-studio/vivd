@@ -1,0 +1,64 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - PORT=3100
+      - DOKPLOY_URL=${DOKPLOY_URL}
+      - DOKPLOY_API_KEY=${DOKPLOY_API_KEY}
+      - SHARED_OPENROUTER_API_KEY=${SHARED_OPENROUTER_API_KEY:-}
+      - SHARED_GOOGLE_API_KEY=${SHARED_GOOGLE_API_KEY:-}
+      - SHARED_GITHUB_TOKEN=${SHARED_GITHUB_TOKEN:-}
+      - SHARED_GITHUB_ORG=${SHARED_GITHUB_ORG:-}
+      - DEFAULT_SCRAPER_URL=${DEFAULT_SCRAPER_URL:-}
+      - DEFAULT_SCRAPER_API_KEY=${DEFAULT_SCRAPER_API_KEY:-}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - control-panel-network
+    ports:
+      - "3100:3100"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://backend:3100
+    depends_on:
+      - backend
+    networks:
+      - control-panel-network
+
+    ports:
+      - "5174:80"
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - control-panel-network
+
+networks:
+  control-panel-network:
+
+volumes:
+  postgres_data:

@@ -1,0 +1,389 @@
+:root {
+  --color-bg: #0a0a0f;
+  --color-surface: #12121a;
+  --color-surface-elevated: #1a1a24;
+  --color-border: #2a2a36;
+  --color-text: #e4e4e7;
+  --color-text-muted: #71717a;
+  --color-primary: #6366f1;
+  --color-primary-hover: #818cf8;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Auth */
+.auth-page {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-card:hover {
+  border-color: var(--color-border);
+  transform: none;
+}
+
+/* Navbar */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.navbar-brand a {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-decoration: none;
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--color-primary-hover)
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.navbar-links a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.navbar-links a:hover {
+  color: var(--color-text);
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Page Headers */
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.page-header p {
+  color: var(--color-text-muted);
+}
+
+/* Cards */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+/* Instance Grid */
+.instance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.instance-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.instance-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.instance-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.instance-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.instance-status.active {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-success);
+}
+
+.instance-status.deploying {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-info);
+}
+
+.instance-status.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+
+.instance-status.stopped {
+  background: rgba(113, 113, 122, 0.15);
+  color: var(--color-text-muted);
+}
+
+.instance-domain {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.instance-domain a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.instance-domain a:hover {
+  text-decoration: underline;
+}
+
+.instance-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.instance-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+  background: var(--color-border);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.btn-ghost:hover {
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* Forms */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 600px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.form-input {
+  padding: 0.75rem 1rem;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.form-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.form-checkbox input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--color-primary);
+}
+
+/* Status Badge */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.status-dot.active {
+  background: var(--color-success);
+}
+.status-dot.deploying {
+  background: var(--color-info);
+}
+.status-dot.error {
+  background: var(--color-error);
+}
+.status-dot.stopped {
+  background: var(--color-text-muted);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--color-text-muted);
+}
+
+.empty-state h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-text);
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

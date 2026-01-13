@@ -1,0 +1,19 @@
+{
+  "name": "vivd-control-panel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Control panel for managing Vivd instances",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm -C backend run dev",
+    "dev:frontend": "npm -C frontend run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "npm -C backend run build",
+    "build:frontend": "npm -C frontend run build",
+    "db:generate": "npm -C backend run db:generate",
+    "db:migrate": "npm -C backend run db:migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
