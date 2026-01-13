@@ -424,8 +424,12 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     // Pipe archive to response
     archive.pipe(res);
 
-    // Add the version directory contents to the archive (including internals)
-    archive.directory(versionDir, false);
+    // Add the version directory contents to the archive (excluding node_modules)
+    archive.glob("**/*", {
+      cwd: versionDir,
+      ignore: ["node_modules/**"],
+      dot: true,
+    });
 
     // Finalize the archive
     await archive.finalize();

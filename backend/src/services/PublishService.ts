@@ -1,10 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
+import { execSync } from "child_process";
 import { db } from "../db";
 import { publishedSite } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { gitService } from "./GitService";
 import { getVersionDir } from "../generator/versionUtils";
+import { detectProjectType, hasNodeModules } from "../devserver/projectType";
 import type { GitHubSyncResult } from "./GitService";
 
 // Directory where published site files are stored (Caddy reads from here)
@@ -173,8 +175,18 @@ export class PublishService {
       fs.rmSync(publishedPath, { recursive: true, force: true });
     }
 
-    // Copy files to published directory
-    this.copyDirectory(versionDir, publishedPath);
+    // Detect project type to determine how to publish
+    const projectConfig = detectProjectType(versionDir);
+
+    if (projectConfig.framework === "astro") {
+      // For Astro projects: build first, then copy the dist folder
+      console.log(`[Publish] Detected Astro project, running build...`);
+      const distPath = await this.buildAstroProject(versionDir);
+      this.copyDirectory(distPath, publishedPath);
+    } else {
+      // For static/non-Astro projects: copy the entire version directory
+      this.copyDirectory(versionDir, publishedPath);
+    }
 
     // Generate Caddy config for this domain
     await this.generateCaddyConfig(normalizedDomain, projectSlug);
@@ -357,6 +369,63 @@ export class PublishService {
         fs.copyFileSync(srcPath, destPath);
       }
     }
+  }
+
+  /**
+   * Build an Astro project and return the path to the build output.
+   * Installs dependencies if needed before building.
+   */
+  private async buildAstroProject(versionDir: string): Promise<string> {
+    const config = detectProjectType(versionDir);
+
+    // Install dependencies if needed
+    if (!hasNodeModules(versionDir)) {
+      console.log(`[Publish] Installing dependencies in ${versionDir}`);
+
+      const installCmd =
+        config.packageManager === "pnpm"
+          ? "pnpm install"
+          : config.packageManager === "yarn"
+            ? "yarn install"
+            : "npm install";
+
+      try {
+        execSync(installCmd, {
+          cwd: versionDir,
+          stdio: "pipe",
+          encoding: "utf-8",
+          timeout: 5 * 60 * 1000, // 5 minute timeout for install
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to install dependencies: ${msg}`);
+      }
+    }
+
+    // Run astro build
+    console.log(`[Publish] Building Astro project in ${versionDir}`);
+    const astroBin = path.join(versionDir, "node_modules", ".bin", "astro");
+
+    try {
+      execSync(`"${astroBin}" build`, {
+        cwd: versionDir,
+        stdio: "pipe",
+        encoding: "utf-8",
+        timeout: 5 * 60 * 1000, // 5 minute timeout for build
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Astro build failed: ${msg}`);
+    }
+
+    // Return path to dist folder
+    const distPath = path.join(versionDir, "dist");
+    if (!fs.existsSync(distPath)) {
+      throw new Error("Astro build completed but dist folder not found");
+    }
+
+    console.log(`[Publish] Astro build completed, output in ${distPath}`);
+    return distPath;
   }
 
   /**

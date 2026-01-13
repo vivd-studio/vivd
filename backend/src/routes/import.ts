@@ -137,13 +137,6 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         });
       }
 
-      const indexHtmlPath = path.join(rootDir, "index.html");
-      if (!fs.existsSync(indexHtmlPath)) {
-        return res.status(400).json({
-          error: "Invalid ZIP: missing index.html at project root",
-        });
-      }
-
       const sourceProjectJsonPath = fs.existsSync(
         path.join(rootDir, ".vivd", "project.json")
       )
