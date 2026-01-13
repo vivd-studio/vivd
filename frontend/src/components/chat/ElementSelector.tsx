@@ -167,6 +167,19 @@ export const ELEMENT_SELECTOR_SCRIPT = `
     const pathname = window.location.pathname;
     const filename = pathname.split('/').pop() || 'index.html';
     
+    // Check for Astro source info (available in Astro dev server)
+    // Walk up to find the nearest element with data-astro-source-file
+    const astroSourceEl = el.closest('[data-astro-source-file]');
+    const astroSourceFile = astroSourceEl?.getAttribute('data-astro-source-file') || null;
+    const astroSourceLoc = astroSourceEl?.getAttribute('data-astro-source-loc') || null;
+    
+    // For Astro, extract relative path from absolute path
+    let sourceFile = null;
+    if (astroSourceFile) {
+      const srcMatch = astroSourceFile.match(/\\/(src\\/.*\\.astro)$/i);
+      sourceFile = srcMatch ? srcMatch[1] : astroSourceFile;
+    }
+    
     window.parent.postMessage({
       type: 'vivd-element-selected',
       data: {
@@ -175,6 +188,9 @@ export const ELEMENT_SELECTOR_SCRIPT = `
         tagName: el.tagName.toLowerCase(),
         text: el.textContent?.trim().slice(0, 100) || '',
         filename,
+        // Astro source info (if available)
+        astroSourceFile: sourceFile,
+        astroSourceLoc,
       }
     }, '*');
     

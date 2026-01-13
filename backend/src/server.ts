@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import archiver from "archiver";
@@ -303,6 +304,64 @@ export default {};
     });
 
     return proxy(req, res, next);
+  }
+);
+
+// Dropped image upload endpoint (for chat drag-and-drop)
+app.post(
+  "/vivd-studio/api/upload-dropped-image/:slug/:version",
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      const session = await getSessionFromRequest(req);
+
+      if (!session) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { slug, version } = req.params;
+      const ok = await enforceProjectAccess(req, res, session, slug);
+      if (!ok) return;
+
+      const versionNumber = Number.parseInt(version, 10);
+      if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+        return res.status(400).json({ error: "Invalid version" });
+      }
+
+      const versionDir = getVersionDir(slug, versionNumber);
+
+      if (!fs.existsSync(versionDir)) {
+        return res.status(404).json({ error: "Project version not found" });
+      }
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      // Create .vivd/dropped-images directory
+      const droppedImagesDir = path.join(versionDir, ".vivd", "dropped-images");
+      if (!fs.existsSync(droppedImagesDir)) {
+        fs.mkdirSync(droppedImagesDir, { recursive: true });
+      }
+
+      // Generate unique filename: uuid-originalname
+      const uuid = crypto.randomUUID().split("-")[0]; // Short UUID prefix
+      const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const uniqueFilename = `${uuid}-${sanitizedName}`;
+      const filePath = path.join(droppedImagesDir, uniqueFilename);
+
+      // Write file
+      fs.writeFileSync(filePath, file.buffer);
+
+      // Return relative path from project root
+      const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
+
+      return res.json({ success: true, path: relativePath });
+    } catch (error) {
+      console.error("Dropped image upload error:", error);
+      return res.status(500).json({ error: "Upload failed" });
+    }
   }
 );
 

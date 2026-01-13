@@ -12,7 +12,11 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EmptyStatePrompt } from "./EmptyStatePrompt";
-import { ElementRefPill, parseElementRef } from "./SelectedElementPill";
+import {
+  ElementRefPill,
+  DroppedImagePill,
+  parseVivdInternalTags,
+} from "./SelectedElementPill";
 import { useChatContext } from "./ChatContext";
 
 export function MessageList() {
@@ -34,6 +38,9 @@ export function MessageList() {
     handleSend,
     attachedElement,
     setAttachedElement,
+    attachedImages,
+    addAttachedImages,
+    removeAttachedImage,
     sessionError,
     clearSessionError,
   } = useChatContext();
@@ -70,6 +77,9 @@ export function MessageList() {
             isLoading={isLoading}
             attachedElement={attachedElement}
             onRemoveElement={() => setAttachedElement(null)}
+            attachedImages={attachedImages}
+            addAttachedImages={addAttachedImages}
+            removeAttachedImage={removeAttachedImage}
           />
         )}
         {messages.map((msg, i) => {
@@ -128,9 +138,19 @@ export function MessageList() {
               {/* User Message Bubble */}
               {isUser ? (
                 (() => {
-                  const { cleanMessage, elementHtml } = parseElementRef(
+                  // Parse all vivd-internal tags (unified for images and element refs)
+                  const { cleanMessage, internalTags } = parseVivdInternalTags(
                     msg.content
                   );
+
+                  // Separate by type
+                  const imageTags = internalTags.filter(
+                    (t) => t.type === "dropped-image"
+                  );
+                  const elementTag = internalTags.find(
+                    (t) => t.type === "element-ref"
+                  );
+
                   return (
                     <div className="rounded-lg px-4 py-2 max-w-[90%] min-w-0 overflow-x-hidden bg-muted text-foreground">
                       <ReactMarkdown
@@ -172,9 +192,21 @@ export function MessageList() {
                       >
                         {cleanMessage}
                       </ReactMarkdown>
-                      {elementHtml && (
+                      {/* Show dropped image pills */}
+                      {imageTags.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-foreground/10 flex flex-wrap gap-1.5">
+                          {imageTags.map((tag, idx) => (
+                            <DroppedImagePill
+                              key={idx}
+                              filename={tag.filename || "image"}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {/* Show element ref pill */}
+                      {elementTag?.selector && (
                         <div className="mt-2 pt-2 border-t border-foreground/10">
-                          <ElementRefPill html={elementHtml} />
+                          <ElementRefPill html={elementTag.selector} />
                         </div>
                       )}
                     </div>

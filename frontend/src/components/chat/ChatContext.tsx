@@ -44,6 +44,14 @@ interface AttachedElement {
   description: string;
   text?: string;
   filename?: string;
+  astroSourceFile?: string | null;
+  astroSourceLoc?: string | null;
+}
+
+export interface AttachedImage {
+  file: File;
+  previewUrl: string;
+  tempId: string;
 }
 
 // Debug state for session monitoring
@@ -107,6 +115,9 @@ interface ChatContextValue {
   setInput: (value: string) => void;
   attachedElement: AttachedElement | null;
   setAttachedElement: (element: AttachedElement | null) => void;
+  attachedImages: AttachedImage[];
+  addAttachedImages: (images: AttachedImage[]) => void;
+  removeAttachedImage: (tempId: string) => void;
 
   // Element selector
   selectorMode: boolean;
@@ -178,6 +189,23 @@ export function ChatProvider({
   // Local state for attached element (shown as pill)
   const [attachedElement, setAttachedElement] =
     useState<AttachedElement | null>(null);
+
+  // Local state for attached images (dropped/pasted in chat)
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+
+  const addAttachedImages = useCallback((images: AttachedImage[]) => {
+    setAttachedImages((prev) => [...prev, ...images]);
+  }, []);
+
+  const removeAttachedImage = useCallback((tempId: string) => {
+    setAttachedImages((prev) => {
+      const toRemove = prev.find((img) => img.tempId === tempId);
+      if (toRemove) {
+        URL.revokeObjectURL(toRemove.previewUrl);
+      }
+      return prev.filter((img) => img.tempId !== tempId);
+    });
+  }, []);
 
   const [messages, setMessages] = useState<Message[]>([]);
   // Ref to access current messages in effects without adding to dependency array
@@ -313,6 +341,8 @@ export function ChatProvider({
         description: selectedElement.description,
         text: selectedElement.text,
         filename: selectedElement.filename,
+        astroSourceFile: selectedElement.astroSourceFile,
+        astroSourceLoc: selectedElement.astroSourceLoc,
       });
       clearSelectedElement();
     }
@@ -930,8 +960,11 @@ export function ChatProvider({
     });
   };
 
-  const handleSend = () => {
-    if ((!input.trim() && !attachedElement) || runTaskMutation.isPending)
+  const handleSend = async () => {
+    if (
+      (!input.trim() && !attachedElement && attachedImages.length === 0) ||
+      runTaskMutation.isPending
+    )
       return;
 
     let task = input.trim() || "I want to change this element";
@@ -940,8 +973,51 @@ export function ChatProvider({
         task,
         attachedElement.selector,
         attachedElement.filename,
-        attachedElement.text
+        attachedElement.text,
+        attachedElement.astroSourceFile,
+        attachedElement.astroSourceLoc
       );
+    }
+
+    // Upload attached images and build internal message
+    if (attachedImages.length > 0 && version) {
+      try {
+        const uploadedPaths: string[] = [];
+        for (const img of attachedImages) {
+          const formData = new FormData();
+          formData.append("file", img.file);
+
+          const response = await fetch(
+            `/vivd-studio/api/upload-dropped-image/${projectSlug}/${version}`,
+            {
+              method: "POST",
+              body: formData,
+              credentials: "include",
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            uploadedPaths.push(data.path);
+          } else {
+            console.error("Failed to upload image:", img.file.name);
+          }
+        }
+
+        // Inject internal tag for each uploaded image
+        for (const imgPath of uploadedPaths) {
+          const filename = imgPath.split("/").pop() || "image";
+          task += `\n<vivd-internal type="dropped-image" filename="${filename}" path="${imgPath}" />`;
+        }
+
+        // Revoke preview URLs and clear attached images
+        for (const img of attachedImages) {
+          URL.revokeObjectURL(img.previewUrl);
+        }
+        setAttachedImages([]);
+      } catch (error) {
+        console.error("Error uploading dropped images:", error);
+      }
     }
 
     setInput("");
@@ -1016,6 +1092,9 @@ export function ChatProvider({
     setInput,
     attachedElement,
     setAttachedElement,
+    attachedImages,
+    addAttachedImages,
+    removeAttachedImage,
     selectorMode,
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,

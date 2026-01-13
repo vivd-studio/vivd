@@ -42,8 +42,16 @@ export function AssetExplorer({
   const { canUseAiImages } = usePermissions();
   const utils = trpc.useUtils();
 
-  // View mode state
-  const [viewMode, setViewMode] = useState<ViewMode>("gallery");
+  // View mode state - persisted to localStorage
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = localStorage.getItem("asset-explorer-view-mode");
+    return stored === "gallery" || stored === "files" ? stored : "gallery";
+  });
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem("asset-explorer-view-mode", mode);
+  };
 
   // Navigation state (for gallery mode) - will be initialized based on folder detection
   const [currentPath, setCurrentPath] = useState<string | null>(null);
@@ -340,7 +348,7 @@ export function AssetExplorer({
       <div className="px-4 py-3 border-b flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Assets</h2>
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle value={viewMode} onChange={handleViewModeChange} />
         </div>
         {onClose && (
           <Button variant="ghost" size="icon" onClick={onClose}>

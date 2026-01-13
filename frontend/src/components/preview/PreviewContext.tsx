@@ -31,6 +31,8 @@ interface SelectedElement {
   tagName: string;
   text: string;
   filename: string;
+  astroSourceFile?: string | null;
+  astroSourceLoc?: string | null;
 }
 
 interface PreviewContextValue {
@@ -771,14 +773,23 @@ export function PreviewProvider({
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "vivd-element-selected") {
-        const { description, selector, tagName, text, filename } =
-          event.data.data;
+        const {
+          description,
+          selector,
+          tagName,
+          text,
+          filename,
+          astroSourceFile,
+          astroSourceLoc,
+        } = event.data.data;
         setSelectedElement({
           description,
           selector,
           tagName,
           text,
           filename: filename || "index.html",
+          astroSourceFile,
+          astroSourceLoc,
         });
         setSelectorModeState(false);
         // Open chat panel when element is selected
