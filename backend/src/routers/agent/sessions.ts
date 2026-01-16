@@ -9,6 +9,7 @@ import {
   revertToUserMessage,
   unrevertSession,
   getSessionsStatus,
+  getAvailableModels,
 } from "../../opencode";
 import {
   getProjectDir,
@@ -27,7 +28,13 @@ export const agentSessionProcedures = {
         task: z.string(),
         sessionId: z.string().optional(),
         version: z.number().optional(),
-      })
+        model: z
+          .object({
+            provider: z.string(),
+            modelId: z.string(),
+          })
+          .optional(),
+      }),
     )
     .mutation(async ({ input }) => {
       // Check usage limits before allowing agent task to run
@@ -56,7 +63,8 @@ export const agentSessionProcedures = {
         const { sessionId } = await runTask(
           input.task,
           versionPath,
-          input.sessionId
+          input.sessionId,
+          input.model,
         );
         return { success: true, sessionId, version: targetVersion };
       } catch (error: any) {
@@ -70,7 +78,7 @@ export const agentSessionProcedures = {
       z.object({
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       try {
@@ -97,7 +105,7 @@ export const agentSessionProcedures = {
       z.object({
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       try {
@@ -127,7 +135,7 @@ export const agentSessionProcedures = {
       z.object({
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       try {
@@ -143,12 +151,12 @@ export const agentSessionProcedures = {
 
         debugLog(
           "[getSessionsStatus] Fetching status for directory:",
-          directory
+          directory,
         );
         const statuses = await getSessionsStatus(directory);
         debugLog(
           "[getSessionsStatus] Statuses:",
-          JSON.stringify(statuses, null, 2)
+          JSON.stringify(statuses, null, 2),
         );
         return statuses;
       } catch (error: any) {
@@ -163,7 +171,7 @@ export const agentSessionProcedures = {
         sessionId: z.string(),
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       try {
@@ -189,7 +197,7 @@ export const agentSessionProcedures = {
         sessionId: z.string(),
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       const targetVersion =
@@ -217,7 +225,7 @@ export const agentSessionProcedures = {
         messageId: z.string(),
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       console.log("[Revert] Attempting to revert to user message:", {
@@ -239,7 +247,7 @@ export const agentSessionProcedures = {
         const result = await revertToUserMessage(
           input.sessionId,
           input.messageId,
-          directory
+          directory,
         );
         console.log("[Revert] Revert completed:", result);
         return { success: true, ...result };
@@ -255,12 +263,12 @@ export const agentSessionProcedures = {
         sessionId: z.string(),
         projectSlug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       console.log(
         "[Unrevert] Attempting to unrevert session:",
-        input.sessionId
+        input.sessionId,
       );
 
       const targetVersion =
@@ -281,4 +289,14 @@ export const agentSessionProcedures = {
         throw new Error(error.message || "Failed to unrevert session");
       }
     }),
+
+  /**
+   * Get available OpenCode models for the model selector.
+   * Returns an empty array if only one model is configured (no selection needed).
+   */
+  getAvailableModels: adminProcedure.query(async () => {
+    const models = getAvailableModels();
+    // Only return models if there are multiple to choose from
+    return models.length > 1 ? models : [];
+  }),
 };

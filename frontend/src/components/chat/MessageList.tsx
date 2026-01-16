@@ -59,7 +59,7 @@ export function MessageList() {
 
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
-      <div className="flex flex-col gap-6 px-6 pt-6 pb-20">
+      <div className="flex flex-col gap-6 px-6 pt-6 pb-6">
         {messages.length === 0 && (
           <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
         )}
@@ -87,7 +87,7 @@ export function MessageList() {
           ) {
             const streamingPartIds = new Set(streamingParts.map((p) => p.id));
             const hasOverlap = msg.parts.some(
-              (p: any) => p.id && streamingPartIds.has(p.id)
+              (p: any) => p.id && streamingPartIds.has(p.id),
             );
             if (hasOverlap) {
               return null;
@@ -121,15 +121,15 @@ export function MessageList() {
                 (() => {
                   // Parse all vivd-internal tags (unified for images and element refs)
                   const { cleanMessage, internalTags } = parseVivdInternalTags(
-                    msg.content
+                    msg.content,
                   );
 
                   // Separate by type
                   const imageTags = internalTags.filter(
-                    (t) => t.type === "dropped-image"
+                    (t) => t.type === "dropped-image",
                   );
                   const elementTag = internalTags.find(
-                    (t) => t.type === "element-ref"
+                    (t) => t.type === "element-ref",
                   );
 
                   return (

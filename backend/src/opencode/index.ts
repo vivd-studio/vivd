@@ -22,15 +22,21 @@ export { agentEventEmitter } from "./eventEmitter";
 export type { AgentEvent, AgentEventType } from "./eventEmitter";
 export { serverManager } from "./serverManager";
 
+import { ModelSelection, getDefaultModel } from "./modelConfig";
+
+export { getAvailableModels } from "./modelConfig";
+export type { ModelTier, ModelSelection } from "./modelConfig";
+
 export async function runTask(
   task: string,
   cwd: string,
-  sessionId?: string
+  sessionId?: string,
+  model?: ModelSelection,
 ): Promise<{ sessionId: string }> {
   console.log(
     `[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${
       sessionId || "New"
-    })`
+    })`,
   );
 
   // Lazily create/get server for this project directory
@@ -49,7 +55,7 @@ export async function runTask(
         currentSessionId,
         createAgentEvent(currentSessionId, "thinking.started", {
           kind: "thinking.started",
-        } as ThinkingStartedData)
+        } as ThinkingStartedData),
       );
     },
     onReasoning: (content, partId) => {
@@ -60,7 +66,7 @@ export async function runTask(
           kind: "reasoning.delta",
           content,
           partId: partId || "unknown",
-        } as ReasoningDeltaData)
+        } as ReasoningDeltaData),
       );
     },
     onText: (content, partId) => {
@@ -71,7 +77,7 @@ export async function runTask(
           kind: "message.delta",
           content,
           partId: partId || "unknown",
-        } as MessageDeltaData)
+        } as MessageDeltaData),
       );
     },
     onToolCall: (toolCall: ToolCall) => {
@@ -79,7 +85,7 @@ export async function runTask(
         `[OpenCode] Tool Call: ${toolCall.tool}${
           // @ts-ignore
           toolCall.title ? ` - ${toolCall.title}` : ""
-        }`
+        }`,
       );
       // Emit tool started event to frontend
       agentEventEmitter.emitSessionEvent(
@@ -90,7 +96,7 @@ export async function runTask(
           tool: toolCall.tool,
           title: toolCall.title,
           input: toolCall.input,
-        } as ToolStartedData)
+        } as ToolStartedData),
       );
     },
     onToolCallFinished: (toolCall: ToolCall) => {
@@ -106,7 +112,7 @@ export async function runTask(
             kind: "tool.error",
             toolId: toolCall.id,
             tool: toolCall.tool,
-          } as ToolErrorData)
+          } as ToolErrorData),
         );
       } else {
         // Emit tool completed event to frontend
@@ -116,7 +122,7 @@ export async function runTask(
             kind: "tool.completed",
             toolId: toolCall.id,
             tool: toolCall.tool,
-          } as ToolCompletedData)
+          } as ToolCompletedData),
         );
       }
     },
@@ -134,7 +140,7 @@ export async function runTask(
       try {
         const sessions = await listSessions(cwd);
         const currentSession = sessions.find(
-          (s: any) => s.id === currentSessionId
+          (s: any) => s.id === currentSessionId,
         );
         sessionTitle =
           typeof currentSession?.title === "string"
@@ -153,7 +159,7 @@ export async function runTask(
           currentSessionId,
           sessionTitle,
           projectSlug,
-          data.partId
+          data.partId,
         )
         .catch((err) => {
           console.error("[OpenCode] Failed to record AI cost:", err);
@@ -166,7 +172,7 @@ export async function runTask(
           kind: "usage.updated",
           cost: data.cost,
           tokens: data.tokens,
-        } as UsageUpdatedData)
+        } as UsageUpdatedData),
       );
     },
     onIdle: () => {
@@ -176,13 +182,13 @@ export async function runTask(
         currentSessionId,
         createAgentEvent(currentSessionId, "session.completed", {
           kind: "session.completed",
-        } as SessionCompletedData)
+        } as SessionCompletedData),
       );
       stop();
     },
     onSessionError: (error) => {
       console.error(
-        `[OpenCode] Session error (${error.type}): ${error.message}`
+        `[OpenCode] Session error (${error.type}): ${error.message}`,
       );
       // Emit session error event to frontend
       agentEventEmitter.emitSessionEvent(
@@ -193,7 +199,7 @@ export async function runTask(
           message: error.message,
           attempt: error.attempt,
           nextRetryAt: error.nextRetryAt,
-        } as SessionErrorData)
+        } as SessionErrorData),
       );
     },
   });
@@ -206,7 +212,7 @@ export async function runTask(
   }
 
   try {
-    await sendPromptAsync(client, currentSessionId, cwd, task);
+    await sendPromptAsync(client, currentSessionId, cwd, task, model);
   } catch (error) {
     console.error(`[OpenCode] Task Error:`, error);
     agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
@@ -254,11 +260,11 @@ export async function getSessionContent(sessionId: string, directory: string) {
 async function getOrCreateSession(
   client: OpencodeClient,
   cwd: string,
-  sessionId?: string
+  sessionId?: string,
 ): Promise<string> {
   if (sessionId) {
     console.log(
-      `[OpenCode] Reusing existing session: ${sessionId} for directory: ${cwd}`
+      `[OpenCode] Reusing existing session: ${sessionId} for directory: ${cwd}`,
     );
     return sessionId;
   }
@@ -266,12 +272,12 @@ async function getOrCreateSession(
   const result = await client.session.create({ query: { directory: cwd } });
   if (result.error)
     throw new Error(
-      `Failed to create session: ${JSON.stringify(result.error)}`
+      `Failed to create session: ${JSON.stringify(result.error)}`,
     );
   if (!result.data?.id) throw new Error("Session created but no ID returned");
 
   console.log(
-    `[OpenCode] Created new session: ${result.data.id} for directory: ${cwd}`
+    `[OpenCode] Created new session: ${result.data.id} for directory: ${cwd}`,
   );
   return result.data.id;
 }
@@ -280,16 +286,20 @@ async function sendPromptAsync(
   client: OpencodeClient,
   sessionId: string,
   cwd: string,
-  task: string
+  task: string,
+  modelSelection?: ModelSelection,
 ): Promise<void> {
-  const modelEnv = process.env.OPENCODE_MODEL;
-  if (!modelEnv) {
-    throw new Error("OPENCODE_MODEL environment variable is not set");
+  // Use provided model or fall back to default
+  const resolvedModel = modelSelection || getDefaultModel();
+  if (!resolvedModel) {
+    throw new Error(
+      "No model configured. Set OPENCODE_MODELS or OPENCODE_MODEL environment variable.",
+    );
   }
-  const [providerID, modelID] = modelEnv.split("/");
+  const { provider: providerID, modelId: modelID } = resolvedModel;
 
   console.log(
-    `[OpenCode] Sending prompt to session: ${sessionId} for directory: ${cwd}, with model: ${modelEnv}`
+    `[OpenCode] Sending prompt to session: ${sessionId} for directory: ${cwd}, with model: ${modelID}`,
   );
   try {
     const result = await client.session.promptAsync({
@@ -304,17 +314,17 @@ async function sendPromptAsync(
     if (result.error) {
       console.error(
         `[OpenCode] promptAsync returned error:`,
-        JSON.stringify(result.error, null, 2)
+        JSON.stringify(result.error, null, 2),
       );
       throw new Error(
-        `Failed to prompt session: ${JSON.stringify(result.error)}`
+        `Failed to prompt session: ${JSON.stringify(result.error)}`,
       );
     }
   } catch (error: any) {
     console.error(`[OpenCode] Error sending prompt:`, error);
     console.error(
       `[OpenCode] Error details:`,
-      JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+      JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
     );
     throw new Error(`OpenCode task failed: ${error.message}`);
   }
@@ -331,7 +341,7 @@ export async function revertSession(
   sessionId: string,
   messageID: string,
   directory: string,
-  partID?: string
+  partID?: string,
 ) {
   const client = await serverManager.getClient(directory);
   const result = await client.session.revert({
@@ -396,7 +406,7 @@ export async function getSessionsStatus(directory: string) {
 
 function normalizeSessionStatuses(
   data: unknown,
-  sessions: { id: string }[]
+  sessions: { id: string }[],
 ): Record<string, SessionStatus> {
   if (!data) return {};
 
@@ -447,7 +457,7 @@ function normalizeSessionStatuses(
 export async function revertToUserMessage(
   sessionId: string,
   userMessageId: string,
-  directory: string
+  directory: string,
 ) {
   const client = await serverManager.getClient(directory);
 

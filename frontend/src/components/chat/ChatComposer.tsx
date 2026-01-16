@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SelectedElementPill } from "./SelectedElementPill";
 import { ImagePreviewPill } from "./ImagePreviewPill";
+import { ModelSelector } from "./ModelSelector";
 import { useChatContext } from "./ChatContext";
 
 import { cn } from "@/lib/utils";
@@ -41,6 +42,9 @@ export function ChatComposer({ className }: ChatComposerProps) {
     isLoading,
     isUsageBlocked,
     selectorModeAvailable,
+    availableModels,
+    selectedModel,
+    setSelectedModel,
   } = useChatContext();
 
   // Combine loading and blocked states for disabling
@@ -94,7 +98,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         addAttachedImages(newImages);
       }
     },
-    [addAttachedImages]
+    [addAttachedImages],
   );
 
   const handlePaste = useCallback(
@@ -127,7 +131,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         }
       }
     },
-    [addAttachedImages]
+    [addAttachedImages],
   );
 
   const handleFileSelect = useCallback(
@@ -149,7 +153,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         fileInputRef.current.value = "";
       }
     },
-    [addAttachedImages]
+    [addAttachedImages],
   );
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -176,7 +180,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
       className={cn(
         "p-6 mt-auto transition-colors",
         isDragOver ? "bg-primary/5" : "",
-        className
+        className,
       )}
       onDragOver={handleDragOver}
       onDragEnter={handleDragOver}
@@ -224,8 +228,8 @@ export function ChatComposer({ className }: ChatComposerProps) {
           isDragOver
             ? "border-primary border-dashed"
             : isUsageBlocked
-            ? "border-destructive/50"
-            : "border-primary/20 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/40"
+              ? "border-destructive/50"
+              : "border-primary/20 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/40"
         }`}
       >
         {/* Textarea - inside container with proper padding */}
@@ -236,10 +240,10 @@ export function ChatComposer({ className }: ChatComposerProps) {
             isUsageBlocked
               ? "Usage limit reached. Please wait for the limit to reset."
               : selectorMode
-              ? "Click an element in the preview..."
-              : attachedElement || attachedImages.length > 0
-              ? "Describe what you want to change..."
-              : "What would you like to change?"
+                ? "Click an element in the preview..."
+                : attachedElement || attachedImages.length > 0
+                  ? "Describe what you want to change..."
+                  : "What would you like to change?"
           }
           value={input}
           onChange={handleTextareaChange}
@@ -308,15 +312,28 @@ export function ChatComposer({ className }: ChatComposerProps) {
             )}
           </div>
 
-          {/* Right side: Send button */}
-          <Button
-            onClick={handleSend}
-            disabled={!canSend}
-            size="icon"
-            className="h-8 w-8 rounded-full"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+          {/* Right side: Model selector + Send button */}
+          <div className="flex items-center gap-1">
+            {/* Model selector dropdown - only when multiple models available */}
+            {availableModels.length > 0 && (
+              <ModelSelector
+                models={availableModels}
+                selectedModel={selectedModel}
+                onSelect={setSelectedModel}
+                disabled={isDisabled}
+              />
+            )}
+
+            {/* Send button */}
+            <Button
+              onClick={handleSend}
+              disabled={!canSend}
+              size="icon"
+              className="h-8 w-8 rounded-full"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

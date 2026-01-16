@@ -109,6 +109,14 @@ export interface UsageLimitStatus {
   };
 }
 
+// Model tier from backend
+export interface ModelTier {
+  tier: "standard" | "advanced" | "pro";
+  provider: string;
+  modelId: string;
+  label: string;
+}
+
 interface ChatContextValue {
   // Project info
   projectSlug: string;
@@ -157,6 +165,11 @@ interface ChatContextValue {
   // Usage limits
   usageLimitStatus: UsageLimitStatus | null;
   isUsageBlocked: boolean;
+
+  // Model selection
+  availableModels: ModelTier[];
+  selectedModel: ModelTier | null;
+  setSelectedModel: (model: ModelTier | null) => void;
 
   // Actions
   handleSend: () => void;
@@ -239,7 +252,7 @@ export function ChatProvider({
   const [isSending, setIsSending] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    null
+    null,
   );
   const pendingSessionIdRef = useRef<string | null>(null);
   const autoSelectLockedRef = useRef(false);
@@ -278,6 +291,25 @@ export function ChatProvider({
   // Derive if usage is blocked
   const isUsageBlocked = usageLimitStatus?.blocked ?? false;
 
+  // Fetch available models for model selector
+  const { data: availableModelsData } = trpc.agent.getAvailableModels.useQuery(
+    undefined,
+    {
+      staleTime: 60000, // Cache for 1 minute
+    },
+  );
+  const availableModels = (availableModelsData ?? []) as ModelTier[];
+
+  // Selected model state - auto-select first model if available
+  const [selectedModel, setSelectedModel] = useState<ModelTier | null>(null);
+
+  // Auto-select first model when models become available
+  useEffect(() => {
+    if (availableModels.length > 0 && !selectedModel) {
+      setSelectedModel(availableModels[0]);
+    }
+  }, [availableModels, selectedModel]);
+
   const confirmResolverRef = useRef<((result: boolean) => void) | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -301,7 +333,7 @@ export function ChatProvider({
         setConfirmDialog({ open: true, ...options });
       });
     },
-    []
+    [],
   );
 
   const resolveConfirm = useCallback((result: boolean) => {
@@ -321,7 +353,7 @@ export function ChatProvider({
       refetchOnMount: true,
       // Poll every 2 seconds when waiting or streaming to keep session status in sync
       refetchInterval: isWaiting || isStreaming ? 2000 : false,
-    }
+    },
   );
 
   // Poll for session statuses - this is the source of truth for whether a session is active
@@ -330,7 +362,7 @@ export function ChatProvider({
     {
       // Poll more frequently when we think something is active
       refetchInterval: isWaiting || isStreaming ? 2000 : 10000,
-    }
+    },
   );
 
   // Get current session's status from polled data
@@ -431,6 +463,12 @@ export function ChatProvider({
             projectSlug,
             task: pendingMessage,
             version,
+            model: selectedModel
+              ? {
+                  provider: selectedModel.provider,
+                  modelId: selectedModel.modelId,
+                }
+              : undefined,
           });
         } else {
           // Use current session if exists
@@ -441,12 +479,24 @@ export function ChatProvider({
               task: pendingMessage,
               sessionId: currentSessionId,
               version,
+              model: selectedModel
+                ? {
+                    provider: selectedModel.provider,
+                    modelId: selectedModel.modelId,
+                  }
+                : undefined,
             });
           } else {
             runTaskMutation.mutate({
               projectSlug,
               task: pendingMessage,
               version,
+              model: selectedModel
+                ? {
+                    provider: selectedModel.provider,
+                    modelId: selectedModel.modelId,
+                  }
+                : undefined,
             });
           }
         }
@@ -512,7 +562,7 @@ export function ChatProvider({
         // Poll every 2 seconds when waiting/streaming as a recovery mechanism
         // in case SSE events are missed
         refetchInterval: isWaiting || isStreaming ? 2000 : false,
-      }
+      },
     );
 
   const shouldSubscribeToSessionEvents =
@@ -540,7 +590,7 @@ export function ChatProvider({
       // Only reset if we're NOT actively waiting for a response
       if (isStreaming || isWaiting) {
         debugLog(
-          "[ChatContext] Session status is idle but was streaming/waiting - resetting state"
+          "[ChatContext] Session status is idle but was streaming/waiting - resetting state",
         );
         setIsStreaming(false);
         setIsWaiting(false);
@@ -552,7 +602,7 @@ export function ChatProvider({
       // Session is active - ensure we're in streaming state
       if (!isStreaming && !isWaiting) {
         debugLog(
-          "[ChatContext] Session status is busy but idle locally - marking waiting state"
+          "[ChatContext] Session status is busy but idle locally - marking waiting state",
         );
         setIsWaiting(true);
       }
@@ -683,8 +733,8 @@ export function ChatProvider({
               const toolId = innerData.toolId as string;
               setStreamingParts((prev) =>
                 prev.map((p) =>
-                  p.id === toolId ? { ...p, status: "completed" } : p
-                )
+                  p.id === toolId ? { ...p, status: "completed" } : p,
+                ),
               );
             }
             break;
@@ -694,8 +744,8 @@ export function ChatProvider({
               const toolId = innerData.toolId as string;
               setStreamingParts((prev) =>
                 prev.map((p) =>
-                  p.id === toolId ? { ...p, status: "error" } : p
-                )
+                  p.id === toolId ? { ...p, status: "error" } : p,
+                ),
               );
             }
             break;
@@ -778,7 +828,7 @@ export function ChatProvider({
         refetchMessages();
         refetchSessions();
       },
-    }
+    },
   );
 
   useEffect(() => {
@@ -857,7 +907,7 @@ export function ChatProvider({
           (localEndsWithUser || fetchedMessageCountHigher)
         ) {
           debugLog(
-            "[ChatContext] Recovery: Task completed but state was stuck. Resetting."
+            "[ChatContext] Recovery: Task completed but state was stuck. Resetting.",
           );
           setIsStreaming(false);
           setIsWaiting(false);
@@ -907,7 +957,7 @@ export function ChatProvider({
 
   const handleDeleteSession = async (
     e: React.MouseEvent,
-    sessionId: string
+    sessionId: string,
   ) => {
     e.stopPropagation();
     const ok = await requestConfirm({
@@ -989,7 +1039,7 @@ export function ChatProvider({
         attachedElement.filename,
         attachedElement.text,
         attachedElement.astroSourceFile,
-        attachedElement.astroSourceLoc
+        attachedElement.astroSourceLoc,
       );
     }
 
@@ -1007,7 +1057,7 @@ export function ChatProvider({
               method: "POST",
               body: formData,
               credentials: "include",
-            }
+            },
           );
 
           if (response.ok) {
@@ -1053,18 +1103,34 @@ export function ChatProvider({
           task,
           sessionId: selectedSessionId,
           version,
+          model: selectedModel
+            ? {
+                provider: selectedModel.provider,
+                modelId: selectedModel.modelId,
+              }
+            : undefined,
         },
         {
           onSettled: () => setIsSending(false),
-        }
+        },
       );
     } else {
       setMessages((prev) => [...prev, { role: "user", content: task }]);
       runTaskMutation.mutate(
-        { projectSlug, task, version },
+        {
+          projectSlug,
+          task,
+          version,
+          model: selectedModel
+            ? {
+                provider: selectedModel.provider,
+                modelId: selectedModel.modelId,
+              }
+            : undefined,
+        },
         {
           onSettled: () => setIsSending(false),
-        }
+        },
       );
     }
   };
@@ -1130,6 +1196,9 @@ export function ChatProvider({
     clearSessionError,
     usageLimitStatus: usageLimitStatus ?? null,
     isUsageBlocked,
+    availableModels,
+    selectedModel,
+    setSelectedModel,
     handleSend,
     handleNewSession,
     handleDeleteSession,
