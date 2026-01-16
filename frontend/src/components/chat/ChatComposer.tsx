@@ -254,7 +254,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         />
 
         {/* Action bar at the bottom - no separator */}
-        <div className="flex items-center justify-between gap-2 px-3 pb-2">
+        <div className="flex items-center justify-between gap-2 px-3 pb-2 bg-card">
           {/* Left side: Plus circle button + Element selector */}
           <div className="flex items-center gap-1">
             {/* Plus button - circle with dropdown */}
