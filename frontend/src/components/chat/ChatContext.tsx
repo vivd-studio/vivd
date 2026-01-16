@@ -528,14 +528,16 @@ export function ChatProvider({
     if (!currentSessionStatus) return;
 
     if (currentSessionStatus.type === "idle") {
-      // Session is definitely done - clear all streaming state if it was stuck
-      if (isWaitingForAgent.current && !isStreaming) {
+      // If we just sent a message (isWaitingForAgent.current is true), don't reset
+      // The session status may still be "idle" from the previous task - wait for it to update
+      if (isWaitingForAgent.current) {
         if (!isWaiting) {
           setIsWaiting(true);
         }
         return;
       }
 
+      // Only reset if we're NOT actively waiting for a response
       if (isStreaming || isWaiting) {
         debugLog(
           "[ChatContext] Session status is idle but was streaming/waiting - resetting state"

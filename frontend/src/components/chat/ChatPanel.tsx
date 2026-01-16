@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
-import { ChatInput } from "./ChatInput";
+import { ChatComposer } from "./ChatComposer";
 import {
   ChatProvider,
   useChatContext,
@@ -129,7 +129,16 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     handleNewSession,
     messages,
     sessionDebugState,
+    setSelectorMode,
   } = useChatContext();
+
+  // Wrap onClose to also exit selector mode
+  const handleClose = () => {
+    if (setSelectorMode) {
+      setSelectorMode(false);
+    }
+    onClose?.();
+  };
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -138,7 +147,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold">Agent Chat</h2>
             {onClose && (
-              <Button variant="ghost" size="icon" onClick={onClose}>
+              <Button variant="ghost" size="icon" onClick={handleClose}>
                 <span className="sr-only">Close</span>
                 <X className="h-4 w-4" />
               </Button>
@@ -157,8 +166,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
 
       <MessageList />
 
-      {/* Only show bottom input when there are messages (otherwise input is in EmptyStatePrompt) */}
-      {messages.length > 0 && <ChatInput />}
+      {messages.length > 0 && <ChatComposer />}
 
       {/* Debug display for session state (admin only) */}
       <SessionDebugDisplay debug={sessionDebugState} />

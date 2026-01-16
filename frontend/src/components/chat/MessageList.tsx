@@ -32,16 +32,6 @@ export function MessageList() {
     isReverted,
     streamingParts,
     setInput,
-    selectorMode,
-    setSelectorMode,
-    selectorModeAvailable,
-    input,
-    handleSend,
-    attachedElement,
-    setAttachedElement,
-    attachedImages,
-    addAttachedImages,
-    removeAttachedImage,
     sessionError,
     clearSessionError,
     usageLimitStatus,
@@ -52,7 +42,6 @@ export function MessageList() {
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
-  const onEnterSelectorMode = () => setSelectorMode?.(!selectorMode);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -72,21 +61,7 @@ export function MessageList() {
     <ScrollArea className="flex-1" ref={scrollRef}>
       <div className="flex flex-col gap-6 px-6 pt-6 pb-20">
         {messages.length === 0 && (
-          <EmptyStatePrompt
-            onSuggestionClick={onSuggestionClick}
-            onEnterSelectorMode={onEnterSelectorMode}
-            selectorModeAvailable={selectorModeAvailable}
-            selectorMode={selectorMode}
-            input={input}
-            setInput={setInput}
-            onSend={handleSend}
-            isLoading={isLoading}
-            attachedElement={attachedElement}
-            onRemoveElement={() => setAttachedElement(null)}
-            attachedImages={attachedImages}
-            addAttachedImages={addAttachedImages}
-            removeAttachedImage={removeAttachedImage}
-          />
+          <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
         )}
         {messages.map((msg, i) => {
           // Skip empty messages (no content and no parts)
@@ -288,7 +263,10 @@ export function MessageList() {
                   Usage Limit Reached
                 </div>
                 {usageLimitStatus.warnings.map((warning, i) => (
-                  <p key={i} className="text-xs text-muted-foreground mt-1 break-words">
+                  <p
+                    key={i}
+                    className="text-xs text-muted-foreground mt-1 break-words"
+                  >
                     {warning}
                   </p>
                 ))}
@@ -298,31 +276,37 @@ export function MessageList() {
         )}
 
         {/* Usage Warning Banner (approaching limits) */}
-        {!isUsageBlocked && usageLimitStatus?.warnings && usageLimitStatus.warnings.length > 0 && !dismissedWarnings && (
-          <div className="flex justify-center py-2">
-            <div className="flex items-start gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 max-w-[90%] w-full">
-              <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm text-yellow-700 dark:text-yellow-500">
-                  Approaching Usage Limit
+        {!isUsageBlocked &&
+          usageLimitStatus?.warnings &&
+          usageLimitStatus.warnings.length > 0 &&
+          !dismissedWarnings && (
+            <div className="flex justify-center py-2">
+              <div className="flex items-start gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 max-w-[90%] w-full">
+                <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm text-yellow-700 dark:text-yellow-500">
+                    Approaching Usage Limit
+                  </div>
+                  {usageLimitStatus.warnings.map((warning, i) => (
+                    <p
+                      key={i}
+                      className="text-xs text-muted-foreground mt-1 break-words"
+                    >
+                      {warning}
+                    </p>
+                  ))}
                 </div>
-                {usageLimitStatus.warnings.map((warning, i) => (
-                  <p key={i} className="text-xs text-muted-foreground mt-1 break-words">
-                    {warning}
-                  </p>
-                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 h-6 w-6 p-0"
+                  onClick={() => setDismissedWarnings(true)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0 h-6 w-6 p-0"
-                onClick={() => setDismissedWarnings(true)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Session Error Display */}
         {sessionError && (
