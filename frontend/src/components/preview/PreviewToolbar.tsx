@@ -259,6 +259,21 @@ export function PreviewToolbar() {
                 View Original Website
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Manage</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setPublishDialogOpen(true)}>
+              <Rocket className="w-4 h-4 mr-2" />
+              {isPublished
+                ? `Live at ${publishStatus?.domain}`
+                : "Publish to Web"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setHistoryPanelOpen(true)}>
+              <History className="w-4 h-4 mr-2" />
+              Snapshots & History
+              {hasGitChanges && (
+                <span className="ml-auto h-2 w-2 bg-amber-500 rounded-full" />
+              )}
+            </DropdownMenuItem>
           </>
         )}
 
@@ -315,6 +330,14 @@ export function PreviewToolbar() {
                 <span>Settings</span>
               </Link>
             </DropdownMenuItem>
+            {session?.user?.role === "admin" && (
+              <DropdownMenuItem asChild>
+                <Link to="/vivd-studio/admin" className="cursor-pointer">
+                  <Shield className="mr-2 h-4 w-4" />
+                  <span>Admin Panel</span>
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>

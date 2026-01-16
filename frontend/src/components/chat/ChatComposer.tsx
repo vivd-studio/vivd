@@ -11,6 +11,8 @@ import { SelectedElementPill } from "./SelectedElementPill";
 import { ImagePreviewPill } from "./ImagePreviewPill";
 import { useChatContext } from "./ChatContext";
 
+import { cn } from "@/lib/utils";
+
 /**
  * ChatComposer - Unified chat input component
  *
@@ -20,7 +22,11 @@ import { useChatContext } from "./ChatContext";
  * - Action bar at bottom (no separator) with: Plus circle (dropdown), Element selector, Send button
  * - Colored border styling
  */
-export function ChatComposer() {
+interface ChatComposerProps {
+  className?: string;
+}
+
+export function ChatComposer({ className }: ChatComposerProps) {
   const {
     input,
     setInput,
@@ -167,9 +173,11 @@ export function ChatComposer() {
 
   return (
     <div
-      className={`p-4 mt-auto transition-colors ${
-        isDragOver ? "bg-primary/5" : ""
-      }`}
+      className={cn(
+        "p-6 mt-auto transition-colors",
+        isDragOver ? "bg-primary/5" : "",
+        className
+      )}
       onDragOver={handleDragOver}
       onDragEnter={handleDragOver}
       onDragLeave={handleDragLeave}
