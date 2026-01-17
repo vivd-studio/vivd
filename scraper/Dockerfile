@@ -1,18 +1,15 @@
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM ghcr.io/puppeteer/puppeteer:24
 
-USER root
 WORKDIR /app
 
 # Copy package files and install dependencies
-COPY package*.json ./
+# Skip Puppeteer's Chrome download - base image already has it
+COPY --chown=pptruser:pptruser package*.json ./
 RUN npm install
 
 # Copy source and build
-COPY . .
+COPY --chown=pptruser:pptruser . .
 RUN npm run build
-
-# Switch back to non-root user for security
-USER pptruser
 
 EXPOSE 3001
 CMD ["node", "dist/index.js"]
