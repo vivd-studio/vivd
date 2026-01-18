@@ -57,6 +57,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built output from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy template files (needed at runtime for AGENTS.md generation)
+COPY --from=builder /app/src/generator/templates ./dist/templates
+
 # Copy drizzle migrations (needed at runtime)
 COPY --from=builder /app/drizzle ./drizzle
 
