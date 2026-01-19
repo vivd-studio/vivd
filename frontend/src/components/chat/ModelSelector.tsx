@@ -1,4 +1,4 @@
-import { Zap, Sparkles, Rocket, Check } from "lucide-react";
+import { Check, Rocket, Sparkles, Zap } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,

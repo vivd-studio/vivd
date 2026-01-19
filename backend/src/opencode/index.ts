@@ -22,7 +22,8 @@ export { agentEventEmitter } from "./eventEmitter";
 export type { AgentEvent, AgentEventType } from "./eventEmitter";
 export { serverManager } from "./serverManager";
 
-import { type ModelSelection, getDefaultModel } from "./modelConfig";
+import type { ModelSelection } from "./modelConfig";
+import { getDefaultModel } from "./modelConfig";
 
 export { getAvailableModels } from "./modelConfig";
 export type { ModelTier, ModelSelection } from "./modelConfig";
