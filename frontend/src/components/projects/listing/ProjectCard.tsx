@@ -29,7 +29,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { VersionSelector } from "@/components/VersionSelector";
+import { VersionSelector } from "../versioning/VersionSelector";
 import {
   AlertDialog,
   AlertDialogAction,

@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { trpc } from "@/lib/trpc";
 import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { toast } from "sonner";
+import { ROUTES } from "@/app/router";
 import {
   scratchSchema,
   fileToBase64,
@@ -52,14 +53,14 @@ type ScratchWizardContextValue = {
 };
 
 const ScratchWizardContext = createContext<ScratchWizardContextValue | null>(
-  null
+  null,
 );
 
 export function useScratchWizard() {
   const ctx = useContext(ScratchWizardContext);
   if (!ctx) {
     throw new Error(
-      "useScratchWizard must be used within a ScratchWizardProvider"
+      "useScratchWizard must be used within a ScratchWizardProvider",
     );
   }
   return ctx;
@@ -121,7 +122,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     {
       enabled: !!started?.slug,
       refetchInterval: 1500,
-    }
+    },
   );
 
   useEffect(() => {
@@ -129,7 +130,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     if (statusData.status === "completed") {
       toast.success("Your first draft is ready");
       utils.project.list.invalidate();
-      navigate(`/vivd-studio/projects/${started.slug}`);
+      navigate(ROUTES.PROJECT(started.slug));
     }
     if (statusData.status === "failed") {
       const errorMessage =
@@ -152,13 +153,13 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       assets.map(async (file) => ({
         filename: file.name,
         base64: await fileToBase64(file),
-      }))
+      })),
     );
     const referenceImagePayload = await Promise.all(
       referenceImages.map(async (file) => ({
         filename: file.name,
         base64: await fileToBase64(file),
-      }))
+      })),
     );
 
     await generateFromScratch({

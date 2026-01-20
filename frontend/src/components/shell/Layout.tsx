@@ -2,8 +2,8 @@ import { Outlet, useLocation } from "react-router-dom";
 import { useRef, useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
-import { ModeToggle } from "@/components/mode-toggle";
+import { AppSidebar } from "./AppSidebar";
+import { ModeToggle } from "@/components/theme";
 import { Separator } from "@/components/ui/separator";
 import {
   Breadcrumb,
@@ -12,8 +12,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { ProjectWizard } from "@/components/ProjectWizard";
-import { HeaderProfileMenu } from "@/components/HeaderProfileMenu";
+import { ProjectWizard } from "@/components/projects";
+import { HeaderProfileMenu } from "./HeaderProfileMenu";
 
 interface PageInfo {
   title: string;

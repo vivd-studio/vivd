@@ -1,6 +1,6 @@
 import { ChatPanel } from "../chat/ChatPanel";
 import { AssetExplorer } from "../asset-explorer";
-import { ResizeHandle } from "../ResizeHandle";
+import { ResizeHandle } from "@/components/common/ResizeHandle";
 import { usePreview } from "./PreviewContext";
 import { PreviewToolbar } from "./PreviewToolbar";
 import { EmbeddedStudioToolbar } from "./EmbeddedStudioToolbar";

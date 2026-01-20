@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Palette } from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme } from "@/components/theme";
 
 export function ScratchPreview() {
   const { watchedTitle, stylePreset, siteTheme } = useScratchWizard();

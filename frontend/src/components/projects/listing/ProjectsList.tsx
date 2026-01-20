@@ -1,8 +1,9 @@
 import { trpc } from "@/lib/trpc";
+import { getProjectLastModified } from "@/lib/project-utils";
 import { useState, useMemo, useEffect } from "react";
 import { ProjectCard } from "./ProjectCard";
-import { VersionDialog } from "./VersionDialog";
-import { DeleteProjectDialog } from "./DeleteProjectDialog";
+import { VersionDialog } from "../versioning/VersionDialog";
+import { DeleteProjectDialog } from "../dialogs/DeleteProjectDialog";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
@@ -90,31 +91,15 @@ export function ProjectsList() {
         (p) =>
           p.slug.toLowerCase().includes(query) ||
           p.title?.toLowerCase().includes(query) ||
-          p.url?.toLowerCase().includes(query)
+          p.url?.toLowerCase().includes(query),
       );
     }
 
     // Sort projects
     projects.sort((a, b) => {
       switch (sortOption) {
-        case "updated-desc": {
-          // Prefer updatedAt, fallback to latest version createdAt, then project createdAt
-          const getLastModified = (project: typeof a) => {
-            if (project.updatedAt) {
-              return new Date(project.updatedAt).getTime();
-            }
-            if (project.versions && project.versions.length > 0) {
-              const latestVersion = project.versions.reduce((latest, version) => {
-                const versionDate = new Date(version.createdAt || 0).getTime();
-                const latestDate = new Date(latest.createdAt || 0).getTime();
-                return versionDate > latestDate ? version : latest;
-              });
-              return new Date(latestVersion.createdAt || 0).getTime();
-            }
-            return new Date(project.createdAt || 0).getTime();
-          };
-          return getLastModified(b) - getLastModified(a);
-        }
+        case "updated-desc":
+          return getProjectLastModified(b) - getProjectLastModified(a);
         case "created-desc":
           return (
             new Date(b.createdAt || 0).getTime() -
@@ -231,7 +216,10 @@ export function ProjectsList() {
               className="pl-9"
             />
           </div>
-          <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
+          <Select
+            value={sortOption}
+            onValueChange={(v) => setSortOption(v as SortOption)}
+          >
             <SelectTrigger className="w-[160px]">
               <SelectValue />
             </SelectTrigger>

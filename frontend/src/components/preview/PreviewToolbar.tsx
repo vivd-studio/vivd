@@ -44,17 +44,17 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { usePreview } from "./PreviewContext";
 import { DEVICE_PRESETS } from "./types";
-import { ModeToggle } from "@/components/mode-toggle";
+import { ModeToggle, useTheme } from "@/components/theme";
 import { authClient } from "@/lib/auth-client";
-import { useTheme } from "@/components/theme-provider";
 import { useState } from "react";
-import { VersionHistoryPanel } from "@/components/VersionHistoryPanel";
-import { PublishDialog } from "@/components/PublishDialog";
+import { VersionHistoryPanel, VersionSelector } from "@/components/projects/versioning";
+import { PublishDialog } from "@/components/publish/PublishDialog";
 import { trpc } from "@/lib/trpc";
+import { POLLING_BACKGROUND } from "@/app/config/polling";
 import { toast } from "sonner";
 import faviconSvg from "/favicon-transparent.svg";
-import { VersionSelector } from "@/components/VersionSelector";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ROUTES } from "@/app/router";
 
 export function PreviewToolbar() {
   const { data: session } = authClient.useSession();
@@ -69,7 +69,7 @@ export function PreviewToolbar() {
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/vivd-studio/login");
+    navigate(ROUTES.LOGIN);
   };
   const {
     projectSlug,
@@ -98,14 +98,14 @@ export function PreviewToolbar() {
 
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
     { slug: projectSlug!, version: selectedVersion },
-    { enabled: !!projectSlug, refetchInterval: 5000 }
+    { enabled: !!projectSlug, refetchInterval: POLLING_BACKGROUND },
   );
   const hasGitChanges = changesData?.hasChanges || false;
 
   // Get publish status
   const { data: publishStatus } = trpc.project.publishStatus.useQuery(
     { slug: projectSlug! },
-    { enabled: !!projectSlug }
+    { enabled: !!projectSlug },
   );
   const isPublished = publishStatus?.isPublished || false;
 
@@ -243,8 +243,8 @@ export function PreviewToolbar() {
               onClick={() => {
                 const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                 window.open(
-                  `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
-                  "_blank"
+                  `${baseUrl}${ROUTES.API_DOWNLOAD(projectSlug, selectedVersion)}`,
+                  "_blank",
                 );
               }}
             >
@@ -325,14 +325,14 @@ export function PreviewToolbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuItem asChild>
-              <Link to="/vivd-studio/settings" className="cursor-pointer">
+              <Link to={ROUTES.SETTINGS} className="cursor-pointer">
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </Link>
             </DropdownMenuItem>
             {session?.user?.role === "admin" && (
               <DropdownMenuItem asChild>
-                <Link to="/vivd-studio/admin" className="cursor-pointer">
+                <Link to={ROUTES.ADMIN} className="cursor-pointer">
                   <Shield className="mr-2 h-4 w-4" />
                   <span>Admin Panel</span>
                 </Link>
@@ -658,8 +658,8 @@ export function PreviewToolbar() {
                     onClick={() => {
                       const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                       window.open(
-                        `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
-                        "_blank"
+                        `${baseUrl}${ROUTES.API_DOWNLOAD(projectSlug, selectedVersion)}`,
+                        "_blank",
                       );
                     }}
                   >
@@ -719,14 +719,14 @@ export function PreviewToolbar() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/vivd-studio/settings" className="cursor-pointer">
+                  <Link to={ROUTES.SETTINGS} className="cursor-pointer">
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </Link>
                 </DropdownMenuItem>
                 {session?.user?.role === "admin" && (
                   <DropdownMenuItem asChild>
-                    <Link to="/vivd-studio/admin" className="cursor-pointer">
+                    <Link to={ROUTES.ADMIN} className="cursor-pointer">
                       <Shield className="mr-2 h-4 w-4" />
                       <span>Admin Panel</span>
                     </Link>

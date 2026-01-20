@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme } from "./theme-provider";
 
 export function ModeToggle() {
   const { setTheme, colorTheme, setColorTheme } = useTheme();

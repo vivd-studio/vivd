@@ -6,14 +6,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { X, Sparkles } from "lucide-react";
-import { ModeToggle } from "@/components/mode-toggle";
+import { ModeToggle } from "@/components/theme";
 import faviconSvg from "/favicon-transparent.svg";
+import { ROUTES } from "@/app/router";
 
 export function ScratchHeader() {
   const navigate = useNavigate();
 
   const handleClose = () => {
-    navigate("/vivd-studio");
+    navigate(ROUTES.DASHBOARD);
   };
 
   return (

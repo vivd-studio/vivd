@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
+import { ROUTES } from "@/app/router";
 import { LogOut, Settings } from "lucide-react";
 import {
   DropdownMenu,
@@ -18,7 +19,7 @@ export function HeaderProfileMenu() {
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/vivd-studio/login");
+    navigate(ROUTES.LOGIN);
   };
 
   if (!session) return null;
@@ -61,7 +62,7 @@ export function HeaderProfileMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/vivd-studio/settings")}>
+        <DropdownMenuItem onClick={() => navigate(ROUTES.SETTINGS)}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>

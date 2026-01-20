@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
-import { usePreview } from "../preview/PreviewContext";
+import {
+  POLLING_INFREQUENT,
+  getActivePollingInterval,
+  getSessionStatusPollingInterval,
+} from "@/app/config/polling";
+import { useOptionalPreview } from "../preview/PreviewContext";
 import { formatMessageWithSelector } from "./SelectedElementPill";
 import {
   AlertDialog,
@@ -210,12 +215,7 @@ export function ChatProvider({
   };
 
   // Access PreviewContext for element selection (may not be available outside preview page)
-  let previewContext: ReturnType<typeof usePreview> | null = null;
-  try {
-    previewContext = usePreview();
-  } catch {
-    // Not in a preview context, element selection won't be available
-  }
+  const previewContext = useOptionalPreview();
 
   const selectorMode = previewContext?.selectorMode ?? false;
   const setSelectorMode = previewContext?.setSelectorMode;
@@ -281,11 +281,11 @@ export function ChatProvider({
   const [sessionError, setSessionError] = useState<SessionError | null>(null);
   const clearSessionError = () => setSessionError(null);
 
-  // Poll usage limits - refetch every 30s or when session completes
+  // Poll usage limits - refetch infrequently or manually after session completes
   const { data: usageLimitStatus, refetch: refetchUsageStatus } =
     trpc.usage.status.useQuery(undefined, {
-      refetchInterval: 30000, // Poll every 30 seconds
-      staleTime: 10000, // Consider data stale after 10 seconds
+      refetchInterval: POLLING_INFREQUENT,
+      staleTime: 10000,
     });
 
   // Derive if usage is blocked
@@ -351,8 +351,7 @@ export function ChatProvider({
     { projectSlug, version },
     {
       refetchOnMount: true,
-      // Poll every 2 seconds when waiting or streaming to keep session status in sync
-      refetchInterval: isWaiting || isStreaming ? 2000 : false,
+      refetchInterval: getActivePollingInterval(isWaiting || isStreaming),
     },
   );
 
@@ -360,8 +359,7 @@ export function ChatProvider({
   const { data: sessionStatuses } = trpc.agent.getSessionsStatus.useQuery(
     { projectSlug, version },
     {
-      // Poll more frequently when we think something is active
-      refetchInterval: isWaiting || isStreaming ? 2000 : 10000,
+      refetchInterval: getSessionStatusPollingInterval(isWaiting || isStreaming),
     },
   );
 
@@ -559,9 +557,8 @@ export function ChatProvider({
       },
       {
         enabled: !!selectedSessionId,
-        // Poll every 2 seconds when waiting/streaming as a recovery mechanism
-        // in case SSE events are missed
-        refetchInterval: isWaiting || isStreaming ? 2000 : false,
+        // Poll when active as a recovery mechanism in case SSE events are missed
+        refetchInterval: getActivePollingInterval(isWaiting || isStreaming),
       },
     );
 

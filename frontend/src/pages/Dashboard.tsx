@@ -1,4 +1,4 @@
-import { ProjectsList } from "@/components/ProjectsList";
+import { ProjectsList } from "@/components/projects";
 
 export default function Dashboard() {
   return <ProjectsList />;

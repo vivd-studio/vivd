@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
+import { POLLING_BACKGROUND } from "@/app/config/polling";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
@@ -73,7 +74,7 @@ export function VersionHistoryPanel({
   const { data: changesData, isFetching: changesFetching } =
     trpc.project.gitHasChanges.useQuery(
       { slug: projectSlug, version },
-      { enabled: open && !!projectSlug, refetchInterval: 5000 }
+      { enabled: open && !!projectSlug, refetchInterval: POLLING_BACKGROUND }
     );
 
   const { data: workingCommitData, isFetching: workingCommitFetching } =

@@ -4,6 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { Navigate, useNavigate } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ROUTES } from "@/app/router";
 
 export default function NoProjectAssigned() {
   const navigate = useNavigate();
@@ -18,36 +19,37 @@ export default function NoProjectAssigned() {
 
   if (isPending) {
     return (
-      <div className="flex h-screen items-center justify-center">Loading...</div>
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
     );
   }
 
   if (!session) {
-    return <Navigate to="/vivd-studio/login" replace />;
+    return <Navigate to={ROUTES.LOGIN} replace />;
   }
 
   if (!isClientEditor) {
-    return <Navigate to="/vivd-studio" replace />;
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">Loading...</div>
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
     );
   }
 
   if (assignedProject?.projectSlug) {
     return (
-      <Navigate
-        to={`/vivd-studio/projects/${assignedProject.projectSlug}`}
-        replace
-      />
+      <Navigate to={ROUTES.PROJECT(assignedProject.projectSlug)} replace />
     );
   }
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/vivd-studio/login");
+    navigate(ROUTES.LOGIN);
   };
 
   return (
@@ -71,4 +73,3 @@ export default function NoProjectAssigned() {
     </div>
   );
 }
-

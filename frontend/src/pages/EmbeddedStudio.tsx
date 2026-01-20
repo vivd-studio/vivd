@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { PreviewContent } from "@/components/preview/PreviewContent";
 import { PreviewProvider } from "@/components/preview/PreviewContext";
+import { ROUTES } from "@/app/router";
 
 /**
  * EmbeddedStudio - Renders the studio view embedded within the Layout (with sidebar/breadcrumbs).
@@ -21,7 +22,7 @@ export default function EmbeddedStudio() {
 
   // Handle close/back navigation
   const handleClose = () => {
-    navigate("/vivd-studio");
+    navigate(ROUTES.DASHBOARD);
   };
 
   // Set document title to project name

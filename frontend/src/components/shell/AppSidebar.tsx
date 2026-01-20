@@ -2,6 +2,8 @@ import * as React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
+import { getProjectLastModified } from "@/lib/project-utils";
+import { ROUTES } from "@/app/router";
 import {
   FolderKanban,
   Shield,
@@ -65,33 +67,14 @@ export function AppSidebar() {
   const recentProjects = React.useMemo(() => {
     if (!projectsData?.projects) return [];
 
-    return [...projectsData.projects].sort((a, b) => {
-      // Get the project's last modified date, preferring updatedAt
-      const getLastModifiedDate = (project: typeof a) => {
-        // Prefer updatedAt if available (set when files are modified)
-        if (project.updatedAt) {
-          return new Date(project.updatedAt).getTime();
-        }
-        // Fallback to latest version's createdAt
-        if (project.versions && project.versions.length > 0) {
-          const latestVersion = project.versions.reduce((latest, version) => {
-            const versionDate = new Date(version.createdAt || 0).getTime();
-            const latestDate = new Date(latest.createdAt || 0).getTime();
-            return versionDate > latestDate ? version : latest;
-          });
-          return new Date(latestVersion.createdAt || 0).getTime();
-        }
-        // Final fallback to project createdAt
-        return new Date(project.createdAt || 0).getTime();
-      };
-
-      return getLastModifiedDate(b) - getLastModifiedDate(a);
-    });
+    return [...projectsData.projects].sort(
+      (a, b) => getProjectLastModified(b) - getProjectLastModified(a),
+    );
   }, [projectsData?.projects]);
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/vivd-studio/login");
+    navigate(ROUTES.LOGIN);
   };
 
   const isActive = (url: string, end?: boolean) => {
@@ -111,7 +94,7 @@ export function AppSidebar() {
               asChild
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Link to="/vivd-studio">
+              <Link to={ROUTES.DASHBOARD}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-amber-500 text-white font-bold">
                   v
                 </div>
@@ -149,8 +132,8 @@ export function AppSidebar() {
               <Collapsible
                 asChild
                 defaultOpen={
-                  isActive("/vivd-studio", true) ||
-                  isActive("/vivd-studio/projects")
+                  isActive(ROUTES.DASHBOARD, true) ||
+                  isActive(`${ROUTES.STUDIO_BASE}/projects`)
                 }
                 className="group/collapsible"
               >
@@ -159,13 +142,13 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       tooltip="Projects"
                       isActive={
-                        isActive("/vivd-studio", true) ||
-                        isActive("/vivd-studio/projects")
+                        isActive(ROUTES.DASHBOARD, true) ||
+                        isActive(`${ROUTES.STUDIO_BASE}/projects`)
                       }
                       onClick={(e) => {
                         if (isCollapsed) {
                           e.preventDefault();
-                          navigate("/vivd-studio");
+                          navigate(ROUTES.DASHBOARD);
                         }
                       }}
                     >
@@ -180,9 +163,9 @@ export function AppSidebar() {
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton
                           asChild
-                          isActive={isActive("/vivd-studio", true)}
+                          isActive={isActive(ROUTES.DASHBOARD, true)}
                         >
-                          <Link to="/vivd-studio">
+                          <Link to={ROUTES.DASHBOARD}>
                             <LayoutGrid className="size-4" />
                             <span className="font-medium">All</span>
                           </Link>
@@ -196,11 +179,10 @@ export function AppSidebar() {
                           <SidebarMenuSubButton
                             asChild
                             isActive={
-                              location.pathname ===
-                              `/vivd-studio/projects/${project.slug}`
+                              location.pathname === ROUTES.PROJECT(project.slug)
                             }
                           >
-                            <Link to={`/vivd-studio/projects/${project.slug}`}>
+                            <Link to={ROUTES.PROJECT(project.slug)}>
                               <span className="truncate">
                                 {project.title || project.slug}
                               </span>
@@ -232,18 +214,18 @@ export function AppSidebar() {
               {isAdmin && (
                 <Collapsible
                   asChild
-                  defaultOpen={isActive("/vivd-studio/admin")}
+                  defaultOpen={isActive(ROUTES.ADMIN)}
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
                         tooltip="Admin"
-                        isActive={isActive("/vivd-studio/admin")}
+                        isActive={isActive(ROUTES.ADMIN)}
                         onClick={(e) => {
                           if (isCollapsed) {
                             e.preventDefault();
-                            navigate("/vivd-studio/admin?tab=users");
+                            navigate(`${ROUTES.ADMIN}?tab=users`);
                           }
                         }}
                       >
@@ -258,12 +240,12 @@ export function AppSidebar() {
                           <SidebarMenuSubButton
                             asChild
                             isActive={
-                              isActive("/vivd-studio/admin") &&
+                              isActive(ROUTES.ADMIN) &&
                               (location.search === "" ||
                                 location.search.includes("tab=users"))
                             }
                           >
-                            <Link to="/vivd-studio/admin?tab=users">
+                            <Link to={`${ROUTES.ADMIN}?tab=users`}>
                               <Users className="size-4" />
                               <span>Users</span>
                             </Link>
@@ -274,7 +256,7 @@ export function AppSidebar() {
                             asChild
                             isActive={location.search.includes("tab=usage")}
                           >
-                            <Link to="/vivd-studio/admin?tab=usage">
+                            <Link to={`${ROUTES.ADMIN}?tab=usage`}>
                               <Activity className="size-4" />
                               <span>Usage</span>
                             </Link>
@@ -287,7 +269,7 @@ export function AppSidebar() {
                               "tab=maintenance",
                             )}
                           >
-                            <Link to="/vivd-studio/admin?tab=maintenance">
+                            <Link to={`${ROUTES.ADMIN}?tab=maintenance`}>
                               <Wrench className="size-4" />
                               <span>Maintenance</span>
                             </Link>
@@ -303,10 +285,10 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={isActive("/vivd-studio/settings")}
+                  isActive={isActive(ROUTES.SETTINGS)}
                   tooltip="Settings"
                 >
-                  <Link to="/vivd-studio/settings">
+                  <Link to={ROUTES.SETTINGS}>
                     <Settings />
                     <span>Settings</span>
                   </Link>

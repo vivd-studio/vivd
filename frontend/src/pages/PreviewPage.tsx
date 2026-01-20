@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { PreviewContent } from "@/components/preview/PreviewContent";
 import { PreviewProvider } from "@/components/preview/PreviewContext";
+import { ROUTES } from "@/app/router";
 
 export default function PreviewPage() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
@@ -15,9 +16,10 @@ export default function PreviewPage() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
 
-  // Handle close/back navigation - go back to embedded view
   const handleClose = () => {
-    navigate(`/vivd-studio/projects/${projectSlug}`);
+    if (projectSlug) {
+      navigate(ROUTES.PROJECT(projectSlug));
+    }
   };
 
   // Set document title to project name

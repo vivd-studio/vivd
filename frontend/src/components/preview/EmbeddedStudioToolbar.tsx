@@ -50,16 +50,15 @@ import {
 import { Link } from "react-router-dom";
 import { usePreview } from "./PreviewContext";
 import { DEVICE_PRESETS } from "./types";
-import { ModeToggle } from "@/components/mode-toggle";
-import { useTheme } from "@/components/theme-provider";
+import { ModeToggle, useTheme } from "@/components/theme";
 import { useState } from "react";
-import { VersionHistoryPanel } from "@/components/VersionHistoryPanel";
-import { PublishDialog } from "@/components/PublishDialog";
+import { VersionHistoryPanel, VersionSelector } from "@/components/projects/versioning";
+import { PublishDialog } from "@/components/publish/PublishDialog";
 import { trpc } from "@/lib/trpc";
+import { POLLING_BACKGROUND } from "@/app/config/polling";
 import { toast } from "sonner";
-import { VersionSelector } from "@/components/VersionSelector";
 import { usePermissions } from "@/hooks/usePermissions";
-import { HeaderProfileMenu } from "@/components/HeaderProfileMenu";
+import { HeaderProfileMenu } from "@/components/shell";
 
 /**
  * EmbeddedStudioToolbar - A unified toolbar for embedded studio views that combines:
@@ -103,7 +102,7 @@ export function EmbeddedStudioToolbar() {
 
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
     { slug: projectSlug!, version: selectedVersion },
-    { enabled: !!projectSlug, refetchInterval: 5000 }
+    { enabled: !!projectSlug, refetchInterval: POLLING_BACKGROUND }
   );
   const hasGitChanges = changesData?.hasChanges || false;
 

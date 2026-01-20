@@ -1,45 +1,27 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { trpc } from "@/lib/trpc";
+import { urlFormSchema, normalizeUrl } from "@/lib/form-schemas";
+import type { UrlFormValues } from "@/lib/form-schemas";
+import { importProjectZip } from "@/lib/import-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
+import { Form } from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { VersionDialog } from "./VersionDialog";
+import { VersionDialog } from "../versioning/VersionDialog";
+import { UrlFormFields } from "./UrlFormFields";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Globe,
-  Sparkles,
-  ArrowLeft,
-  AlertTriangle,
-  Plus,
-  Upload,
-} from "lucide-react";
+import { Globe, Sparkles, ArrowLeft, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { ROUTES } from "@/app/router";
 
 type WizardStep = "choice" | "scratch" | "url" | "import";
-
-const urlFormSchema = z.object({
-  url: z.string().min(1, "URL is required"),
-  disclaimer: z.boolean().refine((val) => val === true, {
-    message: "You must confirm that you own this website",
-  }),
-});
-
-type UrlFormValues = z.infer<typeof urlFormSchema>;
 
 interface ProjectWizardProps {
   onGenerationStarted: (slug: string, version?: number) => void;
@@ -148,11 +130,7 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
 
   const onUrlSubmit = async (data: UrlFormValues) => {
     try {
-      let urlToSubmit = data.url.trim();
-      if (!/^https?:\/\//i.test(urlToSubmit)) {
-        urlToSubmit = `https://${urlToSubmit}`;
-      }
-
+      const urlToSubmit = normalizeUrl(data.url);
       setPendingUrl(urlToSubmit);
       await generate({ url: urlToSubmit });
     } catch (e) {
@@ -181,32 +159,10 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
     if (!importFile) return;
     setIsImporting(true);
     try {
-      const formData = new FormData();
-      formData.append("file", importFile);
-
-      const response = await fetch("/vivd-studio/api/import", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-
-      const payload = (await response.json().catch(() => null)) as {
-        error?: string;
-        slug?: string;
-        version?: number;
-      } | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error || "Import failed");
-      }
-
-      if (!payload?.slug) {
-        throw new Error("Import failed: missing project slug");
-      }
-
+      const result = await importProjectZip(importFile);
       setIsOpen(false);
-      onGenerationStarted(payload.slug, payload.version);
-      navigate(`/vivd-studio/projects/${payload.slug}`);
+      onGenerationStarted(result.slug, result.version);
+      navigate(ROUTES.PROJECT(result.slug));
       toast.success("Project imported");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Import failed");
@@ -260,7 +216,7 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
               <button
                 onClick={() => {
                   setIsOpen(false);
-                  navigate("/vivd-studio/projects/new/scratch");
+                  navigate(ROUTES.NEW_SCRATCH);
                 }}
                 className="w-full p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 text-left group"
               >
@@ -338,7 +294,7 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
                 className="w-full gap-2"
                 onClick={() => {
                   setIsOpen(false);
-                  navigate("/vivd-studio/projects/new/scratch");
+                  navigate(ROUTES.NEW_SCRATCH);
                 }}
               >
                 <Sparkles className="h-4 w-4" />
@@ -354,58 +310,7 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
                 onSubmit={form.handleSubmit(onUrlSubmit)}
                 className="space-y-4"
               >
-                <FormField
-                  control={form.control}
-                  name="url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          placeholder="Enter a URL (e.g., https://example.com)"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="disclaimer"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border">
-                        <input
-                          type="checkbox"
-                          id="disclaimer"
-                          checked={field.value}
-                          onChange={field.onChange}
-                          className="mt-1 h-4 w-4 rounded border-border"
-                        />
-                        <label
-                          htmlFor="disclaimer"
-                          className="text-sm text-muted-foreground cursor-pointer"
-                        >
-                          <span className="flex items-center gap-1.5 text-foreground font-medium mb-1">
-                            <AlertTriangle className="h-4 w-4 text-amber-500" />
-                            I own this website and its content
-                          </span>
-                          By checking this box, you confirm that you have the
-                          rights to use this website's content for generating a
-                          new landing page.
-                        </label>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {form.formState.errors.root && (
-                  <p className="text-sm font-medium text-destructive">
-                    {form.formState.errors.root.message}
-                  </p>
-                )}
+                <UrlFormFields form={form} />
 
                 <Button
                   type="submit"

@@ -10,6 +10,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import {
+  POLLING_BACKGROUND,
+  POLLING_DEV_SERVER_STARTING,
+} from "@/app/config/polling";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useImageDropZone } from "./useImageDropZone";
 import { DEVICE_PRESETS, type DevicePreset } from "./types";
@@ -121,6 +125,14 @@ export function usePreview() {
     throw new Error("usePreview must be used within a PreviewProvider");
   }
   return context;
+}
+
+/**
+ * Returns the PreviewContext value if inside a PreviewProvider, or null otherwise.
+ * Use this when a component may or may not be rendered within a PreviewProvider.
+ */
+export function useOptionalPreview() {
+  return useContext(PreviewContext);
 }
 
 interface PreviewProviderProps {
@@ -314,7 +326,7 @@ export function PreviewProvider({
   // Query for git changes (unsaved work)
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
     { slug: projectSlug!, version: selectedVersion },
-    { enabled: !!projectSlug, refetchInterval: 5000 },
+    { enabled: !!projectSlug, refetchInterval: POLLING_BACKGROUND },
   );
   const hasGitChanges = changesData?.hasChanges || false;
 
@@ -342,7 +354,7 @@ export function PreviewProvider({
           // Keep polling while dev server is starting
           const status = query.state.data?.status;
           if (status === "starting" || status === "installing") {
-            return 2000;
+            return POLLING_DEV_SERVER_STARTING;
           }
           return false;
         },
