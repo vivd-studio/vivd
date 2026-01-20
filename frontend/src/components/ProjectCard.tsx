@@ -13,7 +13,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -25,6 +24,7 @@ import {
   Trash2,
   MoreVertical,
   Download,
+  ExternalLink,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -105,7 +105,7 @@ export function ProjectCard({
   });
 
   const [selectedVersion, setSelectedVersion] = useState(
-    project.currentVersion || 1
+    project.currentVersion || 1,
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -127,7 +127,7 @@ export function ProjectCard({
 
   // Get status for selected version
   const selectedVersionInfo = versions.find(
-    (v) => v.version === selectedVersion
+    (v) => v.version === selectedVersion,
   );
   const isCompleted =
     selectedVersionInfo?.status === "completed" ||
@@ -143,8 +143,8 @@ export function ProjectCard({
   const subtitle = isUrlProject
     ? project.url
     : project.title
-    ? `“${project.title}”`
-    : "Start-from-scratch project";
+      ? `“${project.title}”`
+      : "Start-from-scratch project";
 
   // Calculate progress and label
   let statusLabel = "Pending";
@@ -192,163 +192,129 @@ export function ProjectCard({
   return (
     <>
       <Card
-        className={`flex flex-col h-full overflow-hidden transition-all hover:shadow-md min-h-[190px] ${
+        className={`flex flex-col h-full overflow-hidden transition-all min-h-[160px] bg-card/50 border-border/50 shadow-sm hover:shadow-md ${
           isProcessing
-            ? "border-primary ring-1 ring-primary/20 animate-pulse duration-3000"
+            ? "border-primary/60 ring-1 ring-primary/20 animate-pulse duration-3000"
             : ""
-        } ${isCompleted ? "cursor-pointer hover:border-primary/50" : ""}`}
+        } ${isCompleted ? "cursor-pointer hover:border-primary/40 hover:bg-card" : ""}`}
         onClick={() => {
           if (isCompleted) {
             navigate(`/vivd-studio/projects/${project.slug}`);
           }
         }}
       >
-      <CardHeader className="pb-3">
-        <div className="flex justify-between items-start gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <CardTitle
-              className="text-lg font-medium truncate"
-              title={project.slug}
-            >
-              {project.slug}
-            </CardTitle>
-              {totalVersions > 0 &&
-              (hasMultipleVersions ? (
-                <VersionSelector
-                  selectedVersion={selectedVersion}
-                  versions={versions}
-                  onSelect={handleVersionSelect}
-                  stopPropagation
-                  triggerVariant="secondary"
-                  triggerClassName="shrink-0 text-xs px-1.5 py-0 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
-                  triggerTitle={`Click to select from ${totalVersions} versions`}
-                  align="start"
-                  label="Select Version"
-                />
-              ) : (
-                <VersionSelector
-                  selectedVersion={selectedVersion}
-                  versions={versions}
-                  onSelect={handleVersionSelect}
-                  stopPropagation
-                  triggerVariant="secondary"
-                  triggerClassName="shrink-0 text-xs px-1.5 py-0 font-normal"
-                  triggerTitle={`${totalVersions} version`}
-                />
-              ))}
-          </div>
-          <Badge
-            variant={statusColor}
-            className={`shrink-0 ${
-              isCompleted
-                ? "bg-green-500/15 text-green-600 dark:text-green-400 hover:bg-green-500/25 border-green-500/20"
-                : ""
-            }`}
-          >
-            {statusLabel}
-          </Badge>
-        </div>
-        <div
-          className="text-xs text-muted-foreground truncate"
-          title={subtitle}
-        >
-          {subtitle}
-        </div>
-        {project.publishedDomain && (
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <Globe className="w-3 h-3 text-green-600 shrink-0" />
-            <a
-              href={`https://${project.publishedDomain}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-green-600 hover:text-green-700 hover:underline truncate"
-              title={`Published at ${project.publishedDomain}${
-                project.publishedVersion
-                  ? ` (v${project.publishedVersion})`
-                  : ""
-              }`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {project.publishedDomain}
-              {project.publishedVersion && (
-                <span className="text-muted-foreground ml-1">
-                  (v{project.publishedVersion})
-                </span>
-              )}
-            </a>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent className="pb-3 grow flex items-center justify-center">
-        {isProcessing && (
-          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span className="text-sm font-medium">{statusLabel}...</span>
-            </div>
-            {isAdmin && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowResetConfirm(true);
-                }}
-                disabled={resetMutation.isPending}
+        <CardHeader className="pb-3 pt-4 px-4">
+          <div className="flex justify-between items-start gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <CardTitle
+                className="text-base font-semibold truncate"
+                title={project.slug}
               >
-                <RotateCcw
-                  className={`w-3 h-3 mr-1 ${
-                    resetMutation.isPending ? "animate-spin" : ""
-                  }`}
-                />
-                {resetMutation.isPending
-                  ? "Resetting..."
-                  : "Force Reset (Admin)"}
-              </Button>
+                {project.slug}
+              </CardTitle>
+              {totalVersions > 0 &&
+                (hasMultipleVersions ? (
+                  <VersionSelector
+                    selectedVersion={selectedVersion}
+                    versions={versions}
+                    onSelect={handleVersionSelect}
+                    stopPropagation
+                    triggerVariant="secondary"
+                    triggerClassName="shrink-0 text-xs px-1.5 py-0 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
+                    triggerTitle={`Click to select from ${totalVersions} versions`}
+                    align="start"
+                    label="Select Version"
+                  />
+                ) : (
+                  <VersionSelector
+                    selectedVersion={selectedVersion}
+                    versions={versions}
+                    onSelect={handleVersionSelect}
+                    stopPropagation
+                    triggerVariant="secondary"
+                    triggerClassName="shrink-0 text-xs px-1.5 py-0 font-normal"
+                    triggerTitle={`${totalVersions} version`}
+                  />
+                ))}
+            </div>
+            {!isCompleted && (
+              <Badge
+                variant={statusColor}
+                className="shrink-0"
+              >
+                {statusLabel}
+              </Badge>
             )}
           </div>
-        )}
-
-        {isFailed && (
-          <div className="text-sm text-center text-destructive">
-            Generation failed
-          </div>
-        )}
-      </CardContent>
-      <CardFooter className="pt-0 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-muted-foreground hover:text-primary"
-            disabled={!isCompleted}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(projectEditorUrl, "_blank");
-            }}
+          <div
+            className="text-xs text-muted-foreground truncate"
+            title={subtitle}
           >
-            Open in new tab
-          </Button>
-          {isUrlProject && project.url ? (
-            <>
-              <span className="text-muted-foreground/30">•</span>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-muted-foreground hover:text-primary"
-                disabled={!isCompleted}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(project.url, "_blank");
-                }}
+            {subtitle}
+          </div>
+          {project.publishedDomain && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <Globe className="w-3 h-3 text-green-600 shrink-0" />
+              <a
+                href={`https://${project.publishedDomain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-green-600 hover:text-green-700 hover:underline truncate"
+                title={`Published at ${project.publishedDomain}${
+                  project.publishedVersion
+                    ? ` (v${project.publishedVersion})`
+                    : ""
+                }`}
+                onClick={(e) => e.stopPropagation()}
               >
-                Original Website
-              </Button>
-            </>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-1">
+                {project.publishedDomain}
+                {project.publishedVersion && (
+                  <span className="text-muted-foreground ml-1">
+                    (v{project.publishedVersion})
+                  </span>
+                )}
+              </a>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="pb-1.5 px-4 grow flex items-center justify-center">
+          {isProcessing && (
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-sm font-medium">{statusLabel}...</span>
+              </div>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowResetConfirm(true);
+                  }}
+                  disabled={resetMutation.isPending}
+                >
+                  <RotateCcw
+                    className={`w-3 h-3 mr-1 ${
+                      resetMutation.isPending ? "animate-spin" : ""
+                    }`}
+                  />
+                  {resetMutation.isPending
+                    ? "Resetting..."
+                    : "Force Reset (Admin)"}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {isFailed && (
+            <div className="text-sm text-center text-destructive">
+              Generation failed
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="pt-2.5 pb-3 px-4 flex items-center justify-end gap-2 border-t border-border/30 mt-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -364,14 +330,27 @@ export function ProjectCard({
               align="end"
               onClick={(e) => e.stopPropagation()}
             >
-              <DropdownMenuLabel>Project Options</DropdownMenuLabel>
-              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => window.open(projectEditorUrl, "_blank")}
+                disabled={!isCompleted}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open in new tab
+              </DropdownMenuItem>
+              {isUrlProject && project.url && (
+                <DropdownMenuItem
+                  onClick={() => window.open(project.url, "_blank")}
+                >
+                  <Globe className="w-4 h-4 mr-2" />
+                  Original website
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={() => {
                   const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                   window.open(
                     `${baseUrl}/vivd-studio/api/download/${project.slug}/${selectedVersion}`,
-                    "_blank"
+                    "_blank",
                   );
                 }}
                 disabled={!isCompleted}
@@ -385,11 +364,11 @@ export function ProjectCard({
                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Delete Project
+                Delete project
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {isUrlProject && project.url ? (
+          {isUrlProject && project.url && (
             <Button
               variant="outline"
               size="sm"
@@ -406,9 +385,8 @@ export function ProjectCard({
               />
               <span className="text-xs font-medium">New</span>
             </Button>
-          ) : null}
-        </div>
-      </CardFooter>
+          )}
+        </CardFooter>
       </Card>
 
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
@@ -416,8 +394,8 @@ export function ProjectCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Force Reset Project?</AlertDialogTitle>
             <AlertDialogDescription>
-              Force reset {project.slug} v{selectedVersion} to <code>failed</code>
-              ? This is an admin-only action.
+              Force reset {project.slug} v{selectedVersion} to{" "}
+              <code>failed</code>? This is an admin-only action.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

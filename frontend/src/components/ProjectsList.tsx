@@ -106,11 +106,11 @@ export function ProjectsList() {
 
   if (isLoading) {
     return (
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-48 rounded-xl border bg-card text-card-foreground shadow animate-pulse"
+            className="h-44 rounded-lg border bg-card text-card-foreground shadow-sm animate-pulse"
           />
         ))}
       </div>
@@ -118,19 +118,18 @@ export function ProjectsList() {
   }
 
   if (error)
-    return <div className="mt-8 text-red-500">Error loading projects</div>;
+    return <div className="text-destructive">Error loading projects</div>;
 
   return (
-    <div className="mt-8">
-      <h2 className="text-2xl font-bold tracking-tight mb-4">Your Projects</h2>
+    <div>
       {projectsData?.projects.length === 0 ? (
-        <div className="text-center py-12 border-2 border-dashed rounded-xl">
+        <div className="text-center py-16 border border-dashed rounded-lg bg-muted/30">
           <p className="text-muted-foreground">
-            No projects generated yet. create one above!
+            No projects yet. Click "New Project" to create one!
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
           {projectsData?.projects.map((project) => (
             <ProjectCard
               key={project.slug}

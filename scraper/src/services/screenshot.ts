@@ -7,8 +7,133 @@ const MAX_SCREENSHOT_HEIGHT = 2000;
 export async function takeMainPageScreenshot(page: Page): Promise<string> {
   log("Taking screenshot of main page...");
 
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await new Promise((r) => setTimeout(r, 2000));
+  // Wait for fonts to be fully loaded
+  try {
+    await page.evaluate(() => document.fonts.ready);
+    log("Fonts loaded");
+  } catch (e) {
+    log(`Font wait failed: ${e}`);
+  }
+
+  // Scroll down to trigger lazy-loaded images, then scroll back up
+  try {
+    await page.evaluate(async () => {
+      const scrollStep = window.innerHeight;
+      const maxScroll = Math.min(document.body.scrollHeight, 3000);
+
+      // Scroll down in steps to trigger lazy loading
+      for (let y = 0; y <= maxScroll; y += scrollStep) {
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      // Scroll back to top
+      window.scrollTo(0, 0);
+    });
+    log("Scrolled to trigger lazy images");
+  } catch (e) {
+    log(`Scroll failed: ${e}`);
+  }
+
+  // Force load all lazy images by removing lazy loading attribute and triggering src
+  try {
+    await page.evaluate(() => {
+      const images = document.querySelectorAll('img[loading="lazy"]');
+      images.forEach((img) => {
+        const imgEl = img as HTMLImageElement;
+        imgEl.removeAttribute("loading");
+        // Force reload by toggling src
+        const src = imgEl.src;
+        if (src) {
+          imgEl.src = "";
+          imgEl.src = src;
+        }
+      });
+    });
+    log("Forced lazy images to load");
+  } catch (e) {
+    log(`Force lazy load failed: ${e}`);
+  }
+
+  // Wait for all images to be loaded
+  try {
+    await page.evaluate(async () => {
+      const images = Array.from(document.images);
+      const imagePromises = images.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          setTimeout(resolve, 3000);
+        });
+      });
+      await Promise.race([
+        Promise.all(imagePromises),
+        new Promise((resolve) => setTimeout(resolve, 5000)),
+      ]);
+    });
+    log("All images loaded");
+  } catch (e) {
+    log(`Image wait failed: ${e}`);
+  }
+
+  // Wait for CSS background images to load
+  try {
+    await page.evaluate(async () => {
+      const elements = document.querySelectorAll("*");
+      const bgImagePromises: Promise<void>[] = [];
+
+      elements.forEach((el) => {
+        const style = window.getComputedStyle(el);
+        const bgImage = style.backgroundImage;
+
+        if (bgImage && bgImage !== "none" && bgImage.includes("url(")) {
+          const urlMatches = bgImage.match(/url\(["']?([^"')]+)["']?\)/g);
+          if (urlMatches) {
+            urlMatches.forEach((match) => {
+              const url = match
+                .replace(/url\(["']?/, "")
+                .replace(/["']?\)/, "");
+              if (url.startsWith("http") || url.startsWith("/")) {
+                const img = new Image();
+                const promise = new Promise<void>((resolve) => {
+                  img.onload = () => resolve();
+                  img.onerror = () => resolve();
+                  setTimeout(resolve, 3000);
+                });
+                img.src = url;
+                bgImagePromises.push(promise);
+              }
+            });
+          }
+        }
+      });
+
+      if (bgImagePromises.length > 0) {
+        await Promise.race([
+          Promise.all(bgImagePromises),
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
+      }
+    });
+    log("CSS background images loaded");
+  } catch (e) {
+    log(`Background image wait failed: ${e}`);
+  }
+
+  // Wait for network to be truly idle
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyPage = page as any;
+    if (typeof anyPage.waitForNetworkIdle === "function") {
+      await anyPage.waitForNetworkIdle({ idleTime: 500, timeout: 5000 });
+    }
+  } catch {
+    // Ignore timeout
+  }
+
+  // Final stabilization wait
+  await new Promise((r) => setTimeout(r, 1000));
 
   const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
   const height = Math.min(bodyHeight, MAX_SCREENSHOT_HEIGHT);
@@ -24,7 +149,7 @@ export async function takeMainPageScreenshot(page: Page): Promise<string> {
 }
 
 export async function takeHeaderScreenshot(
-  mainScreenshotBase64: string
+  mainScreenshotBase64: string,
 ): Promise<string> {
   log("Creating header screenshot from main page screenshot...");
 
@@ -56,7 +181,7 @@ export async function takeHeaderScreenshot(
 export async function captureReferenceScreenshot(
   page: Page,
   url: string,
-  index: number
+  index: number,
 ): Promise<{ url: string; data: string; filename: string } | null> {
   try {
     log(`Capturing reference screenshot: ${url}`);

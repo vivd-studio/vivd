@@ -53,7 +53,7 @@ function checkSingleProjectModeLimit(): void {
   if (projectDirs.length > 0) {
     throw new Error(
       "Single project mode is enabled and a project already exists. " +
-        "Delete the existing project before creating a new one."
+        "Delete the existing project before creating a new one.",
     );
   }
 }
@@ -64,7 +64,7 @@ export const projectGenerationProcedures = {
       z.object({
         url: z.string().min(1),
         createNewVersion: z.boolean().optional(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       // Check usage limits before allowing generation (costs LLM tokens)
@@ -106,7 +106,7 @@ export const projectGenerationProcedures = {
           const currentVersionData = getVersionData(domainSlug, currentVersion);
           const status = currentVersionData?.status || "unknown";
           const versionInfo = manifest.versions.find(
-            (v) => v.version === currentVersion
+            (v) => v.version === currentVersion,
           );
 
           // If status is processing but stale (>30 min), allow regeneration
@@ -132,7 +132,7 @@ export const projectGenerationProcedures = {
           processUrl(url, nextVersion)
             .then(() => {
               console.log(
-                `Finished processing ${url} (version ${nextVersion})`
+                `Finished processing ${url} (version ${nextVersion})`,
               );
             })
             .catch((err) => {
@@ -181,7 +181,7 @@ export const projectGenerationProcedures = {
             z.object({
               filename: z.string().min(1),
               base64: z.string().min(1),
-            })
+            }),
           )
           .max(20)
           .optional(),
@@ -190,11 +190,11 @@ export const projectGenerationProcedures = {
             z.object({
               filename: z.string().min(1),
               base64: z.string().min(1),
-            })
+            }),
           )
           .max(20)
           .optional(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       // Check usage limits before allowing scratch generation (costs LLM tokens)
@@ -216,13 +216,13 @@ export const projectGenerationProcedures = {
       runScratchFlow(ctx, input)
         .then(() => {
           console.log(
-            `Finished scratch generation for ${ctx.slug} (version ${ctx.version})`
+            `Finished scratch generation for ${ctx.slug} (version ${ctx.version})`,
           );
         })
         .catch((err) => {
           console.error(
             `Error during scratch generation for ${ctx.slug}:`,
-            err
+            err,
           );
           try {
             ctx.updateStatus("failed");
@@ -244,7 +244,7 @@ export const projectGenerationProcedures = {
       z.object({
         slug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       // Check usage limits before allowing regeneration (costs LLM tokens)
@@ -283,7 +283,7 @@ export const projectGenerationProcedures = {
       processUrl(url, targetVersion)
         .then(() => {
           console.log(
-            `Finished regenerating ${url} (version ${targetVersion})`
+            `Finished regenerating ${url} (version ${targetVersion})`,
           );
         })
         .catch((err) => {
@@ -303,7 +303,7 @@ export const projectGenerationProcedures = {
       z.object({
         slug: z.string(),
         version: z.number().optional(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       const { slug, version } = input;
@@ -437,8 +437,8 @@ export const projectGenerationProcedures = {
             sourceRaw === "scratch"
               ? "scratch"
               : manifest.url
-              ? "url"
-              : "scratch";
+                ? "url"
+                : "scratch";
 
           // Get publish info for this project
           const publishInfo = publishedSites.get(projectSlug);
@@ -459,7 +459,7 @@ export const projectGenerationProcedures = {
           };
         })
         .filter(
-          (project): project is NonNullable<typeof project> => project !== null
+          (project): project is NonNullable<typeof project> => project !== null,
         );
       return { projects };
     } catch (error) {
@@ -476,7 +476,7 @@ export const projectGenerationProcedures = {
       z.object({
         slug: z.string(),
         version: z.number(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       const { slug, version } = input;
@@ -493,7 +493,7 @@ export const projectGenerationProcedures = {
 
       // Validate that the version exists
       const versionExists = manifest.versions.some(
-        (v) => v.version === version
+        (v) => v.version === version,
       );
       if (!versionExists) {
         throw new Error(`Version ${version} does not exist for this project`);

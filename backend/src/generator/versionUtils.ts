@@ -71,7 +71,7 @@ const STALE_THRESHOLD_MINUTES = 30;
  * Check if a version is stale (stuck in processing for too long)
  */
 export function isVersionStale(
-  versionInfo: VersionInfo | VersionData | null
+  versionInfo: VersionInfo | VersionData | null,
 ): boolean {
   if (!versionInfo) return false;
 
@@ -251,7 +251,7 @@ export function migrateProjectIfNeeded(slug: string): boolean {
   if (fs.existsSync(legacyProjectJsonPath)) {
     try {
       legacyProjectData = JSON.parse(
-        fs.readFileSync(legacyProjectJsonPath, "utf-8")
+        fs.readFileSync(legacyProjectJsonPath, "utf-8"),
       );
     } catch (e) {
       console.error(`Error reading legacy project.json for ${slug}:`, e);
@@ -282,7 +282,7 @@ export function migrateProjectIfNeeded(slug: string): boolean {
   if (fs.existsSync(v1ProjectJsonPath)) {
     try {
       const projectData = JSON.parse(
-        fs.readFileSync(v1ProjectJsonPath, "utf-8")
+        fs.readFileSync(v1ProjectJsonPath, "utf-8"),
       );
       projectData.version = 1;
       fs.writeFileSync(v1ProjectJsonPath, JSON.stringify(projectData, null, 2));
@@ -318,7 +318,7 @@ export function createVersionEntry(
   slug: string,
   version: number,
   url: string,
-  status: string = "processing"
+  status: string = "processing",
 ): void {
   const projectDir = getProjectDir(slug);
 
@@ -378,12 +378,12 @@ export function createVersionEntry(
 export function updateVersionStatus(
   slug: string,
   version: number,
-  status: string
+  status: string,
 ): void {
   const manifest = getManifest(slug);
   if (!manifest) {
     console.error(
-      `Cannot update version status: manifest not found for ${slug}`
+      `Cannot update version status: manifest not found for ${slug}`,
     );
     return;
   }
@@ -400,7 +400,7 @@ export function updateVersionStatus(
  */
 export function getVersionData(
   slug: string,
-  version: number
+  version: number,
 ): VersionData | null {
   const versionDir = getVersionDir(slug, version);
   const projectJsonPath = getVivdInternalFilesPath(versionDir, "project.json");

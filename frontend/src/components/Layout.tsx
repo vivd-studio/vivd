@@ -1,27 +1,81 @@
-import { Link, useNavigate, Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
+import { useRef, useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { LogOut, Shield, Settings } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { ModeToggle } from "@/components/mode-toggle";
+import { Separator } from "@/components/ui/separator";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { ProjectWizard } from "@/components/ProjectWizard";
+import { HeaderProfileMenu } from "@/components/HeaderProfileMenu";
+
+interface PageInfo {
+  title: string;
+  isProjectPage: boolean;
+  projectSlug?: string;
+}
+
+function getPageInfo(pathname: string): PageInfo {
+  // Check for project page: /vivd-studio/projects/:slug
+  const projectMatch = pathname.match(/^\/vivd-studio\/projects\/([^/]+)$/);
+  if (projectMatch) {
+    return {
+      title: "Projects",
+      isProjectPage: true,
+      projectSlug: projectMatch[1],
+    };
+  }
+
+  if (pathname === "/vivd-studio" || pathname === "/vivd-studio/") {
+    return { title: "Projects", isProjectPage: false };
+  }
+  if (pathname.startsWith("/vivd-studio/admin")) {
+    return { title: "Admin", isProjectPage: false };
+  }
+  if (pathname.startsWith("/vivd-studio/settings")) {
+    return { title: "Settings", isProjectPage: false };
+  }
+  if (pathname.startsWith("/vivd-studio/no-project")) {
+    return { title: "No Project", isProjectPage: false };
+  }
+  return { title: "Projects", isProjectPage: false };
+}
 
 export function Layout() {
-  const { data: session, isPending } = authClient.useSession();
-  const navigate = useNavigate();
+  const { isPending } = authClient.useSession();
+  const location = useLocation();
+  const pageInfo = getPageInfo(location.pathname);
+  const showNewProjectButton =
+    pageInfo.title === "Projects" && !pageInfo.isProjectPage;
 
-  const handleLogout = async () => {
-    await authClient.signOut();
-    navigate("/vivd-studio/login");
-  };
+  const mainRef = useRef<HTMLElement>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const mainElement = mainRef.current;
+    if (!mainElement || pageInfo.isProjectPage) return;
+
+    const handleScroll = () => {
+      setIsScrolled(mainElement.scrollTop > 0);
+    };
+
+    mainElement.addEventListener("scroll", handleScroll);
+    // Check initial state
+    handleScroll();
+
+    return () => mainElement.removeEventListener("scroll", handleScroll);
+  }, [pageInfo.isProjectPage]);
+
+  // Reset scroll state when navigating
+  useEffect(() => {
+    setIsScrolled(false);
+  }, [location.pathname]);
 
   if (isPending)
     return (
@@ -31,95 +85,44 @@ export function Layout() {
     );
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link
-              to="/vivd-studio"
-              className="font-bold text-xl tracking-tight"
-            >
-              vi
-              <span
-                style={{
-                  background:
-                    "linear-gradient(135deg, #10B981 0%, #F59E0B 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                vd
-              </span>
-            </Link>
-
-            {session?.user?.role === "admin" && (
-              <Link
-                to="/vivd-studio/admin"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-              >
-                <Shield className="h-4 w-4" />
-                Admin
-              </Link>
-            )}
-          </div>
-
-          <div className="flex items-center gap-4">
+    <SidebarProvider>
+      <AppSidebar />
+      <div className="flex flex-1 flex-col min-h-0 h-svh overflow-hidden">
+        {/* For project pages, EmbeddedStudioToolbar handles the header */}
+        {!pageInfo.isProjectPage && (
+          <header
+            className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 px-4 bg-background border-b transition-[border-color] duration-150"
+            style={{ borderColor: isScrolled ? 'hsl(var(--border))' : 'transparent' }}
+          >
+            <SidebarTrigger />
+            <Separator orientation="vertical" className="h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{pageInfo.title}</BreadcrumbPage>
+                </BreadcrumbItem>
+                {showNewProjectButton && (
+                  <>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <ProjectWizard onGenerationStarted={() => {}} />
+                    </BreadcrumbItem>
+                  </>
+                )}
+              </BreadcrumbList>
+            </Breadcrumb>
+            <div className="flex-1" />
             <ModeToggle />
-            {session ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="relative h-8 w-8 rounded-full"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage
-                        src={session.user.image || undefined}
-                        alt={session.user.name}
-                      />
-                      <AvatarFallback>
-                        {session.user.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {session.user.name}
-                      </p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {session.user.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/vivd-studio/settings" className="cursor-pointer">
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button asChild variant="default" size="sm">
-                <Link to="/vivd-studio/login">Log in</Link>
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <Outlet />
-      </main>
-    </div>
+            <HeaderProfileMenu />
+          </header>
+        )}
+        <main
+          ref={mainRef}
+          className={`flex-1 min-h-0 overflow-auto ${pageInfo.isProjectPage ? "overflow-hidden" : "px-6 py-4"}`}
+        >
+          <Outlet />
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }

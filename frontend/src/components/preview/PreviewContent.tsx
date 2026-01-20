@@ -3,6 +3,7 @@ import { AssetExplorer } from "../asset-explorer";
 import { ResizeHandle } from "../ResizeHandle";
 import { usePreview } from "./PreviewContext";
 import { PreviewToolbar } from "./PreviewToolbar";
+import { EmbeddedStudioToolbar } from "./EmbeddedStudioToolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
@@ -38,11 +39,13 @@ export function PreviewContent() {
     devServerError,
     previewMode,
     isPreviewLoading,
+    embedded,
   } = usePreview();
 
   // For dev server projects, don't render iframe until ready
   const isDevServerReady =
-    !isPreviewLoading && (previewMode === "static" || devServerStatus === "ready");
+    !isPreviewLoading &&
+    (previewMode === "static" || devServerStatus === "ready");
 
   // Show loading for both iframe loading AND dev server starting
   const isLoading =
@@ -68,8 +71,12 @@ export function PreviewContent() {
 
   return (
     <>
-      <div className="w-screen h-dvh flex flex-col overflow-hidden bg-background">
-        <PreviewToolbar />
+      <div
+        className={`flex flex-col overflow-hidden bg-background ${
+          embedded ? "w-full h-full" : "w-screen h-dvh"
+        }`}
+      >
+        {embedded ? <EmbeddedStudioToolbar /> : <PreviewToolbar />}
 
         <div className="flex flex-1 min-h-0 relative">
           {/* Asset Explorer Panel - Left side */}

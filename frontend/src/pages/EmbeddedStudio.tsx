@@ -5,7 +5,11 @@ import { formatDocumentTitle } from "@/lib/brand";
 import { PreviewContent } from "@/components/preview/PreviewContent";
 import { PreviewProvider } from "@/components/preview/PreviewContext";
 
-export default function PreviewPage() {
+/**
+ * EmbeddedStudio - Renders the studio view embedded within the Layout (with sidebar/breadcrumbs).
+ * This uses PreviewProvider with embedded=true to fit within the Layout's main content area.
+ */
+export default function EmbeddedStudio() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const navigate = useNavigate();
 
@@ -15,9 +19,9 @@ export default function PreviewPage() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
 
-  // Handle close/back navigation - go back to embedded view
+  // Handle close/back navigation
   const handleClose = () => {
-    navigate(`/vivd-studio/projects/${projectSlug}`);
+    navigate("/vivd-studio");
   };
 
   // Set document title to project name
@@ -32,7 +36,7 @@ export default function PreviewPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Loading preview...</div>
       </div>
     );
@@ -40,7 +44,7 @@ export default function PreviewPage() {
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-full items-center justify-center">
         <div className="text-destructive">
           Error loading project: {error.message}
         </div>
@@ -50,7 +54,7 @@ export default function PreviewPage() {
 
   if (!project || !projectSlug) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Project not found</div>
       </div>
     );
@@ -63,6 +67,7 @@ export default function PreviewPage() {
       projectSlug={projectSlug}
       version={version}
       onClose={handleClose}
+      embedded={true}
     >
       <PreviewContent />
     </PreviewProvider>

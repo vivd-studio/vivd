@@ -1,5 +1,6 @@
 import { authClient } from "@/lib/auth-client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,7 +90,7 @@ const addUserSchema = z
     {
       message: "Project is required for Client Editor",
       path: ["projectSlug"],
-    }
+    },
   );
 
 type AddUserFormValues = z.infer<typeof addUserSchema>;
@@ -101,7 +102,7 @@ const updateUserSchema = z.object({
   projectSlug: z
     .string()
     .transform((val) =>
-      val === "" || val === "__unassigned__" ? undefined : val
+      val === "" || val === "__unassigned__" ? undefined : val,
     )
     .optional(),
   newPassword: z
@@ -119,6 +120,8 @@ const updateUserSchema = z.object({
 type UpdateUserFormValues = z.infer<typeof updateUserSchema>;
 
 export default function Admin() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentTab = searchParams.get("tab") || "users";
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
@@ -131,6 +134,10 @@ export default function Admin() {
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user?.role === "admin";
 
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value });
+  };
+
   const { data: projectsData } = trpc.project.list.useQuery();
   const { mutateAsync: assignUserToProject } =
     trpc.user.assignUserToProject.useMutation();
@@ -139,7 +146,7 @@ export default function Admin() {
   const { data: membersData } = trpc.user.listProjectMembers.useQuery();
 
   const projectMap = new Map(
-    membersData?.members.map((m) => [m.userId, m.projectSlug]) || []
+    membersData?.members.map((m) => [m.userId, m.projectSlug]) || [],
   );
 
   const form = useForm<AddUserFormValues>({
@@ -382,7 +389,7 @@ export default function Admin() {
     );
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
@@ -392,7 +399,11 @@ export default function Admin() {
         </div>
       </div>
 
-      <Tabs defaultValue="users" className="w-full">
+      <Tabs
+        value={currentTab}
+        onValueChange={handleTabChange}
+        className="w-full"
+      >
         <TabsList className="w-full justify-start">
           <TabsTrigger value="users" className="gap-2">
             <Shield className="h-4 w-4" />
@@ -612,8 +623,8 @@ export default function Admin() {
                               user.role === "admin"
                                 ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                                 : user.role === "client_editor"
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                                : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                  : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                             }`}
                           >
                             {user.role === "client_editor"
@@ -1045,7 +1056,7 @@ function UsageStatsCard() {
     undefined,
     {
       refetchInterval: 30000,
-    }
+    },
   );
   const { data: usageHistory } = trpc.usage.history.useQuery({ days: 30 });
 
@@ -1093,13 +1104,16 @@ function UsageStatsCard() {
 
   // Calculate daily cost breakdown from history
   const dailyCosts =
-    usageHistory?.reduce((acc, record) => {
-      const d = new Date(record.createdAt);
-      // Use ISO date string for consistent parsing
-      const dateKey = d.toISOString().split("T")[0];
-      acc[dateKey] = (acc[dateKey] || 0) + parseFloat(record.cost);
-      return acc;
-    }, {} as Record<string, number>) || {};
+    usageHistory?.reduce(
+      (acc, record) => {
+        const d = new Date(record.createdAt);
+        // Use ISO date string for consistent parsing
+        const dateKey = d.toISOString().split("T")[0];
+        acc[dateKey] = (acc[dateKey] || 0) + parseFloat(record.cost);
+        return acc;
+      },
+      {} as Record<string, number>,
+    ) || {};
 
   const last7Days = Object.entries(dailyCosts)
     .slice(-7)
@@ -1142,13 +1156,13 @@ function UsageStatsCard() {
                     usageStatus.usage.daily.percentage >= 1
                       ? "bg-destructive"
                       : usageStatus.usage.daily.percentage >= 0.8
-                      ? "bg-yellow-500"
-                      : "bg-green-500"
+                        ? "bg-yellow-500"
+                        : "bg-green-500"
                   }`}
                   style={{
                     width: `${Math.min(
                       usageStatus.usage.daily.percentage * 100,
-                      100
+                      100,
                     )}%`,
                   }}
                 />
@@ -1183,13 +1197,13 @@ function UsageStatsCard() {
                     usageStatus.usage.weekly.percentage >= 1
                       ? "bg-destructive"
                       : usageStatus.usage.weekly.percentage >= 0.8
-                      ? "bg-yellow-500"
-                      : "bg-green-500"
+                        ? "bg-yellow-500"
+                        : "bg-green-500"
                   }`}
                   style={{
                     width: `${Math.min(
                       usageStatus.usage.weekly.percentage * 100,
-                      100
+                      100,
                     )}%`,
                   }}
                 />
@@ -1224,13 +1238,13 @@ function UsageStatsCard() {
                     usageStatus.usage.monthly.percentage >= 1
                       ? "bg-destructive"
                       : usageStatus.usage.monthly.percentage >= 0.8
-                      ? "bg-yellow-500"
-                      : "bg-green-500"
+                        ? "bg-yellow-500"
+                        : "bg-green-500"
                   }`}
                   style={{
                     width: `${Math.min(
                       usageStatus.usage.monthly.percentage * 100,
-                      100
+                      100,
                     )}%`,
                   }}
                 />
@@ -1265,13 +1279,13 @@ function UsageStatsCard() {
                     usageStatus.usage.imageGen.percentage >= 1
                       ? "bg-destructive"
                       : usageStatus.usage.imageGen.percentage >= 0.8
-                      ? "bg-yellow-500"
-                      : "bg-green-500"
+                        ? "bg-yellow-500"
+                        : "bg-green-500"
                   }`}
                   style={{
                     width: `${Math.min(
                       usageStatus.usage.imageGen.percentage * 100,
-                      100
+                      100,
                     )}%`,
                   }}
                 />

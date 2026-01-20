@@ -2,7 +2,12 @@ import puppeteer, { Browser, Page } from "puppeteer";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import puppeteerExtra from "puppeteer-extra";
 
-puppeteerExtra.use(StealthPlugin());
+// NOTE: The default `iframe.contentWindow` stealth evasion breaks layout on some sites
+// (e.g. ten-it.de ends up with `body { width: 4000px }`, pushing content off-screen).
+// Disabling just this evasion keeps most stealth benefits while avoiding the rendering bug.
+const stealth = StealthPlugin();
+stealth.enabledEvasions.delete("iframe.contentWindow");
+puppeteerExtra.use(stealth);
 
 const MAX_BROWSERS = parseInt(process.env.MAX_BROWSERS || "2", 10);
 

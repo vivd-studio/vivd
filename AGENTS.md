@@ -76,3 +76,7 @@ Available skills:
 
 - .skills/DOKPLOY.md (We deploy on Dokploy, here you can find all information on the platform)
 - .skills/OPENCODE.md (We use OpenCode as our AI coding agent, here you can find docs and configuration reference)
+
+# Local dev
+
+- because of the caddy config, the "published website" is available on http://localhost (without a port) and the development vivd-instance is on http://localhost/vivd-studio (without a port)

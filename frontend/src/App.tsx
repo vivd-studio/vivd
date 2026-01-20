@@ -12,6 +12,7 @@ import Signup from "./pages/Signup";
 import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
 import PreviewPage from "./pages/PreviewPage";
+import EmbeddedStudio from "./pages/EmbeddedStudio";
 import ScratchWizard from "./pages/ScratchWizard";
 import NoProjectAssigned from "./pages/NoProjectAssigned";
 import { Layout } from "@/components/Layout";
@@ -112,6 +113,40 @@ function ProjectRoute() {
   }
 
   return <PreviewPage />;
+}
+
+function EmbeddedStudioRoute() {
+  const { isClientEditor } = usePermissions();
+  const params = useParams();
+  const projectSlug = params.projectSlug ?? "";
+
+  const { data: assignedProject, isLoading } =
+    trpc.user.getMyAssignedProject.useQuery(undefined, {
+      enabled: isClientEditor,
+    });
+
+  if (!isClientEditor) return <EmbeddedStudio />;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">Loading...</div>
+    );
+  }
+
+  if (!assignedProject?.projectSlug) {
+    return <Navigate to="/vivd-studio/no-project" replace />;
+  }
+
+  if (projectSlug && assignedProject.projectSlug !== projectSlug) {
+    return (
+      <Navigate
+        to={`/vivd-studio/projects/${assignedProject.projectSlug}`}
+        replace
+      />
+    );
+  }
+
+  return <EmbeddedStudio />;
 }
 
 function ScratchWizardRoute() {
@@ -224,10 +259,15 @@ export default function App() {
               )
             }
           />
+          {/* Embedded studio view inside Layout */}
+          <Route
+            path="projects/:projectSlug"
+            element={<EmbeddedStudioRoute />}
+          />
         </Route>
-        {/* PreviewPage outside Layout - has its own full-screen UI */}
+        {/* Fullscreen PreviewPage - outside Layout for immersive editing */}
         <Route
-          path="/vivd-studio/projects/:projectSlug"
+          path="/vivd-studio/projects/:projectSlug/fullscreen"
           element={
             session ? <ProjectRoute /> : <Navigate to="/vivd-studio/login" />
           }

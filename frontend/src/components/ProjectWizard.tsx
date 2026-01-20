@@ -101,7 +101,7 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
           setIsOpen(false);
           onGenerationStarted(
             processingResponse.slug,
-            processingResponse.version
+            processingResponse.version,
           );
         }
       },
@@ -190,9 +190,11 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
         credentials: "include",
       });
 
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; slug?: string; version?: number }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        slug?: string;
+        version?: number;
+      } | null;
 
       if (!response.ok) {
         throw new Error(payload?.error || "Import failed");
@@ -228,10 +230,13 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)} size="lg" className="gap-2">
-        <Plus className="h-5 w-5" />
+      <button
+        onClick={() => setIsOpen(true)}
+        className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+      >
+        <Plus className="h-4 w-4" />
         New Project
-      </Button>
+      </button>
 
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
