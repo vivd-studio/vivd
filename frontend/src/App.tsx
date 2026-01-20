@@ -4,6 +4,7 @@ import {
   Route,
   Navigate,
   useParams,
+  useLocation,
 } from "react-router-dom";
 import { useEffect } from "react";
 import Login from "./pages/Login";
@@ -26,10 +27,13 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 /**
  * Wrapper that guards the Layout component in single project mode.
- * Redirects all Layout-wrapped routes to the fullscreen view.
+ * In single project mode:
+ * - Admin and Settings pages remain accessible
+ * - Project list (dashboard) and embedded studio redirect to fullscreen
  */
 function LayoutWithSingleProjectGuard() {
   const { config, isLoading } = useAppConfig();
+  const location = useLocation();
   const { data: projectsData, isLoading: isProjectsLoading } =
     trpc.project.list.useQuery();
 
@@ -41,8 +45,20 @@ function LayoutWithSingleProjectGuard() {
     );
   }
 
-  // In single project mode, redirect to fullscreen view (bypasses Layout entirely)
+  // In single project mode, only redirect project-related routes to fullscreen
+  // Admin and Settings pages should remain accessible
   if (config.singleProjectMode) {
+    const isAdminRoute = location.pathname.startsWith("/vivd-studio/admin");
+    const isSettingsRoute = location.pathname.startsWith(
+      "/vivd-studio/settings",
+    );
+
+    // Allow admin and settings pages through
+    if (isAdminRoute || isSettingsRoute) {
+      return <Layout />;
+    }
+
+    // Redirect project list and embedded studio to fullscreen
     const projects = projectsData?.projects ?? [];
     if (projects.length > 0) {
       return (
