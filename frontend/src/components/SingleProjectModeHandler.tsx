@@ -28,10 +28,13 @@ export function SingleProjectModeHandler() {
 
   const projects = projectsData?.projects ?? [];
 
-  // If projects exist, redirect to the first one
+  // If projects exist, redirect to fullscreen view directly
   if (projects.length > 0) {
     return (
-      <Navigate to={`/vivd-studio/projects/${projects[0].slug}`} replace />
+      <Navigate
+        to={`/vivd-studio/projects/${projects[0].slug}/fullscreen`}
+        replace
+      />
     );
   }
 

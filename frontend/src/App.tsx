@@ -25,6 +25,42 @@ import { Toaster } from "@/components/ui/sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 
 /**
+ * Wrapper that guards the Layout component in single project mode.
+ * Redirects all Layout-wrapped routes to the fullscreen view.
+ */
+function LayoutWithSingleProjectGuard() {
+  const { config, isLoading } = useAppConfig();
+  const { data: projectsData, isLoading: isProjectsLoading } =
+    trpc.project.list.useQuery();
+
+  if (isLoading || isProjectsLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  // In single project mode, redirect to fullscreen view (bypasses Layout entirely)
+  if (config.singleProjectMode) {
+    const projects = projectsData?.projects ?? [];
+    if (projects.length > 0) {
+      return (
+        <Navigate
+          to={`/vivd-studio/projects/${projects[0].slug}/fullscreen`}
+          replace
+        />
+      );
+    }
+    // No projects yet - redirect to single project creation flow
+    return <Navigate to="/vivd-studio/single-project" replace />;
+  }
+
+  // Normal mode: render Layout
+  return <Layout />;
+}
+
+/**
  * Dashboard wrapper that handles single project mode routing.
  * In single project mode: redirects to first project or shows creation wizard.
  * In normal mode: shows the regular Dashboard.
@@ -151,11 +187,14 @@ function EmbeddedStudioRoute() {
 
 function ScratchWizardRoute() {
   const { isClientEditor } = usePermissions();
+  const { config } = useAppConfig();
   const { data: assignedProject, isLoading } =
     trpc.user.getMyAssignedProject.useQuery(undefined, {
       enabled: isClientEditor,
     });
 
+  // In single project mode, ScratchWizard should stay accessible for project creation
+  // The wizard itself will handle redirecting to fullscreen after creation
   if (!isClientEditor) return <ScratchWizard />;
 
   if (isLoading) {
@@ -170,12 +209,12 @@ function ScratchWizardRoute() {
     return <Navigate to="/vivd-studio/no-project" replace />;
   }
 
-  return (
-    <Navigate
-      to={`/vivd-studio/projects/${assignedProject.projectSlug}`}
-      replace
-    />
-  );
+  // Redirect to fullscreen in single project mode, embedded otherwise
+  const targetPath = config.singleProjectMode
+    ? `/vivd-studio/projects/${assignedProject.projectSlug}/fullscreen`
+    : `/vivd-studio/projects/${assignedProject.projectSlug}`;
+
+  return <Navigate to={targetPath} replace />;
 }
 
 export default function App() {
@@ -241,10 +280,16 @@ export default function App() {
             )
           }
         />
-        {/* Nested routes under /vivd-studio with Layout */}
+        {/* Nested routes under /vivd-studio with Layout - guarded for single project mode */}
         <Route
           path="/vivd-studio"
-          element={session ? <Layout /> : <Navigate to="/vivd-studio/login" />}
+          element={
+            session ? (
+              <LayoutWithSingleProjectGuard />
+            ) : (
+              <Navigate to="/vivd-studio/login" />
+            )
+          }
         >
           <Route index element={<DashboardRoute />} />
           <Route path="settings" element={<Settings />} />

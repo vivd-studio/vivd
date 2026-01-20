@@ -61,7 +61,8 @@ export function SingleProjectCreateView() {
       },
       onSuccess: (data) => {
         if (data.slug) {
-          navigate(`/vivd-studio/projects/${data.slug}`);
+          // Navigate to fullscreen view in single project mode
+          navigate(`/vivd-studio/projects/${data.slug}/fullscreen`);
         }
       },
     });
@@ -111,7 +112,8 @@ export function SingleProjectCreateView() {
         throw new Error("Import failed: missing project slug");
       }
 
-      navigate(`/vivd-studio/projects/${payload.slug}`);
+      // Navigate to fullscreen view in single project mode
+      navigate(`/vivd-studio/projects/${payload.slug}/fullscreen`);
       toast.success("Project imported");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Import failed");
