@@ -5,6 +5,7 @@ export const ANALYSIS_MODEL = "google/gemini-3-pro-preview"; // model for text a
 // export const HERO_GENERATION_MODEL = 'google/gemini-2.5-flash-image-preview';
 export const HERO_GENERATION_MODEL = "google/gemini-3-pro-image-preview";
 export const IMAGE_EDITING_MODEL = "google/gemini-3-pro-image-preview"; // model for AI image editing
+export const BACKGROUND_REMOVAL_MODEL = "openai/gpt-5-image"; // GPT-5 for transparent background removal
 export const PRIORITIZATION_MODEL = "google/gemini-2.5-flash";
 export const NAVIGATION_MODEL = "google/gemini-2.5-flash";
 export const VISION_MODEL = "google/gemma-3-12b-it:free"; // model to describe images

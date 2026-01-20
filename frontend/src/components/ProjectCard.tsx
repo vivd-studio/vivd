@@ -45,6 +45,7 @@ export interface VersionInfo {
   version: number;
   createdAt: string;
   status: string;
+  errorMessage?: string;
 }
 
 export interface Project {
@@ -309,8 +310,13 @@ export function ProjectCard({
           )}
 
           {isFailed && (
-            <div className="text-sm text-center text-destructive">
-              Generation failed
+            <div className="text-sm text-center text-destructive space-y-1">
+              <div className="font-medium">Generation failed</div>
+              {selectedVersionInfo?.errorMessage && (
+                <div className="text-xs text-muted-foreground">
+                  {selectedVersionInfo.errorMessage}
+                </div>
+              )}
             </div>
           )}
         </CardContent>

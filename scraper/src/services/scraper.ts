@@ -8,10 +8,21 @@ import {
   sanitizeFilename,
   DownloadedImage,
 } from "../utils/images.js";
+import {
+  validatePageContent,
+  quickBlockCheck,
+  PageValidationResult,
+} from "../utils/pageValidation.js";
+
+export interface ScrapeError {
+  type: "cloudflare" | "access_denied" | "not_found" | "error_page" | "empty_content" | "bot_detection" | "navigation_failed";
+  message: string;
+}
 
 export interface ScrapeResult {
   text: string;
   images: DownloadedImage[];
+  error?: ScrapeError;
 }
 
 export async function scrapePage(
@@ -128,7 +139,26 @@ export async function scrapePage(
       }
     } catch (e) {
       log(`Error navigating to ${url}: ${e}`);
-      return { text: "", images: [] };
+      return {
+        text: "",
+        images: [],
+        error: {
+          type: "navigation_failed",
+          message: `Failed to load the website: ${e instanceof Error ? e.message : String(e)}`,
+        },
+      };
+    }
+
+    // Quick check for obvious blocking before proceeding
+    let rawHtml = "";
+    try {
+      rawHtml = await page.content();
+      if (quickBlockCheck(rawHtml)) {
+        log(`Quick block check detected Cloudflare/challenge page for ${url}`);
+        // Continue to extract text for full validation
+      }
+    } catch {
+      // Ignore HTML fetch errors
     }
 
     log("Handling cookies...");
@@ -172,6 +202,14 @@ export async function scrapePage(
     log(
       `Extracted ${text.length} characters of text from ${frames.length} frames.`
     );
+
+    // Validate page content to detect blocked/error pages
+    const validation = validatePageContent(cleanedText, rawHtml);
+    if (!validation.isValid && validation.error) {
+      log(`Page validation failed for ${url}: ${validation.error.type} - ${validation.error.message}`);
+      // Still return text and continue to get images (useful for debugging)
+      // but include the error so the caller can decide what to do
+    }
 
     // Get DOM images with sizes
     type ImageInfo = { url: string; area: number };
@@ -311,10 +349,23 @@ export async function scrapePage(
     }
 
     log(`Downloaded ${downloadedImages.length} images from ${url}.`);
-    return { text: cleanedText, images: downloadedImages };
+
+    // Return result with validation error if detected
+    const result: ScrapeResult = { text: cleanedText, images: downloadedImages };
+    if (!validation.isValid && validation.error) {
+      result.error = validation.error;
+    }
+    return result;
   } catch (e) {
     log(`Scrape error for ${url}: ${e}`);
-    return { text: "", images: [] };
+    return {
+      text: "",
+      images: [],
+      error: {
+        type: "navigation_failed",
+        message: `Scrape error: ${e instanceof Error ? e.message : String(e)}`,
+      },
+    };
   } finally {
     if (onResponse) {
       try {

@@ -5,6 +5,11 @@ export interface GenerationContext {
   slug: string;
   version: number;
   outputDir: string;
-  updateStatus: (status: string) => void;
+  /**
+   * Update the status of the generation.
+   * @param status - The new status (e.g., "scraping", "failed", "completed")
+   * @param errorMessage - Optional error message to store when status is "failed"
+   */
+  updateStatus: (status: string, errorMessage?: string) => void;
 }
 

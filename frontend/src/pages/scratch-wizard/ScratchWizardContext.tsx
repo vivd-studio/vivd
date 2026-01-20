@@ -132,8 +132,11 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       navigate(`/vivd-studio/projects/${started.slug}`);
     }
     if (statusData.status === "failed") {
+      const errorMessage =
+        (statusData as { errorMessage?: string }).errorMessage ||
+        "Try again or adjust your description.";
       toast.error("Generation failed", {
-        description: "Try again or adjust your description.",
+        description: errorMessage,
       });
     }
   }, [

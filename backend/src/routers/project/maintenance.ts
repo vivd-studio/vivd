@@ -15,6 +15,7 @@ import {
   isLegacyProject,
   migrateProjectIfNeeded,
   getProjectsDir,
+  touchProjectUpdatedAt,
 } from "../../generator/versionUtils";
 import path from "path";
 import fs from "fs";
@@ -197,6 +198,11 @@ export const projectMaintenanceProcedures = {
       }
 
       const noChanges = totalApplied === 0;
+
+      // Update project's updatedAt timestamp if changes were applied
+      if (!noChanges) {
+        touchProjectUpdatedAt(slug);
+      }
 
       return {
         success: true,

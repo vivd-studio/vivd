@@ -118,15 +118,21 @@ export function createGenerationContext(
     console.error(`[Templates] Failed to write template files for ${slug}/v${version}:`, e);
   }
 
-  const updateStatus = (status: string) => {
+  const updateStatus = (status: string, errorMessage?: string) => {
     try {
       const currentData = JSON.parse(fs.readFileSync(projectJsonPath, "utf-8"));
       currentData.status = status;
+      if (errorMessage) {
+        currentData.errorMessage = errorMessage;
+      } else if (currentData.errorMessage && status === "completed") {
+        // Clear error message on successful completion
+        delete currentData.errorMessage;
+      }
       fs.writeFileSync(projectJsonPath, JSON.stringify(currentData, null, 2));
     } catch {
       // ignore
     }
-    updateVersionStatus(slug, version, status);
+    updateVersionStatus(slug, version, status, errorMessage);
   };
 
   return { source, slug, version, outputDir, updateStatus };

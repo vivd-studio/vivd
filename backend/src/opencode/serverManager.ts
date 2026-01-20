@@ -102,7 +102,7 @@ class OpencodeServerManager {
 
   private async spawnServer(
     cwd: string,
-    port: number
+    port: number,
   ): Promise<OpencodeServerInfo> {
     const hostname = "127.0.0.1";
     const timeout = 10000; // 10 seconds
@@ -110,7 +110,11 @@ class OpencodeServerManager {
     const config = {
       model: process.env.OPENCODE_MODEL,
       username: "Website Agent",
-      permission: { external_directory: "deny", doom_loop: "deny" },
+      permission: {
+        external_directory: "deny",
+        doom_loop: "deny",
+        question: "deny",
+      },
     };
 
     const args = [`serve`, `--hostname=${hostname}`, `--port=${port}`];
@@ -127,7 +131,7 @@ class OpencodeServerManager {
       const id = setTimeout(() => {
         proc.kill();
         reject(
-          new Error(`Timeout waiting for server to start after ${timeout}ms`)
+          new Error(`Timeout waiting for server to start after ${timeout}ms`),
         );
       }, timeout);
 
@@ -142,7 +146,7 @@ class OpencodeServerManager {
             if (!match) {
               clearTimeout(id);
               reject(
-                new Error(`Failed to parse server url from output: ${line}`)
+                new Error(`Failed to parse server url from output: ${line}`),
               );
               return;
             }

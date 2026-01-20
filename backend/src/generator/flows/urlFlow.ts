@@ -5,6 +5,7 @@ import { initializeGitRepository } from "../gitUtils";
 import { log } from "../logger";
 import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
+import { ScrapeBlockedError } from "../scraper-client";
 
 export interface UrlFlowInput {
   url: string;
@@ -12,7 +13,18 @@ export interface UrlFlowInput {
 
 export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
   ctx.updateStatus("scraping");
-  await scrapeWebsiteRemote(input.url, ctx.outputDir);
+
+  try {
+    await scrapeWebsiteRemote(input.url, ctx.outputDir);
+  } catch (error) {
+    if (error instanceof ScrapeBlockedError) {
+      log(`[UrlFlow] Scrape blocked: ${error.errorType} - ${error.message}`);
+      ctx.updateStatus("failed", error.message);
+      return;
+    }
+    // Re-throw other errors
+    throw error;
+  }
 
   ctx.updateStatus("analyzing_images");
   await analyzeImages(ctx.outputDir);

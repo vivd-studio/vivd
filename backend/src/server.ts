@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { convertFilenameToWebp, writeImageFile } from "./utils/imageUtils";
 import multer from "multer";
 import archiver from "archiver";
 import {
@@ -19,7 +20,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
 import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
-import { getVersionDir } from "./generator/versionUtils";
+import { getVersionDir, touchProjectUpdatedAt } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
 import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
@@ -55,12 +56,12 @@ function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
     text
       .replace(
         new RegExp(`(^|[^\\w/])\\/(${prefixGroups})\\/`, "g"),
-        `$1${base}/$2/`
+        `$1${base}/$2/`,
       )
       // favicon-like root assets
       .replace(
         /(^|[^\w/])\/(favicon(?:-[^"'`()\s,]+)?\.(?:ico|png|svg))\b/g,
-        `$1${base}/$2`
+        `$1${base}/$2`,
       )
   );
 }
@@ -69,19 +70,19 @@ function stripDevServerToolingFromHtml(html: string): string {
   return html
     .replace(
       /<script\b[^>]*\bsrc=(["'])([^"']*\/@vite\/client[^"']*)\1[^>]*>\s*<\/script>/gi,
-      ""
+      "",
     )
     .replace(
       /<script\b[^>]*\bsrc=(["'])([^"']*dev-toolbar\/entrypoint\.js[^"']*)\1[^>]*>\s*<\/script>/gi,
-      ""
+      "",
     )
     .replace(
       /<link\b[^>]*\bhref=(["'])([^"']*\/@vite\/client[^"']*)\1[^>]*>/gi,
-      ""
+      "",
     )
     .replace(
       /<link\b[^>]*\bhref=(["'])([^"']*dev-toolbar\/[^"']*)\1[^>]*>/gi,
-      ""
+      "",
     );
 }
 
@@ -169,7 +170,7 @@ async function enforceProjectAccess(
   _req: express.Request,
   res: express.Response,
   session: any,
-  slug: string
+  slug: string,
 ): Promise<boolean> {
   const role = getSessionUserRole(session);
   if (role !== "client_editor") return true;
@@ -190,7 +191,7 @@ function createProtectedProjectsStaticMiddleware() {
   return async (
     req: express.Request,
     res: express.Response,
-    next: express.NextFunction
+    next: express.NextFunction,
   ) => {
     const session = await getSessionFromRequest(req);
     if (!session) return res.status(401).json({ error: "Unauthorized" });
@@ -222,7 +223,7 @@ app.use(
         : `https://${process.env.DOMAIN}`
       : "http://localhost:5173",
     credentials: true,
-  })
+  }),
 );
 app.use(express.json({ limit: "50mb" }));
 
@@ -233,11 +234,11 @@ app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
 app.use(
   "/vivd-studio/api/projects",
   createProtectedProjectsStaticMiddleware(),
-  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" })
+  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" }),
 );
 app.use(
   "/vivd-studio/api/preview",
-  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" })
+  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" }),
 );
 
 // Dev server proxy for framework projects (Astro, Vite, etc.)
@@ -246,7 +247,7 @@ app.use(
   async (
     req: express.Request,
     res: express.Response,
-    next: express.NextFunction
+    next: express.NextFunction,
   ) => {
     const session = await getSessionFromRequest(req);
     if (!session) {
@@ -300,7 +301,7 @@ export default {};
     if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
       res.setHeader("Content-Type", "application/javascript");
       return res.send(
-        "// Dev toolbar disabled in preview mode\nexport default {};\n"
+        "// Dev toolbar disabled in preview mode\nexport default {};\n",
       );
     }
 
@@ -318,7 +319,7 @@ export default {};
     // Proxy to the actual dev server (reused proxy instance to avoid listener leaks).
     // Don't rewrite paths - Astro is configured with --base to expect the full path.
     return devPreviewProxy(req, res, next);
-  }
+  },
 );
 
 // Dropped image upload endpoint (for chat drag-and-drop)
@@ -359,14 +360,16 @@ app.post(
         fs.mkdirSync(droppedImagesDir, { recursive: true });
       }
 
-      // Generate unique filename: uuid-originalname
+      // Generate unique filename: uuid-originalname (with webp conversion for images)
       const uuid = crypto.randomUUID().split("-")[0]; // Short UUID prefix
       const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const uniqueFilename = `${uuid}-${sanitizedName}`;
+      const convertedName = convertFilenameToWebp(sanitizedName);
+      const uniqueFilename = `${uuid}-${convertedName}`;
       const filePath = path.join(droppedImagesDir, uniqueFilename);
 
-      // Write file
-      fs.writeFileSync(filePath, file.buffer);
+      // Write file (converts to webp if applicable)
+      await writeImageFile(file.buffer, file.originalname, filePath);
+      touchProjectUpdatedAt(slug);
 
       // Return relative path from project root
       const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
@@ -376,7 +379,7 @@ app.post(
       console.error("Dropped image upload error:", error);
       return res.status(500).json({ error: "Upload failed" });
     }
-  }
+  },
 );
 
 // File upload endpoint
@@ -423,36 +426,40 @@ app.post(
       const uploaded: string[] = [];
 
       for (const file of files) {
-        // Sanitize filename
+        // Sanitize filename and convert to webp if applicable
         const sanitizedName = file.originalname.replace(
           /[^a-zA-Z0-9._-]/g,
-          "_"
+          "_",
         );
+        const finalName = convertFilenameToWebp(sanitizedName);
+
         let filePath: string;
         try {
           const rel = relativePath
-            ? path.posix.join(relativePath.replace(/\\/g, "/"), sanitizedName)
-            : sanitizedName;
+            ? path.posix.join(relativePath.replace(/\\/g, "/"), finalName)
+            : finalName;
           filePath = safeJoin(versionDir, rel);
         } catch {
           return res.status(400).json({ error: "Invalid filename" });
         }
 
-        // Write file
-        fs.writeFileSync(filePath, file.buffer);
+        // Write file (converts to webp if applicable)
+        await writeImageFile(file.buffer, file.originalname, filePath);
+
         uploaded.push(
           relativePath
-            ? path.posix.join(relativePath.replace(/\\/g, "/"), sanitizedName)
-            : sanitizedName
+            ? path.posix.join(relativePath.replace(/\\/g, "/"), finalName)
+            : finalName,
         );
       }
 
+      touchProjectUpdatedAt(slug);
       return res.json({ success: true, uploaded });
     } catch (error) {
       console.error("Upload error:", error);
       return res.status(500).json({ error: "Upload failed" });
     }
-  }
+  },
 );
 
 // Download project version as ZIP
@@ -521,7 +528,7 @@ app.use(
   createExpressMiddleware({
     router: appRouter,
     createContext,
-  })
+  }),
 );
 
 app.get("/vivd-studio/api/health", (_req, res) => {

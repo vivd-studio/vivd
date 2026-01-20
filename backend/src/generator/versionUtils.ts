@@ -29,6 +29,7 @@ export interface ProjectManifest {
   title?: string;
   description?: string;
   createdAt: string;
+  updatedAt?: string; // Last time any file in the project was modified
   currentVersion: number;
   versions: VersionInfo[];
 }
@@ -38,6 +39,7 @@ export interface VersionInfo {
   createdAt: string;
   status: string; // 'processing' | 'completed' | 'failed' | etc.
   startedAt?: string; // ISO timestamp when processing started
+  errorMessage?: string; // Error message when status is 'failed'
 }
 
 // Version-specific data (at projects/<slug>/v<N>/.vivd/project.json)
@@ -50,6 +52,7 @@ export interface VersionData {
   status: string;
   version: number;
   startedAt?: string; // ISO timestamp when processing started
+  errorMessage?: string; // Error message when status is 'failed'
 }
 
 // Statuses that indicate a project is currently being processed
@@ -134,6 +137,20 @@ export function getManifest(slug: string): ProjectManifest | null {
 export function saveManifest(slug: string, manifest: ProjectManifest): void {
   const manifestPath = getManifestPath(slug);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+}
+
+/**
+ * Update the project's updatedAt timestamp
+ * Call this whenever files in the project are modified
+ */
+export function touchProjectUpdatedAt(slug: string): void {
+  const manifest = getManifest(slug);
+  if (!manifest) {
+    console.error(`Cannot touch project: manifest not found for ${slug}`);
+    return;
+  }
+  manifest.updatedAt = new Date().toISOString();
+  saveManifest(slug, manifest);
 }
 
 /**
@@ -374,11 +391,16 @@ export function createVersionEntry(
 
 /**
  * Update the status of a specific version
+ * @param slug - Project slug
+ * @param version - Version number
+ * @param status - New status
+ * @param errorMessage - Optional error message when status is 'failed'
  */
 export function updateVersionStatus(
   slug: string,
   version: number,
   status: string,
+  errorMessage?: string,
 ): void {
   const manifest = getManifest(slug);
   if (!manifest) {
@@ -391,6 +413,12 @@ export function updateVersionStatus(
   const versionEntry = manifest.versions.find((v) => v.version === version);
   if (versionEntry) {
     versionEntry.status = status;
+    if (errorMessage) {
+      versionEntry.errorMessage = errorMessage;
+    } else if (versionEntry.errorMessage && status === "completed") {
+      // Clear error message on successful completion
+      delete versionEntry.errorMessage;
+    }
     saveManifest(slug, manifest);
   }
 }

@@ -60,11 +60,15 @@ export function AssetExplorer({
   // Folder creation state
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [folderCreationPath, setFolderCreationPath] = useState<string | null>(null);
+  const [folderCreationPath, setFolderCreationPath] = useState<string | null>(
+    null,
+  );
 
   // File upload state
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "optimizing"
+  >("idle");
 
   // Image preview state
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
@@ -94,11 +98,11 @@ export function AssetExplorer({
   // Check for public/images first, then fall back to images
   const publicImagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "public/images" },
-    { enabled: !initialPathDetected }
+    { enabled: !initialPathDetected },
   );
   const imagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "images" },
-    { enabled: !initialPathDetected && publicImagesCheck.isFetched }
+    { enabled: !initialPathDetected && publicImagesCheck.isFetched },
   );
 
   // Detect initial path
@@ -137,18 +141,18 @@ export function AssetExplorer({
       version,
       relativePath: currentPath ?? "images",
     },
-    { enabled: viewMode === "gallery" && currentPath !== null }
+    { enabled: viewMode === "gallery" && currentPath !== null },
   );
 
   // Query for create image dialog
   const allImagesQuery = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "images" },
-    { enabled: isCreateImageOpen }
+    { enabled: isCreateImageOpen },
   );
 
   const availableImages =
     allImagesQuery.data?.items?.filter(
-      (item) => item.type === "file" && item.isImage
+      (item) => item.type === "file" && item.isImage,
     ) || [];
 
   // Mutations
@@ -196,6 +200,22 @@ export function AssetExplorer({
       toast.error("Failed to create image", { description: error.message });
     },
   });
+
+  // TODO: Re-enable when GPT-5 image model is available on OpenRouter
+  // const removeBackgroundMutation =
+  //   trpc.assets.removeImageBackground.useMutation({
+  //     onSuccess: (data) => {
+  //       setEditingImage(null);
+  //       galleryQuery.refetch();
+  //       setSelectedImageUrl(buildImageUrl(projectSlug, version, data.newPath));
+  //       toast.success("Background removed successfully");
+  //     },
+  //     onError: (error) => {
+  //       toast.error("Failed to remove background", {
+  //         description: error.message,
+  //       });
+  //     },
+  //   });
 
   // Handlers
   const handleBack = () => {
@@ -249,10 +269,22 @@ export function AssetExplorer({
     });
   };
 
+  // TODO: Re-enable when GPT-5 image model is available on OpenRouter
+  // const handleRemoveBackground = () => {
+  //   if (!editingImage) return;
+  //   removeBackgroundMutation.mutate({
+  //     slug: projectSlug,
+  //     version,
+  //     relativePath: editingImage.path,
+  //   });
+  // };
+
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
       // Use folderCreationPath if set (from context menu), otherwise use currentPath for gallery mode
-      const targetPath = folderCreationPath ?? (viewMode === "gallery" ? currentPath ?? "" : "");
+      const targetPath =
+        folderCreationPath ??
+        (viewMode === "gallery" ? (currentPath ?? "") : "");
       createFolderMutation.mutate({
         slug: projectSlug,
         version,
@@ -275,13 +307,13 @@ export function AssetExplorer({
       version,
       prompt: createImagePrompt.trim(),
       referenceImages: selectedReferenceImages,
-      targetPath: viewMode === "gallery" ? currentPath ?? "" : "images",
+      targetPath: viewMode === "gallery" ? (currentPath ?? "") : "images",
     });
   };
 
   const toggleReferenceImage = (path: string) => {
     setSelectedReferenceImages((prev) =>
-      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path],
     );
   };
 
@@ -298,24 +330,37 @@ export function AssetExplorer({
 
   // File upload handlers
   const uploadFiles = async (files: FileList | File[], targetPath?: string) => {
-    setIsUploading(true);
+    setUploadStatus("uploading");
     const uploadPath =
-      targetPath ?? (viewMode === "gallery" ? currentPath ?? "" : "images");
+      targetPath ?? (viewMode === "gallery" ? (currentPath ?? "") : "images");
     try {
       const formData = new FormData();
       Array.from(files).forEach((file) => {
         formData.append("files", file);
       });
 
+      // Check if any files are images that will be converted to WebP
+      const hasConvertibleImages = Array.from(files).some((file) => {
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        return ["png", "jpg", "jpeg", "tiff", "tif", "bmp", "webp"].includes(
+          ext || "",
+        );
+      });
+
+      // Show "optimizing" status while the request is in flight (backend converts images)
+      if (hasConvertibleImages) {
+        setUploadStatus("optimizing");
+      }
+
       const response = await fetch(
         `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(
-          uploadPath
+          uploadPath,
         )}`,
         {
           method: "POST",
           body: formData,
           credentials: "include",
-        }
+        },
       );
 
       if (!response.ok) {
@@ -327,7 +372,7 @@ export function AssetExplorer({
       console.error("Upload error:", error);
       toast.error("Failed to upload files");
     } finally {
-      setIsUploading(false);
+      setUploadStatus("idle");
     }
   };
 
@@ -349,7 +394,7 @@ export function AssetExplorer({
         uploadFiles(e.dataTransfer.files);
       }
     },
-    [currentPath, viewMode]
+    [currentPath, viewMode],
   );
 
   return (
@@ -371,7 +416,7 @@ export function AssetExplorer({
       {viewMode === "gallery" && (
         <AssetToolbar
           currentPath={currentPath ?? ""}
-          isUploading={isUploading}
+          uploadStatus={uploadStatus}
           onBack={handleBack}
           onCreateFolder={() => {
             setFolderCreationPath(null);
@@ -393,7 +438,7 @@ export function AssetExplorer({
       {/* Toolbar for files mode (no navigation, just action buttons) */}
       {viewMode === "files" && (
         <AssetToolbar
-          isUploading={isUploading}
+          uploadStatus={uploadStatus}
           onCreateFolder={() => {
             setFolderCreationPath(null);
             setIsCreatingFolder(true);
@@ -511,6 +556,9 @@ export function AssetExplorer({
         isPending={editImageMutation.isPending}
         projectSlug={projectSlug}
         version={version}
+        // TODO: Re-enable when GPT-5 image model is available on OpenRouter
+        // onRemoveBackground={handleRemoveBackground}
+        // isRemovingBackground={removeBackgroundMutation.isPending}
       />
 
       {/* Create Image Dialog */}

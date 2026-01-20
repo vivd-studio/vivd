@@ -35,6 +35,34 @@ fullScrapeRouter.post("/", async (req, res) => {
     // Scrape the main page
     const mainPageData = await scrapePage(page, url, true);
 
+    // Check if the main page scrape failed (blocked, error, etc.)
+    if (mainPageData.error) {
+      log(`Main page scrape failed: ${mainPageData.error.type} - ${mainPageData.error.message}`);
+
+      // Still take a screenshot for debugging purposes
+      let screenshot = "";
+      let headerScreenshot = "";
+      try {
+        screenshot = await takeMainPageScreenshot(page);
+        headerScreenshot = await takeHeaderScreenshot(screenshot);
+      } catch (e) {
+        log(`Failed to take screenshot on error page: ${e}`);
+      }
+
+      await page.close();
+
+      // Return error response with 422 Unprocessable Entity
+      res.status(422).json({
+        error: mainPageData.error.message,
+        errorType: mainPageData.error.type,
+        websiteText: mainPageData.text, // Include for debugging
+        screenshot,
+        headerScreenshot,
+        images: [],
+      });
+      return;
+    }
+
     // Take screenshots
     const screenshot = await takeMainPageScreenshot(page);
     const headerScreenshot = await takeHeaderScreenshot(screenshot);

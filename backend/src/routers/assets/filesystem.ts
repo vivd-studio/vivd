@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
-import { getVersionDir } from "../../generator/versionUtils";
+import { getVersionDir, touchProjectUpdatedAt } from "../../generator/versionUtils";
 import { hasDotSegment } from "../../generator/vivdPaths";
 import path from "path";
 import fs from "fs";
@@ -134,6 +134,7 @@ export const assetsFilesystemProcedures = {
         fs.unlinkSync(targetPath);
       }
 
+      touchProjectUpdatedAt(slug);
       return { success: true, deleted: relativePath };
     }),
 
@@ -168,6 +169,7 @@ export const assetsFilesystemProcedures = {
       }
 
       fs.mkdirSync(sanitizedPath, { recursive: true });
+      touchProjectUpdatedAt(slug);
 
       return {
         success: true,
@@ -263,6 +265,7 @@ export const assetsFilesystemProcedures = {
       }
 
       fs.writeFileSync(targetPath, content, "utf-8");
+      touchProjectUpdatedAt(slug);
       return { success: true, path: relativePath };
     }),
 
@@ -325,6 +328,7 @@ export const assetsFilesystemProcedures = {
 
       // Move the file/folder
       fs.renameSync(sourceFullPath, destFullPath);
+      touchProjectUpdatedAt(slug);
 
       return { success: true, oldPath: sourcePath, newPath: destinationPath };
     }),

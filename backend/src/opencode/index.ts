@@ -16,6 +16,7 @@ import {
 } from "./eventEmitter";
 import { serverManager } from "./serverManager";
 import { usageService } from "../services/UsageService";
+import { touchProjectUpdatedAt } from "../generator/versionUtils";
 
 export { useEvents };
 export { agentEventEmitter } from "./eventEmitter";
@@ -178,6 +179,14 @@ export async function runTask(
     },
     onIdle: () => {
       console.log(`[OpenCode] Task execution completed`);
+      // Update the project's updatedAt timestamp since files may have been modified
+      const pathParts = cwd.split("/");
+      const versionIndex = pathParts.findIndex((p) => /^v\d+$/.test(p));
+      const projectSlug =
+        versionIndex > 0 ? pathParts[versionIndex - 1] : undefined;
+      if (projectSlug) {
+        touchProjectUpdatedAt(projectSlug);
+      }
       // Emit session completed event to frontend
       agentEventEmitter.emitSessionEvent(
         currentSessionId,

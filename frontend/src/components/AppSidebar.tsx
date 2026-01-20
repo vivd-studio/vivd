@@ -61,26 +61,31 @@ export function AppSidebar() {
     refetchInterval: 5000, // Poll every 5 seconds
   });
 
-  // Sort projects by most recently updated (latest version's createdAt) and limit to 10
+  // Sort projects by most recently updated (updatedAt first, then fallback to latest version's createdAt)
   const recentProjects = React.useMemo(() => {
     if (!projectsData?.projects) return [];
 
     return [...projectsData.projects].sort((a, b) => {
-      // Get the most recent version's createdAt for each project
-      const getLatestVersionDate = (project: typeof a) => {
-        if (!project.versions || project.versions.length === 0) {
-          return new Date(project.createdAt || 0).getTime();
+      // Get the project's last modified date, preferring updatedAt
+      const getLastModifiedDate = (project: typeof a) => {
+        // Prefer updatedAt if available (set when files are modified)
+        if (project.updatedAt) {
+          return new Date(project.updatedAt).getTime();
         }
-        // Find the version with the latest createdAt
-        const latestVersion = project.versions.reduce((latest, version) => {
-          const versionDate = new Date(version.createdAt || 0).getTime();
-          const latestDate = new Date(latest.createdAt || 0).getTime();
-          return versionDate > latestDate ? version : latest;
-        });
-        return new Date(latestVersion.createdAt || 0).getTime();
+        // Fallback to latest version's createdAt
+        if (project.versions && project.versions.length > 0) {
+          const latestVersion = project.versions.reduce((latest, version) => {
+            const versionDate = new Date(version.createdAt || 0).getTime();
+            const latestDate = new Date(latest.createdAt || 0).getTime();
+            return versionDate > latestDate ? version : latest;
+          });
+          return new Date(latestVersion.createdAt || 0).getTime();
+        }
+        // Final fallback to project createdAt
+        return new Date(project.createdAt || 0).getTime();
       };
 
-      return getLatestVersionDate(b) - getLatestVersionDate(a);
+      return getLastModifiedDate(b) - getLastModifiedDate(a);
     });
   }, [projectsData?.projects]);
 

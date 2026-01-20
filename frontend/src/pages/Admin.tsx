@@ -1115,11 +1115,20 @@ function UsageStatsCard() {
       {} as Record<string, number>,
     ) || {};
 
-  const last7Days = Object.entries(dailyCosts)
-    .slice(-7)
-    .map(([date, cost]) => ({ date, cost }));
+  // Generate last 8 days (including zeros) sorted chronologically
+  const last8Days = (() => {
+    const today = new Date();
+    const days: { date: string; cost: number }[] = [];
+    for (let i = 7; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().split("T")[0];
+      days.push({ date: dateKey, cost: dailyCosts[dateKey] || 0 });
+    }
+    return days;
+  })();
 
-  const maxDailyCost = Math.max(...last7Days.map((d) => d.cost), 1);
+  const maxDailyCost = Math.max(...last8Days.map((d) => d.cost), 0.01);
 
   return (
     <Card>
@@ -1326,47 +1335,72 @@ function UsageStatsCard() {
         )}
 
         {/* Last 7 Days Chart */}
-        {last7Days.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              Last 7 Days
-            </h4>
-            <div className="flex items-end gap-2 h-32">
-              {last7Days.map(({ date, cost }) => (
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium text-muted-foreground">
+            Last 8 Days
+          </h4>
+          <div className="flex items-end gap-2 h-32">
+            {last8Days.map(({ date, cost }) => {
+              const barHeight =
+                maxDailyCost > 0 ? (cost / maxDailyCost) * 96 : 0; // 96px max (h-32 = 128px minus text space)
+              const isToday = date === new Date().toISOString().split("T")[0];
+              return (
                 <div
                   key={date}
                   className="flex-1 flex flex-col items-center gap-1"
                 >
-                  <div className="text-xs text-muted-foreground">
+                  <div
+                    className={`text-xs ${
+                      isToday
+                        ? "text-primary font-medium"
+                        : "text-muted-foreground"
+                    }`}
+                  >
                     {formatDollarsAsCredits(cost)}
                   </div>
                   <div className="w-full bg-muted rounded-t flex-1 flex items-end">
                     <div
-                      className="w-full bg-primary/60 rounded-t transition-all"
+                      className={`w-full rounded-t transition-all ${
+                        isToday ? "bg-primary" : "bg-primary/60"
+                      }`}
                       style={{
-                        height: `${(cost / maxDailyCost) * 100}%`,
+                        height: `${barHeight}px`,
                         minHeight: cost > 0 ? "4px" : "0",
                       }}
                     />
                   </div>
-                  <div className="text-xs text-muted-foreground truncate w-full text-center">
+                  <div
+                    className={`text-xs truncate w-full text-center ${
+                      isToday
+                        ? "text-primary font-medium"
+                        : "text-muted-foreground"
+                    }`}
+                  >
                     {(() => {
                       try {
                         const d = new Date(date);
                         if (isNaN(d.getTime())) return "—";
-                        return d.toLocaleDateString(undefined, {
+                        const weekday = d.toLocaleDateString(undefined, {
                           weekday: "short",
                         });
+                        const dayMonth = d.toLocaleDateString(undefined, {
+                          day: "numeric",
+                          month: "numeric",
+                        });
+                        if (isToday) {
+                          return `${weekday} (today)`;
+                        }
+                        return `${weekday} ${dayMonth}`;
                       } catch {
                         return "—";
                       }
                     })()}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {/* Session Usage */}
         <div className="space-y-3">

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { adminProcedure } from "../../trpc";
-import { getVersionDir } from "../../generator/versionUtils";
+import { getVersionDir, touchProjectUpdatedAt } from "../../generator/versionUtils";
 import { hasDotSegment } from "../../generator/vivdPaths";
 import path from "path";
 import fs from "fs";
@@ -9,6 +9,7 @@ import {
   OPENROUTER_API_KEY,
   IMAGE_EDITING_MODEL,
   HERO_GENERATION_MODEL,
+  BACKGROUND_REMOVAL_MODEL,
 } from "../../generator/config";
 import { downloadImage, saveImageBuffer } from "../../generator/utils";
 import { safeJoin } from "../../fs/safePaths";
@@ -27,7 +28,7 @@ export const assetsAiImageProcedures = {
         version: z.number(),
         relativePath: z.string(), // path to the image file
         prompt: z.string().min(1), // edit instructions
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       const { slug, version, relativePath, prompt } = input;
@@ -69,10 +70,10 @@ export const assetsAiImageProcedures = {
 
       // Call the image generation model
       console.log(
-        `[AI Edit] Editing image: ${relativePath} with prompt: ${prompt}`
+        `[AI Edit] Editing image: ${relativePath} with prompt: ${prompt}`,
       );
       console.log(
-        `[AI Edit] Image size: ${imageBuffer.length} bytes, MIME: image/${mimeType}`
+        `[AI Edit] Image size: ${imageBuffer.length} bytes, MIME: image/${mimeType}`,
       );
 
       try {
@@ -103,7 +104,7 @@ export const assetsAiImageProcedures = {
               "HTTP-Referer": "https://github.com/vivd",
               "X-Title": "Vivd",
             },
-          }
+          },
         );
 
         const result = response.data;
@@ -138,7 +139,7 @@ export const assetsAiImageProcedures = {
 
         if (!imageUrl) {
           throw new Error(
-            "Failed to generate edited image - no image in response"
+            "Failed to generate edited image - no image in response",
           );
         }
 
@@ -183,6 +184,7 @@ export const assetsAiImageProcedures = {
 
         // Record image generation for usage tracking
         await usageService.recordImageGeneration(slug);
+        touchProjectUpdatedAt(slug);
 
         return {
           success: true,
@@ -195,7 +197,7 @@ export const assetsAiImageProcedures = {
         if (error.response?.data) {
           console.error(
             `[AI Edit] Response:`,
-            JSON.stringify(error.response.data)
+            JSON.stringify(error.response.data),
           );
         }
         throw new Error(`Failed to edit image: ${error.message}`);
@@ -213,7 +215,7 @@ export const assetsAiImageProcedures = {
         prompt: z.string().min(1), // generation prompt
         referenceImages: z.array(z.string()).optional().default([]), // paths to reference images
         targetPath: z.string().optional().default(""), // where to save the image (relative path)
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       const { slug, version, prompt, referenceImages, targetPath } = input;
@@ -268,10 +270,10 @@ export const assetsAiImageProcedures = {
       }
 
       console.log(
-        `[AI Create] Creating image with prompt: ${prompt.substring(0, 100)}...`
+        `[AI Create] Creating image with prompt: ${prompt.substring(0, 100)}...`,
       );
       console.log(
-        `[AI Create] Reference images: ${referenceImages.join(", ") || "none"}`
+        `[AI Create] Reference images: ${referenceImages.join(", ") || "none"}`,
       );
 
       try {
@@ -289,7 +291,7 @@ export const assetsAiImageProcedures = {
               "HTTP-Referer": "https://github.com/vivd",
               "X-Title": "Vivd",
             },
-          }
+          },
         );
 
         const result = response.data;
@@ -370,6 +372,7 @@ export const assetsAiImageProcedures = {
 
         // Record image generation for usage tracking
         await usageService.recordImageGeneration(slug);
+        touchProjectUpdatedAt(slug);
 
         return {
           success: true,
@@ -381,10 +384,192 @@ export const assetsAiImageProcedures = {
         if (error.response?.data) {
           console.error(
             `[AI Create] Response:`,
-            JSON.stringify(error.response.data)
+            JSON.stringify(error.response.data),
           );
         }
         throw new Error(`Failed to create image: ${error.message}`);
+      }
+    }),
+
+  /**
+   * Remove background from an image using GPT-5 - makes the background transparent
+   */
+  removeImageBackground: adminProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        relativePath: z.string(), // path to the image file
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version, relativePath } = input;
+
+      // Check usage limits before proceeding
+      await limitsService.assertImageGenNotBlocked();
+
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
+      const versionDir = getVersionDir(slug, version);
+      const imagePath = path.join(versionDir, relativePath);
+
+      // Validate image exists
+      if (!fs.existsSync(imagePath)) {
+        throw new Error("Image not found");
+      }
+
+      // Security: ensure we're within the version directory
+      const realVersionDir = fs.realpathSync(versionDir);
+      const realImagePath = fs.realpathSync(imagePath);
+      if (!realImagePath.startsWith(realVersionDir)) {
+        throw new Error("Invalid path");
+      }
+
+      // Validate it's actually an image
+      if (!isImageFile(imagePath)) {
+        throw new Error("File is not an image");
+      }
+
+      // Read and encode the image
+      const imageBuffer = fs.readFileSync(imagePath);
+      const base64Image = imageBuffer.toString("base64");
+      const ext = path.extname(imagePath).substring(1).toLowerCase();
+      const mimeType = ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
+
+      // Build the prompt for background removal
+      const removeBackgroundPrompt = `Remove the background from this image completely, making it fully transparent. Keep the main subject/foreground exactly as it is with no alterations whatsoever - preserve all details, colors, and edges precisely. Output the image with a transparent background.`;
+
+      console.log(
+        `[AI Remove BG] Removing background from image: ${relativePath}`,
+      );
+      console.log(
+        `[AI Remove BG] Image size: ${imageBuffer.length} bytes, MIME: image/${mimeType}`,
+      );
+
+      try {
+        const response = await axios.post(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            model: BACKGROUND_REMOVAL_MODEL,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: removeBackgroundPrompt },
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: `data:image/${mimeType};base64,${base64Image}`,
+                    },
+                  },
+                ],
+              },
+            ],
+            modalities: ["image", "text"],
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "https://github.com/vivd",
+              "X-Title": "Vivd",
+            },
+          },
+        );
+
+        const result = response.data;
+        let imageUrl: string | null = null;
+
+        if (result.choices && result.choices[0]) {
+          const message = result.choices[0].message;
+
+          // Check for images in the OpenRouter format
+          if (message.images && message.images.length > 0) {
+            const imgObj = message.images[0];
+            imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
+          }
+
+          // Fallback: check content for markdown or URL
+          if (!imageUrl && message.content) {
+            let content = "";
+            if (typeof message.content === "string") {
+              content = message.content;
+            } else if (Array.isArray(message.content)) {
+              content = message.content
+                .filter((c: any) => c.type === "text")
+                .map((c: any) => c.text)
+                .join("");
+            }
+
+            const match = content.match(/\!\[.*?\]\((.*?)\)/);
+            if (match) imageUrl = match[1];
+            else if (content.startsWith("http")) imageUrl = content;
+          }
+        }
+
+        if (!imageUrl) {
+          throw new Error("Failed to remove background - no image in response");
+        }
+
+        // Generate new filename with -transparent suffix and .png extension for transparency
+        const originalName = path.basename(relativePath);
+        const originalDir = path.dirname(relativePath);
+        const extIndex = originalName.lastIndexOf(".");
+        const nameWithoutExt =
+          extIndex > 0 ? originalName.substring(0, extIndex) : originalName;
+
+        // Find a unique filename - use .png for transparency support
+        let suffix = "-transparent";
+        let counter = 1;
+        let newFileName = `${nameWithoutExt}${suffix}.png`;
+        let newFilePath = path.join(versionDir, originalDir, newFileName);
+
+        while (fs.existsSync(newFilePath)) {
+          counter++;
+          newFileName = `${nameWithoutExt}${suffix}-${counter}.png`;
+          newFilePath = path.join(versionDir, originalDir, newFileName);
+        }
+
+        // Download or save the image
+        if (imageUrl.startsWith("http")) {
+          await downloadImage(imageUrl, newFilePath);
+        } else {
+          // Handle base64
+          let buffer: Buffer;
+          if (imageUrl.startsWith("data:image")) {
+            const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+            buffer = Buffer.from(base64Data, "base64");
+          } else {
+            buffer = Buffer.from(imageUrl, "base64");
+          }
+          await saveImageBuffer(buffer, newFilePath);
+        }
+
+        const newRelativePath = path.join(originalDir, newFileName);
+        console.log(
+          `[AI Remove BG] Saved transparent image to: ${newRelativePath}`,
+        );
+
+        // Record image generation for usage tracking
+        await usageService.recordImageGeneration(slug);
+        touchProjectUpdatedAt(slug);
+
+        return {
+          success: true,
+          originalPath: relativePath,
+          newPath: newRelativePath,
+          fileName: newFileName,
+        };
+      } catch (error: any) {
+        console.error(`[AI Remove BG] Error:`, error.message);
+        if (error.response?.data) {
+          console.error(
+            `[AI Remove BG] Response:`,
+            JSON.stringify(error.response.data),
+          );
+        }
+        throw new Error(`Failed to remove background: ${error.message}`);
       }
     }),
 };

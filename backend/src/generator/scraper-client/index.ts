@@ -1,10 +1,28 @@
 import * as fs from "fs";
 import * as path from "path";
 import { log } from "../logger";
-import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../vivdPaths";
+import {
+  ensureVivdInternalFilesDir,
+  getVivdInternalFilesPath,
+} from "../vivdPaths";
 
 const SCRAPER_URL = process.env.SCRAPER_URL || "http://scraper:3001";
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
+
+/**
+ * Error thrown when scraping fails due to blocked pages, errors, etc.
+ */
+export class ScrapeBlockedError extends Error {
+  readonly errorType: string;
+  readonly screenshot?: string;
+
+  constructor(message: string, errorType: string, screenshot?: string) {
+    super(message);
+    this.name = "ScrapeBlockedError";
+    this.errorType = errorType;
+    this.screenshot = screenshot;
+  }
+}
 
 interface FullScrapeResponse {
   websiteText: string;
@@ -15,6 +33,14 @@ interface FullScrapeResponse {
     data: string;
     mimeType: string;
   }>;
+}
+
+interface FullScrapeErrorResponse {
+  error: string;
+  errorType: string;
+  websiteText?: string;
+  screenshot?: string;
+  headerScreenshot?: string;
 }
 
 interface ScreenshotResponse {
@@ -35,7 +61,7 @@ interface FindLinksResponse {
 async function fetchWithRetry<T>(
   url: string,
   options: RequestInit,
-  retries = 3
+  retries = 3,
 ): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try {
@@ -53,6 +79,16 @@ async function fetchWithRetry<T>(
         headers,
       });
 
+      // Handle scrape blocked/error response (422 Unprocessable Entity)
+      if (res.status === 422) {
+        const errorData = (await res.json()) as FullScrapeErrorResponse;
+        throw new ScrapeBlockedError(
+          errorData.error || "Page scrape failed",
+          errorData.errorType || "unknown",
+          errorData.screenshot,
+        );
+      }
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`HTTP ${res.status}: ${errorText}`);
@@ -60,11 +96,16 @@ async function fetchWithRetry<T>(
 
       return res.json() as T;
     } catch (e) {
+      // Don't retry ScrapeBlockedError - the page is genuinely blocked
+      if (e instanceof ScrapeBlockedError) {
+        throw e;
+      }
+
       const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
       log(
         `[ScraperClient] Attempt ${i + 1} failed: ${e}. ${
           i < retries - 1 ? `Retrying in ${delay}ms...` : "Giving up."
-        }`
+        }`,
       );
       if (i === retries - 1) throw e;
       await new Promise((r) => setTimeout(r, delay));
@@ -92,7 +133,7 @@ export const scraperClient = {
       {
         method: "POST",
         body: JSON.stringify({ url }),
-      }
+      },
     );
 
     ensureVivdInternalFilesDir(outputDir);
@@ -100,7 +141,7 @@ export const scraperClient = {
     // Save website text
     fs.writeFileSync(
       getVivdInternalFilesPath(outputDir, "website_text.txt"),
-      response.websiteText
+      response.websiteText,
     );
     log(`[ScraperClient] Saved website_text.txt`);
 
@@ -108,12 +149,15 @@ export const scraperClient = {
     const screenshotBuffer = Buffer.from(response.screenshot, "base64");
     fs.writeFileSync(
       getVivdInternalFilesPath(outputDir, "screenshot.png"),
-      screenshotBuffer
+      screenshotBuffer,
     );
     log(`[ScraperClient] Saved screenshot.png`);
 
     // Save header screenshot
-    const headerPath = getVivdInternalFilesPath(outputDir, "header_screenshot.png");
+    const headerPath = getVivdInternalFilesPath(
+      outputDir,
+      "header_screenshot.png",
+    );
     const headerBuffer = Buffer.from(response.headerScreenshot, "base64");
     fs.writeFileSync(headerPath, headerBuffer);
     log(`[ScraperClient] Saved header_screenshot.png`);
@@ -137,7 +181,7 @@ export const scraperClient = {
   async captureScreenshots(
     urls: string[],
     outputDir: string,
-    maxScreenshots = 4
+    maxScreenshots = 4,
   ): Promise<string[]> {
     log(`[ScraperClient] Requesting screenshots for ${urls.length} URLs`);
 
@@ -146,7 +190,7 @@ export const scraperClient = {
       {
         method: "POST",
         body: JSON.stringify({ urls, maxScreenshots }),
-      }
+      },
     );
 
     const referencesDir = path.join(outputDir, "references");
@@ -171,7 +215,7 @@ export const scraperClient = {
   async scrapePage(
     url: string,
     outputDir: string,
-    isMainPage = false
+    isMainPage = false,
   ): Promise<{ text: string; images: string[] }> {
     log(`[ScraperClient] Requesting single page scrape: ${url}`);
 
@@ -185,7 +229,7 @@ export const scraperClient = {
       {
         method: "POST",
         body: JSON.stringify({ url, isMainPage }),
-      }
+      },
     );
 
     // Save images
@@ -209,10 +253,10 @@ export const scraperClient = {
   async findLinks(
     url: string,
     texts: string[],
-    maxLinks = 50
+    maxLinks = 50,
   ): Promise<Array<{ text: string; url: string }>> {
     log(
-      `[ScraperClient] Requesting find-links: ${url} (${texts.length} terms)`
+      `[ScraperClient] Requesting find-links: ${url} (${texts.length} terms)`,
     );
 
     const response = await fetchWithRetry<FindLinksResponse>(
@@ -220,7 +264,7 @@ export const scraperClient = {
       {
         method: "POST",
         body: JSON.stringify({ url, texts, maxLinks }),
-      }
+      },
     );
 
     return response.links || [];

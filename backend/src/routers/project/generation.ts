@@ -365,6 +365,14 @@ export const projectGenerationProcedures = {
           ? `/projects/${slug}/v${targetVersion}/index.html`
           : undefined;
 
+      // Get error message from version data if status is failed
+      const errorMessage =
+        status === "failed"
+          ? (versionData as any)?.errorMessage ||
+            manifest.versions.find((v) => v.version === targetVersion)
+              ?.errorMessage
+          : undefined;
+
       return {
         status,
         url: resultUrl,
@@ -375,6 +383,7 @@ export const projectGenerationProcedures = {
         version: targetVersion,
         totalVersions: manifest.versions.length,
         versions: manifest.versions,
+        errorMessage,
       };
     }),
 
@@ -450,6 +459,7 @@ export const projectGenerationProcedures = {
             source,
             title,
             createdAt: manifest.createdAt,
+            updatedAt: manifest.updatedAt,
             currentVersion,
             totalVersions: manifest.versions.length,
             versions: manifest.versions,
