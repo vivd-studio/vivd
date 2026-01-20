@@ -20,19 +20,18 @@ class BrowserPool {
   private pool: BrowserInstance[] = [];
   private queue: Array<(browser: Browser) => void> = [];
   private initialized = false;
+  private spawning = false;
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    console.log(`Initializing browser pool with ${MAX_BROWSERS} browsers...`);
+    console.log(`Initializing browser pool (max ${MAX_BROWSERS} browsers, lazy spawn)...`);
 
-    for (let i = 0; i < MAX_BROWSERS; i++) {
-      const browser = await this.launchBrowser();
-      this.pool.push({ browser, inUse: false });
-    }
+    const browser = await this.launchBrowser();
+    this.pool.push({ browser, inUse: false });
 
     this.initialized = true;
-    console.log(`Browser pool ready with ${this.pool.length} browsers`);
+    console.log(`Browser pool ready with 1 browser (will scale up to ${MAX_BROWSERS} on demand)`);
   }
 
   private async launchBrowser(): Promise<Browser> {
@@ -52,6 +51,28 @@ class BrowserPool {
     });
   }
 
+  private async spawnAdditionalBrowser(): Promise<void> {
+    if (this.spawning || this.pool.length >= MAX_BROWSERS) return;
+
+    this.spawning = true;
+    try {
+      console.log(`Spawning additional browser (${this.pool.length + 1}/${MAX_BROWSERS})...`);
+      const browser = await this.launchBrowser();
+      this.pool.push({ browser, inUse: false });
+      console.log(`Browser pool now has ${this.pool.length} browsers`);
+
+      // If someone was waiting, give them the new browser
+      const waiting = this.queue.shift();
+      if (waiting) {
+        const instance = this.pool[this.pool.length - 1];
+        instance.inUse = true;
+        waiting(instance.browser);
+      }
+    } finally {
+      this.spawning = false;
+    }
+  }
+
   async acquire(): Promise<Browser> {
     await this.initialize();
 
@@ -60,6 +81,11 @@ class BrowserPool {
     if (available) {
       available.inUse = true;
       return available.browser;
+    }
+
+    // No available browser - spawn a new one if under limit
+    if (this.pool.length < MAX_BROWSERS) {
+      this.spawnAdditionalBrowser();
     }
 
     // Wait for a browser to become available

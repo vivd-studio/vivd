@@ -42,7 +42,7 @@ export const assetsFilesystemProcedures = {
       const entries = fs.readdirSync(targetDir, { withFileTypes: true });
 
       const items = entries
-        .filter((entry) => !entry.name.startsWith(".")) // Hide hidden files
+        .filter((entry) => !entry.name.startsWith(".") || entry.name === ".vivd") // Hide hidden files except .vivd
         .map((entry) => {
           const fullPath = path.join(targetDir, entry.name);
           const stats = fs.statSync(fullPath);
@@ -376,7 +376,7 @@ export const assetsFilesystemProcedures = {
         const nodes: TreeNode[] = [];
 
         for (const entry of entries) {
-          if (entry.name.startsWith(".")) continue; // Skip hidden files
+          if (entry.name.startsWith(".") && entry.name !== ".vivd") continue; // Skip hidden files except .vivd
 
           const fullPath = path.join(dir, entry.name);
           const relPath = path.join(relativeTo, entry.name);

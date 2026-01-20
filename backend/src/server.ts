@@ -233,11 +233,11 @@ app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
 app.use(
   "/vivd-studio/api/projects",
   createProtectedProjectsStaticMiddleware(),
-  express.static(path.join(__dirname, "../projects"), { dotfiles: "deny" })
+  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" })
 );
 app.use(
   "/vivd-studio/api/preview",
-  express.static(path.join(__dirname, "../projects"), { dotfiles: "deny" })
+  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" })
 );
 
 // Dev server proxy for framework projects (Astro, Vite, etc.)

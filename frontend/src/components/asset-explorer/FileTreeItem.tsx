@@ -19,7 +19,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-// Folders to gray out (build outputs, dependencies)
+// Folders to gray out (build outputs, dependencies, internal)
 const GRAYED_FOLDERS = [
   "dist",
   "build",
@@ -27,6 +27,7 @@ const GRAYED_FOLDERS = [
   ".next",
   ".nuxt",
   ".output",
+  ".vivd",
 ];
 
 interface FileTreeItemProps {

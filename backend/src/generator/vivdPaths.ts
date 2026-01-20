@@ -36,7 +36,7 @@ export function getVivdInternalFilesPath(
 export function hasDotSegment(relativePath: string): boolean {
   const normalized = relativePath.replace(/\\/g, "/");
   const segments = normalized.split("/").filter(Boolean);
-  return segments.some((seg) => seg.startsWith("."));
+  return segments.some((seg) => seg.startsWith(".") && seg !== VIVD_DIRNAME);
 }
 
 function ensureDir(dir: string) {
