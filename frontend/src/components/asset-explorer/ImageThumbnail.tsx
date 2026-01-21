@@ -11,6 +11,7 @@ interface ImageThumbnailProps {
   imageUrl: string;
   selected?: boolean;
   showSelection?: boolean;
+  isViewing?: boolean;
   onClick?: () => void;
   actions?: React.ReactNode;
   className?: string;
@@ -22,6 +23,7 @@ export function ImageThumbnail({
   imageUrl,
   selected = false,
   showSelection = false,
+  isViewing = false,
   onClick,
   actions,
   className = "",
@@ -84,9 +86,11 @@ export function ImageThumbnail({
       draggable={draggable}
       onDragStart={handleDragStart}
       className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all group ${
-        showSelection && selected
-          ? "border-primary ring-2 ring-primary/20"
-          : "border-transparent hover:border-muted-foreground/50"
+        isViewing
+          ? "border-primary ring-2 ring-primary/30"
+          : showSelection && selected
+            ? "border-primary ring-2 ring-primary/20"
+            : "border-transparent hover:border-muted-foreground/50"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${className}`}
     >
       {/* Image container - native aspect ratio */}

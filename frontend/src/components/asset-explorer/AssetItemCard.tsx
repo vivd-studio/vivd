@@ -15,6 +15,7 @@ interface AssetItemCardProps {
   item: AssetItem;
   projectSlug: string;
   version: number;
+  isViewing?: boolean;
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onAiEdit?: (e: React.MouseEvent) => void;
@@ -26,6 +27,7 @@ export function AssetItemCard({
   item,
   projectSlug,
   version,
+  isViewing,
   onClick,
   onDelete,
   onAiEdit,
@@ -125,6 +127,7 @@ export function AssetItemCard({
             <ImageThumbnail
               item={item}
               imageUrl={buildImageUrl(projectSlug, version, item.path)}
+              isViewing={isViewing}
               onClick={onClick}
               actions={imageActions}
             />

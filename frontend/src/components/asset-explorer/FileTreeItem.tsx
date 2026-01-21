@@ -35,6 +35,7 @@ interface FileTreeItemProps {
   item: FileTreeNode;
   depth: number;
   isExpanded: boolean;
+  isViewing?: boolean;
   onClick: () => void;
   onDrop: (draggedPath: string, targetFolderPath: string) => void;
   projectSlug: string;
@@ -54,6 +55,7 @@ export function FileTreeItem({
   item,
   depth,
   isExpanded,
+  isViewing,
   onClick,
   onDrop,
   projectSlug,
@@ -193,7 +195,7 @@ export function FileTreeItem({
     <div
       className={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-muted/50 transition-colors overflow-hidden min-w-0 ${
         isDragOver ? "bg-primary/10 ring-1 ring-primary" : ""
-      } ${isGrayed ? "opacity-50" : ""}`}
+      } ${isGrayed ? "opacity-50" : ""} ${isViewing ? "bg-primary/15 ring-1 ring-primary/50" : ""}`}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       onClick={isRenaming ? undefined : onClick}
       draggable={item.type === "file" && !isRenaming}

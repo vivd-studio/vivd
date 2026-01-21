@@ -6,12 +6,10 @@ import { toast } from "sonner";
 import type { FileTreeNode } from "./types";
 import { FileTreeItem } from "./FileTreeItem";
 import { usePreview } from "@/components/preview/PreviewContext";
-import { buildImageUrl } from "./utils";
 
 interface FileTreeViewProps {
   projectSlug: string;
   version: number;
-  onImagePreview: (url: string, item: FileTreeNode) => void;
   onRefetch?: () => void;
   onFilesUpload?: (files: FileList, targetPath: string) => Promise<void>;
   onDelete?: (item: FileTreeNode) => void;
@@ -24,7 +22,6 @@ interface FileTreeViewProps {
 export function FileTreeView({
   projectSlug,
   version,
-  onImagePreview,
   onRefetch,
   onFilesUpload,
   onDelete,
@@ -37,7 +34,7 @@ export function FileTreeView({
   const [rootDragOver, setRootDragOver] = useState(false);
   const [isExternalDrag, setIsExternalDrag] = useState(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
-  const { setEditingTextFile } = usePreview();
+  const { setEditingTextFile, setViewingImagePath, viewingImagePath } = usePreview();
 
   // Global dragend listener to clean up state when drag is cancelled
   useEffect(() => {
@@ -94,7 +91,8 @@ export function FileTreeView({
     if (item.type === "folder") {
       toggleExpanded(item.path);
     } else if (item.isImage) {
-      onImagePreview(buildImageUrl(projectSlug, version, item.path), item);
+      // Open image in viewer panel (like code view)
+      setViewingImagePath(item.path);
     } else {
       // Text file - open in editor
       setEditingTextFile(item.path);
@@ -258,6 +256,7 @@ export function FileTreeView({
           item={node}
           depth={depth}
           isExpanded={expandedPaths.has(node.path)}
+          isViewing={node.isImage && viewingImagePath === node.path}
           onClick={() => handleItemClick(node)}
           onDrop={handleDrop}
           projectSlug={projectSlug}

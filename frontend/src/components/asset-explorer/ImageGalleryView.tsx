@@ -6,13 +6,13 @@ import type { AssetItem } from "./types";
 import { AssetItemCard } from "./AssetItemCard";
 import { buildImageUrl } from "./utils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePreview } from "@/components/preview/PreviewContext";
 
 interface ImageGalleryViewProps {
   projectSlug: string;
   version: number;
   currentPath: string;
   onNavigate: (path: string) => void;
-  onImagePreview: (url: string, item: AssetItem) => void;
   onAiEdit?: (item: AssetItem) => void;
   onDelete: (item: AssetItem) => void;
   onTextEdit: (path: string) => void;
@@ -28,7 +28,6 @@ export function ImageGalleryView({
   version,
   currentPath,
   onNavigate,
-  onImagePreview,
   onAiEdit,
   onDelete,
   onTextEdit,
@@ -39,6 +38,7 @@ export function ImageGalleryView({
   onDrop,
 }: ImageGalleryViewProps) {
   const { canUseAiImages } = usePermissions();
+  const { setViewingImagePath, viewingImagePath } = usePreview();
 
   const { data, isLoading } = trpc.assets.listAssets.useQuery({
     slug: projectSlug,
@@ -51,12 +51,13 @@ export function ImageGalleryView({
       if (item.type === "folder") {
         onNavigate(item.path);
       } else if (item.isImage) {
-        onImagePreview(buildImageUrl(projectSlug, version, item.path), item);
+        // Open image in viewer panel (like code view)
+        setViewingImagePath(item.path);
       } else if (item.type === "file") {
         onTextEdit(item.path);
       }
     },
-    [projectSlug, version, onNavigate, onImagePreview, onTextEdit]
+    [onNavigate, setViewingImagePath, onTextEdit]
   );
 
   const handleDownload = useCallback(
@@ -114,6 +115,7 @@ export function ImageGalleryView({
               item={item}
               projectSlug={projectSlug}
               version={version}
+              isViewing={item.type === "file" && item.isImage && viewingImagePath === item.path}
               onClick={() => handleItemClick(item)}
               onDelete={(e) => {
                 e.stopPropagation();

@@ -22,6 +22,7 @@ import {
   collectVivdTextPatchesFromDocument,
   getI18nKeyForEditableElement,
 } from "@/lib/vivdPreviewTextPatching";
+import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 
 // Version info from project data
 interface VersionInfo {
@@ -110,6 +111,16 @@ interface PreviewContextValue {
   editingTextFile: string | null;
   setEditingTextFile: (path: string | null) => void;
 
+  // Image Viewer in preview area
+  viewingImagePath: string | null;
+  setViewingImagePath: (path: string | null) => void;
+
+  // Asset actions (shared between AssetExplorer and ImageViewerPanel)
+  editingAsset: AssetItem | FileTreeNode | null;
+  setEditingAsset: (asset: AssetItem | FileTreeNode | null) => void;
+  pendingDeleteAsset: AssetItem | FileTreeNode | null;
+  setPendingDeleteAsset: (asset: AssetItem | FileTreeNode | null) => void;
+
   // Resizable panels
   assetPanel: ReturnType<typeof useResizablePanel>;
   chatPanel: ReturnType<typeof useResizablePanel>;
@@ -188,6 +199,13 @@ export function PreviewProvider({
     startNewSession?: boolean;
   } | null>(null);
   const [editingTextFile, setEditingTextFile] = useState<string | null>(null);
+  const [viewingImagePath, setViewingImagePath] = useState<string | null>(null);
+  const [editingAsset, setEditingAsset] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
+  const [pendingDeleteAsset, setPendingDeleteAsset] = useState<
+    AssetItem | FileTreeNode | null
+  >(null);
   const mobileContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -951,6 +969,16 @@ export function PreviewProvider({
     // Text Editor in preview area
     editingTextFile,
     setEditingTextFile,
+
+    // Image Viewer in preview area
+    viewingImagePath,
+    setViewingImagePath,
+
+    // Asset actions
+    editingAsset,
+    setEditingAsset,
+    pendingDeleteAsset,
+    setPendingDeleteAsset,
 
     // Resizable panels
     assetPanel,
