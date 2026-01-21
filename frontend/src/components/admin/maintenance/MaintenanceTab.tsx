@@ -18,7 +18,8 @@ import { toast } from "sonner";
 type MaintenanceAction =
   | "migrateProcessFiles"
   | "templateAddMissing"
-  | "templateOverwrite";
+  | "templateOverwrite"
+  | "fixGitignore";
 
 export function MaintenanceTab() {
   const [confirmAction, setConfirmAction] = useState<MaintenanceAction | null>(
@@ -52,6 +53,22 @@ export function MaintenanceTab() {
       },
     });
 
+  const fixGitignoreMutation = trpc.project.fixGitignoreAll.useMutation({
+    onSuccess: (data) => {
+      toast.success("Gitignore fix completed", {
+        description:
+          data.versionsFixed > 0
+            ? `Fixed ${data.versionsFixed}/${data.versionsScanned} versions (untracked: ${data.totalUntracked.join(", ")})`
+            : `All ${data.versionsScanned} versions already clean`,
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Gitignore fix failed", {
+        description: err?.message || "Unknown error",
+      });
+    },
+  });
+
   const confirmConfig = (() => {
     switch (confirmAction) {
       case "migrateProcessFiles":
@@ -80,6 +97,15 @@ export function MaintenanceTab() {
           confirmLabel: "Overwrite Files",
           isPending: templateFilesMutation.isPending,
           onConfirm: () => templateFilesMutation.mutate({ overwrite: true }),
+        };
+      case "fixGitignore":
+        return {
+          title: "Fix gitignore for all projects?",
+          description:
+            "This will untrack build cache directories (.astro, node_modules, dist, etc.) that were accidentally committed. Changes will be committed automatically.",
+          confirmLabel: "Fix Gitignore",
+          isPending: fixGitignoreMutation.isPending,
+          onConfirm: () => fixGitignoreMutation.mutate(),
         };
       default:
         return null;
@@ -188,6 +214,52 @@ export function MaintenanceTab() {
                 {templateFilesMutation.data.errors.length > 5 ? (
                   <div className="text-muted-foreground mt-2">
                     …and {templateFilesMutation.data.errors.length - 5} more
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Fix gitignore issues by untracking build cache directories (
+              <code>.astro</code>, <code>node_modules</code>, <code>dist</code>,
+              etc.) that were accidentally committed before being added to{" "}
+              <code>.gitignore</code>.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setConfirmAction("fixGitignore")}
+                disabled={fixGitignoreMutation.isPending}
+              >
+                {fixGitignoreMutation.isPending ? (
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                ) : null}
+                Fix Gitignore (All Projects)
+              </Button>
+              {fixGitignoreMutation.data ? (
+                <span className="text-sm text-muted-foreground">
+                  Fixed {fixGitignoreMutation.data.versionsFixed}/
+                  {fixGitignoreMutation.data.versionsScanned} versions
+                  {fixGitignoreMutation.data.errors.length
+                    ? ` • ${fixGitignoreMutation.data.errors.length} error(s)`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {fixGitignoreMutation.data?.errors.length ? (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium mb-2">Errors</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {fixGitignoreMutation.data.errors.slice(0, 5).map((e, idx) => (
+                    <li key={idx}>
+                      {e.slug}/v{e.version}: {e.error}
+                    </li>
+                  ))}
+                </ul>
+                {fixGitignoreMutation.data.errors.length > 5 ? (
+                  <div className="text-muted-foreground mt-2">
+                    …and {fixGitignoreMutation.data.errors.length - 5} more
                   </div>
                 ) : null}
               </div>

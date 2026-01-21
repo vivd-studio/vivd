@@ -25,7 +25,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@opencode-ai/sdk": "^1.0.216",
+    "@opencode-ai/sdk": "^1.1.28",
     "@openrouter/sdk": "^0.2.9",
     "@trpc/server": "^11.7.2",
     "@types/archiver": "^7.0.0",

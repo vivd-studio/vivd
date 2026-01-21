@@ -684,6 +684,7 @@ export function PreviewProvider({
       : [];
     const imagePatches = Array.from(pendingImagePatchesRef.current.values());
     const patches = [...imagePatches, ...textPatches];
+
     if (!patches.length) {
       toast.info("No changes to save");
       setEditMode(false);

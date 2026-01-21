@@ -56,11 +56,11 @@ export function detectActiveLanguage(doc: Document): string {
   }
 
   const langToggle = Array.from(
-    doc.querySelectorAll<HTMLElement>('[id^="lang-"]')
+    doc.querySelectorAll<HTMLElement>('[id^="lang-"]'),
   ).find(
     (el) =>
       el.classList.contains("font-bold") ||
-      el.getAttribute("aria-current") === "true"
+      el.getAttribute("aria-current") === "true",
   );
   if (langToggle) {
     const id = langToggle.id ?? "";
@@ -80,7 +80,7 @@ export function getI18nKeyForEditableElement(el: HTMLElement): string | null {
   return (
     el.getAttribute("data-i18n") ??
     (el.closest?.("[data-i18n]") as HTMLElement | null)?.getAttribute(
-      "data-i18n"
+      "data-i18n",
     ) ??
     null
   );
@@ -90,7 +90,7 @@ export function serializeI18nElementValue(i18nEl: HTMLElement): string {
   const clone = i18nEl.cloneNode(true) as HTMLElement;
 
   const helperSpans = clone.querySelectorAll<HTMLElement>(
-    "[data-vivd-text-parent-selector][data-vivd-text-node-index]"
+    "[data-vivd-text-parent-selector][data-vivd-text-node-index]",
   );
   helperSpans.forEach((span) => {
     const text = span.textContent ?? "";
@@ -107,7 +107,7 @@ export function serializeI18nElementValue(i18nEl: HTMLElement): string {
     });
 
   const hasMarkup = clone.querySelector("*") !== null;
-  return hasMarkup ? clone.innerHTML : clone.textContent ?? "";
+  return hasMarkup ? clone.innerHTML : (clone.textContent ?? "");
 }
 
 export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
@@ -133,8 +133,9 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
   const activeLang = detectActiveLanguage(doc);
 
   const nodes = doc.querySelectorAll<HTMLElement>(
-    "[data-vivd-text-parent-selector][data-vivd-text-node-index]"
+    "[data-vivd-text-parent-selector][data-vivd-text-node-index]",
   );
+
   nodes.forEach((node) => {
     const i18nKeyFromNode = node.getAttribute("data-vivd-i18n-key");
     const parentSelector = node.getAttribute("data-vivd-text-parent-selector");
@@ -154,19 +155,8 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
     const sourceFile = node.getAttribute("data-vivd-source-file");
     const sourceLoc = node.getAttribute("data-vivd-source-loc");
 
-    if (sourceFile) {
-      // Astro component - emit setAstroText patch
-      const key = `${sourceFile}:${baseline}`;
-      astroEdits.set(key, {
-        sourceFile,
-        sourceLoc: sourceLoc ?? undefined,
-        oldValue: baseline,
-        newValue: current,
-      });
-      return;
-    }
-
-    // Standard HTML patching
+    // PRIORITY 1: Check for i18n key first (works for both Astro and static HTML)
+    // This allows data-i18n attributes to work even in Astro projects
     if (i18nKeyFromNode) {
       const selector = `[data-i18n="${i18nKeyFromNode.replace(/"/g, '\\"')}"]`;
       const i18nEl =
@@ -178,15 +168,31 @@ export function collectVivdTextPatchesFromDocument(doc: Document): VivdPatch[] {
       }
     }
 
+    // PRIORITY 2: Check for data-i18n on parent/ancestor elements
     const parentEl = selectorIndex.get(parentSelector) ?? null;
     const resolvedI18nEl = parentEl?.closest?.("[data-i18n]") ?? null;
     const i18nEl = resolvedI18nEl || node.closest?.("[data-i18n]");
     if (i18nEl instanceof HTMLElement) {
       const key = i18nEl.getAttribute("data-i18n") ?? "";
-      if (key) i18nEdits.set(key, i18nEl);
+      if (key) {
+        i18nEdits.set(key, i18nEl);
+        return;
+      }
+    }
+
+    // PRIORITY 3: Astro source file patching (only if no i18n key found)
+    if (sourceFile) {
+      const key = `${sourceFile}:${baseline}`;
+      astroEdits.set(key, {
+        sourceFile,
+        sourceLoc: sourceLoc ?? undefined,
+        oldValue: baseline,
+        newValue: current,
+      });
       return;
     }
 
+    // PRIORITY 4: Fall back to direct text node patching (no i18n, no Astro source)
     patches.push({
       type: "setTextNode",
       selector: parentSelector,

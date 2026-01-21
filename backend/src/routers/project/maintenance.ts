@@ -569,4 +569,158 @@ export const projectMaintenanceProcedures = {
         message: `Project "${slug}" has been permanently deleted.`,
       };
     }),
+
+  /**
+   * Untrack build cache directories that should be gitignored.
+   * This fixes the issue where .astro/ or other cache dirs were committed
+   * before being added to .gitignore.
+   */
+  fixGitignore: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version } = input;
+      const versionDir = getVersionDir(slug, version);
+
+      if (!fs.existsSync(versionDir)) {
+        throw new Error("Project version not found");
+      }
+
+      // Import gitService dynamically to avoid circular deps
+      const { gitService } = await import("../../services/GitService");
+
+      // Paths that should be ignored but might have been committed
+      const pathsToUntrack = [
+        ".astro",
+        "node_modules",
+        "dist",
+        ".next",
+        ".nuxt",
+        ".output",
+      ];
+
+      // Untrack any that are currently tracked
+      const result = await gitService.untrackIgnoredPaths(
+        versionDir,
+        pathsToUntrack
+      );
+
+      // If we untracked anything, commit the change
+      if (result.untracked.length > 0) {
+        await gitService.save(
+          versionDir,
+          `chore: untrack ${result.untracked.join(", ")} (now in .gitignore)`
+        );
+      }
+
+      return {
+        success: true,
+        untracked: result.untracked,
+        alreadyUntracked: result.alreadyUntracked,
+        message:
+          result.untracked.length > 0
+            ? `Untracked and committed: ${result.untracked.join(", ")}`
+            : "All paths were already untracked",
+      };
+    }),
+
+  /**
+   * Admin maintenance: fix gitignore for all projects.
+   * Untracks build cache directories (.astro, node_modules, etc.) that were
+   * accidentally committed before being added to .gitignore.
+   */
+  fixGitignoreAll: ownerProcedure.mutation(async () => {
+    const projectsDir = getProjectsDir();
+
+    if (!fs.existsSync(projectsDir)) {
+      return {
+        success: true,
+        projectsScanned: 0,
+        versionsScanned: 0,
+        versionsFixed: 0,
+        totalUntracked: [] as string[],
+        errors: [] as Array<{ slug: string; version: number; error: string }>,
+      };
+    }
+
+    // Import gitService dynamically to avoid circular deps
+    const { gitService } = await import("../../services/GitService");
+
+    // Paths that should be ignored but might have been committed
+    const pathsToUntrack = [
+      ".astro",
+      "node_modules",
+      "dist",
+      ".next",
+      ".nuxt",
+      ".output",
+    ];
+
+    let projectsScanned = 0;
+    let versionsScanned = 0;
+    let versionsFixed = 0;
+    const allUntracked: string[] = [];
+    const errors: Array<{ slug: string; version: number; error: string }> = [];
+
+    const projectDirs = fs
+      .readdirSync(projectsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+
+    for (const slug of projectDirs) {
+      projectsScanned++;
+
+      const manifest = getManifest(slug);
+      if (!manifest) continue;
+
+      const projectDir = getProjectDir(slug);
+      if (!fs.existsSync(projectDir)) continue;
+
+      const versionFolders = fs
+        .readdirSync(projectDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
+        .map((d) => d.name);
+
+      for (const folder of versionFolders) {
+        const versionDir = path.join(projectDir, folder);
+        const versionNumber = Number(folder.slice(1));
+        versionsScanned++;
+
+        try {
+          const result = await gitService.untrackIgnoredPaths(
+            versionDir,
+            pathsToUntrack
+          );
+
+          if (result.untracked.length > 0) {
+            await gitService.save(
+              versionDir,
+              `chore: untrack ${result.untracked.join(", ")} (now in .gitignore)`
+            );
+            versionsFixed++;
+            allUntracked.push(...result.untracked);
+          }
+        } catch (e) {
+          errors.push({
+            slug,
+            version: versionNumber,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      projectsScanned,
+      versionsScanned,
+      versionsFixed,
+      totalUntracked: [...new Set(allUntracked)], // unique paths
+      errors,
+    };
+  }),
 };

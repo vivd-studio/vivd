@@ -114,6 +114,7 @@ class OpencodeServerManager {
         external_directory: "deny",
         doom_loop: "deny",
         question: "deny",
+        task: "deny",
       },
     };
 

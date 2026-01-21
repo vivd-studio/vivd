@@ -362,6 +362,52 @@ export class GitService {
   }
 
   /**
+   * Untrack files/directories that are in .gitignore but still tracked.
+   * Runs `git rm --cached -r` on the specified paths.
+   * Returns the list of paths that were untracked.
+   */
+  async untrackIgnoredPaths(
+    cwd: string,
+    paths: string[]
+  ): Promise<{ untracked: string[]; alreadyUntracked: string[] }> {
+    await this.ensureSafeDirectory(cwd);
+
+    if (!(await this.isGitRepository(cwd))) {
+      throw new Error("Not a git repository");
+    }
+
+    const untracked: string[] = [];
+    const alreadyUntracked: string[] = [];
+
+    for (const p of paths) {
+      const fullPath = path.join(cwd, p);
+
+      // Check if path exists
+      if (!fs.existsSync(fullPath)) {
+        alreadyUntracked.push(p);
+        continue;
+      }
+
+      // Check if path is tracked by git
+      try {
+        await execa("git", ["ls-files", "--error-unmatch", p], { cwd });
+        // If no error, the path is tracked - untrack it
+        const isDir = fs.statSync(fullPath).isDirectory();
+        const args = isDir
+          ? ["rm", "--cached", "-r", p]
+          : ["rm", "--cached", p];
+        await execa("git", args, { cwd });
+        untracked.push(p);
+      } catch {
+        // Path is not tracked
+        alreadyUntracked.push(p);
+      }
+    }
+
+    return { untracked, alreadyUntracked };
+  }
+
+  /**
    * Discard all uncommitted changes (both staged and unstaged).
    * If viewing an older version (working commit marker exists), restore to that version.
    * Otherwise, reset to HEAD.

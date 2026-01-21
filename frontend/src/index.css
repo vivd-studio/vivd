@@ -74,12 +74,12 @@
     --secondary-foreground: 210 20% 98%;
 
     /* Muted: Dark gray */
-    --muted: 215 28% 17%;
+    --muted: 215 28% 25%;
     --muted-foreground: 217 10% 64%;
 
-    /* Accent: Bright blue */
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
+    /* Accent: Subtle background for hovers */
+    --accent: 215 28% 32%;
+    --accent-foreground: 210 20% 98%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
@@ -170,11 +170,11 @@
     --secondary-foreground: 40 20% 92%;
 
     /* Muted: Warm dark gray */
-    --muted: 20 12% 16%;
+    --muted: 20 12% 25%;
     --muted-foreground: 40 12% 60%;
 
-    /* Accent: Rich Gold (toned for dark) */
-    --accent: 45 70% 38%;
+    /* Accent: Subtle background for hovers */
+    --accent: 20 15% 32%;
     --accent-foreground: 40 20% 95%;
 
     --destructive: 0 62% 45%;
@@ -266,11 +266,11 @@
     --secondary-foreground: 40 30% 95%;
 
     /* Muted: Warm dark gray */
-    --muted: 20 15% 14%;
+    --muted: 20 15% 25%;
     --muted-foreground: 40 15% 65%;
 
-    /* Accent: Vibrant Gold (toned for dark) */
-    --accent: 45 75% 35%;
+    /* Accent: Subtle background for hovers */
+    --accent: 20 18% 32%;
     --accent-foreground: 40 30% 95%;
 
     --destructive: 0 70% 48%;
@@ -362,11 +362,11 @@
     --secondary-foreground: 0 0% 98%;
 
     /* Muted: Dark neutral */
-    --muted: 0 0% 12%;
+    --muted: 0 0% 25%;
     --muted-foreground: 0 0% 60%;
 
-    /* Accent: Sharp Gold (darker for contrast) */
-    --accent: 45 85% 30%;
+    /* Accent: Subtle background for hovers */
+    --accent: 0 0% 32%;
     --accent-foreground: 0 0% 98%;
 
     --destructive: 0 80% 45%;
@@ -458,12 +458,12 @@
     --secondary-foreground: 210 40% 98%;
 
     /* Muted: Deep blue-gray */
-    --muted: 217 33% 20%;
+    --muted: 217 33% 30%;
     --muted-foreground: 215 20% 65%;
 
-    /* Accent: Bright Cyan/Teal */
-    --accent: 172 66% 50%;
-    --accent-foreground: 0 0% 100%;
+    /* Accent: Subtle background for hovers */
+    --accent: 217 33% 38%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 40% 98%;

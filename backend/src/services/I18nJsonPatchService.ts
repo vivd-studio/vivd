@@ -63,13 +63,27 @@ function readJsonFile(filePath: string): Record<string, unknown> {
 
 /**
  * Write a JSON file, creating parent directories if needed.
+ * Only writes if content actually changed to avoid reformatting-only diffs.
+ * Returns true if file was written, false if skipped (no change).
  */
-function writeJsonFile(filePath: string, data: Record<string, unknown>): void {
+function writeJsonFile(filePath: string, data: Record<string, unknown>): boolean {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+
+  const newContent = JSON.stringify(data, null, 2) + "\n";
+
+  // Check if file exists and content is the same
+  if (fs.existsSync(filePath)) {
+    const existingContent = fs.readFileSync(filePath, "utf-8");
+    if (existingContent === newContent) {
+      return false; // No actual change
+    }
+  }
+
+  fs.writeFileSync(filePath, newContent, "utf-8");
+  return true;
 }
 
 /**
