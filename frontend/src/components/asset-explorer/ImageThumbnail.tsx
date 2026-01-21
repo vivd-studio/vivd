@@ -89,12 +89,12 @@ export function ImageThumbnail({
           : "border-transparent hover:border-muted-foreground/50"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${className}`}
     >
-      {/* Image container */}
-      <div className="aspect-square bg-muted">
+      {/* Image container - native aspect ratio */}
+      <div className="bg-muted">
         <img
           src={imageUrl}
           alt={item.name}
-          className="w-full h-full object-cover"
+          className="w-full h-auto block"
           onError={(e) => {
             e.currentTarget.style.display = "none";
           }}
@@ -118,7 +118,7 @@ export function ImageThumbnail({
       {/* Bottom overlay with name and resolution - tooltip only here */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 cursor-default">
+          <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-1 cursor-default overflow-hidden">
             <p className="text-xs text-white truncate">{item.name}</p>
             {resolutionText && (
               <p className="text-[10px] text-white/70">{resolutionText}</p>

@@ -13,7 +13,7 @@ export const previewProcedures = {
       z.object({
         slug: z.string(),
         version: z.number(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       const { slug, version } = input;
@@ -33,7 +33,7 @@ export const previewProcedures = {
       const basePath = `/vivd-studio/api/devpreview/${slug}/v${version}`;
       const result = await devServerManager.getOrStartDevServer(
         versionDir,
-        basePath
+        basePath,
       );
 
       return {
@@ -53,7 +53,7 @@ export const previewProcedures = {
       z.object({
         slug: z.string(),
         version: z.number(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       const { slug, version } = input;
@@ -65,6 +65,24 @@ export const previewProcedures = {
     }),
 
   /**
+   * Keep the dev server alive by updating its last activity time.
+   * Called periodically by the frontend while the preview is open.
+   */
+  keepAliveDevServer: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version } = input;
+      const versionDir = getVersionDir(slug, version);
+      devServerManager.touchProject(versionDir);
+      return { success: true };
+    }),
+
+  /**
    * Get the current status of a dev server.
    */
   getDevServerStatus: projectMemberProcedure
@@ -72,7 +90,7 @@ export const previewProcedures = {
       z.object({
         slug: z.string(),
         version: z.number(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       const { slug, version } = input;

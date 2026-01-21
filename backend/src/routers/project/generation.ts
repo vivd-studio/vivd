@@ -239,6 +239,187 @@ export const projectGenerationProcedures = {
       };
     }),
 
+  /**
+   * Step 1 of 3-step upload flow: Create a draft project for scratch generation.
+   * Returns slug/version so frontend can upload files via multipart.
+   */
+  createScratchDraft: adminProcedure
+    .input(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+        businessType: z.string().optional(),
+        stylePreset: z.string().optional(),
+        stylePalette: z.array(z.string().min(1)).optional(),
+        styleMode: z.enum(["exact", "reference"]).optional(),
+        siteTheme: z.enum(["dark", "light"]).optional(),
+        referenceUrls: z.array(z.string().min(1)).optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      // Check usage limits early to prevent disk spam
+      await limitsService.assertNotBlocked();
+
+      // Enforce single project mode limit
+      checkSingleProjectModeLimit();
+
+      validateConfig();
+
+      // Create context with "uploading_assets" status
+      const ctx = createGenerationContext({
+        source: "scratch",
+        title: input.title,
+        description: input.description,
+        allowSlugSuffix: true,
+        initialStatus: "uploading_assets",
+      });
+
+      // Create images and references directories for uploads
+      const imagesDir = path.join(ctx.outputDir, "images");
+      const referencesDir = path.join(ctx.outputDir, "references");
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      if (!fs.existsSync(referencesDir)) {
+        fs.mkdirSync(referencesDir, { recursive: true });
+      }
+
+      // Write the brief and metadata now (so scratchFlow can skip this if needed)
+      const brief = [
+        `Title: ${input.title}`,
+        input.businessType ? `Business type: ${input.businessType}` : null,
+        "",
+        "Description:",
+        input.description,
+        input.stylePreset ? "" : null,
+        input.stylePreset ? `Style preset: ${input.stylePreset}` : null,
+        input.stylePreset && input.styleMode
+          ? `Style mode: ${input.styleMode}`
+          : null,
+        input.stylePreset && input.stylePalette?.length
+          ? `Style palette: ${input.stylePalette.join(", ")}`
+          : null,
+        input.siteTheme ? `Site theme: ${input.siteTheme}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      fs.writeFileSync(path.join(ctx.outputDir, "scratch_brief.txt"), brief);
+
+      if (input.referenceUrls?.length) {
+        fs.writeFileSync(
+          path.join(ctx.outputDir, "references", "urls.txt"),
+          input.referenceUrls.join("\n") + "\n",
+        );
+      }
+
+      // Store metadata for startScratchGeneration to use
+      const draftMetaPath = path.join(ctx.outputDir, ".scratch_draft.json");
+      fs.writeFileSync(
+        draftMetaPath,
+        JSON.stringify({
+          title: input.title,
+          description: input.description,
+          businessType: input.businessType,
+          stylePreset: input.stylePreset,
+          stylePalette: input.stylePalette,
+          styleMode: input.styleMode,
+          siteTheme: input.siteTheme,
+          referenceUrls: input.referenceUrls,
+        }),
+      );
+
+      return {
+        status: "uploading_assets",
+        slug: ctx.slug,
+        version: ctx.version,
+        message: "Draft created. Upload assets now.",
+      };
+    }),
+
+  /**
+   * Step 3 of 3-step upload flow: Start generation after assets have been uploaded.
+   */
+  startScratchGeneration: adminProcedure
+    .input(
+      z.object({
+        slug: z.string().min(1),
+        version: z.number().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version } = input;
+
+      // Re-check usage limits (this is the paid step)
+      await limitsService.assertNotBlocked();
+
+      const versionDir = getVersionDir(slug, version);
+
+      if (!fs.existsSync(versionDir)) {
+        throw new Error("Project version not found");
+      }
+
+      // Read stored metadata
+      const draftMetaPath = path.join(versionDir, ".scratch_draft.json");
+      if (!fs.existsSync(draftMetaPath)) {
+        throw new Error(
+          "Draft metadata not found. Use createScratchDraft first.",
+        );
+      }
+
+      const draftMeta = JSON.parse(fs.readFileSync(draftMetaPath, "utf-8"));
+
+      // Create a generation context pointing to existing version
+      const ctx = createGenerationContext({
+        source: "scratch",
+        title: draftMeta.title,
+        description: draftMeta.description,
+        slug, // Use existing slug
+        version, // Use existing version
+        allowSlugSuffix: false, // Don't auto-suffix
+        initialStatus: "pending",
+      });
+
+      // Run scratch flow without base64 assets (they're already uploaded)
+      runScratchFlow(ctx, {
+        title: draftMeta.title,
+        description: draftMeta.description,
+        businessType: draftMeta.businessType,
+        stylePreset: draftMeta.stylePreset,
+        stylePalette: draftMeta.stylePalette,
+        styleMode: draftMeta.styleMode,
+        siteTheme: draftMeta.siteTheme,
+        referenceUrls: draftMeta.referenceUrls,
+        // No assets or referenceImages - they're already on disk
+      })
+        .then(() => {
+          console.log(
+            `Finished scratch generation for ${slug} (version ${version})`,
+          );
+          // Clean up draft metadata
+          try {
+            fs.unlinkSync(draftMetaPath);
+          } catch {
+            // ignore
+          }
+        })
+        .catch((err) => {
+          console.error(`Error during scratch generation for ${slug}:`, err);
+          try {
+            ctx.updateStatus("failed");
+          } catch {
+            // ignore
+          }
+        });
+
+      return {
+        status: "processing",
+        slug,
+        version,
+        message: "Generation started.",
+      };
+    }),
+
   regenerate: adminProcedure
     .input(
       z.object({

@@ -4,10 +4,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { Image as ImageIcon, Link as LinkIcon, Sparkles } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Link as LinkIcon,
+  Sparkles,
+  Upload,
+  Loader2,
+} from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
 import { FileDropzone } from "./FileDropzone";
 import { ColorPaletteSelector } from "./ColorPaletteSelector";
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
 
 export function ScratchForm() {
   const {
@@ -22,10 +36,40 @@ export function ScratchForm() {
     statusData,
     isGenerating,
     progress,
+    uploadPhase,
+    uploadProgress,
+    validationError,
     submit,
   } = useScratchWizard();
 
   const isDisabled = isGenerating || !!started;
+
+  // Get status label for current phase
+  const getStatusLabel = () => {
+    switch (uploadPhase) {
+      case "creating":
+        return "Creating project…";
+      case "uploading":
+        return "Uploading assets…";
+      case "starting":
+        return "Starting generation…";
+      case "generating":
+        return statusData?.status || "Generating…";
+      default:
+        return statusData?.status || "starting";
+    }
+  };
+
+  // Get status badge variant
+  const getStatusBadge = () => {
+    if (uploadPhase === "uploading") {
+      return `${uploadProgress.uploadedFiles}/${uploadProgress.totalFiles} files`;
+    }
+    if (uploadPhase === "generating" && statusData?.status) {
+      return statusData.status;
+    }
+    return uploadPhase;
+  };
 
   return (
     <div className="flex-[4] border-l border-border bg-card flex flex-col">
@@ -109,12 +153,13 @@ export function ScratchForm() {
 
             <FileDropzone
               title="Brand assets"
-              hint="Drop logos / product photos"
+              hint="Drop logos / product photos / PDFs / SVGs"
               files={assets}
               onAddFiles={(files) => setAssets((prev) => [...prev, ...files])}
               onRemoveFile={(idx) =>
                 setAssets((prev) => prev.filter((_, i) => i !== idx))
               }
+              acceptOnlyImages={false}
             />
 
             <FileDropzone
@@ -130,18 +175,41 @@ export function ScratchForm() {
             />
           </div>
 
-          {!!started?.slug && (
+          {/* Validation error */}
+          {validationError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              {validationError}
+            </div>
+          )}
+
+          {/* Progress UI - shown during any upload/generation phase */}
+          {uploadPhase !== "idle" && (
             <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">Generating…</div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  {uploadPhase === "uploading" ? (
+                    <Upload className="h-4 w-4 animate-pulse" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {getStatusLabel()}
+                </div>
                 <Badge variant="secondary" className="text-xs font-normal">
-                  {statusData?.status || "starting"}
+                  {getStatusBadge()}
                 </Badge>
               </div>
               <Progress value={progress} className="h-2" />
-              <div className="text-xs text-muted-foreground">
-                Project: <span className="font-mono">{started.slug}</span>
-              </div>
+              {uploadPhase === "uploading" && uploadProgress.totalBytes > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  {formatBytes(uploadProgress.uploadedBytes)} /{" "}
+                  {formatBytes(uploadProgress.totalBytes)}
+                </div>
+              )}
+              {started?.slug && (
+                <div className="text-xs text-muted-foreground">
+                  Project: <span className="font-mono">{started.slug}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -152,7 +220,7 @@ export function ScratchForm() {
               className="w-full gap-2 h-12 text-base font-medium"
             >
               <Sparkles className="h-5 w-5" />
-              {isGenerating ? "Starting…" : "Generate Website"}
+              {isGenerating ? "Generating…" : "Generate Website"}
             </Button>
             {stylePreset && (
               <div className="text-center text-xs text-muted-foreground mt-3">

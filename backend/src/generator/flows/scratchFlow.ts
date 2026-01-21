@@ -41,45 +41,52 @@ function ensureDir(dir: string) {
 
 export async function runScratchFlow(
   ctx: GenerationContext,
-  input: ScratchFlowInput
+  input: ScratchFlowInput,
 ) {
-  ensureDir(path.join(ctx.outputDir, "images"));
-  ensureDir(path.join(ctx.outputDir, "references"));
+  const imagesDir = path.join(ctx.outputDir, "images");
+  const referencesDir = path.join(ctx.outputDir, "references");
+  ensureDir(imagesDir);
+  ensureDir(referencesDir);
 
-  const brief = [
-    `Title: ${input.title}`,
-    input.businessType ? `Business type: ${input.businessType}` : null,
-    "",
-    "Description:",
-    input.description,
-    input.stylePreset ? "" : null,
-    input.stylePreset ? `Style preset: ${input.stylePreset}` : null,
-    input.stylePreset && input.styleMode
-      ? `Style mode: ${input.styleMode}`
-      : null,
-    input.stylePreset && input.stylePalette?.length
-      ? `Style palette: ${input.stylePalette.join(", ")}`
-      : null,
-    input.siteTheme ? `Site theme: ${input.siteTheme}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // Only write brief if it doesn't already exist (for 3-step flow, it's written in createScratchDraft)
+  const briefPath = path.join(ctx.outputDir, "scratch_brief.txt");
+  if (!fs.existsSync(briefPath)) {
+    const brief = [
+      `Title: ${input.title}`,
+      input.businessType ? `Business type: ${input.businessType}` : null,
+      "",
+      "Description:",
+      input.description,
+      input.stylePreset ? "" : null,
+      input.stylePreset ? `Style preset: ${input.stylePreset}` : null,
+      input.stylePreset && input.styleMode
+        ? `Style mode: ${input.styleMode}`
+        : null,
+      input.stylePreset && input.stylePalette?.length
+        ? `Style palette: ${input.stylePalette.join(", ")}`
+        : null,
+      input.siteTheme ? `Site theme: ${input.siteTheme}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-  fs.writeFileSync(path.join(ctx.outputDir, "scratch_brief.txt"), brief);
-
-  if (input.referenceUrls?.length) {
-    fs.writeFileSync(
-      path.join(ctx.outputDir, "references", "urls.txt"),
-      input.referenceUrls.join("\n") + "\n"
-    );
+    fs.writeFileSync(briefPath, brief);
   }
 
+  // Only write reference URLs if urls.txt doesn't exist and we have URLs
+  const urlsPath = path.join(ctx.outputDir, "references", "urls.txt");
+  if (input.referenceUrls?.length && !fs.existsSync(urlsPath)) {
+    fs.writeFileSync(urlsPath, input.referenceUrls.join("\n") + "\n");
+  }
+
+  // Write base64 assets only if provided (for legacy flow)
+  // In 3-step flow, assets are already uploaded via multipart
   if (input.assets?.length) {
     for (const asset of input.assets) {
       const name = sanitizeFilename(asset.filename);
       fs.writeFileSync(
         path.join(ctx.outputDir, "images", name),
-        decodeBase64(asset.base64)
+        decodeBase64(asset.base64),
       );
     }
   }
@@ -89,7 +96,7 @@ export async function runScratchFlow(
       const name = sanitizeFilename(asset.filename);
       fs.writeFileSync(
         path.join(ctx.outputDir, "references", name),
-        decodeBase64(asset.base64)
+        decodeBase64(asset.base64),
       );
     }
   }
@@ -99,7 +106,7 @@ export async function runScratchFlow(
     await scraperClient.captureScreenshots(
       input.referenceUrls,
       ctx.outputDir,
-      4
+      4,
     );
   }
 

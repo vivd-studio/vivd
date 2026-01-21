@@ -6,6 +6,7 @@ import {
   Upload,
   Loader2,
   ImagePlus,
+  RefreshCw,
 } from "lucide-react";
 
 interface AssetToolbarProps {
@@ -15,6 +16,7 @@ interface AssetToolbarProps {
   onCreateFolder: () => void;
   onCreateImage?: () => void;
   onFilesSelected: (files: FileList) => void;
+  onRefresh?: () => void;
 }
 
 export function AssetToolbar({
@@ -24,6 +26,7 @@ export function AssetToolbar({
   onCreateFolder,
   onCreateImage,
   onFilesSelected,
+  onRefresh,
 }: AssetToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showNavigation = currentPath !== undefined && onBack !== undefined;
@@ -81,6 +84,17 @@ export function AssetToolbar({
         >
           <FolderPlus className="h-4 w-4" />
         </Button>
+        {onRefresh && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onRefresh}
+            title="Refresh"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        )}
         <Button
           variant="outline"
           size={isProcessing ? "default" : "icon"}

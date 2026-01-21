@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Download,
   FolderPlus,
+  MessageSquarePlus,
   Pencil,
   Trash2,
   Wand2,
@@ -46,6 +47,7 @@ interface FileTreeItemProps {
   isRenaming?: boolean;
   onStartRename?: (item: FileTreeNode) => void;
   onCancelRename?: () => void;
+  onAddToChat?: (item: FileTreeNode) => void;
 }
 
 export function FileTreeItem({
@@ -64,6 +66,7 @@ export function FileTreeItem({
   isRenaming,
   onStartRename,
   onCancelRename,
+  onAddToChat,
 }: FileTreeItemProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
@@ -188,7 +191,7 @@ export function FileTreeItem({
 
   const itemContent = (
     <div
-      className={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-muted/50 transition-colors ${
+      className={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-muted/50 transition-colors overflow-hidden min-w-0 ${
         isDragOver ? "bg-primary/10 ring-1 ring-primary" : ""
       } ${isGrayed ? "opacity-50" : ""}`}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -227,13 +230,22 @@ export function FileTreeItem({
           className="h-6 py-0 px-1 text-sm"
         />
       ) : (
-        <span className="text-sm truncate">{item.name}</span>
+        <span className="text-sm truncate min-w-0" title={item.name}>
+          {item.name}
+        </span>
       )}
     </div>
   );
 
   // Only show context menu if we have any handlers
-  if (!onDelete && !onDownload && !onAiEdit && !onCreateFolder && !onStartRename) {
+  if (
+    !onDelete &&
+    !onDownload &&
+    !onAiEdit &&
+    !onCreateFolder &&
+    !onStartRename &&
+    !onAddToChat
+  ) {
     return itemContent;
   }
 
@@ -265,6 +277,14 @@ export function FileTreeItem({
           </ContextMenuItem>
         )}
 
+        {/* Add to Chat - only for files */}
+        {item.type === "file" && onAddToChat && (
+          <ContextMenuItem onClick={() => onAddToChat(item)}>
+            <MessageSquarePlus className="mr-2 h-4 w-4" />
+            Add to Chat
+          </ContextMenuItem>
+        )}
+
         {/* AI Edit - only for images */}
         {item.type === "file" && item.isImage && onAiEdit && (
           <ContextMenuItem onClick={() => onAiEdit(item)}>
@@ -276,7 +296,8 @@ export function FileTreeItem({
         {/* Separator before delete if there are other items */}
         {onDelete &&
           (onStartRename ||
-            (item.type === "file" && (onDownload || (item.isImage && onAiEdit))) ||
+            (item.type === "file" &&
+              (onDownload || onAddToChat || (item.isImage && onAiEdit))) ||
             (item.type === "folder" && onCreateFolder)) && (
             <ContextMenuSeparator />
           )}

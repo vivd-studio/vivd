@@ -347,6 +347,25 @@ export async function deleteSession(sessionId: string, directory: string) {
   return true;
 }
 
+export async function abortSession(sessionId: string, directory: string) {
+  const client = await serverManager.getClient(directory);
+  const result = await client.session.abort({ path: { id: sessionId } });
+  if (result.error) throw new Error(JSON.stringify(result.error));
+
+  // Clear session status since it's aborted
+  agentEventEmitter.setSessionStatus(sessionId, { type: "idle" });
+
+  // Emit session completed event so frontend resets state
+  agentEventEmitter.emitSessionEvent(
+    sessionId,
+    createAgentEvent(sessionId, "session.completed", {
+      kind: "session.completed",
+    } as SessionCompletedData),
+  );
+
+  return true;
+}
+
 export async function revertSession(
   sessionId: string,
   messageID: string,

@@ -4,6 +4,7 @@ import {
   useState,
   useMemo,
   useEffect,
+  useCallback,
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,14 +14,28 @@ import { trpc } from "@/lib/trpc";
 import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
-import {
-  scratchSchema,
-  fileToBase64,
-  type ScratchValues,
-  type StylePreset,
-} from "./types";
+import { scratchSchema, type ScratchValues, type StylePreset } from "./types";
 
 type SiteTheme = "dark" | "light" | null;
+
+type UploadPhase =
+  | "idle"
+  | "creating"
+  | "uploading"
+  | "starting"
+  | "generating";
+
+type UploadProgress = {
+  uploadedBytes: number;
+  totalBytes: number;
+  uploadedFiles: number;
+  totalFiles: number;
+};
+
+// Limits
+const MAX_TOTAL_FILES = 200;
+const MAX_TOTAL_BYTES = 500 * 1024 * 1024; // 500MB
+const BATCH_SIZE = 20;
 
 type ScratchWizardContextValue = {
   // Form
@@ -48,6 +63,11 @@ type ScratchWizardContextValue = {
   isGenerating: boolean;
   progress: number;
 
+  // Upload state (new)
+  uploadPhase: UploadPhase;
+  uploadProgress: UploadProgress;
+  validationError: string | null;
+
   // Actions
   submit: (values: ScratchValues) => Promise<void>;
 };
@@ -64,6 +84,85 @@ export function useScratchWizard() {
     );
   }
   return ctx;
+}
+
+/**
+ * Upload files in batches using XHR for progress tracking.
+ */
+async function uploadFilesBatched(
+  files: File[],
+  slug: string,
+  version: number,
+  pathPrefix: string,
+  onProgress: (uploaded: number, total: number) => void,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  if (files.length === 0) return;
+
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  let completedBytes = 0;
+
+  // Split into batches
+  const batches: File[][] = [];
+  for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    batches.push(files.slice(i, i + BATCH_SIZE));
+  }
+
+  for (const batch of batches) {
+    if (abortSignal?.aborted) {
+      throw new Error("Upload cancelled");
+    }
+
+    const batchBytes = batch.reduce((sum, f) => sum + f.size, 0);
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const formData = new FormData();
+
+      for (const file of batch) {
+        formData.append("files", file);
+      }
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const inFlightProgress = e.loaded / e.total;
+          const currentTotal = completedBytes + batchBytes * inFlightProgress;
+          onProgress(currentTotal, totalBytes);
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          completedBytes += batchBytes;
+          onProgress(completedBytes, totalBytes);
+          resolve();
+        } else {
+          let message = "Upload failed";
+          try {
+            const resp = JSON.parse(xhr.responseText);
+            message = resp.error || message;
+          } catch {
+            // ignore
+          }
+          reject(new Error(message));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.onabort = () => reject(new Error("Upload cancelled"));
+
+      if (abortSignal) {
+        abortSignal.addEventListener("abort", () => xhr.abort());
+      }
+
+      xhr.open(
+        "POST",
+        `/vivd-studio/api/upload/${slug}/${version}?path=${pathPrefix}`,
+      );
+      xhr.withCredentials = true;
+      xhr.send(formData);
+    });
+  }
 }
 
 export function ScratchWizardProvider({ children }: { children: ReactNode }) {
@@ -85,6 +184,16 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
   const [started, setStarted] = useState<{ slug: string; version: number }>();
 
+  // New upload state
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({
+    uploadedBytes: 0,
+    totalBytes: 0,
+    uploadedFiles: 0,
+    totalFiles: 0,
+  });
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   const form = useForm<ScratchValues>({
     resolver: zodResolver(scratchSchema),
     defaultValues: {
@@ -104,16 +213,20 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       .filter(Boolean);
   }, [referenceUrlsText]);
 
-  const { mutateAsync: generateFromScratch, isPending: isGenerating } =
-    trpc.project.generateFromScratch.useMutation({
+  // Mutations for 3-step flow
+  const { mutateAsync: createDraft } =
+    trpc.project.createScratchDraft.useMutation({
+      onError: (error) => {
+        toast.error("Failed to create project", { description: error.message });
+      },
+    });
+
+  const { mutateAsync: startGeneration } =
+    trpc.project.startScratchGeneration.useMutation({
       onError: (error) => {
         toast.error("Failed to start generation", {
           description: error.message,
         });
-      },
-      onSuccess: (data) => {
-        setStarted({ slug: data.slug, version: data.version ?? 1 });
-        utils.project.list.invalidate();
       },
     });
 
@@ -133,6 +246,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       navigate(ROUTES.PROJECT(started.slug));
     }
     if (statusData.status === "failed") {
+      setUploadPhase("idle");
       const errorMessage =
         (statusData as { errorMessage?: string }).errorMessage ||
         "Try again or adjust your description.";
@@ -148,49 +262,175 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     utils.project.list,
   ]);
 
-  const submit = async (values: ScratchValues) => {
-    const assetPayload = await Promise.all(
-      assets.map(async (file) => ({
-        filename: file.name,
-        base64: await fileToBase64(file),
-      })),
-    );
-    const referenceImagePayload = await Promise.all(
-      referenceImages.map(async (file) => ({
-        filename: file.name,
-        base64: await fileToBase64(file),
-      })),
-    );
+  const isGenerating = uploadPhase !== "idle";
 
-    await generateFromScratch({
-      title: values.title,
-      description: values.description,
-      businessType: values.businessType || undefined,
-      stylePreset: stylePreset?.name,
-      stylePalette: stylePreset?.palette,
-      styleMode: stylePreset
-        ? isStyleExact
-          ? "exact"
-          : "reference"
-        : undefined,
-      siteTheme: siteTheme || undefined,
-      referenceUrls: referenceUrls.length ? referenceUrls : undefined,
-      assets: assetPayload.length ? assetPayload : undefined,
-      referenceImages: referenceImagePayload.length
-        ? referenceImagePayload
-        : undefined,
-    });
-  };
+  const submit = useCallback(
+    async (values: ScratchValues) => {
+      // Client-side validation
+      const totalFiles = assets.length + referenceImages.length;
+      const totalBytes = [...assets, ...referenceImages].reduce(
+        (sum, f) => sum + f.size,
+        0,
+      );
+
+      if (totalFiles > MAX_TOTAL_FILES) {
+        setValidationError(
+          `Too many files (${totalFiles}). Maximum is ${MAX_TOTAL_FILES} files.`,
+        );
+        toast.error("Too many files", {
+          description: `Maximum is ${MAX_TOTAL_FILES} files.`,
+        });
+        return;
+      }
+
+      if (totalBytes > MAX_TOTAL_BYTES) {
+        const mb = Math.round(totalBytes / (1024 * 1024));
+        setValidationError(
+          `Files too large (${mb}MB). Maximum is ${MAX_TOTAL_BYTES / (1024 * 1024)}MB.`,
+        );
+        toast.error("Files too large", {
+          description: `Maximum is ${MAX_TOTAL_BYTES / (1024 * 1024)}MB total.`,
+        });
+        return;
+      }
+
+      setValidationError(null);
+
+      try {
+        // Step 1: Create draft
+        setUploadPhase("creating");
+        const draftResult = await createDraft({
+          title: values.title,
+          description: values.description,
+          businessType: values.businessType || undefined,
+          stylePreset: stylePreset?.name,
+          stylePalette: stylePreset?.palette,
+          styleMode: stylePreset
+            ? isStyleExact
+              ? "exact"
+              : "reference"
+            : undefined,
+          siteTheme: siteTheme || undefined,
+          referenceUrls: referenceUrls.length ? referenceUrls : undefined,
+        });
+
+        const { slug, version } = draftResult;
+        setStarted({ slug, version });
+        utils.project.list.invalidate();
+
+        // Step 2: Upload files
+        if (assets.length > 0 || referenceImages.length > 0) {
+          setUploadPhase("uploading");
+          const totalUploadFiles = assets.length + referenceImages.length;
+          const totalUploadBytes = [...assets, ...referenceImages].reduce(
+            (sum, f) => sum + f.size,
+            0,
+          );
+
+          setUploadProgress({
+            uploadedBytes: 0,
+            totalBytes: totalUploadBytes,
+            uploadedFiles: 0,
+            totalFiles: totalUploadFiles,
+          });
+
+          let completedAssetBytes = 0;
+          const assetBytes = assets.reduce((sum, f) => sum + f.size, 0);
+
+          // Upload brand assets
+          if (assets.length > 0) {
+            await uploadFilesBatched(
+              assets,
+              slug,
+              version,
+              "images",
+              (uploaded, _total) => {
+                setUploadProgress((prev) => ({
+                  ...prev,
+                  uploadedBytes: uploaded,
+                  uploadedFiles: Math.floor(
+                    (uploaded / assetBytes) * assets.length,
+                  ),
+                }));
+              },
+            );
+            completedAssetBytes = assetBytes;
+          }
+
+          // Upload reference images
+          if (referenceImages.length > 0) {
+            await uploadFilesBatched(
+              referenceImages,
+              slug,
+              version,
+              "references",
+              (uploaded, _total) => {
+                setUploadProgress((prev) => ({
+                  ...prev,
+                  uploadedBytes: completedAssetBytes + uploaded,
+                  uploadedFiles:
+                    assets.length +
+                    Math.floor(
+                      (uploaded /
+                        referenceImages.reduce((s, f) => s + f.size, 0)) *
+                        referenceImages.length,
+                    ),
+                }));
+              },
+            );
+          }
+        }
+
+        // Step 3: Start generation
+        setUploadPhase("starting");
+        await startGeneration({ slug, version });
+
+        setUploadPhase("generating");
+      } catch (error) {
+        setUploadPhase("idle");
+        console.error("Scratch generation error:", error);
+        if (error instanceof Error && error.message !== "Upload cancelled") {
+          toast.error("Generation failed", { description: error.message });
+        }
+      }
+    },
+    [
+      assets,
+      referenceImages,
+      stylePreset,
+      isStyleExact,
+      siteTheme,
+      referenceUrls,
+      createDraft,
+      startGeneration,
+      utils.project.list,
+    ],
+  );
 
   const progress = useMemo(() => {
+    // Upload phase progress
+    if (uploadPhase === "creating") return 5;
+    if (uploadPhase === "uploading") {
+      const uploadPct =
+        uploadProgress.totalBytes > 0
+          ? (uploadProgress.uploadedBytes / uploadProgress.totalBytes) * 30
+          : 0;
+      return 5 + uploadPct; // 5-35%
+    }
+    if (uploadPhase === "starting") return 40;
+
+    // Generation phase progress
     const status = statusData?.status;
     if (!status) return 0;
-    if (status === "pending") return 10;
-    if (status === "generating_html") return 60;
+    if (status === "pending") return 45;
+    if (status === "uploading_assets") return 35;
+    if (status === "capturing_references") return 50;
+    if (status === "analyzing_images") return 60;
+    if (status === "generating_html") return 75;
     if (status === "completed") return 100;
     if (status === "failed") return 100;
-    return 30;
-  }, [statusData?.status]);
+    return 50;
+  }, [uploadPhase, uploadProgress, statusData?.status]);
 
   const value: ScratchWizardContextValue = {
     form,
@@ -210,6 +450,9 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     statusData,
     isGenerating,
     progress,
+    uploadPhase,
+    uploadProgress,
+    validationError,
     submit,
   };
 

@@ -59,6 +59,12 @@ export interface AttachedImage {
   tempId: string;
 }
 
+export interface AttachedFile {
+  path: string;
+  filename: string;
+  id: string;
+}
+
 // Debug state for session monitoring
 export interface UsageData {
   cost: number;
@@ -84,6 +90,7 @@ export interface SessionDebugState {
   sseConnected: boolean;
   lastEventTime: string | null;
   lastEventType: string | null;
+  lastEventId: string | null; // Last processed event ID for resumable streams
   sessionError: SessionError | null;
   sessionStatus: string | null; // "idle" | "busy" | "retry" from backend
   usage: UsageData | null;
@@ -150,6 +157,9 @@ interface ChatContextValue {
   attachedImages: AttachedImage[];
   addAttachedImages: (images: AttachedImage[]) => void;
   removeAttachedImage: (tempId: string) => void;
+  attachedFiles: AttachedFile[];
+  addAttachedFile: (file: AttachedFile) => void;
+  removeAttachedFile: (id: string) => void;
 
   // Element selector
   selectorMode: boolean;
@@ -182,6 +192,7 @@ interface ChatContextValue {
   handleDeleteSession: (e: React.MouseEvent, sessionId: string) => void;
   handleRevert: (messageId: string) => void;
   handleUnrevert: () => void;
+  handleStopGeneration: () => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -192,6 +203,14 @@ export function useChatContext() {
     throw new Error("useChatContext must be used within a ChatProvider");
   }
   return context;
+}
+
+/**
+ * Returns the ChatContext value if inside a ChatProvider, or null otherwise.
+ * Use this when a component may or may not be rendered within a ChatProvider.
+ */
+export function useOptionalChatContext() {
+  return useContext(ChatContext);
 }
 
 interface ChatProviderProps {
@@ -243,6 +262,23 @@ export function ChatProvider({
     });
   }, []);
 
+  // Local state for attached files (from asset explorer context menu)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+
+  const addAttachedFile = useCallback((file: AttachedFile) => {
+    setAttachedFiles((prev) => {
+      // Avoid duplicates by path
+      if (prev.some((f) => f.path === file.path)) {
+        return prev;
+      }
+      return [...prev, file];
+    });
+  }, []);
+
+  const removeAttachedFile = useCallback((id: string) => {
+    setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([]);
   // Ref to access current messages in effects without adding to dependency array
   const messagesRef = useRef<Message[]>([]);
@@ -277,6 +313,10 @@ export function ChatProvider({
   const [lastEventType, setLastEventType] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
 
+  // Track last processed event ID per session for resumable SSE streams
+  // This prevents replay of old events (like session.completed) on reconnect
+  const lastEventIdBySession = useRef<Map<string, string>>(new Map());
+
   // Session error state (for quota limits, API errors, etc.)
   const [sessionError, setSessionError] = useState<SessionError | null>(null);
   const clearSessionError = () => setSessionError(null);
@@ -300,14 +340,46 @@ export function ChatProvider({
   );
   const availableModels = (availableModelsData ?? []) as ModelTier[];
 
-  // Selected model state - auto-select first model if available
-  const [selectedModel, setSelectedModel] = useState<ModelTier | null>(null);
+  // Selected model state - load from localStorage or auto-select first model
+  const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(
+    null,
+  );
 
-  // Auto-select first model when models become available
-  useEffect(() => {
-    if (availableModels.length > 0 && !selectedModel) {
-      setSelectedModel(availableModels[0]);
+  // Wrapper to save to localStorage when model changes
+  const setSelectedModel = useCallback((model: ModelTier | null) => {
+    setSelectedModelState(model);
+    if (model) {
+      localStorage.setItem(
+        "vivd-selected-model",
+        JSON.stringify({ provider: model.provider, modelId: model.modelId }),
+      );
     }
+  }, []);
+
+  // Load saved model preference or auto-select first model when models become available
+  useEffect(() => {
+    if (availableModels.length === 0) return;
+    if (selectedModel) return;
+
+    // Try to load saved preference from localStorage
+    const savedModel = localStorage.getItem("vivd-selected-model");
+    if (savedModel) {
+      try {
+        const { provider, modelId } = JSON.parse(savedModel);
+        const matchingModel = availableModels.find(
+          (m) => m.provider === provider && m.modelId === modelId,
+        );
+        if (matchingModel) {
+          setSelectedModelState(matchingModel);
+          return;
+        }
+      } catch {
+        // Invalid saved value, fall through to default
+      }
+    }
+
+    // Fall back to first available model
+    setSelectedModelState(availableModels[0]);
   }, [availableModels, selectedModel]);
 
   const confirmResolverRef = useRef<((result: boolean) => void) | null>(null);
@@ -359,7 +431,9 @@ export function ChatProvider({
   const { data: sessionStatuses } = trpc.agent.getSessionsStatus.useQuery(
     { projectSlug, version },
     {
-      refetchInterval: getSessionStatusPollingInterval(isWaiting || isStreaming),
+      refetchInterval: getSessionStatusPollingInterval(
+        isWaiting || isStreaming,
+      ),
     },
   );
 
@@ -622,6 +696,11 @@ export function ChatProvider({
   trpc.agent.sessionEvents.useSubscription(
     {
       sessionId: selectedSessionId ?? "",
+      // Pass last processed event ID to resume from where we left off on reconnect
+      // This prevents replay of old events (like session.completed) causing UI glitches
+      lastEventId: selectedSessionId
+        ? lastEventIdBySession.current.get(selectedSessionId)
+        : undefined,
     },
     {
       enabled: shouldSubscribeToSessionEvents,
@@ -630,6 +709,11 @@ export function ChatProvider({
         setSseConnected(true);
       },
       onData: (trackedEvent) => {
+        // Track the event ID for resumable streams
+        if (selectedSessionId && trackedEvent.id) {
+          lastEventIdBySession.current.set(selectedSessionId, trackedEvent.id);
+        }
+
         const event = trackedEvent.data;
         const innerData = event.data;
 
@@ -1017,9 +1101,31 @@ export function ChatProvider({
     });
   };
 
+  const abortSessionMutation = trpc.agent.abortSession.useMutation({
+    onSuccess: () => {
+      setIsStreaming(false);
+      setIsWaiting(false);
+      setStreamingParts([]);
+      isWaitingForAgent.current = false;
+      refetchMessages();
+    },
+  });
+
+  const handleStopGeneration = () => {
+    if (!selectedSessionId) return;
+    abortSessionMutation.mutate({
+      sessionId: selectedSessionId,
+      projectSlug,
+      version,
+    });
+  };
+
   const handleSend = async () => {
     if (
-      (!input.trim() && !attachedElement && attachedImages.length === 0) ||
+      (!input.trim() &&
+        !attachedElement &&
+        attachedImages.length === 0 &&
+        attachedFiles.length === 0) ||
       runTaskMutation.isPending ||
       isSending
     )
@@ -1049,7 +1155,7 @@ export function ChatProvider({
           formData.append("file", img.file);
 
           const response = await fetch(
-            `/vivd-studio/api/upload-dropped-image/${projectSlug}/${version}`,
+            `/vivd-studio/api/upload-dropped-file/${projectSlug}/${version}`,
             {
               method: "POST",
               body: formData,
@@ -1061,14 +1167,14 @@ export function ChatProvider({
             const data = await response.json();
             uploadedPaths.push(data.path);
           } else {
-            console.error("Failed to upload image:", img.file.name);
+            console.error("Failed to upload file:", img.file.name);
           }
         }
 
-        // Inject internal tag for each uploaded image
+        // Inject internal tag for each uploaded file
         for (const imgPath of uploadedPaths) {
-          const filename = imgPath.split("/").pop() || "image";
-          task += `\n<vivd-internal type="dropped-image" filename="${filename}" path="${imgPath}" />`;
+          const filename = imgPath.split("/").pop() || "file";
+          task += `\n<vivd-internal type="dropped-file" filename="${filename}" path="${imgPath}" />`;
         }
 
         // Revoke preview URLs and clear attached images
@@ -1079,6 +1185,14 @@ export function ChatProvider({
       } catch (error) {
         console.error("Error uploading dropped images:", error);
       }
+    }
+
+    // Inject internal tags for attached files (from asset explorer)
+    if (attachedFiles.length > 0) {
+      for (const file of attachedFiles) {
+        task += `\n<vivd-internal type="attached-file" filename="${file.filename}" path="${file.path}" />`;
+      }
+      setAttachedFiles([]);
     }
 
     setInput("");
@@ -1156,6 +1270,9 @@ export function ChatProvider({
     sseConnected,
     lastEventTime,
     lastEventType,
+    lastEventId: selectedSessionId
+      ? (lastEventIdBySession.current.get(selectedSessionId) ?? null)
+      : null,
     sessionError,
     sessionStatus: currentSessionStatus?.type ?? null,
     usage,
@@ -1183,6 +1300,9 @@ export function ChatProvider({
     attachedImages,
     addAttachedImages,
     removeAttachedImage,
+    attachedFiles,
+    addAttachedFile,
+    removeAttachedFile,
     selectorMode,
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,
@@ -1201,6 +1321,7 @@ export function ChatProvider({
     handleDeleteSession,
     handleRevert,
     handleUnrevert,
+    handleStopGeneration,
   };
 
   return (

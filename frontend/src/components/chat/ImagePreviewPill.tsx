@@ -1,23 +1,31 @@
-import { X } from "lucide-react";
+import { X, FileText } from "lucide-react";
 
-interface ImagePreviewPillProps {
+interface FilePreviewPillProps {
   previewUrl: string;
   fileName: string;
   onRemove: () => void;
 }
 
-export function ImagePreviewPill({
+export function FilePreviewPill({
   previewUrl,
   fileName,
   onRemove,
-}: ImagePreviewPillProps) {
+}: FilePreviewPillProps) {
+  const isImage = previewUrl && previewUrl.length > 0;
+
   return (
     <div className="relative inline-flex items-center gap-2 bg-muted rounded-lg p-1.5 pr-2">
-      <img
-        src={previewUrl}
-        alt={fileName}
-        className="h-10 w-10 object-cover rounded"
-      />
+      {isImage ? (
+        <img
+          src={previewUrl}
+          alt={fileName}
+          className="h-10 w-10 object-cover rounded"
+        />
+      ) : (
+        <div className="h-10 w-10 flex items-center justify-center bg-muted-foreground/10 rounded">
+          <FileText className="h-5 w-5 text-muted-foreground" />
+        </div>
+      )}
       <span className="text-xs text-muted-foreground truncate max-w-[100px]">
         {fileName}
       </span>
@@ -32,3 +40,6 @@ export function ImagePreviewPill({
     </div>
   );
 }
+
+// Re-export with old name for backwards compatibility
+export { FilePreviewPill as ImagePreviewPill };

@@ -191,3 +191,6 @@ export function ChatPanel({
     </ChatProvider>
   );
 }
+
+// Export content component for use when ChatProvider is already present
+export { ChatPanelContent };

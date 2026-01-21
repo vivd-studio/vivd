@@ -39,6 +39,12 @@ export const POLLING_INFREQUENT = 30000;
 export const POLLING_DEV_SERVER_STARTING = 2000;
 
 /**
+ * Dev server keep-alive interval.
+ * Pings the backend to prevent idle timeout (5 min) while preview is open.
+ */
+export const POLLING_DEV_SERVER_KEEPALIVE = 2 * 60 * 1000; // 2 minutes
+
+/**
  * Helper to determine polling interval based on active state.
  * Returns fast polling when active, false (disabled) when idle.
  */

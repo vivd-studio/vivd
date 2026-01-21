@@ -18,6 +18,7 @@ interface FileTreeViewProps {
   onDownload?: (item: FileTreeNode) => void;
   onAiEdit?: (item: FileTreeNode) => void;
   onCreateFolder?: (parentPath: string) => void;
+  onAddToChat?: (item: FileTreeNode) => void;
 }
 
 export function FileTreeView({
@@ -30,6 +31,7 @@ export function FileTreeView({
   onDownload,
   onAiEdit,
   onCreateFolder,
+  onAddToChat,
 }: FileTreeViewProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [rootDragOver, setRootDragOver] = useState(false);
@@ -130,7 +132,8 @@ export function FileTreeView({
 
     // Check if this is a case-only rename (e.g., "Files" -> "files")
     // macOS filesystem is case-insensitive, so we need a two-step rename
-    const isCaseOnlyRename = oldName.toLowerCase() === newName.toLowerCase() && oldName !== newName;
+    const isCaseOnlyRename =
+      oldName.toLowerCase() === newName.toLowerCase() && oldName !== newName;
 
     if (isCaseOnlyRename) {
       // Two-step rename: first to temp name, then to final name
@@ -186,7 +189,7 @@ export function FileTreeView({
     // Check if this is an external file drop
     const hasFiles = e.dataTransfer.types.includes("Files");
     const hasInternalPath = e.dataTransfer.types.includes(
-      "application/x-file-path"
+      "application/x-file-path",
     );
 
     if (hasFiles && !hasInternalPath) {
@@ -250,7 +253,7 @@ export function FileTreeView({
 
   const renderTree = (nodes: FileTreeNode[], depth: number = 0) => {
     return nodes.map((node) => (
-      <div key={node.path}>
+      <div key={node.path} className="overflow-hidden min-w-0">
         <FileTreeItem
           item={node}
           depth={depth}
@@ -263,6 +266,7 @@ export function FileTreeView({
           onDownload={onDownload}
           onAiEdit={onAiEdit}
           onCreateFolder={onCreateFolder}
+          onAddToChat={onAddToChat}
           onRename={handleRename}
           isRenaming={renamingPath === node.path}
           onStartRename={(item) => setRenamingPath(item.path)}
@@ -286,7 +290,7 @@ export function FileTreeView({
 
   return (
     <div
-      className={`py-1 min-h-[200px] ${rootDragOver ? "bg-primary/5" : ""}`}
+      className={`py-1 min-h-[200px] w-full min-w-0 overflow-hidden ${rootDragOver ? "bg-primary/5" : ""}`}
       onDragOver={handleRootDragOver}
       onDragLeave={handleRootDragLeave}
       onDrop={handleRootDrop}
@@ -338,7 +342,7 @@ function FolderDropZone({
     // Check if this is an external file drop
     const hasFiles = e.dataTransfer.types.includes("Files");
     const hasInternalPath = e.dataTransfer.types.includes(
-      "application/x-file-path"
+      "application/x-file-path",
     );
 
     if (hasFiles && !hasInternalPath) {
@@ -391,7 +395,7 @@ function FolderDropZone({
 
   return (
     <div
-      className={isDragOver ? "bg-primary/10" : ""}
+      className={`overflow-hidden min-w-0 ${isDragOver ? "bg-primary/10" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

@@ -1,4 +1,4 @@
-import { X, Code, Image } from "lucide-react";
+import { X, Code, Image, FileText } from "lucide-react";
 
 interface SelectedElementPillProps {
   selector: string;
@@ -72,6 +72,55 @@ export function DroppedImagePill({ filename }: { filename: string }) {
     >
       <Image className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
       <span className="text-blue-700 dark:text-blue-300 truncate max-w-[150px]">
+        {filename}
+      </span>
+    </span>
+  );
+}
+
+// Pill for displaying attached file reference in chat composer (removable)
+interface AttachedFilePillProps {
+  filename: string;
+  path: string;
+  onRemove?: () => void;
+}
+
+export function AttachedFilePill({
+  filename,
+  path,
+  onRemove,
+}: AttachedFilePillProps) {
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-sm max-w-full"
+      title={path}
+    >
+      <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+      <span className="text-emerald-700 dark:text-emerald-300 truncate">
+        {filename}
+      </span>
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          className="shrink-0 p-0.5 rounded-full hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+          aria-label="Remove file reference"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Pill for displaying attached file in message bubbles (non-removable, smaller)
+export function AttachedFileRefPill({ filename }: { filename: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-xs"
+      title={filename}
+    >
+      <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+      <span className="text-emerald-700 dark:text-emerald-300 truncate max-w-[150px]">
         {filename}
       </span>
     </span>

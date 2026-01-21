@@ -322,9 +322,9 @@ export default {};
   },
 );
 
-// Dropped image upload endpoint (for chat drag-and-drop)
+// Dropped file upload endpoint (for chat drag-and-drop)
 app.post(
-  "/vivd-studio/api/upload-dropped-image/:slug/:version",
+  "/vivd-studio/api/upload-dropped-file/:slug/:version",
   upload.single("file"),
   async (req, res) => {
     try {

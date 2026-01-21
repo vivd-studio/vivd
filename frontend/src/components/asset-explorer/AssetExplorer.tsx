@@ -27,6 +27,7 @@ import { ImageGalleryView } from "./ImageGalleryView";
 import { FileTreeView } from "./FileTreeView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
+import { useOptionalChatContext } from "@/components/chat/ChatContext";
 
 interface AssetExplorerProps {
   projectSlug: string;
@@ -95,42 +96,54 @@ export function AssetExplorer({
   // Use context for text editor (rendered in PreviewContent)
   const { setEditingTextFile } = usePreview();
 
-  // Check for public/images first, then fall back to images
+  // Use optional chat context for "Add to chat" feature
+  const chatContext = useOptionalChatContext();
+
+  // Handler for adding file to chat
+  const handleAddToChat = (item: AssetItem | FileTreeNode) => {
+    if (!chatContext) return;
+    chatContext.addAttachedFile({
+      path: item.path,
+      filename: item.name,
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    });
+  };
+
+  // Check both paths in parallel for initial detection
   const publicImagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "public/images" },
     { enabled: !initialPathDetected },
   );
   const imagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "images" },
-    { enabled: !initialPathDetected && publicImagesCheck.isFetched },
+    { enabled: !initialPathDetected },
   );
 
   // Detect initial path
   useEffect(() => {
     if (initialPathDetected) return;
 
-    // Check public/images first
-    if (publicImagesCheck.isFetched) {
-      if (
-        publicImagesCheck.data?.items &&
-        publicImagesCheck.data.items.length > 0
-      ) {
-        setCurrentPath("public/images");
-        setInitialPathDetected(true);
-        return;
-      }
+    // Wait for both queries to complete
+    if (!publicImagesCheck.isFetched || !imagesCheck.isFetched) return;
 
-      // Then check images
-      if (imagesCheck.isFetched) {
-        // Use images even if empty (it's the fallback)
-        setCurrentPath("images");
-        setInitialPathDetected(true);
-      }
+    const publicHasItems =
+      publicImagesCheck.data?.items && publicImagesCheck.data.items.length > 0;
+    const imagesHasItems =
+      imagesCheck.data?.items && imagesCheck.data.items.length > 0;
+
+    // Prefer public/images if it has items, or if both are empty (it's the standard location)
+    // Only use "images" if it has items and public/images is empty
+    if (publicHasItems || !imagesHasItems) {
+      setCurrentPath("public/images");
+    } else {
+      setCurrentPath("images");
     }
+    setInitialPathDetected(true);
   }, [
     publicImagesCheck.isFetched,
     publicImagesCheck.data,
     imagesCheck.isFetched,
+    imagesCheck.data,
     initialPathDetected,
   ]);
 
@@ -432,6 +445,7 @@ export function AssetExplorer({
               : undefined
           }
           onFilesSelected={uploadFiles}
+          onRefresh={() => galleryQuery.refetch()}
         />
       )}
 
@@ -453,6 +467,7 @@ export function AssetExplorer({
               : undefined
           }
           onFilesSelected={uploadFiles}
+          onRefresh={() => utils.assets.invalidate()}
         />
       )}
 
@@ -473,7 +488,7 @@ export function AssetExplorer({
       )}
 
       {/* Main Content Area */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden">
         {viewMode === "gallery" ? (
           <ImageGalleryView
             projectSlug={projectSlug}
@@ -484,23 +499,27 @@ export function AssetExplorer({
             onAiEdit={canUseAiImages ? handleAiEdit : undefined}
             onDelete={handleDelete}
             onTextEdit={setEditingTextFile}
+            onAddToChat={chatContext ? handleAddToChat : undefined}
             isDragging={isDragging}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           />
         ) : (
-          <FileTreeView
-            projectSlug={projectSlug}
-            version={version}
-            onImagePreview={handleImagePreview}
-            onRefetch={() => galleryQuery.refetch()}
-            onFilesUpload={uploadFiles}
-            onDelete={handleDelete}
-            onDownload={handleDownloadFile}
-            onAiEdit={canUseAiImages ? handleAiEdit : undefined}
-            onCreateFolder={handleCreateFolderInPath}
-          />
+          <div className="w-full max-w-full overflow-hidden">
+            <FileTreeView
+              projectSlug={projectSlug}
+              version={version}
+              onImagePreview={handleImagePreview}
+              onRefetch={() => galleryQuery.refetch()}
+              onFilesUpload={uploadFiles}
+              onDelete={handleDelete}
+              onDownload={handleDownloadFile}
+              onAiEdit={canUseAiImages ? handleAiEdit : undefined}
+              onCreateFolder={handleCreateFolderInPath}
+              onAddToChat={chatContext ? handleAddToChat : undefined}
+            />
+          </div>
         )}
       </ScrollArea>
 

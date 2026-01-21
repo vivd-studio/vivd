@@ -1,13 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Send, Image, MousePointerClick, X } from "lucide-react";
+import { Plus, Send, MousePointerClick, X, Square } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SelectedElementPill } from "./SelectedElementPill";
+import { SelectedElementPill, AttachedFilePill } from "./SelectedElementPill";
 import { ImagePreviewPill } from "./ImagePreviewPill";
 import { ModelSelector } from "./ModelSelector";
 import { useChatContext } from "./ChatContext";
@@ -32,14 +32,19 @@ export function ChatComposer({ className }: ChatComposerProps) {
     input,
     setInput,
     handleSend,
+    handleStopGeneration,
     attachedElement,
     setAttachedElement,
     attachedImages,
     addAttachedImages,
     removeAttachedImage,
+    attachedFiles,
+    removeAttachedFile,
     selectorMode,
     setSelectorMode,
     isLoading,
+    isStreaming,
+    isWaiting,
     isUsageBlocked,
     selectorModeAvailable,
     availableModels,
@@ -49,6 +54,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
 
   // Combine loading and blocked states for disabling
   const isDisabled = isLoading || isUsageBlocked;
+  const isGenerating = isStreaming || isWaiting;
 
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,15 +93,16 @@ export function ChatComposer({ className }: ChatComposerProps) {
       setIsDragOver(false);
 
       const files = Array.from(e.dataTransfer.files);
-      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
 
-      if (imageFiles.length > 0) {
-        const newImages = imageFiles.map((file) => ({
+      if (files.length > 0) {
+        const newFiles = files.map((file) => ({
           file,
-          previewUrl: URL.createObjectURL(file),
+          previewUrl: file.type.startsWith("image/")
+            ? URL.createObjectURL(file)
+            : "",
           tempId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         }));
-        addAttachedImages(newImages);
+        addAttachedImages(newFiles);
       }
     },
     [addAttachedImages],
@@ -137,15 +144,16 @@ export function ChatComposer({ className }: ChatComposerProps) {
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
-      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
 
-      if (imageFiles.length > 0) {
-        const newImages = imageFiles.map((file) => ({
+      if (files.length > 0) {
+        const newFiles = files.map((file) => ({
           file,
-          previewUrl: URL.createObjectURL(file),
+          previewUrl: file.type.startsWith("image/")
+            ? URL.createObjectURL(file)
+            : "",
           tempId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         }));
-        addAttachedImages(newImages);
+        addAttachedImages(newFiles);
       }
 
       // Reset input to allow selecting the same file again
@@ -173,7 +181,10 @@ export function ChatComposer({ className }: ChatComposerProps) {
 
   const canSend =
     !isDisabled &&
-    (input.trim() || attachedElement || attachedImages.length > 0);
+    (input.trim() ||
+      attachedElement ||
+      attachedImages.length > 0 ||
+      attachedFiles.length > 0);
 
   return (
     <div
@@ -191,7 +202,6 @@ export function ChatComposer({ className }: ChatComposerProps) {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
         multiple
         onChange={handleFileSelect}
         className="hidden"
@@ -217,6 +227,20 @@ export function ChatComposer({ className }: ChatComposerProps) {
               previewUrl={img.previewUrl}
               fileName={img.file.name}
               onRemove={() => removeAttachedImage(img.tempId)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Show attached files above input */}
+      {attachedFiles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {attachedFiles.map((file) => (
+            <AttachedFilePill
+              key={file.id}
+              filename={file.filename}
+              path={file.path}
+              onRemove={() => removeAttachedFile(file.id)}
             />
           ))}
         </div>
@@ -271,8 +295,8 @@ export function ChatComposer({ className }: ChatComposerProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="top">
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <Image className="w-4 h-4 mr-2" />
-                  Add Image
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add File
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -324,15 +348,26 @@ export function ChatComposer({ className }: ChatComposerProps) {
               />
             )}
 
-            {/* Send button */}
-            <Button
-              onClick={handleSend}
-              disabled={!canSend}
-              size="icon"
-              className="h-8 w-8 rounded-full"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+            {/* Send/Stop button */}
+            {isGenerating ? (
+              <Button
+                onClick={handleStopGeneration}
+                size="icon"
+                variant="destructive"
+                className="h-8 w-8 rounded-full"
+              >
+                <Square className="w-4 h-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSend}
+                disabled={!canSend}
+                size="icon"
+                className="h-8 w-8 rounded-full"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
       </div>

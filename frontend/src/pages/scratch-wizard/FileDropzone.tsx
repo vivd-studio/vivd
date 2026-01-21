@@ -33,7 +33,7 @@ function useDropzone(onFiles: (files: File[]) => void) {
       const dropped = Array.from(e.dataTransfer.files || []);
       if (dropped.length) onFiles(dropped);
     },
-    [onFiles]
+    [onFiles],
   );
 
   return { isDragging, onDragEnter, onDragLeave, onDragOver, onDrop };
@@ -45,6 +45,8 @@ type FileDropzoneProps = {
   files: File[];
   onAddFiles: (files: File[]) => void;
   onRemoveFile: (index: number) => void;
+  /** If true, only image files are accepted. Defaults to true. */
+  acceptOnlyImages?: boolean;
 };
 
 export function FileDropzone({
@@ -53,6 +55,7 @@ export function FileDropzone({
   files,
   onAddFiles,
   onRemoveFile,
+  acceptOnlyImages = true,
 }: FileDropzoneProps) {
   const { isDragging, onDragEnter, onDragLeave, onDragOver, onDrop } =
     useDropzone(onAddFiles);
@@ -79,7 +82,7 @@ export function FileDropzone({
         <input
           type="file"
           multiple
-          accept="image/*"
+          accept={acceptOnlyImages ? "image/*" : undefined}
           className="hidden"
           onChange={(e) => {
             const selectedFiles = Array.from(e.target.files || []);

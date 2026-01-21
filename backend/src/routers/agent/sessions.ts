@@ -6,6 +6,7 @@ import {
   listProjects,
   getSessionContent,
   deleteSession as deleteSessionFn,
+  abortSession as abortSessionFn,
   revertToUserMessage,
   unrevertSession,
   getSessionsStatus,
@@ -299,4 +300,34 @@ export const agentSessionProcedures = {
     // Only return models if there are multiple to choose from
     return models.length > 1 ? models : [];
   }),
+
+  /**
+   * Abort/stop an active session's generation.
+   */
+  abortSession: adminProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const targetVersion =
+        input.version ?? getCurrentVersion(input.projectSlug);
+      let directory: string;
+      if (targetVersion > 0) {
+        directory = getVersionDir(input.projectSlug, targetVersion);
+      } else {
+        directory = getProjectDir(input.projectSlug);
+      }
+
+      try {
+        await abortSessionFn(input.sessionId, directory);
+        return { success: true };
+      } catch (error: any) {
+        console.error("Failed to abort session:", error);
+        throw new Error(error.message || "Failed to abort session");
+      }
+    }),
 };

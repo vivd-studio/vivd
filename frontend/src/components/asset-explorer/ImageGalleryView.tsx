@@ -16,6 +16,7 @@ interface ImageGalleryViewProps {
   onAiEdit?: (item: AssetItem) => void;
   onDelete: (item: AssetItem) => void;
   onTextEdit: (path: string) => void;
+  onAddToChat?: (item: AssetItem) => void;
   isDragging: boolean;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -31,6 +32,7 @@ export function ImageGalleryView({
   onAiEdit,
   onDelete,
   onTextEdit,
+  onAddToChat,
   isDragging,
   onDragOver,
   onDragLeave,
@@ -104,30 +106,37 @@ export function ImageGalleryView({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <div className="grid grid-cols-2 gap-2">
+      {/* Masonry layout with 2 columns */}
+      <div className="columns-2 gap-2">
         {data.items.map((item) => (
-          <AssetItemCard
-            key={item.path}
-            item={item}
-            projectSlug={projectSlug}
-            version={version}
-            onClick={() => handleItemClick(item)}
-            onDelete={(e) => {
-              e.stopPropagation();
-              onDelete(item);
-            }}
-            onAiEdit={
-              canUseAiImages && item.type === "file" && item.isImage && onAiEdit
-                ? (e) => {
-                    e.stopPropagation();
-                    onAiEdit(item);
-                  }
-                : undefined
-            }
-            onDownload={
-              item.type === "file" ? (e) => handleDownload(item, e) : undefined
-            }
-          />
+          <div key={item.path} className="break-inside-avoid mb-2">
+            <AssetItemCard
+              item={item}
+              projectSlug={projectSlug}
+              version={version}
+              onClick={() => handleItemClick(item)}
+              onDelete={(e) => {
+                e.stopPropagation();
+                onDelete(item);
+              }}
+              onAiEdit={
+                canUseAiImages && item.type === "file" && item.isImage && onAiEdit
+                  ? (e) => {
+                      e.stopPropagation();
+                      onAiEdit(item);
+                    }
+                  : undefined
+              }
+              onDownload={
+                item.type === "file" ? (e) => handleDownload(item, e) : undefined
+              }
+              onAddToChat={
+                item.type === "file" && onAddToChat
+                  ? () => onAddToChat(item)
+                  : undefined
+              }
+            />
+          </div>
         ))}
       </div>
     </div>

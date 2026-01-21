@@ -13,6 +13,7 @@ import { trpc } from "@/lib/trpc";
 import {
   POLLING_BACKGROUND,
   POLLING_DEV_SERVER_STARTING,
+  POLLING_DEV_SERVER_KEEPALIVE,
 } from "@/app/config/polling";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useImageDropZone } from "./useImageDropZone";
@@ -372,8 +373,33 @@ export function PreviewProvider({
   // Mutation to stop dev server (available for explicit use, but not called on close)
   const { mutate: _stopDevServer } = trpc.project.stopDevServer.useMutation();
 
-  // Dev server cleanup is handled by the backend's idle timeout (5 minutes)
-  // This avoids restarting the server every time the panel is toggled
+  // Mutation to keep dev server alive while preview is open
+  const { mutate: keepAliveDevServer } =
+    trpc.project.keepAliveDevServer.useMutation();
+
+  // Keep dev server alive while preview is open by pinging every 2 minutes
+  // The backend idle timeout is 5 minutes, so 2 minutes gives us a safe margin
+  useEffect(() => {
+    if (
+      !projectSlug ||
+      previewMode !== "devserver" ||
+      devServerStatus !== "ready"
+    ) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      keepAliveDevServer({ slug: projectSlug, version: selectedVersion });
+    }, POLLING_DEV_SERVER_KEEPALIVE);
+
+    return () => clearInterval(interval);
+  }, [
+    projectSlug,
+    selectedVersion,
+    previewMode,
+    devServerStatus,
+    keepAliveDevServer,
+  ]);
 
   // Enable image drag-and-drop from Asset Explorer (disabled during text editing)
   useImageDropZone({
@@ -750,6 +776,13 @@ export function PreviewProvider({
   const handleRefresh = () => {
     setIframeLoading(true);
     setRefreshKey((prev) => prev + 1);
+    // Invalidate to restart dev server if it was shut down
+    if (projectSlug) {
+      utils.project.getPreviewInfo.invalidate({
+        slug: projectSlug,
+        version: selectedVersion,
+      });
+    }
   };
 
   // Element Selector Mode
