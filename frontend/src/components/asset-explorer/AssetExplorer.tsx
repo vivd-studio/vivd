@@ -267,11 +267,6 @@ export function AssetExplorer({
     setCurrentPath(path);
   };
 
-  const handleImagePreview = (url: string, item: AssetItem | FileTreeNode) => {
-    setSelectedImageUrl(url);
-    setSelectedImageItem(item);
-  };
-
   const handleDelete = (item: AssetItem | FileTreeNode) => {
     setPendingDeleteAsset(item);
   };
