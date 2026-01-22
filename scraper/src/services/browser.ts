@@ -18,9 +18,37 @@ const PROXY_USERNAME = process.env.PROXY_USERNAME;
 const PROXY_PASSWORD = process.env.PROXY_PASSWORD;
 const PROXY_ENABLED = !!PROXY_HOST;
 
+let browserIdCounter = 0;
+
+function log(message: string): void {
+  console.log(`[${new Date().toISOString()}] ${message}`);
+}
+
+/**
+ * Check if an error indicates a broken browser (protocol timeout, disconnected, etc.)
+ */
+export function isBrowserError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("protocol") ||
+    message.includes("timed out") ||
+    message.includes("navigation timeout") ||
+    message.includes("target closed") ||
+    message.includes("session closed") ||
+    message.includes("connection closed") ||
+    message.includes("browser disconnected") ||
+    message.includes("browser has disconnected") ||
+    message.includes("network.enable timed out") ||
+    message.includes("runtime.callfunctionon timed out") ||
+    message.includes("runtime.evaluate timed out")
+  );
+}
+
 interface BrowserInstance {
   browser: Browser;
   inUse: boolean;
+  id: number;
 }
 
 class BrowserPool {
@@ -32,20 +60,17 @@ class BrowserPool {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    console.log(
-      `Initializing browser pool (max ${MAX_BROWSERS} browsers, lazy spawn)...`,
-    );
+    log(`Initializing browser pool (max ${MAX_BROWSERS} browsers, lazy spawn)...`);
     if (PROXY_ENABLED) {
-      console.log(`Proxy enabled: ${PROXY_HOST}:${PROXY_PORT}`);
+      log(`Proxy enabled: ${PROXY_HOST}:${PROXY_PORT}`);
     }
 
     const browser = await this.launchBrowser();
-    this.pool.push({ browser, inUse: false });
+    const id = ++browserIdCounter;
+    this.pool.push({ browser, inUse: false, id });
 
     this.initialized = true;
-    console.log(
-      `Browser pool ready with 1 browser (will scale up to ${MAX_BROWSERS} on demand)`,
-    );
+    log(`Browser pool ready with 1 browser (will scale up to ${MAX_BROWSERS} on demand)`);
   }
 
   private async launchBrowser(): Promise<Browser> {
@@ -68,6 +93,8 @@ class BrowserPool {
     return puppeteerExtra.launch({
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      // Increase protocol timeout to prevent premature disconnects
+      protocolTimeout: 180000, // 3 minutes
       args,
     });
   }
@@ -77,12 +104,11 @@ class BrowserPool {
 
     this.spawning = true;
     try {
-      console.log(
-        `Spawning additional browser (${this.pool.length + 1}/${MAX_BROWSERS})...`,
-      );
+      log(`Spawning additional browser (${this.pool.length + 1}/${MAX_BROWSERS})...`);
       const browser = await this.launchBrowser();
-      this.pool.push({ browser, inUse: false });
-      console.log(`Browser pool now has ${this.pool.length} browsers`);
+      const id = ++browserIdCounter;
+      this.pool.push({ browser, inUse: false, id });
+      log(`Browser pool now has ${this.pool.length} browsers`);
 
       // If someone was waiting, give them the new browser
       const waiting = this.queue.shift();
@@ -91,6 +117,8 @@ class BrowserPool {
         instance.inUse = true;
         waiting(instance.browser);
       }
+    } catch (error) {
+      log(`Failed to spawn browser: ${error}`);
     } finally {
       this.spawning = false;
     }
@@ -103,6 +131,7 @@ class BrowserPool {
     const available = this.pool.find((b) => !b.inUse);
     if (available) {
       available.inUse = true;
+      log(`Acquired browser #${available.id}`);
       return available.browser;
     }
 
@@ -112,22 +141,61 @@ class BrowserPool {
     }
 
     // Wait for a browser to become available
+    log(`All browsers busy, waiting in queue (${this.queue.length + 1} waiting)...`);
     return new Promise((resolve) => {
       this.queue.push(resolve);
     });
   }
 
-  release(browser: Browser): void {
-    const instance = this.pool.find((b) => b.browser === browser);
-    if (instance) {
-      instance.inUse = false;
+  /**
+   * Release a browser back to the pool.
+   * If unhealthy=true, the browser will be closed and removed, and a new one spawned.
+   */
+  release(browser: Browser, unhealthy = false): void {
+    const instanceIndex = this.pool.findIndex((b) => b.browser === browser);
+    if (instanceIndex === -1) {
+      log("Warning: Tried to release unknown browser");
+      return;
+    }
 
-      // If someone is waiting, give them the browser
-      const waiting = this.queue.shift();
-      if (waiting) {
-        instance.inUse = true;
-        waiting(browser);
+    const instance = this.pool[instanceIndex];
+
+    if (unhealthy) {
+      log(`Browser #${instance.id} marked unhealthy, closing and removing from pool...`);
+      // Remove from pool first
+      this.pool.splice(instanceIndex, 1);
+      // Close browser in background (don't await, it might be stuck)
+      browser.close().catch((e) => log(`Error closing unhealthy browser: ${e}`));
+      log(`Browser pool now has ${this.pool.length} browsers after removal`);
+
+      // Spawn a replacement if we're under the max
+      if (this.pool.length < MAX_BROWSERS) {
+        this.spawnAdditionalBrowser();
       }
+
+      // If someone is waiting and we have an available browser, serve them
+      if (this.queue.length > 0) {
+        const availableBrowser = this.pool.find((b) => !b.inUse);
+        if (availableBrowser) {
+          const waiting = this.queue.shift();
+          if (waiting) {
+            availableBrowser.inUse = true;
+            waiting(availableBrowser.browser);
+          }
+        }
+      }
+      return;
+    }
+
+    // Normal release - mark as available
+    instance.inUse = false;
+    log(`Released browser #${instance.id}`);
+
+    // If someone is waiting, give them the browser
+    const waiting = this.queue.shift();
+    if (waiting) {
+      instance.inUse = true;
+      waiting(browser);
     }
   }
 
@@ -156,6 +224,17 @@ class BrowserPool {
     });
 
     return page;
+  }
+
+  /**
+   * Get pool stats for debugging/health checks
+   */
+  getStats(): { total: number; inUse: number; queued: number } {
+    return {
+      total: this.pool.length,
+      inUse: this.pool.filter((b) => b.inUse).length,
+      queued: this.queue.length,
+    };
   }
 }
 

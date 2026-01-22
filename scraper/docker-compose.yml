@@ -6,7 +6,8 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      - MAX_BROWSERS=4
+      - MAX_BROWSERS=${MAX_BROWSERS:-4}
+      - MAX_CONCURRENT_SCRAPES=${MAX_CONCURRENT_SCRAPES:-4}
       - PORT=3001
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { browserPool } from "../services/browser.js";
+import { browserPool, isBrowserError } from "../services/browser.js";
 import { captureReferenceScreenshot } from "../services/screenshot.js";
 import { log } from "../utils/logger.js";
 
@@ -37,10 +37,15 @@ screenshotRouter.post("/", async (req, res) => {
     log(`Screenshot capture completed: ${screenshots.length} successful`);
   } catch (error: any) {
     log(`Screenshot error: ${error.message}`);
+    const unhealthy = isBrowserError(error);
+    if (unhealthy) {
+      log(`Browser error detected, will mark browser as unhealthy`);
+    }
+    browserPool.release(browser, unhealthy);
     res
       .status(500)
       .json({ error: error.message || "Screenshot capture failed" });
-  } finally {
-    browserPool.release(browser);
+    return;
   }
+  browserPool.release(browser);
 });

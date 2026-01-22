@@ -2,8 +2,8 @@
   "name": "vivd-root",
   "private": true,
   "scripts": {
-    "test": "concurrently \"npm run test --prefix backend\" \"npm run test --prefix frontend\"",
-    "test:run": "npm run test:run --prefix backend && npm run test:run --prefix frontend",
+    "test": "concurrently \"npm run test --prefix backend\" \"npm run test --prefix frontend\" \"npm run test --prefix scraper\"",
+    "test:run": "npm run test:run --prefix backend && npm run test:run --prefix frontend && npm run test:run --prefix scraper",
     "gen:client": "cd backend && npm run generate:spec && cd ../frontend && npm run generate:client",
     "db:push": "cd backend && npm run db:push",
     "db:studio": "cd backend && npm run db:studio",

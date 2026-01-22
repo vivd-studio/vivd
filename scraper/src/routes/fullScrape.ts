@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as crypto from "crypto";
-import { browserPool } from "../services/browser.js";
+import { browserPool, isBrowserError } from "../services/browser.js";
 import { scrapePage } from "../services/scraper.js";
 import {
   takeMainPageScreenshot,
@@ -195,8 +195,14 @@ fullScrapeRouter.post("/", async (req, res) => {
     log(`Full scrape completed for: ${url}`);
   } catch (error: any) {
     log(`Full scrape error: ${error.message}`);
+    // Mark browser as unhealthy if it was a protocol/timeout error
+    const unhealthy = isBrowserError(error);
+    if (unhealthy) {
+      log(`Browser error detected, will mark browser as unhealthy`);
+    }
+    browserPool.release(browser, unhealthy);
     res.status(500).json({ error: error.message || "Scrape failed" });
-  } finally {
-    browserPool.release(browser);
+    return;
   }
+  browserPool.release(browser);
 });

@@ -4,25 +4,41 @@ import { screenshotRouter } from "./routes/screenshot.js";
 import { scrapePageRouter } from "./routes/scrapePage.js";
 import { findLinksRouter } from "./routes/findLinks.js";
 import { authMiddleware } from "./middleware/auth.js";
+import {
+  concurrencyLimiter,
+  getConcurrencyStats,
+} from "./middleware/concurrency.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const MAX_CONCURRENT_SCRAPES = parseInt(
+  process.env.MAX_CONCURRENT_SCRAPES || "2",
+  10
+);
 
 app.use(express.json({ limit: "100mb" }));
 
-// Health check - no auth required
+// Health check - no auth required, includes concurrency stats
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  const stats = getConcurrencyStats();
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    concurrency: stats,
+  });
 });
 
-// Protected routes
-app.use("/full-scrape", authMiddleware, fullScrapeRouter);
-app.use("/screenshot", authMiddleware, screenshotRouter);
-app.use("/scrape-page", authMiddleware, scrapePageRouter);
-app.use("/find-links", authMiddleware, findLinksRouter);
+// Protected routes with concurrency limiting for heavy operations
+// Full scrape and screenshot are the most resource-intensive
+app.use("/full-scrape", authMiddleware, concurrencyLimiter, fullScrapeRouter);
+app.use("/screenshot", authMiddleware, concurrencyLimiter, screenshotRouter);
+app.use("/scrape-page", authMiddleware, concurrencyLimiter, scrapePageRouter);
+// find-links is lighter weight but still uses a browser
+app.use("/find-links", authMiddleware, concurrencyLimiter, findLinksRouter);
 
 app.listen(PORT, () => {
   console.log(`Scraper service listening on port ${PORT}`);
+  console.log(`Max concurrent scrapes: ${MAX_CONCURRENT_SCRAPES}`);
   console.log(
     `API Key protection: ${
       process.env.SCRAPER_API_KEY ? "enabled" : "DISABLED (no key set)"

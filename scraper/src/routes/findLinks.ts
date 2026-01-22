@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { browserPool } from "../services/browser.js";
+import { browserPool, isBrowserError } from "../services/browser.js";
 import { log } from "../utils/logger.js";
 import { handleCookieBanner } from "../utils/cookie.js";
 
@@ -132,9 +132,14 @@ findLinksRouter.post("/", async (req, res) => {
     log(`Find-links completed for: ${url} (${result.length} links)`);
   } catch (error: any) {
     log(`Find-links error: ${error.message}`);
+    const unhealthy = isBrowserError(error);
+    if (unhealthy) {
+      log(`Browser error detected, will mark browser as unhealthy`);
+    }
+    browserPool.release(browser, unhealthy);
     res.status(500).json({ error: error.message || "Find-links failed" });
-  } finally {
-    browserPool.release(browser);
+    return;
   }
+  browserPool.release(browser);
 });
 

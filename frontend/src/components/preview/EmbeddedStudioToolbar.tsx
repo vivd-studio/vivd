@@ -46,13 +46,17 @@ import {
   History,
   Rocket,
   Maximize2,
+  X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { usePreview } from "./PreviewContext";
 import { DEVICE_PRESETS } from "./types";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { useState } from "react";
-import { VersionHistoryPanel, VersionSelector } from "@/components/projects/versioning";
+import {
+  VersionHistoryPanel,
+  VersionSelector,
+} from "@/components/projects/versioning";
 import { PublishDialog } from "@/components/publish/PublishDialog";
 import { trpc } from "@/lib/trpc";
 import { POLLING_BACKGROUND } from "@/app/config/polling";
@@ -98,18 +102,19 @@ export function EmbeddedStudioToolbar() {
     setAssetsOpen,
     chatOpen,
     setChatOpen,
+    handleClose,
   } = usePreview();
 
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
     { slug: projectSlug!, version: selectedVersion },
-    { enabled: !!projectSlug, refetchInterval: POLLING_BACKGROUND }
+    { enabled: !!projectSlug, refetchInterval: POLLING_BACKGROUND },
   );
   const hasGitChanges = changesData?.hasChanges || false;
 
   // Get publish status
   const { data: publishStatus } = trpc.project.publishStatus.useQuery(
     { slug: projectSlug! },
-    { enabled: !!projectSlug }
+    { enabled: !!projectSlug },
   );
   const isPublished = publishStatus?.isPublished || false;
 
@@ -247,7 +252,7 @@ export function EmbeddedStudioToolbar() {
                 const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                 window.open(
                   `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
-                  "_blank"
+                  "_blank",
                 );
               }}
             >
@@ -622,7 +627,7 @@ export function EmbeddedStudioToolbar() {
                       const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
                       window.open(
                         `${baseUrl}/vivd-studio/api/download/${projectSlug}/${selectedVersion}`,
-                        "_blank"
+                        "_blank",
                       );
                     }}
                   >
@@ -663,7 +668,12 @@ export function EmbeddedStudioToolbar() {
           {projectSlug && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  asChild
+                >
                   <Link to={`/vivd-studio/projects/${projectSlug}/fullscreen`}>
                     <Maximize2 className="w-4 h-4" />
                   </Link>
@@ -672,6 +682,21 @@ export function EmbeddedStudioToolbar() {
               <TooltipContent>Fullscreen</TooltipContent>
             </Tooltip>
           )}
+
+          {/* Close Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={handleClose}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Close</TooltipContent>
+          </Tooltip>
         </div>
       </header>
 

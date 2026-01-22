@@ -6,7 +6,7 @@
 export interface PageValidationResult {
   isValid: boolean;
   error?: {
-    type: "cloudflare" | "access_denied" | "not_found" | "error_page" | "empty_content" | "bot_detection";
+    type: "cloudflare" | "access_denied" | "not_found" | "error_page" | "bot_detection";
     message: string;
   };
 }
@@ -97,17 +97,6 @@ const BOT_DETECTION_PATTERNS = [
   /suspected bot/i,
 ];
 
-/**
- * Minimum content length to consider a page as having meaningful content.
- * Pages with less text than this (after cleanup) are likely error pages.
- */
-const MIN_MEANINGFUL_CONTENT_LENGTH = 200;
-
-/**
- * Maximum percentage of the page that can be navigation/boilerplate
- * for very short pages (helps catch pages that only have header/footer)
- */
-const MAX_BOILERPLATE_RATIO = 0.8;
 
 function matchesAnyPattern(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
@@ -188,32 +177,9 @@ export function validatePageContent(
     };
   }
 
-  // Check for empty or minimal content
-  if (normalizedText.length < MIN_MEANINGFUL_CONTENT_LENGTH) {
-    return {
-      isValid: false,
-      error: {
-        type: "empty_content",
-        message: "The page appears to be empty or contains very little content. The website may require JavaScript or is blocking scrapers.",
-      },
-    };
-  }
-
-  // Additional check: if content is short and looks like just navigation
-  // This catches cases where only header/footer was captured
-  if (normalizedText.length < 500) {
-    const lines = normalizedText.split("\n").filter((l) => l.trim().length > 0);
-    const shortLines = lines.filter((l) => l.trim().length < 30);
-    if (lines.length > 0 && shortLines.length / lines.length > MAX_BOILERPLATE_RATIO) {
-      return {
-        isValid: false,
-        error: {
-          type: "empty_content",
-          message: "The page content appears to be only navigation or boilerplate. The main content may not have loaded.",
-        },
-      };
-    }
-  }
+  // Note: We intentionally do NOT check for empty/minimal text content.
+  // Some legitimate pages are image-heavy with text in images rather than DOM.
+  // The scraper still captures screenshots and images which can be processed.
 
   return { isValid: true };
 }

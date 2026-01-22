@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { browserPool } from "../services/browser.js";
+import { browserPool, isBrowserError } from "../services/browser.js";
 import { scrapePage } from "../services/scraper.js";
 import { log } from "../utils/logger.js";
 
@@ -32,8 +32,13 @@ scrapePageRouter.post("/", async (req, res) => {
     log(`Single page scrape completed for: ${url}`);
   } catch (error: any) {
     log(`Single page scrape error: ${error.message}`);
+    const unhealthy = isBrowserError(error);
+    if (unhealthy) {
+      log(`Browser error detected, will mark browser as unhealthy`);
+    }
+    browserPool.release(browser, unhealthy);
     res.status(500).json({ error: error.message || "Scrape failed" });
-  } finally {
-    browserPool.release(browser);
+    return;
   }
+  browserPool.release(browser);
 });
