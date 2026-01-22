@@ -11,6 +11,13 @@ puppeteerExtra.use(stealth);
 
 const MAX_BROWSERS = parseInt(process.env.MAX_BROWSERS || "2", 10);
 
+// Proxy configuration (optional - only used when PROXY_HOST is set)
+const PROXY_HOST = process.env.PROXY_HOST;
+const PROXY_PORT = process.env.PROXY_PORT || "823";
+const PROXY_USERNAME = process.env.PROXY_USERNAME;
+const PROXY_PASSWORD = process.env.PROXY_PASSWORD;
+const PROXY_ENABLED = !!PROXY_HOST;
+
 interface BrowserInstance {
   browser: Browser;
   inUse: boolean;
@@ -25,29 +32,43 @@ class BrowserPool {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    console.log(`Initializing browser pool (max ${MAX_BROWSERS} browsers, lazy spawn)...`);
+    console.log(
+      `Initializing browser pool (max ${MAX_BROWSERS} browsers, lazy spawn)...`,
+    );
+    if (PROXY_ENABLED) {
+      console.log(`Proxy enabled: ${PROXY_HOST}:${PROXY_PORT}`);
+    }
 
     const browser = await this.launchBrowser();
     this.pool.push({ browser, inUse: false });
 
     this.initialized = true;
-    console.log(`Browser pool ready with 1 browser (will scale up to ${MAX_BROWSERS} on demand)`);
+    console.log(
+      `Browser pool ready with 1 browser (will scale up to ${MAX_BROWSERS} on demand)`,
+    );
   }
 
   private async launchBrowser(): Promise<Browser> {
+    const args = [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--disable-gpu",
+      // Prevent Chromium from auto-upgrading HTTP navigations to HTTPS
+      // (breaks HTTP-only sites and shows up as net::ERR_BLOCKED_BY_CLIENT).
+      "--disable-features=HttpsFirstBalancedMode,HttpsUpgrades",
+    ];
+
+    // Add proxy server arg if configured
+    if (PROXY_ENABLED) {
+      args.push(`--proxy-server=${PROXY_HOST}:${PROXY_PORT}`);
+    }
+
     return puppeteerExtra.launch({
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
-        "--disable-gpu",
-        // Prevent Chromium from auto-upgrading HTTP navigations to HTTPS
-        // (breaks HTTP-only sites and shows up as net::ERR_BLOCKED_BY_CLIENT).
-        "--disable-features=HttpsFirstBalancedMode,HttpsUpgrades",
-      ],
+      args,
     });
   }
 
@@ -56,7 +77,9 @@ class BrowserPool {
 
     this.spawning = true;
     try {
-      console.log(`Spawning additional browser (${this.pool.length + 1}/${MAX_BROWSERS})...`);
+      console.log(
+        `Spawning additional browser (${this.pool.length + 1}/${MAX_BROWSERS})...`,
+      );
       const browser = await this.launchBrowser();
       this.pool.push({ browser, inUse: false });
       console.log(`Browser pool now has ${this.pool.length} browsers`);
@@ -111,6 +134,14 @@ class BrowserPool {
   async createPage(browser: Browser): Promise<Page> {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
+
+    // Authenticate with proxy if configured
+    if (PROXY_ENABLED && PROXY_USERNAME && PROXY_PASSWORD) {
+      await page.authenticate({
+        username: PROXY_USERNAME,
+        password: PROXY_PASSWORD,
+      });
+    }
 
     // Set extra headers that many sites check for
     await page.setExtraHTTPHeaders({

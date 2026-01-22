@@ -10,3 +10,8 @@ services:
       - PORT=3001
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      # Residential proxy config (optional - set in .env to enable)
+      - PROXY_HOST=${PROXY_HOST:-}
+      - PROXY_PORT=${PROXY_PORT:-823}
+      - PROXY_USERNAME=${PROXY_USERNAME:-}
+      - PROXY_PASSWORD=${PROXY_PASSWORD:-}
