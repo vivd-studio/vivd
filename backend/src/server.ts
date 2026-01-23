@@ -15,6 +15,7 @@ import {
 
 import { serverManager } from "./opencode";
 import { devServerManager } from "./devserver";
+import { detectProjectType } from "./devserver/projectType";
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
@@ -26,6 +27,7 @@ import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
 import { projectMember } from "./db/schema";
 import { eq } from "drizzle-orm";
+import { buildService } from "./services/BuildService";
 
 // ESM dirname replacement
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -236,10 +238,174 @@ app.use(
   createProtectedProjectsStaticMiddleware(),
   express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" }),
 );
-app.use(
-  "/vivd-studio/api/preview",
-  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" }),
-);
+// Security whitelist for external preview (unauthenticated access)
+const ALLOWED_EXTENSIONS = new Set([
+  ".html",
+  ".htm",
+  ".css",
+  ".js",
+  ".mjs",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".ico",
+  ".avif",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".otf",
+  ".mp4",
+  ".webm",
+  ".mp3",
+  ".ogg",
+  ".wav",
+  ".pdf",
+  ".txt",
+  ".xml",
+]);
+
+const BLOCKED_PATHS = [
+  ".git",
+  ".vivd",
+  ".env",
+  "node_modules",
+  "package.json",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "AGENTS.md",
+  "tsconfig.json",
+  "astro.config",
+  "vite.config",
+];
+
+function isAllowedPreviewFile(filePath: string): boolean {
+  // Block hidden files (except root path)
+  if (filePath.startsWith(".") && filePath !== "") {
+    return false;
+  }
+
+  // Block known sensitive paths
+  for (const blocked of BLOCKED_PATHS) {
+    if (filePath.includes(blocked)) {
+      return false;
+    }
+  }
+
+  // Check path segments for hidden files/folders
+  const segments = filePath.split("/");
+  for (const segment of segments) {
+    if (segment.startsWith(".") && segment !== ".well-known") {
+      return false;
+    }
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  // Allow directories (no extension) or whitelisted extensions
+  return ext === "" || ALLOWED_EXTENSIONS.has(ext);
+}
+
+// Secure external preview endpoint (unauthenticated but filtered)
+app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
+  const { slug, version } = req.params;
+
+  // req.url contains the path relative to the mount point (e.g. "/" or "/index.html")
+  // If mounted at /vivd-studio/api/preview/:slug/v:version, then:
+  // - Request to .../v1/          -> req.url = "/"
+  // - Request to .../v1/foo.html  -> req.url = "/foo.html"
+  const rawFilePath = req.url.startsWith("/") ? req.url.slice(1) : req.url;
+  const filePath = rawFilePath || "index.html";
+
+  // Security: check whitelist
+  if (!isAllowedPreviewFile(filePath)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  const versionNumber = Number.parseInt(version, 10);
+  if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+    return res.status(400).json({ error: "Invalid version" });
+  }
+
+  const versionDir = getVersionDir(slug, versionNumber);
+
+  if (!fs.existsSync(versionDir)) {
+    return res.status(404).json({ error: "Project not found" });
+  }
+
+  const config = detectProjectType(versionDir);
+
+  if (config.framework === "astro") {
+    // For Astro projects, serve from dist/ if build is ready
+    const buildPath = buildService.getBuildPath(versionDir);
+    if (!buildPath) {
+      const status = buildService.getBuildStatus(versionDir);
+      return res.status(503).json({
+        error: "Build in progress",
+        status: status?.status || "pending",
+      });
+    }
+
+    // Serve from build output
+    let resolvedPath: string;
+    try {
+      resolvedPath = safeJoin(buildPath, filePath);
+    } catch {
+      return res.status(400).json({ error: "Invalid path" });
+    }
+
+    // Try the exact path, then with index.html for directories
+    if (fs.existsSync(resolvedPath)) {
+      if (fs.statSync(resolvedPath).isDirectory()) {
+        resolvedPath = path.join(resolvedPath, "index.html");
+      }
+    } else if (!path.extname(resolvedPath)) {
+      // Try appending .html for clean URLs
+      const withHtml = resolvedPath + ".html";
+      if (fs.existsSync(withHtml)) {
+        resolvedPath = withHtml;
+      }
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    // Rewrite asset URLs in HTML files to include the preview base path
+    if (resolvedPath.endsWith(".html")) {
+      const content = fs.readFileSync(resolvedPath, "utf-8");
+      const basePath = `/vivd-studio/api/preview/${slug}/v${version}`;
+      const rewritten = rewriteRootAssetUrlsInText(content, basePath);
+      res.setHeader("Content-Type", "text/html");
+      return res.send(rewritten);
+    }
+
+    return res.sendFile(resolvedPath);
+  }
+
+  // Static HTML: serve from version dir (filtered)
+  let resolvedPath: string;
+  try {
+    resolvedPath = safeJoin(versionDir, filePath);
+  } catch {
+    return res.status(400).json({ error: "Invalid path" });
+  }
+
+  // Try the exact path, then with index.html for directories
+  if (fs.existsSync(resolvedPath)) {
+    if (fs.statSync(resolvedPath).isDirectory()) {
+      resolvedPath = path.join(resolvedPath, "index.html");
+    }
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  return res.sendFile(resolvedPath);
+});
 
 // Dev server proxy for framework projects (Astro, Vite, etc.)
 app.use(

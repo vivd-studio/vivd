@@ -7,6 +7,23 @@ import fs from "fs";
 import sizeOf from "image-size";
 import { safeJoin } from "../../fs/safePaths";
 import { getMimeType, isImageFile, isTextFile } from "./shared";
+import ignore from "ignore";
+
+/**
+ * Load and parse .gitignore file from a version directory.
+ * Returns an ignore instance that can check if paths are ignored.
+ */
+function loadGitignore(versionDir: string) {
+  const ig = ignore();
+  const gitignorePath = path.join(versionDir, ".gitignore");
+
+  if (fs.existsSync(gitignorePath)) {
+    const content = fs.readFileSync(gitignorePath, "utf-8");
+    ig.add(content);
+  }
+
+  return ig;
+}
 
 export const assetsFilesystemProcedures = {
   /**
@@ -41,17 +58,28 @@ export const assetsFilesystemProcedures = {
 
       const entries = fs.readdirSync(targetDir, { withFileTypes: true });
 
+      // Dotfiles to show in the asset explorer
+      const VISIBLE_DOTFILES = [".vivd", ".gitignore", ".env.example"];
+
+      // Load gitignore for checking ignored status
+      const ig = loadGitignore(versionDir);
+
       const items = entries
-        .filter((entry) => !entry.name.startsWith(".") || entry.name === ".vivd") // Hide hidden files except .vivd
+        .filter((entry) => !entry.name.startsWith(".") || VISIBLE_DOTFILES.includes(entry.name))
         .map((entry) => {
           const fullPath = path.join(targetDir, entry.name);
           const stats = fs.statSync(fullPath);
+          const itemRelPath = path.join(relativePath, entry.name);
+          // For directories, add trailing slash for gitignore matching
+          const gitignorePath = entry.isDirectory() ? itemRelPath + "/" : itemRelPath;
+          const isIgnored = ig.ignores(gitignorePath);
 
           if (entry.isDirectory()) {
             return {
               name: entry.name,
               type: "folder" as const,
-              path: path.join(relativePath, entry.name),
+              path: itemRelPath,
+              isIgnored,
             };
           } else {
             const isImage = isImageFile(entry.name);
@@ -73,10 +101,11 @@ export const assetsFilesystemProcedures = {
             return {
               name: entry.name,
               type: "file" as const,
-              path: path.join(relativePath, entry.name),
+              path: itemRelPath,
               size: stats.size,
               mimeType: getMimeType(entry.name),
               isImage,
+              isIgnored,
               width,
               height,
             };
@@ -371,7 +400,14 @@ export const assetsFilesystemProcedures = {
         size?: number;
         mimeType?: string;
         isImage?: boolean;
+        isIgnored?: boolean;
       }
+
+      // Dotfiles to show in the tree view
+      const VISIBLE_DOTFILES_TREE = [".vivd", ".gitignore", ".env.example"];
+
+      // Load gitignore for checking ignored status
+      const ig = loadGitignore(versionDir);
 
       const buildTree = (dir: string, relativeTo: string): TreeNode[] => {
         if (!fs.existsSync(dir)) return [];
@@ -380,10 +416,13 @@ export const assetsFilesystemProcedures = {
         const nodes: TreeNode[] = [];
 
         for (const entry of entries) {
-          if (entry.name.startsWith(".") && entry.name !== ".vivd") continue; // Skip hidden files except .vivd
+          if (entry.name.startsWith(".") && !VISIBLE_DOTFILES_TREE.includes(entry.name)) continue;
 
           const fullPath = path.join(dir, entry.name);
           const relPath = path.join(relativeTo, entry.name);
+          // For directories, add trailing slash for gitignore matching
+          const gitignorePath = entry.isDirectory() ? relPath + "/" : relPath;
+          const isIgnored = ig.ignores(gitignorePath);
 
           if (entry.isDirectory()) {
             nodes.push({
@@ -391,6 +430,7 @@ export const assetsFilesystemProcedures = {
               type: "folder",
               path: relPath,
               children: buildTree(fullPath, relPath),
+              isIgnored,
             });
           } else {
             const stats = fs.statSync(fullPath);
@@ -402,6 +442,7 @@ export const assetsFilesystemProcedures = {
               size: stats.size,
               mimeType: getMimeType(entry.name),
               isImage,
+              isIgnored,
             });
           }
         }

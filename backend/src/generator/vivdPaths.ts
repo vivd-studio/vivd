@@ -33,10 +33,13 @@ export function getVivdInternalFilesPath(
   return path.join(getVivdInternalFilesDir(versionDir), filename);
 }
 
+// Dotfiles that are allowed in asset paths
+const ALLOWED_DOTFILES = [VIVD_DIRNAME, ".gitignore", ".env.example"];
+
 export function hasDotSegment(relativePath: string): boolean {
   const normalized = relativePath.replace(/\\/g, "/");
   const segments = normalized.split("/").filter(Boolean);
-  return segments.some((seg) => seg.startsWith(".") && seg !== VIVD_DIRNAME);
+  return segments.some((seg) => seg.startsWith(".") && !ALLOWED_DOTFILES.includes(seg));
 }
 
 function ensureDir(dir: string) {

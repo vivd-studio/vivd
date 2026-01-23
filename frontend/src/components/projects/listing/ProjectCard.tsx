@@ -17,6 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Copy,
+  Check,
   Plus,
   Loader2,
   RotateCcw,
@@ -109,6 +111,16 @@ export function ProjectCard({
     project.currentVersion || 1,
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyPreview = () => {
+    const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
+    const absoluteUrl = `${window.location.origin}${shareablePath}`;
+
+    navigator.clipboard.writeText(absoluteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Sync selectedVersion with project.currentVersion when it changes
   // This ensures we switch to the new version when one is created
@@ -239,10 +251,7 @@ export function ProjectCard({
                 ))}
             </div>
             {!isCompleted && (
-              <Badge
-                variant={statusColor}
-                className="shrink-0"
-              >
+              <Badge variant={statusColor} className="shrink-0">
                 {statusLabel}
               </Badge>
             )}
@@ -342,6 +351,17 @@ export function ProjectCard({
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Open in new tab
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyPreview}
+                disabled={!isCompleted}
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 mr-2" />
+                ) : (
+                  <Copy className="w-4 h-4 mr-2" />
+                )}
+                {copied ? "Copied!" : "Copy preview link"}
               </DropdownMenuItem>
               {isUrlProject && project.url && (
                 <DropdownMenuItem

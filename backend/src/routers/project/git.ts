@@ -2,6 +2,8 @@ import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { gitService } from "../../services/GitService";
+import { buildService } from "../../services/BuildService";
+import { detectProjectType } from "../../devserver/projectType";
 import fs from "fs";
 
 export const projectGitProcedures = {
@@ -30,6 +32,16 @@ export const projectGitProcedures = {
         slug,
         version,
       });
+
+      // Trigger build for Astro projects (fire-and-forget)
+      if (!result.noChanges) {
+        const config = detectProjectType(versionDir);
+        if (config.framework === "astro") {
+          buildService.triggerBuild(versionDir, result.hash).catch((err) => {
+            console.error("[Build] Background build failed:", err);
+          });
+        }
+      }
 
       if (result.noChanges) {
         return {

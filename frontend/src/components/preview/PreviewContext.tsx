@@ -776,9 +776,9 @@ export function PreviewProvider({
   const fullUrl = baseUrl || "";
 
   const handleCopy = () => {
-    const absoluteUrl = fullUrl.startsWith("http")
-      ? fullUrl
-      : `${window.location.origin}${fullUrl}`;
+    // Always copy the external preview URL, not the internal dev server URL
+    const shareablePath = `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/`;
+    const absoluteUrl = `${window.location.origin}${shareablePath}`;
 
     navigator.clipboard.writeText(absoluteUrl);
     setCopied(true);
