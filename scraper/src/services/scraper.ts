@@ -38,7 +38,7 @@ export async function scrapePage(
   const imageRequestIds = new Map<string, { requestId: string; mimeType: string }>();
   const responseImageBodies = new Map<string, { buffer: Buffer; mimeType: string }>();
   const responseImageUrls = new Set<string>();
-  const MAX_PRELOADED_IMAGE_BODIES = isMainPage ? 250 : 150;
+  const MAX_PRELOADED_IMAGE_BODIES = isMainPage ? 150 : 100;
   let onResponse: ((response: HTTPResponse) => void) | null = null;
   const pendingResponseBodyTasks = new Set<Promise<void>>();
 

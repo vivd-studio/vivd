@@ -19,6 +19,7 @@ interface DevServerInfo {
 
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes (shorter than opencode's 10 min)
 const DEV_SERVER_PORT_START = 5100; // Avoid conflicts with common ports
+const MAX_DEV_SERVERS = 5; // Maximum concurrent dev servers
 
 const isDebugEnabled = process.env.DEVSERVER_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
@@ -101,9 +102,17 @@ class DevServerManager {
       return { url: null, status: "error", error: "Not a dev server project" };
     }
 
+    // Enforce maximum server limit
+    if (this.servers.size >= MAX_DEV_SERVERS) {
+      console.log(
+        `[DevServer] At max server limit (${MAX_DEV_SERVERS}), stopping oldest idle server...`
+      );
+      this.stopOldestIdleServer();
+    }
+
     const port = this.nextPort++;
     console.log(
-      `[DevServer] Starting dev server for ${projectDir} on port ${port} with base ${basePath}`
+      `[DevServer] Starting dev server for ${projectDir} on port ${port} with base ${basePath} (${this.servers.size + 1}/${MAX_DEV_SERVERS})`
     );
 
     // Create initial entry with installing status
@@ -371,6 +380,27 @@ class DevServerManager {
         console.log(`[DevServer] Stopping idle dev server for ${dir}`);
         this.stopDevServer(dir);
       }
+    }
+  }
+
+  /**
+   * Stop the oldest idle server to make room for a new one.
+   * Called when we hit MAX_DEV_SERVERS limit.
+   */
+  private stopOldestIdleServer(): void {
+    let oldestDir: string | null = null;
+    let oldestActivity = Infinity;
+
+    for (const [dir, server] of this.servers.entries()) {
+      if (server.lastActivity < oldestActivity) {
+        oldestActivity = server.lastActivity;
+        oldestDir = dir;
+      }
+    }
+
+    if (oldestDir) {
+      console.log(`[DevServer] Evicting oldest server for ${oldestDir}`);
+      this.stopDevServer(oldestDir);
     }
   }
 

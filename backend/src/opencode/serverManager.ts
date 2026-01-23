@@ -1,5 +1,6 @@
-import { spawn, ChildProcess } from "node:child_process";
+import { spawn, ChildProcess, execSync } from "node:child_process";
 import { createOpencodeClient, OpencodeClient } from "@opencode-ai/sdk";
+import * as path from "node:path";
 
 interface OpencodeServerInfo {
   url: string;
@@ -9,6 +10,7 @@ interface OpencodeServerInfo {
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_SERVERS = 10; // Maximum concurrent opencode servers
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
 const debugLog = (...args: unknown[]) => {
   if (debugEnabled) {
@@ -28,10 +30,46 @@ class OpencodeServerManager {
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
+    // Kill any orphaned opencode serve processes from previous runs
+    this.killOrphanedProcesses();
+
     // Start cleanup interval
     this.cleanupInterval = setInterval(() => {
       this.cleanupIdleServers();
     }, 60 * 1000); // Check every minute
+  }
+
+  /**
+   * Kill any orphaned opencode serve processes from previous server runs.
+   * This handles the case where the backend restarts but child processes survive.
+   */
+  private killOrphanedProcesses(): void {
+    try {
+      const result = execSync(
+        'pgrep -f "opencode serve" 2>/dev/null || true',
+        { encoding: "utf-8" },
+      );
+      const pids = result
+        .trim()
+        .split("\n")
+        .filter((p) => p);
+
+      if (pids.length > 0) {
+        console.log(
+          `[OpenCode] Killing ${pids.length} orphaned process(es) from previous run...`,
+        );
+        for (const pid of pids) {
+          try {
+            process.kill(parseInt(pid, 10), "SIGTERM");
+          } catch {
+            // Process may have already exited
+          }
+        }
+      }
+    } catch (e) {
+      // pgrep not available or failed - that's fine
+      debugLog("Could not check for orphaned processes:", e);
+    }
   }
 
   /**
@@ -56,8 +94,18 @@ class OpencodeServerManager {
       return server.url;
     }
 
+    // Enforce maximum server limit - clean up oldest idle server if at limit
+    if (this.servers.size >= MAX_SERVERS) {
+      console.log(
+        `[OpenCode] At max server limit (${MAX_SERVERS}), stopping oldest idle server...`,
+      );
+      this.stopOldestIdleServer();
+    }
+
     const port = this.nextPort++;
-    console.log(`[OpenCode] Spawning server for ${dirKey} on port ${port}`);
+    console.log(
+      `[OpenCode] Spawning server for ${dirKey} on port ${port} (${this.servers.size + 1}/${MAX_SERVERS})`,
+    );
 
     const startPromise = this.spawnServer(dirKey, port)
       .then((server) => {
@@ -97,7 +145,8 @@ class OpencodeServerManager {
   }
 
   private normalizeProjectDir(projectDir: string): string {
-    return projectDir.replace(/[\\/]+$/, "");
+    // Use path.resolve for canonical absolute path, then remove trailing slashes
+    return path.resolve(projectDir).replace(/[\\/]+$/, "");
   }
 
   private async spawnServer(
@@ -199,6 +248,35 @@ class OpencodeServerManager {
           // ignore
         }
         this.servers.delete(dir);
+      }
+    }
+  }
+
+  /**
+   * Stop the oldest idle server to make room for a new one.
+   * Called when we hit MAX_SERVERS limit.
+   */
+  private stopOldestIdleServer(): void {
+    let oldestDir: string | null = null;
+    let oldestActivity = Infinity;
+
+    for (const [dir, server] of this.servers.entries()) {
+      if (server.lastActivity < oldestActivity) {
+        oldestActivity = server.lastActivity;
+        oldestDir = dir;
+      }
+    }
+
+    if (oldestDir) {
+      const server = this.servers.get(oldestDir);
+      if (server) {
+        console.log(`[OpenCode] Evicting oldest server for ${oldestDir}`);
+        try {
+          server.process.kill();
+        } catch {
+          // ignore
+        }
+        this.servers.delete(oldestDir);
       }
     }
   }
