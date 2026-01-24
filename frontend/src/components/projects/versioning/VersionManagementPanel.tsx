@@ -64,7 +64,7 @@ export function VersionManagementPanel({
       setVersionToDelete(null);
       setConfirmationText("");
       utils.project.list.invalidate();
-      utils.project.getDetails.invalidate({ slug: projectSlug });
+      utils.project.status.invalidate({ slug: projectSlug });
       onVersionDeleted?.();
     },
     onError: (error) => {
@@ -101,28 +101,28 @@ export function VersionManagementPanel({
     switch (status) {
       case "completed":
         return (
-          <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+          <Badge
+            variant="outline"
+            className="text-green-600 border-green-200 bg-green-50"
+          >
             Completed
           </Badge>
         );
       case "failed":
-        return (
-          <Badge variant="destructive">
-            Failed
-          </Badge>
-        );
+        return <Badge variant="destructive">Failed</Badge>;
       default:
-        return (
-          <Badge variant="secondary">
-            {status}
-          </Badge>
-        );
+        return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
-  const canDeleteVersion = (version: VersionInfo): { canDelete: boolean; reason?: string } => {
+  const canDeleteVersion = (
+    version: VersionInfo,
+  ): { canDelete: boolean; reason?: string } => {
     if (version.version === publishedVersion) {
-      return { canDelete: false, reason: "This version is currently published" };
+      return {
+        canDelete: false,
+        reason: "This version is currently published",
+      };
     }
     if (versions.length <= 1) {
       return { canDelete: false, reason: "Cannot delete the only version" };
@@ -130,7 +130,8 @@ export function VersionManagementPanel({
     return { canDelete: true };
   };
 
-  const expectedConfirmation = versionToDelete !== null ? `v${versionToDelete}` : "";
+  const expectedConfirmation =
+    versionToDelete !== null ? `v${versionToDelete}` : "";
 
   return (
     <>
@@ -145,7 +146,8 @@ export function VersionManagementPanel({
 
           <div className="mt-6 flex flex-col h-[calc(100vh-120px)]">
             <p className="text-sm text-muted-foreground mb-4">
-              Delete old versions to free up storage. Published versions and the last remaining version cannot be deleted.
+              Delete old versions to free up storage. Published versions and the
+              last remaining version cannot be deleted.
             </p>
 
             <ScrollArea className="flex-1 -mr-4 pr-4">
@@ -183,7 +185,10 @@ export function VersionManagementPanel({
                               Created {formatDate(version.createdAt)}
                             </p>
                             {version.errorMessage && (
-                              <p className="text-xs text-destructive mt-1 truncate" title={version.errorMessage}>
+                              <p
+                                className="text-xs text-destructive mt-1 truncate"
+                                title={version.errorMessage}
+                              >
                                 {version.errorMessage}
                               </p>
                             )}
@@ -217,8 +222,9 @@ export function VersionManagementPanel({
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <span className="block">
-                This will permanently delete version {versionToDelete} of "{projectSlug}".
-                All files, history, and data for this version will be removed.
+                This will permanently delete version {versionToDelete} of "
+                {projectSlug}". All files, history, and data for this version
+                will be removed.
               </span>
               <span className="block font-medium text-foreground">
                 This action cannot be undone.
@@ -228,7 +234,11 @@ export function VersionManagementPanel({
 
           <div className="py-2">
             <Label htmlFor="confirm-delete" className="text-sm font-medium">
-              Type <span className="font-mono bg-muted px-1 rounded">{expectedConfirmation}</span> to confirm
+              Type{" "}
+              <span className="font-mono bg-muted px-1 rounded">
+                {expectedConfirmation}
+              </span>{" "}
+              to confirm
             </Label>
             <Input
               id="confirm-delete"
