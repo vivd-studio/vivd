@@ -316,7 +316,11 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   // If mounted at /vivd-studio/api/preview/:slug/v:version, then:
   // - Request to .../v1/          -> req.url = "/"
   // - Request to .../v1/foo.html  -> req.url = "/foo.html"
-  const rawFilePath = req.url.startsWith("/") ? req.url.slice(1) : req.url;
+  // Strip query string before processing (cache-busting params like ?_vivd=0)
+  const urlWithoutQuery = req.url.split("?")[0];
+  const rawFilePath = urlWithoutQuery.startsWith("/")
+    ? urlWithoutQuery.slice(1)
+    : urlWithoutQuery;
   const filePath = rawFilePath || "index.html";
 
   // Security: check whitelist
