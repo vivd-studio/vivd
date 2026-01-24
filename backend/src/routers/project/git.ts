@@ -3,6 +3,7 @@ import { projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { gitService } from "../../services/GitService";
 import { buildService } from "../../services/BuildService";
+import { thumbnailService } from "../../services/ThumbnailService";
 import { detectProjectType } from "../../devserver/projectType";
 import fs from "fs";
 
@@ -34,11 +35,18 @@ export const projectGitProcedures = {
       });
 
       // Trigger build for Astro projects (fire-and-forget)
+      // For non-Astro, generate thumbnail immediately (debounced)
       if (!result.noChanges) {
         const config = detectProjectType(versionDir);
         if (config.framework === "astro") {
           buildService.triggerBuild(versionDir, result.hash).catch((err) => {
             console.error("[Build] Background build failed:", err);
+          });
+          // Thumbnail will be generated after build completes (see BuildService)
+        } else {
+          // For static projects, generate thumbnail (debounced)
+          thumbnailService.generateThumbnail(versionDir, slug, version).catch((err) => {
+            console.error("[Thumbnail] Warning:", err.message);
           });
         }
       }

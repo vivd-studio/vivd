@@ -39,6 +39,7 @@ import {
   migrateVivdInternalArtifactsInVersion,
   VIVD_INTERNAL_ARTIFACT_FILENAMES,
 } from "../../generator/vivdPaths";
+import { thumbnailService } from "../../services/ThumbnailService";
 import { applyProjectTemplateFiles } from "../../generator/templateFiles";
 import type { GenerationSource } from "../../generator/flows/types";
 
@@ -723,4 +724,116 @@ export const projectMaintenanceProcedures = {
       errors,
     };
   }),
+
+  /**
+   * Admin maintenance: regenerate thumbnails for all completed project versions.
+   * Processes versions sequentially to avoid overwhelming the scraper service.
+   * Only regenerates for versions with status "completed".
+   */
+  regenerateAllThumbnails: ownerProcedure
+    .input(
+      z
+        .object({
+          // If true, only regenerate missing thumbnails. If false, regenerate all.
+          onlyMissing: z.boolean().optional(),
+        })
+        .optional()
+    )
+    .mutation(async ({ input }) => {
+      const projectsDir = getProjectsDir();
+      const onlyMissing = input?.onlyMissing ?? true;
+
+      if (!fs.existsSync(projectsDir)) {
+        return {
+          success: true,
+          projectsScanned: 0,
+          versionsScanned: 0,
+          thumbnailsGenerated: 0,
+          thumbnailsSkipped: 0,
+          errors: [] as Array<{ slug: string; version: number; error: string }>,
+        };
+      }
+
+      let projectsScanned = 0;
+      let versionsScanned = 0;
+      let thumbnailsGenerated = 0;
+      let thumbnailsSkipped = 0;
+      const errors: Array<{ slug: string; version: number; error: string }> = [];
+
+      const projectDirs = fs
+        .readdirSync(projectsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+
+      for (const slug of projectDirs) {
+        projectsScanned++;
+
+        const manifest = getManifest(slug);
+        if (!manifest) continue;
+
+        const projectDir = getProjectDir(slug);
+        if (!fs.existsSync(projectDir)) continue;
+
+        const versionFolders = fs
+          .readdirSync(projectDir, { withFileTypes: true })
+          .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
+          .map((d) => d.name);
+
+        for (const folder of versionFolders) {
+          const versionNumber = Number(folder.slice(1));
+          if (!Number.isFinite(versionNumber) || versionNumber <= 0) continue;
+
+          versionsScanned++;
+
+          const versionDir = path.join(projectDir, folder);
+          const versionData = getVersionData(slug, versionNumber);
+
+          // Only generate thumbnails for completed versions
+          if (versionData?.status !== "completed") {
+            thumbnailsSkipped++;
+            continue;
+          }
+
+          // Check if thumbnail already exists (when onlyMissing is true)
+          if (onlyMissing) {
+            const thumbnailPath = getVivdInternalFilesPath(
+              versionDir,
+              "thumbnail.webp"
+            );
+            if (fs.existsSync(thumbnailPath)) {
+              thumbnailsSkipped++;
+              continue;
+            }
+          }
+
+          try {
+            // Use immediate generation (no debouncing) for batch operations
+            await thumbnailService.generateThumbnailImmediate(
+              versionDir,
+              slug,
+              versionNumber
+            );
+            thumbnailsGenerated++;
+            console.log(
+              `[Thumbnail] Regenerated ${slug} v${versionNumber} (${thumbnailsGenerated} done)`
+            );
+          } catch (e) {
+            errors.push({
+              slug,
+              version: versionNumber,
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+      }
+
+      return {
+        success: true,
+        projectsScanned,
+        versionsScanned,
+        thumbnailsGenerated,
+        thumbnailsSkipped,
+        errors,
+      };
+    }),
 };

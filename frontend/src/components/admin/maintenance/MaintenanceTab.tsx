@@ -19,7 +19,9 @@ type MaintenanceAction =
   | "migrateProcessFiles"
   | "templateAddMissing"
   | "templateOverwrite"
-  | "fixGitignore";
+  | "fixGitignore"
+  | "thumbnailsMissing"
+  | "thumbnailsAll";
 
 export function MaintenanceTab() {
   const [confirmAction, setConfirmAction] = useState<MaintenanceAction | null>(
@@ -69,6 +71,22 @@ export function MaintenanceTab() {
     },
   });
 
+  const thumbnailsMutation = trpc.project.regenerateAllThumbnails.useMutation({
+    onSuccess: (data) => {
+      toast.success("Thumbnail regeneration completed", {
+        description:
+          data.thumbnailsGenerated > 0
+            ? `Generated ${data.thumbnailsGenerated} thumbnails (${data.thumbnailsSkipped} skipped)`
+            : `All ${data.versionsScanned} versions already have thumbnails`,
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Thumbnail regeneration failed", {
+        description: err?.message || "Unknown error",
+      });
+    },
+  });
+
   const confirmConfig = (() => {
     switch (confirmAction) {
       case "migrateProcessFiles":
@@ -106,6 +124,24 @@ export function MaintenanceTab() {
           confirmLabel: "Fix Gitignore",
           isPending: fixGitignoreMutation.isPending,
           onConfirm: () => fixGitignoreMutation.mutate(),
+        };
+      case "thumbnailsMissing":
+        return {
+          title: "Generate missing thumbnails?",
+          description:
+            "This will generate thumbnails for all completed project versions that don't have one. This may take a while as each thumbnail is processed sequentially.",
+          confirmLabel: "Generate Missing",
+          isPending: thumbnailsMutation.isPending,
+          onConfirm: () => thumbnailsMutation.mutate({ onlyMissing: true }),
+        };
+      case "thumbnailsAll":
+        return {
+          title: "Regenerate all thumbnails?",
+          description:
+            "This will regenerate thumbnails for ALL completed project versions, replacing existing ones. This may take a while as each thumbnail is processed sequentially.",
+          confirmLabel: "Regenerate All",
+          isPending: thumbnailsMutation.isPending,
+          onConfirm: () => thumbnailsMutation.mutate({ onlyMissing: false }),
         };
       default:
         return null;
@@ -260,6 +296,62 @@ export function MaintenanceTab() {
                 {fixGitignoreMutation.data.errors.length > 5 ? (
                   <div className="text-muted-foreground mt-2">
                     …and {fixGitignoreMutation.data.errors.length - 5} more
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Generate or regenerate project card thumbnails. Thumbnails are
+              captured from the preview URL and stored in{" "}
+              <code>.vivd/thumbnail.webp</code>. This operation processes
+              versions sequentially to avoid overloading the scraper.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={() => setConfirmAction("thumbnailsMissing")}
+                disabled={thumbnailsMutation.isPending}
+              >
+                {thumbnailsMutation.isPending ? (
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                ) : null}
+                Generate Missing Thumbnails
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmAction("thumbnailsAll")}
+                disabled={thumbnailsMutation.isPending}
+              >
+                {thumbnailsMutation.isPending ? (
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                ) : null}
+                Regenerate All Thumbnails
+              </Button>
+              {thumbnailsMutation.data ? (
+                <span className="text-sm text-muted-foreground">
+                  Generated {thumbnailsMutation.data.thumbnailsGenerated}/
+                  {thumbnailsMutation.data.versionsScanned} versions
+                  {thumbnailsMutation.data.errors.length
+                    ? ` (${thumbnailsMutation.data.errors.length} error(s))`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {thumbnailsMutation.data?.errors.length ? (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium mb-2">Errors</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {thumbnailsMutation.data.errors.slice(0, 5).map((e, idx) => (
+                    <li key={idx}>
+                      {e.slug}/v{e.version}: {e.error}
+                    </li>
+                  ))}
+                </ul>
+                {thumbnailsMutation.data.errors.length > 5 ? (
+                  <div className="text-muted-foreground mt-2">
+                    …and {thumbnailsMutation.data.errors.length - 5} more
                   </div>
                 ) : null}
               </div>

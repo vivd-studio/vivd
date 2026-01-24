@@ -3,6 +3,18 @@ import * as path from "path";
 import { execSync } from "child_process";
 import { detectProjectType, hasNodeModules } from "../devserver/projectType";
 import { gitService } from "./GitService";
+import { thumbnailService } from "./ThumbnailService";
+
+/**
+ * Parse slug and version from a version directory path.
+ * Path format: .../projects/<slug>/v<N>/...
+ */
+function parseVersionDir(versionDir: string): { slug: string; version: number } | null {
+  const normalized = versionDir.replace(/\\/g, "/").replace(/\/+$/, "");
+  const match = normalized.match(/\/([^/]+)\/v(\d+)$/);
+  if (!match) return null;
+  return { slug: match[1], version: parseInt(match[2], 10) };
+}
 
 export interface BuildInfo {
   status: "pending" | "building" | "ready" | "error";
@@ -213,6 +225,16 @@ class BuildService {
       console.log(
         `[Build] Build completed for ${versionDir} (commit ${commitHash.substring(0, 7)})`
       );
+
+      // Generate thumbnail after successful build
+      const parsed = parseVersionDir(versionDir);
+      if (parsed) {
+        thumbnailService
+          .generateThumbnail(versionDir, parsed.slug, parsed.version)
+          .catch((err) => {
+            console.error("[Thumbnail] Post-build warning:", err.message);
+          });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Build] Build failed for ${versionDir}:`, msg);

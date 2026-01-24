@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, type SyntheticEvent } from "react";
+import { forwardRef, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { ELEMENT_SELECTOR_SCRIPT } from "../chat/ElementSelector";
 
 interface PreviewIframeProps {
@@ -9,6 +9,10 @@ interface PreviewIframeProps {
   onLoad?: () => void;
   selectorMode?: boolean;
 }
+
+// Retry configuration for dev server proxy errors
+const MAX_RETRY_ATTEMPTS = 5;
+const INITIAL_RETRY_DELAY_MS = 300;
 
 // Scrollbar style injection for the iframe
 const injectScrollbarStyles = (
@@ -154,16 +158,65 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
     },
     ref
   ) {
+    // Track retry attempts - resets when refreshKey changes (intentional refresh)
+    const retryCountRef = useRef(0);
+    const lastRefreshKeyRef = useRef(refreshKey);
+    const [internalRefreshKey, setInternalRefreshKey] = useState(0);
+
+    // Reset retry count when refreshKey changes (user-initiated refresh)
+    useEffect(() => {
+      if (refreshKey !== lastRefreshKeyRef.current) {
+        retryCountRef.current = 0;
+        lastRefreshKeyRef.current = refreshKey;
+        setInternalRefreshKey(0);
+      }
+    }, [refreshKey]);
+
     const cacheBustedSrc = src
-      ? `${src}${src.includes("?") ? "&" : "?"}_vivd=${refreshKey}`
+      ? `${src}${src.includes("?") ? "&" : "?"}_vivd=${refreshKey}_${internalRefreshKey}`
       : src;
 
     const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
+      const iframe = e.currentTarget;
+
+      // Check if the iframe loaded with a proxy error
+      // This happens when switching commits or restoring changes while dev server rebuilds
+      try {
+        const doc = iframe.contentDocument;
+        if (doc) {
+          const bodyText = doc.body?.textContent?.trim() || "";
+          // Check for the specific proxy error JSON response
+          if (
+            bodyText.includes('"error"') &&
+            (bodyText.includes("Dev server proxy error") ||
+              bodyText.includes("Dev server is starting"))
+          ) {
+            // Only retry if we haven't exceeded max attempts
+            if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
+              retryCountRef.current++;
+              // Exponential backoff: 300ms, 600ms, 1200ms, 2400ms, 4800ms
+              const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCountRef.current - 1);
+              setTimeout(() => {
+                setInternalRefreshKey((prev) => prev + 1);
+              }, delay);
+              // Don't call onLoad yet - we're retrying
+              return;
+            }
+            // Max retries exceeded - let the error show
+          }
+        }
+      } catch {
+        // Cross-origin iframe or other access error - ignore and proceed normally
+      }
+
+      // Reset retry count on successful load
+      retryCountRef.current = 0;
+
       // Some previewed sites ship strict CSP which blocks inline script/style injection.
       // Only inject editor helpers when we actually need them (selector mode).
       if (selectorMode) {
-        injectScrollbarStyles(e.currentTarget, isMobile);
-        injectHighlightListener(e.currentTarget);
+        injectScrollbarStyles(iframe, isMobile);
+        injectHighlightListener(iframe);
       }
       onLoad?.();
     };
@@ -180,7 +233,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 
     return (
       <iframe
-        key={refreshKey}
+        key={`${refreshKey}_${internalRefreshKey}`}
         ref={ref}
         src={cacheBustedSrc}
         className={`w-full h-full border-0 ${className}`}

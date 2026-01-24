@@ -3,6 +3,7 @@ import { fullScrapeRouter } from "./routes/fullScrape.js";
 import { screenshotRouter } from "./routes/screenshot.js";
 import { scrapePageRouter } from "./routes/scrapePage.js";
 import { findLinksRouter } from "./routes/findLinks.js";
+import { thumbnailRouter } from "./routes/thumbnail.js";
 import { authMiddleware } from "./middleware/auth.js";
 import {
   concurrencyLimiter,
@@ -35,6 +36,8 @@ app.use("/screenshot", authMiddleware, concurrencyLimiter, screenshotRouter);
 app.use("/scrape-page", authMiddleware, concurrencyLimiter, scrapePageRouter);
 // find-links is lighter weight but still uses a browser
 app.use("/find-links", authMiddleware, concurrencyLimiter, findLinksRouter);
+// thumbnail endpoint for project card previews
+app.use("/thumbnail", authMiddleware, concurrencyLimiter, thumbnailRouter);
 
 app.listen(PORT, () => {
   console.log(`Scraper service listening on port ${PORT}`);

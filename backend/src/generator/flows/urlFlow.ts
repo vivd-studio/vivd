@@ -6,6 +6,7 @@ import { log } from "../logger";
 import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
 import { ScrapeBlockedError } from "../scraper-client";
+import { thumbnailService } from "../../services/ThumbnailService";
 
 export interface UrlFlowInput {
   url: string;
@@ -50,4 +51,9 @@ export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
   } catch (gitError) {
     log(`[Git] Warning: Failed to initialize/commit git: ${gitError}`);
   }
+
+  // Generate thumbnail (fire-and-forget)
+  thumbnailService
+    .generateThumbnailImmediate(ctx.outputDir, ctx.slug, ctx.version)
+    .catch((err) => log(`[Thumbnail] Warning: ${err.message}`));
 }

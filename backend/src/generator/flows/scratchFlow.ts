@@ -6,6 +6,7 @@ import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
 import { scraperClient } from "../scraper-client";
 import { analyzeImages } from "../image_analyzer";
+import { thumbnailService } from "../../services/ThumbnailService";
 
 export interface ScratchAssetInput {
   filename: string;
@@ -135,4 +136,9 @@ export async function runScratchFlow(
   } catch (gitError) {
     log(`[Git] Warning: Failed to initialize/commit git: ${gitError}`);
   }
+
+  // Generate thumbnail (fire-and-forget)
+  thumbnailService
+    .generateThumbnailImmediate(ctx.outputDir, ctx.slug, ctx.version)
+    .catch((err) => log(`[Thumbnail] Warning: ${err.message}`));
 }

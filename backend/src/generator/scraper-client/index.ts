@@ -58,6 +58,10 @@ interface FindLinksResponse {
   }>;
 }
 
+interface ThumbnailResponse {
+  thumbnail: string;
+}
+
 async function fetchWithRetry<T>(
   url: string,
   options: RequestInit,
@@ -268,5 +272,26 @@ export const scraperClient = {
     );
 
     return response.links || [];
+  },
+
+  /**
+   * Captures a thumbnail screenshot of a URL and returns base64 WebP.
+   */
+  async captureThumbnail(
+    url: string,
+    width = 640,
+    height = 400,
+  ): Promise<string> {
+    log(`[ScraperClient] Requesting thumbnail: ${url} (${width}x${height})`);
+
+    const response = await fetchWithRetry<ThumbnailResponse>(
+      `${SCRAPER_URL}/thumbnail`,
+      {
+        method: "POST",
+        body: JSON.stringify({ url, width, height }),
+      },
+    );
+
+    return response.thumbnail;
   },
 };

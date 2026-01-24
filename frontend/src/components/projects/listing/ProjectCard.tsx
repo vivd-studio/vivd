@@ -62,6 +62,7 @@ export interface Project {
   versions?: VersionInfo[];
   publishedDomain?: string | null;
   publishedVersion?: number | null;
+  thumbnailUrl?: string | null;
 }
 
 interface ProjectCardProps {
@@ -287,9 +288,20 @@ export function ProjectCard({
             </div>
           )}
         </CardHeader>
-        <CardContent className="pb-1.5 px-4 grow flex items-center justify-center">
+        <CardContent className="pb-1.5 px-4 grow flex flex-col">
+          {isCompleted && project.thumbnailUrl && (
+            <div className="w-full aspect-[16/10] rounded-md overflow-hidden bg-muted mb-2">
+              <img
+                src={project.thumbnailUrl}
+                alt={`${project.slug} preview`}
+                className="w-full h-full object-cover object-top"
+                loading="lazy"
+              />
+            </div>
+          )}
+
           {isProcessing && (
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground grow">
               <div className="flex items-center gap-3">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="text-sm font-medium">{statusLabel}...</span>
@@ -319,7 +331,7 @@ export function ProjectCard({
           )}
 
           {isFailed && (
-            <div className="text-sm text-center text-destructive space-y-1">
+            <div className="text-sm text-center text-destructive space-y-1 flex flex-col items-center justify-center grow">
               <div className="font-medium">Generation failed</div>
               {selectedVersionInfo?.errorMessage && (
                 <div className="text-xs text-muted-foreground">

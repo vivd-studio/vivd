@@ -9,6 +9,7 @@ export const VIVD_INTERNAL_ARTIFACT_FILENAMES = [
   "image-files-description.txt",
   "screenshot.png",
   "header_screenshot.png",
+  "thumbnail.webp",
 ] as const;
 
 export type VivdInternalArtifactFilename =

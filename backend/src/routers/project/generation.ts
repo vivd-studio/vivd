@@ -16,6 +16,7 @@ import {
   getProjectsDir,
   PROCESSING_STATUSES,
 } from "../../generator/versionUtils";
+import { getVivdInternalFilesPath } from "../../generator/vivdPaths";
 import { createGenerationContext } from "../../generator/core/context";
 import { runScratchFlow } from "../../generator/flows/scratchFlow";
 import { validateConfig } from "../../generator/config";
@@ -633,6 +634,14 @@ export const projectGenerationProcedures = {
           // Get publish info for this project
           const publishInfo = publishedSites.get(projectSlug);
 
+          // Check if thumbnail exists
+          const versionDir = getVersionDir(projectSlug, currentVersion);
+          const thumbnailPath = getVivdInternalFilesPath(
+            versionDir,
+            "thumbnail.webp"
+          );
+          const hasThumbnail = fs.existsSync(thumbnailPath);
+
           return {
             slug: projectSlug,
             status: versionData?.status || "unknown",
@@ -647,6 +656,10 @@ export const projectGenerationProcedures = {
             // Add publish info
             publishedDomain: publishInfo?.domain ?? null,
             publishedVersion: publishInfo?.projectVersion ?? null,
+            // Add thumbnail URL
+            thumbnailUrl: hasThumbnail
+              ? `/vivd-studio/api/projects/${projectSlug}/v${currentVersion}/.vivd/thumbnail.webp`
+              : null,
           };
         })
         .filter(
