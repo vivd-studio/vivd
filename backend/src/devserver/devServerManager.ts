@@ -427,6 +427,21 @@ class DevServerManager {
   }
 
   /**
+   * Stop all dev servers whose directory starts with the given prefix.
+   * Used when deleting an entire project (stops all version servers).
+   */
+  stopByProjectPrefix(projectDirPrefix: string): number {
+    let stopped = 0;
+    for (const dir of this.servers.keys()) {
+      if (dir.startsWith(projectDirPrefix)) {
+        this.stopDevServer(dir);
+        stopped++;
+      }
+    }
+    return stopped;
+  }
+
+  /**
    * Get the number of active dev servers.
    */
   get serverCount(): number {

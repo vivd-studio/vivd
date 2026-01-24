@@ -636,6 +636,14 @@ export function ChatProvider({
       },
     );
 
+  // Force refetch messages when switching to a session
+  // This ensures we get fresh data even if the session completed while we were away
+  useEffect(() => {
+    if (selectedSessionId) {
+      refetchMessages();
+    }
+  }, [selectedSessionId, refetchMessages]);
+
   const shouldSubscribeToSessionEvents =
     !!selectedSessionId &&
     (isWaiting ||
@@ -1254,6 +1262,7 @@ export function ChatProvider({
     // Clear streaming state to prevent previous session data from appearing
     setIsStreaming(false);
     setIsWaiting(false);
+    isWaitingForAgent.current = false;
     setStreamingParts([]);
     // Clear any error from previous session
     setSessionError(null);

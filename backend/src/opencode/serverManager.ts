@@ -310,6 +310,45 @@ class OpencodeServerManager {
   }
 
   /**
+   * Stop all servers whose directory starts with the given prefix.
+   * Used when deleting an entire project (stops all version servers).
+   */
+  stopByProjectPrefix(projectDirPrefix: string): number {
+    const normalizedPrefix = this.normalizeProjectDir(projectDirPrefix);
+    let stopped = 0;
+    for (const [dir, server] of this.servers.entries()) {
+      if (dir.startsWith(normalizedPrefix)) {
+        console.log(`[OpenCode] Stopping server for ${dir} (project deletion)`);
+        try {
+          server.process.kill();
+        } catch {
+          // ignore
+        }
+        this.servers.delete(dir);
+        stopped++;
+      }
+    }
+    return stopped;
+  }
+
+  /**
+   * Stop server for a specific directory.
+   */
+  stopServer(projectDir: string): void {
+    const normalizedDir = this.normalizeProjectDir(projectDir);
+    const server = this.servers.get(normalizedDir);
+    if (server) {
+      console.log(`[OpenCode] Stopping server for ${normalizedDir}`);
+      try {
+        server.process.kill();
+      } catch {
+        // ignore
+      }
+      this.servers.delete(normalizedDir);
+    }
+  }
+
+  /**
    * Get the number of active servers.
    */
   get serverCount(): number {

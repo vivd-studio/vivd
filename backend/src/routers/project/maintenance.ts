@@ -16,10 +16,16 @@ import {
   migrateProjectIfNeeded,
   getProjectsDir,
   touchProjectUpdatedAt,
+  deleteVersion as deleteVersionUtil,
 } from "../../generator/versionUtils";
 import path from "path";
 import fs from "fs";
 import { publishService } from "../../services/PublishService";
+import { db } from "../../db";
+import { projectMember, publishedSite } from "../../db/schema";
+import { eq, and } from "drizzle-orm";
+import { devServerManager } from "../../devserver/devServerManager";
+import { serverManager as opencodeServerManager } from "../../opencode/serverManager";
 import {
   applyHtmlPatches,
   type HtmlPatch,
@@ -560,6 +566,22 @@ export const projectMaintenanceProcedures = {
         );
       }
 
+      // Delete project_member records from database
+      await db.delete(projectMember).where(eq(projectMember.projectSlug, slug));
+      console.log(`[Delete] Removed project_member records for: ${slug}`);
+
+      // Stop any running dev servers for this project (all versions)
+      const devServersStopped = devServerManager.stopByProjectPrefix(projectDir);
+      if (devServersStopped > 0) {
+        console.log(`[Delete] Stopped ${devServersStopped} dev server(s) for: ${slug}`);
+      }
+
+      // Stop any running OpenCode servers for this project (all versions)
+      const opencodeStopped = opencodeServerManager.stopByProjectPrefix(projectDir);
+      if (opencodeStopped > 0) {
+        console.log(`[Delete] Stopped ${opencodeStopped} OpenCode server(s) for: ${slug}`);
+      }
+
       // Delete the entire project directory
       fs.rmSync(projectDir, { recursive: true, force: true });
       console.log(`[Delete] Permanently deleted project: ${slug}`);
@@ -568,6 +590,87 @@ export const projectMaintenanceProcedures = {
         success: true,
         slug,
         message: `Project "${slug}" has been permanently deleted.`,
+      };
+    }),
+
+  /**
+   * Delete a specific version of a project.
+   * Requires typing "v{N}" to confirm deletion.
+   * Cannot delete published versions or the only remaining version.
+   */
+  deleteVersion: adminProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        confirmationText: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version, confirmationText } = input;
+
+      // Safety check: confirmation text must match "v{N}"
+      const expectedConfirmation = `v${version}`;
+      if (confirmationText !== expectedConfirmation) {
+        throw new Error(
+          `Confirmation text must be "${expectedConfirmation}". Deletion aborted.`
+        );
+      }
+
+      const projectDir = getProjectDir(slug);
+      const versionDir = getVersionDir(slug, version);
+
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project not found");
+      }
+
+      if (!fs.existsSync(versionDir)) {
+        throw new Error(`Version ${version} not found`);
+      }
+
+      // Check if this version is published
+      const publishedVersions = await db
+        .select()
+        .from(publishedSite)
+        .where(
+          and(
+            eq(publishedSite.projectSlug, slug),
+            eq(publishedSite.projectVersion, version)
+          )
+        )
+        .limit(1);
+
+      if (publishedVersions.length > 0) {
+        throw new Error(
+          `Cannot delete version ${version} because it is currently published to "${publishedVersions[0].domain}". Please unpublish first.`
+        );
+      }
+
+      // Check if this is the only version
+      const manifest = getManifest(slug);
+      if (!manifest || manifest.versions.length <= 1) {
+        throw new Error(
+          "Cannot delete the only remaining version. Delete the entire project instead."
+        );
+      }
+
+      // Stop any running dev servers for this version
+      devServerManager.stopDevServer(versionDir);
+      console.log(`[DeleteVersion] Stopped dev server for: ${slug}/v${version}`);
+
+      // Stop any running OpenCode servers for this version
+      opencodeServerManager.stopServer(versionDir);
+      console.log(`[DeleteVersion] Stopped OpenCode server for: ${slug}/v${version}`);
+
+      // Delete the version using the utility function
+      deleteVersionUtil(slug, version);
+      console.log(`[DeleteVersion] Permanently deleted version: ${slug}/v${version}`);
+
+      return {
+        success: true,
+        slug,
+        version,
+        message: `Version ${version} of "${slug}" has been permanently deleted.`,
       };
     }),
 

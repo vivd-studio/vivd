@@ -348,8 +348,8 @@ export function ChatComposer({ className }: ChatComposerProps) {
               />
             )}
 
-            {/* Send/Stop button */}
-            {isGenerating ? (
+            {/* Stop button - only shown when generating */}
+            {isGenerating && (
               <Button
                 onClick={handleStopGeneration}
                 size="icon"
@@ -358,16 +358,17 @@ export function ChatComposer({ className }: ChatComposerProps) {
               >
                 <Square className="w-4 h-4" />
               </Button>
-            ) : (
-              <Button
-                onClick={handleSend}
-                disabled={!canSend}
-                size="icon"
-                className="h-8 w-8 rounded-full"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
             )}
+
+            {/* Send button - always visible */}
+            <Button
+              onClick={handleSend}
+              disabled={!canSend}
+              size="icon"
+              className="h-8 w-8 rounded-full"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </div>

@@ -27,11 +27,13 @@ import {
   MoreVertical,
   Download,
   ExternalLink,
+  Settings2,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { VersionSelector } from "../versioning/VersionSelector";
+import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,6 +114,7 @@ export function ProjectCard({
     project.currentVersion || 1,
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopyPreview = () => {
@@ -238,6 +241,7 @@ export function ProjectCard({
                     triggerTitle={`Click to select from ${totalVersions} versions`}
                     align="start"
                     label="Select Version"
+                    onManageVersions={() => setShowVersionManagement(true)}
                   />
                 ) : (
                   <VersionSelector
@@ -398,6 +402,12 @@ export function ProjectCard({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                onClick={() => setShowVersionManagement(true)}
+              >
+                <Settings2 className="w-4 h-4 mr-2" />
+                Manage versions
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={() => onDelete(project.slug)}
                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
               >
@@ -456,6 +466,14 @@ export function ProjectCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <VersionManagementPanel
+        open={showVersionManagement}
+        onOpenChange={setShowVersionManagement}
+        projectSlug={project.slug}
+        versions={versions}
+        publishedVersion={project.publishedVersion}
+      />
     </>
   );
 }

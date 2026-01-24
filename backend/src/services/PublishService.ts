@@ -5,6 +5,7 @@ import { publishedSite } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { gitService } from "./GitService";
 import { buildService } from "./BuildService";
+import { thumbnailService } from "./ThumbnailService";
 import { getVersionDir } from "../generator/versionUtils";
 import { detectProjectType } from "../devserver/projectType";
 import type { GitHubSyncResult } from "./GitService";
@@ -189,6 +190,18 @@ export class PublishService {
     } else {
       // For static/non-Astro projects: copy the entire version directory
       this.copyDirectory(versionDir, publishedPath);
+    }
+
+    // Generate thumbnail for the published version (includes snapshot)
+    try {
+      await thumbnailService.generateThumbnailImmediate(
+        versionDir,
+        projectSlug,
+        version
+      );
+    } catch (err) {
+      // Log but don't fail publish if thumbnail generation fails
+      console.error(`[Publish] Thumbnail generation failed:`, err);
     }
 
     // Generate Caddy config for this domain

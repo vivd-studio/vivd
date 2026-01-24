@@ -5,14 +5,11 @@ import {
   getVivdInternalFilesPath,
 } from "../generator/vivdPaths";
 
-const BACKEND_PORT = process.env.PORT || 3000;
-// In Docker, the scraper needs to reach the backend via the service name
-// INTERNAL_BACKEND_URL can be set to override, otherwise we detect Docker
-const INTERNAL_BACKEND_URL =
-  process.env.INTERNAL_BACKEND_URL ||
-  (process.env.SCRAPER_URL?.includes("scraper:")
-    ? `http://backend:${BACKEND_PORT}`
-    : `http://localhost:${BACKEND_PORT}`);
+// Base URL for the scraper to reach this backend's preview endpoint
+// In production, use the public DOMAIN. In development, fall back to localhost.
+const PREVIEW_BASE_URL = process.env.DOMAIN
+  ? `https://${process.env.DOMAIN}`
+  : `http://localhost:${process.env.PORT || 3000}`;
 const DEBOUNCE_MS = 5000; // 5 second debounce window
 
 /**
@@ -91,8 +88,8 @@ class ThumbnailService {
       return;
     }
 
-    // Construct preview URL using internal backend URL (works in Docker)
-    const previewUrl = `${INTERNAL_BACKEND_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
+    // Construct preview URL that the scraper can reach
+    const previewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
 
     console.log(`[Thumbnail] Generating for ${slug} v${version}...`);
 

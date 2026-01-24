@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, Layers } from "lucide-react";
+import { Check, ChevronDown, Layers, Settings2 } from "lucide-react";
 import type { MouseEventHandler, ReactNode } from "react";
 
 type VersionStatus = "completed" | "failed" | "unknown" | string;
@@ -29,6 +29,7 @@ interface VersionSelectorProps {
   triggerTitle?: string;
   label?: string;
   align?: "start" | "center" | "end";
+  onManageVersions?: () => void;
 }
 
 function defaultStatusMarker(version: VersionSelectorVersion) {
@@ -60,6 +61,7 @@ export function VersionSelector({
   triggerTitle,
   label = "Select Version",
   align = "start",
+  onManageVersions,
 }: VersionSelectorProps) {
   const hasMultipleVersions = versions.length > 1;
 
@@ -107,6 +109,15 @@ export function VersionSelector({
               : null}
           </DropdownMenuItem>
         ))}
+        {onManageVersions && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onManageVersions}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Manage versions...
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
