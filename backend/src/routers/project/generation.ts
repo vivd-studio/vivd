@@ -65,6 +65,10 @@ export const projectGenerationProcedures = {
       z.object({
         url: z.string().min(1),
         createNewVersion: z.boolean().optional(),
+        /** Optional hint to influence the hero image generation */
+        heroHint: z.string().optional(),
+        /** Optional hint to influence the HTML/landing page generation */
+        htmlHint: z.string().optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -130,7 +134,10 @@ export const projectGenerationProcedures = {
 
           // Create new version
           const nextVersion = getNextVersion(domainSlug);
-          processUrl(url, nextVersion)
+          processUrl(url, nextVersion, {
+            heroHint: input.heroHint,
+            htmlHint: input.htmlHint,
+          })
             .then(() => {
               console.log(
                 `Finished processing ${url} (version ${nextVersion})`,
@@ -150,7 +157,10 @@ export const projectGenerationProcedures = {
       }
 
       // New project - create version 1
-      processUrl(url, 1)
+      processUrl(url, 1, {
+        heroHint: input.heroHint,
+        htmlHint: input.htmlHint,
+      })
         .then(() => {
           console.log(`Finished processing ${url} (version 1)`);
         })

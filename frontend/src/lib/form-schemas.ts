@@ -12,6 +12,10 @@ export const urlFormSchema = z.object({
   disclaimer: z.boolean().refine((val) => val === true, {
     message: "You must confirm that you own this website",
   }),
+  /** Optional hint to influence the hero image generation */
+  heroHint: z.string().optional(),
+  /** Optional hint to influence the HTML/landing page generation */
+  htmlHint: z.string().optional(),
 });
 
 export type UrlFormValues = z.infer<typeof urlFormSchema>;

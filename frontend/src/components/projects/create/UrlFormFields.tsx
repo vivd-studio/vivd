@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   FormControl,
@@ -7,7 +9,7 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import type { UrlFormValues } from "@/lib/form-schemas";
 
 interface UrlFormFieldsProps {
@@ -18,9 +20,11 @@ interface UrlFormFieldsProps {
 
 /**
  * Shared form fields for URL-based project creation.
- * Includes URL input and ownership disclaimer checkbox.
+ * Includes URL input, ownership disclaimer checkbox, and optional generation hints.
  */
 export function UrlFormFields({ form, inputClassName }: UrlFormFieldsProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   return (
     <>
       <FormField
@@ -68,6 +72,65 @@ export function UrlFormFields({ form, inputClassName }: UrlFormFieldsProps) {
           </FormItem>
         )}
       />
+
+      {/* Advanced options toggle */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {showAdvanced ? (
+          <ChevronUp className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+        Custom instructions (optional)
+      </button>
+
+      {/* Advanced options */}
+      {showAdvanced && (
+        <div className="space-y-4 pt-2">
+          <FormField
+            control={form.control}
+            name="heroHint"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Textarea
+                    placeholder="Hero image instructions (e.g., 'Use a warm color palette with nature imagery')"
+                    className="min-h-[80px] resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Guide the AI for the hero image generation
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="htmlHint"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Textarea
+                    placeholder="Page design instructions (e.g., 'Modern minimalist style, focus on the product showcase')"
+                    className="min-h-[80px] resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Guide the AI for the landing page design
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      )}
 
       {form.formState.errors.root && (
         <p className="text-sm font-medium text-destructive">

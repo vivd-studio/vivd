@@ -7,6 +7,7 @@ import { generateHtml } from "../steps/generateHtml";
 import { scraperClient } from "../scraper-client";
 import { analyzeImages } from "../image_analyzer";
 import { thumbnailService } from "../../services/ThumbnailService";
+import type { FlowContext } from "../../services/OpenRouterService";
 
 export interface ScratchAssetInput {
   filename: string;
@@ -44,6 +45,9 @@ export async function runScratchFlow(
   ctx: GenerationContext,
   input: ScratchFlowInput,
 ) {
+  // Create flow context for cost tracking
+  const flowContext: FlowContext = { flowId: "scratch", projectSlug: ctx.slug };
+
   const imagesDir = path.join(ctx.outputDir, "images");
   const referencesDir = path.join(ctx.outputDir, "references");
   ensureDir(imagesDir);
@@ -112,12 +116,13 @@ export async function runScratchFlow(
   }
 
   ctx.updateStatus("analyzing_images");
-  await analyzeImages(ctx.outputDir);
+  await analyzeImages(ctx.outputDir, flowContext);
 
   ctx.updateStatus("generating_html");
   await generateHtml({
     outputDir: ctx.outputDir,
     source: "scratch",
+    flowContext,
     scratch: {
       title: input.title,
       businessType: input.businessType,

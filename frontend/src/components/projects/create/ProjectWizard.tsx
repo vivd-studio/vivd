@@ -132,7 +132,11 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
     try {
       const urlToSubmit = normalizeUrl(data.url);
       setPendingUrl(urlToSubmit);
-      await generate({ url: urlToSubmit });
+      await generate({
+        url: urlToSubmit,
+        heroHint: data.heroHint || undefined,
+        htmlHint: data.htmlHint || undefined,
+      });
     } catch (e) {
       // Handled by onError
     }

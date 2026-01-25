@@ -50,6 +50,7 @@ fullScrapeRouter.post("/", async (req, res) => {
       }
 
       await page.close();
+      browserPool.release(browser);
 
       // Return error response with 422 Unprocessable Entity
       res.status(422).json({

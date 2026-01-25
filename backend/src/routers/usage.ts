@@ -49,4 +49,20 @@ export const usageRouter = router({
       const days = input?.days ?? 30;
       return await usageService.getSessionUsage(days);
     }),
+
+  /**
+   * Get usage aggregated by flow (OpenRouter direct calls)
+   */
+  flows: adminProcedure
+    .input(
+      z
+        .object({
+          days: z.number().min(1).max(365).optional().default(30),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const days = input?.days ?? 30;
+      return await usageService.getFlowUsage(days);
+    }),
 });

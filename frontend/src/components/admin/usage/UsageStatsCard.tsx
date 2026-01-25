@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { SessionUsageTable } from "./SessionUsageTable";
+import { FlowUsageTable } from "./FlowUsageTable";
 
 export function UsageStatsCard() {
   const { data: usageStatus, isLoading } = trpc.usage.status.useQuery(
@@ -354,12 +355,20 @@ export function UsageStatsCard() {
           </div>
         </div>
 
-        {/* Session Usage */}
+        {/* Session Usage (OpenCode) */}
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-muted-foreground">
-            Session Usage
+            Session Usage (OpenCode)
           </h4>
           <SessionUsageTable days={30} />
+        </div>
+
+        {/* Flow Usage (OpenRouter Direct) */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium text-muted-foreground">
+            Flow Usage (Generation Flows)
+          </h4>
+          <FlowUsageTable days={30} />
         </div>
       </CardContent>
     </Card>

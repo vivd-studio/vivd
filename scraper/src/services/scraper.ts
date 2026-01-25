@@ -128,14 +128,20 @@ export async function scrapePage(
     });
 
     log(`Navigating to ${url}...`);
+    let httpStatus: number | null = null;
     try {
+      let response;
       try {
-        await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+        response = await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
       } catch (e) {
         log(
           `Navigation attempt (networkidle2) failed for ${url}: ${e}. Retrying with domcontentloaded...`
         );
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+        response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      }
+      httpStatus = response?.status() ?? null;
+      if (httpStatus) {
+        log(`HTTP status: ${httpStatus}`);
       }
     } catch (e) {
       log(`Error navigating to ${url}: ${e}`);
@@ -204,7 +210,7 @@ export async function scrapePage(
     );
 
     // Validate page content to detect blocked/error pages
-    const validation = validatePageContent(cleanedText, rawHtml);
+    const validation = validatePageContent(cleanedText, rawHtml, httpStatus);
     if (!validation.isValid && validation.error) {
       log(`Page validation failed for ${url}: ${validation.error.type} - ${validation.error.message}`);
       // Still return text and continue to get images (useful for debugging)

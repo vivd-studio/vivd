@@ -17,12 +17,24 @@ export {
 };
 import type { ScratchFlowInput } from "./flows/scratchFlow";
 
+export interface ProcessUrlOptions {
+  /** Optional hint to influence the hero image generation */
+  heroHint?: string;
+  /** Optional hint to influence the HTML/landing page generation */
+  htmlHint?: string;
+}
+
 /**
  * Process a URL to generate a landing page
  * @param targetUrl - The URL to scrape and generate from
  * @param version - Optional version number. If not provided, creates next version.
+ * @param options - Optional hints to influence generation
  */
-export async function processUrl(targetUrl: string, version?: number) {
+export async function processUrl(
+  targetUrl: string,
+  version?: number,
+  options?: ProcessUrlOptions
+) {
   validateConfig();
 
   if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
@@ -42,7 +54,11 @@ export async function processUrl(targetUrl: string, version?: number) {
   });
 
   try {
-    await runUrlFlow(ctx, { url: targetUrl });
+    await runUrlFlow(ctx, {
+      url: targetUrl,
+      heroHint: options?.heroHint,
+      htmlHint: options?.htmlHint,
+    });
     return {
       success: true,
       outputDir: ctx.outputDir,

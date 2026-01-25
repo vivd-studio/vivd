@@ -12,10 +12,14 @@ import {
 import { OpenRouterAgent } from "../agent";
 import type { GenerationAgent } from "../agent";
 import type { GenerationSource } from "../flows/types";
+import type { FlowContext } from "../../services/OpenRouterService";
 
 export interface GenerateHtmlInput {
   outputDir: string;
   source: GenerationSource;
+  flowContext?: FlowContext;
+  /** Optional hint from the client to influence the HTML generation */
+  clientHint?: string;
   scratch?: {
     title?: string;
     businessType?: string;
@@ -117,7 +121,7 @@ export async function generateHtml(input: GenerateHtmlInput) {
 
   const prompt =
     input.source === "url"
-      ? OPEN_ROUTER_LANDING_PAGE_PROMPT(text, imagesSection)
+      ? OPEN_ROUTER_LANDING_PAGE_PROMPT(text, imagesSection, input.clientHint)
       : OPEN_ROUTER_SCRATCH_PAGE_PROMPT(
           text,
           imagesSection,
@@ -133,5 +137,6 @@ export async function generateHtml(input: GenerateHtmlInput) {
     outputDir: input.outputDir,
     screenshotPath: hasScreenshot ? screenshotPath : undefined,
     referenceImagePaths: input.source === "scratch" ? referenceImagePaths : [],
+    flowContext: input.flowContext,
   });
 }

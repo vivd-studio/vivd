@@ -1,23 +1,28 @@
 export const OPEN_ROUTER_LANDING_PAGE_PROMPT = (
   text: string,
-  imagesSection: string
+  imagesSection: string,
+  clientHint?: string
 ) => {
-  return `Create a new, modern, beautiful, fully-fledged, high-converting landing page for the company described in the text below. 
+  const clientHintSection = clientHint
+    ? `\nClient's Specific Wishes:\nThe client has given these specific instructions for the landing page design: "${clientHint}"\nPlease incorporate these wishes into your design.\n`
+    : "";
+
+  return `Create a new, modern, beautiful, fully-fledged, high-converting landing page for the company described in the text below.
 You will receive a screenshot of the company's current website, which is probably a little outdated, as well as the current text on the website.
-Use the attached screenshot for visual context of their current brand. 
+Use the attached screenshot for visual context of their current brand.
 Think about how to improve the current design, colors, typography, effects, and layout. Use subtle appear animations on scroll. Keep it professional and fitting for the company.
 Think about the vibe and artstyle of the website, should it be modern, professional, playful, minimal, sleek, scandinavian, artsy, neo-brutalism, neon, dark, light, etc.
 Don't make the Headline text over the hero image too cringe - if there is something catchy on the page already, take that otherwise keep it professional.
 Use the current text to build a comprehensive landing page. Think about which information is most relevant for the main page and where the information should be placed.
-Put everything inside a single index.html file. 
-Output ONLY the raw HTML code for the new index.html file. 
-
+Put everything inside a single index.html file.
+Output ONLY the raw HTML code for the new index.html file.
+${clientHintSection}
 ${imagesSection}
 
-Current Text on the website: 
+Current Text on the website:
 The text below contains content from the main page and potentially several subpages (e.g. About, Contact, Team).
 Use this content to build a comprehensive landing page. You can decide which information is most relevant for the main page.
-${text} 
+${text}
 `;
 };
 

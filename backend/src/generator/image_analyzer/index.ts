@@ -7,10 +7,11 @@ import { getImageDimensions } from "./utils";
 import { prioritizeImages } from "./prioritize";
 import { describeImage } from "./describe";
 import { generateImageDescriptionFile } from "./report";
+import type { FlowContext } from "../../services/OpenRouterService";
 
 export type { ImageInfo };
 
-export async function analyzeImages(outputDir: string) {
+export async function analyzeImages(outputDir: string, flowContext?: FlowContext) {
   const imagesDir = path.join(outputDir, "images");
   if (!fs.existsSync(imagesDir)) {
     log("No images directory found.");
@@ -88,7 +89,7 @@ export async function analyzeImages(outputDir: string) {
 
   if (ENABLE_IMAGE_ANALYSIS) {
     // 1. Prioritize
-    const prioritizedImages = await prioritizeImages(validImages);
+    const prioritizedImages = await prioritizeImages(validImages, flowContext);
     const topImageNames = prioritizedImages.slice(0, MAX_IMAGES_TO_ANALYZE);
     log(
       `Prioritized ${prioritizedImages.length} images. Analyzing top ${topImageNames.length}.`
@@ -99,7 +100,7 @@ export async function analyzeImages(outputDir: string) {
       const priorityIndex = topImageNames.indexOf(img.filename);
       if (priorityIndex !== -1) {
         log(`Analyzing ${img.filename}...`);
-        const result = await describeImage(img, outputDir);
+        const result = await describeImage(img, outputDir, flowContext);
         img.description = result.description;
         img.priorityIndex = priorityIndex;
         img.analyzed = true;

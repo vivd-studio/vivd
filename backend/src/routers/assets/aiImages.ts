@@ -4,9 +4,7 @@ import { getVersionDir, touchProjectUpdatedAt } from "../../generator/versionUti
 import { hasDotSegment } from "../../generator/vivdPaths";
 import path from "path";
 import fs from "fs";
-import axios from "axios";
 import {
-  OPENROUTER_API_KEY,
   IMAGE_EDITING_MODEL,
   HERO_GENERATION_MODEL,
   BACKGROUND_REMOVAL_MODEL,
@@ -15,7 +13,10 @@ import { downloadImage, saveImageBuffer } from "../../generator/utils";
 import { safeJoin } from "../../fs/safePaths";
 import { isImageFile } from "./shared";
 import { limitsService } from "../../services/LimitsService";
-import { usageService } from "../../services/UsageService";
+import {
+  createImageGeneration,
+  extractImageFromResponse,
+} from "../../services/OpenRouterService";
 
 export const assetsAiImageProcedures = {
   /**
@@ -77,8 +78,7 @@ export const assetsAiImageProcedures = {
       );
 
       try {
-        const response = await axios.post(
-          "https://openrouter.ai/api/v1/chat/completions",
+        const { data: result } = await createImageGeneration(
           {
             model: IMAGE_EDITING_MODEL,
             messages: [
@@ -97,45 +97,10 @@ export const assetsAiImageProcedures = {
             ],
             modalities: ["image", "text"],
           },
-          {
-            headers: {
-              Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "https://github.com/vivd",
-              "X-Title": "Vivd",
-            },
-          },
+          { flowId: "image_edit", projectSlug: slug },
         );
 
-        const result = response.data;
-        let imageUrl: string | null = null;
-
-        if (result.choices && result.choices[0]) {
-          const message = result.choices[0].message;
-
-          // Check for images in the OpenRouter format
-          if (message.images && message.images.length > 0) {
-            const imgObj = message.images[0];
-            imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
-          }
-
-          // Fallback: check content for markdown or URL
-          if (!imageUrl && message.content) {
-            let content = "";
-            if (typeof message.content === "string") {
-              content = message.content;
-            } else if (Array.isArray(message.content)) {
-              content = message.content
-                .filter((c: any) => c.type === "text")
-                .map((c: any) => c.text)
-                .join("");
-            }
-
-            const match = content.match(/\!\[.*?\]\((.*?)\)/);
-            if (match) imageUrl = match[1];
-            else if (content.startsWith("http")) imageUrl = content;
-          }
-        }
+        const imageUrl = extractImageFromResponse(result);
 
         if (!imageUrl) {
           throw new Error(
@@ -182,8 +147,7 @@ export const assetsAiImageProcedures = {
         const newRelativePath = path.join(originalDir, newFileName);
         console.log(`[AI Edit] Saved edited image to: ${newRelativePath}`);
 
-        // Record image generation for usage tracking
-        await usageService.recordImageGeneration(slug);
+        // Cost is automatically tracked by OpenRouterService
         touchProjectUpdatedAt(slug);
 
         return {
@@ -277,52 +241,16 @@ export const assetsAiImageProcedures = {
       );
 
       try {
-        const response = await axios.post(
-          "https://openrouter.ai/api/v1/chat/completions",
+        const { data: result } = await createImageGeneration(
           {
             model: HERO_GENERATION_MODEL,
             messages: messages,
             modalities: ["image", "text"],
           },
-          {
-            headers: {
-              Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "https://github.com/vivd",
-              "X-Title": "Vivd",
-            },
-          },
+          { flowId: "image_create", projectSlug: slug },
         );
 
-        const result = response.data;
-        let imageUrl: string | null = null;
-
-        if (result.choices && result.choices[0]) {
-          const message = result.choices[0].message;
-
-          // Check for images in the OpenRouter format
-          if (message.images && message.images.length > 0) {
-            const imgObj = message.images[0];
-            imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
-          }
-
-          // Fallback: check content for markdown or URL
-          if (!imageUrl && message.content) {
-            let content = "";
-            if (typeof message.content === "string") {
-              content = message.content;
-            } else if (Array.isArray(message.content)) {
-              content = message.content
-                .filter((c: any) => c.type === "text")
-                .map((c: any) => c.text)
-                .join("");
-            }
-
-            const match = content.match(/\!\[.*?\]\((.*?)\)/);
-            if (match) imageUrl = match[1];
-            else if (content.startsWith("http")) imageUrl = content;
-          }
-        }
+        const imageUrl = extractImageFromResponse(result);
 
         if (!imageUrl) {
           throw new Error("Failed to generate image - no image in response");
@@ -370,8 +298,7 @@ export const assetsAiImageProcedures = {
           : newFileName;
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
 
-        // Record image generation for usage tracking
-        await usageService.recordImageGeneration(slug);
+        // Cost is automatically tracked by OpenRouterService
         touchProjectUpdatedAt(slug);
 
         return {
@@ -448,8 +375,7 @@ export const assetsAiImageProcedures = {
       );
 
       try {
-        const response = await axios.post(
-          "https://openrouter.ai/api/v1/chat/completions",
+        const { data: result } = await createImageGeneration(
           {
             model: BACKGROUND_REMOVAL_MODEL,
             messages: [
@@ -468,45 +394,10 @@ export const assetsAiImageProcedures = {
             ],
             modalities: ["image", "text"],
           },
-          {
-            headers: {
-              Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-              "Content-Type": "application/json",
-              "HTTP-Referer": "https://github.com/vivd",
-              "X-Title": "Vivd",
-            },
-          },
+          { flowId: "bg_remove", projectSlug: slug },
         );
 
-        const result = response.data;
-        let imageUrl: string | null = null;
-
-        if (result.choices && result.choices[0]) {
-          const message = result.choices[0].message;
-
-          // Check for images in the OpenRouter format
-          if (message.images && message.images.length > 0) {
-            const imgObj = message.images[0];
-            imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
-          }
-
-          // Fallback: check content for markdown or URL
-          if (!imageUrl && message.content) {
-            let content = "";
-            if (typeof message.content === "string") {
-              content = message.content;
-            } else if (Array.isArray(message.content)) {
-              content = message.content
-                .filter((c: any) => c.type === "text")
-                .map((c: any) => c.text)
-                .join("");
-            }
-
-            const match = content.match(/\!\[.*?\]\((.*?)\)/);
-            if (match) imageUrl = match[1];
-            else if (content.startsWith("http")) imageUrl = content;
-          }
-        }
+        const imageUrl = extractImageFromResponse(result);
 
         if (!imageUrl) {
           throw new Error("Failed to remove background - no image in response");
@@ -551,8 +442,7 @@ export const assetsAiImageProcedures = {
           `[AI Remove BG] Saved transparent image to: ${newRelativePath}`,
         );
 
-        // Record image generation for usage tracking
-        await usageService.recordImageGeneration(slug);
+        // Cost is automatically tracked by OpenRouterService
         touchProjectUpdatedAt(slug);
 
         return {

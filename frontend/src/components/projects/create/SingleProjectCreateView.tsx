@@ -52,7 +52,11 @@ export function SingleProjectCreateView() {
   const onUrlSubmit = async (data: UrlFormValues) => {
     try {
       const urlToSubmit = normalizeUrl(data.url);
-      await generate({ url: urlToSubmit });
+      await generate({
+        url: urlToSubmit,
+        heroHint: data.heroHint || undefined,
+        htmlHint: data.htmlHint || undefined,
+      });
     } catch {
       // Handled by onError
     }

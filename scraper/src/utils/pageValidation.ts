@@ -1,6 +1,7 @@
 /**
  * Utility functions for detecting blocked, error, or invalid pages.
- * Used to identify when a scrape didn't capture meaningful content.
+ * Uses HTTP status codes as primary signal, with text patterns as fallback
+ * for cases like Cloudflare challenges that return 200 status.
  */
 
 export interface PageValidationResult {
@@ -12,72 +13,17 @@ export interface PageValidationResult {
 }
 
 /**
- * Cloudflare challenge page indicators
+ * Cloudflare challenge page indicators.
+ * These are specific to CF challenge pages, not general mentions of Cloudflare.
  */
-const CLOUDFLARE_PATTERNS = [
+const CLOUDFLARE_CHALLENGE_PATTERNS = [
   /checking if the site connection is secure/i,
-  /just a moment\.\.\./i,
-  /enable javascript and cookies to continue/i,
-  /ray id:/i,
-  /cloudflare/i,
-  /cf-browser-verification/i,
   /please wait while we verify/i,
   /verifying you are human/i,
-  /attention required!/i,
-  /one more step/i,
   /please complete the security check/i,
-  /ddos-guard/i,
   /checking your browser/i,
-  /please turn javascript on/i,
-  /please enable cookies/i,
-];
-
-/**
- * Access denied / forbidden page indicators
- */
-const ACCESS_DENIED_PATTERNS = [
-  /403 forbidden/i,
-  /access denied/i,
-  /you don't have permission/i,
-  /you do not have permission/i,
-  /not authorized/i,
-  /unauthorized/i,
-  /error 403/i,
-];
-
-/**
- * Not found page indicators
- */
-const NOT_FOUND_PATTERNS = [
-  /404 not found/i,
-  /page not found/i,
-  /error 404/i,
-  /this page doesn't exist/i,
-  /this page does not exist/i,
-  /couldn't find that page/i,
-  /could not find that page/i,
-  /the page you requested/i,
-  /page you're looking for/i,
-];
-
-/**
- * Generic error page indicators
- */
-const ERROR_PAGE_PATTERNS = [
-  /500 internal server error/i,
-  /502 bad gateway/i,
-  /503 service unavailable/i,
-  /504 gateway timeout/i,
-  /error 500/i,
-  /error 502/i,
-  /error 503/i,
-  /error 504/i,
-  /something went wrong/i,
-  /an error occurred/i,
-  /server error/i,
-  /this site can't be reached/i,
-  /connection timed out/i,
-  /unable to connect/i,
+  /cf-browser-verification/i,
+  /enable javascript and cookies to continue/i,
 ];
 
 /**
@@ -87,20 +33,11 @@ const BOT_DETECTION_PATTERNS = [
   /are you a robot/i,
   /prove you're human/i,
   /verify you're human/i,
-  /captcha/i,
   /recaptcha/i,
   /hcaptcha/i,
   /bot protection/i,
-  /automated access/i,
   /unusual traffic/i,
-  /automated queries/i,
-  /suspected bot/i,
 ];
-
-
-function matchesAnyPattern(text: string, patterns: RegExp[]): boolean {
-  return patterns.some((pattern) => pattern.test(text));
-}
 
 function countPatternMatches(text: string, patterns: RegExp[]): number {
   return patterns.filter((pattern) => pattern.test(text)).length;
@@ -111,18 +48,63 @@ function countPatternMatches(text: string, patterns: RegExp[]): number {
  *
  * @param text - The extracted text content from the page
  * @param htmlContent - Optional raw HTML for additional validation
+ * @param httpStatus - HTTP status code from navigation (most reliable signal)
  * @returns Validation result indicating if page is valid and any error details
  */
 export function validatePageContent(
   text: string,
-  htmlContent?: string
+  htmlContent?: string,
+  httpStatus?: number | null
 ): PageValidationResult {
   const normalizedText = text.trim();
   const contentToCheck = normalizedText + (htmlContent || "");
 
-  // Check for Cloudflare challenge (most common blocker in deployed environments)
-  const cloudflareMatches = countPatternMatches(contentToCheck, CLOUDFLARE_PATTERNS);
-  if (cloudflareMatches >= 2) {
+  // === PRIMARY: Use HTTP status code (most reliable) ===
+
+  if (httpStatus) {
+    // 403 Forbidden
+    if (httpStatus === 403) {
+      return {
+        isValid: false,
+        error: {
+          type: "access_denied",
+          message: "Access to the website was denied (403 Forbidden).",
+        },
+      };
+    }
+
+    // 404 Not Found
+    if (httpStatus === 404) {
+      return {
+        isValid: false,
+        error: {
+          type: "not_found",
+          message: "The page was not found (404). Check if the URL is correct.",
+        },
+      };
+    }
+
+    // 5xx Server errors
+    if (httpStatus >= 500 && httpStatus < 600) {
+      return {
+        isValid: false,
+        error: {
+          type: "error_page",
+          message: `The website returned a server error (${httpStatus}). The site may be temporarily unavailable.`,
+        },
+      };
+    }
+  }
+
+  // === SECONDARY: Text-based detection for challenges that return 200 ===
+
+  // Cloudflare challenge pages return 200 but show a challenge.
+  // They have very little actual content (< 500 chars typically) and specific phrases.
+  const cloudflareMatches = countPatternMatches(contentToCheck, CLOUDFLARE_CHALLENGE_PATTERNS);
+  const hasCloudflareHtmlElements = quickBlockCheck(htmlContent || "");
+
+  // Require: CF HTML elements OR 2+ CF text patterns, AND minimal content
+  if ((hasCloudflareHtmlElements || cloudflareMatches >= 2) && normalizedText.length < 1000) {
     return {
       isValid: false,
       error: {
@@ -132,9 +114,10 @@ export function validatePageContent(
     };
   }
 
-  // Check for bot detection / captcha
+  // Bot detection / captcha (also returns 200 typically)
+  // Require 2+ matches AND minimal content
   const botMatches = countPatternMatches(contentToCheck, BOT_DETECTION_PATTERNS);
-  if (botMatches >= 2) {
+  if (botMatches >= 2 && normalizedText.length < 1500) {
     return {
       isValid: false,
       error: {
@@ -144,54 +127,18 @@ export function validatePageContent(
     };
   }
 
-  // Check for access denied
-  if (matchesAnyPattern(contentToCheck, ACCESS_DENIED_PATTERNS)) {
-    return {
-      isValid: false,
-      error: {
-        type: "access_denied",
-        message: "Access to the website was denied (403 Forbidden).",
-      },
-    };
-  }
-
-  // Check for not found
-  if (matchesAnyPattern(contentToCheck, NOT_FOUND_PATTERNS) && normalizedText.length < 1000) {
-    return {
-      isValid: false,
-      error: {
-        type: "not_found",
-        message: "The page was not found (404). Check if the URL is correct.",
-      },
-    };
-  }
-
-  // Check for error pages
-  if (matchesAnyPattern(contentToCheck, ERROR_PAGE_PATTERNS)) {
-    return {
-      isValid: false,
-      error: {
-        type: "error_page",
-        message: "The website returned an error page. The site may be temporarily unavailable.",
-      },
-    };
-  }
-
-  // Note: We intentionally do NOT check for empty/minimal text content.
-  // Some legitimate pages are image-heavy with text in images rather than DOM.
-  // The scraper still captures screenshots and images which can be processed.
-
   return { isValid: true };
 }
 
 /**
- * Quick check for obvious blocking indicators in raw HTML.
- * Can be used before full text extraction for early bailout.
+ * Quick check for Cloudflare-specific HTML elements.
+ * These are reliable indicators of a CF challenge page.
  */
 export function quickBlockCheck(html: string): boolean {
+  if (!html) return false;
+
   // Check for meta refresh to challenge page
   if (/<meta[^>]*http-equiv\s*=\s*["']?refresh/i.test(html)) {
-    // Cloudflare often uses meta refresh
     if (/challenge/i.test(html) || /cloudflare/i.test(html)) {
       return true;
     }

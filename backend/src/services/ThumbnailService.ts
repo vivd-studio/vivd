@@ -5,11 +5,14 @@ import {
   getVivdInternalFilesPath,
 } from "../generator/vivdPaths";
 
-// Base URL for the scraper to reach this backend's preview endpoint
-// In production, use the public DOMAIN. In development, fall back to localhost.
-const PREVIEW_BASE_URL = process.env.DOMAIN
-  ? `https://${process.env.DOMAIN}`
-  : `http://localhost:${process.env.PORT || 3000}`;
+// Base URL for the scraper (in Docker) to reach this backend's preview endpoint.
+// In dev/local, use the Docker service name. In production, use the public DOMAIN.
+const PREVIEW_BASE_URL =
+  !process.env.DOMAIN || process.env.DOMAIN.includes("localhost")
+    ? `http://backend:${process.env.PORT || 3000}`
+    : process.env.DOMAIN.startsWith("http")
+      ? process.env.DOMAIN
+      : `https://${process.env.DOMAIN}`;
 const DEBOUNCE_MS = 5000; // 5 second debounce window
 
 /**

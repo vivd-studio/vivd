@@ -1,11 +1,3 @@
-import OpenAI from "openai";
-import { OPENROUTER_API_KEY } from "./config";
-
-export const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "https://github.com/vivd",
-    "X-Title": "Vivd",
-  },
-});
+// Re-export from OpenRouterService for backwards compatibility
+// All new code should import directly from OpenRouterService
+export { openai } from "../services/OpenRouterService";

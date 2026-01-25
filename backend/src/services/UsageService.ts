@@ -152,6 +152,58 @@ class UsageService {
   }
 
   /**
+   * Record an OpenRouter cost event
+   * Uses generationId as idempotency key to prevent duplicate recordings
+   */
+  async recordOpenRouterCost(
+    cost: number,
+    generationId: string,
+    flowId: string,
+    projectSlug?: string
+  ): Promise<void> {
+    const now = new Date();
+    const idempotencyKey = `openrouter:${generationId}`;
+
+    try {
+      const didInsert = await db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(usageRecord)
+          .values({
+            id: randomUUID(),
+            eventType: flowId,
+            cost: cost.toString(),
+            tokens: null,
+            sessionId: null,
+            sessionTitle: null,
+            projectSlug: projectSlug ?? null,
+            idempotencyKey,
+            createdAt: now,
+          })
+          .onConflictDoNothing({ target: usageRecord.idempotencyKey })
+          .returning({ id: usageRecord.id });
+
+        if (inserted.length === 0) return false;
+
+        await this.updatePeriodAggregatesInTx(tx, cost, 0, now);
+        return true;
+      });
+
+      if (!didInsert) {
+        console.log(
+          `[UsageService] Skipped duplicate OpenRouter cost record: ${idempotencyKey}`
+        );
+        return;
+      }
+
+      console.log(
+        `[UsageService] Recorded OpenRouter cost: $${cost.toFixed(6)} (${flowId})`
+      );
+    } catch (error) {
+      console.error(`[UsageService] Failed to record OpenRouter cost:`, error);
+    }
+  }
+
+  /**
    * Record an image generation event
    * Uses transaction for consistency
    */
@@ -332,6 +384,42 @@ class UsageService {
     return records.map((r) => ({
       sessionId: r.sessionId,
       sessionTitle: r.sessionTitle,
+      projectSlug: r.projectSlug,
+      totalCost: parseFloat(r.totalCost),
+      eventCount: Number(r.count),
+      lastActive: r.lastActive,
+    }));
+  }
+
+  /**
+   * Get usage aggregated by flow (for OpenRouter direct calls without session)
+   */
+  async getFlowUsage(days: number = 30) {
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - days);
+
+    const records = await db
+      .select({
+        eventType: usageRecord.eventType,
+        projectSlug: usageRecord.projectSlug,
+        totalCost: sql<string>`sum(${usageRecord.cost})`,
+        count: sql<number>`count(*)`,
+        lastActive: sql<Date>`max(${usageRecord.createdAt})`,
+      })
+      .from(usageRecord)
+      .where(
+        and(
+          gte(usageRecord.createdAt, since),
+          sql`${usageRecord.sessionId} IS NULL`,
+          // Exclude image_gen events (legacy counting-only records)
+          sql`${usageRecord.eventType} != 'image_gen'`
+        )
+      )
+      .groupBy(usageRecord.eventType, usageRecord.projectSlug)
+      .orderBy(desc(sql`max(${usageRecord.createdAt})`));
+
+    return records.map((r) => ({
+      flowId: r.eventType,
       projectSlug: r.projectSlug,
       totalCost: parseFloat(r.totalCost),
       eventCount: Number(r.count),
