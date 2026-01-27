@@ -60,6 +60,7 @@ export default function PreviewPage() {
 
   return (
     <PreviewProvider
+      key={`${projectSlug}-${version}`}
       url={null}
       originalUrl={project.url}
       projectSlug={projectSlug}

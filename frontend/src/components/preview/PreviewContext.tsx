@@ -388,10 +388,6 @@ export function PreviewProvider({
   const devServerError =
     previewInfo?.mode === "devserver" ? previewInfo.error : undefined;
 
-  // Mutation to stop opencode server on cleanup (dev server has its own idle timeout)
-  const { mutateAsync: stopOpencodeServerMutation } =
-    trpc.project.stopOpencodeServer.useMutation();
-
   // Mutation to keep dev server alive while preview is open
   const { mutate: keepAliveDevServer } =
     trpc.project.keepAliveDevServer.useMutation();
@@ -420,25 +416,29 @@ export function PreviewProvider({
     keepAliveDevServer,
   ]);
 
-  // Stop servers when component unmounts (normal React navigation)
-  // Uses refs to avoid stale closure issues
+  // Track current values in refs for cleanup (avoids stale closures)
   const projectSlugRef = useRef(projectSlug);
   const selectedVersionRef = useRef(selectedVersion);
+
   useEffect(() => {
     projectSlugRef.current = projectSlug;
     selectedVersionRef.current = selectedVersion;
   }, [projectSlug, selectedVersion]);
 
+  // Stop server when component unmounts
+  // Uses sendBeacon for reliable delivery even during React teardown
   useEffect(() => {
     return () => {
       const slug = projectSlugRef.current;
       const version = selectedVersionRef.current;
-      if (slug && version) {
-        // Fire-and-forget: stop opencode server on unmount
-        void stopOpencodeServerMutation({ slug, version });
+      if (slug && version !== undefined) {
+        const payload = JSON.stringify({ slug, version });
+        // Must use Blob with correct content-type for express.json() to parse it
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon("/vivd-studio/api/cleanup/preview-leave", blob);
       }
     };
-  }, [stopOpencodeServerMutation]);
+  }, []);
 
   // Enable image drag-and-drop from Asset Explorer (disabled during text editing)
   useImageDropZone({
@@ -935,7 +935,9 @@ export function PreviewProvider({
         slug: projectSlug,
         version: selectedVersion,
       });
-      navigator.sendBeacon("/vivd-studio/api/cleanup/preview-leave", payload);
+      // Must use Blob with correct content-type for express.json() to parse it
+      const blob = new Blob([payload], { type: "application/json" });
+      navigator.sendBeacon("/vivd-studio/api/cleanup/preview-leave", blob);
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);

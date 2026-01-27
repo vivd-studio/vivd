@@ -63,6 +63,7 @@ export default function EmbeddedStudio() {
 
   return (
     <PreviewProvider
+      key={`${projectSlug}-${version}`}
       url={null}
       originalUrl={project.url}
       projectSlug={projectSlug}
