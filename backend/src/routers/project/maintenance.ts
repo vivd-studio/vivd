@@ -577,7 +577,7 @@ export const projectMaintenanceProcedures = {
       }
 
       // Stop any running OpenCode servers for this project (all versions)
-      const opencodeStopped = opencodeServerManager.stopByProjectPrefix(projectDir);
+      const opencodeStopped = await opencodeServerManager.stopByProjectPrefix(projectDir);
       if (opencodeStopped > 0) {
         console.log(`[Delete] Stopped ${opencodeStopped} OpenCode server(s) for: ${slug}`);
       }
@@ -659,7 +659,7 @@ export const projectMaintenanceProcedures = {
       console.log(`[DeleteVersion] Stopped dev server for: ${slug}/v${version}`);
 
       // Stop any running OpenCode servers for this version
-      opencodeServerManager.stopServer(versionDir);
+      await opencodeServerManager.stopServer(versionDir);
       console.log(`[DeleteVersion] Stopped OpenCode server for: ${slug}/v${version}`);
 
       // Delete the version using the utility function

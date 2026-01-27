@@ -1,6 +1,7 @@
 import { spawn, ChildProcess, execSync } from "node:child_process";
 import { createOpencodeClient, OpencodeClient } from "@opencode-ai/sdk";
 import * as path from "node:path";
+import treeKill from "tree-kill";
 
 interface OpencodeServerInfo {
   url: string;
@@ -27,6 +28,7 @@ class OpencodeServerManager {
   private servers = new Map<string, OpencodeServerInfo>();
   private startingServers = new Map<string, Promise<OpencodeServerInfo>>();
   private nextPort = 4096;
+  private availablePorts: number[] = [];
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -42,33 +44,97 @@ class OpencodeServerManager {
   /**
    * Kill any orphaned opencode serve processes from previous server runs.
    * This handles the case where the backend restarts but child processes survive.
+   * Also kills language server children that may have survived parent death.
    */
   private killOrphanedProcesses(): void {
-    try {
-      const result = execSync(
-        'pgrep -f "opencode serve" 2>/dev/null || true',
-        { encoding: "utf-8" },
-      );
-      const pids = result
-        .trim()
-        .split("\n")
-        .filter((p) => p);
+    const patterns = [
+      "opencode serve", // Main servers
+      "opencode run.*language", // Language servers (astro, etc)
+    ];
 
-      if (pids.length > 0) {
-        console.log(
-          `[OpenCode] Killing ${pids.length} orphaned process(es) from previous run...`,
-        );
-        for (const pid of pids) {
-          try {
-            process.kill(parseInt(pid, 10), "SIGTERM");
-          } catch {
-            // Process may have already exited
+    for (const pattern of patterns) {
+      try {
+        const result = execSync(`pgrep -f "${pattern}" 2>/dev/null || true`, {
+          encoding: "utf-8",
+        });
+        const pids = result
+          .trim()
+          .split("\n")
+          .filter((p) => p);
+
+        if (pids.length > 0) {
+          console.log(
+            `[OpenCode] Killing ${pids.length} orphaned "${pattern}" process(es)...`,
+          );
+          for (const pid of pids) {
+            const numPid = parseInt(pid, 10);
+            try {
+              process.kill(numPid, "SIGTERM");
+            } catch {
+              // Process may have already exited
+            }
           }
+
+          // Wait 1 second then SIGKILL any survivors
+          setTimeout(() => {
+            for (const pid of pids) {
+              try {
+                process.kill(parseInt(pid, 10), "SIGKILL");
+              } catch {
+                // Process may have already exited
+              }
+            }
+          }, 1000);
         }
+      } catch (e) {
+        // pgrep not available or failed - that's fine
+        debugLog("Could not check for orphaned processes:", e);
       }
-    } catch (e) {
-      // pgrep not available or failed - that's fine
-      debugLog("Could not check for orphaned processes:", e);
+    }
+  }
+
+  /**
+   * Kill a process and all its children using tree-kill.
+   * First tries SIGTERM for graceful shutdown, then SIGKILL after 1 second.
+   */
+  private killProcessTree(pid: number): Promise<void> {
+    return new Promise((resolve) => {
+      // First try SIGTERM for graceful shutdown
+      treeKill(pid, "SIGTERM", (err) => {
+        if (err) {
+          resolve(); // Process already dead
+          return;
+        }
+
+        // Wait 1 second, then force kill if still alive
+        setTimeout(() => {
+          try {
+            process.kill(pid, 0); // Check if alive (throws if dead)
+            treeKill(pid, "SIGKILL", () => resolve());
+          } catch {
+            resolve(); // Already dead
+          }
+        }, 1000);
+      });
+    });
+  }
+
+  /**
+   * Get an available port, recycling freed ports when possible.
+   */
+  private getPort(): number {
+    if (this.availablePorts.length > 0) {
+      return this.availablePorts.pop()!;
+    }
+    return this.nextPort++;
+  }
+
+  /**
+   * Release a port back to the pool for reuse.
+   */
+  private releasePort(port: number): void {
+    if (!this.availablePorts.includes(port)) {
+      this.availablePorts.push(port);
     }
   }
 
@@ -99,10 +165,10 @@ class OpencodeServerManager {
       console.log(
         `[OpenCode] At max server limit (${MAX_SERVERS}), stopping oldest idle server...`,
       );
-      this.stopOldestIdleServer();
+      await this.stopOldestIdleServer();
     }
 
-    const port = this.nextPort++;
+    const port = this.getPort();
     console.log(
       `[OpenCode] Spawning server for ${dirKey} on port ${port} (${this.servers.size + 1}/${MAX_SERVERS})`,
     );
@@ -237,26 +303,29 @@ class OpencodeServerManager {
     };
   }
 
-  private cleanupIdleServers(): void {
+  private async cleanupIdleServers(): Promise<void> {
     const now = Date.now();
+    const killPromises: Promise<void>[] = [];
+
     for (const [dir, server] of this.servers.entries()) {
       if (now - server.lastActivity > IDLE_TIMEOUT_MS) {
         console.log(`[OpenCode] Stopping idle server for ${dir}`);
-        try {
-          server.process.kill();
-        } catch (e) {
-          // ignore
-        }
         this.servers.delete(dir);
+        this.releasePort(server.port);
+        if (server.process.pid) {
+          killPromises.push(this.killProcessTree(server.process.pid));
+        }
       }
     }
+
+    await Promise.all(killPromises);
   }
 
   /**
    * Stop the oldest idle server to make room for a new one.
    * Called when we hit MAX_SERVERS limit.
    */
-  private stopOldestIdleServer(): void {
+  private async stopOldestIdleServer(): Promise<void> {
     let oldestDir: string | null = null;
     let oldestActivity = Infinity;
 
@@ -271,12 +340,11 @@ class OpencodeServerManager {
       const server = this.servers.get(oldestDir);
       if (server) {
         console.log(`[OpenCode] Evicting oldest server for ${oldestDir}`);
-        try {
-          server.process.kill();
-        } catch {
-          // ignore
-        }
         this.servers.delete(oldestDir);
+        this.releasePort(server.port);
+        if (server.process.pid) {
+          await this.killProcessTree(server.process.pid);
+        }
       }
     }
   }
@@ -284,22 +352,25 @@ class OpencodeServerManager {
   /**
    * Close all servers gracefully.
    */
-  closeAll(): void {
+  async closeAll(): Promise<void> {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
 
     console.log(`[OpenCode] Stopping ${this.servers.size} server(s)...`);
+    const killPromises: Promise<void>[] = [];
+
     for (const [dir, server] of this.servers.entries()) {
       console.log(`[OpenCode] Stopping server for ${dir}`);
-      try {
-        server.process.kill();
-      } catch (e) {
-        // ignore
+      this.releasePort(server.port);
+      if (server.process.pid) {
+        killPromises.push(this.killProcessTree(server.process.pid));
       }
     }
     this.servers.clear();
+
+    await Promise.all(killPromises);
   }
 
   /**
@@ -313,38 +384,40 @@ class OpencodeServerManager {
    * Stop all servers whose directory starts with the given prefix.
    * Used when deleting an entire project (stops all version servers).
    */
-  stopByProjectPrefix(projectDirPrefix: string): number {
+  async stopByProjectPrefix(projectDirPrefix: string): Promise<number> {
     const normalizedPrefix = this.normalizeProjectDir(projectDirPrefix);
     let stopped = 0;
+    const killPromises: Promise<void>[] = [];
+
     for (const [dir, server] of this.servers.entries()) {
       if (dir.startsWith(normalizedPrefix)) {
         console.log(`[OpenCode] Stopping server for ${dir} (project deletion)`);
-        try {
-          server.process.kill();
-        } catch {
-          // ignore
-        }
         this.servers.delete(dir);
+        this.releasePort(server.port);
+        if (server.process.pid) {
+          killPromises.push(this.killProcessTree(server.process.pid));
+        }
         stopped++;
       }
     }
+
+    await Promise.all(killPromises);
     return stopped;
   }
 
   /**
    * Stop server for a specific directory.
    */
-  stopServer(projectDir: string): void {
+  async stopServer(projectDir: string): Promise<void> {
     const normalizedDir = this.normalizeProjectDir(projectDir);
     const server = this.servers.get(normalizedDir);
     if (server) {
       console.log(`[OpenCode] Stopping server for ${normalizedDir}`);
-      try {
-        server.process.kill();
-      } catch {
-        // ignore
-      }
       this.servers.delete(normalizedDir);
+      this.releasePort(server.port);
+      if (server.process.pid) {
+        await this.killProcessTree(server.process.pid);
+      }
     }
   }
 
