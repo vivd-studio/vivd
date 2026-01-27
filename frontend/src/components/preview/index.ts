@@ -1,6 +1,6 @@
 export { PreviewContent } from "./PreviewContent";
 export { PreviewProvider, usePreview } from "./PreviewContext";
-export { PreviewToolbar } from "./PreviewToolbar";
+export { PreviewToolbar, EmbeddedStudioToolbar } from "./toolbar";
 export { PreviewIframe } from "./PreviewIframe";
 export { MobileFrame } from "./MobileFrame";
 export { UnsavedChangesBar } from "./UnsavedChangesBar";

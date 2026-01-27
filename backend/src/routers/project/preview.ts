@@ -3,6 +3,7 @@ import { projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { devServerManager, detectProjectType } from "../../devserver";
 import { buildService } from "../../services/BuildService";
+import { serverManager as opencodeServerManager } from "../../opencode/serverManager";
 
 export const previewProcedures = {
   /**
@@ -62,6 +63,24 @@ export const previewProcedures = {
 
       devServerManager.stopDevServer(versionDir);
 
+      return { success: true };
+    }),
+
+  /**
+   * Stop an opencode server for a project version.
+   */
+  stopOpencodeServer: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { slug, version } = input;
+      const versionDir = getVersionDir(slug, version);
+      await opencodeServerManager.stopServer(versionDir);
+      console.log(`[Preview] Stopped opencode server for ${slug}/v${version}`);
       return { success: true };
     }),
 

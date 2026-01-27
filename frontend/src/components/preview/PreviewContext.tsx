@@ -388,8 +388,9 @@ export function PreviewProvider({
   const devServerError =
     previewInfo?.mode === "devserver" ? previewInfo.error : undefined;
 
-  // Mutation to stop dev server (available for explicit use, but not called on close)
-  const { mutate: _stopDevServer } = trpc.project.stopDevServer.useMutation();
+  // Mutation to stop opencode server on cleanup (dev server has its own idle timeout)
+  const { mutateAsync: stopOpencodeServerMutation } =
+    trpc.project.stopOpencodeServer.useMutation();
 
   // Mutation to keep dev server alive while preview is open
   const { mutate: keepAliveDevServer } =
@@ -418,6 +419,26 @@ export function PreviewProvider({
     devServerStatus,
     keepAliveDevServer,
   ]);
+
+  // Stop servers when component unmounts (normal React navigation)
+  // Uses refs to avoid stale closure issues
+  const projectSlugRef = useRef(projectSlug);
+  const selectedVersionRef = useRef(selectedVersion);
+  useEffect(() => {
+    projectSlugRef.current = projectSlug;
+    selectedVersionRef.current = selectedVersion;
+  }, [projectSlug, selectedVersion]);
+
+  useEffect(() => {
+    return () => {
+      const slug = projectSlugRef.current;
+      const version = selectedVersionRef.current;
+      if (slug && version) {
+        // Fire-and-forget: stop opencode server on unmount
+        void stopOpencodeServerMutation({ slug, version });
+      }
+    };
+  }, [stopOpencodeServerMutation]);
 
   // Enable image drag-and-drop from Asset Explorer (disabled during text editing)
   useImageDropZone({
@@ -903,6 +924,23 @@ export function PreviewProvider({
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasGitChanges]);
+
+  // Stop opencode server on tab/window close using sendBeacon for reliable delivery
+  // sendBeacon is specifically designed for page unload - browser guarantees delivery
+  useEffect(() => {
+    if (!projectSlug) return;
+
+    const handleBeforeUnload = () => {
+      const payload = JSON.stringify({
+        slug: projectSlug,
+        version: selectedVersion,
+      });
+      navigator.sendBeacon("/vivd-studio/api/cleanup/preview-leave", payload);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [projectSlug, selectedVersion]);
 
   const value: PreviewContextValue = {
     // Props

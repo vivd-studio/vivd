@@ -692,6 +692,22 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
 // Import Projects endpoint(s)
 app.use("/vivd-studio/api", createImportRouter({ auth, upload }));
 
+// Cleanup endpoint for sendBeacon on page leave (no auth - fire and forget)
+// Only stops opencode server; dev server has its own idle timeout
+app.post(
+  "/vivd-studio/api/cleanup/preview-leave",
+  express.json(),
+  (req, res) => {
+    const { slug, version } = req.body;
+    if (slug && version) {
+      const versionDir = getVersionDir(slug, version);
+      void serverManager.stopServer(versionDir);
+      console.log(`[Cleanup] Preview leave: stopping opencode server for ${slug}/v${version}`);
+    }
+    res.status(200).end();
+  },
+);
+
 // tRPC
 app.use(
   "/vivd-studio/api/trpc",

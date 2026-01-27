@@ -1,7 +1,17 @@
-import { spawn, ChildProcess, execSync } from "node:child_process";
+import { spawn, ChildProcess, execSync, spawnSync } from "node:child_process";
 import { createOpencodeClient, OpencodeClient } from "@opencode-ai/sdk";
 import * as path from "node:path";
 import treeKill from "tree-kill";
+
+// Check if `ps` command is available (tree-kill needs it)
+const hasPsCommand = (() => {
+  try {
+    const result = spawnSync("ps", ["--version"], { stdio: "ignore" });
+    return result.error === undefined;
+  } catch {
+    return false;
+  }
+})();
 
 interface OpencodeServerInfo {
   url: string;
@@ -10,7 +20,7 @@ interface OpencodeServerInfo {
   lastActivity: number;
 }
 
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 const MAX_SERVERS = 10; // Maximum concurrent opencode servers
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
 const debugLog = (...args: unknown[]) => {
@@ -96,13 +106,18 @@ class OpencodeServerManager {
   /**
    * Kill a process and all its children using tree-kill.
    * First tries SIGTERM for graceful shutdown, then SIGKILL after 1 second.
+   * Falls back to simple process.kill() if ps command not available (e.g., in Docker).
    */
   private killProcessTree(pid: number): Promise<void> {
+    // If ps command isn't available, use simple kill
+    if (!hasPsCommand) {
+      return this.simpleKill(pid);
+    }
+
     return new Promise((resolve) => {
-      // First try SIGTERM for graceful shutdown
       treeKill(pid, "SIGTERM", (err) => {
         if (err) {
-          resolve(); // Process already dead
+          resolve(); // Process already dead or error
           return;
         }
 
@@ -116,6 +131,43 @@ class OpencodeServerManager {
           }
         }, 1000);
       });
+    });
+  }
+
+  /**
+   * Simple kill without tree-kill (for environments without ps command).
+   * Uses negative PID to kill the entire process group (requires detached: true on spawn).
+   */
+  private simpleKill(pid: number): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        // Kill entire process group with negative PID
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        // Try killing just the process if group kill fails
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          resolve(); // Process already dead
+          return;
+        }
+      }
+
+      // Wait 1 second, then force kill if still alive
+      setTimeout(() => {
+        try {
+          process.kill(-pid, 0); // Check if group alive
+          process.kill(-pid, "SIGKILL");
+        } catch {
+          try {
+            process.kill(pid, 0); // Check if process alive
+            process.kill(pid, "SIGKILL");
+          } catch {
+            // Already dead
+          }
+        }
+        resolve();
+      }, 1000);
     });
   }
 
@@ -237,6 +289,7 @@ class OpencodeServerManager {
 
     const proc = spawn(`opencode`, args, {
       cwd, // This is the key fix!
+      detached: true, // Create new process group so we can kill all children
       env: {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
@@ -245,7 +298,14 @@ class OpencodeServerManager {
 
     const url = await new Promise<string>((resolve, reject) => {
       const id = setTimeout(() => {
-        proc.kill();
+        // Kill entire process group on timeout
+        if (proc.pid) {
+          try {
+            process.kill(-proc.pid, "SIGKILL");
+          } catch {
+            proc.kill();
+          }
+        }
         reject(
           new Error(`Timeout waiting for server to start after ${timeout}ms`),
         );
