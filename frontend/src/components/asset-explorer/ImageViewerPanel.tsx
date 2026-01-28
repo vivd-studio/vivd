@@ -18,7 +18,9 @@ import {
   RotateCcw,
   MessageSquarePlus,
 } from "lucide-react";
+import { toast } from "sonner";
 import { buildImageUrl } from "./utils";
+import { useOptionalChatContext } from "@/components/chat/ChatContext";
 
 interface ImageViewerPanelProps {
   projectSlug: string;
@@ -27,7 +29,6 @@ interface ImageViewerPanelProps {
   onClose: () => void;
   onAiEdit?: () => void;
   onDelete?: () => void;
-  onAddToChat?: () => void;
   onNavigatePrevious?: () => void;
   onNavigateNext?: () => void;
   canNavigatePrevious?: boolean;
@@ -45,7 +46,6 @@ export function ImageViewerPanel({
   onClose,
   onAiEdit,
   onDelete,
-  onAddToChat,
   onNavigatePrevious,
   onNavigateNext,
   canNavigatePrevious = false,
@@ -54,11 +54,22 @@ export function ImageViewerPanel({
   const imageUrl = buildImageUrl(projectSlug, version, filePath);
   const filename = filePath.split("/").pop() || filePath;
   const containerRef = useRef<HTMLDivElement>(null);
+  const chatContext = useOptionalChatContext();
 
   const hasNavigation = onNavigatePrevious || onNavigateNext;
 
   // Zoom state
   const [zoom, setZoom] = useState(1);
+
+  const handleAddToChat = useCallback(() => {
+    if (!chatContext) return;
+    chatContext.addAttachedFile({
+      path: filePath,
+      filename: filename,
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+    });
+    toast.success(`Added ${filename} to chat`);
+  }, [chatContext, filePath, filename]);
 
   // Reset zoom when image changes
   useEffect(() => {
@@ -146,11 +157,11 @@ export function ImageViewerPanel({
   return (
     <div className="absolute inset-0 z-10 bg-background flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 gap-2">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           {/* Navigation buttons - left side */}
           {hasNavigation && (
-            <div className="flex items-center gap-1 mr-2">
+            <div className="flex items-center gap-1 mr-2 shrink-0">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -181,13 +192,13 @@ export function ImageViewerPanel({
               </Tooltip>
             </div>
           )}
-          <ImageIcon className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <h2 className="text-sm font-semibold">{filename}</h2>
-            <p className="text-xs text-muted-foreground">{filePath}</p>
+          <ImageIcon className="h-5 w-5 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold truncate" title={filename}>{filename}</h2>
+            <p className="text-xs text-muted-foreground truncate" title={filePath}>{filePath}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {/* Zoom controls */}
           <div className="flex items-center gap-1 mr-2 border-r pr-2">
             {zoom !== 1 && (
@@ -252,13 +263,13 @@ export function ImageViewerPanel({
             <TooltipContent>Download</TooltipContent>
           </Tooltip>
 
-          {onAddToChat && (
+          {chatContext && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={onAddToChat}
+                  onClick={handleAddToChat}
                   className="h-8 w-8 p-0"
                 >
                   <MessageSquarePlus className="h-4 w-4" />

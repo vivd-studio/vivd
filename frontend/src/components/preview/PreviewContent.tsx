@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { ChatPanelContent } from "../chat/ChatPanel";
-import { ChatProvider, useOptionalChatContext } from "../chat/ChatContext";
+import { ChatProvider } from "../chat/ChatContext";
 import { AssetExplorer } from "../asset-explorer";
 import { ResizeHandle } from "@/components/common/ResizeHandle";
 import { usePreview } from "./PreviewContext";
@@ -207,21 +207,6 @@ export function PreviewContent() {
     },
   });
 
-  const chatContext = useOptionalChatContext();
-
-  const handleAddToChat = useCallback(
-    (asset: FileTreeNode | AssetItem) => {
-      if (!chatContext) return;
-      chatContext.addAttachedFile({
-        path: asset.path,
-        filename: asset.name,
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      });
-      toast.success(`Added ${asset.name} to chat`);
-    },
-    [chatContext],
-  );
-
   const handleConfirmDelete = useCallback(() => {
     if (!projectSlug || !pendingDeleteAsset) return;
     deleteMutation.mutate({
@@ -369,9 +354,6 @@ export function PreviewContent() {
               currentAsset
                 ? () => setPendingDeleteAsset(currentAsset)
                 : undefined
-            }
-            onAddToChat={
-              currentAsset ? () => handleAddToChat(currentAsset) : undefined
             }
           />
         )}

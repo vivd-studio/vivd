@@ -6,8 +6,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, Save, X, FileCode, WrapText } from "lucide-react";
+import { Loader2, Save, X, FileCode, WrapText, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
+import { useOptionalChatContext } from "@/components/chat/ChatContext";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
@@ -76,6 +77,19 @@ export function TextEditorPanel({
   const [content, setContent] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const [lineWrap, setLineWrap] = useState(true);
+  const chatContext = useOptionalChatContext();
+
+  const filename = filePath.split("/").pop() || filePath;
+
+  const handleAddToChat = useCallback(() => {
+    if (!chatContext) return;
+    chatContext.addAttachedFile({
+      path: filePath,
+      filename: filename,
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+    });
+    toast.success(`Added ${filename} to chat`);
+  }, [chatContext, filePath, filename]);
 
   // Query to load file content
   const { data, isLoading, error } = trpc.assets.readTextFile.useQuery(
@@ -157,7 +171,6 @@ export function TextEditorPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave, handleClose, hasChanges, saveMutation.isPending]);
 
-  const filename = filePath.split("/").pop() || filePath;
   const languageExtension = getLanguageExtension(filename);
 
   // Build extensions array with optional line wrapping
@@ -172,20 +185,20 @@ export function TextEditorPanel({
   return (
     <div className="absolute inset-0 z-10 bg-background flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-        <div className="flex items-center gap-3">
-          <FileCode className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <h2 className="text-sm font-semibold">{filename}</h2>
-            <p className="text-xs text-muted-foreground">{filePath}</p>
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 gap-2">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <FileCode className="h-5 w-5 text-muted-foreground shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold truncate" title={filename}>{filename}</h2>
+            <p className="text-xs text-muted-foreground truncate" title={filePath}>{filePath}</p>
           </div>
           {hasChanges && (
-            <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full">
+            <span className="text-xs px-2 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full shrink-0">
               Unsaved
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -201,6 +214,22 @@ export function TextEditorPanel({
               {lineWrap ? "Disable line wrap" : "Enable line wrap"}
             </TooltipContent>
           </Tooltip>
+
+          {chatContext && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAddToChat}
+                  className="h-8 w-8 p-0"
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Add to Chat</TooltipContent>
+            </Tooltip>
+          )}
 
           <Tooltip>
             <TooltipTrigger asChild>

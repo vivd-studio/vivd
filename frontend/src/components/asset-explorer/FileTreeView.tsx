@@ -91,10 +91,12 @@ export function FileTreeView({
     if (item.type === "folder") {
       toggleExpanded(item.path);
     } else if (item.isImage) {
-      // Open image in viewer panel (like code view)
+      // Open image in viewer panel - close text editor first
+      setEditingTextFile(null);
       setViewingImagePath(item.path);
     } else {
-      // Text file - open in editor
+      // Text file - open in editor, close image viewer first
+      setViewingImagePath(null);
       setEditingTextFile(item.path);
     }
   };

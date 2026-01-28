@@ -4,6 +4,8 @@
   "scripts": {
     "test": "concurrently \"npm run test --prefix backend\" \"npm run test --prefix frontend\" \"npm run test --prefix scraper\"",
     "test:run": "npm run test:run --prefix backend && npm run test:run --prefix frontend && npm run test:run --prefix scraper",
+    "lint": "npm run lint --prefix frontend",
+    "check": "npm run lint && npm run test:run",
     "gen:client": "cd backend && npm run generate:spec && cd ../frontend && npm run generate:client",
     "db:push": "cd backend && npm run db:push",
     "db:studio": "cd backend && npm run db:studio",
