@@ -16,6 +16,7 @@ import { EmptyStatePrompt } from "./EmptyStatePrompt";
 import {
   ElementRefPill,
   DroppedImagePill,
+  AttachedFileRefPill,
   parseVivdInternalTags,
 } from "./SelectedElementPill";
 import { useChatContext } from "./ChatContext";
@@ -126,7 +127,10 @@ export function MessageList() {
 
                   // Separate by type
                   const imageTags = internalTags.filter(
-                    (t) => t.type === "dropped-image",
+                    (t) => t.type === "dropped-file",
+                  );
+                  const fileTags = internalTags.filter(
+                    (t) => t.type === "attached-file",
                   );
                   const elementTag = internalTags.find(
                     (t) => t.type === "element-ref",
@@ -173,21 +177,29 @@ export function MessageList() {
                       >
                         {cleanMessage}
                       </ReactMarkdown>
-                      {/* Show dropped image pills */}
-                      {imageTags.length > 0 && (
+                      {/* Show all attachment pills (images, files, and element refs) */}
+                      {(imageTags.length > 0 ||
+                        fileTags.length > 0 ||
+                        elementTag?.selector) && (
                         <div className="mt-2 pt-2 border-t border-foreground/10 flex flex-wrap gap-1.5">
                           {imageTags.map((tag, idx) => (
                             <DroppedImagePill
-                              key={idx}
+                              key={`img-${idx}`}
                               filename={tag.filename || "image"}
                             />
                           ))}
-                        </div>
-                      )}
-                      {/* Show element ref pill */}
-                      {elementTag?.selector && (
-                        <div className="mt-2 pt-2 border-t border-foreground/10">
-                          <ElementRefPill html={elementTag.selector} />
+                          {fileTags.map((tag, idx) => (
+                            <AttachedFileRefPill
+                              key={`file-${idx}`}
+                              filename={tag.filename || "file"}
+                            />
+                          ))}
+                          {elementTag?.selector && (
+                            <ElementRefPill
+                              key="element"
+                              html={elementTag.selector}
+                            />
+                          )}
                         </div>
                       )}
                     </div>
