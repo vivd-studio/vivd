@@ -5,7 +5,6 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { fileURLToPath } from "url";
 import { convertFilenameToWebp, writeImageFile } from "./utils/imageUtils";
 import multer from "multer";
 import archiver from "archiver";
