@@ -22,7 +22,11 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
 import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
-import { getVersionDir, touchProjectUpdatedAt } from "./generator/versionUtils";
+import {
+  getProjectsDir,
+  getVersionDir,
+  touchProjectUpdatedAt,
+} from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
 import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
@@ -244,7 +248,7 @@ app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
 app.use(
   "/vivd-studio/api/projects",
   createProtectedProjectsStaticMiddleware(),
-  express.static(path.join(__dirname, "../projects"), { dotfiles: "allow" }),
+  express.static(getProjectsDir(), { dotfiles: "allow" }),
 );
 // Security whitelist for external preview (unauthenticated access)
 const ALLOWED_EXTENSIONS = new Set([
