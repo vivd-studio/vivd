@@ -34,9 +34,6 @@ import { projectMember } from "./db/schema";
 import { eq } from "drizzle-orm";
 import { buildService } from "./services/BuildService";
 
-// ESM dirname replacement
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
