@@ -2,12 +2,13 @@
 .venv
 node_modules
 .DS_Store
-backend/projects/
+packages/backend/projects/
 projects_backup/
-dist/
+**/dist/
 generated/
 generated_backup*/
 published/
+packages/backend/published/
 caddy-sites/
 
 # Test artifacts

@@ -1,27 +1,28 @@
+# Self-hosted production configuration
+# Explicit SAAS_MODE=false ensures self-hosted behavior
+
 services:
   caddy:
-    image: caddy:2-alpine
-    # ports:
-    #   - "80:80"
-    #   - "443:443"
+    image: ghcr.io/vivd-studio/vivd-caddy:latest
+    pull_policy: always
+    restart: unless-stopped
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
       - caddy_sites:/etc/caddy/sites.d
+      - caddy_caddyfile:/etc/caddy_shared
       - published_sites:/srv/published:ro
-      - ./packages/backend/static:/srv/default:ro
     depends_on:
       - backend
     networks:
       - vivd-network
 
   backend:
-    build:
-      context: .
-      dockerfile: packages/backend/Dockerfile
-      target: prod
+    image: ghcr.io/vivd-studio/vivd-server:latest
+    pull_policy: always
+    restart: unless-stopped
     environment:
+      - SAAS_MODE=false
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - PORT=3000
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
@@ -54,7 +55,7 @@ services:
       - opencode_data:/root/.local/share/opencode/storage
       - published_sites:/srv/published
       - caddy_sites:/etc/caddy/sites.d
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_caddyfile:/etc/caddy_shared:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,12 +63,11 @@ services:
       - vivd-network
 
   frontend:
-    build:
-      context: .
-      dockerfile: packages/frontend/Dockerfile
-      target: prod
-      args:
-        - VITE_APP_ENV=${VITE_APP_ENV}
+    image: ghcr.io/vivd-studio/vivd-ui:latest
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      - VITE_APP_ENV=${VITE_APP_ENV}
     depends_on:
       - backend
     networks:
@@ -75,6 +75,7 @@ services:
 
   postgres:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -99,4 +100,5 @@ volumes:
   caddy_data:
   caddy_config:
   caddy_sites:
+  caddy_caddyfile:
   published_sites:
