@@ -21,6 +21,7 @@ import { DEVICE_PRESETS, type DevicePreset } from "./types";
 import {
   collectVivdTextPatchesFromDocument,
   getI18nKeyForEditableElement,
+  type VivdPatch,
 } from "@/lib/vivdPreviewTextPatching";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 
@@ -180,13 +181,16 @@ export function PreviewProvider({
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  type HtmlPatch =
-    | { type: "setTextNode"; selector: string; index: number; value: string }
-    | { type: "setI18n"; key: string; lang: string; value: string }
+  type SavePatch =
+    | VivdPatch
     | { type: "setAttr"; selector: string; name: "src"; value: string };
 
+  type ImagePatch =
+    | Extract<SavePatch, { type: "setAttr" }>
+    | Extract<SavePatch, { type: "setAstroText" }>;
+
   const pendingImagePatchesRef = useRef<
-    Map<string, Extract<HtmlPatch, { type: "setAttr" }>>
+    Map<string, ImagePatch>
   >(new Map());
   const baselineSrcRef = useRef<Map<string, string | null>>(new Map());
   const editModeCleanupRef = useRef<(() => void) | null>(null);
@@ -285,9 +289,62 @@ export function PreviewProvider({
     [getVivdSelector],
   );
 
+  const normalizeAstroSourceFile = useCallback((astroSourceFile: string) => {
+    const srcMatch = astroSourceFile.match(/\/(src\/.*\.astro)$/i);
+    return srcMatch ? srcMatch[1] : astroSourceFile;
+  }, []);
+
+  const getOriginalAssetUrlFromPreviewUrl = useCallback(
+    (src: string | null) => {
+      if (!src) return null;
+
+      // Preserve relative URLs (e.g. "images/foo.png") as-is
+      let normalized = src;
+      if (
+        normalized.startsWith("http://") ||
+        normalized.startsWith("https://")
+      ) {
+        try {
+          normalized = new URL(normalized).pathname;
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!projectSlug) return normalized;
+
+      const prefixes = [
+        `/vivd-studio/api/devpreview/${projectSlug}/v${selectedVersion}`,
+        `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}`,
+        `/vivd-studio/api/projects/${projectSlug}/v${selectedVersion}`,
+      ];
+
+      for (const prefix of prefixes) {
+        if (normalized.startsWith(prefix + "/")) {
+          return normalized.slice(prefix.length);
+        }
+      }
+
+      return normalized;
+    },
+    [projectSlug, selectedVersion],
+  );
+
+  const toPublicUrlPath = useCallback(
+    (assetPath: string, baseline: string | null) => {
+      const withoutLeadingSlash = assetPath.replace(/^\/+/, "");
+      const withoutPublicPrefix = withoutLeadingSlash.replace(/^public\//, "");
+      const baselineHasLeadingSlash = (baseline ?? "").startsWith("/");
+      return baselineHasLeadingSlash
+        ? `/${withoutPublicPrefix}`
+        : withoutPublicPrefix;
+    },
+    [],
+  );
+
   const collectTextPatchesFromDocument = useCallback(
-    (doc: Document): HtmlPatch[] => {
-      return collectVivdTextPatchesFromDocument(doc) as HtmlPatch[];
+    (doc: Document): VivdPatch[] => {
+      return collectVivdTextPatchesFromDocument(doc);
     },
     [],
   );
@@ -454,10 +511,49 @@ export function PreviewProvider({
 
       const key = `setAttr:${selector}:src`;
       if (!baselineSrcRef.current.has(key)) {
-        baselineSrcRef.current.set(key, previousSrcAttr);
+        baselineSrcRef.current.set(
+          key,
+          getOriginalAssetUrlFromPreviewUrl(previousSrcAttr),
+        );
       }
 
       const baseline = baselineSrcRef.current.get(key) ?? null;
+
+      // If this is an Astro dev server element, patch the source .astro file instead of index.html.
+      const astroSourceEl = targetImg.closest(
+        "[data-astro-source-file]",
+      ) as HTMLElement | null;
+      const astroSourceFileRaw =
+        astroSourceEl?.getAttribute("data-astro-source-file") ?? null;
+      const astroSourceLoc =
+        astroSourceEl?.getAttribute("data-astro-source-loc") ?? null;
+
+      if (astroSourceFileRaw) {
+        const sourceFile = normalizeAstroSourceFile(astroSourceFileRaw);
+        if (!baseline) {
+          toast.error(
+            "This image doesn't have a source src value, so Vivd can't save the change for Astro projects.",
+          );
+          syncUnsavedChangesState();
+          return;
+        }
+        const newValue = toPublicUrlPath(assetPath, baseline);
+        if (baseline === newValue) {
+          pendingImagePatchesRef.current.delete(key);
+        } else {
+          pendingImagePatchesRef.current.set(key, {
+            type: "setAstroText",
+            sourceFile,
+            sourceLoc: astroSourceLoc ?? undefined,
+            oldValue: baseline,
+            newValue,
+          });
+        }
+        syncUnsavedChangesState();
+        return;
+      }
+
+      // Static HTML projects: patch the HTML output directly.
       if (baseline === assetPath) {
         pendingImagePatchesRef.current.delete(key);
       } else {

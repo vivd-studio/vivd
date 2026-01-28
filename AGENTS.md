@@ -13,6 +13,10 @@ Vivd uses an npm workspaces monorepo (`package.json` at repo root, one root `pac
 - `packages/theme`: Shared CSS variables/themes for any frontend apps.
 - `legacy/control-panel`: Legacy/previous control-panel attempt (not the planned SaaS control plane).
 
+## Generated Sites
+
+The generator produces plain HTML (`index.html`) files by default. We also support Astro projects, which can be built and served by the devserver.
+
 ## Package Manager Rules
 
 - Install deps at repo root; avoid per-package `package-lock.json` files.
