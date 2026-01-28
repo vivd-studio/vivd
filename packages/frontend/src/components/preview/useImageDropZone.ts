@@ -4,6 +4,7 @@ import { toast } from "sonner";
 interface UseImageDropZoneOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   projectSlug?: string;
+  version?: number;
   enabled?: boolean;
   onImageDropped?: (
     imagePath: string,
@@ -64,15 +65,20 @@ const DROP_ZONE_STYLES = `
 export function useImageDropZone({
   iframeRef,
   projectSlug,
+  version,
   enabled = true,
   onImageDropped,
 }: UseImageDropZoneOptions) {
-  // Build the image URL path that the HTML can use
-  const buildRelativeImagePath = useCallback((assetPath: string): string => {
-    // The HTML uses relative paths, so we just return the asset path
-    // which should already be relative to the project root (e.g., "images/hero.png")
+  // Build the image URL for preview display
+  const buildImagePreviewUrl = useCallback((assetPath: string): string => {
+    // For Astro projects, use absolute API paths to avoid base path issues
+    // For static projects, relative paths work fine
+    if (projectSlug && version) {
+      return `/vivd-studio/api/projects/${projectSlug}/v${version}/${assetPath}`;
+    }
+    // Fallback to relative path (works for static HTML projects)
     return assetPath;
-  }, []);
+  }, [projectSlug, version]);
 
   // Set up drop zones on all images in the iframe
   const enableDropZones = useCallback(
@@ -121,17 +127,17 @@ export function useImageDropZone({
           img.setAttribute("data-drop-target", "true");
 
           const assetPath = e.dataTransfer?.getData("application/x-asset-path");
-          // assetUrl is available if needed for fallback: e.dataTransfer?.getData("application/x-asset-url")
 
           if (assetPath) {
-            // Update the image source to the new asset
-            const newSrc = buildRelativeImagePath(assetPath);
+            // Update the image source to the new asset for preview display
+            const previewUrl = buildImagePreviewUrl(assetPath);
             const previousSrcAttr = img.getAttribute("src");
-            img.setAttribute("src", newSrc);
+            img.setAttribute("src", previewUrl);
 
             toast.success(`Image replaced with ${assetPath.split("/").pop()}`);
 
             if (onImageDropped) {
+              // Pass the asset path (not the preview URL) to store in patches
               onImageDropped(assetPath, img, previousSrcAttr);
             }
           }
@@ -149,7 +155,7 @@ export function useImageDropZone({
         img.addEventListener("drop", handleDrop);
       });
     },
-    [buildRelativeImagePath, onImageDropped]
+    [buildImagePreviewUrl, onImageDropped]
   );
 
   // Remove drop zones from all images

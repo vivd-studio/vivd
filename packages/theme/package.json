@@ -1,0 +1,16 @@
+{
+  "name": "@vivd/theme",
+  "version": "1.0.0",
+  "private": true,
+  "files": [
+    "theme.css"
+  ],
+  "style": "./theme.css",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./theme.css",
+    "./theme.css": "./theme.css"
+  }
+}

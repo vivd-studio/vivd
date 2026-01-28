@@ -632,6 +632,9 @@ vivd/
 │   │   │   └── utils/
 │   │   └── package.json
 │   │
+│   ├── theme/                           # Shared design tokens (CSS variables)
+│   │   └── theme.css
+│   │
 │   ├── backend/                         # Studio backend (existing, modified)
 │   │   ├── src/
 │   │   │   ├── server.ts
@@ -702,12 +705,13 @@ vivd/
 ### Phase 1: Foundation & Dual-Mode Support
 **Goal:** Enable the current codebase to run in both self-hosted and SaaS mode without breaking existing functionality.
 
-- [ ] Create `packages/shared` with types and mode detection
-- [ ] Add `SAAS_MODE` environment variable support
-- [ ] Modify auth to support control plane token validation
-- [ ] Modify limits service to fetch from control plane when in SaaS mode
-- [ ] Create `docker-compose.self-hosted.yml`
-- [ ] Test self-hosted mode works identically to current
+- [x] Create `packages/shared` with types and mode detection
+- [x] Add `SAAS_MODE` environment variable support
+- [x] Modify auth to support control plane token validation (provider abstraction + stub)
+- [x] Modify limits service to fetch from control plane when in SaaS mode (cached stub + env fallback)
+- [x] Create `docker-compose.self-hosted.yml`
+- [x] Create `packages/theme` for shared design tokens (CSS variables)
+- [x] Test self-hosted mode works identically to current
 
 ### Phase 2: Database Schema & Organizations
 **Goal:** Add organization model and multi-tenancy to the database.

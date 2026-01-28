@@ -1,82 +1,38 @@
-# Vivd
+# Vivd (Monorepo)
 
-Vivd is an AI-powered website builder that let's Anyone build their own website.
+Vivd is an AI-powered website builder: generate a site, preview/edit it in the studio, and publish it via Caddy.
 
-- You can Preview your page in an Editor and just tell the Agent what you want, and he will implement it in the website (be it content, text, images, pages, subpages, job-listings, etc.).
-- Like a CMS you control with "Saying what you want", replacing the need for a web-agency. The AI is your Designer, Developer, Security Reviewer, Content Creator and sparring partner.
-- easy Editor that let's you drag&drop new assets, like images or files directly into your site and also directly edit text on the page.
-- a server to host your website - you just have to click "publish" and it will be available on the internet.
+## Repo Layout
 
-# Frontend
+Vivd uses an npm workspaces monorepo (`package.json` at repo root, one root `package-lock.json`).
 
-The frontend is a React with Vite application that provides a user interface for interacting with the backend.
+- `packages/backend`: Express + tRPC, Better Auth, Drizzle migrations, OpenCode agent integration. Serves project files and manages publishing (writes Caddy snippets + reloads Caddy).
+- `packages/frontend`: React + Vite studio UI. Uses tRPC, shadcn/ui, `react-hook-form`. Tailwind design tokens come from `@vivd/theme`.
+- `packages/scraper`: Dedicated Express + Puppeteer service (called by backend).
+- `packages/shared`: Shared types + SaaS mode config (`SAAS_MODE`, `CONTROL_PLANE_*`) for the studio backend.
+- `packages/theme`: Shared CSS variables/themes for any frontend apps.
+- `legacy/control-panel`: Legacy/previous control-panel attempt (not the planned SaaS control plane).
 
-- we are using trpc for api-calls.
-- the generated website files will be served by the backend from statically from the projects/ folder.
-- Try to use shadcn components if possible.
-- use react-hook-form for forms
-- use our tailwind tokens from index.css for styling
-- for api-calls with trpc, always deconstruct queries or mutations, for example: const { x, y, z } = trpc.example.useMutation()
+## Package Manager Rules
 
-# Backend
+- Install deps at repo root; avoid per-package `package-lock.json` files.
+- Run package scripts via workspaces, e.g. `npm run build -w @vivd/backend`.
 
-The backend is a Node.js application that provides an API for interacting with the frontend. The backend statically serves all the generated index.htmls from the projects/ folder
+## Docker / Local Dev
 
-- express.js
-- drizzle-orm with migrations for database (DON't EVER RUN DB PUSH, allways apply migrations)
-- better-auth for authentication
-- puppeteer for scraping
-- trpc for api-calls
-- opencode for ai-agent
+- `docker-compose.yml` is the base stack; `docker-compose.override.yml` is local dev overrides.
+- Local URLs (via Caddy): studio at `http://localhost/vivd-studio`, published sites at `http://localhost/`.
+- `docker-compose.self-hosted.yml` is the self-hosted production compose (GHCR images, `SAAS_MODE=false`).
 
-# Deployment & Development
+## DB / Migrations
 
-We are using the docker-compose.yml file to deploy all of our services (backend, frontend, database) so this file needs to be ready to deploy. (PROD)
-The docker-compose.override.yml file is used to override the docker-compose.yml file for local development. (DEV)
+- Drizzle migrations only. Do not use `drizzle-kit push` / `db:push`.
 
-## How it works
+## Plans
 
-1. **Scrapes** a target URL for text, images, and a screenshot using Puppeteer.
-2. **Analyzes** the content and current brand visual.
-3. **Generates** a new, high-converting landing page (HTML/Tailwind) via OpenRouter API.
-
-We save all the generated and downloaded files from the url in the projects/domain-name folder and also keep a project.json in the root folder, that tracks the url, created_at, status, etc.
-
-Afterwards we can use an Agent to request changes on to our website. The agent is an opencode agent (https://opencode.ai/docs) and we are consuming its SDK in our backend.
+- Main roadmap: `docs/implementation.md`
+- SaaS refactor plan: `docs/multi-tenant-refactor/multi-tenant-saas-refactor-plan.md`
 
 ## Testing Note
 
-> [!IMPORTANT] > **Do not run tests on every change.**
-> The workflow is long-running and uses paid API calls. Running tests frequently can be pricey and time-consuming.
-
-# Architecture
-
-Vivd uses a **single-tenant architecture** where each user gets their own isolated instance:
-(There is an option planned for the software to be used multitenant though)
-
-Per-User Instance
-Frontend / Backend (+ opencode agent) / Postgres Database / Caddy Server for live website
-Dedicated Volume (projects/)
-
-- **Backend**: Each user has their own backend container with an embedded opencode agent
-- **Database**: Separate Postgres database per user (isolated data)
-- **Volumes**: Dedicated storage volumes for generated files and assets
-- **Agent**: opencode runs within the backend, scoped to that user's project files only
-- **Publishing**: A separate Caddy server serves the published live website
-
-# Implementation Plan
-
-We are constantly keeping track of the implementation plan in the docs/implementation.md file, it's kind of our main-quest. If you are tasked to work on it, ask if you can tick of certain elements so we can mark them as done.
-
-# Skills
-
-To get further information on certain topics, you can load extra information from the .skills folder.
-
-Available skills:
-
-- .skills/DOKPLOY.md (We deploy on Dokploy, here you can find all information on the platform)
-- .skills/OPENCODE.md (We use OpenCode as our AI coding agent, here you can find docs and configuration reference)
-
-# Local dev
-
-- because of the caddy config, the "published website" is available on http://localhost (without a port) and the development vivd-instance is on http://localhost/vivd-studio (without a port)
+- Avoid running full test suites frequently (some workflows are long-running / use paid APIs). Prefer targeted builds and minimal checks.

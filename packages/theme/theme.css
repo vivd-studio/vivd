@@ -1,0 +1,727 @@
+@layer base {
+  /* ============================================
+     DEFAULT: Clean Theme (Slate/Gray + Blue)
+     ============================================ */
+  :root {
+    --radius: 0.5rem;
+
+    /* Clean Light Theme - Minimal & Professional */
+    --background: 0 0% 100%; /* Pure white */
+    --foreground: 224 10% 15%; /* Near black with slight warmth */
+
+    --card: 210 20% 99%; /* Very subtle cool tint */
+    --card-foreground: 224 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 10% 15%;
+
+    /* Primary: Calm slate blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Light gray */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 224 10% 25%;
+
+    /* Muted: Soft gray */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent: Subtle indigo */
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 217 91% 60%;
+
+    --chart-1: 217 91% 60%; /* Blue */
+    --chart-2: 142 71% 45%; /* Green */
+    --chart-3: 262 83% 58%; /* Purple */
+    --chart-4: 43 96% 56%; /* Yellow */
+    --chart-5: 0 84% 60%; /* Red */
+
+    /* Chat user bubble: softer blue-gray */
+    --chat-user: 220 13% 91%;
+    --chat-user-foreground: 224 10% 20%;
+  }
+
+  .dark {
+    /* Clean Dark Theme - Sleek & Modern */
+    --background: 224 71% 4%; /* Near black */
+    --foreground: 210 20% 98%; /* Off-white */
+
+    --card: 224 40% 12%; /* Lighter for elevation contrast */
+    --card-foreground: 210 20% 98%;
+
+    --popover: 224 40% 6%;
+    --popover-foreground: 210 20% 98%;
+
+    /* Primary: Bright blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Dark gray */
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 20% 98%;
+
+    /* Muted: Dark gray */
+    --muted: 215 28% 25%;
+    --muted-foreground: 217 10% 64%;
+
+    /* Accent: Subtle background for hovers */
+    --accent: 215 28% 32%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 217 91% 60%;
+
+    /* Charts */
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 262 83% 58%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 0 84% 60%;
+
+    /* Chat user bubble: softer slate */
+    --chat-user: 215 28% 22%;
+    --chat-user-foreground: 210 20% 98%;
+  }
+
+  /* ============================================
+     NATURAL Theme (Warm Green/Gold)
+     ============================================ */
+  [data-color-theme="natural"] {
+    /* Natural Light Theme - Pristine & Clean */
+    --background: 40 33% 98%; /* Warm off-white */
+    --foreground: 20 25% 18%; /* Warm dark brown */
+
+    --card: 40 25% 99%;
+    --card-foreground: 20 25% 18%;
+
+    --popover: 40 33% 99%;
+    --popover-foreground: 20 25% 18%;
+
+    /* Primary: Fresh Sage Green */
+    --primary: 153 42% 52%;
+    --primary-foreground: 40 33% 98%;
+
+    /* Secondary: Soft cream */
+    --secondary: 43 60% 94%;
+    --secondary-foreground: 20 25% 22%;
+
+    /* Muted: Very light warm gray */
+    --muted: 40 20% 94%;
+    --muted-foreground: 20 10% 50%;
+
+    /* Accent: Rich Gold */
+    --accent: 45 85% 72%;
+    --accent-foreground: 20 30% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 153 50% 30%;
+
+    /* Charts */
+    --chart-1: 153 42% 52%;
+    --chart-2: 45 85% 58%;
+    --chart-3: 184 48% 24%;
+    --chart-4: 38 80% 62%;
+    --chart-5: 193 24% 76%;
+
+    /* Chat user bubble: soft sage-gray */
+    --chat-user: 153 20% 85%;
+    --chat-user-foreground: 20 25% 18%;
+  }
+
+  [data-color-theme="natural"].dark,
+  .dark[data-color-theme="natural"] {
+    /* Natural Dark Theme - Warm & Earthy */
+    --background: 20 20% 8%;
+    --foreground: 40 20% 92%;
+
+    --card: 20 18% 15%; /* Lighter for elevation contrast */
+    --card-foreground: 40 20% 92%;
+
+    --popover: 20 18% 10%;
+    --popover-foreground: 40 20% 92%;
+
+    /* Primary: Fresh Sage Green */
+    --primary: 153 50% 60%;
+    --primary-foreground: 20 20% 8%;
+
+    /* Secondary: Muted warm tones */
+    --secondary: 20 15% 16%;
+    --secondary-foreground: 40 20% 92%;
+
+    /* Muted: Warm dark gray */
+    --muted: 20 12% 25%;
+    --muted-foreground: 40 12% 60%;
+
+    /* Accent: Subtle background for hovers */
+    --accent: 20 15% 32%;
+    --accent-foreground: 40 20% 95%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 20 12% 20%;
+    --input: 20 12% 20%;
+    --ring: 153 50% 60%;
+
+    /* Charts */
+    --chart-1: 153 50% 60%;
+    --chart-2: 45 70% 45%;
+    --chart-3: 184 40% 40%;
+    --chart-4: 35 65% 48%;
+    --chart-5: 193 30% 65%;
+
+    /* Chat user bubble: soft warm gray */
+    --chat-user: 20 12% 22%;
+    --chat-user-foreground: 40 20% 92%;
+  }
+
+  /* ============================================
+     VIVD GREEN Theme (Sharper, Higher Contrast)
+     ============================================ */
+  [data-color-theme="vivd-green"] {
+    /* Vivd Green Light Theme - Crisp & Bold */
+    --background: 0 0% 100%; /* Pure white */
+    --foreground: 20 30% 12%; /* Deeper brown-black */
+
+    --card: 40 40% 99%;
+    --card-foreground: 20 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 30% 12%;
+
+    /* Primary: Vibrant Emerald Green */
+    --primary: 152 60% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Warm cream with more saturation */
+    --secondary: 43 50% 92%;
+    --secondary-foreground: 20 30% 18%;
+
+    /* Muted: Clean gray */
+    --muted: 40 10% 94%;
+    --muted-foreground: 20 15% 45%;
+
+    /* Accent: Vibrant Gold */
+    --accent: 45 90% 70%;
+    --accent-foreground: 20 35% 12%;
+
+    --destructive: 0 80% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 20% 85%;
+    --input: 40 20% 85%;
+    --ring: 152 60% 35%;
+
+    /* Charts */
+    --chart-1: 152 60% 42%;
+    --chart-2: 45 90% 55%;
+    --chart-3: 184 55% 28%;
+    --chart-4: 40 85% 58%;
+    --chart-5: 193 35% 55%;
+
+    /* Chat user bubble: soft green-gray */
+    --chat-user: 152 15% 82%;
+    --chat-user-foreground: 20 30% 12%;
+  }
+
+  [data-color-theme="vivd-green"].dark,
+  .dark[data-color-theme="vivd-green"] {
+    /* Vivd Green Dark Theme - Bold & Sharp */
+    --background: 20 25% 6%; /* Deep charcoal */
+    --foreground: 40 30% 95%; /* Bright off-white */
+
+    --card: 20 22% 14%; /* Lighter for elevation contrast */
+    --card-foreground: 40 30% 95%;
+
+    --popover: 20 22% 8%;
+    --popover-foreground: 40 30% 95%;
+
+    /* Primary: Bright Emerald Green */
+    --primary: 152 65% 55%;
+    --primary-foreground: 20 25% 6%;
+
+    /* Secondary: Warm tones */
+    --secondary: 20 18% 14%;
+    --secondary-foreground: 40 30% 95%;
+
+    /* Muted: Warm dark gray */
+    --muted: 20 15% 25%;
+    --muted-foreground: 40 15% 65%;
+
+    /* Accent: Subtle background for hovers */
+    --accent: 20 18% 32%;
+    --accent-foreground: 40 30% 95%;
+
+    --destructive: 0 70% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 20 15% 18%;
+    --input: 20 15% 18%;
+    --ring: 152 65% 55%;
+
+    /* Charts */
+    --chart-1: 152 65% 55%;
+    --chart-2: 45 75% 42%;
+    --chart-3: 184 50% 45%;
+    --chart-4: 38 70% 45%;
+    --chart-5: 193 40% 60%;
+
+    /* Chat user bubble: soft warm dark gray */
+    --chat-user: 20 15% 20%;
+    --chat-user-foreground: 40 30% 95%;
+  }
+
+  /* ============================================
+     VIVD SHARP Theme (Maximum Contrast & Sharpness)
+     ============================================ */
+  [data-color-theme="vivd-sharp"] {
+    /* Vivd Sharp Light Theme - Maximum Clarity */
+    --background: 0 0% 100%; /* Pure white */
+    --foreground: 0 0% 5%; /* Near black */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 5%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 5%;
+
+    /* Primary: Maximum Saturation Emerald */
+    --primary: 152 80% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Pure light gray */
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 10%;
+
+    /* Muted: Neutral gray */
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 40%;
+
+    /* Accent: Maximum Saturation Gold */
+    --accent: 45 100% 68%;
+    --accent-foreground: 0 0% 5%;
+
+    --destructive: 0 90% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 152 80% 30%;
+
+    /* Charts */
+    --chart-1: 152 80% 38%;
+    --chart-2: 45 100% 55%;
+    --chart-3: 184 70% 25%;
+    --chart-4: 40 95% 55%;
+    --chart-5: 193 50% 50%;
+
+    /* Chat user bubble: clean gray */
+    --chat-user: 0 0% 88%;
+    --chat-user-foreground: 0 0% 10%;
+  }
+
+  [data-color-theme="vivd-sharp"].dark,
+  .dark[data-color-theme="vivd-sharp"] {
+    /* Vivd Sharp Dark Theme - Maximum Contrast */
+    --background: 0 0% 4%; /* Near pure black */
+    --foreground: 0 0% 98%; /* Near pure white */
+
+    --card: 0 0% 11%; /* Lighter for elevation contrast */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Primary: Bright Maximum Emerald */
+    --primary: 152 85% 48%;
+    --primary-foreground: 0 0% 4%;
+
+    /* Secondary: Dark neutral */
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+
+    /* Muted: Dark neutral */
+    --muted: 0 0% 25%;
+    --muted-foreground: 0 0% 60%;
+
+    /* Accent: Subtle background for hovers */
+    --accent: 0 0% 32%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 80% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 152 85% 48%;
+
+    /* Charts */
+    --chart-1: 152 85% 48%;
+    --chart-2: 45 85% 30%;
+    --chart-3: 184 60% 40%;
+    --chart-4: 38 80% 40%;
+    --chart-5: 193 50% 55%;
+
+    /* Chat user bubble: dark neutral gray */
+    --chat-user: 0 0% 16%;
+    --chat-user-foreground: 0 0% 98%;
+  }
+
+  /* ============================================
+     OCEAN Theme (Calming Blue/Teal)
+     ============================================ */
+  [data-color-theme="ocean"] {
+    /* Ocean Light Theme - Fresh & Breezy */
+    --background: 210 40% 98%; /* Very pale blue */
+    --foreground: 222 47% 11%; /* Deep navy */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary: Ocean Blue */
+    --primary: 199 89% 48%; /* Bright cerulean */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Soft foam */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted: Mist */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent: Coral/Teal */
+    --accent: 172 66% 50%; /* Teal/Turquoise */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 199 89% 48%;
+
+    /* Charts */
+    --chart-1: 199 89% 48%; /* Blue */
+    --chart-2: 172 66% 50%; /* Teal */
+    --chart-3: 262 83% 58%; /* Purple */
+    --chart-4: 43 96% 56%; /* Yellow */
+    --chart-5: 0 84% 60%; /* Red */
+
+    /* Chat user bubble: soft blue */
+    --chat-user: 210 40% 96%;
+    --chat-user-foreground: 222 47% 11%;
+  }
+
+  [data-color-theme="ocean"].dark,
+  .dark[data-color-theme="ocean"] {
+    /* Ocean Dark Theme - Deep Sea */
+    --background: 222 47% 11%; /* Deep Navy */
+    --foreground: 210 40% 98%; /* Pale blue text */
+
+    --card: 217 33% 21%; /* Lighter for elevation contrast */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 217 33% 15%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary: Bright Ocean Blue */
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Deep blue-gray */
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    /* Muted: Deep blue-gray */
+    --muted: 217 33% 30%;
+    --muted-foreground: 215 20% 65%;
+
+    /* Accent: Subtle background for hovers */
+    --accent: 217 33% 38%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 199 89% 48%;
+
+    /* Charts */
+    --chart-1: 199 89% 48%;
+    --chart-2: 172 66% 50%;
+    --chart-3: 262 83% 58%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 0 84% 60%;
+
+    /* Chat user bubble: deep blue */
+    --chat-user: 217 33% 25%;
+    --chat-user-foreground: 210 40% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Fix autofill background in dark mode */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px hsl(var(--card)) inset !important;
+    -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground)) !important;
+  }
+
+  /* Give inputs a visible background */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    background-color: hsl(var(--card)) !important;
+  }
+}
+
+@keyframes bop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-outline {
+  0% {
+    box-shadow: 0 0 0 0 hsla(155, 35%, 48%, 0.6);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px hsla(155, 35%, 48%, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 hsla(155, 35%, 48%, 0);
+  }
+}
+
+.animate-bop {
+  animation: bop 3s ease-in-out infinite;
+}
+
+.animate-pulse-outline {
+  animation: pulse-outline 2s infinite;
+}
+
+:root {
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+}
+
+.dark {
+  --sidebar: hsl(224 40% 8%);
+  --sidebar-foreground: hsl(210 20% 98%);
+  --sidebar-primary: hsl(217 91% 60%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(215 28% 17%);
+  --sidebar-accent-foreground: hsl(210 20% 98%);
+  --sidebar-border: hsl(215 28% 17%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+}
+
+/* Natural theme sidebar */
+[data-color-theme="natural"] {
+  --sidebar: hsl(40 25% 96%);
+  --sidebar-foreground: hsl(20 25% 22%);
+  --sidebar-primary: hsl(153 42% 52%);
+  --sidebar-primary-foreground: hsl(40 33% 98%);
+  --sidebar-accent: hsl(40 20% 92%);
+  --sidebar-accent-foreground: hsl(20 25% 18%);
+  --sidebar-border: hsl(40 15% 88%);
+  --sidebar-ring: hsl(153 50% 30%);
+}
+
+[data-color-theme="natural"].dark,
+.dark[data-color-theme="natural"] {
+  --sidebar: hsl(20 18% 11%);
+  --sidebar-foreground: hsl(40 20% 92%);
+  --sidebar-primary: hsl(153 50% 60%);
+  --sidebar-primary-foreground: hsl(20 20% 8%);
+  --sidebar-accent: hsl(20 15% 16%);
+  --sidebar-accent-foreground: hsl(40 20% 92%);
+  --sidebar-border: hsl(20 12% 20%);
+  --sidebar-ring: hsl(153 50% 60%);
+}
+
+/* Vivd Green theme sidebar */
+[data-color-theme="vivd-green"] {
+  --sidebar: hsl(40 30% 96%);
+  --sidebar-foreground: hsl(20 30% 18%);
+  --sidebar-primary: hsl(152 60% 42%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(40 15% 92%);
+  --sidebar-accent-foreground: hsl(20 30% 12%);
+  --sidebar-border: hsl(40 20% 85%);
+  --sidebar-ring: hsl(152 60% 35%);
+}
+
+[data-color-theme="vivd-green"].dark,
+.dark[data-color-theme="vivd-green"] {
+  --sidebar: hsl(20 22% 10%);
+  --sidebar-foreground: hsl(40 30% 95%);
+  --sidebar-primary: hsl(152 65% 55%);
+  --sidebar-primary-foreground: hsl(20 25% 6%);
+  --sidebar-accent: hsl(20 18% 14%);
+  --sidebar-accent-foreground: hsl(40 30% 95%);
+  --sidebar-border: hsl(20 15% 18%);
+  --sidebar-ring: hsl(152 65% 55%);
+}
+
+/* Vivd Sharp theme sidebar */
+[data-color-theme="vivd-sharp"] {
+  --sidebar: hsl(0 0% 96%);
+  --sidebar-foreground: hsl(0 0% 10%);
+  --sidebar-primary: hsl(152 80% 38%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(0 0% 92%);
+  --sidebar-accent-foreground: hsl(0 0% 5%);
+  --sidebar-border: hsl(0 0% 88%);
+  --sidebar-ring: hsl(152 80% 30%);
+}
+
+[data-color-theme="vivd-sharp"].dark,
+.dark[data-color-theme="vivd-sharp"] {
+  --sidebar: hsl(0 0% 7%);
+  --sidebar-foreground: hsl(0 0% 98%);
+  --sidebar-primary: hsl(152 85% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 4%);
+  --sidebar-accent: hsl(0 0% 12%);
+  --sidebar-accent-foreground: hsl(0 0% 98%);
+  --sidebar-border: hsl(0 0% 15%);
+  --sidebar-ring: hsl(152 85% 48%);
+}
+
+/* Ocean theme sidebar */
+[data-color-theme="ocean"] {
+  --sidebar: hsl(210 40% 96%);
+  --sidebar-foreground: hsl(222 47% 15%);
+  --sidebar-primary: hsl(199 89% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(210 40% 92%);
+  --sidebar-accent-foreground: hsl(222 47% 11%);
+  --sidebar-border: hsl(214 32% 91%);
+  --sidebar-ring: hsl(199 89% 48%);
+}
+
+[data-color-theme="ocean"].dark,
+.dark[data-color-theme="ocean"] {
+  --sidebar: hsl(217 33% 17%);
+  --sidebar-foreground: hsl(210 40% 98%);
+  --sidebar-primary: hsl(199 89% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(217 33% 22%);
+  --sidebar-accent-foreground: hsl(210 40% 98%);
+  --sidebar-border: hsl(217 33% 20%);
+  --sidebar-ring: hsl(199 89% 48%);
+}
+
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Themed scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Sidebar-specific scrollbar */
+  [data-sidebar="content"]::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-thumb {
+    background: var(--sidebar-border);
+    border-radius: 3px;
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+  }
+
+  /* Firefox scrollbar styling */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  [data-sidebar="content"] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sidebar-border) transparent;
+  }
+}

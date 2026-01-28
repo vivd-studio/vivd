@@ -444,6 +444,7 @@ export function PreviewProvider({
   useImageDropZone({
     iframeRef,
     projectSlug,
+    version: selectedVersion,
     enabled: !!projectSlug && !editMode,
     onImageDropped: (assetPath, targetImg, previousSrcAttr) => {
       if (!iframeRef.current?.contentDocument) return;
