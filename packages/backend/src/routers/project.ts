@@ -4,6 +4,7 @@ import { projectGitProcedures } from "./project/git";
 import { projectPublishProcedures } from "./project/publish";
 import { projectMaintenanceProcedures } from "./project/maintenance";
 import { previewProcedures } from "./project/preview";
+import { studioProcedures } from "./project/studio";
 
 export const projectRouter = router({
   ...projectGenerationProcedures,
@@ -11,4 +12,5 @@ export const projectRouter = router({
   ...projectPublishProcedures,
   ...projectMaintenanceProcedures,
   ...previewProcedures,
+  ...studioProcedures,
 });
