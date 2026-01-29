@@ -27,6 +27,7 @@ import {
   touchProjectUpdatedAt,
 } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
+import { createGitHttpRouter } from "./routers/gitHttp";
 import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
 import { projectMember } from "./db/schema";
@@ -720,6 +721,9 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
 
 // Import Projects endpoint(s)
 app.use("/vivd-studio/api", createImportRouter({ auth, upload }));
+
+// Git HTTP Server endpoints (must be before tRPC routes)
+app.use("/vivd-studio/api/git", createGitHttpRouter());
 
 // Cleanup endpoint for sendBeacon on page leave (no auth - fire and forget)
 // Only stops opencode server; dev server has its own idle timeout

@@ -538,18 +538,7 @@ export const projectGenerationProcedures = {
       const source: "url" | "scratch" =
         sourceRaw === "scratch" ? "scratch" : manifest.url ? "url" : "scratch";
 
-      // On preview open, sync from GitHub (best-effort).
-      // Skips automatically if there are local uncommitted changes.
-      if (status === "completed") {
-        const versionDir = getVersionDir(slug, targetVersion);
-        if (fs.existsSync(versionDir)) {
-          await gitService.syncPullFromGitHub({
-            cwd: versionDir,
-            slug,
-            version: targetVersion,
-          });
-        }
-      }
+      // GitHub sync removed - using self-hosted Git HTTP server instead
 
       // Build the preview URL for the specific version
       const resultUrl =
