@@ -6,6 +6,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    depends_on:
+      - backend
+      - studio
   backend:
     build:
       target: dev
@@ -40,7 +43,10 @@ services:
     command: npm run dev
 
     depends_on:
-      - scraper
+      postgres:
+        condition: service_healthy
+      scraper:
+        condition: service_started
 
   frontend:
     build:
@@ -72,6 +78,45 @@ services:
           path: ./packages/theme/package.json
         - action: rebuild
           path: ./packages/backend/package.json
+
+  studio:
+    build:
+      context: .
+      dockerfile: packages/studio/Dockerfile
+      target: dev
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3100
+      - BRANCH=${STUDIO_BRANCH:-main}
+      - REPO_URL=${STUDIO_REPO_URL:-}
+      - GIT_TOKEN=${STUDIO_GIT_TOKEN:-}
+    volumes:
+      - opencode_data:/root/.local/share/opencode/storage
+    ports:
+      - "3100:3100"
+      - "3101:3101"
+    networks:
+      - vivd-network
+    develop:
+      watch:
+        - action: sync
+          path: ./packages/studio
+          target: /app/packages/studio
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/theme
+          target: /app/packages/theme
+          ignore:
+            - node_modules/
+        - action: rebuild
+          path: ./packages/studio/package.json
+        - action: rebuild
+          path: ./packages/theme/package.json
+    command: npm run dev
   postgres:
     ports:
       - "5432:5432"

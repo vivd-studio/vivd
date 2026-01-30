@@ -15,10 +15,12 @@ RUN npm install -g opencode-ai@1.1.28 \
 RUN git config --global user.email "generator@vivd.local" \
     && git config --global user.name "Vivd Generator"
 
-# Install deps for just the studio backend (+ shared) via root workspaces/lockfile
+# Install deps for just the backend (+ shared) via root workspaces/lockfile
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
+# Keep workspace metadata available for npm workspaces resolution
+COPY packages/studio/package.json packages/studio/package.json
 COPY packages/theme/package.json packages/theme/package.json
 
 COPY packages/frontend/package.json packages/frontend/package.json
@@ -76,6 +78,7 @@ RUN git config --global user.email "generator@vivd.local" \
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
+COPY packages/studio/package.json packages/studio/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json

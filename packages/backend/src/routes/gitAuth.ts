@@ -28,9 +28,17 @@ export async function gitAuthMiddleware(
   next: express.NextFunction
 ): Promise<void> {
   try {
+    const respondUnauthorized = (error: string) => {
+      // Git clients typically only send credentials after a Basic challenge.
+      // Without this header, `git clone https://user:pass@host/...` can fail with
+      // "Authentication failed" because no Authorization header is sent.
+      res.setHeader("WWW-Authenticate", 'Basic realm="Vivd Git"');
+      res.status(401).json({ error });
+    };
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Basic ")) {
-      res.status(401).json({ error: "Unauthorized: Missing or invalid auth" });
+      respondUnauthorized("Unauthorized: Missing or invalid auth");
       return;
     }
 
@@ -39,10 +47,11 @@ export async function gitAuthMiddleware(
     const credentials = Buffer.from(base64Credentials, "base64").toString(
       "utf8"
     );
-    const [_username, token] = credentials.split(":");
+    const colonIndex = credentials.indexOf(":");
+    const token = colonIndex >= 0 ? credentials.slice(colonIndex + 1) : "";
 
     if (!token) {
-      res.status(401).json({ error: "Unauthorized: Invalid credentials" });
+      respondUnauthorized("Unauthorized: Invalid credentials");
       return;
     }
 
@@ -55,34 +64,46 @@ export async function gitAuthMiddleware(
     });
 
     if (!sessionRecord) {
-      res.status(401).json({ error: "Unauthorized: Invalid token" });
+      respondUnauthorized("Unauthorized: Invalid token");
       return;
     }
 
+    const role = sessionRecord.user.role ?? "user";
+
     // Check session expiration
     if (sessionRecord.expiresAt && new Date(sessionRecord.expiresAt) < new Date()) {
-      res.status(401).json({ error: "Unauthorized: Token expired" });
+      respondUnauthorized("Unauthorized: Token expired");
       return;
     }
 
     // Extract project slug from URL
-    const slug = req.params.slug;
+    const rawSlug = req.params.slug;
+    const slug =
+      typeof rawSlug === "string"
+        ? rawSlug
+        : Array.isArray(rawSlug) && typeof rawSlug[0] === "string"
+          ? rawSlug[0]
+          : null;
+
     if (!slug) {
       res.status(400).json({ error: "Bad request: Missing project slug" });
       return;
     }
 
-    // Check project access
-    const member = await db.query.projectMember.findFirst({
-      where: and(
-        eq(projectMember.userId, sessionRecord.user.id),
-        eq(projectMember.projectSlug, slug)
-      ),
-    });
+    // Check project access.
+    // Client editors are restricted to their assigned project; admins/users can access all.
+    if (role === "client_editor") {
+      const member = await db.query.projectMember.findFirst({
+        where: and(
+          eq(projectMember.userId, sessionRecord.user.id),
+          eq(projectMember.projectSlug, slug)
+        ),
+      });
 
-    if (!member) {
-      res.status(403).json({ error: "Forbidden: No access to project" });
-      return;
+      if (!member) {
+        res.status(403).json({ error: "Forbidden: No access to project" });
+        return;
+      }
     }
 
     // Attach auth info to request

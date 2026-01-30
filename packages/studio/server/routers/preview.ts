@@ -24,28 +24,31 @@ export const previewRouter = router({
         projectType: "unknown",
         projectPath: null,
         status: "none" as const,
+        error: "Workspace not initialized",
       };
     }
 
     const projectPath = ctx.workspace.getProjectPath();
     const config = detectProjectType(projectPath);
     const devServer = getDevServer();
+    const previewUrl = "/preview/";
 
     if (config.mode === "static") {
       return {
-        url: null,
+        url: previewUrl,
         mode: "static" as const,
         projectType: config.framework,
         projectPath,
-        status: "none" as const,
+        status: "ready" as const,
+        error: undefined,
       };
     }
 
     // Get or start dev server
-    const result = await devServer.getOrStartDevServer(projectPath);
+    const result = await devServer.getOrStartDevServer(projectPath, "/preview");
 
     return {
-      url: result.url,
+      url: previewUrl,
       mode: "dev-server" as const,
       projectType: config.framework,
       projectPath,
@@ -64,7 +67,7 @@ export const previewRouter = router({
 
     return {
       status,
-      url: devServer.getDevServerUrl(),
+      url: status === "ready" ? "/preview/" : null,
     };
   }),
 

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { studioService } from "../../services/StudioService";
+import { db } from "../../db";
+import { session as sessionTable } from "../../db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Studio-related TRPC procedures.
@@ -51,9 +54,19 @@ export const studioProcedures = {
       const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
       const repoUrl = `${backendUrl}/vivd-studio/api/git/${input.slug}/v${input.version}`;
 
-      // Use the user's session token for git authentication
-      // The studio will pass this as git credentials when cloning/pushing
-      const sessionToken = ctx.session?.token;
+      // Resolve the user's session token for git authentication.
+      // The auth session shape we expose to the app does not include the raw token.
+      const sessionId = ctx.session.session.id;
+      const sessionRecord = await db.query.session.findFirst({
+        where: eq(sessionTable.id, sessionId),
+      });
+      const sessionToken = sessionRecord?.token;
+      if (!sessionToken) {
+        return {
+          success: false,
+          error: "Failed to resolve session token for git authentication",
+        };
+      }
 
       try {
         const { url, port } = await studioService.start(

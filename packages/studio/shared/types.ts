@@ -11,7 +11,7 @@ export const setTextNodePatchSchema = z.object({
 export const setAttrPatchSchema = z.object({
   type: z.literal("setAttr"),
   selector: z.string(),
-  attr: z.string(),
+  name: z.string(),
   value: z.string(),
 });
 
@@ -25,14 +25,7 @@ export const setI18nPatchSchema = z.object({
 export const setAstroTextPatchSchema = z.object({
   type: z.literal("setAstroText"),
   sourceFile: z.string(),
-  sourceLoc: z
-    .object({
-      startLine: z.number(),
-      startCol: z.number(),
-      endLine: z.number(),
-      endCol: z.number(),
-    })
-    .optional(),
+  sourceLoc: z.string().optional(),
   oldValue: z.string(),
   newValue: z.string(),
 });
@@ -45,6 +38,7 @@ export const htmlPatchSchema = z.discriminatedUnion("type", [
 
 export const vivdPatchSchema = z.discriminatedUnion("type", [
   setTextNodePatchSchema,
+  setAttrPatchSchema,
   setI18nPatchSchema,
   setAstroTextPatchSchema,
 ]);
@@ -66,12 +60,7 @@ export interface I18nJsonPatch {
 // Astro patch type
 export interface AstroTextPatch {
   sourceFile: string;
-  sourceLoc?: {
-    startLine: number;
-    startCol: number;
-    endLine: number;
-    endCol: number;
-  };
+  sourceLoc?: string;
   oldValue: string;
   newValue: string;
 }

@@ -1,4 +1,5 @@
-import { simpleGit, SimpleGit } from "simple-git";
+import { simpleGit } from "simple-git";
+import type { SimpleGit } from "simple-git";
 import fs from "fs-extra";
 import path from "path";
 import os from "os";
@@ -6,7 +7,6 @@ import os from "os";
 export class WorkspaceManager {
   private workspaceDir: string | null = null;
   private git: SimpleGit | null = null;
-  private repoUrl: string | null = null;
 
   async clone(
     repoUrl: string,
@@ -23,7 +23,6 @@ export class WorkspaceManager {
 
     // Construct authenticated URL if token provided
     const authUrl = token ? this.addTokenToUrl(repoUrl, token) : repoUrl;
-    this.repoUrl = repoUrl;
 
     // Clone repository
     this.git = simpleGit();
@@ -45,8 +44,10 @@ export class WorkspaceManager {
     // Handle http(s) URLs
     if (url.startsWith("http://") || url.startsWith("https://")) {
       const urlObj = new URL(url);
-      urlObj.username = token;
-      urlObj.password = "";
+      // Git smart HTTP uses Basic auth; our backend expects the session token as the password.
+      // Username is ignored by the server but must be present for some git clients.
+      urlObj.username = "git";
+      urlObj.password = token;
       return urlObj.toString();
     }
     return url;
@@ -114,17 +115,92 @@ export class WorkspaceManager {
 
   async getHistory(
     limit: number = 10
-  ): Promise<Array<{ hash: string; message: string; date: string }>> {
+  ): Promise<
+    Array<{
+      hash: string;
+      shortHash: string;
+      message: string;
+      date: string;
+      author: string;
+      parents: string[];
+    }>
+  > {
     if (!this.git) {
       return [];
     }
 
-    const log = await this.git.log({ maxCount: limit });
-    return log.all.map((entry) => ({
-      hash: entry.hash,
-      message: entry.message,
-      date: entry.date,
-    }));
+    try {
+      // Format: hash|shortHash|author|date|message|parents
+      const stdout = await this.git.raw([
+        "log",
+        "--format=%H|%h|%an|%aI|%s|%P",
+        "-n",
+        String(Math.max(1, limit)),
+      ]);
+
+      if (!stdout.trim()) return [];
+
+      return stdout
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const parts = line.split("|");
+          if (parts.length < 6) {
+            const [hash, shortHash, author, date, ...rest] = parts;
+            return {
+              hash: hash ?? "",
+              shortHash: shortHash ?? "",
+              author: author ?? "",
+              date: date ?? "",
+              message: rest.join("|"),
+              parents: [],
+            };
+          }
+
+          const hash = parts[0] ?? "";
+          const shortHash = parts[1] ?? "";
+          const author = parts[2] ?? "";
+          const date = parts[3] ?? "";
+          const parentsStr = parts[parts.length - 1] ?? "";
+          const message = parts.slice(4, parts.length - 1).join("|");
+
+          return {
+            hash,
+            shortHash,
+            author,
+            date,
+            message,
+            parents: parentsStr ? parentsStr.split(" ") : [],
+          };
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  async getHeadCommit(): Promise<{ hash: string; message: string } | null> {
+    if (!this.git) return null;
+    try {
+      const log = await this.git.log({ maxCount: 1 });
+      const latest = log.latest;
+      if (!latest) return null;
+      return { hash: latest.hash, message: latest.message };
+    } catch {
+      return null;
+    }
+  }
+
+  async getTags(): Promise<string[]> {
+    if (!this.git) return [];
+    try {
+      const stdout = await this.git.raw(["tag", "--sort=-creatordate"]);
+      return stdout
+        .split("\n")
+        .map((t) => t.trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
   }
 
   getProjectPath(): string {

@@ -45,7 +45,6 @@ export const editRouter = router({
       const textPatches = input.patches.filter(
         (p) => p.type === "setTextNode"
       ) as HtmlPatch[];
-      const i18nPatches = input.patches.filter((p) => p.type === "setI18n");
       const astroPatches = extractAstroPatches(input.patches);
 
       // Add text patches to HTML patches

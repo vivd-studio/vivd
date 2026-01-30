@@ -10,3 +10,12 @@ export const DEVICE_PRESETS = [
 ] as const;
 
 export type DevicePreset = (typeof DEVICE_PRESETS)[number];
+
+export interface PreviewModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  url: string | null;
+  originalUrl?: string | null;
+  projectSlug?: string;
+  version?: number;
+}

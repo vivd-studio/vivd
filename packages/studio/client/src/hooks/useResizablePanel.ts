@@ -16,7 +16,6 @@ export function useResizablePanel({
   side,
 }: UseResizablePanelOptions) {
   const [width, setWidth] = useState(() => {
-    if (typeof window === "undefined") return defaultWidth;
     const stored = localStorage.getItem(storageKey);
     if (stored) {
       const parsed = parseInt(stored, 10);
@@ -31,6 +30,7 @@ export function useResizablePanel({
   const startX = useRef(0);
   const startWidth = useRef(0);
 
+  // Save to localStorage when width changes
   useEffect(() => {
     localStorage.setItem(storageKey, width.toString());
   }, [storageKey, width]);
@@ -43,6 +43,7 @@ export function useResizablePanel({
       startX.current = e.clientX;
       startWidth.current = width;
 
+      // Disable pointer events on all iframes to prevent them from capturing mouse events
       const iframes = document.querySelectorAll("iframe");
       iframes.forEach((iframe) => {
         iframe.style.pointerEvents = "none";
@@ -54,6 +55,7 @@ export function useResizablePanel({
     [width]
   );
 
+  // Handle mouse move and mouse up at the document level via useEffect
   useEffect(() => {
     if (!isResizing) return;
 
@@ -75,6 +77,7 @@ export function useResizablePanel({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
 
+      // Re-enable pointer events on all iframes
       const iframes = document.querySelectorAll("iframe");
       iframes.forEach((iframe) => {
         iframe.style.pointerEvents = "";

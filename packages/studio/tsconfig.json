@@ -7,7 +7,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "./dist",
-    "rootDir": "./server",
+    "rootDir": ".",
     "strict": true,
     "declaration": true,
     "baseUrl": ".",

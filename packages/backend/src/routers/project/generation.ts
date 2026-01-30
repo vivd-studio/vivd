@@ -22,7 +22,6 @@ import { runScratchFlow } from "../../generator/flows/scratchFlow";
 import { validateConfig } from "../../generator/config";
 import fs from "fs";
 import path from "path";
-import { gitService } from "../../services/GitService";
 import { publishService } from "../../services/PublishService";
 import { db } from "../../db";
 import { projectMember } from "../../db/schema";

@@ -1,10 +1,13 @@
 import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import type { PluginOption } from "vite";
 
 export default defineConfig({
+  base: "/vivd-studio",
   root: path.resolve(__dirname),
-  plugins: [react()],
+  // Cast to avoid type mismatches when multiple Vite versions are present in the workspace.
+  plugins: [react()] as unknown as PluginOption[],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -16,15 +19,12 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    host: true,
     port: 3101,
     proxy: {
-      "/trpc": {
-        target: "http://localhost:3100",
-        changeOrigin: true,
-      },
-      "/preview": {
-        target: "http://localhost:3100",
-        changeOrigin: true,
+      "/vivd-studio/api": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:3100",
+        changeOrigin: false,
       },
     },
   },

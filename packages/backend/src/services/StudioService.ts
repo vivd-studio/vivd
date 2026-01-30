@@ -212,7 +212,7 @@ class StudioService {
   private cleanupIdleStudios(): void {
     const now = Date.now();
 
-    for (const [key, studio] of this.studios.entries()) {
+    for (const studio of this.studios.values()) {
       if (now - studio.startedAt.getTime() > IDLE_TIMEOUT_MS) {
         console.log(
           `[Studio] Stopping idle studio for ${studio.projectSlug}/v${studio.version}`

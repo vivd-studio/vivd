@@ -8,6 +8,7 @@ COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
+COPY packages/studio/package.json packages/studio/package.json
 
 COPY packages/scraper/package.json packages/scraper/package.json
 

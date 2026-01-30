@@ -16,14 +16,19 @@ import /etc/caddy/sites.d/*.caddy
 
 # Default server - handles studio routes and fallback
 :80 {
-    # Vivd Studio API routes - proxy to backend
-    handle /vivd-studio/api/* {
+    # Git smart HTTP server (backend)
+    handle /vivd-studio/api/git/* {
         reverse_proxy backend:3000
     }
 
-    # Vivd Studio frontend - proxy to Vite dev server (handles /vivd-studio and /vivd-studio/*)
+    # Standalone Studio API routes
+    handle /vivd-studio/api/* {
+        reverse_proxy studio:3100
+    }
+
+    # Standalone Studio frontend - Vite dev server (handles /vivd-studio and /vivd-studio/*)
     handle /vivd-studio* {
-        reverse_proxy frontend:5173
+        reverse_proxy studio:3101
     }
 
     # Health check endpoint
