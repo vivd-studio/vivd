@@ -13,6 +13,7 @@ import {
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
 } from "../vivdPaths";
+import { WEBP_QUALITY } from "../config";
 
 export interface UrlFlowInput {
   url: string;
@@ -46,7 +47,7 @@ export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
           const screenshotBuffer = Buffer.from(error.screenshot, "base64");
           const thumbnailBuffer = await sharp(screenshotBuffer)
             .resize(640, 400, { fit: "cover", position: "top" })
-            .webp({ quality: 80 })
+            .webp({ quality: WEBP_QUALITY })
             .toBuffer();
           fs.writeFileSync(thumbnailPath, thumbnailBuffer);
           log(`[UrlFlow] Saved error screenshot as thumbnail`);

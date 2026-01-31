@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import sharp from 'sharp';
 import { log } from './logger';
+import { WEBP_QUALITY } from './config';
 
 export async function autoScroll(page: any) {
     await page.evaluate(async () => {
@@ -28,7 +29,7 @@ export async function autoScroll(page: any) {
 export async function saveImageBuffer(buffer: Buffer, filepath: string) {
     if (filepath.endsWith('.webp')) {
         await sharp(buffer)
-            .webp({ quality: 80 })
+            .webp({ quality: WEBP_QUALITY })
             .toFile(filepath);
     } else {
         await fs.promises.writeFile(filepath, buffer);

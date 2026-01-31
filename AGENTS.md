@@ -32,11 +32,11 @@ The generator produces plain HTML (`index.html`) files by default. We also suppo
 
 - Drizzle migrations only. Do not use `drizzle-kit push` / `db:push`.
 
-## Plans
-
-- Main roadmap: `docs/implementation.md`
-- SaaS refactor plan: `docs/multi-tenant-refactor/multi-tenant-saas-refactor-plan.md`
 
 ## Testing Note
 
 - Avoid running full test suites frequently (some workflows are long-running / use paid APIs). Prefer targeted builds and minimal checks.
+
+## GIT
+
+- DO NOT COMMIT or PUSH code. Just change and let me handle git. You can use other git commands to help you understand the codebase.

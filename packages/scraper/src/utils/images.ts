@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as path from "path";
 import sharp from "sharp";
 import { log } from "./logger.js";
+import { WEBP_QUALITY } from "../config.js";
 
 // Domains that serve tracking pixels, ads, or analytics
 const BLOCKED_DOMAINS = [
@@ -52,7 +53,7 @@ export async function downloadImage(
       contentType.includes("jpg")
     ) {
       try {
-        buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
+        buffer = await sharp(buffer).webp({ quality: WEBP_QUALITY }).toBuffer();
         mimeType = "image/webp";
       } catch (e) {
         log(`Failed to convert image to webp: ${e}`);

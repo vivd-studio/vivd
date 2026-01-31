@@ -1,5 +1,6 @@
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const MAX_SCREENSHOT_HEIGHT = 2000; // Limit screenshot height to avoid huge files
+export const WEBP_QUALITY = 85; // Quality setting for WebP image conversions (1-100)
 export const GENERATION_MODEL = "google/gemini-3-pro-preview"; // model to create index.html
 export const ANALYSIS_MODEL = "google/gemini-3-pro-preview"; // model for text analysis and planning operations
 // export const HERO_GENERATION_MODEL = 'google/gemini-2.5-flash-image-preview';

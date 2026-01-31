@@ -17,7 +17,7 @@ export function usePermissions() {
 
     // Feature gates
     canUseAgent: true,
-    canUseAiImages: false,
+    canUseAiImages: true,
     canManageProjects: false,
     canManageUsers: false,
     canAccessMaintenance: false,

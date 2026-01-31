@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import path from "path";
+import { WEBP_QUALITY } from "../generator/config";
 
 /**
  * Image extensions that should be converted to WebP.
@@ -39,13 +40,13 @@ export function convertFilenameToWebp(filename: string): string {
  * Process an image buffer - converts to WebP if applicable, otherwise returns original.
  * @param buffer - The image file buffer
  * @param filename - Original filename (used to determine if conversion is needed)
- * @param quality - WebP quality (default: 80)
+ * @param quality - WebP quality (default: 85)
  * @returns The processed buffer (WebP if converted, original otherwise)
  */
 export async function processImageBuffer(
   buffer: Buffer,
   filename: string,
-  quality = 80
+  quality = WEBP_QUALITY
 ): Promise<Buffer> {
   if (isConvertibleImage(filename)) {
     return await sharp(buffer).webp({ quality }).toBuffer();
@@ -58,13 +59,13 @@ export async function processImageBuffer(
  * @param buffer - The image file buffer
  * @param filename - Original filename (used to determine if conversion is needed)
  * @param outputPath - Full path where the file should be written
- * @param quality - WebP quality (default: 80)
+ * @param quality - WebP quality (default: 85)
  */
 export async function writeImageFile(
   buffer: Buffer,
   filename: string,
   outputPath: string,
-  quality = 80
+  quality = WEBP_QUALITY
 ): Promise<void> {
   if (isConvertibleImage(filename)) {
     await sharp(buffer).webp({ quality }).toFile(outputPath);

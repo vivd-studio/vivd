@@ -4,6 +4,8 @@ import path from "path";
 import fs from "fs";
 import sizeOf from "image-size";
 import ignore from "ignore";
+import sharp from "sharp";
+import { WEBP_QUALITY } from "../config.js";
 
 function safeJoin(root: string, targetPath: string): string {
   const resolvedRoot = path.resolve(root);
@@ -134,6 +136,109 @@ function loadGitignore(projectDir: string) {
   }
 
   return ig;
+}
+
+// AI Image helper functions
+const IMAGE_EDITING_MODEL =
+  process.env.IMAGE_EDITING_MODEL || "google/gemini-3-pro-image-preview";
+const HERO_GENERATION_MODEL =
+  process.env.HERO_GENERATION_MODEL || "google/gemini-3-pro-image-preview";
+const BACKGROUND_REMOVAL_MODEL =
+  process.env.BACKGROUND_REMOVAL_MODEL || "openai/gpt-5-image";
+
+async function callOpenRouter(body: any): Promise<any> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY not set");
+  }
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://github.com/vivd",
+      "X-Title": "Vivd",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} ${error}`);
+  }
+
+  return response.json();
+}
+
+function extractImageFromResponse(result: any): string | null {
+  if (!result.choices || !result.choices[0]) {
+    return null;
+  }
+
+  const message = result.choices[0].message;
+
+  // Check for images in the OpenRouter format
+  if (message.images && message.images.length > 0) {
+    const imgObj = message.images[0];
+    const imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
+    if (imageUrl) {
+      return imageUrl;
+    }
+  }
+
+  // Fallback: check content for markdown or URL
+  if (message.content) {
+    let content = "";
+    if (typeof message.content === "string") {
+      content = message.content;
+    } else if (Array.isArray(message.content)) {
+      content = message.content
+        .filter((c: any) => c.type === "text")
+        .map((c: any) => c.text)
+        .join("");
+    }
+
+    // Check for Markdown image link ![alt](url)
+    const match = content.match(/\!\[.*?\]\((.*?)\)/);
+    if (match) return match[1];
+    if (content.startsWith("http")) return content;
+  }
+
+  return null;
+}
+
+async function saveGeneratedImage(
+  imageUrl: string,
+  filepath: string
+): Promise<void> {
+  let buffer: Buffer;
+
+  if (imageUrl.startsWith("http")) {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.status}`);
+    }
+    buffer = Buffer.from(await response.arrayBuffer());
+  } else if (imageUrl.startsWith("data:image")) {
+    const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+    buffer = Buffer.from(base64Data, "base64");
+  } else {
+    buffer = Buffer.from(imageUrl, "base64");
+  }
+
+  // Create parent directory if needed
+  const parentDir = path.dirname(filepath);
+  if (!fs.existsSync(parentDir)) {
+    fs.mkdirSync(parentDir, { recursive: true });
+  }
+
+  // Convert to WebP if filepath ends in .webp
+  if (filepath.endsWith(".webp")) {
+    await sharp(buffer).webp({ quality: WEBP_QUALITY }).toFile(filepath);
+  } else {
+    fs.writeFileSync(filepath, buffer);
+  }
 }
 
 export const assetsRouter = router({
@@ -587,7 +692,7 @@ export const assetsRouter = router({
     }),
 
   /**
-   * AI image editing (not yet supported in standalone studio)
+   * AI image editing - sends the image to the generation model with edit instructions
    */
   editImageWithAI: publicProcedure
     .input(
@@ -598,12 +703,115 @@ export const assetsRouter = router({
         prompt: z.string().min(1),
       })
     )
-    .mutation(async () => {
-      throw new Error("AI image editing is not enabled in standalone studio");
+    .mutation(async ({ input, ctx }) => {
+      const { relativePath, prompt } = input;
+
+      if (hasDotSegment(relativePath)) {
+        throw new Error("Invalid path");
+      }
+
+      const projectDir = ctx.workspace.getProjectPath();
+      const imagePath = path.join(projectDir, relativePath);
+
+      // Validate image exists
+      if (!fs.existsSync(imagePath)) {
+        throw new Error("Image not found");
+      }
+
+      // Security: ensure we're within the project directory
+      const realProjectDir = fs.realpathSync(projectDir);
+      const realImagePath = fs.realpathSync(imagePath);
+      if (!realImagePath.startsWith(realProjectDir)) {
+        throw new Error("Invalid path");
+      }
+
+      // Validate it's actually an image
+      if (!isImageFile(imagePath)) {
+        throw new Error("File is not an image");
+      }
+
+      // Read and encode the image
+      const imageBuffer = fs.readFileSync(imagePath);
+      const base64Image = imageBuffer.toString("base64");
+      const ext = path.extname(imagePath).substring(1).toLowerCase();
+      const mimeType = ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
+
+      const editPrompt = `Edit this image according to the following instructions: ${prompt}`;
+
+      console.log(
+        `[AI Edit] Editing image: ${relativePath} with prompt: ${prompt}`
+      );
+      console.log(
+        `[AI Edit] Image size: ${imageBuffer.length} bytes, MIME: image/${mimeType}`
+      );
+
+      try {
+        const result = await callOpenRouter({
+          model: IMAGE_EDITING_MODEL,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: editPrompt },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:image/${mimeType};base64,${base64Image}`,
+                  },
+                },
+              ],
+            },
+          ],
+          modalities: ["image", "text"],
+        });
+
+        const imageUrl = extractImageFromResponse(result);
+
+        if (!imageUrl) {
+          throw new Error(
+            "Failed to generate edited image - no image in response"
+          );
+        }
+
+        // Generate new filename with -ai-edited suffix
+        const originalName = path.basename(relativePath);
+        const originalDir = path.dirname(relativePath);
+        const extIndex = originalName.lastIndexOf(".");
+        const nameWithoutExt =
+          extIndex > 0 ? originalName.substring(0, extIndex) : originalName;
+
+        // Find a unique filename
+        let suffix = "-ai-edited";
+        let counter = 1;
+        let newFileName = `${nameWithoutExt}${suffix}.webp`;
+        let newFilePath = path.join(projectDir, originalDir, newFileName);
+
+        while (fs.existsSync(newFilePath)) {
+          counter++;
+          newFileName = `${nameWithoutExt}${suffix}-${counter}.webp`;
+          newFilePath = path.join(projectDir, originalDir, newFileName);
+        }
+
+        // Save the image
+        await saveGeneratedImage(imageUrl, newFilePath);
+
+        const newRelativePath = path.join(originalDir, newFileName);
+        console.log(`[AI Edit] Saved edited image to: ${newRelativePath}`);
+
+        return {
+          success: true,
+          originalPath: relativePath,
+          newPath: newRelativePath,
+          fileName: newFileName,
+        };
+      } catch (error: any) {
+        console.error(`[AI Edit] Error:`, error.message);
+        throw new Error(`Failed to edit image: ${error.message}`);
+      }
     }),
 
   /**
-   * AI image creation (not yet supported in standalone studio)
+   * AI image creation - generates an image from a prompt with optional reference images
    */
   createImageWithAI: publicProcedure
     .input(
@@ -615,7 +823,113 @@ export const assetsRouter = router({
         targetPath: z.string().optional().default(""),
       })
     )
-    .mutation(async () => {
-      throw new Error("AI image generation is not enabled in standalone studio");
+    .mutation(async ({ input, ctx }) => {
+      const { prompt, referenceImages, targetPath } = input;
+
+      const projectDir = ctx.workspace.getProjectPath();
+
+      // Validate projectDir exists
+      if (!fs.existsSync(projectDir)) {
+        throw new Error("Project directory not found");
+      }
+
+      let saveDir: string;
+      try {
+        saveDir = safeJoin(projectDir, targetPath);
+      } catch {
+        throw new Error("Invalid path");
+      }
+
+      // Build the messages array with prompt and optional reference images
+      const messages: any[] = [
+        {
+          role: "user",
+          content: [{ type: "text", text: prompt }],
+        },
+      ];
+
+      // Add reference images
+      for (const imgPath of referenceImages) {
+        let fullPath: string;
+        try {
+          fullPath = safeJoin(projectDir, imgPath);
+        } catch {
+          throw new Error("Invalid path");
+        }
+        if (fs.existsSync(fullPath) && isImageFile(fullPath)) {
+          const buffer = fs.readFileSync(fullPath);
+          const base64 = buffer.toString("base64");
+          const ext = path.extname(fullPath).substring(1).toLowerCase();
+          const mimeType =
+            ext === "svg" ? "svg+xml" : ext === "jpg" ? "jpeg" : ext;
+
+          messages[0].content.push({
+            type: "image_url",
+            image_url: {
+              url: `data:image/${mimeType};base64,${base64}`,
+            },
+          });
+        }
+      }
+
+      console.log(
+        `[AI Create] Creating image with prompt: ${prompt.substring(0, 100)}...`
+      );
+      console.log(
+        `[AI Create] Reference images: ${referenceImages.join(", ") || "none"}`
+      );
+
+      try {
+        const result = await callOpenRouter({
+          model: HERO_GENERATION_MODEL,
+          messages: messages,
+          modalities: ["image", "text"],
+        });
+
+        const imageUrl = extractImageFromResponse(result);
+
+        if (!imageUrl) {
+          throw new Error("Failed to generate image - no image in response");
+        }
+
+        // Generate filename from prompt (sanitized)
+        const sanitizedPrompt = prompt
+          .substring(0, 30)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "");
+
+        const timestamp = Date.now();
+        const newFileName = `ai-${sanitizedPrompt}-${timestamp}.webp`;
+
+        // Determine save path
+        if (!fs.existsSync(saveDir)) {
+          fs.mkdirSync(saveDir, { recursive: true });
+        }
+
+        const newFilePath = path.join(saveDir, newFileName);
+
+        // Save the image
+        await saveGeneratedImage(imageUrl, newFilePath);
+
+        const normalizedTarget = targetPath
+          .replace(/\\/g, "/")
+          .replace(/^\/+/, "")
+          .replace(/\/+$/, "");
+        const newRelativePath = normalizedTarget
+          ? path.posix.join(normalizedTarget, newFileName)
+          : newFileName;
+        console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
+
+        return {
+          success: true,
+          path: newRelativePath,
+          fileName: newFileName,
+        };
+      } catch (error: any) {
+        console.error(`[AI Create] Error:`, error.message);
+        throw new Error(`Failed to create image: ${error.message}`);
+      }
     }),
 });

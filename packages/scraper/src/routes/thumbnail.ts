@@ -2,6 +2,7 @@ import { Router } from "express";
 import sharp from "sharp";
 import { browserPool, isBrowserError } from "../services/browser.js";
 import { log } from "../utils/logger.js";
+import { WEBP_QUALITY } from "../config.js";
 
 export const thumbnailRouter = Router();
 
@@ -65,7 +66,7 @@ thumbnailRouter.post("/", async (req, res) => {
         fit: "cover",
         position: "top",
       })
-      .webp({ quality: 80 })
+      .webp({ quality: WEBP_QUALITY })
       .toBuffer();
 
     // Return as base64

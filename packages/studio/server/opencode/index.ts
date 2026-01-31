@@ -15,6 +15,7 @@ import {
   type SessionStatus,
 } from "./eventEmitter.js";
 import { serverManager } from "./serverManager.js";
+import { usageReporter } from "../services/UsageReporter.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel, getAvailableModels } from "./modelConfig.js";
@@ -118,6 +119,9 @@ export async function runTask(
           tokens: data.tokens,
         } as UsageUpdatedData),
       );
+
+      // Report usage to backend in connected mode
+      await usageReporter.report(data, currentSessionId, undefined, cwd);
     },
     onIdle: () => {
       agentEventEmitter.emitSessionEvent(

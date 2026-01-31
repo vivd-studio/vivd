@@ -1,0 +1,265 @@
+/**
+ * Usage Reporter Service
+ *
+ * Reports usage events from standalone studio to main backend in connected mode.
+ * In standalone mode, this is a no-op.
+ */
+
+import {
+  isConnectedMode,
+  getBackendUrl,
+  getSessionToken,
+  getStudioId,
+  type StudioUsageReport,
+} from "@vivd/shared";
+import type { UsageData } from "../opencode/useEvents.js";
+
+const MAX_QUEUE_SIZE = 100;
+const FLUSH_INTERVAL_MS = 5000;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1000;
+
+class UsageReporter {
+  private queue: StudioUsageReport[] = [];
+  private flushing = false;
+  private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private initialized = false;
+
+  /**
+   * Initialize the reporter. Call this once at startup.
+   */
+  init(): void {
+    if (this.initialized) return;
+    this.initialized = true;
+
+    if (!isConnectedMode()) {
+      console.log("[UsageReporter] Standalone mode - usage reporting disabled");
+      return;
+    }
+
+    console.log("[UsageReporter] Connected mode - usage reporting enabled");
+
+    // Start periodic flush
+    this.flushTimer = setInterval(() => {
+      this.flush().catch((err) => {
+        console.error("[UsageReporter] Flush error:", err);
+      });
+    }, FLUSH_INTERVAL_MS);
+  }
+
+  /**
+   * Report a usage event. Called by OpenCode event handler.
+   */
+  async report(
+    data: UsageData,
+    sessionId: string,
+    sessionTitle?: string,
+    projectPath?: string
+  ): Promise<void> {
+    if (!isConnectedMode()) {
+      return; // No-op in standalone mode
+    }
+
+    const report: StudioUsageReport = {
+      sessionId,
+      sessionTitle,
+      cost: data.cost,
+      tokens: data.tokens,
+      partId: data.partId,
+      projectPath,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.queue.push(report);
+
+    // Prevent queue from growing too large
+    if (this.queue.length > MAX_QUEUE_SIZE) {
+      this.queue.shift();
+      console.warn("[UsageReporter] Queue overflow - oldest report dropped");
+    }
+
+    // If queue is getting large, trigger immediate flush
+    if (this.queue.length >= 10) {
+      this.flush().catch((err) => {
+        console.error("[UsageReporter] Immediate flush error:", err);
+      });
+    }
+  }
+
+  /**
+   * Flush queued reports to backend.
+   */
+  private async flush(): Promise<void> {
+    if (this.flushing || this.queue.length === 0) {
+      return;
+    }
+
+    this.flushing = true;
+
+    try {
+      const reportsToSend = [...this.queue];
+      this.queue = [];
+
+      const success = await this.sendToBackend(reportsToSend);
+
+      if (!success) {
+        // Re-queue failed reports (at the front)
+        this.queue = [...reportsToSend, ...this.queue];
+        // Trim if too large
+        while (this.queue.length > MAX_QUEUE_SIZE) {
+          this.queue.shift();
+        }
+      }
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  /**
+   * Send reports to the main backend.
+   */
+  private async sendToBackend(reports: StudioUsageReport[]): Promise<boolean> {
+    const backendUrl = getBackendUrl();
+    const sessionToken = getSessionToken();
+    const studioId = getStudioId();
+
+    if (!backendUrl || !sessionToken || !studioId) {
+      console.error("[UsageReporter] Missing backend configuration");
+      return false;
+    }
+
+    let attempt = 0;
+    while (attempt < MAX_RETRY_ATTEMPTS) {
+      attempt++;
+
+      try {
+        const response = await fetch(`${backendUrl}/api/trpc/studioApi.reportUsage`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify({
+            json: {
+              studioId,
+              reports,
+            },
+          }),
+        });
+
+        if (response.ok) {
+          console.log(`[UsageReporter] Sent ${reports.length} reports to backend`);
+          return true;
+        }
+
+        const errorText = await response.text().catch(() => "Unknown error");
+        console.error(
+          `[UsageReporter] Backend returned ${response.status}: ${errorText}`
+        );
+
+        // Don't retry on auth errors
+        if (response.status === 401 || response.status === 403) {
+          console.error("[UsageReporter] Authentication failed - check SESSION_TOKEN");
+          return false;
+        }
+      } catch (err) {
+        console.error(`[UsageReporter] Network error (attempt ${attempt}):`, err);
+      }
+
+      // Wait before retry
+      if (attempt < MAX_RETRY_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+      }
+    }
+
+    console.error(
+      `[UsageReporter] Failed to send reports after ${MAX_RETRY_ATTEMPTS} attempts`
+    );
+    return false;
+  }
+
+  /**
+   * Fetch current usage status from backend.
+   * Returns null in standalone mode or on error.
+   */
+  async fetchStatus(): Promise<UsageStatus | null> {
+    if (!isConnectedMode()) {
+      return null;
+    }
+
+    const backendUrl = getBackendUrl();
+    const sessionToken = getSessionToken();
+    const studioId = getStudioId();
+
+    if (!backendUrl || !sessionToken || !studioId) {
+      console.error("[UsageReporter] Missing backend configuration for status fetch");
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/api/trpc/studioApi.getStatus?input=${encodeURIComponent(
+          JSON.stringify({ json: { studioId } })
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        console.error(
+          `[UsageReporter] Status fetch failed ${response.status}: ${errorText}`
+        );
+        return null;
+      }
+
+      const data = await response.json();
+      return data.result?.data?.json ?? data.result?.data ?? null;
+    } catch (err) {
+      console.error("[UsageReporter] Failed to fetch status:", err);
+      return null;
+    }
+  }
+
+  /**
+   * Shutdown the reporter. Call on process exit.
+   */
+  async shutdown(): Promise<void> {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    // Final flush
+    if (this.queue.length > 0) {
+      await this.flush();
+    }
+  }
+}
+
+/**
+ * Usage status returned from backend.
+ */
+export interface UsageStatus {
+  blocked: boolean;
+  imageGenBlocked: boolean;
+  warnings: string[];
+  usage: {
+    daily: { current: number; limit: number; percentage: number };
+    weekly: { current: number; limit: number; percentage: number };
+    monthly: { current: number; limit: number; percentage: number };
+    imageGen: { current: number; limit: number; percentage: number };
+  };
+  nextReset: {
+    daily: Date | string;
+    weekly: Date | string;
+    monthly: Date | string;
+  };
+}
+
+export const usageReporter = new UsageReporter();

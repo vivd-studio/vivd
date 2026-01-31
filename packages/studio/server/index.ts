@@ -16,6 +16,7 @@ import { WorkspaceManager } from "./workspace/WorkspaceManager.js";
 import { detectProjectType } from "./services/projectType.js";
 import { devServerService } from "./services/DevServerService.js";
 import { serverManager as opencodeServerManager } from "./opencode/serverManager.js";
+import { usageReporter } from "./services/UsageReporter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -269,6 +270,9 @@ async function startServer() {
   const REPO_URL = process.env.REPO_URL;
   const GIT_TOKEN = process.env.GIT_TOKEN;
   const BRANCH = process.env.BRANCH || "main";
+
+  // Initialize usage reporter for connected mode
+  usageReporter.init();
 
   // CORS for development
   app.use(cors());
@@ -785,6 +789,7 @@ export default {};
   // Graceful shutdown
   const shutdown = async () => {
     console.log("\nShutting down studio...");
+    await usageReporter.shutdown();
     devServerService.close();
     opencodeServerManager.closeAll();
     await workspace.cleanup();
