@@ -2,6 +2,12 @@
 
 Vivd is an AI-powered website builder: generate a site, preview/edit it in the studio, and publish it via Caddy.
 
+## Project State & Roadmap
+
+See **`docs/PROJECT_STATE.md`** for the current implementation roadmap, progress tracking, and open decisions.
+
+**Important:** When the plan changes or tasks are completed, update `docs/PROJECT_STATE.md` to reflect the current state.
+
 ## Repo Layout
 
 Vivd uses an npm workspaces monorepo (`package.json` at repo root, one root `package-lock.json`).

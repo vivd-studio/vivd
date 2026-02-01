@@ -112,10 +112,17 @@ services:
           target: /app/packages/theme
           ignore:
             - node_modules/
+        - action: sync
+          path: ./packages/shared
+          target: /app/packages/shared
+          ignore:
+            - node_modules/
         - action: rebuild
           path: ./packages/studio/package.json
         - action: rebuild
           path: ./packages/theme/package.json
+        - action: rebuild
+          path: ./packages/shared/package.json
     command: npm run dev
   postgres:
     ports:

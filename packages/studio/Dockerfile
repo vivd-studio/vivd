@@ -26,13 +26,17 @@ COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/theme -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/studio --include-workspace-root=false \
   && npm cache clean --force
 
 # Stage 2: Development
 FROM deps AS dev
+COPY packages/shared ./packages/shared
 COPY packages/theme ./packages/theme
 COPY packages/studio ./packages/studio
+
+# Ensure shared is built (runtime imports come from `@vivd/shared/dist/*`)
+RUN npm run build -w @vivd/shared
 
 WORKDIR /app/packages/studio
 COPY packages/studio/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -43,9 +47,11 @@ CMD ["npm", "run", "dev"]
 
 # Stage 3: Build
 FROM deps AS build
+COPY packages/shared ./packages/shared
 COPY packages/theme ./packages/theme
 COPY packages/studio ./packages/studio
 
+RUN npm run build -w @vivd/shared
 RUN npm run build -w @vivd/studio
 
 # Stage 4: Production
@@ -76,10 +82,14 @@ COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/studio --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/studio --omit=dev --include-workspace-root=false \
   && npm cache clean --force
 
+# Copy shared package (runtime dependency)
+COPY packages/shared ./packages/shared
+
 # Copy built outputs
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/studio/dist ./packages/studio/dist
 
 WORKDIR /app/packages/studio
