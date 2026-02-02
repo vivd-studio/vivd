@@ -68,9 +68,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] Git operations (commit, history, discard)
 
 - [ ] **Test connected mode end-to-end**
-  - [ ] Start studio with `MAIN_BACKEND_URL`, `SESSION_TOKEN`, `STUDIO_ID`
-  - [ ] Verify usage status fetch works (`usage.status`)
-  - [ ] Verify usage reporting reaches backend (`studioApi.reportUsage`)
+  - [x] Start studio with `MAIN_BACKEND_URL`, `SESSION_TOKEN`, `STUDIO_ID`
+  - [x] Backend accepts `Authorization: Bearer <SESSION_TOKEN>` for `studioApi.*` (machine-to-backend)
+  - [x] Verify usage status fetch works (`usage.status`)
+  - [ ] Verify usage reporting reaches backend (`studioApi.reportUsage`) (fixed request shape; re-test)
   - [ ] Verify backend-unavailable behavior blocks usage (no bypass)
 
 - [ ] **Clean up legacy studio code from packages**
@@ -93,12 +94,17 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ### 0.4 Studio Integration in Main App
 
-- [ ] Embed studio in iframe from main frontend (or redirect to studio URL)
-- [ ] Pass context (project slug, version, org info) to studio
-- [ ] Pass project slug/name to studio for breadcrumb display
-- [ ] "Back to Dashboard" navigation from studio
-- [ ] Auth bridging: reuse existing session token for studio API (no second login)
-- [ ] **Decision needed:** studio URL structure (iframe vs redirect vs subdomain)
+- [x] Embed studio in iframe from main frontend (or redirect to studio URL)
+- [x] Show view-only preview first; start studio on "Edit"
+  - [x] Pass context (project slug, version) to studio (via query params)
+  - [x] Pass project slug to studio for breadcrumb display
+  - [x] "Back" navigation from studio (postMessage + `returnTo`)
+  - [x] Fullscreen studio UX (in-app route, no new tab)
+  - [x] Prefer showing studio if already running (project route resumes)
+  - [x] Connected usage reports include `projectSlug` + `sessionTitle`
+  - [x] Session title updates propagate after rename (studioApi.updateSessionTitle)
+  - [x] Auth bridging: reuse existing session token for studio API (no second login)
+  - [ ] **Decision needed:** studio URL structure (iframe vs redirect vs subdomain)
 
 ### 0.5 Build / Preview / Thumbnail Pipeline (Decision Needed)
 
@@ -119,6 +125,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ### 0.6 Docker & CI
 
 - [x] Build `@vivd/shared` in studio Dockerfile (prevents missing `@vivd/shared/dist/*` at runtime)
+- [x] Local dev: isolate per-studio internal ports (dev server + OpenCode) via env offsets
 - [ ] Add studio image to GitHub Actions (build + push GHCR)
 - [ ] Decide tags/strategy (branch tags vs semver)
 - [ ] Add minimal smoke checks (container boots + `/health` endpoint)
@@ -263,6 +270,9 @@ SESSION_TOKEN=<user-auth-token>         # For backend auth
 STUDIO_ID=studio-instance-1             # Unique instance ID
 REPO_URL=http://backend/git/...         # Git repo to clone
 GIT_TOKEN=<optional-git-auth>           # If git server requires auth
+DEV_SERVER_PORT_START=5100              # Optional: dev server port range start
+OPENCODE_PORT_START=4096                # Optional: OpenCode port range start
+OPENCODE_KILL_ORPHANS=0                 # Optional: disable orphan cleanup (needed for local multi-studio)
 ```
 
 ### Backend
@@ -281,4 +291,4 @@ SAAS_MODE=true                          # Enable SaaS features
 
 ---
 
-*Last updated: 2026-02-01*
+*Last updated: 2026-02-02*

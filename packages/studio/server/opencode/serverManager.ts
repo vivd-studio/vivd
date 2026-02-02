@@ -31,12 +31,17 @@ const debugLog = (...args: unknown[]) => {
 class OpencodeServerManager {
   private servers = new Map<string, OpencodeServerInfo>();
   private startingServers = new Map<string, Promise<OpencodeServerInfo>>();
-  private nextPort = 4096;
+  private nextPort = Math.max(
+    1024,
+    Number.parseInt(process.env.OPENCODE_PORT_START || "4096", 10) || 4096
+  );
   private availablePorts: number[] = [];
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.killOrphanedProcesses();
+    if (process.env.OPENCODE_KILL_ORPHANS !== "0") {
+      this.killOrphanedProcesses();
+    }
     this.cleanupInterval = setInterval(() => {
       this.cleanupIdleServers();
     }, 60 * 1000);
@@ -328,4 +333,3 @@ class OpencodeServerManager {
 }
 
 export const serverManager = new OpencodeServerManager();
-

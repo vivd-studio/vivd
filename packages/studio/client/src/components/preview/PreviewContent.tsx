@@ -435,7 +435,7 @@ export function PreviewContent() {
   return (
     <div
       className={`flex flex-col overflow-hidden bg-background ${
-        embedded ? "w-full h-full" : "w-screen h-dvh"
+        embedded ? "w-full h-dvh" : "w-screen h-dvh"
       }`}
     >
       <StudioToolbar />

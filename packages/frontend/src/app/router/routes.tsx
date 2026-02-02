@@ -6,6 +6,7 @@ import Admin from "@/pages/Admin";
 import Settings from "@/pages/Settings";
 import PreviewPage from "@/pages/PreviewPage";
 import EmbeddedStudio from "@/pages/EmbeddedStudio";
+import StudioFullscreen from "@/pages/StudioFullscreen";
 import ScratchWizard from "@/pages/ScratchWizard";
 import NoProjectAssigned from "@/pages/NoProjectAssigned";
 import { Layout } from "@/components/shell";
@@ -61,6 +62,17 @@ function FullscreenProjectRoute() {
   return (
     <RequireAssignedProject>
       <PreviewPage />
+    </RequireAssignedProject>
+  );
+}
+
+/**
+ * Fullscreen studio (connected mode) with no layout chrome.
+ */
+function FullscreenStudioRoute() {
+  return (
+    <RequireAssignedProject>
+      <StudioFullscreen />
     </RequireAssignedProject>
   );
 }
@@ -146,6 +158,16 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         element={
           <RequireAuth>
             <FullscreenProjectRoute />
+          </RequireAuth>
+        }
+      />
+
+      {/* Fullscreen Studio (connected) - outside Layout */}
+      <Route
+        path="/vivd-studio/projects/:projectSlug/studio-fullscreen"
+        element={
+          <RequireAuth>
+            <FullscreenStudioRoute />
           </RequireAuth>
         }
       />

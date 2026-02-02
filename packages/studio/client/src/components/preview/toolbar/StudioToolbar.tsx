@@ -2,6 +2,16 @@ import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
 import faviconSvg from "/favicon-transparent.svg";
+import { Maximize2, Minimize2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 import { useToolbarState } from "./useToolbarState";
 import {
@@ -21,9 +31,14 @@ export function StudioToolbar() {
   const { setTheme, theme } = useTheme();
   const { canUseAgent } = usePermissions();
 
+  const params = new URLSearchParams(window.location.search);
+  const returnTo = params.get("returnTo");
+  const fullscreen = params.get("fullscreen") === "1";
+
   const state = useToolbarState();
   const {
     projectSlug,
+    embedded,
     originalUrl,
     copied,
     selectedVersion,
@@ -53,11 +68,22 @@ export function StudioToolbar() {
     publishStatus,
     handleLoadVersion,
     utils,
+    handleClose,
   } = state;
+
+  const showClose = embedded || !!returnTo;
+
+  const handleToggleFullscreen = () => {
+    if (!embedded) return;
+    window.parent?.postMessage(
+      { type: fullscreen ? "vivd:studio:exitFullscreen" : "vivd:studio:fullscreen" },
+      "*",
+    );
+  };
 
   return (
     <>
-      <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-10 bg-background overflow-x-auto">
+      <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-30 bg-background overflow-x-auto">
         {/* Left Section: App Icon + Preview Identity */}
         <div className="flex items-center">
           <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
@@ -67,9 +93,31 @@ export function StudioToolbar() {
         <div className="hidden sm:block h-5 w-px bg-border mx-1" />
 
         <div className="flex items-center gap-1 md:gap-2 shrink-0">
-          <span className="hidden sm:inline font-medium text-muted-foreground">
-            Preview
-          </span>
+          {embedded ? (
+            <Breadcrumb className="hidden sm:flex">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <button
+                      type="button"
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={handleClose}
+                    >
+                      Projects
+                    </button>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          ) : (
+            <span className="hidden sm:inline font-medium text-muted-foreground">
+              Preview
+            </span>
+          )}
           {projectSlug && (
             <VersionSelector
               selectedVersion={selectedVersion}
@@ -180,6 +228,38 @@ export function StudioToolbar() {
             setTheme={setTheme}
             canUseAgent={canUseAgent}
           />
+
+          {/* Embedded-only actions */}
+          {embedded ? (
+            <>
+              <div className="hidden md:block h-5 w-px bg-border mx-1" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleFullscreen}
+                className="h-8 w-8 p-0"
+                title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              >
+                {fullscreen ? (
+                  <Minimize2 className="w-4 h-4" />
+                ) : (
+                  <Maximize2 className="w-4 h-4" />
+                )}
+              </Button>
+            </>
+          ) : null}
+
+          {showClose ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClose}
+              className="h-8 w-8 p-0"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          ) : null}
         </div>
       </header>
 

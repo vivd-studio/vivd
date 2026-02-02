@@ -14,7 +14,10 @@ interface DevServerInfo {
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const DEV_SERVER_PORT_START = 5100;
+const DEV_SERVER_PORT_START = Math.max(
+  1024,
+  Number.parseInt(process.env.DEV_SERVER_PORT_START || "5100", 10) || 5100
+);
 
 const isDebugEnabled = process.env.DEVSERVER_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {

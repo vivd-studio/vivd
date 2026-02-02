@@ -17,6 +17,7 @@ import { detectProjectType } from "./services/projectType.js";
 import { devServerService } from "./services/DevServerService.js";
 import { serverManager as opencodeServerManager } from "./opencode/serverManager.js";
 import { usageReporter } from "./services/UsageReporter.js";
+import { validateStudioConfig } from "@vivd/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -309,6 +310,16 @@ async function startServer() {
   const REPO_URL = process.env.REPO_URL;
   const GIT_TOKEN = process.env.GIT_TOKEN;
   const BRANCH = process.env.BRANCH || "main";
+
+  // Ensure connected-mode configuration is consistent.
+  // Some environments may not propagate STUDIO_ID reliably; generate one to avoid blocking usage.
+  if (process.env.MAIN_BACKEND_URL && !process.env.STUDIO_ID) {
+    process.env.STUDIO_ID = crypto.randomUUID();
+    console.warn(
+      `[Studio] MAIN_BACKEND_URL set but STUDIO_ID missing; generated ${process.env.STUDIO_ID}`,
+    );
+  }
+  validateStudioConfig();
 
   // Initialize usage reporter for connected mode
   usageReporter.init();

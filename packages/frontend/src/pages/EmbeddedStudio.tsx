@@ -1,18 +1,33 @@
-import { useParams, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
-import { PreviewContent } from "@/components/preview/PreviewContent";
-import { PreviewProvider } from "@/components/preview/PreviewContext";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/theme";
+import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 
 /**
- * EmbeddedStudio - Renders the studio view embedded within the Layout (with sidebar/breadcrumbs).
- * This uses PreviewProvider with embedded=true to fit within the Layout's main content area.
+ * EmbeddedStudio - Project page inside the main app shell.
+ *
+ * Default: show a fast, prebuilt preview (or placeholder).
+ * User clicks "Edit" to start a studio machine and embed it in an iframe.
  */
 export default function EmbeddedStudio() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
+  const [editRequested, setEditRequested] = useState(false);
 
   // Fetch project data to get current version
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
@@ -20,10 +35,50 @@ export default function EmbeddedStudio() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
 
-  // Handle close/back navigation
-  const handleClose = () => {
-    navigate(ROUTES.DASHBOARD);
-  };
+  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const resumeStudio = urlParams.get("view") === "studio";
+  const versionOverrideRaw = urlParams.get("version");
+  const versionOverride = versionOverrideRaw
+    ? Number.parseInt(versionOverrideRaw, 10)
+    : NaN;
+  const studioVersion =
+    Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
+
+  const utils = trpc.useUtils();
+  const startStudio = trpc.project.startStudio.useMutation({
+    onSuccess: () => {
+      if (!projectSlug) return;
+      utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
+    },
+  });
+  const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
+    { slug: projectSlug!, version: studioVersion },
+    {
+      enabled: !!projectSlug && !!project,
+      // This is a lightweight status check; prefer correctness over caching so we can
+      // resume an already-running studio after navigation (or after fullscreen toggles).
+      staleTime: 0,
+      refetchOnMount: "always",
+      refetchOnReconnect: "always",
+    },
+  );
+  const { data: externalPreview } = trpc.project.getExternalPreviewStatus.useQuery(
+    { slug: projectSlug!, version: studioVersion },
+    { enabled: !!projectSlug && !!project },
+  );
+
+  // Reset local state when navigating between projects.
+  useEffect(() => {
+    setEditRequested(false);
+    startStudio.reset();
+  }, [projectSlug, startStudio.reset]);
+
+  // If we navigated back from fullscreen with `?view=studio`, prefer showing the running studio.
+  useEffect(() => {
+    if (resumeStudio) {
+      setEditRequested(false);
+    }
+  }, [resumeStudio]);
 
   // Set document title to project name
   useEffect(() => {
@@ -35,10 +90,92 @@ export default function EmbeddedStudio() {
     };
   }, [project?.slug]);
 
+  const handleClose = () => {
+    navigate(ROUTES.DASHBOARD);
+  };
+
+  const handleEdit = () => {
+    if (!projectSlug || !project) return;
+    setEditRequested(true);
+    startStudio.mutate({ slug: projectSlug, version: studioVersion });
+  };
+
+  const studioOrigin = useMemo(() => {
+    const baseUrl = editRequested
+      ? startStudio.data?.success
+        ? startStudio.data.url
+        : null
+      : studioUrlQuery.data?.status === "running"
+        ? studioUrlQuery.data.url
+        : null;
+    if (!baseUrl) return null;
+    try {
+      return new URL(baseUrl).origin;
+    } catch {
+      return null;
+    }
+  }, [editRequested, startStudio.data, studioUrlQuery.data]);
+
+  // Listen for studio events from the iframe (cross-origin via postMessage).
+  useEffect(() => {
+    if (!studioOrigin) return;
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== studioOrigin) return;
+      if (event.data?.type === "vivd:studio:close") {
+        navigate(ROUTES.DASHBOARD);
+      }
+      if (event.data?.type === "vivd:studio:fullscreen") {
+        navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${studioVersion}`);
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, [navigate, projectSlug, studioOrigin, studioVersion]);
+
+  const studioIframeSrc = useMemo(() => {
+    const baseUrl = editRequested
+      ? startStudio.data?.success
+        ? startStudio.data.url
+        : null
+      : studioUrlQuery.data?.status === "running"
+        ? studioUrlQuery.data.url
+        : null;
+    if (!baseUrl) return null;
+
+    const url = new URL("/vivd-studio", baseUrl);
+    url.searchParams.set("embedded", "1");
+    url.searchParams.set("projectSlug", projectSlug || "");
+    url.searchParams.set("version", String(studioVersion));
+    // Used by the "fullscreen/open in new tab" studio view to navigate back.
+    url.searchParams.set(
+      "returnTo",
+      new URL(
+        `${ROUTES.PROJECT(projectSlug || "")}?view=studio&version=${studioVersion}`,
+        window.location.origin,
+      ).toString(),
+    );
+    return url.toString();
+  }, [editRequested, projectSlug, startStudio.data, studioUrlQuery.data, studioVersion]);
+
+  const previewIframeSrc = useMemo(() => {
+    if (!projectSlug || !project) return null;
+    if (externalPreview?.status !== "ready") return null;
+    return externalPreview.url;
+  }, [externalPreview, projectSlug, project]);
+
+  const thumbnailSrc = useMemo(() => {
+    if (!projectSlug) return null;
+    return `/vivd-studio/api/projects/${projectSlug}/v${version}/.vivd/thumbnail.webp`;
+  }, [projectSlug, version]);
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-muted-foreground">Loading preview...</div>
+        <div className="text-muted-foreground">Loading project...</div>
       </div>
     );
   }
@@ -61,17 +198,178 @@ export default function EmbeddedStudio() {
     );
   }
 
+  if (startStudio.error) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="h-4 hidden sm:block" />
+          <Breadcrumb className="hidden sm:flex">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="flex-1" />
+          <ModeToggle />
+          <HeaderProfileMenu />
+          <Button variant="ghost" onClick={handleClose}>
+            Close
+          </Button>
+        </header>
+        <div className="flex flex-1 min-h-0 items-center justify-center">
+          <div className="text-destructive">
+            Error starting studio: {startStudio.error.message}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (startStudio.data && !startStudio.data.success) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="h-4 hidden sm:block" />
+          <Breadcrumb className="hidden sm:flex">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="flex-1" />
+          <ModeToggle />
+          <HeaderProfileMenu />
+          <Button variant="ghost" onClick={handleClose}>
+            Close
+          </Button>
+        </header>
+        <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3">
+          <div className="text-destructive">
+            Failed to start studio: {startStudio.data.error || "Unknown error"}
+          </div>
+          <Button onClick={handleEdit}>Retry</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (editRequested && !studioIframeSrc) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="h-4 hidden sm:block" />
+          <Breadcrumb className="hidden sm:flex">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="flex-1" />
+          <Button disabled>Starting studio…</Button>
+          <ModeToggle />
+          <HeaderProfileMenu />
+          <Button variant="ghost" onClick={handleClose}>
+            Close
+          </Button>
+        </header>
+        <div className="flex flex-1 min-h-0 items-center justify-center">
+          <div className="text-muted-foreground">Starting studio…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <PreviewProvider
-      key={`${projectSlug}-${version}`}
-      url={null}
-      originalUrl={project.url}
-      projectSlug={projectSlug}
-      version={version}
-      onClose={handleClose}
-      embedded={true}
-    >
-      <PreviewContent />
-    </PreviewProvider>
+    <div className="flex h-full min-h-0 flex-col">
+      {!studioIframeSrc ? (
+        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="h-4 hidden sm:block" />
+          <Breadcrumb className="hidden sm:flex">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="flex-1" />
+          {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
+          <ModeToggle />
+          <HeaderProfileMenu />
+          <Button variant="ghost" onClick={handleClose}>
+            Close
+          </Button>
+        </header>
+      ) : null}
+
+      <div className="flex-1 min-h-0">
+        {studioIframeSrc ? (
+          <iframe
+            key={`${projectSlug}-${version}-${studioUrlQuery.data?.url ?? startStudio.data?.url ?? ""}`}
+            src={studioIframeSrc}
+            title={`Vivd Studio - ${projectSlug}`}
+            className="h-full w-full border-0"
+            allow="fullscreen; clipboard-write"
+            allowFullScreen
+          />
+        ) : previewIframeSrc ? (
+          <iframe
+            key={`${projectSlug}-${version}-preview`}
+            src={previewIframeSrc}
+            title={`Preview - ${projectSlug}`}
+            className="h-full w-full border-0"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center p-6">
+            <div className="flex w-full max-w-4xl flex-col gap-4">
+              <div className="text-sm text-muted-foreground">
+                Preview not ready yet{externalPreview?.status ? ` (${externalPreview.status})` : ""}. Click{" "}
+                <span className="font-medium text-foreground">Edit</span> to start a studio machine.
+              </div>
+              {thumbnailSrc ? (
+                <div className="overflow-hidden rounded-lg border bg-muted">
+                  <img
+                    src={thumbnailSrc}
+                    alt={`Thumbnail - ${projectSlug}`}
+                    className="h-auto w-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

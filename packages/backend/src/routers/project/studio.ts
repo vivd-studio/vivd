@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
-import { studioService } from "../../services/StudioService";
+import { studioMachineProvider } from "../../services/studioMachines";
 import { db } from "../../db";
 import { session as sessionTable } from "../../db/schema";
 import { eq } from "drizzle-orm";
@@ -23,7 +23,7 @@ export const studioProcedures = {
     )
     .query(async ({ input }) => {
       // Check if studio is already running
-      const existingUrl = studioService.getUrl(input.slug, input.version);
+      const existingUrl = studioMachineProvider.getUrl(input.slug, input.version);
       if (existingUrl) {
         return {
           url: existingUrl,
@@ -49,10 +49,17 @@ export const studioProcedures = {
       })
     )
     .mutation(async ({ input, ctx }) => {
-      // Build the git repo URL for the project
-      // The URL should point to the backend's git HTTP endpoint
-      const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
-      const repoUrl = `${backendUrl}/vivd-studio/api/git/${input.slug}/v${input.version}`;
+      const backendOrigin =
+        process.env.BACKEND_URL ||
+        process.env.BETTER_AUTH_URL ||
+        "http://localhost:3000";
+
+      const repoUrl = new URL(
+        `/vivd-studio/api/git/${input.slug}/v${input.version}`,
+        backendOrigin,
+      ).toString();
+
+      const mainBackendUrl = new URL("/vivd-studio", backendOrigin).toString().replace(/\/$/, "");
 
       // Resolve the user's session token for git authentication.
       // The auth session shape we expose to the app does not include the raw token.
@@ -63,27 +70,33 @@ export const studioProcedures = {
       const sessionToken = sessionRecord?.token;
       if (!sessionToken) {
         return {
-          success: false,
+          success: false as const,
           error: "Failed to resolve session token for git authentication",
         };
       }
 
       try {
-        const { url, port } = await studioService.start(
-          input.slug,
-          input.version,
+        const { studioId, url, port } = await studioMachineProvider.ensureRunning({
+          projectSlug: input.slug,
+          version: input.version,
           repoUrl,
-          sessionToken
-        );
+          gitToken: sessionToken,
+          env: {
+            MAIN_BACKEND_URL: mainBackendUrl,
+            SESSION_TOKEN: sessionToken,
+          },
+        });
 
         return {
-          success: true,
+          success: true as const,
           url,
           port,
+          studioId,
+          provider: studioMachineProvider.kind,
         };
       } catch (error) {
         return {
-          success: false,
+          success: false as const,
           error: error instanceof Error ? error.message : "Failed to start studio",
         };
       }
@@ -100,7 +113,7 @@ export const studioProcedures = {
       })
     )
     .mutation(async ({ input }) => {
-      studioService.stop(input.slug, input.version);
+      await studioMachineProvider.stop(input.slug, input.version);
       return { success: true };
     }),
 
@@ -116,8 +129,8 @@ export const studioProcedures = {
     )
     .query(async ({ input }) => {
       return {
-        running: studioService.isRunning(input.slug, input.version),
-        url: studioService.getUrl(input.slug, input.version),
+        running: studioMachineProvider.isRunning(input.slug, input.version),
+        url: studioMachineProvider.getUrl(input.slug, input.version),
       };
     }),
 };

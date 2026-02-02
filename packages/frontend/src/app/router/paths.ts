@@ -28,6 +28,8 @@ export const ROUTES = {
   PROJECT: (slug: string) => `/vivd-studio/projects/${slug}` as const,
   PROJECT_FULLSCREEN: (slug: string) =>
     `/vivd-studio/projects/${slug}/fullscreen` as const,
+  PROJECT_STUDIO_FULLSCREEN: (slug: string) =>
+    `/vivd-studio/projects/${slug}/studio-fullscreen` as const,
   NEW_SCRATCH: "/vivd-studio/projects/new/scratch",
 
   // API endpoints

@@ -27,6 +27,48 @@ export { serverManager } from "./serverManager.js";
 export { getAvailableModels } from "./modelConfig.js";
 export type { ModelTier, ModelSelection } from "./modelConfig.js";
 
+const sessionTitleCache = new Map<
+  string,
+  { title: string | undefined; fetchedAt: number }
+>();
+
+const DEFAULT_TITLE_TTL_MS = 30_000;
+const PENDING_TITLE_TTL_MS = 5_000;
+
+function isPlaceholderTitle(title: string | undefined): boolean {
+  if (!title) return true;
+  const t = title.trim().toLowerCase();
+  return t === "new session" || t.startsWith("new session");
+}
+
+async function getSessionTitle(
+  client: OpencodeClient,
+  cwd: string,
+  sessionId: string,
+): Promise<string | undefined> {
+  const cached = sessionTitleCache.get(sessionId);
+  if (cached) {
+    const ttl = isPlaceholderTitle(cached.title)
+      ? PENDING_TITLE_TTL_MS
+      : DEFAULT_TITLE_TTL_MS;
+    if (Date.now() - cached.fetchedAt < ttl) {
+      return cached.title;
+    }
+  }
+
+  try {
+    const result = await client.session.list({ query: { directory: cwd } });
+    if (result.error) return undefined;
+    const sessions = (result.data || []) as any[];
+    const match = sessions.find((s) => s?.id === sessionId);
+    const title = typeof match?.title === "string" ? match.title : undefined;
+    sessionTitleCache.set(sessionId, { title, fetchedAt: Date.now() });
+    return title;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function runTask(
   task: string,
   cwd: string,
@@ -121,7 +163,13 @@ export async function runTask(
       );
 
       // Report usage to backend in connected mode
-      await usageReporter.report(data, currentSessionId, undefined, cwd);
+      const sessionTitle = await getSessionTitle(client, cwd, currentSessionId);
+      await usageReporter.report(
+        data,
+        currentSessionId,
+        sessionTitle,
+        process.env.VIVD_PROJECT_SLUG || cwd,
+      );
     },
     onIdle: () => {
       agentEventEmitter.emitSessionEvent(
@@ -130,6 +178,16 @@ export async function runTask(
           kind: "session.completed",
         } as SessionCompletedData),
       );
+      void (async () => {
+        const sessionTitle = await getSessionTitle(client, cwd, currentSessionId);
+        if (sessionTitle) {
+          await usageReporter.updateSessionTitle(
+            currentSessionId,
+            sessionTitle,
+            process.env.VIVD_PROJECT_SLUG || cwd,
+          );
+        }
+      })();
       stop();
     },
     onSessionError: (error) => {
@@ -365,4 +423,3 @@ export async function revertToUserMessage(
 
   return { reverted: true, messageId: userMessageId };
 }
-

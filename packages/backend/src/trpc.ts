@@ -3,7 +3,7 @@ import * as trpcExpress from "@trpc/server/adapters/express";
 import { getSession } from "./lib/authProvider";
 import { z } from "zod";
 import { db } from "./db";
-import { projectMember } from "./db/schema";
+import { projectMember, session as sessionTable } from "./db/schema";
 import { eq } from "drizzle-orm";
 
 export const createContext = async ({
@@ -19,7 +19,52 @@ export const createContext = async ({
     }
   });
 
-  const session = await getSession(headers);
+  let session = await getSession(headers);
+
+  // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
+  // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
+  if (!session) {
+    const authHeader = headers.get("authorization");
+    const bearer = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : null;
+
+    if (bearer) {
+      const sessionRecord = await db.query.session.findFirst({
+        where: eq(sessionTable.token, bearer),
+        with: {
+          user: true,
+        },
+      });
+
+      if (
+        sessionRecord &&
+        (!sessionRecord.expiresAt || new Date(sessionRecord.expiresAt) > new Date())
+      ) {
+        session = {
+          session: {
+            id: sessionRecord.id,
+            userId: sessionRecord.userId,
+            expiresAt: new Date(sessionRecord.expiresAt),
+            createdAt: new Date(sessionRecord.createdAt),
+            updatedAt: new Date(sessionRecord.updatedAt),
+            ipAddress: sessionRecord.ipAddress,
+            userAgent: sessionRecord.userAgent,
+          },
+          user: {
+            id: sessionRecord.user.id,
+            email: sessionRecord.user.email,
+            name: sessionRecord.user.name,
+            role: (sessionRecord.user.role as "admin" | "user" | "client_editor") ?? "user",
+            emailVerified: !!sessionRecord.user.emailVerified,
+            image: sessionRecord.user.image,
+            createdAt: new Date(sessionRecord.user.createdAt),
+            updatedAt: new Date(sessionRecord.user.updatedAt),
+          },
+        };
+      }
+    }
+  }
 
   return {
     req,

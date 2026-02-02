@@ -35,6 +35,7 @@ export function useToolbarState() {
     chatOpen,
     setChatOpen,
     handleClose,
+    embedded,
   } = usePreview();
 
   // Git changes query
@@ -113,6 +114,7 @@ export function useToolbarState() {
     chatOpen,
     setChatOpen,
     handleClose,
+    embedded,
 
     // Query data
     hasGitChanges,

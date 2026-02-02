@@ -93,6 +93,32 @@ function getPeriodId(type: PeriodType, periodStart: Date): string {
 }
 
 class UsageService {
+  async updateSessionTitle(
+    sessionId: string,
+    sessionTitle: string,
+    projectSlug?: string,
+  ): Promise<void> {
+    if (!sessionId || !sessionTitle) return;
+
+    const title = sessionTitle.trim();
+    if (!title) return;
+
+    const isPlaceholder = /^new session\b/i.test(title);
+    if (isPlaceholder) return;
+
+    try {
+      await db
+        .update(usageRecord)
+        .set({
+          sessionTitle: title,
+          ...(projectSlug ? { projectSlug } : {}),
+        })
+        .where(eq(usageRecord.sessionId, sessionId));
+    } catch (error) {
+      console.error("[UsageService] Failed to update session title:", error);
+    }
+  }
+
   /**
    * Record an AI cost event from OpenCode
    * Uses idempotency key (sessionId:partId) to prevent duplicate recordings

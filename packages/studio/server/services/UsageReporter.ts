@@ -87,6 +87,55 @@ class UsageReporter {
   }
 
   /**
+   * Send the latest session title to the backend (connected mode).
+   * This is used to update UI labels after OpenCode renames a session.
+   */
+  async updateSessionTitle(
+    sessionId: string,
+    sessionTitle: string,
+    projectSlug?: string,
+  ): Promise<void> {
+    if (!isConnectedMode()) return;
+
+    const backendUrl = getBackendUrl();
+    const sessionToken = getSessionToken();
+    const studioId = getStudioId();
+    if (!backendUrl || !sessionToken || !studioId) return;
+
+    const title = sessionTitle.trim();
+    if (!title) return;
+    if (/^new session\b/i.test(title)) return;
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/api/trpc/studioApi.updateSessionTitle`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify({
+            studioId,
+            sessionId,
+            sessionTitle: title,
+            projectSlug,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        console.error(
+          `[UsageReporter] Session title update failed ${response.status}: ${errorText}`,
+        );
+      }
+    } catch (err) {
+      console.error("[UsageReporter] Session title update network error:", err);
+    }
+  }
+
+  /**
    * Flush queued reports to backend.
    */
   private async flush(): Promise<void> {
@@ -133,6 +182,8 @@ class UsageReporter {
       attempt++;
 
       try {
+        // `studioApi.reportUsage` is a tRPC mutation procedure.
+        // The Express adapter expects the raw JSON input body (no `{ json: ... }` wrapper).
         const response = await fetch(`${backendUrl}/api/trpc/studioApi.reportUsage`, {
           method: "POST",
           headers: {
@@ -140,10 +191,8 @@ class UsageReporter {
             Authorization: `Bearer ${sessionToken}`,
           },
           body: JSON.stringify({
-            json: {
-              studioId,
-              reports,
-            },
+            studioId,
+            reports,
           }),
         });
 
@@ -197,9 +246,11 @@ class UsageReporter {
     }
 
     try {
+      // `studioApi.getStatus` is a tRPC query procedure, which expects GET requests.
+      // The `input` querystring should be the raw JSON input (no `{ json: ... }` wrapper).
       const response = await fetch(
         `${backendUrl}/api/trpc/studioApi.getStatus?input=${encodeURIComponent(
-          JSON.stringify({ json: { studioId } })
+          JSON.stringify({ studioId })
         )}`,
         {
           method: "GET",

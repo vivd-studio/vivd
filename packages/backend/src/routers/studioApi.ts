@@ -72,6 +72,36 @@ export const studioApiRouter = router({
     }),
 
   /**
+   * Update the display title for an OpenCode session after it has been renamed.
+   * This allows the usage table to reflect the latest session titles even if no
+   * further usage events are emitted after the rename.
+   */
+  updateSessionTitle: protectedProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        sessionId: z.string(),
+        sessionTitle: z.string(),
+        projectSlug: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+
+      console.log(
+        `[StudioAPI] Session title update from studio ${input.studioId} (user: ${userId}): ${input.sessionId} -> "${input.sessionTitle}"`,
+      );
+
+      await usageService.updateSessionTitle(
+        input.sessionId,
+        input.sessionTitle,
+        input.projectSlug,
+      );
+
+      return { success: true };
+    }),
+
+  /**
    * Return current usage status for a studio instance.
    * Studio calls this to get limit information for display.
    * Authenticated via user's session token.
