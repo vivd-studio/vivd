@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Wrench, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 
 type MaintenanceAction =
   | "migrateProcessFiles"
+  | "exportProjectsToObjectStorage"
   | "templateAddMissing"
   | "templateOverwrite"
   | "fixGitignore"
@@ -27,6 +29,8 @@ export function MaintenanceTab() {
   const [confirmAction, setConfirmAction] = useState<MaintenanceAction | null>(
     null,
   );
+
+  const { data: config } = trpc.project.getConfig.useQuery();
 
   const migrateMutation = trpc.project.migrateVivdProcessFiles.useMutation({
     onSuccess: (data) => {
@@ -40,6 +44,20 @@ export function MaintenanceTab() {
       });
     },
   });
+
+  const exportMutation =
+    trpc.project.exportAllProjectsToObjectStorage.useMutation({
+      onSuccess: (data) => {
+        toast.success("Export completed", {
+          description: `Exported ${data.versionsExported}/${data.versionsScanned} versions • ${data.filesUploaded} files`,
+        });
+      },
+      onError: (err: any) => {
+        toast.error("Export failed", {
+          description: err?.message || "Unknown error",
+        });
+      },
+    });
 
   const templateFilesMutation =
     trpc.project.migrateProjectTemplateFiles.useMutation({
@@ -97,6 +115,15 @@ export function MaintenanceTab() {
           confirmLabel: "Run Migration",
           isPending: migrateMutation.isPending,
           onConfirm: () => migrateMutation.mutate(),
+        };
+      case "exportProjectsToObjectStorage":
+        return {
+          title: "Export all projects to object storage?",
+          description:
+            "This uploads every project version into your S3/R2 bucket under tenants/<tenant>/projects/<slug>/v<version>/source/ so studio machines can hydrate from the bucket.",
+          confirmLabel: "Export Projects",
+          isPending: exportMutation.isPending,
+          onConfirm: () => exportMutation.mutate(),
         };
       case "templateAddMissing":
         return {
@@ -158,6 +185,25 @@ export function MaintenanceTab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {config ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>Tenant:</span>
+              <code>{config.tenantId}</code>
+              <span className="mx-1">•</span>
+              <span>GitHub sync:</span>
+              <Badge variant={config.github.enabled ? "default" : "secondary"}>
+                {config.github.enabled ? "enabled" : "disabled"}
+              </Badge>
+              {config.github.enabled && config.github.org ? (
+                <code>
+                  {config.github.org}
+                  {config.github.repoPrefix
+                    ? ` (prefix: ${config.github.repoPrefix})`
+                    : ""}
+                </code>
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             Move vivd process files (like <code>project.json</code>,{" "}
             <code>website_text.txt</code>, screenshots) into the hidden{" "}
@@ -200,6 +246,65 @@ export function MaintenanceTab() {
               ) : null}
             </div>
           ) : null}
+
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Export all local project files into your configured S3/R2 bucket so
+              studio machines can hydrate a workspace directory on startup.
+              Files are uploaded under{" "}
+              <code>
+                tenants/&lt;tenant&gt;/projects/&lt;slug&gt;/v&lt;version&gt;/source/
+              </code>{" "}
+              and <code>node_modules</code> is skipped.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setConfirmAction("exportProjectsToObjectStorage")}
+                disabled={exportMutation.isPending}
+              >
+                {exportMutation.isPending ? (
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                ) : null}
+                Export Projects to Bucket
+              </Button>
+              {exportMutation.data ? (
+                <span className="text-sm text-muted-foreground">
+                  Exported {exportMutation.data.versionsExported}/
+                  {exportMutation.data.versionsScanned} versions •{" "}
+                  {exportMutation.data.filesUploaded} files
+                  {exportMutation.data.errors.length ||
+                  exportMutation.data.fileErrors.length
+                    ? ` • ${
+                        exportMutation.data.errors.length +
+                        exportMutation.data.fileErrors.length
+                      } error(s)`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {exportMutation.data?.errors.length ||
+            exportMutation.data?.fileErrors.length ? (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium mb-2">Errors</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {(exportMutation.data?.errors ?? [])
+                    .slice(0, 3)
+                    .map((e, idx) => (
+                      <li key={`v-${idx}`}>
+                        {e.slug}: {e.error}
+                      </li>
+                    ))}
+                  {(exportMutation.data?.fileErrors ?? [])
+                    .slice(0, 2)
+                    .map((e, idx) => (
+                      <li key={`f-${idx}`}>
+                        {e.slug}: {e.file} • {e.error}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
 
           <div className="border-t pt-3 space-y-3">
             <p className="text-sm text-muted-foreground">

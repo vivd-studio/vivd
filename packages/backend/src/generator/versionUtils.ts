@@ -17,9 +17,60 @@ function detectProjectsDir(): string {
 
 // Base directory for all projects
 const PROJECTS_DIR = detectProjectsDir();
+const TENANTS_DIRNAME = "tenants";
+const DEFAULT_TENANT_ID = "default";
 
 export function getProjectsDir(): string {
   return PROJECTS_DIR;
+}
+
+export function getProjectsRootDir(): string {
+  return PROJECTS_DIR;
+}
+
+export function getTenantsDir(): string {
+  return path.join(PROJECTS_DIR, TENANTS_DIRNAME);
+}
+
+export function getActiveTenantId(): string {
+  const tenantId =
+    process.env.PROJECTS_TENANT_ID?.trim() ||
+    process.env.TENANT_ID?.trim() ||
+    process.env.VIVD_TENANT_ID?.trim();
+  return tenantId || DEFAULT_TENANT_ID;
+}
+
+export function getTenantProjectsDir(tenantId: string = getActiveTenantId()): string {
+  return path.join(getTenantsDir(), tenantId);
+}
+
+export function listProjectSlugs(options?: {
+  tenantId?: string;
+  includeLegacy?: boolean;
+}): string[] {
+  const tenantId = options?.tenantId ?? getActiveTenantId();
+  const includeLegacy = options?.includeLegacy ?? true;
+
+  const slugs = new Set<string>();
+
+  const tenantDir = getTenantProjectsDir(tenantId);
+  if (fs.existsSync(tenantDir)) {
+    for (const entry of fs.readdirSync(tenantDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) slugs.add(entry.name);
+    }
+  }
+
+  if (includeLegacy) {
+    if (fs.existsSync(PROJECTS_DIR)) {
+      for (const entry of fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === TENANTS_DIRNAME) continue;
+        slugs.add(entry.name);
+      }
+    }
+  }
+
+  return Array.from(slugs).sort((a, b) => a.localeCompare(b));
 }
 
 // Project-level manifest (at projects/<slug>/manifest.json)
@@ -98,7 +149,15 @@ export function isVersionStale(
  * Get the base project directory for a slug
  */
 export function getProjectDir(slug: string): string {
-  return path.join(PROJECTS_DIR, slug);
+  const tenantDir = getTenantProjectsDir();
+  const tenantPath = path.join(tenantDir, slug);
+  if (fs.existsSync(tenantPath)) return tenantPath;
+
+  const legacyPath = path.join(PROJECTS_DIR, slug);
+  if (fs.existsSync(legacyPath)) return legacyPath;
+
+  // Default to tenant layout for new projects.
+  return tenantPath;
 }
 
 /**

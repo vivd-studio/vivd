@@ -54,14 +54,9 @@ export const studioProcedures = {
         process.env.BETTER_AUTH_URL ||
         "http://localhost:3000";
 
-      const repoUrl = new URL(
-        `/vivd-studio/api/git/${input.slug}/v${input.version}`,
-        backendOrigin,
-      ).toString();
-
       const mainBackendUrl = new URL("/vivd-studio", backendOrigin).toString().replace(/\/$/, "");
 
-      // Resolve the user's session token for git authentication.
+      // Resolve the user's session token for machine-to-backend authentication.
       // The auth session shape we expose to the app does not include the raw token.
       const sessionId = ctx.session.session.id;
       const sessionRecord = await db.query.session.findFirst({
@@ -71,7 +66,7 @@ export const studioProcedures = {
       if (!sessionToken) {
         return {
           success: false as const,
-          error: "Failed to resolve session token for git authentication",
+          error: "Failed to resolve session token for studio authentication",
         };
       }
 
@@ -79,8 +74,6 @@ export const studioProcedures = {
         const { studioId, url, port } = await studioMachineProvider.ensureRunning({
           projectSlug: input.slug,
           version: input.version,
-          repoUrl,
-          gitToken: sessionToken,
           env: {
             MAIN_BACKEND_URL: mainBackendUrl,
             SESSION_TOKEN: sessionToken,

@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "/vivd-studio",
-  plugins: [react()],
+  plugins: [react() as any],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

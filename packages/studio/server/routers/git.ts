@@ -40,7 +40,6 @@ export const gitRouter = router({
           return { success: true, message: "No changes to commit" };
         }
 
-        await ctx.workspace.push();
         return { success: true, commitHash };
       } catch (error) {
         return {

@@ -13,7 +13,7 @@ import {
   getNextVersion,
   getVersionData,
   isVersionStale,
-  getProjectsDir,
+  listProjectSlugs,
   PROCESSING_STATUSES,
 } from "../../generator/versionUtils";
 import { getVivdInternalFilesPath } from "../../generator/vivdPaths";
@@ -23,6 +23,7 @@ import { validateConfig } from "../../generator/config";
 import fs from "fs";
 import path from "path";
 import { publishService } from "../../services/PublishService";
+import { gitService } from "../../services/GitService";
 import { db } from "../../db";
 import { projectMember } from "../../db/schema";
 import { eq } from "drizzle-orm";
@@ -37,20 +38,10 @@ function checkSingleProjectModeLimit(): void {
     return; // Not in single project mode
   }
 
-  const projectsDir = getProjectsDir();
-  if (!fs.existsSync(projectsDir)) {
-    return; // No projects exist yet
-  }
+  const projectSlugs = listProjectSlugs();
+  const hasAnyProject = projectSlugs.some((slug) => getManifest(slug) !== null);
 
-  const files = fs.readdirSync(projectsDir, { withFileTypes: true });
-  const projectDirs = files.filter((dirent) => {
-    if (!dirent.isDirectory()) return false;
-    // Check if it's a valid project (has manifest.json)
-    const manifest = getManifest(dirent.name);
-    return manifest !== null;
-  });
-
-  if (projectDirs.length > 0) {
+  if (hasAnyProject) {
     throw new Error(
       "Single project mode is enabled and a project already exists. " +
         "Delete the existing project before creating a new one.",
@@ -537,7 +528,18 @@ export const projectGenerationProcedures = {
       const source: "url" | "scratch" =
         sourceRaw === "scratch" ? "scratch" : manifest.url ? "url" : "scratch";
 
-      // GitHub sync removed - using self-hosted Git HTTP server instead
+      // On preview open, sync from GitHub (best-effort).
+      // Skips automatically if there are local uncommitted changes.
+      if (status === "completed") {
+        const versionDir = getVersionDir(slug, targetVersion);
+        if (fs.existsSync(versionDir)) {
+          await gitService.syncPullFromGitHub({
+            cwd: versionDir,
+            slug,
+            version: targetVersion,
+          });
+        }
+      }
 
       // Build the preview URL for the specific version
       const resultUrl =
@@ -568,8 +570,6 @@ export const projectGenerationProcedures = {
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
-    const projectsDir = getProjectsDir();
-
     // Check if user is a client_editor
     const isClientEditor = ctx.session.user.role === "client_editor";
     let assignedProjectSlug: string | null = null;
@@ -586,26 +586,19 @@ export const projectGenerationProcedures = {
       }
     }
 
-    if (!fs.existsSync(projectsDir)) {
-      return { projects: [] };
-    }
-
     try {
       // Fetch all published sites upfront for efficient lookup
       const publishedSites = await publishService.getAllPublishedSites();
 
-      const files = fs.readdirSync(projectsDir, { withFileTypes: true });
-      const projects = files
-        .filter((dirent) => dirent.isDirectory())
-        .filter((dirent) => {
-          // Filter by assigned project if user is client_editor
-          if (isClientEditor) {
-            return dirent.name === assignedProjectSlug;
-          }
-          return true;
-        })
-        .map((dirent) => {
-          const projectSlug = dirent.name;
+      const projectSlugs = listProjectSlugs().filter((projectSlug) => {
+        if (isClientEditor) {
+          return projectSlug === assignedProjectSlug;
+        }
+        return true;
+      });
+
+      const projects = projectSlugs
+        .map((projectSlug) => {
 
           const manifest = getManifest(projectSlug);
 

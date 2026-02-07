@@ -1,6 +1,8 @@
 import { execa } from "execa";
 import * as fs from "fs";
 import * as path from "path";
+import { getActiveTenantId } from "../generator/versionUtils";
+import { getGitHubSyncSettings, gitHubApiService } from "./GitHubApiService";
 
 // Marker file name for tracking working commit
 const WORKING_COMMIT_MARKER = ".vivd-working-commit";
@@ -19,6 +21,17 @@ export interface SaveResult {
   hash: string;
   noChanges?: boolean;
 }
+
+export type GitHubSyncResult =
+  | { attempted: false; success: true }
+  | { attempted: true; success: true; repo: string; remoteUrl: string }
+  | {
+      attempted: true;
+      success: false;
+      error: string;
+      repo?: string;
+      remoteUrl?: string;
+    };
 
 /**
  * Service for Git operations on project version directories.
@@ -422,6 +435,319 @@ export class GitService {
       // Reset to HEAD
       await execa("git", ["reset", "HEAD"], { cwd });
       await execa("git", ["checkout", "--", "."], { cwd });
+    }
+  }
+
+  private getGitHttpAuthHeaderValue(token: string): string {
+    // GitHub Git-over-HTTPS expects Basic auth (username can be anything).
+    // Using http.extraHeader keeps the token out of the remote URL.
+    const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+    return `AUTHORIZATION: basic ${basic}`;
+  }
+
+  private buildGitHubRepoName(args: {
+    tenantId: string;
+    slug: string;
+    version: number;
+  }): string {
+    const settings = getGitHubSyncSettings();
+    const base = `${args.tenantId}-${args.slug}-v${args.version}`;
+    const withPrefix = `${settings.repoPrefix}${base}`;
+    return withPrefix
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+/, "")
+      .replace(/-+$/, "")
+      .slice(0, 100);
+  }
+
+  private buildGitHubRemoteUrl(
+    org: string,
+    repo: string,
+    gitHost: string,
+  ): string {
+    return `https://${gitHost}/${org}/${repo}.git`;
+  }
+
+  private async ensureRemoteUrl(
+    cwd: string,
+    remoteName: string,
+    remoteUrl: string,
+  ): Promise<void> {
+    await this.ensureSafeDirectory(cwd);
+
+    try {
+      const { stdout } = await execa("git", ["remote", "get-url", remoteName], {
+        cwd,
+      });
+      if (stdout.trim() === remoteUrl) return;
+      await execa("git", ["remote", "set-url", remoteName, remoteUrl], { cwd });
+    } catch {
+      await execa("git", ["remote", "add", remoteName, remoteUrl], { cwd });
+    }
+  }
+
+  private async gitWithHttpAuth(
+    cwd: string,
+    token: string,
+    args: string[],
+  ): Promise<void> {
+    const extraHeader = this.getGitHttpAuthHeaderValue(token);
+    await execa("git", ["-c", `http.extraHeader=${extraHeader}`, ...args], {
+      cwd,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+      },
+    });
+  }
+
+  private sanitizeGitAuthFromMessage(message: string): string {
+    return message.replace(
+      /http\.extraHeader=AUTHORIZATION:\s*basic\s+[A-Za-z0-9+/=]+/gi,
+      "http.extraHeader=AUTHORIZATION: basic <redacted>",
+    );
+  }
+
+  async syncPushToGitHub(params: {
+    cwd: string;
+    slug: string;
+    version: number;
+    tenantId?: string;
+  }): Promise<GitHubSyncResult> {
+    const settings = getGitHubSyncSettings();
+    if (!settings.enabled) return { attempted: false, success: true };
+
+    if (!settings.org || !settings.token) {
+      const error = "GITHUB_ORG/GITHUB_TOKEN missing";
+      if (settings.strict) throw new Error(error);
+      return { attempted: true, success: false, error };
+    }
+
+    const tenantId = params.tenantId || getActiveTenantId();
+    const repoName = this.buildGitHubRepoName({
+      tenantId,
+      slug: params.slug,
+      version: params.version,
+    });
+    const remoteUrl = this.buildGitHubRemoteUrl(
+      settings.org,
+      repoName,
+      settings.gitHost,
+    );
+
+    try {
+      await this.ensureGitRepository(params.cwd);
+      await gitHubApiService.ensureOrgRepoExists(settings.org, repoName, settings);
+      await this.ensureRemoteUrl(params.cwd, settings.remoteName, remoteUrl);
+
+      // Sync current HEAD to main. Keep tags (publishes are tags in some flows).
+      await this.gitWithHttpAuth(params.cwd, settings.token, [
+        "push",
+        "--tags",
+        "-u",
+        settings.remoteName,
+        "HEAD:main",
+      ]);
+
+      return {
+        attempted: true,
+        success: true,
+        repo: `${settings.org}/${repoName}`,
+        remoteUrl,
+      };
+    } catch (error) {
+      const msgRaw = error instanceof Error ? error.message : String(error);
+      const msg = this.sanitizeGitAuthFromMessage(msgRaw);
+      if (settings.strict) throw error;
+      console.warn("GitHub sync push failed:", msg);
+      return {
+        attempted: true,
+        success: false,
+        error: msg,
+        repo: `${settings.org}/${repoName}`,
+        remoteUrl,
+      };
+    }
+  }
+
+  async syncPullFromGitHub(params: {
+    cwd: string;
+    slug: string;
+    version: number;
+    tenantId?: string;
+  }): Promise<GitHubSyncResult & { skippedReason?: string }> {
+    const settings = getGitHubSyncSettings();
+    if (!settings.enabled) return { attempted: false, success: true };
+
+    if (!settings.org || !settings.token) {
+      const error = "GITHUB_ORG/GITHUB_TOKEN missing";
+      if (settings.strict) throw new Error(error);
+      return { attempted: true, success: false, error };
+    }
+
+    const tenantId = params.tenantId || getActiveTenantId();
+    const repoName = this.buildGitHubRepoName({
+      tenantId,
+      slug: params.slug,
+      version: params.version,
+    });
+    const remoteUrl = this.buildGitHubRemoteUrl(
+      settings.org,
+      repoName,
+      settings.gitHost,
+    );
+
+    try {
+      await this.ensureGitRepository(params.cwd);
+
+      const workingCommit = this.getWorkingCommit(params.cwd);
+      if (workingCommit) {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: "Working directory pinned to older commit",
+        };
+      }
+
+      const hasChanges = await this.hasUncommittedChanges(params.cwd);
+      if (hasChanges) {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: "Uncommitted local changes",
+        };
+      }
+
+      const { stdout: branch } = await execa(
+        "git",
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        { cwd: params.cwd },
+      );
+      if (branch.trim() === "HEAD") {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: "Detached HEAD",
+        };
+      }
+
+      const exists = await gitHubApiService.repoExists(
+        settings.org,
+        repoName,
+        settings,
+      );
+      if (!exists) {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: "Remote repo does not exist yet",
+        };
+      }
+
+      await this.ensureRemoteUrl(params.cwd, settings.remoteName, remoteUrl);
+
+      // Avoid auto-merges/rebases; only fast-forward.
+      try {
+        await this.gitWithHttpAuth(params.cwd, settings.token, [
+          "fetch",
+          settings.remoteName,
+          "main",
+        ]);
+      } catch (fetchError) {
+        const fetchMsgRaw =
+          fetchError instanceof Error ? fetchError.message : String(fetchError);
+        const fetchMsg = this.sanitizeGitAuthFromMessage(fetchMsgRaw);
+        if (
+          fetchMsg.toLowerCase().includes("couldn't find remote ref") ||
+          fetchMsg.toLowerCase().includes("remote branch main not found")
+        ) {
+          return {
+            attempted: true,
+            success: true,
+            repo: `${settings.org}/${repoName}`,
+            remoteUrl,
+            skippedReason: "Remote has no main branch yet",
+          };
+        }
+        throw new Error(fetchMsg);
+      }
+
+      const { stdout: counts } = await execa(
+        "git",
+        [
+          "rev-list",
+          "--left-right",
+          "--count",
+          `HEAD...${settings.remoteName}/main`,
+        ],
+        { cwd: params.cwd },
+      );
+      const [aheadRaw, behindRaw] = counts.trim().split(/\s+/);
+      const ahead = Number(aheadRaw || "0");
+      const behind = Number(behindRaw || "0");
+
+      if (!Number.isFinite(ahead) || !Number.isFinite(behind)) {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: "Failed to compare local and remote history",
+        };
+      }
+
+      if (behind === 0) {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: ahead > 0 ? "Local ahead of remote" : "Already up to date",
+        };
+      }
+
+      if (ahead > 0 && behind > 0) {
+        return {
+          attempted: true,
+          success: true,
+          repo: `${settings.org}/${repoName}`,
+          remoteUrl,
+          skippedReason: "Histories diverged",
+        };
+      }
+
+      // behind > 0 and ahead === 0 => fast-forward.
+      await execa("git", ["merge", "--ff-only", `${settings.remoteName}/main`], {
+        cwd: params.cwd,
+      });
+
+      return {
+        attempted: true,
+        success: true,
+        repo: `${settings.org}/${repoName}`,
+        remoteUrl,
+      };
+    } catch (error) {
+      const msgRaw = error instanceof Error ? error.message : String(error);
+      const msg = this.sanitizeGitAuthFromMessage(msgRaw);
+      if (settings.strict) throw error;
+      console.warn("GitHub sync pull failed:", msg);
+      return {
+        attempted: true,
+        success: false,
+        error: msg,
+        repo: `${settings.org}/${repoName}`,
+        remoteUrl,
+      };
     }
   }
 

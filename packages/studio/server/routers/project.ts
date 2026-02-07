@@ -324,8 +324,6 @@ export const projectRouter = router({
         };
       }
 
-      await ctx.workspace.push();
-
       return {
         success: true,
         hash,
@@ -456,13 +454,6 @@ export const projectRouter = router({
           await git.tag(["-a", input.tagName, "-m", input.message]);
         } else {
           await git.tag([input.tagName]);
-        }
-
-        // Push tags to origin so the git server can react to the publish event.
-        try {
-          await git.pushTags("origin");
-        } catch (err) {
-          console.warn("[Git] Tag created but failed to push tags:", err);
         }
 
         return {

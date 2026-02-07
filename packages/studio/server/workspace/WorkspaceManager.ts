@@ -7,6 +7,78 @@ import os from "os";
 export class WorkspaceManager {
   private workspaceDir: string | null = null;
   private git: SimpleGit | null = null;
+  private workspaceOwned = false;
+  private configuredSafeDirectories = new Set<string>();
+
+  async open(directory: string): Promise<void> {
+    this.workspaceDir = path.resolve(directory);
+    this.workspaceOwned = false;
+    await fs.ensureDir(this.workspaceDir);
+
+    await this.ensureSafeDirectory(this.workspaceDir);
+    this.git = simpleGit(this.workspaceDir);
+
+    let isRepo = false;
+    try {
+      isRepo = await this.git.checkIsRepo();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("detected dubious ownership")) {
+        await this.ensureSafeDirectory(this.workspaceDir);
+        isRepo = await this.git.checkIsRepo();
+      } else {
+        throw err;
+      }
+    }
+    if (!isRepo) {
+      await this.git.init();
+      // Ensure branch name is stable for downstream tooling.
+      await this.git.raw(["branch", "-M", "main"]);
+    }
+
+    // Configure git user for commits
+    await this.git.addConfig("user.email", "studio@vivd.dev");
+    await this.git.addConfig("user.name", "Vivd Studio");
+  }
+
+  private async ensureSafeDirectory(directory: string): Promise<void> {
+    const resolved = path.resolve(directory);
+    if (this.configuredSafeDirectories.has(resolved)) return;
+
+    const git = simpleGit();
+    try {
+      const existing = await git.raw([
+        "config",
+        "--global",
+        "--get-all",
+        "safe.directory",
+      ]);
+
+      const alreadyConfigured = existing
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .includes(resolved);
+
+      if (alreadyConfigured) {
+        this.configuredSafeDirectories.add(resolved);
+        return;
+      }
+    } catch {
+      // Ignore config read failures; we'll still try to add the entry.
+    }
+
+    try {
+      await git.raw(["config", "--global", "--add", "safe.directory", resolved]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[Git] Failed to configure safe.directory for ${resolved}: ${message}`
+      );
+    }
+
+    this.configuredSafeDirectories.add(resolved);
+  }
 
   async clone(
     repoUrl: string,
@@ -20,6 +92,7 @@ export class WorkspaceManager {
       Date.now().toString()
     );
     await fs.ensureDir(this.workspaceDir);
+    this.workspaceOwned = true;
 
     // Construct authenticated URL if token provided
     const authUrl = token ? this.addTokenToUrl(repoUrl, token) : repoUrl;
@@ -66,14 +139,6 @@ export class WorkspaceManager {
     await this.git.add(".");
     const result = await this.git.commit(message);
     return result.commit;
-  }
-
-  async push(): Promise<void> {
-    if (!this.git) {
-      throw new Error("Workspace not initialized");
-    }
-
-    await this.git.push("origin", "HEAD");
   }
 
   async hasChanges(): Promise<boolean> {
@@ -216,14 +281,17 @@ export class WorkspaceManager {
 
   async cleanup(): Promise<void> {
     if (this.workspaceDir) {
-      try {
-        await fs.remove(this.workspaceDir);
-        console.log(`Cleaned up workspace: ${this.workspaceDir}`);
-      } catch (error) {
-        console.error(`Failed to cleanup workspace: ${error}`);
+      if (this.workspaceOwned) {
+        try {
+          await fs.remove(this.workspaceDir);
+          console.log(`Cleaned up workspace: ${this.workspaceDir}`);
+        } catch (error) {
+          console.error(`Failed to cleanup workspace: ${error}`);
+        }
       }
       this.workspaceDir = null;
       this.git = null;
+      this.workspaceOwned = false;
     }
   }
 }

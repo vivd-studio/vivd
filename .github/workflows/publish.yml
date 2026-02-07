@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Set up QEMU (for multi-platform builds)
         uses: docker/setup-qemu-action@v3
@@ -43,10 +45,14 @@ jobs:
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.inputs.tag }}"
           else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            VERSION="${GITHUB_REF#refs/tags/}"
           fi
+
+          VERSION_NO_V="${VERSION#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
 
       - name: Build and push vivd-server
         uses: docker/build-push-action@v5
@@ -58,6 +64,7 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/vivd-server:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ steps.tag.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -72,7 +79,23 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ steps.tag.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-ui:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push vivd-studio
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/studio/Dockerfile
+          target: prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ steps.tag.outputs.version_no_v }}
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -85,6 +108,7 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/vivd-caddy:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-caddy:${{ steps.tag.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-caddy:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

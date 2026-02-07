@@ -307,6 +307,8 @@ const devPreviewProxy = createProxyMiddleware({
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || "3100", 10);
+  const WORKSPACE_DIR =
+    process.env.VIVD_WORKSPACE_DIR || process.env.WORKSPACE_DIR;
   const REPO_URL = process.env.REPO_URL;
   const GIT_TOKEN = process.env.GIT_TOKEN;
   const BRANCH = process.env.BRANCH || "main";
@@ -331,7 +333,11 @@ async function startServer() {
   // Initialize workspace
   const workspace = new WorkspaceManager();
 
-  if (REPO_URL) {
+  if (WORKSPACE_DIR) {
+    console.log(`Using workspace directory: ${WORKSPACE_DIR}`);
+    await workspace.open(WORKSPACE_DIR);
+    console.log(`Workspace ready at: ${workspace.getProjectPath()}`);
+  } else if (REPO_URL) {
     console.log(`Cloning repository: ${REPO_URL}`);
     await cloneWorkspaceWithRetry({
       workspace,
@@ -342,7 +348,7 @@ async function startServer() {
     console.log(`Repository cloned to: ${workspace.getProjectPath()}`);
   } else {
     console.log(
-      "No REPO_URL provided. Running in development mode without git."
+      "No VIVD_WORKSPACE_DIR/WORKSPACE_DIR or REPO_URL provided. Workspace not initialized."
     );
   }
 

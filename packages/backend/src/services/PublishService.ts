@@ -8,6 +8,7 @@ import { buildService } from "./BuildService";
 import { thumbnailService } from "./ThumbnailService";
 import { getVersionDir } from "../generator/versionUtils";
 import { detectProjectType } from "../devserver/projectType";
+import type { GitHubSyncResult } from "./GitService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
@@ -22,6 +23,7 @@ export interface PublishResult {
   commitHash: string;
   url: string;
   message: string;
+  github?: GitHubSyncResult;
 }
 
 export interface PublishedSiteInfo {
@@ -160,6 +162,12 @@ export class PublishService {
     const commitMessage = `Published to ${normalizedDomain}`;
     const saveResult = await gitService.save(versionDir, commitMessage);
     const commitHash = saveResult.hash;
+    const github = await gitService
+      .syncPushToGitHub({ cwd: versionDir, slug: projectSlug, version })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { attempted: true, success: false, error: msg } as const;
+      });
 
     // Create published directory structure
     const publishedPath = path.join(PUBLISHED_DIR, projectSlug);
@@ -253,6 +261,7 @@ export class PublishService {
       commitHash,
       url: `${urlScheme}://${normalizedDomain}`,
       message: `Published to ${normalizedDomain}`,
+      github,
     };
   }
 

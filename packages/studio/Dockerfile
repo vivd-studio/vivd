@@ -2,9 +2,10 @@
 FROM node:23-slim AS deps
 WORKDIR /app
 
-# Install git + ca-certs (git clone/push) and python3 (required by opencode-ai)
+# Install git + ca-certs (git clone/push) and python3 (required by opencode-ai).
+# Install awscli for S3/R2 hydration + sync.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates python3 \
+  && apt-get install -y --no-install-recommends git ca-certificates python3 awscli \
   && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)
@@ -58,9 +59,10 @@ RUN npm run build -w @vivd/studio
 FROM node:23-slim AS prod
 WORKDIR /app
 
-# Install git + ca-certs (git clone/push) and python3 (required by opencode-ai)
+# Install git + ca-certs (git clone/push) and python3 (required by opencode-ai).
+# Install awscli for S3/R2 hydration + sync.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates python3 \
+  && apt-get install -y --no-install-recommends git ca-certificates python3 awscli \
   && rm -rf /var/lib/apt/lists/*
 
 # Install opencode CLI (required for SDK to spawn server)

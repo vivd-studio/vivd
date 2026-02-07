@@ -23,11 +23,11 @@ import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
 import {
   getProjectsDir,
+  getTenantProjectsDir,
   getVersionDir,
   touchProjectUpdatedAt,
 } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
-import { createGitHttpRouter } from "./routers/gitHttp";
 import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
 import { projectMember } from "./db/schema";
@@ -211,6 +211,11 @@ function createProtectedProjectsStaticMiddleware() {
     const slug = segments[0];
     if (!slug) return res.status(400).json({ error: "Invalid path" });
 
+    // Prevent accidental exposure of tenant storage paths via the legacy static root.
+    if (slug === "tenants") {
+      return res.status(404).json({ error: "Not found" });
+    }
+
     const ok = await enforceProjectAccess(req, res, session, slug);
     if (!ok) return;
 
@@ -245,6 +250,7 @@ app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
 app.use(
   "/vivd-studio/api/projects",
   createProtectedProjectsStaticMiddleware(),
+  express.static(getTenantProjectsDir(), { dotfiles: "allow" }),
   express.static(getProjectsDir(), { dotfiles: "allow" }),
 );
 // Security whitelist for external preview (unauthenticated access)
@@ -721,9 +727,6 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
 
 // Import Projects endpoint(s)
 app.use("/vivd-studio/api", createImportRouter({ auth, upload }));
-
-// Git HTTP Server endpoints (must be before tRPC routes)
-app.use("/vivd-studio/api/git", createGitHttpRouter());
 
 // Cleanup endpoint for sendBeacon on page leave (no auth - fire and forget)
 // Only stops opencode server; dev server has its own idle timeout

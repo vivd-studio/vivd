@@ -227,13 +227,6 @@ export const agentRouter = router({
             console.log(
               `[PrePublishChecklist] Created snapshot commit: ${snapshotCommitHash}`
             );
-            // Push the snapshot to remote
-            try {
-              await git.push("origin", "HEAD");
-              console.log("[PrePublishChecklist] Pushed snapshot to remote");
-            } catch (pushError) {
-              console.warn("[PrePublishChecklist] Failed to push snapshot:", pushError);
-            }
           } else {
             const log = await git.log({ maxCount: 1 });
             snapshotCommitHash = log.latest?.hash;
@@ -515,4 +508,3 @@ This marks the issue as fixed but requiring re-verification. The user can then r
       }
     }),
 });
-

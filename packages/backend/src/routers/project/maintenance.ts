@@ -6,6 +6,7 @@ import {
   projectMemberProcedure,
 } from "../../trpc";
 import {
+  getActiveTenantId,
   getProjectDir,
   getVersionDir,
   getManifest,
@@ -14,7 +15,7 @@ import {
   updateVersionStatus,
   isLegacyProject,
   migrateProjectIfNeeded,
-  getProjectsDir,
+  listProjectSlugs,
   touchProjectUpdatedAt,
   deleteVersion as deleteVersionUtil,
 } from "../../generator/versionUtils";
@@ -48,6 +49,11 @@ import {
 import { thumbnailService } from "../../services/ThumbnailService";
 import { applyProjectTemplateFiles } from "../../generator/templateFiles";
 import type { GenerationSource } from "../../generator/flows/types";
+import {
+  createS3Client,
+  getObjectStorageConfigFromEnv,
+  uploadDirectoryToBucket,
+} from "../../services/ObjectStorageService";
 
 export const projectMaintenanceProcedures = {
   applyHtmlPatches: projectMemberProcedure
@@ -291,8 +297,8 @@ export const projectMaintenanceProcedures = {
    * Keeps the version root clean and prevents accidental public access to process artifacts.
    */
   migrateVivdProcessFiles: ownerProcedure.mutation(async () => {
-    const projectsDir = getProjectsDir();
-    if (!fs.existsSync(projectsDir)) {
+    const projectDirs = listProjectSlugs();
+    if (projectDirs.length === 0) {
       return {
         success: true,
         projectsScanned: 0,
@@ -326,11 +332,6 @@ export const projectMaintenanceProcedures = {
     let versionsTouched = 0;
     const errors: Array<{ slug: string; versionDir: string; error: string }> =
       [];
-
-    const projectDirs = fs
-      .readdirSync(projectsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
 
     for (const slug of projectDirs) {
       projectsScanned++;
@@ -405,7 +406,6 @@ export const projectMaintenanceProcedures = {
         .optional()
     )
     .mutation(async ({ input }) => {
-      const projectsDir = getProjectsDir();
       const overwrite = input?.overwrite ?? false;
 
       const written: Record<string, number> = {
@@ -419,8 +419,8 @@ export const projectMaintenanceProcedures = {
       let versionsTouched = 0;
       const errors: Array<{ slug: string; versionDir: string; error: string }> =
         [];
-
-      if (!fs.existsSync(projectsDir)) {
+      const projectDirs = listProjectSlugs();
+      if (projectDirs.length === 0) {
         return {
           success: true,
           projectsScanned,
@@ -431,11 +431,6 @@ export const projectMaintenanceProcedures = {
           errors,
         };
       }
-
-      const projectDirs = fs
-        .readdirSync(projectsDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
 
       for (const slug of projectDirs) {
         projectsScanned++;
@@ -528,6 +523,160 @@ export const projectMaintenanceProcedures = {
     return {
       // The current domain where vivd-studio is running
       domain,
+      tenantId: getActiveTenantId(),
+      github: {
+        enabled: process.env.GITHUB_SYNC_ENABLED === "true",
+        org: process.env.GITHUB_ORG || null,
+        repoPrefix: process.env.GITHUB_REPO_PREFIX || "",
+      },
+    };
+  }),
+
+  /**
+   * Admin maintenance: upload all local project versions into object storage (S3/R2)
+   * so studio machines can hydrate workspaces from the bucket.
+   */
+  exportAllProjectsToObjectStorage: ownerProcedure.mutation(async () => {
+    const { bucket, endpointUrl, region, accessKeyId, secretAccessKey, sessionToken } =
+      getObjectStorageConfigFromEnv();
+    const client = createS3Client({
+      bucket,
+      endpointUrl,
+      region,
+      accessKeyId,
+      secretAccessKey,
+      sessionToken,
+    });
+
+    const tenantId = getActiveTenantId();
+
+    const projectDirs = listProjectSlugs();
+    if (projectDirs.length === 0) {
+      return {
+        success: true,
+        bucket,
+        endpointUrl: endpointUrl || null,
+        tenantId,
+        projectsScanned: 0,
+        legacyProjectsMigrated: 0,
+        versionsScanned: 0,
+        versionsExported: 0,
+        filesUploaded: 0,
+        bytesUploaded: 0,
+        errors: [] as Array<{
+          slug: string;
+          versionDir: string;
+          error: string;
+        }>,
+        fileErrors: [] as Array<{
+          slug: string;
+          versionDir: string;
+          file: string;
+          key: string;
+          error: string;
+        }>,
+      };
+    }
+
+    let projectsScanned = 0;
+    let legacyProjectsMigrated = 0;
+    let versionsScanned = 0;
+    let versionsExported = 0;
+    let filesUploaded = 0;
+    let bytesUploaded = 0;
+
+    const errors: Array<{ slug: string; versionDir: string; error: string }> =
+      [];
+    const fileErrors: Array<{
+      slug: string;
+      versionDir: string;
+      file: string;
+      key: string;
+      error: string;
+    }> = [];
+
+    for (const slug of projectDirs) {
+      projectsScanned++;
+
+      try {
+        if (isLegacyProject(slug)) {
+          const did = migrateProjectIfNeeded(slug);
+          if (did) legacyProjectsMigrated++;
+        }
+      } catch (e) {
+        errors.push({
+          slug,
+          versionDir: getProjectDir(slug),
+          error: e instanceof Error ? e.message : String(e),
+        });
+        continue;
+      }
+
+      const projectDir = getProjectDir(slug);
+      if (!fs.existsSync(projectDir)) continue;
+
+      // Keep behavior consistent with other migrations: only process projects with a manifest.
+      const manifest = getManifest(slug);
+      if (!manifest) continue;
+
+      const versionFolders = fs
+        .readdirSync(projectDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
+        .map((d) => d.name);
+
+      for (const folder of versionFolders) {
+        const versionDir = path.join(projectDir, folder);
+        versionsScanned++;
+
+        if (!fs.existsSync(versionDir)) continue;
+
+        const keyPrefix = `tenants/${tenantId}/projects/${slug}/${folder}/source`;
+
+        try {
+          const res = await uploadDirectoryToBucket({
+            client,
+            bucket,
+            localDir: versionDir,
+            keyPrefix,
+            excludeDirNames: ["node_modules"],
+          });
+
+          versionsExported++;
+          filesUploaded += res.filesUploaded;
+          bytesUploaded += res.bytesUploaded;
+
+          for (const fe of res.errors) {
+            fileErrors.push({
+              slug,
+              versionDir,
+              file: fe.file,
+              key: fe.key,
+              error: fe.error,
+            });
+          }
+        } catch (e) {
+          errors.push({
+            slug,
+            versionDir,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      bucket,
+      endpointUrl: endpointUrl || null,
+      tenantId,
+      projectsScanned,
+      legacyProjectsMigrated,
+      versionsScanned,
+      versionsExported,
+      filesUploaded,
+      bytesUploaded,
+      errors,
+      fileErrors,
     };
   }),
 
@@ -738,9 +887,8 @@ export const projectMaintenanceProcedures = {
    * accidentally committed before being added to .gitignore.
    */
   fixGitignoreAll: ownerProcedure.mutation(async () => {
-    const projectsDir = getProjectsDir();
-
-    if (!fs.existsSync(projectsDir)) {
+    const projectDirs = listProjectSlugs();
+    if (projectDirs.length === 0) {
       return {
         success: true,
         projectsScanned: 0,
@@ -769,11 +917,6 @@ export const projectMaintenanceProcedures = {
     let versionsFixed = 0;
     const allUntracked: string[] = [];
     const errors: Array<{ slug: string; version: number; error: string }> = [];
-
-    const projectDirs = fs
-      .readdirSync(projectsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
 
     for (const slug of projectDirs) {
       projectsScanned++;
@@ -843,10 +986,9 @@ export const projectMaintenanceProcedures = {
         .optional()
     )
     .mutation(async ({ input }) => {
-      const projectsDir = getProjectsDir();
       const onlyMissing = input?.onlyMissing ?? true;
-
-      if (!fs.existsSync(projectsDir)) {
+      const projectDirs = listProjectSlugs();
+      if (projectDirs.length === 0) {
         return {
           success: true,
           projectsScanned: 0,
@@ -862,11 +1004,6 @@ export const projectMaintenanceProcedures = {
       let thumbnailsGenerated = 0;
       let thumbnailsSkipped = 0;
       const errors: Array<{ slug: string; version: number; error: string }> = [];
-
-      const projectDirs = fs
-        .readdirSync(projectsDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
 
       for (const slug of projectDirs) {
         projectsScanned++;

@@ -28,6 +28,13 @@ export const projectGitProcedures = {
       }
 
       const result = await gitService.save(versionDir, message);
+      const github = result.noChanges
+        ? ({ attempted: false, success: true } as const)
+        : await gitService.syncPushToGitHub({
+            cwd: versionDir,
+            slug,
+            version,
+          });
 
       // Trigger build for Astro projects (fire-and-forget)
       // For non-Astro, generate thumbnail immediately (debounced)
@@ -52,6 +59,7 @@ export const projectGitProcedures = {
           hash: result.hash,
           noChanges: true,
           message: "No changes to save",
+          github,
         };
       }
 
@@ -60,6 +68,7 @@ export const projectGitProcedures = {
         hash: result.hash,
         noChanges: false,
         message: `Saved version with commit ${result.hash.substring(0, 7)}`,
+        github,
       };
     }),
 
