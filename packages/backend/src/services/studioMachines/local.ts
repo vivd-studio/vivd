@@ -313,7 +313,6 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   async getUrl(projectSlug: string, version: number): Promise<string | null> {
     const studio = this.studios.get(this.key(projectSlug, version));
     if (!studio) return null;
-    this.touch(projectSlug, version);
     return this.getPublicUrl(studio.port);
   }
 
@@ -424,7 +423,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         keyPrefix: sourceKeyPrefix,
         localDir: options.workspaceDir,
         // Keep legacy `.vivd/opencode-data` out of source sync if it still exists.
-        excludeDirNames: ["node_modules", "opencode-data"],
+        excludeDirNames: ["node_modules", "opencode-data", "dist", ".astro"],
       },
       {
         name: "opencode",

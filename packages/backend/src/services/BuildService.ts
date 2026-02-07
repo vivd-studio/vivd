@@ -4,6 +4,7 @@ import { execSync } from "child_process";
 import { detectProjectType, hasNodeModules } from "../devserver/projectType";
 import { gitService } from "./GitService";
 import { thumbnailService } from "./ThumbnailService";
+import { uploadProjectPreviewToBucket } from "./ProjectArtifactsService";
 
 /**
  * Parse slug and version from a version directory path.
@@ -226,8 +227,28 @@ class BuildService {
         `[Build] Build completed for ${versionDir} (commit ${commitHash.substring(0, 7)})`
       );
 
-      // Generate thumbnail after successful build
+      // Sync preview artifacts to object storage (best-effort).
       const parsed = parseVersionDir(versionDir);
+      if (parsed) {
+        const startedAt = this.builds.get(versionDir)?.startedAt;
+        await uploadProjectPreviewToBucket({
+          localDir: outputPath,
+          slug: parsed.slug,
+          version: parsed.version,
+          meta: {
+            status: "ready",
+            framework: "astro",
+            commitHash,
+            startedAt: startedAt ? new Date(startedAt).toISOString() : undefined,
+            completedAt: new Date().toISOString(),
+          },
+        }).catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`[Build] Preview artifact upload failed: ${message}`);
+        });
+      }
+
+      // Generate thumbnail after successful build
       if (parsed) {
         thumbnailService
           .generateThumbnail(versionDir, parsed.slug, parsed.version)

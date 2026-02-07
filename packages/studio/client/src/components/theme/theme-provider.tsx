@@ -1,7 +1,20 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import {
+  isColorTheme,
+  isTheme,
+  type ColorTheme,
+  type Theme,
+} from "@vivd/shared/types";
 
-type Theme = "dark" | "light" | "system";
-type ColorTheme = "clean" | "natural" | "vivd-green" | "vivd-sharp" | "ocean";
+function getThemeFromQuery(): Theme | null {
+  const value = new URLSearchParams(window.location.search).get("theme");
+  return isTheme(value) ? value : null;
+}
+
+function getColorThemeFromQuery(): ColorTheme | null {
+  const value = new URLSearchParams(window.location.search).get("colorTheme");
+  return isColorTheme(value) ? value : null;
+}
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -34,13 +47,22 @@ export function ThemeProvider({
   storageKey = "vite-ui-theme",
   colorThemeStorageKey = "vite-ui-color-theme",
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
-  );
+  const [theme, setThemeState] = useState<Theme>(() => {
+    const fromQuery = getThemeFromQuery();
+    if (fromQuery) return fromQuery;
+    const fromStorage = localStorage.getItem(storageKey);
+    return isTheme(fromStorage) ? fromStorage : defaultTheme;
+  });
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(
-    () =>
-      (localStorage.getItem(colorThemeStorageKey) as ColorTheme) ||
-      defaultColorTheme
+    () => {
+      const fromQuery = getColorThemeFromQuery();
+      if (fromQuery) return fromQuery;
+      const fromStorage = localStorage.getItem(colorThemeStorageKey);
+      return isColorTheme(fromStorage) ? fromStorage : defaultColorTheme;
+    }
+  );
+  const [hostThemeInitialized, setHostThemeInitialized] = useState(
+    () => window.parent === window
   );
 
   // Apply light/dark mode
@@ -62,6 +84,10 @@ export function ThemeProvider({
     root.classList.add(theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem(storageKey, theme);
+  }, [storageKey, theme]);
+
   // Apply color theme
   useEffect(() => {
     const root = window.document.documentElement;
@@ -73,11 +99,47 @@ export function ThemeProvider({
     }
   }, [colorTheme]);
 
+  useEffect(() => {
+    localStorage.setItem(colorThemeStorageKey, colorTheme);
+  }, [colorTheme, colorThemeStorageKey]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (window.parent === window) return;
+      if (event.data?.type !== "vivd:host:theme") return;
+
+      const nextTheme = event.data?.theme;
+      const nextColorTheme = event.data?.colorTheme;
+
+      if (isTheme(nextTheme)) {
+        setThemeState((prev) => (prev === nextTheme ? prev : nextTheme));
+      }
+      if (isColorTheme(nextColorTheme)) {
+        setColorThemeState((prev) =>
+          prev === nextColorTheme ? prev : nextColorTheme
+        );
+      }
+      setHostThemeInitialized(true);
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useEffect(() => {
+    if (window.parent === window) return;
+    if (!hostThemeInitialized) return;
+    window.parent.postMessage(
+      { type: "vivd:studio:theme", theme, colorTheme },
+      "*"
+    );
+  }, [hostThemeInitialized, theme, colorTheme]);
+
   const value = {
     theme,
     setTheme: (theme: Theme) => {
       localStorage.setItem(storageKey, theme);
-      setTheme(theme);
+      setThemeState(theme);
     },
     colorTheme,
     setColorTheme: (colorTheme: ColorTheme) => {

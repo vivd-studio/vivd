@@ -21,6 +21,11 @@ import {
 } from "../services/I18nJsonPatchService.js";
 import { devServerService } from "../services/DevServerService.js";
 import { detectProjectType } from "../services/projectType.js";
+import {
+  buildAndUploadPreview,
+  buildAndUploadPublished,
+  syncSourceToBucket,
+} from "../services/ArtifactSyncService.js";
 
 // Dotfiles that are allowed in asset paths
 const ALLOWED_DOTFILES = [".vivd", ".gitignore", ".env.example"];
@@ -328,6 +333,26 @@ export const projectRouter = router({
         };
       }
 
+      const projectDir = ctx.workspace.getProjectPath();
+      // Keep bucket-backed preview up to date (best-effort, async).
+      void syncSourceToBucket({
+        projectDir,
+        slug: input.slug,
+        version: input.version,
+      }).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[Artifacts] Source sync failed: ${msg}`);
+      });
+      void buildAndUploadPreview({
+        projectDir,
+        slug: input.slug,
+        version: input.version,
+        commitHash: hash,
+      }).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[Artifacts] Preview build/upload failed: ${msg}`);
+      });
+
       return {
         success: true,
         hash,
@@ -456,6 +481,29 @@ export const projectRouter = router({
         } else {
           await git.tag([input.tagName]);
         }
+
+        const version = Math.max(
+          1,
+          Number.parseInt(process.env.VIVD_PROJECT_VERSION || "1", 10) || 1,
+        );
+        const commitHash = (await git.raw(["rev-parse", "HEAD"])).trim();
+        const projectDir = ctx.workspace.getProjectPath();
+
+        // Keep bucket-backed published artifacts up to date (best-effort, async).
+        void syncSourceToBucket({
+          projectDir,
+          slug: input.slug,
+          version,
+        }).catch(() => {});
+        void buildAndUploadPublished({
+          projectDir,
+          slug: input.slug,
+          version,
+          commitHash,
+        }).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Artifacts] Published build/upload failed: ${msg}`);
+        });
 
         return {
           success: true,

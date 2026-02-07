@@ -86,16 +86,18 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ### 0.3 Object Storage Sync (R2) (In Progress)
 
 - [x] Define `source/` bucket layout: `tenants/<tenantId>/projects/<slug>/v<version>/source/`
-- [ ] Define `preview/` bucket layout: `tenants/<tenantId>/projects/<slug>/v<version>/preview/` (served without a running studio machine)
+- [x] Define `preview/` bucket layout: `tenants/<tenantId>/projects/<slug>/v<version>/preview/` (latest build only; overwritten)
+- [x] Define `published/` bucket layout: `tenants/<tenantId>/projects/<slug>/v<version>/published/` (latest build only; overwritten)
 - [x] Studio supports `VIVD_WORKSPACE_DIR` (no `git clone` required)
 - [x] Studio entrypoint hydrates from R2 on boot + periodic sync + final sync on shutdown
 - [x] Local studio provider (`STUDIO_MACHINE_PROVIDER=local`) hydrates/syncs via object storage when R2/S3 env vars are set
 - [x] OpenCode session storage moved to project-scoped `XDG_DATA_HOME` and synced under a dedicated object-storage prefix (separate from `source/`)
 - [x] Maintenance action: export local projects into object storage (initial migration)
 - [ ] Move project source-of-truth to R2 (backend reads/writes via object storage, not local FS)
-- [ ] Serve view-only preview from R2 (machines can sleep)
+- [x] Serve view-only preview from R2 (machines can sleep)
+- [x] Harden preview streaming from R2 against client disconnects (avoid noisy `ERR_STREAM_UNABLE_TO_PIPE`)
 - [ ] Decide concurrency/locking model (single-writer lock vs optimistic)
-- [ ] Decide sync exclusions (caches, build outputs, large artifacts)
+- [ ] Decide sync exclusions (caches, build outputs, large artifacts) (initial: exclude `dist/` + `.astro/`)
 
 ### 0.4 Studio Integration in Main App
 
@@ -105,6 +107,8 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Pass project slug to studio for breadcrumb display
   - [x] "Back" navigation from studio (postMessage + `returnTo`)
   - [x] Fullscreen studio UX (in-app route, no new tab)
+  - [x] Animated studio startup loading screen with first-startup timing hint
+  - [x] Theme synchronization between app shell and embedded/fullscreen studio (light/dark + color theme)
   - [x] Prefer showing studio if already running (project route resumes)
   - [x] Connected usage reports include `projectSlug` + `sessionTitle`
   - [x] Session title updates propagate after rename (studioApi.updateSessionTitle)
@@ -120,11 +124,12 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 - [ ] **Thumbnail generation**
   - Current: Scraper service generates thumbnails
+  - [x] Fix screenshot clipping on sites where `document.body.scrollHeight` is `0`
   - [ ] Decide scraper placement (centralized recommended)
   - [ ] Ensure scraper works with the new storage workflow (R2 artifacts)
 
 - [ ] **Preview without studio machine**
-  - [ ] Serve prebuilt static versions for quick preview
+  - [x] Serve bucket-backed prebuilt previews for quick preview
   - [ ] User clicks "Edit" → spin up / route to studio machine
 
 ### 0.6 Docker & CI
@@ -219,6 +224,9 @@ Studio Machine (isolated; per-tenant or per-edit session)
 - [x] Reuse `node_modules` via lockfile-hash cache archive (restore on boot, save after first install)
 - [x] Fly machine sizing tunables (`FLY_STUDIO_CPU_KIND`, `FLY_STUDIO_CPUS`, `FLY_STUDIO_MEMORY_MB`)
 - [x] Keep studio responsive during dependency install (async install + pause S3 sync loop briefly)
+- [x] Avoid unexpected wakeups: backend controls starts (Fly `autostart=false`; status checks do not count as keepalive)
+- [x] Lazy machine config/image reconciliation on next start (update `config.image` + service autostart/autostop via Machines API)
+- [x] Auto studio image selection from GHCR semver tags by default (optional `FLY_STUDIO_IMAGE_REPO` source override and `FLY_STUDIO_IMAGE` pin override)
 - [ ] Provision studio machine on demand (or per org)
 - [x] Auto-suspend/resume (cost control)
 - [ ] Preview → Edit transition (route user to the right machine)
@@ -308,7 +316,11 @@ SAAS_MODE=true                          # Enable SaaS features
 # STUDIO_MACHINE_PROVIDER=fly
 # FLY_API_TOKEN=fly_xxx
 # FLY_STUDIO_APP=vivd-studio-dev
-# FLY_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:latest
+# Auto image selection is default (latest semver from ghcr.io/vivd-studio/vivd-studio)
+# Optional source override:
+# FLY_STUDIO_IMAGE_REPO=ghcr.io/vivd-studio/vivd-studio
+# Optional pin override:
+# FLY_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:0.2.2
 # FLY_STUDIO_REGION=iad
 # FLY_STUDIO_PORT_START=3100
 # FLY_STUDIO_PUBLIC_HOST=vivd-studio-dev.fly.dev

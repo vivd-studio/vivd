@@ -3,6 +3,38 @@ import sharp from "sharp";
 import { log } from "../utils/logger.js";
 
 const MAX_SCREENSHOT_HEIGHT = 2000;
+const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
+
+async function getDocumentHeight(page: Page): Promise<number> {
+  const height = await page.evaluate(() => {
+    const body = document.body;
+    const html = document.documentElement;
+
+    const bodyHeight = Math.max(
+      body?.scrollHeight ?? 0,
+      body?.offsetHeight ?? 0,
+      body?.clientHeight ?? 0,
+    );
+
+    const htmlHeight = Math.max(
+      html?.scrollHeight ?? 0,
+      html?.offsetHeight ?? 0,
+      html?.clientHeight ?? 0,
+    );
+
+    const viewportHeight = window.innerHeight || 0;
+
+    return Math.max(bodyHeight, htmlHeight, viewportHeight);
+  });
+
+  if (typeof height !== "number" || !Number.isFinite(height)) return 0;
+  return height;
+}
+
+function toPositiveInt(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.floor(value));
+}
 
 export async function takeMainPageScreenshot(page: Page): Promise<string> {
   log("Taking screenshot of main page...");
@@ -135,12 +167,21 @@ export async function takeMainPageScreenshot(page: Page): Promise<string> {
   // Final stabilization wait
   await new Promise((r) => setTimeout(r, 1000));
 
-  const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
-  const height = Math.min(bodyHeight, MAX_SCREENSHOT_HEIGHT);
+  const viewport = page.viewport() ?? DEFAULT_VIEWPORT;
+  const width = viewport.width || DEFAULT_VIEWPORT.width;
+  const viewportHeight = viewport.height || DEFAULT_VIEWPORT.height;
+
+  // Some sites (e.g. content in iframes / scroll containers) report `document.body.scrollHeight === 0`
+  // which would make Puppeteer throw: `'height' in 'clip' must be positive.`
+  const documentHeight = await getDocumentHeight(page);
+  const height = toPositiveInt(
+    Math.min(documentHeight || viewportHeight, MAX_SCREENSHOT_HEIGHT),
+  );
 
   const screenshot = await page.screenshot({
     fullPage: false,
-    clip: { x: 0, y: 0, width: 1280, height },
+    captureBeyondViewport: true,
+    clip: { x: 0, y: 0, width, height },
     encoding: "base64",
   });
 
@@ -190,12 +231,19 @@ export async function captureReferenceScreenshot(
     await page.evaluate(() => window.scrollTo(0, 0));
     await new Promise((r) => setTimeout(r, 1500));
 
-    const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
-    const height = Math.min(bodyHeight, MAX_SCREENSHOT_HEIGHT);
+    const viewport = page.viewport() ?? DEFAULT_VIEWPORT;
+    const width = viewport.width || DEFAULT_VIEWPORT.width;
+    const viewportHeight = viewport.height || DEFAULT_VIEWPORT.height;
+
+    const documentHeight = await getDocumentHeight(page);
+    const height = toPositiveInt(
+      Math.min(documentHeight || viewportHeight, MAX_SCREENSHOT_HEIGHT),
+    );
 
     const screenshot = await page.screenshot({
       fullPage: false,
-      clip: { x: 0, y: 0, width: 1280, height },
+      captureBeyondViewport: true,
+      clip: { x: 0, y: 0, width, height },
       encoding: "base64",
     });
 

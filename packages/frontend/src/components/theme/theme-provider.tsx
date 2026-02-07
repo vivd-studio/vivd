@@ -1,7 +1,10 @@
 import { createContext, useContext, useEffect, useState } from "react";
-
-type Theme = "dark" | "light" | "system";
-type ColorTheme = "clean" | "natural" | "vivd-green" | "vivd-sharp" | "ocean";
+import {
+  isColorTheme,
+  isTheme,
+  type ColorTheme,
+  type Theme,
+} from "@vivd/shared/types";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -35,12 +38,16 @@ export function ThemeProvider({
   colorThemeStorageKey = "vite-ui-color-theme",
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
+    () => {
+      const fromStorage = localStorage.getItem(storageKey);
+      return isTheme(fromStorage) ? fromStorage : defaultTheme;
+    }
   );
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(
-    () =>
-      (localStorage.getItem(colorThemeStorageKey) as ColorTheme) ||
-      defaultColorTheme
+    () => {
+      const fromStorage = localStorage.getItem(colorThemeStorageKey);
+      return isColorTheme(fromStorage) ? fromStorage : defaultColorTheme;
+    }
   );
 
   // Apply light/dark mode

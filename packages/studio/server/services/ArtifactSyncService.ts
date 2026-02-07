@@ -1,0 +1,577 @@
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { detectProjectType, hasNodeModules } from "./projectType.js";
+
+type ArtifactKind = "source" | "preview" | "published";
+
+type BuildMeta = {
+  status: "building" | "ready" | "error";
+  framework: "astro" | "generic";
+  commitHash?: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+};
+
+type S3Client = {
+  send: (command: unknown) => Promise<any>;
+};
+
+type AwsSdkModule = {
+  S3Client: new (options: any) => S3Client;
+  PutObjectCommand: new (input: any) => unknown;
+  ListObjectsV2Command: new (input: any) => unknown;
+  DeleteObjectsCommand: new (input: any) => unknown;
+};
+
+let awsSdkPromise: Promise<AwsSdkModule | null> | null = null;
+
+async function loadAwsSdk(): Promise<AwsSdkModule | null> {
+  if (!awsSdkPromise) {
+    awsSdkPromise = import("@aws-sdk/client-s3")
+      .then((mod) => mod as unknown as AwsSdkModule)
+      .catch(() => null);
+  }
+  return awsSdkPromise;
+}
+
+function trimSlashes(value: string): string {
+  return value.replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function getBucket(): string | null {
+  const bucket = (process.env.VIVD_S3_BUCKET || process.env.R2_BUCKET || "").trim();
+  return bucket || null;
+}
+
+function getEndpointUrl(): string | null {
+  const endpoint = (
+    process.env.VIVD_S3_ENDPOINT_URL ||
+    process.env.R2_ENDPOINT ||
+    ""
+  ).trim();
+  return endpoint || null;
+}
+
+function getTenantId(): string {
+  return (
+    process.env.VIVD_TENANT_ID ||
+    process.env.TENANT_ID ||
+    "default"
+  ).trim();
+}
+
+function getBasePrefix(slug: string, version: number): string {
+  const tenantId = getTenantId();
+  const defaultPrefix = `tenants/${tenantId}/projects/${slug}/v${version}`;
+  const configured = (process.env.VIVD_S3_PREFIX || "").trim();
+  return trimSlashes(configured || defaultPrefix);
+}
+
+function getKeyPrefix(options: {
+  slug: string;
+  version: number;
+  kind: ArtifactKind;
+}): string {
+  return `${getBasePrefix(options.slug, options.version)}/${options.kind}`;
+}
+
+function getS3Uri(options: {
+  bucket: string;
+  keyPrefix: string;
+}): string {
+  const prefix = trimSlashes(options.keyPrefix);
+  return prefix ? `s3://${options.bucket}/${prefix}` : `s3://${options.bucket}`;
+}
+
+type ObjectStorageConfig = {
+  bucket: string;
+  endpointUrl?: string;
+  region: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  sessionToken?: string;
+};
+
+function getObjectStorageConfigFromEnv(): ObjectStorageConfig | null {
+  const bucket = (process.env.VIVD_S3_BUCKET || process.env.R2_BUCKET || "").trim();
+  if (!bucket) return null;
+
+  const endpointUrl = (
+    process.env.VIVD_S3_ENDPOINT_URL ||
+    process.env.R2_ENDPOINT ||
+    ""
+  ).trim();
+
+  const accessKeyId = (
+    process.env.R2_ACCESS_KEY ||
+    process.env.AWS_ACCESS_KEY_ID ||
+    ""
+  ).trim();
+  const secretAccessKey = (
+    process.env.R2_SECRET_KEY ||
+    process.env.AWS_SECRET_ACCESS_KEY ||
+    ""
+  ).trim();
+  const sessionToken = (process.env.AWS_SESSION_TOKEN || "").trim() || undefined;
+
+  const region = (
+    process.env.AWS_REGION ||
+    process.env.AWS_DEFAULT_REGION ||
+    "auto"
+  ).trim();
+
+  const r2Configured =
+    Boolean(process.env.R2_BUCKET) ||
+    Boolean(process.env.R2_ENDPOINT) ||
+    Boolean(process.env.R2_ACCESS_KEY) ||
+    Boolean(process.env.R2_SECRET_KEY);
+
+  // If credentials are missing, don't attempt SDK mode (CLI might still work via profiles/roles).
+  if (r2Configured && (!endpointUrl || !accessKeyId || !secretAccessKey)) {
+    return null;
+  }
+
+  if (endpointUrl && (!accessKeyId || !secretAccessKey)) {
+    return null;
+  }
+
+  return {
+    bucket,
+    endpointUrl: endpointUrl || undefined,
+    region,
+    accessKeyId: accessKeyId || undefined,
+    secretAccessKey: secretAccessKey || undefined,
+    sessionToken,
+  };
+}
+
+function toPosixPath(p: string): string {
+  return p.split(path.sep).join("/");
+}
+
+function normalizeKeyPrefix(prefix: string): string {
+  const trimmed = prefix.replace(/^\/+/, "");
+  return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+}
+
+function normalizeExcludedPrefixes(exclude: string[] | undefined): string[] {
+  return (exclude ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => value.replace(/\\/g, "/"))
+    .map((value) => value.replace(/^\.\//, ""))
+    .map((value) => value.replace(/^\/+/, ""))
+    .map((value) => value.replace(/\*+$/, ""))
+    .map((value) => value.replace(/\/+$/, ""))
+    .filter(Boolean);
+}
+
+async function listFilesRecursively(options: {
+  rootDir: string;
+  excludedPrefixes: string[];
+}): Promise<Array<{ absPath: string; relPath: string; size: number }>> {
+  const rootDir = path.resolve(options.rootDir);
+  const files: Array<{ absPath: string; relPath: string; size: number }> = [];
+  const excluded = options.excludedPrefixes;
+
+  const isExcluded = (relPath: string): boolean => {
+    if (!excluded.length) return false;
+    const normalized = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    return excluded.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
+  };
+
+  const walk = async (currentDir: string): Promise<void> => {
+    const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const absPath = path.join(currentDir, entry.name);
+      const relPath = toPosixPath(path.relative(rootDir, absPath));
+
+      if (isExcluded(relPath)) continue;
+
+      if (entry.isDirectory()) {
+        await walk(absPath);
+        continue;
+      }
+
+      if (entry.isFile()) {
+        const stat = await fs.promises.stat(absPath);
+        files.push({ absPath, relPath, size: stat.size });
+      }
+    }
+  };
+
+  await walk(rootDir);
+  return files;
+}
+
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  const concurrency = Math.max(1, Math.floor(limit));
+  let index = 0;
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = index++;
+        if (i >= items.length) return;
+        await worker(items[i]!);
+      }
+    }
+  );
+
+  await Promise.all(runners);
+}
+
+async function createS3Client(): Promise<{ client: S3Client; bucket: string } | null> {
+  const config = getObjectStorageConfigFromEnv();
+  if (!config) return null;
+
+  const sdk = await loadAwsSdk();
+  if (!sdk) return null;
+
+  const client = new sdk.S3Client({
+    region: config.region,
+    endpoint: config.endpointUrl,
+    forcePathStyle: Boolean(config.endpointUrl),
+    credentials:
+      config.accessKeyId && config.secretAccessKey
+        ? {
+            accessKeyId: config.accessKeyId,
+            secretAccessKey: config.secretAccessKey,
+            sessionToken: config.sessionToken,
+          }
+        : undefined,
+  });
+
+  return { client, bucket: config.bucket };
+}
+
+async function deletePrefixSdk(options: {
+  client: S3Client;
+  bucket: string;
+  keyPrefix: string;
+}): Promise<void> {
+  const sdk = await loadAwsSdk();
+  if (!sdk) throw new Error("Missing @aws-sdk/client-s3");
+
+  const bucket = options.bucket.trim();
+  const keyPrefix = normalizeKeyPrefix(options.keyPrefix);
+
+  let continuationToken: string | undefined;
+  do {
+    const page = await options.client.send(
+      new sdk.ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: keyPrefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    const keys = (page.Contents ?? [])
+      .map((obj: any) => obj.Key)
+      .filter((key: any): key is string => typeof key === "string" && key.length > 0);
+
+    for (let i = 0; i < keys.length; i += 1000) {
+      const batch = keys.slice(i, i + 1000);
+      if (batch.length === 0) continue;
+      await options.client.send(
+        new sdk.DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Objects: batch.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        })
+      );
+    }
+
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+}
+
+async function uploadDirectorySdk(options: {
+  client: S3Client;
+  bucket: string;
+  localDir: string;
+  keyPrefix: string;
+  exclude?: string[];
+  concurrency?: number;
+}): Promise<void> {
+  const sdk = await loadAwsSdk();
+  if (!sdk) throw new Error("Missing @aws-sdk/client-s3");
+
+  const keyPrefix = normalizeKeyPrefix(options.keyPrefix);
+  const excludedPrefixes = normalizeExcludedPrefixes(options.exclude);
+
+  const files = await listFilesRecursively({
+    rootDir: options.localDir,
+    excludedPrefixes,
+  });
+
+  await mapLimit(files, options.concurrency ?? 6, async (file) => {
+    const key = `${keyPrefix}${toPosixPath(file.relPath)}`;
+    await options.client.send(
+      new sdk.PutObjectCommand({
+        Bucket: options.bucket,
+        Key: key,
+        Body: fs.createReadStream(file.absPath),
+        ContentLength: file.size,
+      })
+    );
+  });
+}
+
+function resolveInstallCommand(projectDir: string, packageManager: "npm" | "pnpm" | "yarn"): {
+  cmd: string;
+  args: string[];
+} {
+  if (packageManager === "pnpm") {
+    if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) {
+      return { cmd: "pnpm", args: ["install", "--frozen-lockfile", "--prefer-offline"] };
+    }
+    return { cmd: "pnpm", args: ["install", "--prefer-offline"] };
+  }
+
+  if (packageManager === "yarn") {
+    if (fs.existsSync(path.join(projectDir, "yarn.lock"))) {
+      return { cmd: "yarn", args: ["install", "--frozen-lockfile", "--prefer-offline"] };
+    }
+    return { cmd: "yarn", args: ["install", "--prefer-offline"] };
+  }
+
+  if (
+    fs.existsSync(path.join(projectDir, "package-lock.json")) ||
+    fs.existsSync(path.join(projectDir, "npm-shrinkwrap.json"))
+  ) {
+    return { cmd: "npm", args: ["ci", "--prefer-offline", "--no-audit", "--no-fund"] };
+  }
+
+  return { cmd: "npm", args: ["install", "--prefer-offline", "--no-audit", "--no-fund"] };
+}
+
+function runCommand(options: {
+  cmd: string;
+  args: string[];
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+  label: string;
+  timeoutMs: number;
+}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(options.cmd, options.args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const timeout = setTimeout(() => {
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        // ignore
+      }
+      reject(new Error(`${options.label} timed out after ${options.timeoutMs}ms`));
+    }, options.timeoutMs);
+    timeout.unref?.();
+
+    proc.stdout?.on("data", (d) => {
+      const text = d.toString().trim();
+      if (text) console.log(`[${options.label}] ${text}`);
+    });
+    proc.stderr?.on("data", (d) => {
+      const text = d.toString().trim();
+      if (text) console.error(`[${options.label}] ${text}`);
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+    proc.on("exit", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) return resolve();
+      reject(new Error(`${options.label} failed (exit code ${code ?? 1})`));
+    });
+  });
+}
+
+async function syncDirectoryToBucket(options: {
+  source: string;
+  bucket: string;
+  keyPrefix: string;
+  delete?: boolean;
+  exclude?: string[];
+  label: string;
+}): Promise<void> {
+  const sdkStorage = await createS3Client();
+  if (sdkStorage) {
+    if (options.delete) {
+      await deletePrefixSdk({
+        client: sdkStorage.client,
+        bucket: options.bucket,
+        keyPrefix: options.keyPrefix,
+      });
+    }
+
+    await uploadDirectorySdk({
+      client: sdkStorage.client,
+      bucket: options.bucket,
+      localDir: options.source,
+      keyPrefix: options.keyPrefix,
+      exclude: options.exclude,
+    });
+    return;
+  }
+
+  // Fallback to AWS CLI (available in studio Docker image).
+  const endpointUrl = getEndpointUrl();
+  const args: string[] = [];
+  if (endpointUrl) {
+    args.push("--endpoint-url", endpointUrl);
+  }
+
+  const destination = getS3Uri({ bucket: options.bucket, keyPrefix: options.keyPrefix });
+  args.push("s3", "sync", options.source, destination, "--only-show-errors");
+  if (options.delete) args.push("--delete");
+  for (const pattern of options.exclude ?? []) {
+    args.push("--exclude", pattern);
+  }
+
+  await runCommand({
+    cmd: "aws",
+    args,
+    cwd: process.cwd(),
+    label: options.label,
+    timeoutMs: 15 * 60 * 1000,
+  });
+}
+
+function writeBuildMeta(distDir: string, meta: BuildMeta): void {
+  const dir = path.join(distDir, ".vivd");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "build.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf-8");
+}
+
+export async function syncSourceToBucket(options: {
+  projectDir: string;
+  slug: string;
+  version: number;
+}): Promise<void> {
+  const bucket = getBucket();
+  if (!bucket) return;
+
+  const keyPrefix = getKeyPrefix({ slug: options.slug, version: options.version, kind: "source" });
+
+  await syncDirectoryToBucket({
+    source: options.projectDir,
+    bucket,
+    keyPrefix,
+    delete: false,
+    exclude: [
+      "node_modules/*",
+      "dist/*",
+      ".astro/*",
+      ".vivd/opencode-data/*",
+    ],
+    label: "SourceSync",
+  });
+}
+
+async function ensureAstroBuild(projectDir: string, commitHash?: string): Promise<string> {
+  const config = detectProjectType(projectDir);
+  if (config.framework !== "astro") {
+    throw new Error("Not an Astro project");
+  }
+
+  if (!hasNodeModules(projectDir)) {
+    const install = resolveInstallCommand(projectDir, config.packageManager);
+    await runCommand({
+      cmd: install.cmd,
+      args: install.args,
+      cwd: projectDir,
+      label: "AstroInstall",
+      timeoutMs: 15 * 60 * 1000,
+    });
+  }
+
+  const distDir = path.join(projectDir, "dist");
+  const astroBin = path.join(projectDir, "node_modules", ".bin", "astro");
+  if (!fs.existsSync(astroBin)) {
+    throw new Error("Astro CLI not found (node_modules/.bin/astro)");
+  }
+
+  const startedAt = new Date().toISOString();
+  await runCommand({
+    cmd: astroBin,
+    args: ["build", "--outDir", "dist"],
+    cwd: projectDir,
+    label: "AstroBuild",
+    timeoutMs: 15 * 60 * 1000,
+  });
+
+  writeBuildMeta(distDir, {
+    status: "ready",
+    framework: "astro",
+    commitHash,
+    startedAt,
+    completedAt: new Date().toISOString(),
+  });
+
+  return distDir;
+}
+
+export async function buildAndUploadPreview(options: {
+  projectDir: string;
+  slug: string;
+  version: number;
+  commitHash?: string;
+}): Promise<void> {
+  const bucket = getBucket();
+  if (!bucket) return;
+
+  const config = detectProjectType(options.projectDir);
+  if (config.framework !== "astro") return;
+
+  const distDir = await ensureAstroBuild(options.projectDir, options.commitHash);
+
+  const keyPrefix = getKeyPrefix({ slug: options.slug, version: options.version, kind: "preview" });
+
+  await syncDirectoryToBucket({
+    source: distDir,
+    bucket,
+    keyPrefix,
+    delete: true,
+    label: "PreviewUpload",
+  });
+}
+
+export async function buildAndUploadPublished(options: {
+  projectDir: string;
+  slug: string;
+  version: number;
+  commitHash?: string;
+}): Promise<void> {
+  const bucket = getBucket();
+  if (!bucket) return;
+
+  const config = detectProjectType(options.projectDir);
+  if (config.framework !== "astro") return;
+
+  const distDir = await ensureAstroBuild(options.projectDir, options.commitHash);
+
+  const keyPrefix = getKeyPrefix({ slug: options.slug, version: options.version, kind: "published" });
+
+  await syncDirectoryToBucket({
+    source: distDir,
+    bucket,
+    keyPrefix,
+    delete: true,
+    label: "PublishedUpload",
+  });
+}

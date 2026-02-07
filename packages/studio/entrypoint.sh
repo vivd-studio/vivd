@@ -114,6 +114,8 @@ sync_source() {
 
   aws_s3_sync "$VIVD_WORKSPACE_DIR" "$S3_SOURCE_URI" \
     --exclude "node_modules/*" \
+    --exclude "dist/*" \
+    --exclude ".astro/*" \
     --exclude ".vivd/opencode-data/*"
 }
 
@@ -137,6 +139,8 @@ hydrate_source() {
   mkdir -p "$VIVD_WORKSPACE_DIR"
   aws_s3_sync "$S3_SOURCE_URI" "$VIVD_WORKSPACE_DIR" \
     --exclude "node_modules/*" \
+    --exclude "dist/*" \
+    --exclude ".astro/*" \
     --exclude ".vivd/opencode-data/*"
 }
 

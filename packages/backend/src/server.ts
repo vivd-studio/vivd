@@ -12,6 +12,10 @@ import {
   createProxyMiddleware,
   responseInterceptor,
 } from "http-proxy-middleware";
+import type { S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import { serverManager } from "./opencode";
 import { devServerManager } from "./devserver";
@@ -24,6 +28,7 @@ import { createContext } from "./trpc";
 import {
   getProjectsDir,
   getTenantProjectsDir,
+  getActiveTenantId,
   getVersionDir,
   touchProjectUpdatedAt,
 } from "./generator/versionUtils";
@@ -33,6 +38,8 @@ import { db } from "./db";
 import { projectMember } from "./db/schema";
 import { eq } from "drizzle-orm";
 import { buildService } from "./services/BuildService";
+import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
+import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +58,54 @@ function getRouteParam(req: express.Request, key: string): string | undefined {
 
 function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+  const baseNoLeadingSlash = base.replace(/^\/+/, "");
+  const escapedBaseNoLeadingSlash = baseNoLeadingSlash.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+
+  // Prefix root-relative URLs in common HTML attributes so that in-preview navigation
+  // like `<a href="/de">` stays within `/vivd-studio/api/preview/...`.
+  const rewriteRootRelativeAttributes = (input: string) =>
+    input.replace(
+      new RegExp(
+        String.raw`\b(href|src|action|poster|data|content)=(["'])\/(?!\/)(?!${escapedBaseNoLeadingSlash}(?:\/|$))([^"']*)\2`,
+        "g",
+      ),
+      `$1=$2${base}/$3$2`,
+    );
+
+  // Best-effort rewrite for common client-side navigations / redirects in inline scripts.
+  const rewriteRootRelativeJsNavigations = (input: string) =>
+    input
+      // Common pattern in generated sites: `const baseUrl = "/";`
+      .replace(
+        /\b(const|let|var)\s+baseUrl\s*=\s*(["'])\/\2/g,
+        `$1 baseUrl = $2${base}/$2`,
+      )
+      .replace(
+        /\bbaseUrl\s*=\s*(["'])\/\1/g,
+        `baseUrl = "${
+          base.replace(/"/g, '\\"')
+        }/"`,
+      )
+      // Direct navigations: location.replace('/foo'), location.assign('/foo')
+      .replace(
+        new RegExp(
+          String.raw`(\b(?:window\.)?location\.(?:assign|replace)\(\s*)(["'])\/(?!\/)(?!${escapedBaseNoLeadingSlash}(?:\/|$))`,
+          "g",
+        ),
+        `$1$2${base}/`,
+      )
+      // Assignments: location.href = '/foo', location.pathname = '/foo'
+      .replace(
+        new RegExp(
+          String.raw`(\b(?:window\.)?location\.(?:href|pathname)\s*=\s*)(["'])\/(?!\/)(?!${escapedBaseNoLeadingSlash}(?:\/|$))`,
+          "g",
+        ),
+        `$1$2${base}/`,
+      );
+
   const prefixGroups = [
     "images",
     "_astro",
@@ -62,9 +117,10 @@ function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
     "assets",
   ].join("|");
 
-  // Only rewrites known asset-like prefixes; does not touch page routes (e.g. "/ueber-uns").
+  // Note: This is a best-effort rewrite to keep bucket-backed previews functional
+  // under a nested base path; it intentionally rewrites some root-relative navigations.
   return (
-    text
+    rewriteRootRelativeJsNavigations(rewriteRootRelativeAttributes(text))
       .replace(
         new RegExp(`(^|[^\\w/])\\/(${prefixGroups})\\/`, "g"),
         `$1${base}/$2/`,
@@ -323,6 +379,242 @@ function isAllowedPreviewFile(filePath: string): boolean {
   return ext === "" || ALLOWED_EXTENSIONS.has(ext);
 }
 
+function isObjectNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+
+  const anyErr = err as {
+    name?: string;
+    $metadata?: { httpStatusCode?: number };
+    Code?: string;
+    code?: string;
+  };
+
+  const status = anyErr.$metadata?.httpStatusCode;
+  if (status === 404) return true;
+
+  const name = String(anyErr.name || "");
+  const code = String(anyErr.Code || anyErr.code || "");
+  return (
+    name === "NoSuchKey" ||
+    name === "NotFound" ||
+    code === "NoSuchKey" ||
+    code === "NotFound"
+  );
+}
+
+function normalizePreviewRelativePath(filePath: string): string | null {
+  if (filePath.includes("\0")) return null;
+  const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.length === 0) return "";
+  if (segments.some((seg) => seg === "." || seg === "..")) return null;
+  return segments.join("/");
+}
+
+function buildPreviewCandidates(filePath: string): string[] {
+  const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const trimmed = normalized.replace(/\/+$/, "");
+
+  if (!trimmed) return ["index.html"];
+
+  const candidates = new Set<string>();
+  candidates.add(trimmed);
+
+  const ext = path.posix.extname(trimmed);
+  if (!ext) {
+    candidates.add(`${trimmed}.html`);
+    candidates.add(`${trimmed}/index.html`);
+  }
+
+  if (normalized.endsWith("/")) {
+    candidates.add(`${trimmed}/index.html`);
+  }
+
+  return Array.from(candidates);
+}
+
+type PreviewBucketConfig = {
+  client: S3Client;
+  bucket: string;
+};
+
+let previewBucketConfig: PreviewBucketConfig | null | undefined;
+
+function getPreviewBucketConfig(): PreviewBucketConfig | null {
+  if (previewBucketConfig !== undefined) return previewBucketConfig;
+
+  try {
+    const config = getObjectStorageConfigFromEnv(process.env);
+    previewBucketConfig = {
+      client: createS3Client(config),
+      bucket: config.bucket,
+    };
+  } catch {
+    previewBucketConfig = null;
+  }
+
+  return previewBucketConfig;
+}
+
+function isResponseClosed(
+  res: express.Response,
+  req?: express.Request,
+): boolean {
+  if (req?.aborted) return true;
+  if (res.writableEnded || res.writableFinished) return true;
+  if ((res as any).destroyed) return true;
+  return false;
+}
+
+function isClientDisconnectedError(err: unknown): boolean {
+  const code = (err as any)?.code;
+  return (
+    code === "ERR_STREAM_UNABLE_TO_PIPE" ||
+    code === "ERR_STREAM_PREMATURE_CLOSE" ||
+    code === "ECONNRESET" ||
+    code === "EPIPE"
+  );
+}
+
+async function tryServeFromBucket(options: {
+  req?: express.Request;
+  res: express.Response;
+  slug: string;
+  version: number;
+  kind: "source" | "preview";
+  filePath: string;
+}): Promise<"served" | "not_found" | "disabled"> {
+  const storage = getPreviewBucketConfig();
+  if (!storage) return "disabled";
+
+  const rel = normalizePreviewRelativePath(options.filePath);
+  if (rel === null) return "not_found";
+
+  const keyPrefix = getProjectArtifactKeyPrefix({
+    tenantId: getActiveTenantId(),
+    slug: options.slug,
+    version: options.version,
+    kind: options.kind,
+  });
+
+  const candidates = buildPreviewCandidates(rel || "index.html");
+
+  for (const candidate of candidates) {
+    if (isResponseClosed(options.res, options.req)) return "served";
+
+    const key = `${keyPrefix}/${candidate}`;
+
+    try {
+      if (candidate.endsWith(".html")) {
+        const { buffer } = await getObjectBuffer({
+          client: storage.client,
+          bucket: storage.bucket,
+          key,
+        });
+        if (isResponseClosed(options.res, options.req)) return "served";
+        const basePath = `/vivd-studio/api/preview/${options.slug}/v${options.version}`;
+        const rewritten = rewriteRootAssetUrlsInText(
+          buffer.toString("utf-8"),
+          basePath,
+        );
+        options.res.type("html");
+        options.res.setHeader("Content-Type", "text/html");
+        options.res.send(rewritten);
+        return "served";
+      }
+
+      const response = await storage.client.send(
+        new GetObjectCommand({
+          Bucket: storage.bucket,
+          Key: key,
+        }),
+      );
+
+      if (isResponseClosed(options.res, options.req)) return "served";
+
+      const ext = path.extname(candidate);
+      if (ext) {
+        // Prefer inferring from the file extension because bucket uploads may not
+        // carry accurate ContentType metadata (often defaults to octet-stream).
+        options.res.type(ext);
+      } else if (typeof response.ContentType === "string" && response.ContentType.length > 0) {
+        options.res.setHeader("Content-Type", response.ContentType);
+      } else {
+        options.res.type("application/octet-stream");
+      }
+      if (typeof response.ContentLength === "number") {
+        options.res.setHeader("Content-Length", String(response.ContentLength));
+      }
+
+      const body = response.Body;
+      if (!body) {
+        options.res.status(404).json({ error: "File not found" });
+        return "served";
+      }
+
+      if (body instanceof Readable) {
+        const destroyBody = () => {
+          if (!body.destroyed) body.destroy();
+        };
+        const onClose = () => destroyBody();
+        const onAborted = () => destroyBody();
+
+        options.res.on("close", onClose);
+        options.req?.on("aborted", onAborted);
+        try {
+          await pipeline(body, options.res);
+        } catch (err) {
+          // Client navigated away / closed the connection; avoid noisy logs and
+          // don't fall back to FS (which can cause additional errors).
+          if (isClientDisconnectedError(err) || isResponseClosed(options.res, options.req)) {
+            destroyBody();
+            return "served";
+          }
+          throw err;
+        } finally {
+          options.res.off("close", onClose);
+          options.req?.off("aborted", onAborted);
+        }
+        return "served";
+      }
+
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        "transformToByteArray" in body &&
+        typeof (body as any).transformToByteArray === "function"
+      ) {
+        const bytes = await (body as any).transformToByteArray();
+        if (isResponseClosed(options.res, options.req)) return "served";
+        options.res.send(Buffer.from(bytes));
+        return "served";
+      }
+
+      if (typeof body === "string" || Buffer.isBuffer(body) || body instanceof Uint8Array) {
+        if (isResponseClosed(options.res, options.req)) return "served";
+        options.res.send(body);
+        return "served";
+      }
+
+      // Fallback: stringify unknown body types.
+      if (isResponseClosed(options.res, options.req)) return "served";
+      options.res.send(String(body));
+      return "served";
+    } catch (err) {
+      if (isObjectNotFoundError(err)) {
+        continue;
+      }
+      if (isClientDisconnectedError(err) || isResponseClosed(options.res, options.req)) {
+        return "served";
+      }
+      console.warn(`[Preview] Bucket fetch failed (key=${key}):`, err);
+      return "not_found";
+    }
+  }
+
+  return "not_found";
+}
+
 // Secure external preview endpoint (unauthenticated but filtered)
 app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   const slug = getRouteParam(req, "slug");
@@ -354,14 +646,39 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
 
   const versionDir = getVersionDir(slug, versionNumber);
 
+  const config = fs.existsSync(versionDir)
+    ? detectProjectType(versionDir)
+    : { framework: "generic" as const, mode: "static" as const, packageManager: "npm" as const };
+
+  // Prefer serving from object storage when configured.
+  if (config.framework === "astro") {
+    const served = await tryServeFromBucket({
+      req,
+      res,
+      slug,
+      version: versionNumber,
+      kind: "preview",
+      filePath,
+    });
+    if (served === "served") return;
+  } else {
+    const served = await tryServeFromBucket({
+      req,
+      res,
+      slug,
+      version: versionNumber,
+      kind: "source",
+      filePath,
+    });
+    if (served === "served") return;
+  }
+
   if (!fs.existsSync(versionDir)) {
     return res.status(404).json({ error: "Project not found" });
   }
 
-  const config = detectProjectType(versionDir);
-
   if (config.framework === "astro") {
-    // For Astro projects, serve from dist/ if build is ready
+    // For Astro projects, serve from dist/ if build is ready (fallback when bucket isn't configured).
     const buildPath = buildService.getBuildPath(versionDir);
     if (!buildPath) {
       const status = buildService.getBuildStatus(versionDir);

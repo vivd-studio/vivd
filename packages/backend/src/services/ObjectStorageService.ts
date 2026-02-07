@@ -1,5 +1,7 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -267,6 +269,44 @@ async function writeObjectBodyToFile(
   throw new Error("Unsupported object body type");
 }
 
+async function readObjectBodyToBuffer(body: unknown): Promise<Buffer> {
+  if (!body) return Buffer.from("");
+
+  if (typeof body === "string") {
+    return Buffer.from(body);
+  }
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+
+  if (typeof body === "object" && body !== null) {
+    const streamWithHelpers = body as {
+      transformToByteArray?: () => Promise<Uint8Array>;
+    };
+    if (typeof streamWithHelpers.transformToByteArray === "function") {
+      const bytes = await streamWithHelpers.transformToByteArray();
+      return Buffer.from(bytes);
+    }
+  }
+
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      if (typeof chunk === "string") {
+        chunks.push(Buffer.from(chunk));
+      } else {
+        chunks.push(Buffer.from(chunk as Buffer));
+      }
+    }
+    return Buffer.concat(chunks);
+  }
+
+  throw new Error("Unsupported object body type");
+}
+
 export async function downloadBucketPrefixToDirectory(options: {
   client: S3Client;
   bucket: string;
@@ -345,4 +385,90 @@ export async function downloadBucketPrefixToDirectory(options: {
   });
 
   return { filesDownloaded, bytesDownloaded, errors };
+}
+
+export async function doesObjectExist(options: {
+  client: S3Client;
+  bucket: string;
+  key: string;
+}): Promise<boolean> {
+  try {
+    await options.client.send(
+      new HeadObjectCommand({
+        Bucket: options.bucket,
+        Key: options.key,
+      })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getObjectBuffer(options: {
+  client: S3Client;
+  bucket: string;
+  key: string;
+}): Promise<{ buffer: Buffer; contentType: string | null }> {
+  const response = await options.client.send(
+    new GetObjectCommand({
+      Bucket: options.bucket,
+      Key: options.key,
+    })
+  );
+
+  const buffer = await readObjectBodyToBuffer(response.Body);
+  const contentTypeRaw = response.ContentType;
+  const contentType =
+    typeof contentTypeRaw === "string" && contentTypeRaw.trim().length > 0
+      ? contentTypeRaw
+      : null;
+  return { buffer, contentType };
+}
+
+export async function deleteBucketPrefix(options: {
+  client: S3Client;
+  bucket: string;
+  keyPrefix: string;
+}): Promise<{ objectsDeleted: number }> {
+  const bucket = options.bucket.trim();
+  const keyPrefix = normalizeKeyPrefix(options.keyPrefix);
+
+  let objectsDeleted = 0;
+
+  let continuationToken: string | undefined;
+  do {
+    const page = await options.client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: keyPrefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    const keys = (page.Contents ?? [])
+      .map((obj) => obj.Key)
+      .filter((key): key is string => typeof key === "string" && key.length > 0);
+
+    // Batch delete: S3 max is 1000 keys.
+    for (let i = 0; i < keys.length; i += 1000) {
+      const batch = keys.slice(i, i + 1000);
+      if (batch.length === 0) continue;
+
+      await options.client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Objects: batch.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        })
+      );
+      objectsDeleted += batch.length;
+    }
+
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return { objectsDeleted };
 }

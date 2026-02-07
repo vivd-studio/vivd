@@ -9,6 +9,11 @@ import { thumbnailService } from "./ThumbnailService";
 import { getVersionDir } from "../generator/versionUtils";
 import { detectProjectType } from "../devserver/projectType";
 import type { GitHubSyncResult } from "./GitService";
+import {
+  uploadProjectPreviewToBucket,
+  uploadProjectPublishedToBucket,
+  uploadProjectSourceToBucket,
+} from "./ProjectArtifactsService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
@@ -188,10 +193,40 @@ export class PublishService {
 
       // Update build status so external preview knows dist/ is ready
       buildService.markBuildReady(versionDir, commitHash, distPath);
+
+      // Keep bucket preview/published artifacts up to date (best-effort).
+      await uploadProjectSourceToBucket({ versionDir, slug: projectSlug, version }).catch(() => {});
+      await uploadProjectPreviewToBucket({
+        localDir: distPath,
+        slug: projectSlug,
+        version,
+        meta: {
+          status: "ready",
+          framework: "astro",
+          commitHash,
+          completedAt: new Date().toISOString(),
+        },
+      }).catch(() => {});
     } else {
       // For static/non-Astro projects: copy the entire version directory
       this.copyDirectory(versionDir, publishedPath);
+
+      // Keep bucket source/published artifacts up to date (best-effort).
+      await uploadProjectSourceToBucket({ versionDir, slug: projectSlug, version }).catch(() => {});
     }
+
+    // Upload published artifacts (best-effort).
+    await uploadProjectPublishedToBucket({
+      localDir: publishedPath,
+      slug: projectSlug,
+      version,
+      meta: {
+        status: "ready",
+        framework: projectConfig.framework,
+        commitHash,
+        completedAt: new Date().toISOString(),
+      },
+    }).catch(() => {});
 
     // Generate thumbnail for the published version (includes snapshot)
     try {

@@ -17,22 +17,57 @@ type FlyMachineState =
   | "destroyed"
   | "suspended";
 
+type FlyImageRef = {
+  registry?: string;
+  repository?: string;
+  tag?: string;
+  digest?: string;
+  labels?: Record<string, string>;
+};
+
+type FlyMachinePort = {
+  port?: number;
+  handlers?: string[];
+};
+
+type FlyMachineService = {
+  protocol?: string;
+  internal_port?: number;
+  ports?: FlyMachinePort[];
+  // New-format string, but the API can return booleans for backwards compat.
+  autostop?: "off" | "stop" | "suspend" | boolean | string;
+  autostart?: boolean;
+  min_machines_running?: number;
+  [key: string]: unknown;
+};
+
+type FlyMachineGuest = {
+  cpu_kind?: "shared" | "performance" | string;
+  cpus?: number;
+  memory_mb?: number;
+  [key: string]: unknown;
+};
+
+type FlyMachineConfig = {
+  image?: string;
+  env?: Record<string, string>;
+  guest?: FlyMachineGuest;
+  services?: FlyMachineService[];
+  metadata?: Record<string, string>;
+  // Keep unknown fields when passing configs back to Fly.
+  [key: string]: unknown;
+};
+
 type FlyMachine = {
   id: string;
   name?: string;
   state?: FlyMachineState | string;
   region?: string;
-  config?: {
-    env?: Record<string, string>;
-    services?: Array<{
-      protocol?: string;
-      internal_port?: number;
-      ports?: Array<{
-        port?: number;
-        handlers?: string[];
-      }>;
-    }>;
-  };
+  instance_id?: string;
+  image_ref?: FlyImageRef;
+  config?: FlyMachineConfig;
+  // Older code used to send top-level metadata, but Fly stores it on config.metadata.
+  // Keep this optional for backwards compatibility with any cached shapes.
   metadata?: Record<string, string>;
 };
 
@@ -73,12 +108,156 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function isRecordOfStrings(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== "object") return false;
+  for (const v of Object.values(value as Record<string, unknown>)) {
+    if (typeof v !== "string") return false;
+  }
+  return true;
+}
+
+type Semver = { major: number; minor: number; patch: number };
+
+function parseSemverTag(tag: string): { version: Semver; normalized: string } | null {
+  const match = tag.trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return null;
+
+  const major = Number.parseInt(match[1], 10);
+  const minor = Number.parseInt(match[2], 10);
+  const patch = Number.parseInt(match[3], 10);
+  if (![major, minor, patch].every((n) => Number.isFinite(n) && n >= 0)) {
+    return null;
+  }
+
+  return {
+    version: { major, minor, patch },
+    normalized: `${major}.${minor}.${patch}`,
+  };
+}
+
+function compareSemver(a: Semver, b: Semver): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
+
+function pickLatestSemverTag(tags: string[]): string | null {
+  const byVersion = new Map<string, { version: Semver; tagWithV?: string; tagNoV?: string }>();
+
+  for (const tag of tags) {
+    const parsed = parseSemverTag(tag);
+    if (!parsed) continue;
+    const entry =
+      byVersion.get(parsed.normalized) || { version: parsed.version };
+    if (tag.startsWith("v")) {
+      entry.tagWithV = tag;
+    } else {
+      entry.tagNoV = tag;
+    }
+    byVersion.set(parsed.normalized, entry);
+  }
+
+  let best: { version: Semver; tag: string } | null = null;
+  for (const entry of byVersion.values()) {
+    const tag = entry.tagNoV || entry.tagWithV;
+    if (!tag) continue;
+
+    if (!best || compareSemver(entry.version, best.version) > 0) {
+      best = { version: entry.version, tag };
+    }
+  }
+
+  return best?.tag || null;
+}
+
+function normalizeGhcrRepository(input: string): { ownerRepo: string; imageBase: string } {
+  let value = input.trim();
+
+  if (value.startsWith("https://")) value = value.slice("https://".length);
+  if (value.startsWith("http://")) value = value.slice("http://".length);
+
+  // Allow passing full image refs (strip tag/digest).
+  value = value.split("@")[0];
+  const lastSlash = value.lastIndexOf("/");
+  const lastColon = value.lastIndexOf(":");
+  if (lastColon > lastSlash) value = value.slice(0, lastColon);
+
+  if (value.startsWith("ghcr.io/")) value = value.slice("ghcr.io/".length);
+  if (!value.includes("/")) {
+    throw new Error(
+      `[FlyMachines] Invalid GHCR repository "${input}". Expected "owner/repo" or "ghcr.io/owner/repo".`,
+    );
+  }
+
+  return { ownerRepo: value, imageBase: `ghcr.io/${value}` };
+}
+
+async function fetchJsonWithTimeout<T>(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  timeout.unref?.();
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchGhcrPullToken(options: {
+  ownerRepo: string;
+  timeoutMs: number;
+}): Promise<string> {
+  const tokenUrl = new URL("https://ghcr.io/token");
+  tokenUrl.searchParams.set("service", "ghcr.io");
+  tokenUrl.searchParams.set("scope", `repository:${options.ownerRepo}:pull`);
+
+  const data = await fetchJsonWithTimeout<{ token?: string }>(
+    tokenUrl.toString(),
+    { method: "GET" },
+    options.timeoutMs,
+  );
+  if (!data.token) throw new Error("Missing token in GHCR response");
+  return data.token;
+}
+
+async function fetchGhcrTags(options: {
+  ownerRepo: string;
+  token: string;
+  timeoutMs: number;
+}): Promise<string[]> {
+  const tagsUrl = `https://ghcr.io/v2/${options.ownerRepo}/tags/list`;
+  const data = await fetchJsonWithTimeout<{ tags?: string[] }>(
+    tagsUrl,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${options.token}`,
+      },
+    },
+    options.timeoutMs,
+  );
+
+  if (!Array.isArray(data.tags)) return [];
+  return data.tags.filter((tag): tag is string => typeof tag === "string");
+}
+
 export class FlyStudioMachineProvider implements StudioMachineProvider {
   kind = "fly" as const;
 
   private machinesCache: { machines: FlyMachine[]; fetchedAt: number } | null =
     null;
   private inflight = new Map<string, Promise<StudioMachineStartResult>>();
+  private resolvedImageCache: { image: string; fetchedAt: number } | null = null;
+  private resolveImageInflight: Promise<string> | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
   private idleCleanupInterval: NodeJS.Timeout | null = null;
   private lastActivityByStudioKey = new Map<string, number>();
@@ -136,10 +315,74 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return app;
   }
 
-  private get image(): string {
-    return (
-      process.env.FLY_STUDIO_IMAGE || "ghcr.io/vivd-studio/vivd-studio:latest"
+  private get studioImageRepository(): string {
+    const configured = process.env.FLY_STUDIO_IMAGE_REPO?.trim();
+    if (configured) return configured;
+    return "ghcr.io/vivd-studio/vivd-studio";
+  }
+
+  private get fallbackStudioImage(): string {
+    try {
+      const { imageBase } = normalizeGhcrRepository(this.studioImageRepository);
+      return `${imageBase}:latest`;
+    } catch {
+      return "ghcr.io/vivd-studio/vivd-studio:latest";
+    }
+  }
+
+  private async resolveLatestStudioImageFromGhcr(): Promise<string> {
+    const { ownerRepo, imageBase } = normalizeGhcrRepository(
+      this.studioImageRepository,
     );
+    const token = await fetchGhcrPullToken({
+      ownerRepo,
+      timeoutMs: 10_000,
+    });
+    const tags = await fetchGhcrTags({
+      ownerRepo,
+      token,
+      timeoutMs: 10_000,
+    });
+
+    const latestTag = pickLatestSemverTag(tags);
+    if (!latestTag) {
+      throw new Error(
+        `No semver tags found for GHCR repository ${ownerRepo} (tags=${tags.length})`,
+      );
+    }
+
+    return `${imageBase}:${latestTag}`;
+  }
+
+  private async getDesiredImage(): Promise<string> {
+    const configured = process.env.FLY_STUDIO_IMAGE;
+    if (configured && configured.trim().length > 0) return configured;
+
+    const now = Date.now();
+    const refreshMs = 300_000; // 5 minutes
+    if (this.resolvedImageCache && now - this.resolvedImageCache.fetchedAt < refreshMs) {
+      return this.resolvedImageCache.image;
+    }
+
+    const inflight = this.resolveImageInflight;
+    if (inflight) return inflight;
+
+    const promise = (async () => {
+      try {
+        const resolved = await this.resolveLatestStudioImageFromGhcr();
+        this.resolvedImageCache = { image: resolved, fetchedAt: Date.now() };
+        return resolved;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[FlyMachines] Failed to resolve latest studio image: ${message}`);
+        return this.resolvedImageCache?.image || this.fallbackStudioImage;
+      } finally {
+        this.resolveImageInflight = null;
+      }
+    })();
+
+    this.resolveImageInflight = promise;
+    return promise;
   }
 
   private get region(): string {
@@ -312,11 +555,17 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   ): FlyMachine | null {
     const v = String(version);
     return (
-      machines.find(
-        (m) =>
-          m.metadata?.vivd_project_slug === projectSlug &&
-          m.metadata?.vivd_project_version === v,
-      ) || null
+      machines.find((machine) => {
+        const metadata = this.getMachineMetadata(machine);
+        const machineSlug =
+          metadata?.vivd_project_slug || machine.config?.env?.VIVD_PROJECT_SLUG;
+        const machineVersion =
+          metadata?.vivd_project_version ||
+          machine.config?.env?.VIVD_PROJECT_VERSION;
+        return (
+          machineSlug === projectSlug && machineVersion === v
+        );
+      }) || null
     );
   }
 
@@ -325,8 +574,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   private getStudioKeyFromMachine(machine: FlyMachine): string | null {
-    const projectSlug = machine.metadata?.vivd_project_slug;
-    const version = parseIntOrNull(machine.metadata?.vivd_project_version);
+    const metadata = this.getMachineMetadata(machine);
+    const projectSlug =
+      metadata?.vivd_project_slug || machine.config?.env?.VIVD_PROJECT_SLUG;
+    const version = parseIntOrNull(
+      metadata?.vivd_project_version || machine.config?.env?.VIVD_PROJECT_VERSION,
+    );
     if (!projectSlug || !version) return null;
     return this.key(projectSlug, version);
   }
@@ -335,8 +588,18 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     this.lastActivityByStudioKey.set(studioKey, Date.now());
   }
 
+  private getMachineMetadata(machine: FlyMachine): Record<string, string> | null {
+    const fromConfig = machine.config?.metadata;
+    if (isRecordOfStrings(fromConfig)) return fromConfig;
+    const legacy = machine.metadata;
+    if (isRecordOfStrings(legacy)) return legacy;
+    return null;
+  }
+
   private getMachineExternalPort(machine: FlyMachine): number | null {
-    const fromMetadata = parseIntOrNull(machine.metadata?.vivd_external_port);
+    const fromMetadata = parseIntOrNull(
+      this.getMachineMetadata(machine)?.vivd_external_port,
+    );
     if (fromMetadata) return fromMetadata;
 
     const ports = machine.config?.services?.flatMap((s) => s.ports ?? []) ?? [];
@@ -415,6 +678,75 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     );
   }
 
+  private async waitForState(options: {
+    machineId: string;
+    state: FlyMachineState;
+    timeoutMs: number;
+  }): Promise<void> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < options.timeoutMs) {
+      const machine = await this.getMachine(options.machineId);
+      const state = machine.state || "unknown";
+
+      if (state === options.state) return;
+      if (state === "destroyed" || state === "destroying") {
+        throw new Error(`[FlyMachines] Machine ${options.machineId} was destroyed`);
+      }
+
+      await sleep(500);
+    }
+
+    throw new Error(
+      `[FlyMachines] Timed out waiting for machine to reach state=${options.state} (${options.machineId})`,
+    );
+  }
+
+  private normalizeServicesForVivd(
+    services: FlyMachineService[] | undefined,
+    externalPort: number,
+  ): FlyMachineService[] {
+    const normalized = (services && services.length > 0 ? services : [{}]).map(
+      (service) => {
+        const ports = (service.ports && service.ports.length > 0
+          ? service.ports
+          : [{ port: externalPort, handlers: ["tls", "http"] }]) as FlyMachinePort[];
+
+        // Ensure the external port we expect is present.
+        const hasExternalPort = ports.some((p) => p.port === externalPort);
+        if (!hasExternalPort) {
+          ports.push({ port: externalPort, handlers: ["tls", "http"] });
+        }
+
+        return {
+          ...service,
+          protocol: service.protocol || "tcp",
+          internal_port: service.internal_port || 3100,
+          ports,
+          autostop: "suspend",
+          autostart: false,
+          min_machines_running: 0,
+        };
+      },
+    );
+
+    return normalized;
+  }
+
+  private async updateMachineConfig(options: {
+    machineId: string;
+    config: FlyMachineConfig;
+    skipLaunch?: boolean;
+  }): Promise<FlyMachine> {
+    const body: Record<string, unknown> = { config: options.config };
+    if (options.skipLaunch) body.skip_launch = true;
+    const machine = await this.flyFetch<FlyMachine>(`/machines/${options.machineId}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    this.machinesCache = null;
+    return machine;
+  }
+
   private async ensureExistingMachineRunning(
     existing: FlyMachine,
     args: StudioMachineStartArgs,
@@ -425,6 +757,67 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       throw new Error(
         `[FlyMachines] Found machine ${existing.id} for ${args.projectSlug}/v${args.version} but could not determine its external port. Destroy it or recreate it.`,
       );
+    }
+
+    const desiredImage = await this.getDesiredImage();
+    const configuredImage =
+      typeof existing.config?.image === "string" ? existing.config.image : null;
+    const needsImageUpdate = configuredImage !== desiredImage;
+
+    const needsServiceUpdate =
+      existing.config?.services?.some((service) => {
+        const needsAutostart = service.autostart !== false;
+        const needsAutostop = service.autostop !== "suspend";
+        return needsAutostart || needsAutostop;
+      }) ?? true;
+
+    // Only reconcile machine config when it's not running, to avoid disrupting an
+    // active studio session. This also ensures the next boot uses the latest image.
+    if (existing.state !== "started" && (needsImageUpdate || needsServiceUpdate)) {
+      // A suspended machine would resume a snapshot; stop it first to boot fresh.
+      if (needsImageUpdate && existing.state === "suspended") {
+        await this.stopMachine(existing.id);
+        await this.waitForState({
+          machineId: existing.id,
+          state: "stopped",
+          timeoutMs: 60_000,
+        });
+      }
+
+      const current = await this.getMachine(existing.id);
+
+      const studioId =
+        this.getMachineMetadata(current)?.vivd_studio_id ||
+        current.config?.env?.STUDIO_ID ||
+        args.env.STUDIO_ID ||
+        crypto.randomUUID();
+
+      const metadata: Record<string, string> = {
+        ...(this.getMachineMetadata(current) || {}),
+        vivd_project_slug: args.projectSlug,
+        vivd_project_version: String(args.version),
+        vivd_external_port: String(port),
+        vivd_studio_id: studioId,
+        vivd_image: desiredImage,
+      };
+
+      const config: FlyMachineConfig = {
+        ...(current.config || {}),
+        ...(needsImageUpdate ? { image: desiredImage } : {}),
+        // Keep services stable and prevent wakeups from stray traffic.
+        ...(needsServiceUpdate
+          ? { services: this.normalizeServicesForVivd(current.config?.services, port) }
+          : {}),
+        metadata,
+      };
+
+      await this.updateMachineConfig({
+        machineId: existing.id,
+        config,
+        skipLaunch: true,
+      });
+
+      existing = await this.getMachine(existing.id);
     }
 
     if (existing.state !== "started") {
@@ -439,7 +832,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     });
 
     const studioId =
-      existing.metadata?.vivd_studio_id ||
+      this.getMachineMetadata(existing)?.vivd_studio_id ||
       existing.config?.env?.STUDIO_ID ||
       args.env.STUDIO_ID ||
       crypto.randomUUID();
@@ -562,6 +955,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
     const port = this.allocatePort(machines);
     const studioId = args.env.STUDIO_ID || crypto.randomUUID();
+    const desiredImage = await this.getDesiredImage();
 
     const env = this.buildStudioEnv({ ...args, studioId });
 
@@ -573,7 +967,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           name: machineName || undefined,
           region: this.region,
           config: {
-            image: this.image,
+            image: desiredImage,
             guest: {
               cpu_kind: this.cpuKind,
               cpus: this.cpuCount,
@@ -586,16 +980,19 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
                 internal_port: 3100,
                 ports: [{ port, handlers: ["tls", "http"] }],
                 autostop: "suspend",
-                autostart: true,
+                // We control lifecycle explicitly via the backend. Autostart can wake machines
+                // from stray traffic (e.g. previews, probes), so keep it off.
+                autostart: false,
                 min_machines_running: 0,
               },
             ],
-          },
-          metadata: {
-            vivd_project_slug: args.projectSlug,
-            vivd_project_version: String(args.version),
-            vivd_external_port: String(port),
-            vivd_studio_id: studioId,
+            metadata: {
+              vivd_project_slug: args.projectSlug,
+              vivd_project_version: String(args.version),
+              vivd_external_port: String(port),
+              vivd_studio_id: studioId,
+              vivd_image: desiredImage,
+            },
           },
         }),
       });
@@ -646,7 +1043,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       if (existing.state !== "started") return null;
       const port = this.getMachineExternalPort(existing);
       if (!port) return null;
-      this.touch(projectSlug, version);
       return this.getPublicUrlForPort(port);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

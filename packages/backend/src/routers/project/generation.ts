@@ -28,6 +28,12 @@ import { db } from "../../db";
 import { projectMember } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { limitsService } from "../../services/LimitsService";
+import { detectProjectType } from "../../devserver/projectType";
+import { buildService } from "../../services/BuildService";
+import {
+  uploadProjectPreviewToBucket,
+  uploadProjectSourceToBucket,
+} from "../../services/ProjectArtifactsService";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -47,6 +53,33 @@ function checkSingleProjectModeLimit(): void {
         "Delete the existing project before creating a new one.",
     );
   }
+}
+
+async function syncArtifactsAfterGeneration(options: {
+  versionDir: string;
+  slug: string;
+  version: number;
+}): Promise<void> {
+  await uploadProjectSourceToBucket({
+    versionDir: options.versionDir,
+    slug: options.slug,
+    version: options.version,
+  });
+
+  const projectConfig = detectProjectType(options.versionDir);
+  if (projectConfig.framework !== "astro") return;
+
+  const distPath = await buildService.buildSync(options.versionDir, "dist");
+  await uploadProjectPreviewToBucket({
+    localDir: distPath,
+    slug: options.slug,
+    version: options.version,
+    meta: {
+      status: "ready",
+      framework: "astro",
+      completedAt: new Date().toISOString(),
+    },
+  });
 }
 
 export const projectGenerationProcedures = {
@@ -128,10 +161,20 @@ export const projectGenerationProcedures = {
             heroHint: input.heroHint,
             htmlHint: input.htmlHint,
           })
-            .then(() => {
+            .then(async (result) => {
               console.log(
                 `Finished processing ${url} (version ${nextVersion})`,
               );
+              try {
+                await syncArtifactsAfterGeneration({
+                  versionDir: result.outputDir,
+                  slug: result.domainSlug,
+                  version: result.version,
+                });
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.warn(`[Artifacts] Post-generation upload failed: ${msg}`);
+              }
             })
             .catch((err) => {
               console.error(`Error processing ${url}:`, err);
@@ -151,8 +194,18 @@ export const projectGenerationProcedures = {
         heroHint: input.heroHint,
         htmlHint: input.htmlHint,
       })
-        .then(() => {
+        .then(async (result) => {
           console.log(`Finished processing ${url} (version 1)`);
+          try {
+            await syncArtifactsAfterGeneration({
+              versionDir: result.outputDir,
+              slug: result.domainSlug,
+              version: result.version,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Post-generation upload failed: ${msg}`);
+          }
         })
         .catch((err) => {
           console.error(`Error processing ${url}:`, err);
@@ -215,10 +268,20 @@ export const projectGenerationProcedures = {
       });
 
       runScratchFlow(ctx, input)
-        .then(() => {
+        .then(async () => {
           console.log(
             `Finished scratch generation for ${ctx.slug} (version ${ctx.version})`,
           );
+          try {
+            await syncArtifactsAfterGeneration({
+              versionDir: ctx.outputDir,
+              slug: ctx.slug,
+              version: ctx.version,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Post-generation upload failed: ${msg}`);
+          }
         })
         .catch((err) => {
           console.error(
@@ -463,10 +526,20 @@ export const projectGenerationProcedures = {
 
       // Regenerate the same version
       processUrl(url, targetVersion)
-        .then(() => {
+        .then(async (result) => {
           console.log(
             `Finished regenerating ${url} (version ${targetVersion})`,
           );
+          try {
+            await syncArtifactsAfterGeneration({
+              versionDir: result.outputDir,
+              slug: result.domainSlug,
+              version: result.version,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Post-generation upload failed: ${msg}`);
+          }
         })
         .catch((err) => {
           console.error(`Error regenerating ${url}:`, err);

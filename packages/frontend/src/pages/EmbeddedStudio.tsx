@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -13,9 +13,11 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { ModeToggle } from "@/components/theme";
+import { ModeToggle, useTheme } from "@/components/theme";
 import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
+import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
+import { isColorTheme, isTheme } from "@vivd/shared/types";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -27,7 +29,9 @@ export default function EmbeddedStudio() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const [editRequested, setEditRequested] = useState(false);
+  const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Fetch project data to get current version
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
@@ -111,15 +115,6 @@ export default function EmbeddedStudio() {
         : null;
   }, [editRequested, startStudio.data, studioUrlQuery.data]);
 
-  const studioOrigin = useMemo(() => {
-    if (!studioBaseUrl) return null;
-    try {
-      return new URL(studioBaseUrl).origin;
-    } catch {
-      return null;
-    }
-  }, [studioBaseUrl]);
-
   useEffect(() => {
     if (!projectSlug || !studioBaseUrl) return;
 
@@ -142,17 +137,36 @@ export default function EmbeddedStudio() {
     };
   }, [projectSlug, studioBaseUrl, studioVersion, touchStudio.mutate]);
 
+  const syncThemeToStudio = () => {
+    const targetWindow = studioIframeRef.current?.contentWindow;
+    if (!targetWindow) return;
+    targetWindow.postMessage(
+      { type: "vivd:host:theme", theme, colorTheme },
+      "*",
+    );
+  };
+
+  useEffect(() => {
+    syncThemeToStudio();
+  }, [theme, colorTheme]);
+
   // Listen for studio events from the iframe (cross-origin via postMessage).
   useEffect(() => {
-    if (!studioOrigin) return;
-
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== studioOrigin) return;
+      const studioWindow = studioIframeRef.current?.contentWindow;
+      if (!studioWindow || event.source !== studioWindow) return;
       if (event.data?.type === "vivd:studio:close") {
         navigate(ROUTES.DASHBOARD);
       }
       if (event.data?.type === "vivd:studio:fullscreen") {
         navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${studioVersion}`);
+      }
+      if (event.data?.type === "vivd:studio:theme") {
+        const nextTheme = event.data?.theme;
+        const nextColorTheme = event.data?.colorTheme;
+
+        if (isTheme(nextTheme)) setTheme(nextTheme);
+        if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
       }
     };
 
@@ -160,7 +174,13 @@ export default function EmbeddedStudio() {
     return () => {
       window.removeEventListener("message", onMessage);
     };
-  }, [navigate, projectSlug, studioOrigin, studioVersion]);
+  }, [
+    navigate,
+    projectSlug,
+    setColorTheme,
+    setTheme,
+    studioVersion,
+  ]);
 
   const studioIframeSrc = useMemo(() => {
     if (!studioBaseUrl) return null;
@@ -308,16 +328,17 @@ export default function EmbeddedStudio() {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="flex-1" />
-          <Button disabled>Starting studio…</Button>
+          <Button disabled>
+            <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
+            Booting studio…
+          </Button>
           <ModeToggle />
           <HeaderProfileMenu />
           <Button variant="ghost" onClick={handleClose}>
             Close
           </Button>
         </header>
-        <div className="flex flex-1 min-h-0 items-center justify-center">
-          <div className="text-muted-foreground">Starting studio…</div>
-        </div>
+        <StudioStartupLoading />
       </div>
     );
   }
@@ -354,6 +375,8 @@ export default function EmbeddedStudio() {
       <div className="flex-1 min-h-0">
         {studioIframeSrc ? (
           <iframe
+            ref={studioIframeRef}
+            onLoad={syncThemeToStudio}
             key={`${projectSlug}-${version}-${studioUrlQuery.data?.url ?? startStudio.data?.url ?? ""}`}
             src={studioIframeSrc}
             title={`Vivd Studio - ${projectSlug}`}

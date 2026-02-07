@@ -6,6 +6,7 @@ import { buildService } from "../../services/BuildService";
 import { thumbnailService } from "../../services/ThumbnailService";
 import { detectProjectType } from "../../devserver/projectType";
 import fs from "fs";
+import { uploadProjectSourceToBucket } from "../../services/ProjectArtifactsService";
 
 export const projectGitProcedures = {
   /**
@@ -39,6 +40,12 @@ export const projectGitProcedures = {
       // Trigger build for Astro projects (fire-and-forget)
       // For non-Astro, generate thumbnail immediately (debounced)
       if (!result.noChanges) {
+        // Keep object storage source up to date (best-effort, fire-and-forget).
+        uploadProjectSourceToBucket({ versionDir, slug, version }).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Artifacts] Source upload failed for ${slug}/v${version}: ${msg}`);
+        });
+
         const config = detectProjectType(versionDir);
         if (config.framework === "astro") {
           buildService.triggerBuild(versionDir, result.hash).catch((err) => {

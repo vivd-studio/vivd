@@ -1,9 +1,12 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
-import { getVersionDir } from "../../generator/versionUtils";
+import { getActiveTenantId, getVersionDir } from "../../generator/versionUtils";
 import { devServerManager, detectProjectType } from "../../devserver";
 import { buildService } from "../../services/BuildService";
 import { serverManager as opencodeServerManager } from "../../opencode/serverManager";
+import type { S3Client } from "@aws-sdk/client-s3";
+import { createS3Client, doesObjectExist, getObjectStorageConfigFromEnv } from "../../services/ObjectStorageService";
+import { getProjectArtifactKeyPrefix } from "../../services/ProjectStoragePaths";
 
 export const previewProcedures = {
   /**
@@ -141,12 +144,64 @@ export const previewProcedures = {
       // External preview URL is always /preview/ (static serving)
       const url = `/vivd-studio/api/preview/${slug}/v${version}/`;
 
+      // Prefer bucket-backed preview readiness when object storage is configured.
+      // Fallback to local build artifacts for dev/self-hosted modes.
+      let storage: { client: S3Client; bucket: string } | null = null;
+      try {
+        const s3Config = getObjectStorageConfigFromEnv(process.env);
+        storage = { client: createS3Client(s3Config), bucket: s3Config.bucket };
+      } catch {
+        storage = null;
+      }
+
       if (config.framework !== "astro") {
+        if (storage) {
+          const keyPrefix = getProjectArtifactKeyPrefix({
+            tenantId: getActiveTenantId(),
+            slug,
+            version,
+            kind: "source",
+          });
+          const exists = await doesObjectExist({
+            client: storage.client,
+            bucket: storage.bucket,
+            key: `${keyPrefix}/index.html`,
+          });
+          if (exists) {
+            return {
+              mode: "static" as const,
+              status: "ready" as const,
+              url,
+            };
+          }
+        }
+
         return {
           mode: "static" as const,
           status: "ready" as const,
           url,
         };
+      }
+
+      if (storage) {
+        const keyPrefix = getProjectArtifactKeyPrefix({
+          tenantId: getActiveTenantId(),
+          slug,
+          version,
+          kind: "preview",
+        });
+        const exists = await doesObjectExist({
+          client: storage.client,
+          bucket: storage.bucket,
+          key: `${keyPrefix}/index.html`,
+        });
+        if (exists) {
+          return {
+            mode: "built" as const,
+            status: "ready" as const,
+            url,
+          };
+        }
       }
 
       // Check if build exists (in memory or on disk via getBuildPath)

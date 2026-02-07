@@ -1,7 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
+import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
+import { useTheme } from "@/components/theme";
+import { isColorTheme, isTheme } from "@vivd/shared/types";
 
 /**
  * Fullscreen studio view (still embedded via iframe).
@@ -11,6 +14,8 @@ export default function StudioFullscreen() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
+  const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
@@ -68,15 +73,6 @@ export default function StudioFullscreen() {
     return null;
   }, [startStudio.data, studioUrlQuery.data]);
 
-  const studioOrigin = useMemo(() => {
-    if (!baseUrl) return null;
-    try {
-      return new URL(baseUrl).origin;
-    } catch {
-      return null;
-    }
-  }, [baseUrl]);
-
   useEffect(() => {
     if (!projectSlug || !baseUrl) return;
 
@@ -99,19 +95,46 @@ export default function StudioFullscreen() {
     };
   }, [baseUrl, projectSlug, touchStudio.mutate, version]);
 
+  const syncThemeToStudio = () => {
+    const targetWindow = studioIframeRef.current?.contentWindow;
+    if (!targetWindow) return;
+    targetWindow.postMessage(
+      { type: "vivd:host:theme", theme, colorTheme },
+      "*",
+    );
+  };
+
+  useEffect(() => {
+    syncThemeToStudio();
+  }, [theme, colorTheme]);
+
   // Handle close/minimize requests from the studio iframe.
   useEffect(() => {
-    if (!studioOrigin) return;
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== studioOrigin) return;
+      const studioWindow = studioIframeRef.current?.contentWindow;
+      if (!studioWindow || event.source !== studioWindow) return;
       const type = event.data?.type;
       if (type === "vivd:studio:close" || type === "vivd:studio:exitFullscreen") {
         navigate(`${ROUTES.PROJECT(projectSlug!)}?view=studio&version=${version}`);
+        return;
+      }
+      if (type === "vivd:studio:theme") {
+        const nextTheme = event.data?.theme;
+        const nextColorTheme = event.data?.colorTheme;
+
+        if (isTheme(nextTheme)) setTheme(nextTheme);
+        if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, projectSlug, studioOrigin, version]);
+  }, [
+    navigate,
+    projectSlug,
+    setColorTheme,
+    setTheme,
+    version,
+  ]);
 
   const studioIframeSrc = useMemo(() => {
     if (!baseUrl) return null;
@@ -166,15 +189,15 @@ export default function StudioFullscreen() {
 
   if (!studioIframeSrc) {
     return (
-      <div className="flex h-dvh w-screen items-center justify-center">
-        <div className="text-muted-foreground">Starting studio…</div>
-      </div>
+      <StudioStartupLoading fullScreen />
     );
   }
 
   return (
     <div className="h-dvh w-screen">
       <iframe
+        ref={studioIframeRef}
+        onLoad={syncThemeToStudio}
         src={studioIframeSrc}
         title={`Vivd Studio - ${projectSlug}`}
         className="h-full w-full border-0"
