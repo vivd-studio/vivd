@@ -206,6 +206,15 @@ Studio Machine (isolated; per-tenant or per-edit session)
 > For SaaS: On-demand studio machines via Fly.io Machines (or similar).
 
 - [x] Backend: basic Fly.io studio machine provider (local-first; no DB persistence)
+- [x] Frontend keepalive + backend `touchStudio` heartbeat (prevents premature Fly suspend while editing)
+- [x] Explicit backend idle stop for Fly machines (`FLY_STUDIO_IDLE_TIMEOUT_MS`, default 120s)
+- [x] Fly machine reuse on reopen (lookup by metadata/name, recover from name-collision `already_exists`)
+- [x] Faster machine bootstrap: hydrate source + OpenCode data from object storage in parallel
+- [x] Startup resilience: retry initial usage-status call to backend on transient network failures
+- [x] Faster preview startup: persistent package-manager cache in OpenCode data + offline-first installs
+- [x] Studio server binds explicitly to `0.0.0.0` for Fly machine ingress compatibility
+- [x] Reuse `node_modules` via lockfile-hash cache archive (restore on boot, save after first install)
+- [x] Fly machine sizing tunables (`FLY_STUDIO_CPU_KIND`, `FLY_STUDIO_CPUS`, `FLY_STUDIO_MEMORY_MB`)
 - [ ] Provision studio machine on demand (or per org)
 - [ ] Auto-suspend/resume (cost control)
 - [ ] Preview → Edit transition (route user to the right machine)
@@ -300,6 +309,15 @@ SAAS_MODE=true                          # Enable SaaS features
 # FLY_STUDIO_PORT_START=3100
 # FLY_STUDIO_PUBLIC_HOST=vivd-studio-dev.fly.dev
 # FLY_STUDIO_PUBLIC_PROTOCOL=https
+# FLY_STUDIO_CPU_KIND=shared
+# FLY_STUDIO_CPUS=1
+# FLY_STUDIO_MEMORY_MB=1024
+# FLY_STUDIO_IDLE_TIMEOUT_MS=120000
+# FLY_STUDIO_IDLE_CHECK_INTERVAL_MS=30000
+# DEVSERVER_INSTALL_TIMEOUT_MS=900000
+# VIVD_PACKAGE_CACHE_DIR=/home/studio/opencode-data/package-cache
+# DEVSERVER_NODE_MODULES_CACHE=1
+# STUDIO_HOST=0.0.0.0
 # FLY_STUDIO_ENV_PASSTHROUGH=GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS
 # ... existing env vars
 ```

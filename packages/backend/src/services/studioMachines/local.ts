@@ -157,7 +157,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     const existing = this.studios.get(key);
     if (existing) {
-      existing.lastActivityAt = new Date();
+      this.touch(args.projectSlug, args.version);
       return {
         studioId: existing.studioId,
         url: this.getPublicUrl(existing.port),
@@ -292,6 +292,12 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return { studioId, url: this.getPublicUrl(port), port };
   }
 
+  touch(projectSlug: string, version: number): void {
+    const studio = this.studios.get(this.key(projectSlug, version));
+    if (!studio) return;
+    studio.lastActivityAt = new Date();
+  }
+
   stop(projectSlug: string, version: number): void {
     const key = this.key(projectSlug, version);
     const studio = this.studios.get(key);
@@ -304,14 +310,14 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     this.studios.delete(key);
   }
 
-  getUrl(projectSlug: string, version: number): string | null {
+  async getUrl(projectSlug: string, version: number): Promise<string | null> {
     const studio = this.studios.get(this.key(projectSlug, version));
     if (!studio) return null;
-    studio.lastActivityAt = new Date();
+    this.touch(projectSlug, version);
     return this.getPublicUrl(studio.port);
   }
 
-  isRunning(projectSlug: string, version: number): boolean {
+  async isRunning(projectSlug: string, version: number): Promise<boolean> {
     return this.studios.has(this.key(projectSlug, version));
   }
 

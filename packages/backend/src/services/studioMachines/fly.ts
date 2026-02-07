@@ -61,6 +61,18 @@ function parseIntOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value || "", 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value || "", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return parsed;
+}
+
 export class FlyStudioMachineProvider implements StudioMachineProvider {
   kind = "fly" as const;
 
@@ -68,23 +80,40 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     null;
   private inflight = new Map<string, Promise<StudioMachineStartResult>>();
   private refreshInterval: NodeJS.Timeout | null = null;
+  private idleCleanupInterval: NodeJS.Timeout | null = null;
+  private lastActivityByStudioKey = new Map<string, number>();
+  private idleStopInFlight = new Set<string>();
 
   constructor() {
     // Avoid log spam if Fly isn't configured yet.
     if (!process.env.FLY_API_TOKEN || !process.env.FLY_STUDIO_APP) return;
 
-    // Best-effort background refresh so `getUrl()` / `isRunning()` can work
-    // without making the provider interface async.
+    // Best-effort background refresh to reduce latency for status checks.
     this.refreshInterval = setInterval(() => {
       void this.refreshMachines();
     }, 5_000);
     // Don't keep the backend process alive just to refresh the Fly cache.
     this.refreshInterval.unref?.();
     void this.refreshMachines();
+
+    if (this.idleTimeoutMs > 0) {
+      this.idleCleanupInterval = setInterval(() => {
+        void this.stopIdleMachines();
+      }, this.idleCheckIntervalMs);
+      this.idleCleanupInterval.unref?.();
+      void this.stopIdleMachines();
+    }
   }
 
   private key(projectSlug: string, version: number): string {
     return `${projectSlug}:${version}`;
+  }
+
+  private machineNameFor(projectSlug: string, version: number): string {
+    const machineNameBase = sanitizeForFlyAppId(`studio-${projectSlug}-v${version}`);
+    return machineNameBase.length > 45
+      ? machineNameBase.slice(0, 45)
+      : machineNameBase;
   }
 
   private get token(): string {
@@ -135,6 +164,32 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     const raw = process.env.STUDIO_MACHINE_START_TIMEOUT_MS || "300000";
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : 300_000;
+  }
+
+  private get idleTimeoutMs(): number {
+    return parseNonNegativeInt(process.env.FLY_STUDIO_IDLE_TIMEOUT_MS, 120_000);
+  }
+
+  private get idleCheckIntervalMs(): number {
+    return parseNonNegativeInt(
+      process.env.FLY_STUDIO_IDLE_CHECK_INTERVAL_MS,
+      30_000,
+    );
+  }
+
+  private get cpuKind(): "shared" | "performance" {
+    const configured = (process.env.FLY_STUDIO_CPU_KIND || "shared")
+      .trim()
+      .toLowerCase();
+    return configured === "performance" ? "performance" : "shared";
+  }
+
+  private get cpuCount(): number {
+    return parsePositiveInt(process.env.FLY_STUDIO_CPUS, 1);
+  }
+
+  private get memoryMb(): number {
+    return Math.max(256, parsePositiveInt(process.env.FLY_STUDIO_MEMORY_MB, 1024));
   }
 
   private async flyFetch<T>(
@@ -195,6 +250,47 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     }
   }
 
+  private async stopIdleMachines(): Promise<void> {
+    const idleTimeoutMs = this.idleTimeoutMs;
+    if (idleTimeoutMs <= 0) return;
+
+    const now = Date.now();
+    const machines = await this.listMachines();
+
+    for (const machine of machines) {
+      if (machine.state !== "started") continue;
+
+      const studioKey = this.getStudioKeyFromMachine(machine);
+      if (!studioKey) continue;
+
+      const lastActivity = this.lastActivityByStudioKey.get(studioKey);
+      if (!lastActivity) {
+        this.lastActivityByStudioKey.set(studioKey, now);
+        continue;
+      }
+
+      if (now - lastActivity < idleTimeoutMs) continue;
+      if (this.idleStopInFlight.has(studioKey)) continue;
+
+      this.idleStopInFlight.add(studioKey);
+      try {
+        await this.stopMachine(machine.id);
+        this.lastActivityByStudioKey.delete(studioKey);
+        const idleSeconds = Math.max(1, Math.round((now - lastActivity) / 1000));
+        console.log(
+          `[FlyMachines] Stopped idle machine ${machine.id} for ${studioKey} after ${idleSeconds}s without keepalive`,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[FlyMachines] Failed to stop idle machine ${machine.id} for ${studioKey}: ${message}`,
+        );
+      } finally {
+        this.idleStopInFlight.delete(studioKey);
+      }
+    }
+  }
+
   private findMachine(
     machines: FlyMachine[],
     projectSlug: string,
@@ -208,6 +304,21 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           m.metadata?.vivd_project_version === v,
       ) || null
     );
+  }
+
+  private findMachineByName(machines: FlyMachine[], machineName: string): FlyMachine | null {
+    return machines.find((machine) => machine.name === machineName) || null;
+  }
+
+  private getStudioKeyFromMachine(machine: FlyMachine): string | null {
+    const projectSlug = machine.metadata?.vivd_project_slug;
+    const version = parseIntOrNull(machine.metadata?.vivd_project_version);
+    if (!projectSlug || !version) return null;
+    return this.key(projectSlug, version);
+  }
+
+  private touchKey(studioKey: string): void {
+    this.lastActivityByStudioKey.set(studioKey, Date.now());
   }
 
   private getMachineExternalPort(machine: FlyMachine): number | null {
@@ -272,6 +383,65 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     );
   }
 
+  private async ensureExistingMachineRunning(
+    existing: FlyMachine,
+    args: StudioMachineStartArgs,
+    studioKey: string,
+  ): Promise<StudioMachineStartResult> {
+    const port = this.getMachineExternalPort(existing);
+    if (!port) {
+      throw new Error(
+        `[FlyMachines] Found machine ${existing.id} for ${args.projectSlug}/v${args.version} but could not determine its external port. Destroy it or recreate it.`,
+      );
+    }
+
+    if (existing.state !== "started") {
+      await this.startMachine(existing.id);
+    }
+
+    const url = this.getPublicUrlForPort(port);
+    await this.waitForReady({
+      machineId: existing.id,
+      url,
+      timeoutMs: this.startTimeoutMs,
+    });
+
+    const studioId =
+      existing.metadata?.vivd_studio_id ||
+      existing.config?.env?.STUDIO_ID ||
+      args.env.STUDIO_ID ||
+      crypto.randomUUID();
+
+    this.touchKey(studioKey);
+    return { studioId, url, port };
+  }
+
+  private async recoverCreateNameConflict(
+    error: unknown,
+    machineName: string,
+  ): Promise<FlyMachine | null> {
+    const message = error instanceof Error ? error.message : String(error);
+    const normalized = message.toLowerCase();
+    const isNameConflict =
+      normalized.includes("already_exists") &&
+      normalized.includes("unique machine name");
+    if (!isNameConflict) return null;
+
+    const machineIdMatch = message.match(/machine ID ([a-z0-9]+)/i);
+    const machineId = machineIdMatch?.[1];
+    if (machineId) {
+      try {
+        return await this.getMachine(machineId);
+      } catch {
+        // Fall through to list-based lookup.
+      }
+    }
+
+    this.machinesCache = null;
+    const machines = await this.listMachines();
+    return this.findMachineByName(machines, machineName);
+  }
+
   private allocatePort(machines: FlyMachine[]): number {
     const used = new Set<number>();
     for (const machine of machines) {
@@ -319,7 +489,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
     // Optional passthrough for local-first testing (keeps config explicit).
     const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH ||
-      "GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION")
+      "GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE")
       .split(",")
       .map((k) => k.trim())
       .filter(Boolean);
@@ -347,35 +517,15 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   private async ensureRunningInner(
     args: StudioMachineStartArgs,
   ): Promise<StudioMachineStartResult> {
+    const studioKey = this.key(args.projectSlug, args.version);
+    const machineName = this.machineNameFor(args.projectSlug, args.version);
     const machines = await this.listMachines();
-    const existing = this.findMachine(machines, args.projectSlug, args.version);
+    const existing =
+      this.findMachine(machines, args.projectSlug, args.version) ||
+      this.findMachineByName(machines, machineName);
 
     if (existing) {
-      const port = this.getMachineExternalPort(existing);
-      if (!port) {
-        throw new Error(
-          `[FlyMachines] Found machine ${existing.id} for ${args.projectSlug}/v${args.version} but could not determine its external port. Destroy it or recreate it.`,
-        );
-      }
-
-      if (existing.state !== "started") {
-        await this.startMachine(existing.id);
-      }
-
-      const url = this.getPublicUrlForPort(port);
-      await this.waitForReady({
-        machineId: existing.id,
-        url,
-        timeoutMs: this.startTimeoutMs,
-      });
-
-      const studioId =
-        existing.metadata?.vivd_studio_id ||
-        existing.config?.env?.STUDIO_ID ||
-        args.env.STUDIO_ID ||
-        crypto.randomUUID();
-
-      return { studioId, url, port };
+      return this.ensureExistingMachineRunning(existing, args, studioKey);
     }
 
     const port = this.allocatePort(machines);
@@ -383,42 +533,47 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
     const env = this.buildStudioEnv({ ...args, studioId });
 
-    const machineNameBase = sanitizeForFlyAppId(`studio-${args.projectSlug}-v${args.version}`);
-    const machineName =
-      machineNameBase.length > 45 ? machineNameBase.slice(0, 45) : machineNameBase;
-
-    const create = await this.flyFetch<FlyMachine>("/machines", {
-      method: "POST",
-      body: JSON.stringify({
-        name: machineName || undefined,
-        region: this.region,
-        config: {
-          image: this.image,
-          guest: {
-            cpu_kind: "shared",
-            cpus: 1,
-            memory_mb: 1024,
-          },
-          env,
-          services: [
-            {
-              protocol: "tcp",
-              internal_port: 3100,
-              ports: [{ port, handlers: ["tls", "http"] }],
-              autostop: "suspend",
-              autostart: true,
-              min_machines_running: 0,
+    let create: FlyMachine;
+    try {
+      create = await this.flyFetch<FlyMachine>("/machines", {
+        method: "POST",
+        body: JSON.stringify({
+          name: machineName || undefined,
+          region: this.region,
+          config: {
+            image: this.image,
+            guest: {
+              cpu_kind: this.cpuKind,
+              cpus: this.cpuCount,
+              memory_mb: this.memoryMb,
             },
-          ],
-        },
-        metadata: {
-          vivd_project_slug: args.projectSlug,
-          vivd_project_version: String(args.version),
-          vivd_external_port: String(port),
-          vivd_studio_id: studioId,
-        },
-      }),
-    });
+            env,
+            services: [
+              {
+                protocol: "tcp",
+                internal_port: 3100,
+                ports: [{ port, handlers: ["tls", "http"] }],
+                autostop: "suspend",
+                autostart: true,
+                min_machines_running: 0,
+              },
+            ],
+          },
+          metadata: {
+            vivd_project_slug: args.projectSlug,
+            vivd_project_version: String(args.version),
+            vivd_external_port: String(port),
+            vivd_studio_id: studioId,
+          },
+        }),
+      });
+    } catch (error) {
+      const recovered = await this.recoverCreateNameConflict(error, machineName);
+      if (recovered) {
+        return this.ensureExistingMachineRunning(recovered, args, studioKey);
+      }
+      throw error;
+    }
 
     const url = this.getPublicUrlForPort(port);
     await this.waitForReady({
@@ -427,39 +582,60 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       timeoutMs: this.startTimeoutMs,
     });
 
+    this.touchKey(studioKey);
     return { studioId, url, port };
   }
 
+  touch(projectSlug: string, version: number): void {
+    this.touchKey(this.key(projectSlug, version));
+  }
+
   async stop(projectSlug: string, version: number): Promise<void> {
+    const studioKey = this.key(projectSlug, version);
+    this.lastActivityByStudioKey.delete(studioKey);
+
     const machines = await this.listMachines();
-    const existing = this.findMachine(machines, projectSlug, version);
+    const existing =
+      this.findMachine(machines, projectSlug, version) ||
+      this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
     if (!existing) return;
     await this.stopMachine(existing.id);
   }
 
-  getUrl(projectSlug: string, version: number): string | null {
-    const cached = this.machinesCache?.machines;
-    if (!cached) {
-      void this.refreshMachines();
+  async getUrl(projectSlug: string, version: number): Promise<string | null> {
+    try {
+      const machines = await this.listMachines();
+      const existing =
+        this.findMachine(machines, projectSlug, version) ||
+        this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
+      if (!existing) return null;
+      if (existing.state !== "started") return null;
+      const port = this.getMachineExternalPort(existing);
+      if (!port) return null;
+      this.touch(projectSlug, version);
+      return this.getPublicUrlForPort(port);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[FlyMachines] getUrl failed for ${projectSlug}/v${version}: ${message}`,
+      );
       return null;
     }
-    if (cached) {
-      const existing = this.findMachine(cached, projectSlug, version);
-      if (!existing) return null;
-      const port = this.getMachineExternalPort(existing);
-      return port ? this.getPublicUrlForPort(port) : null;
-    }
-    return null;
   }
 
-  isRunning(projectSlug: string, version: number): boolean {
-    const cached = this.machinesCache?.machines;
-    if (!cached) {
-      void this.refreshMachines();
+  async isRunning(projectSlug: string, version: number): Promise<boolean> {
+    try {
+      const machines = await this.listMachines();
+      const existing =
+        this.findMachine(machines, projectSlug, version) ||
+        this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
+      return !!existing && existing.state === "started";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[FlyMachines] isRunning failed for ${projectSlug}/v${version}: ${message}`,
+      );
       return false;
     }
-    if (!cached) return false;
-    const existing = this.findMachine(cached, projectSlug, version);
-    return !!existing && existing.state === "started";
   }
 }

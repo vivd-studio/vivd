@@ -18,6 +18,8 @@ const MAX_QUEUE_SIZE = 100;
 const FLUSH_INTERVAL_MS = 5000;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
+const STATUS_MAX_RETRY_ATTEMPTS = 3;
+const STATUS_RETRY_DELAY_MS = 1000;
 
 class UsageReporter {
   private queue: StudioUsageReport[] = [];
@@ -245,36 +247,51 @@ class UsageReporter {
       return null;
     }
 
-    try {
-      // `studioApi.getStatus` is a tRPC query procedure, which expects GET requests.
-      // The `input` querystring should be the raw JSON input (no `{ json: ... }` wrapper).
-      const response = await fetch(
-        `${backendUrl}/api/trpc/studioApi.getStatus?input=${encodeURIComponent(
-          JSON.stringify({ studioId })
-        )}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionToken}`,
-          },
-        }
-      );
+    let attempt = 0;
+    while (attempt < STATUS_MAX_RETRY_ATTEMPTS) {
+      attempt++;
+      try {
+        // `studioApi.getStatus` is a tRPC query procedure, which expects GET requests.
+        // The `input` querystring should be the raw JSON input (no `{ json: ... }` wrapper).
+        const response = await fetch(
+          `${backendUrl}/api/trpc/studioApi.getStatus?input=${encodeURIComponent(
+            JSON.stringify({ studioId })
+          )}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${sessionToken}`,
+            },
+          }
+        );
 
-      if (!response.ok) {
+        if (response.ok) {
+          const data = await response.json();
+          return data.result?.data?.json ?? data.result?.data ?? null;
+        }
+
         const errorText = await response.text().catch(() => "Unknown error");
         console.error(
           `[UsageReporter] Status fetch failed ${response.status}: ${errorText}`
         );
-        return null;
+
+        // Don't retry auth errors.
+        if (response.status === 401 || response.status === 403) {
+          return null;
+        }
+      } catch (err) {
+        console.error(`[UsageReporter] Failed to fetch status (attempt ${attempt}):`, err);
       }
 
-      const data = await response.json();
-      return data.result?.data?.json ?? data.result?.data ?? null;
-    } catch (err) {
-      console.error("[UsageReporter] Failed to fetch status:", err);
-      return null;
+      if (attempt < STATUS_MAX_RETRY_ATTEMPTS) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, STATUS_RETRY_DELAY_MS * attempt)
+        );
+      }
     }
+
+    return null;
   }
 
   /**

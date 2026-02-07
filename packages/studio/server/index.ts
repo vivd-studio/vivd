@@ -307,6 +307,7 @@ const devPreviewProxy = createProxyMiddleware({
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || "3100", 10);
+  const HOST = process.env.STUDIO_HOST || "0.0.0.0";
   const WORKSPACE_DIR =
     process.env.VIVD_WORKSPACE_DIR || process.env.WORKSPACE_DIR;
   const REPO_URL = process.env.REPO_URL;
@@ -857,8 +858,8 @@ export default {};
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  app.listen(PORT, () => {
-    console.log(`Studio server running on http://localhost:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`Studio server running on http://${HOST}:${PORT}`);
   });
 }
 

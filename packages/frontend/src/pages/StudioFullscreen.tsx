@@ -35,6 +35,7 @@ export default function StudioFullscreen() {
       utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
     },
   });
+  const touchStudio = trpc.project.touchStudio.useMutation();
   const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
     { slug: projectSlug!, version },
     {
@@ -75,6 +76,28 @@ export default function StudioFullscreen() {
       return null;
     }
   }, [baseUrl]);
+
+  useEffect(() => {
+    if (!projectSlug || !baseUrl) return;
+
+    const heartbeat = () => {
+      touchStudio.mutate({ slug: projectSlug, version });
+      const healthUrl = new URL("/health", baseUrl).toString();
+      void fetch(healthUrl, {
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+      }).catch(() => {
+        // Keepalive is best-effort.
+      });
+    };
+
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 30_000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [baseUrl, projectSlug, touchStudio.mutate, version]);
 
   // Handle close/minimize requests from the studio iframe.
   useEffect(() => {

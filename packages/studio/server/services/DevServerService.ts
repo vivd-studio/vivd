@@ -1,4 +1,6 @@
-import { spawn, ChildProcess, execSync } from "node:child_process";
+import { spawn, spawnSync, ChildProcess, execSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "path";
 import { detectProjectType, hasNodeModules, type ProjectConfig } from "./projectType.js";
 
@@ -18,12 +20,224 @@ const DEV_SERVER_PORT_START = Math.max(
   1024,
   Number.parseInt(process.env.DEV_SERVER_PORT_START || "5100", 10) || 5100
 );
+const DEVSERVER_INSTALL_TIMEOUT_MS = Math.max(
+  60_000,
+  Number.parseInt(process.env.DEVSERVER_INSTALL_TIMEOUT_MS || "900000", 10) || 900000
+);
+const DEVSERVER_NODE_MODULES_CACHE_ENABLED =
+  process.env.DEVSERVER_NODE_MODULES_CACHE !== "0";
 
 const isDebugEnabled = process.env.DEVSERVER_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
   if (!isDebugEnabled) return;
   console.log("[DevServer DEBUG]", ...args);
 };
+
+function resolveInstallCommand(
+  projectDir: string,
+  packageManager: ProjectConfig["packageManager"]
+): string {
+  if (packageManager === "pnpm") {
+    if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) {
+      return "pnpm install --frozen-lockfile --prefer-offline";
+    }
+    return "pnpm install --prefer-offline";
+  }
+
+  if (packageManager === "yarn") {
+    if (fs.existsSync(path.join(projectDir, "yarn.lock"))) {
+      return "yarn install --frozen-lockfile --prefer-offline";
+    }
+    return "yarn install --prefer-offline";
+  }
+
+  if (
+    fs.existsSync(path.join(projectDir, "package-lock.json")) ||
+    fs.existsSync(path.join(projectDir, "npm-shrinkwrap.json"))
+  ) {
+    return "npm ci --prefer-offline --no-audit --no-fund";
+  }
+
+  return "npm install --prefer-offline --no-audit --no-fund";
+}
+
+function resolveInstallEnv(projectDir: string): NodeJS.ProcessEnv {
+  const installEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    npm_config_audit: "false",
+    npm_config_fund: "false",
+    npm_config_update_notifier: "false",
+  };
+
+  const opencodeDataHome =
+    installEnv.VIVD_OPENCODE_DATA_HOME || installEnv.XDG_DATA_HOME || null;
+  if (!opencodeDataHome) return installEnv;
+
+  const packageCacheRoot = path.join(opencodeDataHome, "package-cache");
+  const npmCacheDir = installEnv.npm_config_cache || path.join(packageCacheRoot, "npm");
+  const pnpmStoreDir =
+    installEnv.pnpm_config_store_dir || path.join(packageCacheRoot, "pnpm-store");
+  const yarnCacheDir = installEnv.YARN_CACHE_FOLDER || path.join(packageCacheRoot, "yarn");
+
+  installEnv.npm_config_cache = npmCacheDir;
+  installEnv.pnpm_config_store_dir = pnpmStoreDir;
+  installEnv.PNPM_STORE_PATH = installEnv.PNPM_STORE_PATH || pnpmStoreDir;
+  installEnv.YARN_CACHE_FOLDER = yarnCacheDir;
+
+  fs.mkdirSync(npmCacheDir, { recursive: true });
+  fs.mkdirSync(pnpmStoreDir, { recursive: true });
+  fs.mkdirSync(yarnCacheDir, { recursive: true });
+
+  debugLog(
+    "Using package-manager cache",
+    JSON.stringify({
+      npmCacheDir,
+      pnpmStoreDir,
+      yarnCacheDir,
+      projectDir,
+    })
+  );
+
+  return installEnv;
+}
+
+function getPackageCacheRoot(): string | null {
+  if (process.env.VIVD_PACKAGE_CACHE_DIR) {
+    return process.env.VIVD_PACKAGE_CACHE_DIR;
+  }
+
+  const opencodeDataHome =
+    process.env.VIVD_OPENCODE_DATA_HOME || process.env.XDG_DATA_HOME || null;
+  if (!opencodeDataHome) return null;
+  return path.join(opencodeDataHome, "package-cache");
+}
+
+function getNodeModulesCacheArchivePath(
+  projectDir: string,
+  packageManager: ProjectConfig["packageManager"]
+): string | null {
+  if (!DEVSERVER_NODE_MODULES_CACHE_ENABLED) return null;
+
+  const packageCacheRoot = getPackageCacheRoot();
+  if (!packageCacheRoot) return null;
+
+  const filesForHash: string[] = [];
+  const packageJsonPath = path.join(projectDir, "package.json");
+  if (fs.existsSync(packageJsonPath)) {
+    filesForHash.push(packageJsonPath);
+  }
+
+  const lockfileCandidates =
+    packageManager === "pnpm"
+      ? ["pnpm-lock.yaml"]
+      : packageManager === "yarn"
+        ? ["yarn.lock"]
+        : ["package-lock.json", "npm-shrinkwrap.json"];
+
+  for (const lockfileName of lockfileCandidates) {
+    const lockfilePath = path.join(projectDir, lockfileName);
+    if (fs.existsSync(lockfilePath)) {
+      filesForHash.push(lockfilePath);
+    }
+  }
+
+  if (filesForHash.length === 0) return null;
+
+  const hash = createHash("sha256");
+  for (const filePath of filesForHash) {
+    hash.update(path.basename(filePath));
+    hash.update("\n");
+    hash.update(fs.readFileSync(filePath));
+    hash.update("\n");
+  }
+
+  const digest = hash.digest("hex").slice(0, 24);
+  return path.join(packageCacheRoot, "node-modules", `${packageManager}-${digest}.tar.gz`);
+}
+
+function restoreNodeModulesFromCache(
+  projectDir: string,
+  packageManager: ProjectConfig["packageManager"]
+): boolean {
+  const archivePath = getNodeModulesCacheArchivePath(projectDir, packageManager);
+  if (!archivePath || !fs.existsSync(archivePath)) return false;
+
+  console.log(
+    `[DevServer] Restoring node_modules cache (${path.basename(archivePath)})`
+  );
+
+  const nodeModulesDir = path.join(projectDir, "node_modules");
+  fs.rmSync(nodeModulesDir, { recursive: true, force: true });
+
+  const result = spawnSync("tar", ["-xzf", archivePath, "-C", projectDir], {
+    stdio: "pipe",
+    timeout: DEVSERVER_INSTALL_TIMEOUT_MS,
+  });
+  if (result.status === 0 && hasNodeModules(projectDir)) {
+    return true;
+  }
+
+  const stderr = result.stderr?.toString?.().trim();
+  if (stderr) {
+    console.warn(`[DevServer] Failed to restore node_modules cache: ${stderr}`);
+  } else {
+    console.warn("[DevServer] Failed to restore node_modules cache");
+  }
+  return false;
+}
+
+function writeNodeModulesCacheInBackground(
+  projectDir: string,
+  packageManager: ProjectConfig["packageManager"]
+): void {
+  const archivePath = getNodeModulesCacheArchivePath(projectDir, packageManager);
+  if (!archivePath) return;
+  if (!hasNodeModules(projectDir)) return;
+
+  fs.mkdirSync(path.dirname(archivePath), { recursive: true });
+  const tmpArchivePath = `${archivePath}.tmp-${Date.now()}`;
+
+  const proc = spawn(
+    "tar",
+    [
+      "-czf",
+      tmpArchivePath,
+      "--exclude=node_modules/.cache",
+      "--exclude=node_modules/.vite",
+      "--exclude=node_modules/**/.cache",
+      "-C",
+      projectDir,
+      "node_modules",
+    ],
+    {
+      stdio: "pipe",
+    }
+  );
+
+  proc.on("exit", (code) => {
+    if (code === 0) {
+      try {
+        fs.renameSync(tmpArchivePath, archivePath);
+        console.log(
+          `[DevServer] Saved node_modules cache (${path.basename(archivePath)})`
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[DevServer] Failed to finalize node_modules cache: ${msg}`);
+        fs.rmSync(tmpArchivePath, { force: true });
+      }
+      return;
+    }
+
+    const stderr = proc.stderr?.read?.()?.toString?.().trim();
+    if (stderr) {
+      console.warn(`[DevServer] Failed to write node_modules cache: ${stderr}`);
+    } else {
+      console.warn("[DevServer] Failed to write node_modules cache");
+    }
+    fs.rmSync(tmpArchivePath, { force: true });
+  });
+}
 
 /**
  * Manages a single dev server instance for the studio workspace.
@@ -124,31 +338,39 @@ export class DevServerService {
     serverInfo: DevServerInfo
   ): Promise<void> {
     try {
+      let installedDependencies = false;
+
       // Install dependencies if needed
       if (!hasNodeModules(projectDir)) {
-        console.log(`[DevServer] Installing dependencies in ${projectDir}`);
-        serverInfo.status = "installing";
+        const restoredFromCache = restoreNodeModulesFromCache(
+          projectDir,
+          config.packageManager
+        );
 
-        const installCmd =
-          config.packageManager === "pnpm"
-            ? "pnpm install"
-            : config.packageManager === "yarn"
-            ? "yarn install"
-            : "npm install";
+        if (!restoredFromCache) {
+          console.log(`[DevServer] Installing dependencies in ${projectDir}`);
+          serverInfo.status = "installing";
 
-        try {
-          execSync(installCmd, {
-            cwd: projectDir,
-            stdio: "pipe",
-            encoding: "utf-8",
-            timeout: 5 * 60 * 1000,
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[DevServer] Failed to install dependencies: ${msg}`);
-          serverInfo.status = "error";
-          serverInfo.error = `npm install failed: ${msg}`;
-          return;
+          const installCmd = resolveInstallCommand(projectDir, config.packageManager);
+          const installEnv = resolveInstallEnv(projectDir);
+          debugLog(`Install command: ${installCmd}`);
+
+          try {
+            execSync(installCmd, {
+              cwd: projectDir,
+              env: installEnv,
+              stdio: "pipe",
+              encoding: "utf-8",
+              timeout: DEVSERVER_INSTALL_TIMEOUT_MS,
+            });
+            installedDependencies = true;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[DevServer] Failed to install dependencies: ${msg}`);
+            serverInfo.status = "error";
+            serverInfo.error = `${config.packageManager} install failed: ${msg}`;
+            return;
+          }
         }
       }
 
@@ -156,6 +378,10 @@ export class DevServerService {
 
       // Start the dev server
       await this.spawnDevServer(projectDir, config, port, basePath, serverInfo);
+
+      if (installedDependencies && serverInfo.status === "ready") {
+        writeNodeModulesCacheInBackground(projectDir, config.packageManager);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[DevServer] Error starting dev server: ${msg}`);

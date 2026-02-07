@@ -51,6 +51,7 @@ export default function EmbeddedStudio() {
       utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
     },
   });
+  const touchStudio = trpc.project.touchStudio.useMutation();
   const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
     { slug: projectSlug!, version: studioVersion },
     {
@@ -100,21 +101,46 @@ export default function EmbeddedStudio() {
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
   };
 
-  const studioOrigin = useMemo(() => {
-    const baseUrl = editRequested
+  const studioBaseUrl = useMemo(() => {
+    return editRequested
       ? startStudio.data?.success
         ? startStudio.data.url
         : null
       : studioUrlQuery.data?.status === "running"
         ? studioUrlQuery.data.url
         : null;
-    if (!baseUrl) return null;
+  }, [editRequested, startStudio.data, studioUrlQuery.data]);
+
+  const studioOrigin = useMemo(() => {
+    if (!studioBaseUrl) return null;
     try {
-      return new URL(baseUrl).origin;
+      return new URL(studioBaseUrl).origin;
     } catch {
       return null;
     }
-  }, [editRequested, startStudio.data, studioUrlQuery.data]);
+  }, [studioBaseUrl]);
+
+  useEffect(() => {
+    if (!projectSlug || !studioBaseUrl) return;
+
+    const heartbeat = () => {
+      touchStudio.mutate({ slug: projectSlug, version: studioVersion });
+      const healthUrl = new URL("/health", studioBaseUrl).toString();
+      void fetch(healthUrl, {
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+      }).catch(() => {
+        // Keepalive is best-effort.
+      });
+    };
+
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 30_000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [projectSlug, studioBaseUrl, studioVersion, touchStudio.mutate]);
 
   // Listen for studio events from the iframe (cross-origin via postMessage).
   useEffect(() => {
@@ -137,16 +163,9 @@ export default function EmbeddedStudio() {
   }, [navigate, projectSlug, studioOrigin, studioVersion]);
 
   const studioIframeSrc = useMemo(() => {
-    const baseUrl = editRequested
-      ? startStudio.data?.success
-        ? startStudio.data.url
-        : null
-      : studioUrlQuery.data?.status === "running"
-        ? studioUrlQuery.data.url
-        : null;
-    if (!baseUrl) return null;
+    if (!studioBaseUrl) return null;
 
-    const url = new URL("/vivd-studio", baseUrl);
+    const url = new URL("/vivd-studio", studioBaseUrl);
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
@@ -159,7 +178,7 @@ export default function EmbeddedStudio() {
       ).toString(),
     );
     return url.toString();
-  }, [editRequested, projectSlug, startStudio.data, studioUrlQuery.data, studioVersion]);
+  }, [projectSlug, studioBaseUrl, studioVersion]);
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;

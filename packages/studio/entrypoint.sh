@@ -14,6 +14,25 @@ if [ -z "$XDG_DATA_HOME" ]; then
   export XDG_DATA_HOME="$VIVD_OPENCODE_DATA_HOME"
 fi
 
+if [ -z "$VIVD_PACKAGE_CACHE_DIR" ]; then
+  export VIVD_PACKAGE_CACHE_DIR="${VIVD_OPENCODE_DATA_HOME}/package-cache"
+fi
+mkdir -p "$VIVD_PACKAGE_CACHE_DIR"
+
+if [ -z "$npm_config_cache" ]; then
+  export npm_config_cache="${VIVD_PACKAGE_CACHE_DIR}/npm"
+fi
+if [ -z "$pnpm_config_store_dir" ]; then
+  export pnpm_config_store_dir="${VIVD_PACKAGE_CACHE_DIR}/pnpm-store"
+fi
+if [ -z "$PNPM_STORE_PATH" ]; then
+  export PNPM_STORE_PATH="$pnpm_config_store_dir"
+fi
+if [ -z "$YARN_CACHE_FOLDER" ]; then
+  export YARN_CACHE_FOLDER="${VIVD_PACKAGE_CACHE_DIR}/yarn"
+fi
+mkdir -p "$npm_config_cache" "$pnpm_config_store_dir" "$YARN_CACHE_FOLDER"
+
 write_opencode_auth() {
   if [ -z "$GOOGLE_API_KEY" ]; then
     return 0
@@ -107,6 +126,32 @@ sync_opencode() {
   aws_s3_sync "$VIVD_OPENCODE_DATA_HOME" "$S3_OPENCODE_URI"
 }
 
+hydrate_source() {
+  if [ -z "$S3_SOURCE_URI" ]; then
+    return 0
+  fi
+
+  echo "Hydrating source from S3..."
+  echo "  Source: ${S3_SOURCE_URI}"
+  echo "  Target: ${VIVD_WORKSPACE_DIR}"
+  mkdir -p "$VIVD_WORKSPACE_DIR"
+  aws_s3_sync "$S3_SOURCE_URI" "$VIVD_WORKSPACE_DIR" \
+    --exclude "node_modules/*" \
+    --exclude ".vivd/opencode-data/*"
+}
+
+hydrate_opencode() {
+  if [ -z "$S3_OPENCODE_URI" ]; then
+    return 0
+  fi
+
+  echo "Hydrating OpenCode data from S3..."
+  echo "  Source: ${S3_OPENCODE_URI}"
+  echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
+  mkdir -p "$VIVD_OPENCODE_DATA_HOME"
+  aws_s3_sync "$S3_OPENCODE_URI" "$VIVD_OPENCODE_DATA_HOME"
+}
+
 SYNC_ENABLED="0"
 if { [ -n "$S3_SOURCE_URI" ] || [ -n "$S3_OPENCODE_URI" ]; } && command -v aws >/dev/null 2>&1; then
   SYNC_ENABLED="1"
@@ -119,22 +164,25 @@ if [ "$SYNC_ENABLED" = "1" ]; then
     mv "$LEGACY_OPENCODE_DIR" "$VIVD_OPENCODE_DATA_HOME" || true
   fi
 
+  HYDRATE_SOURCE_PID=""
+  HYDRATE_OPENCODE_PID=""
+
   if [ -n "$S3_SOURCE_URI" ]; then
-    echo "Hydrating source from S3..."
-    echo "  Source: ${S3_SOURCE_URI}"
-    echo "  Target: ${VIVD_WORKSPACE_DIR}"
-    mkdir -p "$VIVD_WORKSPACE_DIR"
-    aws_s3_sync "$S3_SOURCE_URI" "$VIVD_WORKSPACE_DIR" \
-      --exclude "node_modules/*" \
-      --exclude ".vivd/opencode-data/*" || true
+    (hydrate_source) &
+    HYDRATE_SOURCE_PID="$!"
   fi
 
   if [ -n "$S3_OPENCODE_URI" ]; then
-    echo "Hydrating OpenCode data from S3..."
-    echo "  Source: ${S3_OPENCODE_URI}"
-    echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
-    mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-    aws_s3_sync "$S3_OPENCODE_URI" "$VIVD_OPENCODE_DATA_HOME" || true
+    (hydrate_opencode) &
+    HYDRATE_OPENCODE_PID="$!"
+  fi
+
+  if [ -n "$HYDRATE_SOURCE_PID" ]; then
+    wait "$HYDRATE_SOURCE_PID" || true
+  fi
+
+  if [ -n "$HYDRATE_OPENCODE_PID" ]; then
+    wait "$HYDRATE_OPENCODE_PID" || true
   fi
 
   write_opencode_auth

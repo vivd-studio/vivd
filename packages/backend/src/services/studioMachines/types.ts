@@ -20,7 +20,8 @@ export interface StudioMachineProvider {
   kind: StudioMachineProviderKind;
 
   ensureRunning(args: StudioMachineStartArgs): Promise<StudioMachineStartResult>;
+  touch(projectSlug: string, version: number): void | Promise<void>;
   stop(projectSlug: string, version: number): void | Promise<void>;
-  getUrl(projectSlug: string, version: number): string | null;
-  isRunning(projectSlug: string, version: number): boolean;
+  getUrl(projectSlug: string, version: number): Promise<string | null>;
+  isRunning(projectSlug: string, version: number): Promise<boolean>;
 }

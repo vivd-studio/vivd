@@ -23,7 +23,10 @@ export const studioProcedures = {
     )
     .query(async ({ input }) => {
       // Check if studio is already running
-      const existingUrl = studioMachineProvider.getUrl(input.slug, input.version);
+      const existingUrl = await studioMachineProvider.getUrl(
+        input.slug,
+        input.version,
+      );
       if (existingUrl) {
         return {
           url: existingUrl,
@@ -111,6 +114,21 @@ export const studioProcedures = {
     }),
 
   /**
+   * Keep a studio instance alive while the editor UI is open.
+   */
+  touchStudio: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await studioMachineProvider.touch(input.slug, input.version);
+      return { success: true };
+    }),
+
+  /**
    * Check if a studio is running.
    */
   isStudioRunning: projectMemberProcedure
@@ -121,9 +139,14 @@ export const studioProcedures = {
       })
     )
     .query(async ({ input }) => {
+      const running = await studioMachineProvider.isRunning(
+        input.slug,
+        input.version,
+      );
+      const url = await studioMachineProvider.getUrl(input.slug, input.version);
       return {
-        running: studioMachineProvider.isRunning(input.slug, input.version),
-        url: studioMachineProvider.getUrl(input.slug, input.version),
+        running,
+        url,
       };
     }),
 };
