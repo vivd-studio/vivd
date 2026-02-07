@@ -288,16 +288,16 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
       this.idleStopInFlight.add(studioKey);
       try {
-        await this.stopMachine(machine.id);
+        const action = await this.suspendOrStopMachine(machine.id);
         this.lastActivityByStudioKey.delete(studioKey);
         const idleSeconds = Math.max(1, Math.round((now - lastActivity) / 1000));
         console.log(
-          `[FlyMachines] Stopped idle machine ${machine.id} for ${studioKey} after ${idleSeconds}s without keepalive`,
+          `[FlyMachines] ${action === "suspended" ? "Suspended" : "Stopped"} idle machine ${machine.id} for ${studioKey} after ${idleSeconds}s without keepalive`,
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(
-          `[FlyMachines] Failed to stop idle machine ${machine.id} for ${studioKey}: ${message}`,
+          `[FlyMachines] Failed to suspend/stop idle machine ${machine.id} for ${studioKey}: ${message}`,
         );
       } finally {
         this.idleStopInFlight.delete(studioKey);
@@ -357,6 +357,24 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
   private async stopMachine(machineId: string): Promise<void> {
     await this.flyFetch(`/machines/${machineId}/stop`, { method: "POST" });
+  }
+
+  private async suspendMachine(machineId: string): Promise<void> {
+    await this.flyFetch(`/machines/${machineId}/suspend`, { method: "POST" });
+  }
+
+  private async suspendOrStopMachine(machineId: string): Promise<"suspended" | "stopped"> {
+    try {
+      await this.suspendMachine(machineId);
+      return "suspended";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[FlyMachines] Failed to suspend machine ${machineId}: ${message}; falling back to stop.`,
+      );
+      await this.stopMachine(machineId);
+      return "stopped";
+    }
   }
 
   private async getMachine(machineId: string): Promise<FlyMachine> {
@@ -613,7 +631,9 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       this.findMachine(machines, projectSlug, version) ||
       this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
     if (!existing) return;
-    await this.stopMachine(existing.id);
+    if (existing.state === "started") {
+      await this.suspendOrStopMachine(existing.id);
+    }
   }
 
   async getUrl(projectSlug: string, version: number): Promise<string | null> {

@@ -132,6 +132,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 - [x] Build `@vivd/shared` in studio Dockerfile (prevents missing `@vivd/shared/dist/*` at runtime)
 - [x] Local dev: isolate per-studio internal ports (dev server + OpenCode) via env offsets
 - [x] Add studio image to GitHub Actions (build + push GHCR)
+- [x] Publish workflow builds/pushes `vivd-studio` first (faster studio iteration)
 - [x] Tag strategy: publish both tag forms (`vX.Y.Z` and `X.Y.Z`) + `latest`
 - [x] Add branch-safe studio test workflow (`build-studio-test.yml`) without `latest` or deployment hooks
 - [ ] Add minimal smoke checks (container boots + `/health` endpoint)
@@ -209,7 +210,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 - [x] Backend: basic Fly.io studio machine provider (local-first; no DB persistence)
 - [x] Frontend keepalive + backend `touchStudio` heartbeat (prevents premature Fly suspend while editing)
-- [x] Explicit backend idle stop for Fly machines (`FLY_STUDIO_IDLE_TIMEOUT_MS`, default 120s)
+- [x] Explicit backend idle suspend for Fly machines (`FLY_STUDIO_IDLE_TIMEOUT_MS`, default 120s; stop fallback if suspend unsupported)
 - [x] Fly machine reuse on reopen (lookup by metadata/name, recover from name-collision `already_exists`)
 - [x] Faster machine bootstrap: hydrate source + OpenCode data from object storage in parallel
 - [x] Startup resilience: retry initial usage-status call to backend on transient network failures
@@ -219,7 +220,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 - [x] Fly machine sizing tunables (`FLY_STUDIO_CPU_KIND`, `FLY_STUDIO_CPUS`, `FLY_STUDIO_MEMORY_MB`)
 - [x] Keep studio responsive during dependency install (async install + pause S3 sync loop briefly)
 - [ ] Provision studio machine on demand (or per org)
-- [ ] Auto-suspend/resume (cost control)
+- [x] Auto-suspend/resume (cost control)
 - [ ] Preview → Edit transition (route user to the right machine)
 - [ ] Machine auth: control plane issues scoped, short-lived tokens
 - [ ] R2 hydration + sync: ensure machines can start/stop without data loss
