@@ -4,6 +4,8 @@ import fs from "fs-extra";
 import path from "path";
 import os from "os";
 
+const WORKING_COMMIT_MARKER = ".vivd-working-commit";
+
 export class WorkspaceManager {
   private workspaceDir: string | null = null;
   private git: SimpleGit | null = null;
@@ -131,13 +133,27 @@ export class WorkspaceManager {
       throw new Error("Workspace not initialized");
     }
 
-    const status = await this.git.status();
-    if (status.isClean()) {
+    // Stage all changes
+    await this.git.raw(["add", "-A"]);
+
+    // Ensure our internal marker file is never committed and doesn't count as a "change"
+    try {
+      await this.git.raw(["reset", "HEAD", WORKING_COMMIT_MARKER]);
+    } catch {
+      // Ignore if file isn't staged or doesn't exist
+    }
+
+    // Only commit if there are staged changes
+    const staged = await this.git.raw(["diff", "--cached", "--name-only"]);
+    if (!staged.trim()) {
       return null;
     }
 
-    await this.git.add(".");
     const result = await this.git.commit(message);
+
+    // We're now on a new HEAD commit; clear the working-commit marker.
+    await this.clearWorkingCommit();
+
     return result.commit;
   }
 
@@ -146,8 +162,35 @@ export class WorkspaceManager {
       return false;
     }
 
-    const status = await this.git.status();
-    return !status.isClean();
+    const workingCommit = await this.getWorkingCommit();
+
+    if (workingCommit) {
+      // Compare against the loaded commit so just loading an older version doesn't count as "changes"
+      const diff = await this.git.raw(["diff", "--name-only", workingCommit]);
+      const diffFiles = diff
+        .trim()
+        .split("\n")
+        .filter((f) => f && f !== WORKING_COMMIT_MARKER);
+
+      const untracked = await this.git.raw([
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+      ]);
+      const untrackedFiles = untracked
+        .trim()
+        .split("\n")
+        .filter((f) => f && f !== WORKING_COMMIT_MARKER);
+
+      return diffFiles.length > 0 || untrackedFiles.length > 0;
+    }
+
+    const status = await this.git.raw(["status", "--porcelain"]);
+    const statusLines = status
+      .trim()
+      .split("\n")
+      .filter((line) => line && !line.endsWith(WORKING_COMMIT_MARKER));
+    return statusLines.length > 0;
   }
 
   async getStatus(): Promise<{
@@ -172,6 +215,16 @@ export class WorkspaceManager {
       throw new Error("Workspace not initialized");
     }
 
+    const workingCommit = await this.getWorkingCommit();
+
+    if (workingCommit) {
+      // Remove untracked files (but keep our marker file)
+      await this.git.raw(["clean", "-fd", "-e", WORKING_COMMIT_MARKER]);
+      // Restore to the loaded version
+      await this.git.raw(["checkout", workingCommit, "--", "."]);
+      return;
+    }
+
     // Reset staged changes
     await this.git.reset(["--hard", "HEAD"]);
     // Clean untracked files
@@ -179,7 +232,7 @@ export class WorkspaceManager {
   }
 
   async getHistory(
-    limit: number = 10
+    limit: number = 50
   ): Promise<
     Array<{
       hash: string;
@@ -240,6 +293,79 @@ export class WorkspaceManager {
         });
     } catch {
       return [];
+    }
+  }
+
+  async getCommitCount(): Promise<number> {
+    if (!this.git) return 0;
+    try {
+      const stdout = await this.git.raw(["rev-list", "--count", "HEAD"]);
+      const count = Number.parseInt(stdout.trim(), 10);
+      return Number.isFinite(count) ? count : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  async loadVersion(commitHash: string): Promise<void> {
+    if (!this.git || !this.workspaceDir) {
+      throw new Error("Workspace not initialized");
+    }
+
+    // 1) Clean untracked files
+    await this.git.raw(["clean", "-fd"]);
+
+    // 2) Remove currently tracked files so we don't keep files that exist in HEAD but not in target commit
+    try {
+      const trackedFiles = await this.git.raw(["ls-files"]);
+      const filesToDelete = trackedFiles
+        .split("\n")
+        .map((f) => f.trim())
+        .filter(Boolean);
+
+      for (const file of filesToDelete) {
+        const filePath = path.join(this.workspaceDir, file);
+        if (await fs.pathExists(filePath)) {
+          await fs.remove(filePath);
+        }
+      }
+    } catch (err) {
+      console.warn("[Git] Failed to clean tracked files before load:", err);
+    }
+
+    // 3) Restore files from the specific commit without changing HEAD
+    await this.git.raw(["checkout", commitHash, "--", "."]);
+
+    // Track the loaded commit in a marker file
+    await this.setWorkingCommit(commitHash);
+  }
+
+  async getWorkingCommit(): Promise<string | null> {
+    if (!this.workspaceDir) return null;
+    const markerPath = path.join(this.workspaceDir, WORKING_COMMIT_MARKER);
+    try {
+      const exists = await fs.pathExists(markerPath);
+      if (!exists) return null;
+      const hash = (await fs.readFile(markerPath, "utf-8")).trim();
+      return hash || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async setWorkingCommit(hash: string): Promise<void> {
+    if (!this.workspaceDir) return;
+    const markerPath = path.join(this.workspaceDir, WORKING_COMMIT_MARKER);
+    await fs.writeFile(markerPath, hash, "utf-8");
+  }
+
+  private async clearWorkingCommit(): Promise<void> {
+    if (!this.workspaceDir) return;
+    const markerPath = path.join(this.workspaceDir, WORKING_COMMIT_MARKER);
+    try {
+      await fs.remove(markerPath);
+    } catch {
+      // ignore
     }
   }
 

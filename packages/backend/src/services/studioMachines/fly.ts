@@ -188,8 +188,22 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return parsePositiveInt(process.env.FLY_STUDIO_CPUS, 1);
   }
 
+  private get minimumMemoryMb(): number {
+    if (this.cpuKind !== "performance") return 256;
+    // Performance machines require more RAM; enforce a conservative floor.
+    return Math.max(4096, this.cpuCount * 2048);
+  }
+
   private get memoryMb(): number {
-    return Math.max(256, parsePositiveInt(process.env.FLY_STUDIO_MEMORY_MB, 1024));
+    const configured = parsePositiveInt(process.env.FLY_STUDIO_MEMORY_MB, 1024);
+    const minimum = this.minimumMemoryMb;
+    if (configured < minimum) {
+      console.warn(
+        `[FlyMachines] FLY_STUDIO_MEMORY_MB=${configured} too low for cpu_kind=${this.cpuKind}, cpus=${this.cpuCount}; using ${minimum} MiB.`,
+      );
+      return minimum;
+    }
+    return configured;
   }
 
   private async flyFetch<T>(

@@ -1,4 +1,4 @@
-import { spawn, spawnSync, ChildProcess, execSync } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "path";
@@ -26,6 +26,17 @@ const DEVSERVER_INSTALL_TIMEOUT_MS = Math.max(
 );
 const DEVSERVER_NODE_MODULES_CACHE_ENABLED =
   process.env.DEVSERVER_NODE_MODULES_CACHE !== "0";
+const SYNC_PAUSE_FILE_PATH =
+  process.env.VIVD_SYNC_PAUSE_FILE || "/tmp/vivd-sync.pause";
+
+const MAX_CAPTURE_BYTES = 64 * 1024;
+
+type RunProcessResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+};
 
 const isDebugEnabled = process.env.DEVSERVER_DEBUG === "1";
 const debugLog = (...args: unknown[]) => {
@@ -36,29 +47,41 @@ const debugLog = (...args: unknown[]) => {
 function resolveInstallCommand(
   projectDir: string,
   packageManager: ProjectConfig["packageManager"]
-): string {
+): { cmd: string; args: string[] } {
   if (packageManager === "pnpm") {
     if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) {
-      return "pnpm install --frozen-lockfile --prefer-offline";
+      return {
+        cmd: "pnpm",
+        args: ["install", "--frozen-lockfile", "--prefer-offline"],
+      };
     }
-    return "pnpm install --prefer-offline";
+    return { cmd: "pnpm", args: ["install", "--prefer-offline"] };
   }
 
   if (packageManager === "yarn") {
     if (fs.existsSync(path.join(projectDir, "yarn.lock"))) {
-      return "yarn install --frozen-lockfile --prefer-offline";
+      return {
+        cmd: "yarn",
+        args: ["install", "--frozen-lockfile", "--prefer-offline"],
+      };
     }
-    return "yarn install --prefer-offline";
+    return { cmd: "yarn", args: ["install", "--prefer-offline"] };
   }
 
   if (
     fs.existsSync(path.join(projectDir, "package-lock.json")) ||
     fs.existsSync(path.join(projectDir, "npm-shrinkwrap.json"))
   ) {
-    return "npm ci --prefer-offline --no-audit --no-fund";
+    return {
+      cmd: "npm",
+      args: ["ci", "--prefer-offline", "--no-audit", "--no-fund"],
+    };
   }
 
-  return "npm install --prefer-offline --no-audit --no-fund";
+  return {
+    cmd: "npm",
+    args: ["install", "--prefer-offline", "--no-audit", "--no-fund"],
+  };
 }
 
 function resolveInstallEnv(projectDir: string): NodeJS.ProcessEnv {
@@ -99,6 +122,76 @@ function resolveInstallEnv(projectDir: string): NodeJS.ProcessEnv {
   );
 
   return installEnv;
+}
+
+function setSyncPaused(paused: boolean): void {
+  try {
+    if (paused) {
+      fs.mkdirSync(path.dirname(SYNC_PAUSE_FILE_PATH), { recursive: true });
+      fs.writeFileSync(SYNC_PAUSE_FILE_PATH, "1", "utf-8");
+      return;
+    }
+    fs.rmSync(SYNC_PAUSE_FILE_PATH, { force: true });
+  } catch {
+    // Best-effort only.
+  }
+}
+
+function runProcess(
+  cmd: string,
+  args: string[],
+  options: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+    timeoutMs: number;
+  }
+): Promise<RunProcessResult> {
+  return new Promise((resolve) => {
+    const proc = spawn(cmd, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const append = (target: "stdout" | "stderr", chunk: unknown) => {
+      const next = typeof chunk === "string" ? chunk : Buffer.from(chunk as Buffer).toString();
+      if (!next) return;
+
+      if (target === "stdout") {
+        stdout = (stdout + next).slice(-MAX_CAPTURE_BYTES);
+      } else {
+        stderr = (stderr + next).slice(-MAX_CAPTURE_BYTES);
+      }
+    };
+
+    proc.stdout?.on("data", (chunk) => append("stdout", chunk));
+    proc.stderr?.on("data", (chunk) => append("stderr", chunk));
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        // ignore
+      }
+    }, options.timeoutMs);
+    timeout.unref?.();
+
+    proc.on("exit", (code) => {
+      clearTimeout(timeout);
+      resolve({ code: code ?? 1, stdout, stderr, timedOut });
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(timeout);
+      append("stderr", err instanceof Error ? err.message : String(err));
+      resolve({ code: 1, stdout, stderr, timedOut });
+    });
+  });
 }
 
 function getPackageCacheRoot(): string | null {
@@ -155,10 +248,10 @@ function getNodeModulesCacheArchivePath(
   return path.join(packageCacheRoot, "node-modules", `${packageManager}-${digest}.tar.gz`);
 }
 
-function restoreNodeModulesFromCache(
+async function restoreNodeModulesFromCache(
   projectDir: string,
   packageManager: ProjectConfig["packageManager"]
-): boolean {
+): Promise<boolean> {
   const archivePath = getNodeModulesCacheArchivePath(projectDir, packageManager);
   if (!archivePath || !fs.existsSync(archivePath)) return false;
 
@@ -169,74 +262,95 @@ function restoreNodeModulesFromCache(
   const nodeModulesDir = path.join(projectDir, "node_modules");
   fs.rmSync(nodeModulesDir, { recursive: true, force: true });
 
-  const result = spawnSync("tar", ["-xzf", archivePath, "-C", projectDir], {
-    stdio: "pipe",
-    timeout: DEVSERVER_INSTALL_TIMEOUT_MS,
-  });
-  if (result.status === 0 && hasNodeModules(projectDir)) {
+  const result = await runProcess(
+    "tar",
+    ["-xzf", archivePath, "-C", projectDir],
+    {
+      cwd: projectDir,
+      timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
+    }
+  );
+
+  if (result.code === 0 && hasNodeModules(projectDir)) {
     return true;
   }
 
-  const stderr = result.stderr?.toString?.().trim();
+  const stderr = result.stderr.trim();
   if (stderr) {
     console.warn(`[DevServer] Failed to restore node_modules cache: ${stderr}`);
+  } else if (result.timedOut) {
+    console.warn("[DevServer] Failed to restore node_modules cache: timed out");
   } else {
     console.warn("[DevServer] Failed to restore node_modules cache");
   }
+
   return false;
 }
 
-function writeNodeModulesCacheInBackground(
+async function writeNodeModulesCache(
   projectDir: string,
   packageManager: ProjectConfig["packageManager"]
-): void {
+): Promise<void> {
   const archivePath = getNodeModulesCacheArchivePath(projectDir, packageManager);
   if (!archivePath) return;
   if (!hasNodeModules(projectDir)) return;
+  if (fs.existsSync(archivePath)) return;
 
   fs.mkdirSync(path.dirname(archivePath), { recursive: true });
   const tmpArchivePath = `${archivePath}.tmp-${Date.now()}`;
 
-  const proc = spawn(
-    "tar",
-    [
-      "-czf",
-      tmpArchivePath,
-      "--exclude=node_modules/.cache",
-      "--exclude=node_modules/.vite",
-      "--exclude=node_modules/**/.cache",
-      "-C",
-      projectDir,
-      "node_modules",
-    ],
-    {
-      stdio: "pipe",
-    }
-  );
+  const env = { ...process.env, GZIP: process.env.GZIP || "-1" };
 
-  proc.on("exit", (code) => {
-    if (code === 0) {
-      try {
-        fs.renameSync(tmpArchivePath, archivePath);
-        console.log(
-          `[DevServer] Saved node_modules cache (${path.basename(archivePath)})`
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[DevServer] Failed to finalize node_modules cache: ${msg}`);
-        fs.rmSync(tmpArchivePath, { force: true });
-      }
-      return;
-    }
+  const args = [
+    "--warning=no-file-changed",
+    "--warning=no-file-removed",
+    "--warning=no-file-shrank",
+    "--ignore-failed-read",
+    "-czf",
+    tmpArchivePath,
+    "--exclude=node_modules/.cache",
+    "--exclude=node_modules/.vite",
+    "--exclude=node_modules/**/.cache",
+    "--exclude=node_modules/**/.vite",
+    "--exclude=node_modules/**/.astro",
+    "-C",
+    projectDir,
+    "node_modules",
+  ];
 
-    const stderr = proc.stderr?.read?.()?.toString?.().trim();
+  const result = await runProcess("tar", args, {
+    cwd: projectDir,
+    env,
+    timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
+  });
+
+  const hasTmp =
+    fs.existsSync(tmpArchivePath) && fs.statSync(tmpArchivePath).size > 0;
+  const success = result.code === 0 || (result.code === 1 && hasTmp);
+
+  if (!success) {
+    const stderr = result.stderr.trim();
     if (stderr) {
       console.warn(`[DevServer] Failed to write node_modules cache: ${stderr}`);
+    } else if (result.timedOut) {
+      console.warn("[DevServer] Failed to write node_modules cache: timed out");
     } else {
       console.warn("[DevServer] Failed to write node_modules cache");
     }
     fs.rmSync(tmpArchivePath, { force: true });
-  });
+    return;
+  }
+
+  try {
+    fs.renameSync(tmpArchivePath, archivePath);
+    console.log(
+      `[DevServer] Saved node_modules cache (${path.basename(archivePath)})`
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DevServer] Failed to finalize node_modules cache: ${msg}`);
+    fs.rmSync(tmpArchivePath, { force: true });
+  }
 }
 
 /**
@@ -342,51 +456,62 @@ export class DevServerService {
 
       // Install dependencies if needed
       if (!hasNodeModules(projectDir)) {
-        const restoredFromCache = restoreNodeModulesFromCache(
+        serverInfo.status = "installing";
+        setSyncPaused(true);
+
+        const restoredFromCache = await restoreNodeModulesFromCache(
           projectDir,
           config.packageManager
         );
 
         if (!restoredFromCache) {
           console.log(`[DevServer] Installing dependencies in ${projectDir}`);
-          serverInfo.status = "installing";
 
-          const installCmd = resolveInstallCommand(projectDir, config.packageManager);
+          const install = resolveInstallCommand(projectDir, config.packageManager);
           const installEnv = resolveInstallEnv(projectDir);
-          debugLog(`Install command: ${installCmd}`);
+          debugLog(`Install command: ${install.cmd} ${install.args.join(" ")}`);
 
-          try {
-            execSync(installCmd, {
-              cwd: projectDir,
-              env: installEnv,
-              stdio: "pipe",
-              encoding: "utf-8",
-              timeout: DEVSERVER_INSTALL_TIMEOUT_MS,
-            });
-            installedDependencies = true;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
+          const result = await runProcess(install.cmd, install.args, {
+            cwd: projectDir,
+            env: installEnv,
+            timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
+          });
+
+          if (result.code !== 0 || result.timedOut) {
+            const stderr = result.stderr.trim();
+            const tail = stderr || result.stdout.trim();
+            const msg = result.timedOut
+              ? "Timed out"
+              : tail
+                ? tail
+                : `Exit code ${result.code}`;
             console.error(`[DevServer] Failed to install dependencies: ${msg}`);
             serverInfo.status = "error";
             serverInfo.error = `${config.packageManager} install failed: ${msg}`;
+            setSyncPaused(false);
             return;
           }
+
+          installedDependencies = true;
         }
+
+        if (installedDependencies) {
+          await writeNodeModulesCache(projectDir, config.packageManager);
+        }
+
+        setSyncPaused(false);
       }
 
       serverInfo.status = "starting";
 
       // Start the dev server
       await this.spawnDevServer(projectDir, config, port, basePath, serverInfo);
-
-      if (installedDependencies && serverInfo.status === "ready") {
-        writeNodeModulesCacheInBackground(projectDir, config.packageManager);
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[DevServer] Error starting dev server: ${msg}`);
       serverInfo.status = "error";
       serverInfo.error = msg;
+      setSyncPaused(false);
     }
   }
 

@@ -209,6 +209,17 @@ if [ "$SYNC_ENABLED" = "1" ]; then
   echo "Sync loop enabled (interval=${SYNC_INTERVAL}s)"
   while kill -0 "$PID" 2>/dev/null; do
     sleep "$SYNC_INTERVAL"
+    SYNC_PAUSE_FILE="${VIVD_SYNC_PAUSE_FILE:-/tmp/vivd-sync.pause}"
+    SYNC_PAUSE_MAX_AGE_SECONDS="${VIVD_SYNC_PAUSE_MAX_AGE_SECONDS:-600}"
+    if [ -f "$SYNC_PAUSE_FILE" ]; then
+      NOW="$(date +%s)"
+      MTIME="$(stat -c %Y "$SYNC_PAUSE_FILE" 2>/dev/null || echo 0)"
+      AGE="$((NOW - MTIME))"
+      if [ "$AGE" -le "$SYNC_PAUSE_MAX_AGE_SECONDS" ]; then
+        continue
+      fi
+      rm -f "$SYNC_PAUSE_FILE" 2>/dev/null || true
+    fi
     sync_source || true
     sync_opencode || true
   done

@@ -96,27 +96,27 @@ export function VersionHistoryPanel({
   // Save State
   const [commitMessage, setCommitMessage] = useState("");
 
+  const commitCount = Math.max(
+    historyData?.totalCommits ?? 0,
+    historyData?.commits?.length ?? 0
+  );
+
   // Default Commit Message
   useEffect(() => {
     if (open) {
-      const commitCount = historyData?.commits?.length || 0;
       const nextVersionNumber = commitCount + 1;
       setCommitMessage(`Version ${nextVersionNumber}`);
     }
-  }, [open, historyData?.commits?.length]);
+  }, [open, commitCount]);
 
   const saveMutation = trpc.project.gitSave.useMutation({
     onSuccess: (data) => {
-      // Don't close panel, just clear message and refresh
-      setCommitMessage("");
-
-      const commitCount = (historyData?.commits?.length || 0) + 1;
-      setCommitMessage(`Version ${commitCount + 1}`);
-
       if (data.noChanges) {
         toast.info("No changes to save");
+        setCommitMessage(`Version ${commitCount + 1}`);
       } else {
         toast.success(data.message);
+        setCommitMessage(`Version ${commitCount + 2}`);
         // Invalidate queries to refresh history
         utils.project.gitHistory.invalidate({ slug: projectSlug, version });
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version });

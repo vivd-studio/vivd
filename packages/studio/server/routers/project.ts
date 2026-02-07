@@ -274,7 +274,7 @@ export const projectRouter = router({
     )
     .query(async ({ ctx }) => {
       try {
-        const hasChanges = await ctx.workspace.hasChanges?.();
+        const hasChanges = await ctx.workspace.hasChanges();
         return { hasChanges: hasChanges ?? false };
       } catch (err) {
         console.error("Error checking git status:", err);
@@ -291,13 +291,17 @@ export const projectRouter = router({
     )
     .query(async ({ ctx }) => {
       try {
-        const history = await ctx.workspace.getHistory?.();
+        const [history, totalCommits] = await Promise.all([
+          ctx.workspace.getHistory(),
+          ctx.workspace.getCommitCount(),
+        ]);
         return {
           commits: history ?? [],
+          totalCommits,
         };
       } catch (err) {
         console.error("Error fetching git history:", err);
-        return { commits: [] };
+        return { commits: [], totalCommits: 0 };
       }
     }),
 
@@ -386,7 +390,12 @@ export const projectRouter = router({
     )
     .query(async ({ ctx }) => {
       try {
-        const head = await ctx.workspace.getHeadCommit?.();
+        const workingHash = await ctx.workspace.getWorkingCommit();
+        if (workingHash) {
+          return { hash: workingHash };
+        }
+
+        const head = await ctx.workspace.getHeadCommit();
         return { hash: head?.hash || null };
       } catch (err) {
         console.error("Error fetching head commit:", err);
@@ -405,25 +414,17 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      try {
-        const history = await ctx.workspace.getHistory?.();
-        const commitExists = history?.some(
-          (c: any) => c.hash === input.commitHash
-        );
-
-        if (!commitExists) {
-          throw new Error("Commit not found");
-        }
-
-        const shortHash = input.commitHash.substring(0, 7);
-        return {
-          success: true,
-          message: `Loaded version ${shortHash}`,
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        throw new Error(`Failed to load version: ${msg}`);
+      if (!ctx.workspace.isInitialized()) {
+        throw new Error("Workspace not initialized");
       }
+
+      await ctx.workspace.loadVersion(input.commitHash);
+
+      const shortHash = input.commitHash.substring(0, 7);
+      return {
+        success: true,
+        message: `Loaded version ${shortHash}`,
+      };
     }),
 
   setCurrentVersion: publicProcedure

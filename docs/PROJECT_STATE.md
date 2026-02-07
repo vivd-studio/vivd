@@ -68,6 +68,8 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] File editing and preview
   - [ ] Asset management
   - [ ] Git operations (commit, history, discard)
+    - [x] Snapshots: restore older commit + working-commit tracking
+    - [x] Snapshot naming uses total git commit count (not truncated history length)
 
 - [ ] **Test connected mode end-to-end**
   - [x] Start studio with `MAIN_BACKEND_URL`, `SESSION_TOKEN`, `STUDIO_ID`
@@ -215,6 +217,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 - [x] Studio server binds explicitly to `0.0.0.0` for Fly machine ingress compatibility
 - [x] Reuse `node_modules` via lockfile-hash cache archive (restore on boot, save after first install)
 - [x] Fly machine sizing tunables (`FLY_STUDIO_CPU_KIND`, `FLY_STUDIO_CPUS`, `FLY_STUDIO_MEMORY_MB`)
+- [x] Keep studio responsive during dependency install (async install + pause S3 sync loop briefly)
 - [ ] Provision studio machine on demand (or per org)
 - [ ] Auto-suspend/resume (cost control)
 - [ ] Preview → Edit transition (route user to the right machine)
@@ -311,7 +314,7 @@ SAAS_MODE=true                          # Enable SaaS features
 # FLY_STUDIO_PUBLIC_PROTOCOL=https
 # FLY_STUDIO_CPU_KIND=shared
 # FLY_STUDIO_CPUS=1
-# FLY_STUDIO_MEMORY_MB=1024
+# FLY_STUDIO_MEMORY_MB=1024 (performance mode auto-clamped to Fly minimums)
 # FLY_STUDIO_IDLE_TIMEOUT_MS=120000
 # FLY_STUDIO_IDLE_CHECK_INTERVAL_MS=30000
 # DEVSERVER_INSTALL_TIMEOUT_MS=900000
