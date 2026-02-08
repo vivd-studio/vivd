@@ -8,6 +8,7 @@ import {
 import { resolvePublishableArtifactState } from "../../services/ProjectArtifactStateService";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { projectMetaService } from "../../services/ProjectMetaService";
+import { studioWorkspaceStateService } from "../../services/StudioWorkspaceStateService";
 
 export const projectPublishProcedures = {
   /**
@@ -25,6 +26,27 @@ export const projectPublishProcedures = {
     .mutation(async ({ input, ctx }) => {
       const { slug, version, domain, expectedCommitHash } = input;
       const userId = ctx.session.user.id;
+
+      const studioRunning = await studioMachineProvider.isRunning(slug, version);
+      if (studioRunning) {
+        const workspaceState = studioWorkspaceStateService.getRecent(slug, version);
+        if (!workspaceState?.isFresh) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "Studio is currently active. Open Studio and save before publishing.",
+            cause: { reason: "studio_state_unavailable" },
+          });
+        }
+        if (workspaceState.hasUnsavedChanges) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "You have unsaved changes in Studio. Save changes in Studio before publishing.",
+            cause: { reason: "studio_unsaved_changes" },
+          });
+        }
+      }
 
       try {
         const result = await publishService.publish({
@@ -159,6 +181,11 @@ export const projectPublishProcedures = {
         resolvePublishableArtifactState({ slug, version }),
         studioMachineProvider.isRunning(slug, version),
       ]);
+      const workspaceState = studioWorkspaceStateService.getRecent(slug, version);
+      const studioStateAvailable = Boolean(studioRunning && workspaceState?.isFresh);
+      const studioHasUnsavedChanges = Boolean(
+        studioStateAvailable && workspaceState?.hasUnsavedChanges,
+      );
 
       return {
         storageEnabled: artifactState.storageEnabled,
@@ -172,6 +199,11 @@ export const projectPublishProcedures = {
         previewBuiltAt: artifactState.previewBuiltAt,
         error: artifactState.error,
         studioRunning,
+        studioStateAvailable,
+        studioHasUnsavedChanges,
+        studioHeadCommitHash: workspaceState?.headCommitHash ?? null,
+        studioWorkingCommitHash: workspaceState?.workingCommitHash ?? null,
+        studioStateReportedAt: workspaceState?.reportedAt.toISOString() ?? null,
       };
     }),
 

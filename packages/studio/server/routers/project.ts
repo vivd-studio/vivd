@@ -567,6 +567,11 @@ export const projectRouter = router({
         previewBuiltAt: null,
         error: null,
         studioRunning: true,
+        studioStateAvailable: true,
+        studioHasUnsavedChanges: false,
+        studioHeadCommitHash: head?.hash || null,
+        studioWorkingCommitHash: null,
+        studioStateReportedAt: new Date().toISOString(),
       };
     }),
 

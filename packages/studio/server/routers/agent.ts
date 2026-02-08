@@ -306,11 +306,11 @@ export const agentRouter = router({
         // Create a git snapshot before running the checklist (auto-save)
         let snapshotCommitHash: string | undefined;
         try {
-          const status = await git.status();
-          if (!status.isClean()) {
-            await git.add(".");
-            const result = await git.commit("Pre-publish checklist snapshot");
-            snapshotCommitHash = result.commit;
+          const commitHash = await ctx.workspace.commit(
+            "Pre-publish checklist snapshot"
+          );
+          if (commitHash) {
+            snapshotCommitHash = commitHash;
             console.log(
               `[PrePublishChecklist] Created snapshot commit: ${snapshotCommitHash}`
             );
@@ -470,8 +470,7 @@ export const agentRouter = router({
               const git = simpleGit(workspacePath);
               const log = await git.log({ maxCount: 1 });
               const currentCommit = log.latest?.hash;
-              const status = await git.status();
-              const hasUncommitted = !status.isClean();
+              const hasUncommitted = await ctx.workspace.hasChanges();
               hasChangesSinceCheck =
                 currentCommit !== checklist.snapshotCommitHash || hasUncommitted;
             } catch {
@@ -507,8 +506,7 @@ export const agentRouter = router({
             const git = simpleGit(workspacePath);
             const log = await git.log({ maxCount: 1 });
             const currentCommit = log.latest?.hash;
-            const status = await git.status();
-            const hasUncommitted = !status.isClean();
+            const hasUncommitted = await ctx.workspace.hasChanges();
 
             // Changes exist if: current commit differs from snapshot OR there are uncommitted changes
             hasChangesSinceCheck =

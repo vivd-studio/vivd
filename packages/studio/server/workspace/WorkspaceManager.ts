@@ -128,6 +128,46 @@ export class WorkspaceManager {
     return url;
   }
 
+  private normalizeGitPath(filePath: string): string {
+    return filePath.trim().replaceAll("\\", "/");
+  }
+
+  private isIgnoredWorkspacePath(filePath: string): boolean {
+    const normalized = this.normalizeGitPath(filePath);
+    if (!normalized) return true;
+    if (normalized === WORKING_COMMIT_MARKER) return true;
+    if (normalized.startsWith(".astro/")) return true;
+    if (normalized.startsWith("dist/")) return true;
+    return false;
+  }
+
+  private getRelevantPaths(output: string): string[] {
+    return output
+      .trim()
+      .split("\n")
+      .map((entry) => this.normalizeGitPath(entry))
+      .filter((entry) => entry && !this.isIgnoredWorkspacePath(entry));
+  }
+
+  private getRelevantStatusLines(statusOutput: string): string[] {
+    return statusOutput
+      .trim()
+      .split("\n")
+      .filter((line) => {
+        if (!line) return false;
+        const statusPath = this.normalizeGitPath(line.slice(3));
+        if (!statusPath) return false;
+        if (statusPath.includes(" -> ")) {
+          const [fromPath, toPath] = statusPath.split(" -> ").map((p) => p.trim());
+          return !(
+            this.isIgnoredWorkspacePath(fromPath) &&
+            this.isIgnoredWorkspacePath(toPath)
+          );
+        }
+        return !this.isIgnoredWorkspacePath(statusPath);
+      });
+  }
+
   async commit(message: string): Promise<string | null> {
     if (!this.git || !this.workspaceDir) {
       throw new Error("Workspace not initialized");
@@ -167,29 +207,20 @@ export class WorkspaceManager {
     if (workingCommit) {
       // Compare against the loaded commit so just loading an older version doesn't count as "changes"
       const diff = await this.git.raw(["diff", "--name-only", workingCommit]);
-      const diffFiles = diff
-        .trim()
-        .split("\n")
-        .filter((f) => f && f !== WORKING_COMMIT_MARKER);
+      const diffFiles = this.getRelevantPaths(diff);
 
       const untracked = await this.git.raw([
         "ls-files",
         "--others",
         "--exclude-standard",
       ]);
-      const untrackedFiles = untracked
-        .trim()
-        .split("\n")
-        .filter((f) => f && f !== WORKING_COMMIT_MARKER);
+      const untrackedFiles = this.getRelevantPaths(untracked);
 
       return diffFiles.length > 0 || untrackedFiles.length > 0;
     }
 
     const status = await this.git.raw(["status", "--porcelain"]);
-    const statusLines = status
-      .trim()
-      .split("\n")
-      .filter((line) => line && !line.endsWith(WORKING_COMMIT_MARKER));
+    const statusLines = this.getRelevantStatusLines(status);
     return statusLines.length > 0;
   }
 
@@ -347,7 +378,25 @@ export class WorkspaceManager {
       const exists = await fs.pathExists(markerPath);
       if (!exists) return null;
       const hash = (await fs.readFile(markerPath, "utf-8")).trim();
-      return hash || null;
+      if (!hash) return null;
+
+      if (this.git) {
+        try {
+          const headHash = (await this.git.raw(["rev-parse", "HEAD"])).trim();
+          if (headHash && headHash !== hash) {
+            const status = await this.git.raw(["status", "--porcelain"]);
+            const nonMarkerStatusLines = this.getRelevantStatusLines(status);
+            // If HEAD advanced but there are no real workspace changes, the marker is stale.
+            if (nonMarkerStatusLines.length === 0) {
+              return null;
+            }
+          }
+        } catch {
+          // If we can't resolve HEAD/status, fall back to marker value.
+        }
+      }
+
+      return hash;
     } catch {
       return null;
     }

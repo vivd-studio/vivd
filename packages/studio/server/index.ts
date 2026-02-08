@@ -18,6 +18,7 @@ import { devServerService } from "./services/DevServerService.js";
 import { serverManager as opencodeServerManager } from "./opencode/serverManager.js";
 import { usageReporter } from "./services/UsageReporter.js";
 import { projectTouchReporter } from "./services/ProjectTouchReporter.js";
+import { workspaceStateReporter } from "./services/WorkspaceStateReporter.js";
 import { validateStudioConfig } from "@vivd/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -352,6 +353,22 @@ async function startServer() {
     console.log(
       "No VIVD_WORKSPACE_DIR/WORKSPACE_DIR or REPO_URL provided. Workspace not initialized."
     );
+  }
+
+  const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+  const projectVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
+  const canReportWorkspaceState =
+    workspace.isInitialized() &&
+    projectSlug.length > 0 &&
+    Number.isFinite(projectVersion) &&
+    projectVersion > 0;
+
+  if (canReportWorkspaceState) {
+    workspaceStateReporter.start({
+      workspace,
+      slug: projectSlug,
+      version: projectVersion,
+    });
   }
 
   // Health check endpoint for service discovery
@@ -851,6 +868,7 @@ export default {};
   // Graceful shutdown
   const shutdown = async () => {
     console.log("\nShutting down studio...");
+    await workspaceStateReporter.shutdown();
     await usageReporter.shutdown();
     devServerService.close();
     opencodeServerManager.closeAll();

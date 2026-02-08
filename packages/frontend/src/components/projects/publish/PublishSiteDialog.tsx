@@ -126,9 +126,21 @@ export function PublishSiteDialog({
 
   const unsavedChangesWarning = useMemo(() => {
     if (!state?.studioRunning) return false;
+    if (state?.studioHasUnsavedChanges) return true;
+    if (state?.studioStateAvailable === false) return true;
     if (!state.publishableCommitHash || !state.lastSyncedCommitHash) return false;
     return state.publishableCommitHash !== state.lastSyncedCommitHash;
-  }, [state?.studioRunning, state?.publishableCommitHash, state?.lastSyncedCommitHash]);
+  }, [
+    state?.studioRunning,
+    state?.studioHasUnsavedChanges,
+    state?.studioStateAvailable,
+    state?.publishableCommitHash,
+    state?.lastSyncedCommitHash,
+  ]);
+
+  const studioStateUnknownWarning = Boolean(
+    state?.studioRunning && state?.studioStateAvailable === false,
+  );
 
   const domainOk = normalizedInput.length > 0 && (checkDomainQuery.data?.available ?? true);
   const readyForPublish = state?.readiness === "ready";
@@ -136,7 +148,9 @@ export function PublishSiteDialog({
     publishMutation.isPending ||
     !readyForPublish ||
     !domainOk ||
-    !state?.storageEnabled;
+    !state?.storageEnabled ||
+    studioStateUnknownWarning ||
+    Boolean(state?.studioHasUnsavedChanges);
 
   const handlePublish = () => {
     setPublishError(null);
@@ -203,7 +217,11 @@ export function PublishSiteDialog({
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 mt-0.5" />
                   <div className="space-y-2">
-                    <div>You have unsaved changes in Studio.</div>
+                    <div>
+                      {studioStateUnknownWarning
+                        ? "Studio is active. Open Studio and save before publishing."
+                        : "You have unsaved changes in Studio."}
+                    </div>
                     {onOpenStudio ? (
                       <Button
                         size="sm"

@@ -70,6 +70,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] Git operations (commit, history, discard)
     - [x] Snapshots: restore older commit + working-commit tracking
     - [x] Snapshot naming uses total git commit count (not truncated history length)
+    - [x] Ignore stale working-commit marker after HEAD-only auto snapshots (prevents persistent false "unsaved changes")
 
 - [ ] **Test connected mode end-to-end**
   - [x] Start studio with `MAIN_BACKEND_URL`, `SESSION_TOKEN`, `STUDIO_ID`
@@ -132,22 +133,23 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Astro publish uses ready `preview/` artifact (no rebuild on publish)
   - [x] Static publish uses `source/` artifact
   - [x] Add readiness/race checks (`artifact_not_ready`, optional expected-hash compare-and-swap)
-- [ ] **Unified publish UX across Studio + app shell**
-  - [ ] Keep publish/unpublish available in Studio and preview/dashboard
-  - [ ] Route all publish/unpublish through backend publish APIs (single behavior)
-  - [ ] Use non-technical labels ("Publish changes", "Unpublish site")
-  - [ ] In connected mode, Studio publish dialog shows backend publish status (URL/domain, version, publishedAt)
-  - [ ] In connected mode, Studio publish dialog exposes unpublish action using backend API
-  - [ ] Show explicit unsaved-changes warning when Studio has newer unsynced edits
-  - [ ] Add CTA button in publish dialog: "Open Studio to save changes"
-  - [ ] Show deterministic publish dialog states: Ready / Build in progress / Unsaved changes in Studio
-  - [ ] Show exact artifact being published (source kind, built time, short hash) before confirmation
+- [x] **Unified publish UX across Studio + app shell**
+  - [x] Keep publish/unpublish available in Studio and preview/dashboard
+  - [x] Route all publish/unpublish through backend publish APIs (single behavior)
+  - [x] Use non-technical labels ("Publish site", "Unpublish site")
+  - [x] In connected mode, Studio publish dialog shows backend publish status (URL/domain, version, publishedAt)
+  - [x] In connected mode, Studio publish dialog exposes unpublish action using backend API
+  - [x] Show explicit unsaved-changes warning when Studio has newer unsynced edits
+  - [x] Add CTA button in publish dialog: "Open Studio to save changes"
+  - [x] Show deterministic publish dialog states: Ready / Build in progress / Unsaved changes in Studio
+  - [x] Show exact artifact being published (source kind, built time, short hash) before confirmation
+  - [x] Live Studio workspace-state reporting (dirty/head) blocks publish while Studio has unsaved changes
 - [ ] **Checklist DB-only**
   - [x] Studio checklist run/fix must upsert into `project_publish_checklist`
   - [x] Remove `.vivd/publish-checklist.json` as authoritative source
   - [x] Expose checklist state/freshness for publish dialogs outside Studio
-- [ ] **Studio provider parity**
-  - [ ] Keep local studio provider behavior aligned with production flow (hydrate/sync via bucket, publish consumes bucket artifacts)
+- [x] **Studio provider parity**
+  - [x] Keep local studio provider behavior aligned with production flow (hydrate/sync via bucket, publish consumes bucket artifacts)
 
 - [ ] **Thumbnail generation**
   - Current: Scraper service generates thumbnails

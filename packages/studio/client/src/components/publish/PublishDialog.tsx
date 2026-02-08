@@ -320,18 +320,25 @@ export function PublishDialog({
   if (connectedMode) {
     const publishState = publishStateQuery.data;
     const publishChecklist = publishChecklistQuery.data;
+    const studioStateUnknownWarning = Boolean(
+      publishState?.studioRunning && publishState?.studioStateAvailable === false,
+    );
     const unsavedChangesInStudio =
       Boolean(publishState?.studioRunning) &&
-      Boolean(publishState?.publishableCommitHash) &&
-      Boolean(publishState?.lastSyncedCommitHash) &&
-      publishState?.publishableCommitHash !== publishState?.lastSyncedCommitHash;
+      (Boolean(publishState?.studioHasUnsavedChanges) ||
+        studioStateUnknownWarning ||
+        (Boolean(publishState?.publishableCommitHash) &&
+          Boolean(publishState?.lastSyncedCommitHash) &&
+          publishState?.publishableCommitHash !== publishState?.lastSyncedCommitHash));
 
     const domainOk =
       normalizedDomain.length > 0 && (checkDomainQuery.data?.available ?? true);
     const canPublish =
       publishState?.storageEnabled &&
       publishState?.readiness === "ready" &&
-      domainOk;
+      domainOk &&
+      !studioStateUnknownWarning &&
+      !publishState?.studioHasUnsavedChanges;
 
     return (
       <>
@@ -390,7 +397,9 @@ export function PublishDialog({
 
               {unsavedChangesInStudio ? (
                 <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                  You have unsaved changes in Studio. Save changes before publishing to include latest edits.
+                  {studioStateUnknownWarning
+                    ? "Studio is active. Save changes before publishing."
+                    : "You have unsaved changes in Studio. Save changes before publishing to include latest edits."}
                 </div>
               ) : null}
 

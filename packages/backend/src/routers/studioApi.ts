@@ -12,6 +12,7 @@ import { limitsService } from "../services/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
 import { thumbnailService } from "../services/ThumbnailService";
 import { projectMetaService } from "../services/ProjectMetaService";
+import { studioWorkspaceStateService } from "../services/StudioWorkspaceStateService";
 
 /**
  * Schema for token data in usage reports
@@ -199,6 +200,34 @@ export const studioApiRouter = router({
             `[StudioAPI] Thumbnail generation failed for ${input.slug}/v${input.version}: ${message}`,
           );
         });
+
+      return { success: true };
+    }),
+
+  /**
+   * Receive live workspace state from connected studio.
+   * Used by publish safety checks to avoid publishing while Studio has unsaved edits.
+   */
+  reportWorkspaceState: projectMemberProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        hasUnsavedChanges: z.boolean(),
+        headCommitHash: z.string().nullable().optional(),
+        workingCommitHash: z.string().nullable().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      studioWorkspaceStateService.report({
+        studioId: input.studioId,
+        slug: input.slug,
+        version: input.version,
+        hasUnsavedChanges: input.hasUnsavedChanges,
+        headCommitHash: input.headCommitHash ?? null,
+        workingCommitHash: input.workingCommitHash ?? null,
+      });
 
       return { success: true };
     }),
