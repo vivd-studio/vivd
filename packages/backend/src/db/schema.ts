@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   index,
+  uniqueIndex,
   integer,
   numeric,
   jsonb,
@@ -129,6 +130,112 @@ export const projectMemberRelations = relations(projectMember, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// Project metadata (replaces manifest.json + .vivd/project.json)
+export const projectMeta = pgTable(
+  "project_meta",
+  {
+    slug: text("slug").primaryKey(),
+    source: text("source").notNull().default("scratch"), // 'url' | 'scratch'
+    url: text("url").notNull().default(""),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+    currentVersion: integer("current_version").notNull().default(1),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("project_meta_slug_idx").on(table.slug)]
+);
+
+export const projectVersion = pgTable(
+  "project_version",
+  {
+    id: text("id").primaryKey(),
+    projectSlug: text("project_slug")
+      .notNull()
+      .references(() => projectMeta.slug, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    source: text("source").notNull().default("scratch"),
+    url: text("url").notNull().default(""),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+    status: text("status").notNull().default("completed"),
+    startedAt: timestamp("started_at"),
+    errorMessage: text("error_message"),
+    thumbnailKey: text("thumbnail_key"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("project_version_project_idx").on(table.projectSlug),
+    uniqueIndex("project_version_slug_version_unique").on(
+      table.projectSlug,
+      table.version
+    ),
+  ]
+);
+
+export const projectPublishChecklist = pgTable(
+  "project_publish_checklist",
+  {
+    id: text("id").primaryKey(),
+    projectSlug: text("project_slug")
+      .notNull()
+      .references(() => projectMeta.slug, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    runAt: timestamp("run_at").notNull(),
+    snapshotCommitHash: text("snapshot_commit_hash"),
+    checklist: jsonb("checklist").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("project_publish_checklist_project_idx").on(
+      table.projectSlug,
+      table.version
+    ),
+    uniqueIndex("project_publish_checklist_slug_version_unique").on(
+      table.projectSlug,
+      table.version
+    ),
+  ]
+);
+
+export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
+  versions: many(projectVersion),
+  publishChecklists: many(projectPublishChecklist),
+}));
+
+export const projectVersionRelations = relations(projectVersion, ({ one, many }) => ({
+  project: one(projectMeta, {
+    fields: [projectVersion.projectSlug],
+    references: [projectMeta.slug],
+  }),
+  publishChecklists: many(projectPublishChecklist),
+}));
+
+export const projectPublishChecklistRelations = relations(
+  projectPublishChecklist,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [projectPublishChecklist.projectSlug],
+      references: [projectMeta.slug],
+    }),
+    projectVersion: one(projectVersion, {
+      fields: [projectPublishChecklist.projectSlug, projectPublishChecklist.version],
+      references: [projectVersion.projectSlug, projectVersion.version],
+    }),
+  })
+);
 
 // Published sites - tracks domain to project mapping for Caddy routing
 export const publishedSite = pgTable(

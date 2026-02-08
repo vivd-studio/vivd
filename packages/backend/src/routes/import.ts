@@ -7,7 +7,8 @@ import type { Multer } from "multer";
 
 import { getProjectDir, getVersionDir } from "../generator/versionUtils";
 import { initializeGitRepository } from "../generator/gitUtils";
-import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../generator/vivdPaths";
+import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
+import { projectMetaService } from "../services/ProjectMetaService";
 
 type AuthLike = {
   api: {
@@ -183,6 +184,13 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         : "project";
       const slug = findAvailableSlug(slugBase);
 
+      const existing = await projectMetaService.getProject(slug);
+      if (existing) {
+        return res.status(409).json({
+          error: "Project already exists",
+        });
+      }
+
       const projectDir = getProjectDir(slug);
       const version = 1;
       const versionDir = getVersionDir(slug, version);
@@ -209,56 +217,34 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
       createdProjectDir = projectDir;
       fs.cpSync(rootDir, versionDir, { recursive: true });
 
+      // DB is the source of truth for project metadata.
+      // Remove any imported metadata files to avoid confusion.
+      try {
+        const legacyRootProjectJson = path.join(versionDir, "project.json");
+        if (fs.existsSync(legacyRootProjectJson)) {
+          fs.rmSync(legacyRootProjectJson, { force: true });
+        }
+
+        const vivdProjectJson = path.join(versionDir, ".vivd", "project.json");
+        if (fs.existsSync(vivdProjectJson)) {
+          fs.rmSync(vivdProjectJson, { force: true });
+        }
+      } catch {
+        // ignore
+      }
+
       ensureVivdInternalFilesDir(versionDir);
-      const importedProjectJsonPath = getVivdInternalFilesPath(
-        versionDir,
-        "project.json"
-      );
-      const normalizedProjectData: Record<string, unknown> = {
-        ...rawProjectData,
+
+      await projectMetaService.createProjectVersion({
+        slug,
+        version,
         source,
         url,
         title,
         description,
-        createdAt,
         status,
-        version,
-      };
-      fs.writeFileSync(
-        importedProjectJsonPath,
-        JSON.stringify(normalizedProjectData, null, 2)
-      );
-
-      const legacyRootProjectJson = path.join(versionDir, "project.json");
-      if (fs.existsSync(legacyRootProjectJson)) {
-        try {
-          fs.rmSync(legacyRootProjectJson, { force: true });
-        } catch {
-          // ignore
-        }
-      }
-
-      const manifest: Record<string, unknown> = {
-        url,
-        createdAt,
-        currentVersion: version,
-        versions: [
-          {
-            version,
-            createdAt,
-            status,
-            startedAt: createdAt,
-          },
-        ],
-        source,
-      };
-      if (title) manifest.title = title;
-      if (description) manifest.description = description;
-
-      fs.writeFileSync(
-        path.join(projectDir, "manifest.json"),
-        JSON.stringify(manifest, null, 2)
-      );
+        createdAt: new Date(createdAt),
+      });
 
       try {
         await initializeGitRepository(versionDir, "Imported project");

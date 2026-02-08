@@ -1,9 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
-import {
-  migrateVivdInternalArtifactsInVersion,
-  getVivdInternalFilesPath,
-} from "./vivdPaths";
+import { projectMetaService } from "../services/ProjectMetaService";
 
 function detectProjectsDir(): string {
   const env = process.env.PROJECTS_DIR?.trim();
@@ -44,36 +41,12 @@ export function getTenantProjectsDir(tenantId: string = getActiveTenantId()): st
   return path.join(getTenantsDir(), tenantId);
 }
 
-export function listProjectSlugs(options?: {
-  tenantId?: string;
-  includeLegacy?: boolean;
-}): string[] {
-  const tenantId = options?.tenantId ?? getActiveTenantId();
-  const includeLegacy = options?.includeLegacy ?? true;
-
-  const slugs = new Set<string>();
-
-  const tenantDir = getTenantProjectsDir(tenantId);
-  if (fs.existsSync(tenantDir)) {
-    for (const entry of fs.readdirSync(tenantDir, { withFileTypes: true })) {
-      if (entry.isDirectory()) slugs.add(entry.name);
-    }
-  }
-
-  if (includeLegacy) {
-    if (fs.existsSync(PROJECTS_DIR)) {
-      for (const entry of fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        if (entry.name === TENANTS_DIRNAME) continue;
-        slugs.add(entry.name);
-      }
-    }
-  }
-
-  return Array.from(slugs).sort((a, b) => a.localeCompare(b));
+export async function listProjectSlugs(): Promise<string[]> {
+  const projects = await projectMetaService.listProjects();
+  return projects.map((p) => p.slug).sort((a, b) => a.localeCompare(b));
 }
 
-// Project-level manifest (at projects/<slug>/manifest.json)
+// Project-level metadata (DB-backed; replaces projects/<slug>/manifest.json)
 export interface ProjectManifest {
   url: string;
   source?: "url" | "scratch";
@@ -93,7 +66,7 @@ export interface VersionInfo {
   errorMessage?: string; // Error message when status is 'failed'
 }
 
-// Version-specific data (at projects/<slug>/v<N>/.vivd/project.json)
+// Version-specific metadata (DB-backed; replaces projects/<slug>/v<N>/.vivd/project.json)
 export interface VersionData {
   url: string;
   source?: "url" | "scratch";
@@ -104,6 +77,7 @@ export interface VersionData {
   version: number;
   startedAt?: string; // ISO timestamp when processing started
   errorMessage?: string; // Error message when status is 'failed'
+  thumbnailKey?: string;
 }
 
 // Statuses that indicate a project is currently being processed
@@ -167,100 +141,57 @@ export function getVersionDir(slug: string, version: number): string {
   return path.join(getProjectDir(slug), `v${version}`);
 }
 
-/**
- * Get the manifest path for a project
- */
-function getManifestPath(slug: string): string {
-  return path.join(getProjectDir(slug), "manifest.json");
+export async function getManifest(slug: string): Promise<ProjectManifest | null> {
+  const project = await projectMetaService.getProject(slug);
+  if (!project) return null;
+
+  const versions = await projectMetaService.listProjectVersions(slug);
+  return {
+    url: project.url,
+    source: (project.source as "url" | "scratch") ?? undefined,
+    title: project.title || undefined,
+    description: project.description || undefined,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt?.toISOString(),
+    currentVersion: project.currentVersion,
+    versions: versions.map((v) => ({
+      version: v.version,
+      createdAt: v.createdAt.toISOString(),
+      status: v.status,
+      startedAt: v.startedAt?.toISOString(),
+      errorMessage: v.errorMessage ?? undefined,
+    })),
+  };
 }
 
-/**
- * Read the project manifest
- */
-export function getManifest(slug: string): ProjectManifest | null {
-  const manifestPath = getManifestPath(slug);
-  if (!fs.existsSync(manifestPath)) {
-    return null;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  } catch (e) {
-    console.error(`Error reading manifest for ${slug}:`, e);
-    return null;
-  }
-}
-
-/**
- * Save the project manifest
- */
-export function saveManifest(slug: string, manifest: ProjectManifest): void {
-  const manifestPath = getManifestPath(slug);
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-}
-
-/**
- * Update the project's updatedAt timestamp
- * Call this whenever files in the project are modified
- */
-export function touchProjectUpdatedAt(slug: string): void {
-  const manifest = getManifest(slug);
-  if (!manifest) {
-    console.error(`Cannot touch project: manifest not found for ${slug}`);
-    return;
-  }
-  manifest.updatedAt = new Date().toISOString();
-  saveManifest(slug, manifest);
+export async function touchProjectUpdatedAt(slug: string): Promise<void> {
+  await projectMetaService.touchUpdatedAt(slug);
 }
 
 /**
  * Get the current (latest) version number for a project
  * Returns 0 if no versions exist
  */
-export function getCurrentVersion(slug: string): number {
-  const manifest = getManifest(slug);
-  if (manifest) {
-    return manifest.currentVersion;
-  }
-  // Check for legacy project (files directly in slug folder)
-  const projectDir = getProjectDir(slug);
-  if (
-    fs.existsSync(path.join(projectDir, "index.html")) ||
-    fs.existsSync(path.join(projectDir, "project.json"))
-  ) {
-    // Legacy project exists, will be migrated to v1
-    return 1;
-  }
-  return 0;
+export async function getCurrentVersion(slug: string): Promise<number> {
+  return projectMetaService.getCurrentVersion(slug);
 }
 
 /**
  * Get the highest version number for a project
  * Returns 0 if no versions exist
  */
-export function getHighestVersion(slug: string): number {
-  const manifest = getManifest(slug);
-  if (manifest && manifest.versions.length > 0) {
-    // Return the maximum version number from the versions array
-    return Math.max(...manifest.versions.map((v) => v.version));
-  }
-  // Check for legacy project (files directly in slug folder)
-  const projectDir = getProjectDir(slug);
-  if (
-    fs.existsSync(path.join(projectDir, "index.html")) ||
-    fs.existsSync(path.join(projectDir, "project.json"))
-  ) {
-    // Legacy project exists, will be migrated to v1
-    return 1;
-  }
-  return 0;
+export async function getHighestVersion(slug: string): Promise<number> {
+  const versions = await projectMetaService.listProjectVersions(slug);
+  if (versions.length === 0) return 0;
+  return Math.max(...versions.map((v) => v.version));
 }
 
 /**
  * Get the next version number for a project
  * Based on the highest existing version, not the currently selected version
  */
-export function getNextVersion(slug: string): number {
-  return getHighestVersion(slug) + 1;
+export async function getNextVersion(slug: string): Promise<number> {
+  return projectMetaService.getNextVersion(slug);
 }
 
 /**
@@ -273,32 +204,23 @@ export function versionExists(slug: string, version: number): boolean {
 /**
  * List all versions for a project
  */
-export function listVersions(slug: string): VersionInfo[] {
-  const manifest = getManifest(slug);
-  if (manifest) {
-    return manifest.versions;
-  }
-  return [];
+export async function listVersions(slug: string): Promise<VersionInfo[]> {
+  const versions = await projectMetaService.listProjectVersions(slug);
+  return versions.map((v) => ({
+    version: v.version,
+    createdAt: v.createdAt.toISOString(),
+    status: v.status,
+    startedAt: v.startedAt?.toISOString(),
+    errorMessage: v.errorMessage ?? undefined,
+  }));
 }
 
 /**
  * Check if a project is a legacy project (no versioning)
  */
 export function isLegacyProject(slug: string): boolean {
-  const projectDir = getProjectDir(slug);
-  const manifestPath = getManifestPath(slug);
-
-  // If manifest exists, it's not legacy
-  if (fs.existsSync(manifestPath)) {
-    return false;
-  }
-
-  // Check if there are files directly in the project folder (legacy structure)
-  const hasDirectFiles =
-    fs.existsSync(path.join(projectDir, "index.html")) ||
-    fs.existsSync(path.join(projectDir, "project.json"));
-
-  return hasDirectFiles;
+  void slug;
+  return false;
 }
 
 /**
@@ -306,85 +228,8 @@ export function isLegacyProject(slug: string): boolean {
  * Moves all files from projects/<slug>/ to projects/<slug>/v1/
  */
 export function migrateProjectIfNeeded(slug: string): boolean {
-  if (!isLegacyProject(slug)) {
-    return false;
-  }
-
-  console.log(`[Version] Migrating legacy project: ${slug}`);
-
-  const projectDir = getProjectDir(slug);
-  const v1Dir = getVersionDir(slug, 1);
-
-  // Create v1 directory
-  fs.mkdirSync(v1Dir, { recursive: true });
-
-  // Get all files and directories in the project folder
-  const items = fs.readdirSync(projectDir, { withFileTypes: true });
-
-  // Read existing project.json if it exists for metadata
-  let legacyProjectData: any = {};
-  const legacyProjectJsonPath = path.join(projectDir, "project.json");
-  if (fs.existsSync(legacyProjectJsonPath)) {
-    try {
-      legacyProjectData = JSON.parse(
-        fs.readFileSync(legacyProjectJsonPath, "utf-8"),
-      );
-    } catch (e) {
-      console.error(`Error reading legacy project.json for ${slug}:`, e);
-    }
-  }
-
-  // Move all items to v1 (except v1 itself and manifest.json if somehow exists)
-  for (const item of items) {
-    if (item.name === "v1" || item.name === "manifest.json") {
-      continue;
-    }
-
-    const sourcePath = path.join(projectDir, item.name);
-    const destPath = path.join(v1Dir, item.name);
-
-    fs.renameSync(sourcePath, destPath);
-  }
-
-  // Move vivd process files into `.vivd/` inside v1
-  try {
-    migrateVivdInternalArtifactsInVersion(v1Dir);
-  } catch (e) {
-    console.error(`[Version] Failed to migrate vivd files for ${slug}/v1:`, e);
-  }
-
-  // Update the project.json in v1 to include version number
-  const v1ProjectJsonPath = getVivdInternalFilesPath(v1Dir, "project.json");
-  if (fs.existsSync(v1ProjectJsonPath)) {
-    try {
-      const projectData = JSON.parse(
-        fs.readFileSync(v1ProjectJsonPath, "utf-8"),
-      );
-      projectData.version = 1;
-      fs.writeFileSync(v1ProjectJsonPath, JSON.stringify(projectData, null, 2));
-    } catch (e) {
-      console.error(`Error updating v1 project.json for ${slug}:`, e);
-    }
-  }
-
-  // Create manifest
-  const manifest: ProjectManifest = {
-    url: legacyProjectData.url || "",
-    createdAt: legacyProjectData.createdAt || new Date().toISOString(),
-    currentVersion: 1,
-    versions: [
-      {
-        version: 1,
-        createdAt: legacyProjectData.createdAt || new Date().toISOString(),
-        status: legacyProjectData.status || "completed",
-      },
-    ],
-  };
-
-  saveManifest(slug, manifest);
-
-  console.log(`[Version] Successfully migrated ${slug} to versioned structure`);
-  return true;
+  void slug;
+  return false;
 }
 
 /**
@@ -395,57 +240,19 @@ export function createVersionEntry(
   version: number,
   url: string,
   status: string = "processing",
-): void {
-  const projectDir = getProjectDir(slug);
-
-  // Ensure project directory exists
-  if (!fs.existsSync(projectDir)) {
-    fs.mkdirSync(projectDir, { recursive: true });
-  }
-
-  let manifest = getManifest(slug);
-  const now = new Date().toISOString();
-
-  if (!manifest) {
-    // Create new manifest
-    manifest = {
-      url,
-      createdAt: now,
-      currentVersion: version,
-      versions: [],
-    };
-  }
-
-  // Check if version already exists in versions array
-  const existingIdx = manifest.versions.findIndex((v) => v.version === version);
-
-  if (existingIdx >= 0) {
-    // Update existing version entry
-    manifest.versions[existingIdx] = {
-      version,
-      createdAt: now,
-      status,
-      startedAt: now, // Track when processing started
-    };
-  } else {
-    // Add new version
-    manifest.versions.push({
-      version,
-      createdAt: now,
-      status,
-      startedAt: now, // Track when processing started
-    });
-  }
-
-  // Update current version if this is the latest
-  if (version >= manifest.currentVersion) {
-    manifest.currentVersion = version;
-  }
-
-  // Sort versions by version number
-  manifest.versions.sort((a, b) => a.version - b.version);
-
-  saveManifest(slug, manifest);
+): Promise<void> {
+  const now = new Date();
+  const source: "url" | "scratch" = url ? "url" : "scratch";
+  return projectMetaService.createProjectVersion({
+    slug,
+    version,
+    source,
+    url,
+    title: "",
+    description: "",
+    status,
+    createdAt: now,
+  });
 }
 
 /**
@@ -455,77 +262,47 @@ export function createVersionEntry(
  * @param status - New status
  * @param errorMessage - Optional error message when status is 'failed'
  */
-export function updateVersionStatus(
+export async function updateVersionStatus(
   slug: string,
   version: number,
   status: string,
   errorMessage?: string,
-): void {
-  const manifest = getManifest(slug);
-  if (!manifest) {
-    console.error(
-      `Cannot update version status: manifest not found for ${slug}`,
-    );
-    return;
-  }
-
-  const versionEntry = manifest.versions.find((v) => v.version === version);
-  if (versionEntry) {
-    versionEntry.status = status;
-    if (errorMessage) {
-      versionEntry.errorMessage = errorMessage;
-    } else if (versionEntry.errorMessage && status === "completed") {
-      // Clear error message on successful completion
-      delete versionEntry.errorMessage;
-    }
-    saveManifest(slug, manifest);
-  }
+): Promise<void> {
+  await projectMetaService.updateVersionStatus({ slug, version, status, errorMessage });
 }
 
 /**
  * Get version data from a specific version's project.json
  */
-export function getVersionData(
+export async function getVersionData(
   slug: string,
   version: number,
-): VersionData | null {
-  const versionDir = getVersionDir(slug, version);
-  const projectJsonPath = getVivdInternalFilesPath(versionDir, "project.json");
-
-  if (!fs.existsSync(projectJsonPath)) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(fs.readFileSync(projectJsonPath, "utf-8"));
-  } catch (e) {
-    console.error(`Error reading version data for ${slug}/v${version}:`, e);
-    return null;
-  }
+): Promise<VersionData | null> {
+  const record = await projectMetaService.getProjectVersion(slug, version);
+  if (!record) return null;
+  return {
+    url: record.url,
+    source: (record.source as "url" | "scratch") ?? undefined,
+    title: record.title || undefined,
+    description: record.description || undefined,
+    createdAt: record.createdAt.toISOString(),
+    status: record.status,
+    version: record.version,
+    startedAt: record.startedAt?.toISOString(),
+    errorMessage: record.errorMessage ?? undefined,
+    thumbnailKey: record.thumbnailKey ?? undefined,
+  };
 }
 
 /**
  * Delete a specific version
  */
-export function deleteVersion(slug: string, version: number): void {
+export async function deleteVersion(slug: string, version: number): Promise<void> {
   const versionDir = getVersionDir(slug, version);
 
   if (fs.existsSync(versionDir)) {
     fs.rmSync(versionDir, { recursive: true, force: true });
   }
 
-  // Update manifest
-  const manifest = getManifest(slug);
-  if (manifest) {
-    manifest.versions = manifest.versions.filter((v) => v.version !== version);
-
-    // Update current version if needed
-    if (manifest.currentVersion === version) {
-      const remaining = manifest.versions.map((v) => v.version);
-      manifest.currentVersion =
-        remaining.length > 0 ? Math.max(...remaining) : 0;
-    }
-
-    saveManifest(slug, manifest);
-  }
+  await projectMetaService.deleteProjectVersion({ slug, version });
 }

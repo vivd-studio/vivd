@@ -6,6 +6,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -21,6 +22,61 @@ export type ObjectStorageConfig = {
 };
 
 type EnvMap = Record<string, string | undefined>;
+
+let publicBaseUrlCache: string | null | undefined;
+let signedUrlStorageCache:
+  | { client: S3Client; bucket: string }
+  | null
+  | undefined;
+
+function getPublicObjectBaseUrl(env: EnvMap = process.env): string | null {
+  if (publicBaseUrlCache !== undefined) return publicBaseUrlCache;
+  const base = (env.VIVD_S3_PUBLIC_BASE_URL || env.R2_PUBLIC_BASE_URL || "").trim();
+  publicBaseUrlCache = base ? base.replace(/\/+$/, "") : null;
+  return publicBaseUrlCache;
+}
+
+function getSignedUrlStorage(env: EnvMap = process.env): { client: S3Client; bucket: string } | null {
+  if (signedUrlStorageCache !== undefined) return signedUrlStorageCache;
+  try {
+    const config = getObjectStorageConfigFromEnv(env);
+    signedUrlStorageCache = {
+      client: createS3Client(config),
+      bucket: config.bucket,
+    };
+  } catch {
+    signedUrlStorageCache = null;
+  }
+  return signedUrlStorageCache;
+}
+
+export async function getObjectDownloadUrl(options: {
+  key: string;
+  expiresInSeconds?: number;
+  env?: EnvMap;
+}): Promise<string | null> {
+  const env = options.env ?? process.env;
+  const key = options.key.replace(/^\/+/, "");
+
+  const publicBaseUrl = getPublicObjectBaseUrl(env);
+  if (publicBaseUrl) {
+    return `${publicBaseUrl}/${key}`;
+  }
+
+  const storage = getSignedUrlStorage(env);
+  if (!storage) return null;
+
+  const expiresInSeconds = options.expiresInSeconds ?? 60 * 60;
+  try {
+    return await getSignedUrl(
+      storage.client,
+      new GetObjectCommand({ Bucket: storage.bucket, Key: key }),
+      { expiresIn: expiresInSeconds },
+    );
+  } catch {
+    return null;
+  }
+}
 
 export function getObjectStorageConfigFromEnv(env: EnvMap = process.env): ObjectStorageConfig {
   const bucket = (env.VIVD_S3_BUCKET || env.R2_BUCKET || "").trim();

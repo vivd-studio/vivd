@@ -44,8 +44,8 @@ export async function processUrl(
   const domainSlug = new URL(targetUrl).hostname
     .replace("www.", "")
     .split(".")[0];
-  const targetVersion = version ?? getNextVersion(domainSlug);
-  const ctx = createGenerationContext({
+  const targetVersion = version ?? (await getNextVersion(domainSlug));
+  const ctx = await createGenerationContext({
     source: "url",
     url: targetUrl,
     slug: domainSlug,
@@ -84,7 +84,7 @@ export async function processScratchProject(
 ) {
   validateConfig();
 
-  const ctx = createGenerationContext({
+  const ctx = await createGenerationContext({
     source: "scratch",
     title: input.title,
     description: input.description,

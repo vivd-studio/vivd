@@ -148,7 +148,7 @@ export const assetsAiImageProcedures = {
         console.log(`[AI Edit] Saved edited image to: ${newRelativePath}`);
 
         // Cost is automatically tracked by OpenRouterService
-        touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(slug);
 
         return {
           success: true,
@@ -299,7 +299,7 @@ export const assetsAiImageProcedures = {
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
 
         // Cost is automatically tracked by OpenRouterService
-        touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(slug);
 
         return {
           success: true,
@@ -443,7 +443,7 @@ export const assetsAiImageProcedures = {
         );
 
         // Cost is automatically tracked by OpenRouterService
-        touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(slug);
 
         return {
           success: true,

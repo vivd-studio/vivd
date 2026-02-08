@@ -14,6 +14,8 @@ import {
   getVivdInternalFilesPath,
 } from "../vivdPaths";
 import { WEBP_QUALITY } from "../config";
+import { uploadProjectThumbnailToBucket } from "../../services/ProjectArtifactsService";
+import { projectMetaService } from "../../services/ProjectMetaService";
 
 export interface UrlFlowInput {
   url: string;
@@ -50,6 +52,24 @@ export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
             .webp({ quality: WEBP_QUALITY })
             .toBuffer();
           fs.writeFileSync(thumbnailPath, thumbnailBuffer);
+
+          try {
+            const uploaded = await uploadProjectThumbnailToBucket({
+              localFilePath: thumbnailPath,
+              slug: ctx.slug,
+              version: ctx.version,
+            });
+            if (uploaded.uploaded && uploaded.key) {
+              await projectMetaService.setVersionThumbnailKey({
+                slug: ctx.slug,
+                version: ctx.version,
+                thumbnailKey: uploaded.key,
+              });
+            }
+          } catch (uploadErr) {
+            log(`[UrlFlow] Thumbnail upload failed: ${uploadErr}`);
+          }
+
           log(`[UrlFlow] Saved error screenshot as thumbnail`);
         } catch (thumbErr) {
           log(`[UrlFlow] Failed to save error thumbnail: ${thumbErr}`);

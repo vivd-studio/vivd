@@ -1,6 +1,6 @@
 import { getActiveTenantId } from "../generator/versionUtils";
 
-export type ProjectArtifactKind = "source" | "preview" | "published";
+export type ProjectArtifactKind = "source" | "preview" | "published" | "thumbnails";
 
 export function getProjectVersionBasePrefix(options: {
   tenantId?: string;
@@ -37,3 +37,10 @@ export function getProjectPublishedBuildMetaKey(options: {
   return `${getProjectArtifactKeyPrefix({ ...options, kind: "published" })}/.vivd/build.json`;
 }
 
+export function getProjectThumbnailKey(options: {
+  tenantId?: string;
+  slug: string;
+  version: number;
+}): string {
+  return `${getProjectArtifactKeyPrefix({ ...options, kind: "thumbnails" })}/thumbnail.webp`;
+}

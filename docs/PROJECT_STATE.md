@@ -163,15 +163,19 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] `domain` - global domain registry
   - [ ] `subscription_tier` - plan definitions
   - [ ] `tenant_machine` - studio machine registry (url, status, last_active, fly ids)
-  - [ ] `project_meta` - project list, display name, description, storage pointer, default version
+  - [x] `project_meta` - project list + metadata (slug, title/desc, current version)
+  - [x] `project_version` - per-version status/meta + thumbnail key
+  - [x] `project_publish_checklist` - DB-backed publish checklist
 
 - [ ] **Existing table modifications**
   - [ ] Add `organization_id` to user, usage_record, usage_period
 
-- [ ] **Move metadata to database**
-  - Currently: `manifest.json`, `project.json`, `checklist.json` are files
-  - [ ] Design database schema for project metadata
-  - [ ] Migration script for existing projects
+- [x] **Move metadata to database**
+  - Previously: `manifest.json`, `.vivd/project.json`, `.vivd/publish-checklist.json` were file-backed
+  - [x] Design database schema for project metadata
+  - [x] Migration script for existing projects (`npm run migrate:project-meta -w @vivd/backend`)
+  - [x] Maintenance tab action for migration (Admin → Maintenance → "Migrate Project Metadata to DB")
+  - [x] Runtime uses DB as source of truth (no legacy file reads/writes)
 
 ---
 

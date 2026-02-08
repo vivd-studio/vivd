@@ -6,7 +6,6 @@ import {
 } from "../../trpc";
 import { processUrl } from "../../generator/index";
 import {
-  getProjectDir,
   getVersionDir,
   getManifest,
   getCurrentVersion,
@@ -16,7 +15,6 @@ import {
   listProjectSlugs,
   PROCESSING_STATUSES,
 } from "../../generator/versionUtils";
-import { getVivdInternalFilesPath } from "../../generator/vivdPaths";
 import { createGenerationContext } from "../../generator/core/context";
 import { runScratchFlow } from "../../generator/flows/scratchFlow";
 import { validateConfig } from "../../generator/config";
@@ -30,24 +28,24 @@ import { eq } from "drizzle-orm";
 import { limitsService } from "../../services/LimitsService";
 import { detectProjectType } from "../../devserver/projectType";
 import { buildService } from "../../services/BuildService";
+import { projectMetaService } from "../../services/ProjectMetaService";
 import {
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
 } from "../../services/ProjectArtifactsService";
+import { getObjectDownloadUrl } from "../../services/ObjectStorageService";
 
 /**
  * Check if single project mode is enabled and a project already exists.
  * In single project mode, only one project is allowed.
  */
-function checkSingleProjectModeLimit(): void {
+async function checkSingleProjectModeLimit(): Promise<void> {
   if (process.env.SINGLE_PROJECT_MODE !== "true") {
     return; // Not in single project mode
   }
 
-  const projectSlugs = listProjectSlugs();
-  const hasAnyProject = projectSlugs.some((slug) => getManifest(slug) !== null);
-
-  if (hasAnyProject) {
+  const projectSlugs = await listProjectSlugs();
+  if (projectSlugs.length > 0) {
     throw new Error(
       "Single project mode is enabled and a project already exists. " +
         "Delete the existing project before creating a new one.",
@@ -103,17 +101,15 @@ export const projectGenerationProcedures = {
 
       // Only check limit if this is a brand new project (not a new version of existing)
       if (!createNewVersion) {
-        // We need to check if project exists first before enforcing the limit
         let targetUrl = url;
         if (!targetUrl.startsWith("http")) targetUrl = "https://" + targetUrl;
         const domainSlug = new URL(targetUrl).hostname
           .replace("www.", "")
           .split(".")[0];
-        const projectDir = getProjectDir(domainSlug);
 
-        // Only enforce limit if this would be a new project
-        if (!fs.existsSync(projectDir)) {
-          checkSingleProjectModeLimit();
+        const existing = await getManifest(domainSlug);
+        if (!existing) {
+          await checkSingleProjectModeLimit();
         }
       }
 
@@ -123,15 +119,14 @@ export const projectGenerationProcedures = {
       const domainSlug = new URL(targetUrl).hostname
         .replace("www.", "")
         .split(".")[0];
-      const projectDir = getProjectDir(domainSlug);
 
-      if (fs.existsSync(projectDir)) {
-        const manifest = getManifest(domainSlug);
-        const currentVersion = getCurrentVersion(domainSlug);
+      const manifest = await getManifest(domainSlug);
+      if (manifest) {
+        const currentVersion = await getCurrentVersion(domainSlug);
 
         if (manifest && currentVersion > 0) {
           // Check if any version is currently processing (but not stale)
-          const currentVersionData = getVersionData(domainSlug, currentVersion);
+          const currentVersionData = await getVersionData(domainSlug, currentVersion);
           const status = currentVersionData?.status || "unknown";
           const versionInfo = manifest.versions.find(
             (v) => v.version === currentVersion,
@@ -156,7 +151,7 @@ export const projectGenerationProcedures = {
           }
 
           // Create new version
-          const nextVersion = getNextVersion(domainSlug);
+          const nextVersion = await getNextVersion(domainSlug);
           processUrl(url, nextVersion, {
             heroHint: input.heroHint,
             htmlHint: input.htmlHint,
@@ -255,11 +250,11 @@ export const projectGenerationProcedures = {
       await limitsService.assertNotBlocked();
 
       // Enforce single project mode limit
-      checkSingleProjectModeLimit();
+      await checkSingleProjectModeLimit();
 
       validateConfig();
 
-      const ctx = createGenerationContext({
+      const ctx = await createGenerationContext({
         source: "scratch",
         title: input.title,
         description: input.description,
@@ -325,12 +320,12 @@ export const projectGenerationProcedures = {
       await limitsService.assertNotBlocked();
 
       // Enforce single project mode limit
-      checkSingleProjectModeLimit();
+      await checkSingleProjectModeLimit();
 
       validateConfig();
 
       // Create context with "uploading_assets" status
-      const ctx = createGenerationContext({
+      const ctx = await createGenerationContext({
         source: "scratch",
         title: input.title,
         description: input.description,
@@ -434,7 +429,7 @@ export const projectGenerationProcedures = {
       const draftMeta = JSON.parse(fs.readFileSync(draftMetaPath, "utf-8"));
 
       // Create a generation context pointing to existing version
-      const ctx = createGenerationContext({
+      const ctx = await createGenerationContext({
         source: "scratch",
         title: draftMeta.title,
         description: draftMeta.description,
@@ -496,19 +491,18 @@ export const projectGenerationProcedures = {
       await limitsService.assertNotBlocked();
 
       const { slug, version } = input;
-      const projectDir = getProjectDir(slug);
-
-      if (!fs.existsSync(projectDir)) {
+      const manifest = await getManifest(slug);
+      if (!manifest) {
         throw new Error("Project not found");
       }
 
-      const targetVersion = version ?? getCurrentVersion(slug);
+      const targetVersion = version ?? (await getCurrentVersion(slug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
 
       const versionDir = getVersionDir(slug, targetVersion);
-      const versionData = getVersionData(slug, targetVersion);
+      const versionData = await getVersionData(slug, targetVersion);
 
       if (!versionData) {
         throw new Error("Version metadata not found");
@@ -562,21 +556,8 @@ export const projectGenerationProcedures = {
     )
     .query(async ({ input }) => {
       const { slug, version } = input;
-      const projectDir = getProjectDir(slug);
-
-      if (!fs.existsSync(projectDir)) {
-        return {
-          status: "not_found",
-          url: undefined,
-          originalUrl: "",
-          createdAt: "",
-          version: 0,
-          totalVersions: 0,
-        };
-      }
-
-      const manifest = getManifest(slug);
-      const targetVersion = version ?? getCurrentVersion(slug);
+      const manifest = await getManifest(slug);
+      const targetVersion = version ?? manifest?.currentVersion ?? 0;
 
       if (targetVersion === 0 || !manifest) {
         return {
@@ -589,13 +570,15 @@ export const projectGenerationProcedures = {
         };
       }
 
-      const versionData = getVersionData(slug, targetVersion);
+      const versionData = await getVersionData(slug, targetVersion);
       const status = versionData?.status || "unknown";
       const originalUrl = versionData?.url || manifest.url || "";
       const createdAt = versionData?.createdAt || "";
-      const sourceRaw = (manifest as any).source as string | undefined;
+      const sourceRaw = (versionData?.source ?? manifest.source) as
+        | string
+        | undefined;
       const title =
-        (versionData as any)?.title ||
+        versionData?.title ||
         ((manifest as any).title as string | undefined) ||
         "";
       const source: "url" | "scratch" =
@@ -623,7 +606,7 @@ export const projectGenerationProcedures = {
       // Get error message from version data if status is failed
       const errorMessage =
         status === "failed"
-          ? (versionData as any)?.errorMessage ||
+          ? versionData?.errorMessage ||
             manifest.versions.find((v) => v.version === targetVersion)
               ?.errorMessage
           : undefined;
@@ -663,53 +646,41 @@ export const projectGenerationProcedures = {
       // Fetch all published sites upfront for efficient lookup
       const publishedSites = await publishService.getAllPublishedSites();
 
-      const projectSlugs = listProjectSlugs().filter((projectSlug) => {
-        if (isClientEditor) {
-          return projectSlug === assignedProjectSlug;
-        }
-        return true;
-      });
+      const projectSlugs = await listProjectSlugs();
+      const filteredSlugs = isClientEditor
+        ? projectSlugs.filter((slug) => slug === assignedProjectSlug)
+        : projectSlugs;
 
-      const projects = projectSlugs
-        .map((projectSlug) => {
+      const projects = await Promise.all(
+        filteredSlugs.map(async (slug) => {
+          const manifest = await getManifest(slug);
+          if (!manifest) return null;
 
-          const manifest = getManifest(projectSlug);
-
-          // Only include directories that have a valid manifest (are actual projects)
-          if (!manifest) {
-            return null;
-          }
-
-          // Get data from current version
           const currentVersion = manifest.currentVersion;
-          const versionData = getVersionData(projectSlug, currentVersion);
-          const sourceRaw = (manifest as any).source as string | undefined;
-          const title =
-            (versionData as any)?.title ||
-            ((manifest as any).title as string | undefined) ||
-            "";
+          const versionData =
+            currentVersion > 0 ? await getVersionData(slug, currentVersion) : null;
+
+          const title = versionData?.title || (manifest as any).title || "";
+          const sourceRaw = (versionData?.source ?? manifest.source) as
+            | string
+            | undefined;
           const source: "url" | "scratch" =
-            sourceRaw === "scratch"
-              ? "scratch"
-              : manifest.url
-                ? "url"
-                : "scratch";
+            sourceRaw === "scratch" ? "scratch" : manifest.url ? "url" : "scratch";
 
-          // Get publish info for this project
-          const publishInfo = publishedSites.get(projectSlug);
+          const publishInfo = publishedSites.get(slug);
 
-          // Check if thumbnail exists
-          const versionDir = getVersionDir(projectSlug, currentVersion);
-          const thumbnailPath = getVivdInternalFilesPath(
-            versionDir,
-            "thumbnail.webp"
-          );
-          const hasThumbnail = fs.existsSync(thumbnailPath);
+          const thumbnailUrl =
+            versionData?.thumbnailKey
+              ? await getObjectDownloadUrl({
+                  key: versionData.thumbnailKey,
+                  expiresInSeconds: 60 * 60,
+                })
+              : null;
 
           return {
-            slug: projectSlug,
+            slug,
             status: versionData?.status || "unknown",
-            url: manifest.url,
+            url: versionData?.url || manifest.url,
             source,
             title,
             createdAt: manifest.createdAt,
@@ -717,19 +688,18 @@ export const projectGenerationProcedures = {
             currentVersion,
             totalVersions: manifest.versions.length,
             versions: manifest.versions,
-            // Add publish info
             publishedDomain: publishInfo?.domain ?? null,
             publishedVersion: publishInfo?.projectVersion ?? null,
-            // Add thumbnail URL
-            thumbnailUrl: hasThumbnail
-              ? `/vivd-studio/api/projects/${projectSlug}/v${currentVersion}/.vivd/thumbnail.webp`
-              : null,
+            thumbnailUrl,
           };
-        })
-        .filter(
+        }),
+      );
+
+      return {
+        projects: projects.filter(
           (project): project is NonNullable<typeof project> => project !== null,
-        );
-      return { projects };
+        ),
+      };
     } catch (error) {
       console.error("Failed to list projects:", error);
       throw new Error("Failed to list projects");
@@ -737,7 +707,7 @@ export const projectGenerationProcedures = {
   }),
 
   /**
-   * Set the current version for a project (persists to manifest.json)
+   * Set the current version for a project (persists to DB)
    */
   setCurrentVersion: projectMemberProcedure
     .input(
@@ -748,16 +718,8 @@ export const projectGenerationProcedures = {
     )
     .mutation(async ({ input }) => {
       const { slug, version } = input;
-      const projectDir = getProjectDir(slug);
-
-      if (!fs.existsSync(projectDir)) {
-        throw new Error("Project not found");
-      }
-
-      const manifest = getManifest(slug);
-      if (!manifest) {
-        throw new Error("Project manifest not found");
-      }
+      const manifest = await getManifest(slug);
+      if (!manifest) throw new Error("Project not found");
 
       // Validate that the version exists
       const versionExists = manifest.versions.some(
@@ -767,10 +729,8 @@ export const projectGenerationProcedures = {
         throw new Error(`Version ${version} does not exist for this project`);
       }
 
-      // Update the manifest with new currentVersion
-      manifest.currentVersion = version;
-      const manifestPath = path.join(projectDir, "manifest.json");
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      await projectMetaService.setCurrentVersion(slug, version);
+      await projectMetaService.touchUpdatedAt(slug);
 
       return {
         success: true,

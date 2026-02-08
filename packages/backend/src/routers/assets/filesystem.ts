@@ -163,7 +163,7 @@ export const assetsFilesystemProcedures = {
         fs.unlinkSync(targetPath);
       }
 
-      touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(slug);
       return { success: true, deleted: relativePath };
     }),
 
@@ -198,7 +198,7 @@ export const assetsFilesystemProcedures = {
       }
 
       fs.mkdirSync(sanitizedPath, { recursive: true });
-      touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(slug);
 
       return {
         success: true,
@@ -294,7 +294,7 @@ export const assetsFilesystemProcedures = {
       }
 
       fs.writeFileSync(targetPath, content, "utf-8");
-      touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(slug);
       return { success: true, path: relativePath };
     }),
 
@@ -357,7 +357,7 @@ export const assetsFilesystemProcedures = {
 
       // Move the file/folder
       fs.renameSync(sourceFullPath, destFullPath);
-      touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(slug);
 
       return { success: true, oldPath: sourcePath, newPath: destinationPath };
     }),

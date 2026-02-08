@@ -185,7 +185,9 @@ export async function runTask(
       const projectSlug =
         versionIndex > 0 ? pathParts[versionIndex - 1] : undefined;
       if (projectSlug) {
-        touchProjectUpdatedAt(projectSlug);
+        void touchProjectUpdatedAt(projectSlug).catch((err) => {
+          console.warn("[OpenCode] Failed to touch project updatedAt:", err);
+        });
       }
       // Emit session completed event to frontend
       agentEventEmitter.emitSessionEvent(

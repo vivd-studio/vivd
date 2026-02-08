@@ -207,9 +207,8 @@ export default function EmbeddedStudio() {
   }, [externalPreview, projectSlug, project]);
 
   const thumbnailSrc = useMemo(() => {
-    if (!projectSlug) return null;
-    return `/vivd-studio/api/projects/${projectSlug}/v${version}/.vivd/thumbnail.webp`;
-  }, [projectSlug, version]);
+    return project?.thumbnailUrl ?? null;
+  }, [project?.thumbnailUrl]);
 
   if (isLoading) {
     return (

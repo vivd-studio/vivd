@@ -1,16 +1,13 @@
 import * as fs from "fs";
 import {
-  createVersionEntry,
-  getManifest,
   getNextVersion,
   getProjectDir,
   getVersionDir,
-  saveManifest,
-  updateVersionStatus,
 } from "../versionUtils";
 import type { GenerationContext, GenerationSource } from "../flows/types";
-import { ensureVivdInternalFilesDir, getVivdInternalFilesPath } from "../vivdPaths";
+import { ensureVivdInternalFilesDir } from "../vivdPaths";
 import { applyProjectTemplateFiles } from "../templateFiles";
+import { projectMetaService } from "../../services/ProjectMetaService";
 
 function slugifyTitle(title: string): string {
   const cleaned = title
@@ -29,16 +26,21 @@ function getSlugFromUrl(targetUrl: string): string {
   return hostname.split(".")[0] || "project";
 }
 
-function findAvailableSlug(baseSlug: string): string {
+async function slugExists(slug: string): Promise<boolean> {
+  const existing = await projectMetaService.getProject(slug);
+  if (existing) return true;
+  return fs.existsSync(getProjectDir(slug));
+}
+
+async function findAvailableSlug(baseSlug: string): Promise<string> {
   const normalizedBase = baseSlug.trim().toLowerCase();
-  const baseDir = getProjectDir(normalizedBase);
-  if (!fs.existsSync(baseDir)) return normalizedBase;
+  if (!(await slugExists(normalizedBase))) return normalizedBase;
 
   let i = 2;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const candidate = `${normalizedBase}-${i}`;
-    if (!fs.existsSync(getProjectDir(candidate))) return candidate;
+    if (!(await slugExists(candidate))) return candidate;
     i++;
   }
 }
@@ -54,10 +56,10 @@ export interface CreateGenerationContextInput {
   initialStatus?: string;
 }
 
-export function createGenerationContext(
-  input: CreateGenerationContextInput
-): GenerationContext {
-  const now = new Date().toISOString();
+export async function createGenerationContext(
+  input: CreateGenerationContextInput,
+): Promise<GenerationContext> {
+  const now = new Date();
   const source = input.source;
   const initialStatus = input.initialStatus ?? "pending";
 
@@ -73,39 +75,28 @@ export function createGenerationContext(
   }
 
   if (input.allowSlugSuffix) {
-    slug = findAvailableSlug(slug);
+    slug = await findAvailableSlug(slug);
   }
 
-  const version = input.version ?? getNextVersion(slug);
+  const version = input.version ?? (await getNextVersion(slug));
   const projectDir = getProjectDir(slug);
   const outputDir = getVersionDir(slug, version);
 
   if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-  createVersionEntry(slug, version, input.url ?? "", initialStatus);
-
-  const manifest = getManifest(slug);
-  if (manifest) {
-    (manifest as any).source = source;
-    if (input.title) (manifest as any).title = input.title;
-    if (input.description) (manifest as any).description = input.description;
-    if (!manifest.createdAt) manifest.createdAt = now;
-    saveManifest(slug, manifest);
-  }
-
-  ensureVivdInternalFilesDir(outputDir);
-  const projectJsonPath = getVivdInternalFilesPath(outputDir, "project.json");
-  const projectData: Record<string, unknown> = {
+  await projectMetaService.createProjectVersion({
+    slug,
+    version,
     source,
     url: input.url ?? "",
     title: input.title ?? "",
     description: input.description ?? "",
-    createdAt: now,
     status: initialStatus,
-    version,
-  };
-  fs.writeFileSync(projectJsonPath, JSON.stringify(projectData, null, 2));
+    createdAt: now,
+  });
+
+  ensureVivdInternalFilesDir(outputDir);
 
   try {
     applyProjectTemplateFiles({
@@ -119,20 +110,12 @@ export function createGenerationContext(
   }
 
   const updateStatus = (status: string, errorMessage?: string) => {
-    try {
-      const currentData = JSON.parse(fs.readFileSync(projectJsonPath, "utf-8"));
-      currentData.status = status;
-      if (errorMessage) {
-        currentData.errorMessage = errorMessage;
-      } else if (currentData.errorMessage && status === "completed") {
-        // Clear error message on successful completion
-        delete currentData.errorMessage;
-      }
-      fs.writeFileSync(projectJsonPath, JSON.stringify(currentData, null, 2));
-    } catch {
-      // ignore
-    }
-    updateVersionStatus(slug, version, status, errorMessage);
+    void projectMetaService
+      .updateVersionStatus({ slug, version, status, errorMessage })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[ProjectMeta] Failed to update status for ${slug}/v${version}: ${message}`);
+      });
   };
 
   return { source, slug, version, outputDir, updateStatus };

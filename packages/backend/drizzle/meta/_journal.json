@@ -50,6 +50,13 @@
       "when": 1768334562903,
       "tag": "0006_pink_shinko_yamashiro",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770488200993,
+      "tag": "0007_slippery_carmella_unuscione",
+      "breakpoints": true
     }
   ]
 }

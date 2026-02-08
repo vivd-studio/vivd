@@ -8,7 +8,6 @@ import {
 } from "../../generator/versionUtils";
 import { gitService } from "../../services/GitService";
 import fs from "fs";
-import path from "path";
 import { CHECKLIST_PROMPT } from "../../opencode/checklistTypes";
 import type {
   PrePublishChecklist,
@@ -16,12 +15,13 @@ import type {
 } from "../../opencode/checklistTypes";
 import { debugLog } from "./debug";
 import { limitsService } from "../../services/LimitsService";
+import { projectMetaService } from "../../services/ProjectMetaService";
 
 export const agentChecklistProcedures = {
   /**
    * Run pre-publish checklist analysis via the agent.
    * The agent analyzes the project and returns a JSON checklist.
-   * Results are saved to .vivd/publish-checklist.json
+   * Results are saved to the database (project_publish_checklist).
    */
   runPrePublishChecklist: adminProcedure
     .input(
@@ -41,7 +41,7 @@ export const agentChecklistProcedures = {
       }
 
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
@@ -166,17 +166,9 @@ export const agentChecklistProcedures = {
           summary,
         };
 
-        // Save to .vivd/publish-checklist.json
-        const vivdDir = path.join(versionPath, ".vivd");
-        if (!fs.existsSync(vivdDir)) {
-          fs.mkdirSync(vivdDir, { recursive: true });
-        }
-
-        const checklistPath = path.join(vivdDir, "publish-checklist.json");
-        fs.writeFileSync(checklistPath, JSON.stringify(checklist, null, 2));
-
+        await projectMetaService.upsertPublishChecklist(checklist);
         console.log(
-          `[PrePublishChecklist] Saved checklist to ${checklistPath}`
+          `[PrePublishChecklist] Saved checklist to DB for ${input.projectSlug} v${targetVersion}`
         );
 
         return { success: true, checklist, sessionId };
@@ -198,51 +190,43 @@ export const agentChecklistProcedures = {
     )
     .query(async ({ input }) => {
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
 
       if (targetVersion === 0) {
         return { checklist: null, hasChangesSinceCheck: true };
       }
 
       const versionPath = getVersionDir(input.projectSlug, targetVersion);
-      const checklistPath = path.join(
-        versionPath,
-        ".vivd",
-        "publish-checklist.json"
-      );
+      const checklist = await projectMetaService.getPublishChecklist({
+        slug: input.projectSlug,
+        version: targetVersion,
+      });
 
-      if (!fs.existsSync(checklistPath)) {
+      if (!checklist) {
         return { checklist: null, hasChangesSinceCheck: true };
       }
 
-      try {
-        const content = fs.readFileSync(checklistPath, "utf-8");
-        const checklist: PrePublishChecklist = JSON.parse(content);
+      // Check if there have been changes since the checklist was run
+      let hasChangesSinceCheck = true; // Default to true if we can't determine
+      if (checklist.snapshotCommitHash) {
+        try {
+          const currentCommit = await gitService.getCurrentCommit(
+            versionPath
+          );
+          const hasUncommitted = await gitService.hasUncommittedChanges(
+            versionPath
+          );
 
-        // Check if there have been changes since the checklist was run
-        let hasChangesSinceCheck = true; // Default to true if we can't determine
-        if (checklist.snapshotCommitHash) {
-          try {
-            const currentCommit = await gitService.getCurrentCommit(
-              versionPath
-            );
-            const hasUncommitted = await gitService.hasUncommittedChanges(
-              versionPath
-            );
-
-            // Changes exist if: current commit differs from snapshot OR there are uncommitted changes
-            hasChangesSinceCheck =
-              currentCommit !== checklist.snapshotCommitHash || hasUncommitted;
-          } catch {
-            // If we can't check, assume there are changes to be safe
-            hasChangesSinceCheck = true;
-          }
+          // Changes exist if: current commit differs from snapshot OR there are uncommitted changes
+          hasChangesSinceCheck =
+            currentCommit !== checklist.snapshotCommitHash || hasUncommitted;
+        } catch {
+          // If we can't check, assume there are changes to be safe
+          hasChangesSinceCheck = true;
         }
-
-        return { checklist, hasChangesSinceCheck };
-      } catch {
-        return { checklist: null, hasChangesSinceCheck: true };
       }
+
+      return { checklist, hasChangesSinceCheck };
     }),
 
   /**
@@ -271,7 +255,7 @@ export const agentChecklistProcedures = {
       }
 
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
@@ -288,22 +272,24 @@ export const agentChecklistProcedures = {
 **${input.itemLabel}** (${input.itemStatus})
 ${input.itemNote ? `Issue: ${input.itemNote}` : ""}
 
-The checklist file is located at \`.vivd/publish-checklist.json\`.
+After you fix this issue, respond with ONLY valid JSON:
 
-After you fix this issue, please update the checklist file:
-1. Find the item with id "${input.itemId}" in the items array
-2. Change its status from "${input.itemStatus}" to "fixed"
-3. Update the note to briefly describe what you fixed
-4. Update the summary counts (decrement ${
-        input.itemStatus === "fail" ? "failed" : "warnings"
-      }, increment fixed)
-
-This marks the issue as fixed but requiring re-verification. The user can then re-run the full checks to confirm everything is correct.`;
+{"note":"Briefly describe what you changed."}`;
 
       try {
         console.log(
           `[FixChecklistItem] Fixing item "${input.itemId}" for ${input.projectSlug} v${targetVersion}`
         );
+
+        const existingChecklist = await projectMetaService.getPublishChecklist({
+          slug: input.projectSlug,
+          version: targetVersion,
+        });
+        if (!existingChecklist) {
+          throw new Error(
+            "No checklist found for this version. Run the pre-publish checklist first."
+          );
+        }
 
         // Run the agent with the fix prompt - always create a new session
         const { sessionId } = await runTask(fixPrompt, versionPath);
@@ -349,22 +335,66 @@ This marks the issue as fixed but requiring re-verification. The user can then r
           );
         }
 
-        // Read the updated checklist to return
-        const checklistPath = path.join(
-          versionPath,
-          ".vivd",
-          "publish-checklist.json"
-        );
-        let updatedChecklist: PrePublishChecklist | null = null;
+        // Extract a note from the agent response (best-effort)
+        let fixNote: string | undefined;
+        try {
+          const messages = await getSessionContent(sessionId, versionPath);
+          const assistantMessages = messages?.filter(
+            (m: { info: { role: string } }) => m.info.role === "assistant"
+          );
+          const lastMessage = assistantMessages?.[assistantMessages.length - 1];
 
-        if (fs.existsSync(checklistPath)) {
-          try {
-            const content = fs.readFileSync(checklistPath, "utf-8");
-            updatedChecklist = JSON.parse(content);
-          } catch {
-            // Ignore parse errors
+          let textContent = "";
+          if (lastMessage?.parts) {
+            for (const part of lastMessage.parts) {
+              if (part.type === "text" && part.text) {
+                textContent += part.text;
+              }
+            }
           }
+
+          const jsonMatch = textContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+          const jsonStr = jsonMatch ? jsonMatch[1].trim() : textContent.trim();
+          const parsed = JSON.parse(jsonStr) as { note?: unknown };
+          if (typeof parsed.note === "string" && parsed.note.trim()) {
+            fixNote = parsed.note.trim();
+          }
+        } catch {
+          // ignore
         }
+
+        const updatedChecklist: PrePublishChecklist = {
+          ...existingChecklist,
+          items: existingChecklist.items.map((item) => {
+            if (item.id !== input.itemId) return item;
+            return {
+              ...item,
+              status: "fixed",
+              note: fixNote || item.note || "Fixed by agent",
+            };
+          }),
+          summary: (() => {
+            const items = existingChecklist.items.map((item) =>
+              item.id === input.itemId
+                ? {
+                    ...item,
+                    status: "fixed" as const,
+                    note: fixNote || item.note || "Fixed by agent",
+                  }
+                : item
+            );
+            const fixed = items.filter((i) => i.status === "fixed").length;
+            return {
+              passed: items.filter((i) => i.status === "pass").length,
+              failed: items.filter((i) => i.status === "fail").length,
+              warnings: items.filter((i) => i.status === "warning").length,
+              skipped: items.filter((i) => i.status === "skip").length,
+              ...(fixed ? { fixed } : {}),
+            };
+          })(),
+        };
+
+        await projectMetaService.upsertPublishChecklist(updatedChecklist);
 
         return { success: true, checklist: updatedChecklist, sessionId };
       } catch (error: any) {

@@ -884,7 +884,7 @@ app.post(
 
       // Write file (converts to webp if applicable)
       await writeImageFile(file.buffer, file.originalname, filePath);
-      touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(slug);
 
       // Return relative path from project root
       const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
@@ -972,7 +972,7 @@ app.post(
         );
       }
 
-      touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(slug);
       return res.json({ success: true, uploaded });
     } catch (error) {
       console.error("Upload error:", error);

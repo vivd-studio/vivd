@@ -11,6 +11,7 @@ import {
   getProjectArtifactKeyPrefix,
   getProjectPreviewBuildMetaKey,
   getProjectPublishedBuildMetaKey,
+  getProjectThumbnailKey,
 } from "./ProjectStoragePaths";
 import { getActiveTenantId } from "../generator/versionUtils";
 
@@ -186,9 +187,36 @@ export async function uploadProjectPublishedToBucket(options: {
   return { uploaded: true };
 }
 
+export async function uploadProjectThumbnailToBucket(options: {
+  localFilePath: string;
+  slug: string;
+  version: number;
+}): Promise<{ uploaded: boolean; key?: string }> {
+  const storage = getStorage();
+  if (!storage) return { uploaded: false };
+
+  if (!fs.existsSync(options.localFilePath)) return { uploaded: false };
+
+  const key = getProjectThumbnailKey({
+    tenantId: storage.tenantId,
+    slug: options.slug,
+    version: options.version,
+  });
+
+  await storage.client.send(
+    new PutObjectCommand({
+      Bucket: storage.bucket,
+      Key: key,
+      Body: fs.createReadStream(options.localFilePath),
+      ContentType: "image/webp",
+    }),
+  );
+
+  return { uploaded: true, key };
+}
+
 export function getProjectPreviewMetaPathOnDisk(options: {
   versionDir: string;
 }): string {
   return path.join(options.versionDir, ".vivd", "preview-build.json");
 }
-

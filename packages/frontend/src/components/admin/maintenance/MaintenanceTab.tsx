@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 type MaintenanceAction =
   | "migrateProcessFiles"
+  | "migrateProjectMetadataToDb"
   | "exportProjectsToObjectStorage"
   | "templateAddMissing"
   | "templateOverwrite"
@@ -44,6 +45,20 @@ export function MaintenanceTab() {
       });
     },
   });
+
+  const migrateProjectMetadataMutation =
+    trpc.project.migrateProjectMetadataToDb.useMutation({
+      onSuccess: (data) => {
+        toast.success("DB migration completed", {
+          description: `Migrated ${data.projectsMigrated}/${data.projectsScanned} projects • ${data.versionsUpserted} versions`,
+        });
+      },
+      onError: (err: any) => {
+        toast.error("DB migration failed", {
+          description: err?.message || "Unknown error",
+        });
+      },
+    });
 
   const exportMutation =
     trpc.project.exportAllProjectsToObjectStorage.useMutation({
@@ -115,6 +130,15 @@ export function MaintenanceTab() {
           confirmLabel: "Run Migration",
           isPending: migrateMutation.isPending,
           onConfirm: () => migrateMutation.mutate(),
+        };
+      case "migrateProjectMetadataToDb":
+        return {
+          title: "Migrate project metadata to the database?",
+          description:
+            "This will import manifest/project metadata + publish checklist into Postgres and upload thumbnails to the bucket (if configured). It's safe to run multiple times.",
+          confirmLabel: "Migrate to DB",
+          isPending: migrateProjectMetadataMutation.isPending,
+          onConfirm: () => migrateProjectMetadataMutation.mutate(),
         };
       case "exportProjectsToObjectStorage":
         return {
@@ -246,6 +270,58 @@ export function MaintenanceTab() {
               ) : null}
             </div>
           ) : null}
+
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Migrate project metadata from local files into the database
+              (tables <code>project_meta</code>, <code>project_version</code>,{" "}
+              <code>project_publish_checklist</code>). If object storage is
+              configured, existing <code>.vivd/thumbnail.webp</code> files are
+              uploaded and persisted as <code>thumbnail_key</code>.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setConfirmAction("migrateProjectMetadataToDb")}
+                disabled={migrateProjectMetadataMutation.isPending}
+              >
+                {migrateProjectMetadataMutation.isPending ? (
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                ) : null}
+                Migrate Project Metadata to DB
+              </Button>
+              {migrateProjectMetadataMutation.data ? (
+                <span className="text-sm text-muted-foreground">
+                  Migrated {migrateProjectMetadataMutation.data.projectsMigrated}/
+                  {migrateProjectMetadataMutation.data.projectsScanned} projects •{" "}
+                  {migrateProjectMetadataMutation.data.versionsUpserted} versions •{" "}
+                  {migrateProjectMetadataMutation.data.checklistsUpserted} checklists •{" "}
+                  {migrateProjectMetadataMutation.data.thumbnailsUploaded} thumbnails
+                  {migrateProjectMetadataMutation.data.errors.length
+                    ? ` • ${migrateProjectMetadataMutation.data.errors.length} error(s)`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {migrateProjectMetadataMutation.data?.errors.length ? (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium mb-2">Errors</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {migrateProjectMetadataMutation.data.errors
+                    .slice(0, 5)
+                    .map((e, idx) => (
+                      <li key={idx}>
+                        {e.slug}: {e.error}
+                      </li>
+                    ))}
+                </ul>
+                {migrateProjectMetadataMutation.data.errors.length > 5 ? (
+                  <div className="text-muted-foreground mt-2">
+                    …and {migrateProjectMetadataMutation.data.errors.length - 5} more
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <div className="border-t pt-3 space-y-3">
             <p className="text-sm text-muted-foreground">

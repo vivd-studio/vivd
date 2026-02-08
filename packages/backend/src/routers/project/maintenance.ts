@@ -41,7 +41,6 @@ import {
 } from "../../services/I18nJsonPatchService";
 import {
   hasDotSegment,
-  ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
   migrateVivdInternalArtifactsInVersion,
   VIVD_INTERNAL_ARTIFACT_FILENAMES,
@@ -54,6 +53,7 @@ import {
   getObjectStorageConfigFromEnv,
   uploadDirectoryToBucket,
 } from "../../services/ObjectStorageService";
+import { migrateProjectMetadataToDbFromFilesystem } from "../../services/ProjectMetaMigrationService";
 
 export const projectMaintenanceProcedures = {
   applyHtmlPatches: projectMemberProcedure
@@ -214,7 +214,7 @@ export const projectMaintenanceProcedures = {
 
       // Update project's updatedAt timestamp if changes were applied
       if (!noChanges) {
-        touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(slug);
       }
 
       return {
@@ -239,44 +239,19 @@ export const projectMaintenanceProcedures = {
     )
     .mutation(async ({ input }) => {
       const { slug, version } = input;
-      const projectDir = getProjectDir(slug);
+      const manifest = await getManifest(slug);
+      if (!manifest) throw new Error("Project not found");
 
-      if (!fs.existsSync(projectDir)) {
-        throw new Error("Project not found");
-      }
-
-      const manifest = getManifest(slug);
-      if (!manifest) {
-        throw new Error("Project manifest not found");
-      }
-
-      const targetVersion = version ?? getCurrentVersion(slug);
+      const targetVersion = version ?? (await getCurrentVersion(slug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
 
-      const versionData = getVersionData(slug, targetVersion);
+      const versionData = await getVersionData(slug, targetVersion);
       const currentStatus = versionData?.status || "unknown";
 
       // Update the status to 'failed'
-      updateVersionStatus(slug, targetVersion, "failed");
-
-      // Also update the version-specific project.json if it exists
-      const versionDir = getVersionDir(slug, targetVersion);
-      const readPath = getVivdInternalFilesPath(versionDir, "project.json");
-      if (fs.existsSync(readPath)) {
-        try {
-          const data = JSON.parse(fs.readFileSync(readPath, "utf-8"));
-          data.status = "failed";
-          ensureVivdInternalFilesDir(versionDir);
-          fs.writeFileSync(readPath, JSON.stringify(data, null, 2));
-        } catch (e) {
-          console.error(
-            `Failed to update project.json for ${slug}/v${targetVersion}:`,
-            e
-          );
-        }
-      }
+      await updateVersionStatus(slug, targetVersion, "failed");
 
       console.log(
         `[Admin] Reset status for ${slug}/v${targetVersion}: ${currentStatus} -> failed`
@@ -297,7 +272,7 @@ export const projectMaintenanceProcedures = {
    * Keeps the version root clean and prevents accidental public access to process artifacts.
    */
   migrateVivdProcessFiles: ownerProcedure.mutation(async () => {
-    const projectDirs = listProjectSlugs();
+    const projectDirs = await listProjectSlugs();
     if (projectDirs.length === 0) {
       return {
         success: true,
@@ -354,7 +329,7 @@ export const projectMaintenanceProcedures = {
       if (!fs.existsSync(projectDir)) continue;
 
       // Only treat directories with a manifest as projects; legacy projects are handled above.
-      const manifest = getManifest(slug);
+      const manifest = await getManifest(slug);
       if (!manifest) continue;
 
       const versionFolders = fs
@@ -394,6 +369,14 @@ export const projectMaintenanceProcedures = {
   }),
 
   /**
+   * Admin maintenance: migrate file-backed project metadata into the database.
+   * Imports `manifest.json`, `.vivd/project.json`, `.vivd/publish-checklist.json`, and thumbnail artifacts.
+   */
+  migrateProjectMetadataToDb: ownerProcedure.mutation(async () => {
+    return migrateProjectMetadataToDbFromFilesystem();
+  }),
+
+  /**
    * Admin maintenance: ensure project template files (like AGENTS.md, .gitignore) exist in all versions.
    * Can be re-run with overwrite=true to update templates across all projects.
    */
@@ -419,7 +402,7 @@ export const projectMaintenanceProcedures = {
       let versionsTouched = 0;
       const errors: Array<{ slug: string; versionDir: string; error: string }> =
         [];
-      const projectDirs = listProjectSlugs();
+      const projectDirs = await listProjectSlugs();
       if (projectDirs.length === 0) {
         return {
           success: true,
@@ -449,7 +432,7 @@ export const projectMaintenanceProcedures = {
           continue;
         }
 
-        const manifest = getManifest(slug);
+        const manifest = await getManifest(slug);
         if (!manifest) continue;
 
         const projectDir = getProjectDir(slug);
@@ -467,7 +450,7 @@ export const projectMaintenanceProcedures = {
           const versionNumber = Number(folder.slice(1));
           const versionData =
             Number.isFinite(versionNumber) && versionNumber > 0
-              ? getVersionData(slug, versionNumber)
+              ? await getVersionData(slug, versionNumber)
               : null;
 
           const rawSource = (versionData?.source ??
@@ -550,7 +533,7 @@ export const projectMaintenanceProcedures = {
 
     const tenantId = getActiveTenantId();
 
-    const projectDirs = listProjectSlugs();
+    const projectDirs = await listProjectSlugs();
     if (projectDirs.length === 0) {
       return {
         success: true,
@@ -616,7 +599,7 @@ export const projectMaintenanceProcedures = {
       if (!fs.existsSync(projectDir)) continue;
 
       // Keep behavior consistent with other migrations: only process projects with a manifest.
-      const manifest = getManifest(slug);
+      const manifest = await getManifest(slug);
       if (!manifest) continue;
 
       const versionFolders = fs
@@ -796,7 +779,7 @@ export const projectMaintenanceProcedures = {
       }
 
       // Check if this is the only version
-      const manifest = getManifest(slug);
+      const manifest = await getManifest(slug);
       if (!manifest || manifest.versions.length <= 1) {
         throw new Error(
           "Cannot delete the only remaining version. Delete the entire project instead."
@@ -812,7 +795,7 @@ export const projectMaintenanceProcedures = {
       console.log(`[DeleteVersion] Stopped OpenCode server for: ${slug}/v${version}`);
 
       // Delete the version using the utility function
-      deleteVersionUtil(slug, version);
+      await deleteVersionUtil(slug, version);
       console.log(`[DeleteVersion] Permanently deleted version: ${slug}/v${version}`);
 
       return {
@@ -887,7 +870,7 @@ export const projectMaintenanceProcedures = {
    * accidentally committed before being added to .gitignore.
    */
   fixGitignoreAll: ownerProcedure.mutation(async () => {
-    const projectDirs = listProjectSlugs();
+    const projectDirs = await listProjectSlugs();
     if (projectDirs.length === 0) {
       return {
         success: true,
@@ -921,7 +904,7 @@ export const projectMaintenanceProcedures = {
     for (const slug of projectDirs) {
       projectsScanned++;
 
-      const manifest = getManifest(slug);
+      const manifest = await getManifest(slug);
       if (!manifest) continue;
 
       const projectDir = getProjectDir(slug);
@@ -987,7 +970,7 @@ export const projectMaintenanceProcedures = {
     )
     .mutation(async ({ input }) => {
       const onlyMissing = input?.onlyMissing ?? true;
-      const projectDirs = listProjectSlugs();
+      const projectDirs = await listProjectSlugs();
       if (projectDirs.length === 0) {
         return {
           success: true,
@@ -1008,7 +991,7 @@ export const projectMaintenanceProcedures = {
       for (const slug of projectDirs) {
         projectsScanned++;
 
-        const manifest = getManifest(slug);
+        const manifest = await getManifest(slug);
         if (!manifest) continue;
 
         const projectDir = getProjectDir(slug);
@@ -1026,7 +1009,7 @@ export const projectMaintenanceProcedures = {
           versionsScanned++;
 
           const versionDir = path.join(projectDir, folder);
-          const versionData = getVersionData(slug, versionNumber);
+          const versionData = await getVersionData(slug, versionNumber);
 
           // Only generate thumbnails for completed versions
           if (versionData?.status !== "completed") {

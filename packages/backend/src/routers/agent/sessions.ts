@@ -49,7 +49,7 @@ export const agentSessionProcedures = {
 
       // Determine version and get version-specific path
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
@@ -85,7 +85,7 @@ export const agentSessionProcedures = {
       try {
         // Determine version and get version-specific path
         const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
+          input.version ?? (await getCurrentVersion(input.projectSlug));
         let directory: string;
         if (targetVersion > 0) {
           directory = getVersionDir(input.projectSlug, targetVersion);
@@ -111,7 +111,7 @@ export const agentSessionProcedures = {
     .query(async ({ input }) => {
       try {
         const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
+          input.version ?? (await getCurrentVersion(input.projectSlug));
         let directory: string;
         if (targetVersion > 0) {
           directory = getVersionDir(input.projectSlug, targetVersion);
@@ -142,7 +142,7 @@ export const agentSessionProcedures = {
       try {
         // Compute the directory for this project/version
         const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
+          input.version ?? (await getCurrentVersion(input.projectSlug));
         let directory: string | undefined;
         if (targetVersion > 0) {
           directory = getVersionDir(input.projectSlug, targetVersion);
@@ -177,7 +177,7 @@ export const agentSessionProcedures = {
     .query(async ({ input }) => {
       try {
         const targetVersion =
-          input.version ?? getCurrentVersion(input.projectSlug);
+          input.version ?? (await getCurrentVersion(input.projectSlug));
         let directory: string;
         if (targetVersion > 0) {
           directory = getVersionDir(input.projectSlug, targetVersion);
@@ -202,7 +202,7 @@ export const agentSessionProcedures = {
     )
     .mutation(async ({ input }) => {
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       let directory: string;
       if (targetVersion > 0) {
         directory = getVersionDir(input.projectSlug, targetVersion);
@@ -236,7 +236,7 @@ export const agentSessionProcedures = {
       });
 
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       let directory: string;
       if (targetVersion > 0) {
         directory = getVersionDir(input.projectSlug, targetVersion);
@@ -273,7 +273,7 @@ export const agentSessionProcedures = {
       );
 
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       let directory: string;
       if (targetVersion > 0) {
         directory = getVersionDir(input.projectSlug, targetVersion);
@@ -314,7 +314,7 @@ export const agentSessionProcedures = {
     )
     .mutation(async ({ input }) => {
       const targetVersion =
-        input.version ?? getCurrentVersion(input.projectSlug);
+        input.version ?? (await getCurrentVersion(input.projectSlug));
       let directory: string;
       if (targetVersion > 0) {
         directory = getVersionDir(input.projectSlug, targetVersion);

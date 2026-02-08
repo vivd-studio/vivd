@@ -4,6 +4,8 @@ import {
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
 } from "../generator/vivdPaths";
+import { uploadProjectThumbnailToBucket } from "./ProjectArtifactsService";
+import { projectMetaService } from "./ProjectMetaService";
 
 // Base URL for the scraper (in Docker) to reach this backend's preview endpoint.
 // In dev/local, use the Docker service name. In production, use the public DOMAIN.
@@ -111,6 +113,27 @@ class ThumbnailService {
       const thumbnailPath = getVivdInternalFilesPath(versionDir, "thumbnail.webp");
       const thumbnailBuffer = Buffer.from(base64Thumbnail, "base64");
       fs.writeFileSync(thumbnailPath, thumbnailBuffer);
+
+      // Upload thumbnail to object storage (best-effort) and persist key in DB.
+      try {
+        const uploaded = await uploadProjectThumbnailToBucket({
+          localFilePath: thumbnailPath,
+          slug,
+          version,
+        });
+
+        if (uploaded.uploaded && uploaded.key) {
+          await projectMetaService.setVersionThumbnailKey({
+            slug,
+            version,
+            thumbnailKey: uploaded.key,
+          });
+        }
+      } catch (uploadErr) {
+        const message =
+          uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+        console.warn(`[Thumbnail] Bucket upload failed: ${message}`);
+      }
 
       console.log(`[Thumbnail] Generated successfully: ${thumbnailPath}`);
     } catch (err) {
