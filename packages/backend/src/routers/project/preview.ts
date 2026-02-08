@@ -1,12 +1,10 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
-import { getActiveTenantId, getVersionDir } from "../../generator/versionUtils";
+import { getVersionDir } from "../../generator/versionUtils";
 import { buildService } from "../../services/BuildService";
-import type { S3Client } from "@aws-sdk/client-s3";
-import { createS3Client, doesObjectExist, getObjectStorageConfigFromEnv } from "../../services/ObjectStorageService";
-import { getProjectArtifactKeyPrefix } from "../../services/ProjectStoragePaths";
 import { detectProjectType } from "../../devserver/projectType";
 import fs from "node:fs";
+import { resolvePublishableArtifactState } from "../../services/ProjectArtifactStateService";
 
 export const previewProcedures = {
   /**
@@ -27,52 +25,29 @@ export const previewProcedures = {
       // External preview URL is always /preview/ (static serving)
       const url = `/vivd-studio/api/preview/${slug}/v${version}/`;
 
-      // Prefer bucket-backed preview readiness when object storage is configured.
-      // Fallback to local build artifacts for dev/self-hosted modes.
-      let storage: { client: S3Client; bucket: string } | null = null;
-      try {
-        const s3Config = getObjectStorageConfigFromEnv(process.env);
-        storage = { client: createS3Client(s3Config), bucket: s3Config.bucket };
-      } catch {
-        storage = null;
-      }
-
-      if (storage) {
-        const previewPrefix = getProjectArtifactKeyPrefix({
-          tenantId: getActiveTenantId(),
-          slug,
-          version,
-          kind: "preview",
-        });
-        const hasPreview = await doesObjectExist({
-          client: storage.client,
-          bucket: storage.bucket,
-          key: `${previewPrefix}/index.html`,
-        });
-        if (hasPreview) {
+      const artifactState = await resolvePublishableArtifactState({ slug, version });
+      if (artifactState.storageEnabled) {
+        if (artifactState.readiness === "ready") {
           return {
-            mode: "built" as const,
+            mode: artifactState.sourceKind === "preview" ? ("built" as const) : ("static" as const),
             status: "ready" as const,
             url,
           };
         }
-
-        const sourcePrefix = getProjectArtifactKeyPrefix({
-          tenantId: getActiveTenantId(),
-          slug,
-          version,
-          kind: "source",
-        });
-        const hasSourceIndex = await doesObjectExist({
-          client: storage.client,
-          bucket: storage.bucket,
-          key: `${sourcePrefix}/index.html`,
-        });
-        if (hasSourceIndex) {
+        if (artifactState.readiness === "build_in_progress") {
           return {
-            mode: "static" as const,
-            status: "ready" as const,
+            mode: "built" as const,
+            status: "building" as const,
             url,
+            error: artifactState.error ?? undefined,
+          };
+        }
+        if (artifactState.readiness === "artifact_not_ready") {
+          return {
+            mode: "built" as const,
+            status: "error" as const,
+            url,
+            error: artifactState.error ?? undefined,
           };
         }
 
@@ -80,9 +55,11 @@ export const previewProcedures = {
           mode: "built" as const,
           status: "pending" as const,
           url,
+          error: artifactState.error ?? undefined,
         };
       }
 
+      // Fallback for local standalone mode without object storage.
       const versionDir = getVersionDir(slug, version);
       const config = fs.existsSync(versionDir)
         ? detectProjectType(versionDir)

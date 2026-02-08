@@ -36,6 +36,14 @@ export function getProjectPreviewBuildMetaKey(options: {
   return `${getProjectArtifactKeyPrefix({ ...options, kind: "preview" })}/.vivd/build.json`;
 }
 
+export function getProjectSourceBuildMetaKey(options: {
+  tenantId?: string;
+  slug: string;
+  version: number;
+}): string {
+  return `${getProjectArtifactKeyPrefix({ ...options, kind: "source" })}/.vivd/build.json`;
+}
+
 export function getProjectPublishedBuildMetaKey(options: {
   tenantId?: string;
   slug: string;

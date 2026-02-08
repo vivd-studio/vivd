@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { formatDistanceToNow } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,9 @@ import {
   AlertTriangle,
   Save,
   CheckCircle2,
+  ExternalLink,
+  Globe,
+  RefreshCw,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -87,6 +91,13 @@ function suggestNextVersion(lastTag: string | null): string {
   return `${lastTag}-2`;
 }
 
+function formatTimeLabel(iso: string | null | undefined): string {
+  if (!iso) return "Unknown";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return `${date.toLocaleString()} (${formatDistanceToNow(date, { addSuffix: true })})`;
+}
+
 /**
  * Standalone studio publish dialog.
  *
@@ -104,6 +115,9 @@ export function PublishDialog({
   const [versionName, setVersionName] = useState("");
   const [message, setMessage] = useState("");
   const [showPublishWarning, setShowPublishWarning] = useState(false);
+  const [domain, setDomain] = useState("");
+  const [confirmUnpublishOpen, setConfirmUnpublishOpen] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   // Check for unsaved changes
   const { data: hasChangesData, isLoading: isCheckingChanges } =
@@ -119,6 +133,75 @@ export function PublishDialog({
     { slug: projectSlug },
     { enabled: open && !!projectSlug }
   );
+  const publishedVersion =
+    publishStatus && "projectVersion" in publishStatus
+      ? publishStatus.projectVersion
+      : null;
+  const connectedMode = publishStatus?.mode === "connected";
+
+  const publishStateQuery = trpc.project.publishState.useQuery(
+    { slug: projectSlug, version },
+    { enabled: open && !!projectSlug && connectedMode }
+  );
+  const publishChecklistQuery = trpc.project.publishChecklist.useQuery(
+    { slug: projectSlug, version },
+    { enabled: open && !!projectSlug && connectedMode }
+  );
+
+  useEffect(() => {
+    if (!open || !connectedMode) return;
+    setDomain(publishStatus?.domain ?? "");
+  }, [open, connectedMode, publishStatus?.domain]);
+
+  useEffect(() => {
+    if (!open) {
+      setPublishError(null);
+    }
+  }, [open]);
+
+  const normalizedDomain = domain.trim();
+  const checkDomainQuery = trpc.project.checkDomain.useQuery(
+    { domain: normalizedDomain, slug: projectSlug },
+    {
+      enabled: open && !!projectSlug && connectedMode && normalizedDomain.length > 0,
+    }
+  );
+
+  const publishMutation = trpc.project.publish.useMutation({
+    onSuccess: () => {
+      setPublishError(null);
+      toast.success("Published changes");
+      void Promise.all([
+        utils.project.publishStatus.invalidate({ slug: projectSlug }),
+        utils.project.publishState.invalidate({ slug: projectSlug, version }),
+        utils.project.publishChecklist.invalidate({ slug: projectSlug, version }),
+      ]);
+      onPublished?.();
+      onOpenChange(false);
+    },
+    onError: (error) => {
+      const message = error.message || "Failed to publish";
+      const detail =
+        error.data?.code === "CONFLICT"
+          ? `${message} Refresh status and retry.`
+          : message;
+      setPublishError(detail);
+      toast.error(error.message || "Failed to publish");
+      void utils.project.publishState.invalidate({ slug: projectSlug, version });
+    },
+  });
+
+  const unpublishMutation = trpc.project.unpublish.useMutation({
+    onSuccess: () => {
+      toast.success("Site unpublished");
+      setConfirmUnpublishOpen(false);
+      void utils.project.publishStatus.invalidate({ slug: projectSlug });
+      onPublished?.();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to unpublish");
+    },
+  });
 
   // Pre-publish checklist
   const {
@@ -233,6 +316,237 @@ export function PublishDialog({
   // Separate "publishing" state from "busy" state for button display
   const isPublishing = createTagMutation.isPending || saveMutation.isPending;
   const isBusy = isPublishing || isRunningChecklist || fixingItemId !== null;
+
+  if (connectedMode) {
+    const publishState = publishStateQuery.data;
+    const publishChecklist = publishChecklistQuery.data;
+    const unsavedChangesInStudio =
+      Boolean(publishState?.studioRunning) &&
+      Boolean(publishState?.publishableCommitHash) &&
+      Boolean(publishState?.lastSyncedCommitHash) &&
+      publishState?.publishableCommitHash !== publishState?.lastSyncedCommitHash;
+
+    const domainOk =
+      normalizedDomain.length > 0 && (checkDomainQuery.data?.available ?? true);
+    const canPublish =
+      publishState?.storageEnabled &&
+      publishState?.readiness === "ready" &&
+      domainOk;
+
+    return (
+      <>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="sm:max-w-[560px] max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Rocket className="h-5 w-5" />
+                Publish Site
+              </DialogTitle>
+              <DialogDescription>
+                Make {projectSlug} live at your domain.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 overflow-y-auto py-1">
+              <div className="rounded-md border p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Publishing content</span>
+                  <span className="text-foreground">
+                    {publishState?.sourceKind === "preview"
+                      ? "Latest preview build"
+                      : "Latest saved files"}
+                  </span>
+                </div>
+                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  <div>
+                    Version: <span className="text-foreground">v{version}</span>
+                  </div>
+                  <div>
+                    Prepared:{" "}
+                    <span className="text-foreground">
+                      {formatTimeLabel(publishState?.builtAt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {publishState?.readiness === "build_in_progress" ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  Site build in progress. You can publish once it is ready.
+                </div>
+              ) : null}
+
+              {publishState?.readiness === "artifact_not_ready" ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {publishState.error || "This site is not ready to publish yet."}
+                </div>
+              ) : null}
+
+              {publishError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {publishError}
+                </div>
+              ) : null}
+
+              {unsavedChangesInStudio ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  You have unsaved changes in Studio. Save changes before publishing to include latest edits.
+                </div>
+              ) : null}
+
+              <PrePublishChecklist
+                dialogOpen={open}
+                checklist={checklist}
+                hasChangesSinceCheck={hasChangesSinceCheck}
+                isLoading={isLoadingChecklist}
+                isRunning={isRunningChecklist}
+                onRun={runChecklist}
+                onFixItem={fixChecklistItem}
+                fixingItemId={fixingItemId}
+              />
+
+              {publishChecklist?.checklist ? (
+                <div className="rounded-md border p-3 text-xs text-muted-foreground">
+                  Checklist: {publishChecklist.checklist.summary.passed}/
+                  {publishChecklist.checklist.items.length} passed
+                  {publishChecklist.stale ? " (stale)" : " (fresh)"}
+                </div>
+              ) : null}
+
+              <div className="grid gap-2">
+                <Label htmlFor="publish-domain">Domain</Label>
+                <Input
+                  id="publish-domain"
+                  placeholder="example.com"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  autoComplete="off"
+                />
+                {normalizedDomain.length > 0 && checkDomainQuery.data?.error ? (
+                  <p className="text-xs text-destructive">
+                    {checkDomainQuery.data.error}
+                  </p>
+                ) : null}
+              </div>
+
+              {publishStatus?.isPublished ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      Published at{" "}
+                      <span className="font-medium">{publishStatus.domain}</span>
+                      {publishStatus.publishedAt
+                        ? ` · ${formatTimeLabel(publishStatus.publishedAt)}`
+                        : ""}
+                    </div>
+                    {publishStatus.url ? (
+                      <a
+                        className="inline-flex items-center gap-1 text-emerald-900 hover:underline"
+                        href={publishStatus.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter className="gap-2 sm:justify-between">
+              <div>
+                {publishStatus?.isPublished ? (
+                  <Button
+                    variant="destructive"
+                    onClick={() => setConfirmUnpublishOpen(true)}
+                    disabled={unpublishMutation.isPending}
+                  >
+                    {unpublishMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Unpublishing...
+                      </>
+                    ) : (
+                      "Unpublish site"
+                    )}
+                  </Button>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPublishError(null);
+                    void Promise.all([
+                      publishStateQuery.refetch(),
+                      publishChecklistQuery.refetch(),
+                      publishStatus && utils.project.publishStatus.invalidate({ slug: projectSlug }),
+                    ]);
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh status
+                </Button>
+                <Button
+                  onClick={() => {
+                    setPublishError(null);
+                    publishMutation.mutate({
+                      slug: projectSlug,
+                      version,
+                      domain: normalizedDomain,
+                      expectedCommitHash: publishState?.publishableCommitHash ?? undefined,
+                    });
+                  }}
+                  disabled={!canPublish || publishMutation.isPending}
+                >
+                  {publishMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="h-4 w-4 mr-2" />
+                      Publish site
+                    </>
+                  )}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog
+          open={confirmUnpublishOpen}
+          onOpenChange={setConfirmUnpublishOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Unpublish site?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will remove publish routing for{" "}
+                <span className="font-medium">
+                  {publishStatus?.domain || projectSlug}
+                </span>
+                {publishedVersion ? ` (v${publishedVersion})` : ""}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => unpublishMutation.mutate({ slug: projectSlug })}
+              >
+                Unpublish
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+  }
 
   return (
     <>

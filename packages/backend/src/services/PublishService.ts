@@ -1,19 +1,17 @@
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { db } from "../db";
 import { publishedSite } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { gitService } from "./GitService";
-import { buildService } from "./BuildService";
-import { thumbnailService } from "./ThumbnailService";
-import { getVersionDir } from "../generator/versionUtils";
-import { detectProjectType } from "../devserver/projectType";
 import type { GitHubSyncResult } from "./GitService";
 import {
-  uploadProjectPreviewToBucket,
   uploadProjectPublishedToBucket,
-  uploadProjectSourceToBucket,
 } from "./ProjectArtifactsService";
+import {
+  downloadArtifactToDirectory,
+  resolvePublishableArtifactState,
+} from "./ProjectArtifactStateService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
@@ -40,10 +38,38 @@ export interface PublishedSiteInfo {
   projectVersion: number;
 }
 
+export class PublishConflictError extends Error {
+  reason: "build_in_progress" | "artifact_not_ready" | "artifact_changed";
+
+  constructor(
+    reason: "build_in_progress" | "artifact_not_ready" | "artifact_changed",
+    message: string,
+  ) {
+    super(message);
+    this.reason = reason;
+    this.name = "PublishConflictError";
+  }
+}
+
 /**
  * Service for publishing project versions to custom domains via Caddy.
  */
 export class PublishService {
+  private activePublishes = new Set<string>();
+
+  private async withPublishLock<T>(projectSlug: string, work: () => Promise<T>): Promise<T> {
+    while (this.activePublishes.has(projectSlug)) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    this.activePublishes.add(projectSlug);
+
+    try {
+      return await work();
+    } finally {
+      this.activePublishes.delete(projectSlug);
+    }
+  }
+
   /**
    * Normalize domain: strip www., lowercase, trim whitespace, remove port
    */
@@ -136,168 +162,154 @@ export class PublishService {
     version: number;
     domain: string;
     userId: string;
+    expectedCommitHash?: string;
   }): Promise<PublishResult> {
-    const { projectSlug, version, domain, userId } = params;
-    const normalizedDomain = this.normalizeDomain(domain);
+    return await this.withPublishLock(params.projectSlug, async () => {
+      const { projectSlug, version, domain, userId, expectedCommitHash } = params;
+      const normalizedDomain = this.normalizeDomain(domain);
 
-    // Validate domain format
-    const validation = this.validateDomain(normalizedDomain);
-    if (!validation.valid) {
-      throw new Error(validation.error);
-    }
+      // Validate domain format
+      const validation = this.validateDomain(normalizedDomain);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
 
-    // Check domain availability
-    const available = await this.isDomainAvailable(
-      normalizedDomain,
-      projectSlug
-    );
-    if (!available) {
-      throw new Error(
-        `Domain "${normalizedDomain}" is already in use by another project`
-      );
-    }
+      // Check domain availability
+      const available = await this.isDomainAvailable(normalizedDomain, projectSlug);
+      if (!available) {
+        throw new Error(
+          `Domain "${normalizedDomain}" is already in use by another project`,
+        );
+      }
 
-    // Get project version directory
-    const versionDir = getVersionDir(projectSlug, version);
-    if (!fs.existsSync(versionDir)) {
-      throw new Error("Project version not found");
-    }
-
-    // Create a snapshot (git commit) for publishing
-    const commitMessage = `Published to ${normalizedDomain}`;
-    const saveResult = await gitService.save(versionDir, commitMessage);
-    const commitHash = saveResult.hash;
-    const github = await gitService
-      .syncPushToGitHub({ cwd: versionDir, slug: projectSlug, version })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { attempted: true, success: false, error: msg } as const;
+      // Resolve publish source from bucket artifacts.
+      const artifactState = await resolvePublishableArtifactState({
+        slug: projectSlug,
+        version,
       });
 
-    // Create published directory structure
-    const publishedPath = path.join(PUBLISHED_DIR, projectSlug);
+      if (!artifactState.storageEnabled) {
+        throw new Error(
+          "Publishing requires object storage configuration (bucket-first publish).",
+        );
+      }
 
-    // Remove old published files if they exist
-    if (fs.existsSync(publishedPath)) {
-      fs.rmSync(publishedPath, { recursive: true, force: true });
-    }
+      if (artifactState.readiness === "build_in_progress") {
+        throw new PublishConflictError(
+          "build_in_progress",
+          "Build in progress. Publish is blocked until artifact is ready.",
+        );
+      }
 
-    // Detect project type to determine how to publish
-    const projectConfig = detectProjectType(versionDir);
+      if (artifactState.readiness === "artifact_not_ready") {
+        throw new PublishConflictError(
+          "artifact_not_ready",
+          artifactState.error || "Artifact is not ready for publish.",
+        );
+      }
 
-    if (projectConfig.framework === "astro") {
-      // For Astro projects: build first, then copy the dist folder
-      console.log(`[Publish] Detected Astro project, running build...`);
-      const distPath = await buildService.buildSync(versionDir, "dist");
-      this.copyDirectory(distPath, publishedPath);
+      if (artifactState.readiness === "not_found" || !artifactState.sourceKind) {
+        throw new Error("No publishable artifact found for this project version.");
+      }
 
-      // Update build status so external preview knows dist/ is ready
-      buildService.markBuildReady(versionDir, commitHash, distPath);
+      if (expectedCommitHash && artifactState.commitHash !== expectedCommitHash) {
+        throw new PublishConflictError(
+          "artifact_changed",
+          "The publishable artifact changed. Refresh status and try again.",
+        );
+      }
 
-      // Keep bucket preview/published artifacts up to date (best-effort).
-      await uploadProjectSourceToBucket({ versionDir, slug: projectSlug, version }).catch(() => {});
-      await uploadProjectPreviewToBucket({
-        localDir: distPath,
+      const publishedPath = path.join(PUBLISHED_DIR, projectSlug);
+      const stagingDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), `vivd-publish-${projectSlug}-`),
+      );
+
+      try {
+        // Hydrate artifact from bucket into a temporary staging directory.
+        const downloadResult = await downloadArtifactToDirectory({
+          slug: projectSlug,
+          version,
+          kind: artifactState.sourceKind,
+          destinationDir: stagingDir,
+        });
+        if (!downloadResult.downloaded) {
+          throw new Error("Artifact download failed or returned no files.");
+        }
+
+        if (fs.existsSync(publishedPath)) {
+          fs.rmSync(publishedPath, { recursive: true, force: true });
+        }
+        this.copyDirectory(stagingDir, publishedPath);
+      } finally {
+        fs.rmSync(stagingDir, { recursive: true, force: true });
+      }
+
+      const commitHash = artifactState.commitHash || "unknown";
+
+      // Keep published artifact in bucket in sync (best-effort).
+      await uploadProjectPublishedToBucket({
+        localDir: publishedPath,
         slug: projectSlug,
         version,
         meta: {
           status: "ready",
-          framework: "astro",
+          framework: artifactState.framework,
           commitHash,
           completedAt: new Date().toISOString(),
         },
       }).catch(() => {});
-    } else {
-      // For static/non-Astro projects: copy the entire version directory
-      this.copyDirectory(versionDir, publishedPath);
 
-      // Keep bucket source/published artifacts up to date (best-effort).
-      await uploadProjectSourceToBucket({ versionDir, slug: projectSlug, version }).catch(() => {});
-    }
+      // Read existing publish record before reloading Caddy so we can remove stale domain config.
+      const existingRecord = await db
+        .select()
+        .from(publishedSite)
+        .where(eq(publishedSite.projectSlug, projectSlug))
+        .limit(1);
 
-    // Upload published artifacts (best-effort).
-    await uploadProjectPublishedToBucket({
-      localDir: publishedPath,
-      slug: projectSlug,
-      version,
-      meta: {
-        status: "ready",
-        framework: projectConfig.framework,
-        commitHash,
-        completedAt: new Date().toISOString(),
-      },
-    }).catch(() => {});
+      if (existingRecord.length > 0 && existingRecord[0].domain !== normalizedDomain) {
+        this.removeCaddyConfig(existingRecord[0].domain);
+      }
 
-    // Generate thumbnail for the published version (includes snapshot)
-    try {
-      await thumbnailService.generateThumbnailImmediate(
-        versionDir,
-        projectSlug,
-        version
-      );
-    } catch (err) {
-      // Log but don't fail publish if thumbnail generation fails
-      console.error(`[Publish] Thumbnail generation failed:`, err);
-    }
+      await this.generateCaddyConfig(normalizedDomain, projectSlug);
+      await this.reloadCaddy();
 
-    // Generate Caddy config for this domain
-    await this.generateCaddyConfig(normalizedDomain, projectSlug);
+      const now = new Date();
+      const recordId =
+        existingRecord.length > 0 ? existingRecord[0].id : crypto.randomUUID();
 
-    // Reload Caddy to apply new config
-    await this.reloadCaddy();
-
-    // Upsert database record
-    const existingRecord = await db
-      .select()
-      .from(publishedSite)
-      .where(eq(publishedSite.projectSlug, projectSlug))
-      .limit(1);
-
-    const now = new Date();
-    const recordId =
-      existingRecord.length > 0 ? existingRecord[0].id : crypto.randomUUID();
-
-    if (existingRecord.length > 0) {
-      // Update existing record
-      await db
-        .update(publishedSite)
-        .set({
-          domain: normalizedDomain,
+      if (existingRecord.length > 0) {
+        await db
+          .update(publishedSite)
+          .set({
+            domain: normalizedDomain,
+            projectVersion: version,
+            commitHash,
+            publishedAt: now,
+            publishedById: userId,
+          })
+          .where(eq(publishedSite.id, existingRecord[0].id));
+      } else {
+        await db.insert(publishedSite).values({
+          id: recordId,
+          projectSlug,
           projectVersion: version,
+          domain: normalizedDomain,
           commitHash,
           publishedAt: now,
           publishedById: userId,
-        })
-        .where(eq(publishedSite.id, existingRecord[0].id));
-
-      // If domain changed, remove old Caddy config
-      if (existingRecord[0].domain !== normalizedDomain) {
-        this.removeCaddyConfig(existingRecord[0].domain);
+        });
       }
-    } else {
-      // Insert new record
-      await db.insert(publishedSite).values({
-        id: recordId,
-        projectSlug,
-        projectVersion: version,
+
+      const urlScheme = this.isDevDomain(normalizedDomain) ? "http" : "https";
+
+      return {
+        success: true,
         domain: normalizedDomain,
         commitHash,
-        publishedAt: now,
-        publishedById: userId,
-      });
-    }
-
-    // Determine URL scheme based on domain type
-    const urlScheme = this.isDevDomain(normalizedDomain) ? "http" : "https";
-
-    return {
-      success: true,
-      domain: normalizedDomain,
-      commitHash,
-      url: `${urlScheme}://${normalizedDomain}`,
-      message: `Published to ${normalizedDomain}`,
-      github,
-    };
+        url: `${urlScheme}://${normalizedDomain}`,
+        message: `Published to ${normalizedDomain}`,
+      };
+    });
   }
 
   /**

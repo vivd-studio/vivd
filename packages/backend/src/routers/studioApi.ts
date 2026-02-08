@@ -11,6 +11,7 @@ import { usageService, type TokenData } from "../services/UsageService";
 import { limitsService } from "../services/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
 import { thumbnailService } from "../services/ThumbnailService";
+import { projectMetaService } from "../services/ProjectMetaService";
 
 /**
  * Schema for token data in usage reports
@@ -36,6 +37,28 @@ const studioUsageReportSchema = z.object({
   partId: z.string().optional(),
   projectPath: z.string().optional(),
   timestamp: z.string(),
+});
+
+const checklistItemSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: z.enum(["pass", "fail", "warning", "skip", "fixed"]),
+  note: z.string().optional(),
+});
+
+const prePublishChecklistSchema = z.object({
+  projectSlug: z.string(),
+  version: z.number().int().positive(),
+  runAt: z.string(),
+  snapshotCommitHash: z.string().optional(),
+  items: z.array(checklistItemSchema),
+  summary: z.object({
+    passed: z.number(),
+    failed: z.number(),
+    warnings: z.number(),
+    skipped: z.number(),
+    fixed: z.number().optional(),
+  }),
 });
 
 export const studioApiRouter = router({
@@ -178,5 +201,45 @@ export const studioApiRouter = router({
         });
 
       return { success: true };
+    }),
+
+  /**
+   * Upsert checklist state from connected studio into DB.
+   */
+  upsertPublishChecklist: projectMemberProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        checklist: prePublishChecklistSchema,
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await projectMetaService.upsertPublishChecklist({
+        ...input.checklist,
+        projectSlug: input.slug,
+        version: input.version,
+      });
+      return { success: true };
+    }),
+
+  /**
+   * Read checklist state for connected studio from DB.
+   */
+  getPublishChecklist: projectMemberProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const checklist = await projectMetaService.getPublishChecklist({
+        slug: input.slug,
+        version: input.version,
+      });
+      return { checklist };
     }),
 });

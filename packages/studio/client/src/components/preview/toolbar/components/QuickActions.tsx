@@ -34,7 +34,11 @@ interface QuickActionsProps {
   setPublishDialogOpen: (value: boolean) => void;
   hasGitChanges: boolean;
   isPublished: boolean;
-  publishStatus?: { domain?: string | null; lastTag?: string | null };
+  publishStatus?: {
+    mode?: "connected" | "standalone";
+    domain?: string | null;
+    lastTag?: string | null;
+  };
   gradientId?: string;
 }
 
@@ -89,10 +93,14 @@ export function QuickActions({
         </TooltipTrigger>
         <TooltipContent>
           {isPublished
-            ? publishStatus?.lastTag
-              ? `Published: ${publishStatus.lastTag}`
-              : "Published"
-            : "Create a git tag"}
+            ? publishStatus?.domain
+              ? `Published: ${publishStatus.domain}`
+              : publishStatus?.lastTag
+                ? `Published: ${publishStatus.lastTag}`
+                : "Published"
+            : publishStatus?.mode === "connected"
+              ? "Publish site"
+              : "Create a git tag"}
         </TooltipContent>
       </Tooltip>
       )}

@@ -34,6 +34,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
+import { PublishSiteDialog } from "../publish/PublishSiteDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +73,15 @@ interface ProjectCardProps {
   onRegenerate: (slug: string, version?: number) => void;
   onDelete: (slug: string) => void;
   isRegenerating: boolean;
+}
+
+function isDevDomain(domain: string): boolean {
+  return (
+    domain === "localhost" ||
+    domain.endsWith(".local") ||
+    domain.endsWith(".localhost") ||
+    !domain.includes(".")
+  );
 }
 
 export function ProjectCard({
@@ -115,6 +125,7 @@ export function ProjectCard({
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showVersionManagement, setShowVersionManagement] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopyPreview = () => {
@@ -162,6 +173,9 @@ export function ProjectCard({
     : project.title
       ? `“${project.title}”`
       : "Start-from-scratch project";
+  const publishedUrl = project.publishedDomain
+    ? `${isDevDomain(project.publishedDomain) ? "http" : "https"}://${project.publishedDomain}`
+    : null;
 
   // Calculate progress and label
   let statusLabel = "Pending";
@@ -271,7 +285,7 @@ export function ProjectCard({
             <div className="mt-1.5 flex items-center gap-1.5">
               <Globe className="w-3 h-3 text-green-600 shrink-0" />
               <a
-                href={`https://${project.publishedDomain}`}
+                href={publishedUrl ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-green-600 hover:text-green-700 hover:underline truncate"
@@ -408,6 +422,13 @@ export function ProjectCard({
                 Manage versions
               </DropdownMenuItem>
               <DropdownMenuItem
+                onClick={() => setPublishDialogOpen(true)}
+                disabled={!isCompleted}
+              >
+                <Globe className="w-4 h-4 mr-2" />
+                {project.publishedDomain ? "Manage publishing" : "Publish site"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={() => onDelete(project.slug)}
                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
               >
@@ -473,6 +494,14 @@ export function ProjectCard({
         projectSlug={project.slug}
         versions={versions}
         publishedVersion={project.publishedVersion}
+      />
+
+      <PublishSiteDialog
+        open={publishDialogOpen}
+        onOpenChange={setPublishDialogOpen}
+        slug={project.slug}
+        version={selectedVersion}
+        onOpenStudio={() => navigate(`/vivd-studio/projects/${project.slug}`)}
       />
     </>
   );

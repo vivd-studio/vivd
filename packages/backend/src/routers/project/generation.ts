@@ -58,13 +58,19 @@ async function syncArtifactsAfterGeneration(options: {
   slug: string;
   version: number;
 }): Promise<void> {
+  const projectConfig = detectProjectType(options.versionDir);
+
   await uploadProjectSourceToBucket({
     versionDir: options.versionDir,
     slug: options.slug,
     version: options.version,
+    meta: {
+      status: "ready",
+      framework: projectConfig.framework,
+      completedAt: new Date().toISOString(),
+    },
   });
 
-  const projectConfig = detectProjectType(options.versionDir);
   if (projectConfig.framework !== "astro") return;
 
   const distPath = await buildService.buildSync(options.versionDir, "dist");

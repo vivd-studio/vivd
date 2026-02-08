@@ -125,13 +125,13 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ### 0.5.1 Publishing / Checklist Consolidation (Decided 2026-02-08)
 
 - [ ] **Bucket-first publish + preview (no local project dir dependency in runtime paths)**
-  - [ ] Publish pipeline must not read from local `projects/<slug>/vN` as source
-  - [ ] Preview serving must not depend on local `versionDir` detection/fallback in connected/prod mode
+  - [x] Publish pipeline must not read from local `projects/<slug>/vN` as source
+  - [x] Preview serving must not depend on local `versionDir` detection/fallback in connected/prod mode
   - [ ] Generation flows may continue using temporary local workspace, then sync artifacts to bucket on completion
 - [ ] **Reuse preview artifacts for publish**
-  - [ ] Astro publish uses ready `preview/` artifact (no rebuild on publish)
-  - [ ] Static publish uses `source/` artifact
-  - [ ] Add readiness/race checks (`artifact_not_ready`, optional expected-hash compare-and-swap)
+  - [x] Astro publish uses ready `preview/` artifact (no rebuild on publish)
+  - [x] Static publish uses `source/` artifact
+  - [x] Add readiness/race checks (`artifact_not_ready`, optional expected-hash compare-and-swap)
 - [ ] **Unified publish UX across Studio + app shell**
   - [ ] Keep publish/unpublish available in Studio and preview/dashboard
   - [ ] Route all publish/unpublish through backend publish APIs (single behavior)
@@ -143,9 +143,9 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] Show deterministic publish dialog states: Ready / Build in progress / Unsaved changes in Studio
   - [ ] Show exact artifact being published (source kind, built time, short hash) before confirmation
 - [ ] **Checklist DB-only**
-  - [ ] Studio checklist run/fix must upsert into `project_publish_checklist`
-  - [ ] Remove `.vivd/publish-checklist.json` as authoritative source
-  - [ ] Expose checklist state/freshness for publish dialogs outside Studio
+  - [x] Studio checklist run/fix must upsert into `project_publish_checklist`
+  - [x] Remove `.vivd/publish-checklist.json` as authoritative source
+  - [x] Expose checklist state/freshness for publish dialogs outside Studio
 - [ ] **Studio provider parity**
   - [ ] Keep local studio provider behavior aligned with production flow (hydrate/sync via bucket, publish consumes bucket artifacts)
 
@@ -253,6 +253,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 - [x] Faster preview startup: persistent package-manager cache in OpenCode data + offline-first installs
 - [x] Studio server binds explicitly to `0.0.0.0` for Fly machine ingress compatibility
 - [x] Reuse `node_modules` via lockfile-hash cache archive (restore on boot, save after first install)
+- [x] Auto-recover stale project `node_modules` (esbuild host/binary mismatch) by forcing dependency reinstall before dev server launch
 - [x] Fly machine sizing tunables (`FLY_STUDIO_CPU_KIND`, `FLY_STUDIO_CPUS`, `FLY_STUDIO_MEMORY_MB`)
 - [x] Keep studio responsive during dependency install (async install + pause S3 sync loop briefly)
 - [x] Avoid unexpected wakeups: backend controls starts (Fly `autostart=false`; status checks do not count as keepalive)

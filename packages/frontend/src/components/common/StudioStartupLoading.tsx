@@ -36,12 +36,9 @@ export function StudioStartupLoading({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
-          <span>This can take a while on first startup.</span>
-        </div>
+        <p className="text-xs text-muted-foreground animate-pulse">
+          This can take a while on first startup.
+        </p>
       </div>
     </div>
   );

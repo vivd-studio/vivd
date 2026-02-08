@@ -62,7 +62,11 @@ interface MobileActionsMenuProps {
   // Status
   hasGitChanges: boolean;
   isPublished: boolean;
-  publishStatus?: { domain?: string | null; lastTag?: string | null };
+  publishStatus?: {
+    mode?: "connected" | "standalone";
+    domain?: string | null;
+    lastTag?: string | null;
+  };
 
   // Theme
   theme: string;
@@ -213,10 +217,14 @@ export function MobileActionsMenu({
             <DropdownMenuItem onClick={() => setPublishDialogOpen(true)}>
               <Rocket className="w-4 h-4 mr-2" />
               {isPublished
-                ? publishStatus?.lastTag
-                  ? `Published: ${publishStatus.lastTag}`
-                  : "Published"
-                : "Create a git tag"}
+                ? publishStatus?.domain
+                  ? `Published: ${publishStatus.domain}`
+                  : publishStatus?.lastTag
+                    ? `Published: ${publishStatus.lastTag}`
+                    : "Published"
+                : publishStatus?.mode === "connected"
+                  ? "Publish site"
+                  : "Create a git tag"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setHistoryPanelOpen(true)}>
               <History className="w-4 h-4 mr-2" />

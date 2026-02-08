@@ -18,6 +18,7 @@ import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
+import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -31,6 +32,7 @@ export default function EmbeddedStudio() {
   const navigate = useNavigate();
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const [editRequested, setEditRequested] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Fetch project data to get current version
@@ -363,6 +365,12 @@ export default function EmbeddedStudio() {
           </Breadcrumb>
           <div className="flex-1" />
           {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
+          <Button
+            variant="outline"
+            onClick={() => setPublishDialogOpen(true)}
+          >
+            Publish site
+          </Button>
           <ModeToggle />
           <HeaderProfileMenu />
           <Button variant="ghost" onClick={handleClose}>
@@ -411,6 +419,16 @@ export default function EmbeddedStudio() {
           </div>
         )}
       </div>
+
+      {!studioIframeSrc ? (
+        <PublishSiteDialog
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          slug={projectSlug}
+          version={studioVersion}
+          onOpenStudio={handleEdit}
+        />
+      ) : null}
     </div>
   );
 }

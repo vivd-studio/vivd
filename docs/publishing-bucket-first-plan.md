@@ -2,7 +2,7 @@
 
 Date: 2026-02-08
 Owner: backend + studio + frontend
-Status: planned
+Status: in progress (phases A-E largely implemented; cleanup/hardening remains)
 
 ## Scope
 This plan consolidates publishing, preview serving, and checklist handling around object storage as source of truth, while keeping Caddy local serving for published sites.

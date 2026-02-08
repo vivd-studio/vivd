@@ -1,6 +1,13 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { projectMemberProcedure } from "../../trpc";
-import { publishService } from "../../services/PublishService";
+import {
+  publishService,
+  PublishConflictError,
+} from "../../services/PublishService";
+import { resolvePublishableArtifactState } from "../../services/ProjectArtifactStateService";
+import { studioMachineProvider } from "../../services/studioMachines";
+import { projectMetaService } from "../../services/ProjectMetaService";
 
 export const projectPublishProcedures = {
   /**
@@ -12,20 +19,33 @@ export const projectPublishProcedures = {
         slug: z.string(),
         version: z.number(),
         domain: z.string().min(1, "Domain is required"),
+        expectedCommitHash: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { slug, version, domain } = input;
+      const { slug, version, domain, expectedCommitHash } = input;
       const userId = ctx.session.user.id;
 
-      const result = await publishService.publish({
-        projectSlug: slug,
-        version,
-        domain,
-        userId,
-      });
+      try {
+        const result = await publishService.publish({
+          projectSlug: slug,
+          version,
+          domain,
+          userId,
+          expectedCommitHash,
+        });
 
-      return result;
+        return result;
+      } catch (err) {
+        if (err instanceof PublishConflictError) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: err.message,
+            cause: { reason: err.reason },
+          });
+        }
+        throw err;
+      }
     }),
 
   /**
@@ -118,6 +138,90 @@ export const projectPublishProcedures = {
         available,
         normalizedDomain: normalized,
         error: available ? undefined : "Domain is already in use",
+      };
+    }),
+
+  /**
+   * Publish dialog state for dashboard/studio UIs.
+   * Exposes artifact readiness and unsaved-change hint inputs.
+   */
+  publishState: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { slug, version } = input;
+
+      const [artifactState, studioRunning] = await Promise.all([
+        resolvePublishableArtifactState({ slug, version }),
+        studioMachineProvider.isRunning(slug, version),
+      ]);
+
+      return {
+        storageEnabled: artifactState.storageEnabled,
+        readiness: artifactState.readiness,
+        sourceKind: artifactState.sourceKind,
+        framework: artifactState.framework,
+        publishableCommitHash: artifactState.commitHash,
+        lastSyncedCommitHash: artifactState.sourceCommitHash ?? artifactState.commitHash,
+        builtAt: artifactState.builtAt,
+        sourceBuiltAt: artifactState.sourceBuiltAt,
+        previewBuiltAt: artifactState.previewBuiltAt,
+        error: artifactState.error,
+        studioRunning,
+      };
+    }),
+
+  /**
+   * Read checklist state from DB for publish UIs.
+   */
+  publishChecklist: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { slug, version } = input;
+      const [checklist, versionMeta, artifactState] = await Promise.all([
+        projectMetaService.getPublishChecklist({ slug, version }),
+        projectMetaService.getProjectVersion(slug, version),
+        resolvePublishableArtifactState({ slug, version }),
+      ]);
+
+      if (!checklist) {
+        return {
+          checklist: null,
+          stale: true,
+          reason: "missing",
+        };
+      }
+
+      let stale = false;
+      let reason: "project_updated" | "hash_mismatch" | null = null;
+
+      if (versionMeta && new Date(checklist.runAt).getTime() < versionMeta.updatedAt.getTime()) {
+        stale = true;
+        reason = "project_updated";
+      }
+
+      if (
+        checklist.snapshotCommitHash &&
+        artifactState.commitHash &&
+        checklist.snapshotCommitHash !== artifactState.commitHash
+      ) {
+        stale = true;
+        reason = "hash_mismatch";
+      }
+
+      return {
+        checklist,
+        stale,
+        reason,
       };
     }),
 };

@@ -8,6 +8,7 @@ import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
+import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 
 /**
  * ProjectFullscreen
@@ -25,6 +26,7 @@ export default function ProjectFullscreen() {
   const navigate = useNavigate();
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const [editRequested, setEditRequested] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
@@ -306,6 +308,9 @@ export default function ProjectFullscreen() {
           </Link>
           <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
           {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
+          <Button variant="outline" onClick={() => setPublishDialogOpen(true)}>
+            Publish site
+          </Button>
           <ModeToggle />
           <HeaderProfileMenu />
           <Button variant="ghost" onClick={handleClose}>
@@ -356,7 +361,16 @@ export default function ProjectFullscreen() {
           </div>
         )}
       </div>
+
+      {!studioIframeSrc ? (
+        <PublishSiteDialog
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          slug={projectSlug}
+          version={version}
+          onOpenStudio={handleEdit}
+        />
+      ) : null}
     </div>
   );
 }
-

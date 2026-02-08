@@ -28,6 +28,12 @@ import {
 } from "../services/ArtifactSyncService.js";
 import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
 import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
+import {
+  getBackendUrl,
+  getSessionToken,
+  getStudioId,
+  isConnectedMode,
+} from "@vivd/shared";
 
 // Dotfiles that are allowed in asset paths
 const ALLOWED_DOTFILES = [".vivd", ".gitignore", ".env.example"];
@@ -39,6 +45,72 @@ function hasDotSegment(relativePath: string): boolean {
     (segment) =>
       segment.startsWith(".") && !ALLOWED_DOTFILES.includes(segment)
   );
+}
+
+function getConnectedBackendConfig():
+  | { backendUrl: string; sessionToken: string; studioId: string }
+  | null {
+  if (!isConnectedMode()) return null;
+  const backendUrl = getBackendUrl();
+  const sessionToken = getSessionToken();
+  const studioId = getStudioId();
+  if (!backendUrl || !sessionToken || !studioId) return null;
+  return { backendUrl, sessionToken, studioId };
+}
+
+async function callConnectedBackendQuery<T>(
+  procedure: string,
+  input: Record<string, unknown>,
+): Promise<T> {
+  const config = getConnectedBackendConfig();
+  if (!config) {
+    throw new Error("Connected backend is not configured");
+  }
+
+  const response = await fetch(
+    `${config.backendUrl}/api/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.sessionToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "Unknown error");
+    throw new Error(`${procedure} failed (${response.status}): ${text}`);
+  }
+
+  const body = (await response.json()) as any;
+  return (body?.result?.data?.json ?? body?.result?.data ?? body) as T;
+}
+
+async function callConnectedBackendMutation<T>(
+  procedure: string,
+  input: Record<string, unknown>,
+): Promise<T> {
+  const config = getConnectedBackendConfig();
+  if (!config) {
+    throw new Error("Connected backend is not configured");
+  }
+
+  const response = await fetch(`${config.backendUrl}/api/trpc/${procedure}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.sessionToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "Unknown error");
+    throw new Error(`${procedure} failed (${response.status}): ${text}`);
+  }
+
+  const body = (await response.json()) as any;
+  return (body?.result?.data?.json ?? body?.result?.data ?? body) as T;
 }
 
 export const projectRouter = router({
@@ -349,6 +421,7 @@ export const projectRouter = router({
           projectDir,
           slug: input.slug,
           version: input.version,
+          commitHash: hash,
         }).catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[Artifacts] Source sync failed: ${msg}`);
@@ -372,6 +445,7 @@ export const projectRouter = router({
           projectDir,
           slug: input.slug,
           version: input.version,
+          commitHash: hash,
         })
           .then(() => {
             thumbnailGenerationReporter.request(input.slug, input.version);
@@ -417,23 +491,154 @@ export const projectRouter = router({
         slug: z.string(),
       })
     )
-    .query(async ({ ctx }) => {
+    .query(async ({ ctx, input }) => {
+      if (isConnectedMode()) {
+        try {
+          const result = await callConnectedBackendQuery<{
+            isPublished: boolean;
+            domain: string | null;
+            commitHash: string | null;
+            publishedAt: string | null;
+            url: string | null;
+            projectVersion?: number | null;
+          }>("project.publishStatus", { slug: input.slug });
+
+          return {
+            mode: "connected" as const,
+            ...result,
+            lastTag: null,
+          };
+        } catch (err) {
+          console.error("Connected publish status failed:", err);
+        }
+      }
+
       try {
         const tags = await ctx.workspace.getTags?.();
         const lastTag = tags?.[0] || null;
         return {
+          mode: "standalone" as const,
           isPublished: tags && tags.length > 0,
           lastTag: lastTag,
           domain: null,
+          commitHash: null,
+          publishedAt: null,
+          url: null,
         };
       } catch (err) {
         console.error("Error fetching publish status:", err);
         return {
+          mode: "standalone" as const,
           isPublished: false,
           lastTag: null,
           domain: null,
+          commitHash: null,
+          publishedAt: null,
+          url: null,
         };
       }
+    }),
+
+  publishState: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      if (isConnectedMode()) {
+        return await callConnectedBackendQuery("project.publishState", {
+          slug: input.slug,
+          version: input.version,
+        });
+      }
+
+      const head = await ctx.workspace.getHeadCommit();
+      return {
+        storageEnabled: false,
+        readiness: "ready" as const,
+        sourceKind: "source" as const,
+        framework: "generic" as const,
+        publishableCommitHash: head?.hash || null,
+        lastSyncedCommitHash: head?.hash || null,
+        builtAt: null,
+        sourceBuiltAt: null,
+        previewBuiltAt: null,
+        error: null,
+        studioRunning: true,
+      };
+    }),
+
+  publishChecklist: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .query(async ({ input }) => {
+      if (isConnectedMode()) {
+        return await callConnectedBackendQuery("project.publishChecklist", {
+          slug: input.slug,
+          version: input.version,
+        });
+      }
+
+      return {
+        checklist: null,
+        stale: true,
+        reason: "missing" as const,
+      };
+    }),
+
+  checkDomain: publicProcedure
+    .input(
+      z.object({
+        domain: z.string(),
+        slug: z.string().optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      if (isConnectedMode()) {
+        return await callConnectedBackendQuery("project.checkDomain", input);
+      }
+
+      const normalizedDomain = input.domain.toLowerCase().trim();
+      return {
+        available: true,
+        normalizedDomain,
+      };
+    }),
+
+  publish: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        domain: z.string(),
+        expectedCommitHash: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isConnectedMode()) {
+        throw new Error("Publishing via domain is available in connected mode only.");
+      }
+
+      return await callConnectedBackendMutation("project.publish", input);
+    }),
+
+  unpublish: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isConnectedMode()) {
+        throw new Error("Unpublish is available in connected mode only.");
+      }
+      return await callConnectedBackendMutation("project.unpublish", input);
     }),
 
   gitWorkingCommit: publicProcedure
@@ -525,6 +730,7 @@ export const projectRouter = router({
           projectDir,
           slug: input.slug,
           version,
+          commitHash,
         }).catch(() => {});
         void buildAndUploadPublished({
           projectDir,

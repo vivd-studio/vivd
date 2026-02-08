@@ -29,6 +29,7 @@ import { eq } from "drizzle-orm";
 import { buildService } from "./services/BuildService";
 import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
 import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
+import { resolvePublishableArtifactState } from "./services/ProjectArtifactStateService";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -512,34 +513,54 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
     return res.status(400).json({ error: "Invalid version" });
   }
 
-  const versionDir = getVersionDir(slug, versionNumber);
+  const artifactState = await resolvePublishableArtifactState({
+    slug,
+    version: versionNumber,
+  });
 
+  // Bucket-first serving in connected/prod mode.
+  if (artifactState.storageEnabled) {
+    res.setHeader(
+      "X-Vivd-Preview-Source",
+      `bucket:${artifactState.sourceKind ?? "unknown"}`,
+    );
+
+    if (artifactState.readiness === "build_in_progress") {
+      return res.status(503).json({
+        error: "Build in progress",
+        status: "building",
+      });
+    }
+
+    if (artifactState.readiness === "artifact_not_ready") {
+      return res.status(503).json({
+        error: artifactState.error || "Artifact not ready",
+        status: "error",
+      });
+    }
+
+    if (artifactState.readiness !== "ready" || !artifactState.sourceKind) {
+      return res.status(404).json({ error: "Preview artifact not found" });
+    }
+
+    const served = await tryServeFromBucket({
+      req,
+      res,
+      slug,
+      version: versionNumber,
+      kind: artifactState.sourceKind,
+      filePath,
+    });
+    if (served === "served") return;
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  // Local fallback for standalone mode when object storage is disabled.
+  res.setHeader("X-Vivd-Preview-Source", "local");
+  const versionDir = getVersionDir(slug, versionNumber);
   const config = fs.existsSync(versionDir)
     ? detectProjectType(versionDir)
     : { framework: "generic" as const, mode: "static" as const, packageManager: "npm" as const };
-
-  // Prefer serving from object storage when configured.
-  if (config.framework === "astro") {
-    const served = await tryServeFromBucket({
-      req,
-      res,
-      slug,
-      version: versionNumber,
-      kind: "preview",
-      filePath,
-    });
-    if (served === "served") return;
-  } else {
-    const served = await tryServeFromBucket({
-      req,
-      res,
-      slug,
-      version: versionNumber,
-      kind: "source",
-      filePath,
-    });
-    if (served === "served") return;
-  }
 
   if (!fs.existsSync(versionDir)) {
     return res.status(404).json({ error: "Project not found" });

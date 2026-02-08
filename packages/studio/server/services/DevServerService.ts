@@ -353,6 +353,57 @@ async function writeNodeModulesCache(
   }
 }
 
+function hasEsbuildPackage(projectDir: string): boolean {
+  return fs.existsSync(
+    path.join(projectDir, "node_modules", "esbuild", "package.json")
+  );
+}
+
+function removeNodeModules(projectDir: string): void {
+  fs.rmSync(path.join(projectDir, "node_modules"), {
+    recursive: true,
+    force: true,
+  });
+}
+
+async function detectEsbuildBinaryMismatch(
+  projectDir: string
+): Promise<string | null> {
+  if (!hasEsbuildPackage(projectDir)) return null;
+
+  const sanityCheck = await runProcess(
+    "node",
+    ["-e", "const esbuild=require('esbuild');esbuild.transformSync('let x=1')"],
+    {
+      cwd: projectDir,
+      timeoutMs: 20_000,
+    }
+  );
+
+  if (sanityCheck.code === 0 && !sanityCheck.timedOut) {
+    return null;
+  }
+
+  const output = `${sanityCheck.stderr}\n${sanityCheck.stdout}`;
+  const normalized = output.toLowerCase();
+  const hasVersionMismatch =
+    (normalized.includes("host version") &&
+      normalized.includes("does not match binary version")) ||
+    normalized.includes("you installed esbuild for another platform");
+
+  if (!hasVersionMismatch) return null;
+  return output.trim() || "esbuild host/binary version mismatch";
+}
+
+function formatInstallFailure(result: RunProcessResult): string {
+  const stderr = result.stderr.trim();
+  const stdout = result.stdout.trim();
+  if (result.timedOut) return "Timed out";
+  if (stderr) return stderr;
+  if (stdout) return stdout;
+  return `Exit code ${result.code}`;
+}
+
 /**
  * Manages a single dev server instance for the studio workspace.
  */
@@ -453,16 +504,45 @@ export class DevServerService {
   ): Promise<void> {
     try {
       let installedDependencies = false;
+      let needsInstall = !hasNodeModules(projectDir);
+
+      if (!needsInstall) {
+        const esbuildMismatch = await detectEsbuildBinaryMismatch(projectDir);
+        if (esbuildMismatch) {
+          console.warn(
+            "[DevServer] Detected stale node_modules (esbuild mismatch). Reinstalling dependencies."
+          );
+          debugLog("esbuild mismatch details:", esbuildMismatch);
+          removeNodeModules(projectDir);
+          needsInstall = true;
+        }
+      }
 
       // Install dependencies if needed
-      if (!hasNodeModules(projectDir)) {
+      if (needsInstall) {
         serverInfo.status = "installing";
         setSyncPaused(true);
 
-        const restoredFromCache = await restoreNodeModulesFromCache(
+        let restoredFromCache = await restoreNodeModulesFromCache(
           projectDir,
           config.packageManager
         );
+
+        if (restoredFromCache) {
+          const esbuildMismatchAfterRestore =
+            await detectEsbuildBinaryMismatch(projectDir);
+          if (esbuildMismatchAfterRestore) {
+            console.warn(
+              "[DevServer] Cached node_modules is stale (esbuild mismatch). Falling back to fresh install."
+            );
+            debugLog(
+              "esbuild mismatch after cache restore:",
+              esbuildMismatchAfterRestore
+            );
+            removeNodeModules(projectDir);
+            restoredFromCache = false;
+          }
+        }
 
         if (!restoredFromCache) {
           console.log(`[DevServer] Installing dependencies in ${projectDir}`);
@@ -478,16 +558,27 @@ export class DevServerService {
           });
 
           if (result.code !== 0 || result.timedOut) {
-            const stderr = result.stderr.trim();
-            const tail = stderr || result.stdout.trim();
-            const msg = result.timedOut
-              ? "Timed out"
-              : tail
-                ? tail
-                : `Exit code ${result.code}`;
+            const msg = formatInstallFailure(result);
             console.error(`[DevServer] Failed to install dependencies: ${msg}`);
             serverInfo.status = "error";
             serverInfo.error = `${config.packageManager} install failed: ${msg}`;
+            setSyncPaused(false);
+            return;
+          }
+
+          const esbuildMismatchAfterInstall =
+            await detectEsbuildBinaryMismatch(projectDir);
+          if (esbuildMismatchAfterInstall) {
+            console.error(
+              "[DevServer] Dependencies installed, but esbuild is still mismatched."
+            );
+            debugLog(
+              "esbuild mismatch after install:",
+              esbuildMismatchAfterInstall
+            );
+            serverInfo.status = "error";
+            serverInfo.error =
+              "Dependency install completed but esbuild binary is incompatible";
             setSyncPaused(false);
             return;
           }

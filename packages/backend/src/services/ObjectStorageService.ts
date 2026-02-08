@@ -461,6 +461,26 @@ export async function doesObjectExist(options: {
   }
 }
 
+export async function doesPrefixHaveObjects(options: {
+  client: S3Client;
+  bucket: string;
+  keyPrefix: string;
+}): Promise<boolean> {
+  const prefix = normalizeKeyPrefix(options.keyPrefix);
+  try {
+    const result = await options.client.send(
+      new ListObjectsV2Command({
+        Bucket: options.bucket,
+        Prefix: prefix,
+        MaxKeys: 1,
+      }),
+    );
+    return (result.Contents?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function getObjectBuffer(options: {
   client: S3Client;
   bucket: string;

@@ -10,6 +10,7 @@ import {
 import {
   getProjectArtifactKeyPrefix,
   getProjectBasePrefix,
+  getProjectSourceBuildMetaKey,
   getProjectPreviewBuildMetaKey,
   getProjectPublishedBuildMetaKey,
   getProjectThumbnailKey,
@@ -70,6 +71,7 @@ export async function uploadProjectSourceToBucket(options: {
   versionDir: string;
   slug: string;
   version: number;
+  meta?: ArtifactBuildMeta;
 }): Promise<{ uploaded: boolean }> {
   const storage = getStorage();
   if (!storage) return { uploaded: false };
@@ -91,6 +93,19 @@ export async function uploadProjectSourceToBucket(options: {
     // Keep git history in storage; exclude bulky caches/builds.
     excludeDirNames: ["node_modules", "dist", ".astro"],
   });
+
+  if (options.meta) {
+    await putJsonObject({
+      client: storage.client,
+      bucket: storage.bucket,
+      key: getProjectSourceBuildMetaKey({
+        tenantId: storage.tenantId,
+        slug: options.slug,
+        version: options.version,
+      }),
+      payload: options.meta,
+    });
+  }
 
   return { uploaded: true };
 }

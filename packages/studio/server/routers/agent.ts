@@ -23,12 +23,99 @@ import {
 import { simpleGit } from "simple-git";
 import fs from "fs";
 import path from "path";
+import {
+  getBackendUrl,
+  getSessionToken,
+  getStudioId,
+  isConnectedMode,
+} from "@vivd/shared";
 
 function getWorkspaceDir(ctx: { workspace: { isInitialized(): boolean; getProjectPath(): string } }): string {
   if (!ctx.workspace.isInitialized()) {
     throw new Error("Workspace not initialized");
   }
   return ctx.workspace.getProjectPath();
+}
+
+function getConnectedChecklistApiConfig():
+  | { backendUrl: string; sessionToken: string; studioId: string }
+  | null {
+  if (!isConnectedMode()) return null;
+  const backendUrl = getBackendUrl();
+  const sessionToken = getSessionToken();
+  const studioId = getStudioId();
+  if (!backendUrl || !sessionToken || !studioId) return null;
+  return { backendUrl, sessionToken, studioId };
+}
+
+async function upsertChecklistToBackend(options: {
+  slug: string;
+  version: number;
+  checklist: PrePublishChecklist;
+}): Promise<void> {
+  const config = getConnectedChecklistApiConfig();
+  if (!config) return;
+
+  const response = await fetch(
+    `${config.backendUrl}/api/trpc/studioApi.upsertPublishChecklist`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.sessionToken}`,
+      },
+      body: JSON.stringify({
+        studioId: config.studioId,
+        slug: options.slug,
+        version: options.version,
+        checklist: options.checklist,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown error");
+    throw new Error(
+      `Failed to persist checklist in backend (${response.status}): ${errorText}`,
+    );
+  }
+}
+
+async function getChecklistFromBackend(options: {
+  slug: string;
+  version: number;
+}): Promise<PrePublishChecklist | null> {
+  const config = getConnectedChecklistApiConfig();
+  if (!config) return null;
+
+  const queryInput = encodeURIComponent(
+    JSON.stringify({
+      studioId: config.studioId,
+      slug: options.slug,
+      version: options.version,
+    }),
+  );
+
+  const response = await fetch(
+    `${config.backendUrl}/api/trpc/studioApi.getPublishChecklist?input=${queryInput}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.sessionToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown error");
+    throw new Error(
+      `Failed to load checklist from backend (${response.status}): ${errorText}`,
+    );
+  }
+
+  const body = (await response.json().catch(() => null)) as any;
+  const data = body?.result?.data?.json ?? body?.result?.data ?? body;
+  return (data?.checklist as PrePublishChecklist | null | undefined) ?? null;
 }
 
 export const agentRouter = router({
@@ -200,7 +287,7 @@ export const agentRouter = router({
   /**
    * Run pre-publish checklist analysis via the agent.
    * The agent analyzes the project and returns a JSON checklist.
-   * Results are saved to .vivd/publish-checklist.json
+   * Connected mode persists checklist to backend DB; standalone mode keeps local file storage.
    */
   runPrePublishChecklist: publicProcedure
     .input(
@@ -209,7 +296,7 @@ export const agentRouter = router({
         version: z.number().optional(),
       })
     )
-    .mutation(async ({ ctx }) => {
+    .mutation(async ({ ctx, input }) => {
       const workspacePath = getWorkspaceDir(ctx);
       const git = simpleGit(workspacePath);
 
@@ -321,26 +408,30 @@ export const agentRouter = router({
 
         // Build the full checklist object
         const checklist: PrePublishChecklist = {
-          projectSlug: "studio",
-          version: 1,
+          projectSlug: input.projectSlug,
+          version: input.version ?? 1,
           runAt: new Date().toISOString(),
           snapshotCommitHash,
           items: checklistData.items,
           summary,
         };
 
-        // Save to .vivd/publish-checklist.json
-        const vivdDir = path.join(workspacePath, ".vivd");
-        if (!fs.existsSync(vivdDir)) {
-          fs.mkdirSync(vivdDir, { recursive: true });
+        // In connected mode, DB is the source of truth.
+        if (isConnectedMode()) {
+          await upsertChecklistToBackend({
+            slug: input.projectSlug,
+            version: input.version ?? 1,
+            checklist,
+          });
         }
 
-        const checklistPath = path.join(vivdDir, "publish-checklist.json");
-        fs.writeFileSync(checklistPath, JSON.stringify(checklist, null, 2));
-
-        console.log(
-          `[PrePublishChecklist] Saved checklist to ${checklistPath}`
-        );
+        // Standalone mode keeps checklist on disk.
+        if (!isConnectedMode()) {
+          const vivdDir = path.join(workspacePath, ".vivd");
+          if (!fs.existsSync(vivdDir)) fs.mkdirSync(vivdDir, { recursive: true });
+          const checklistPath = path.join(vivdDir, "publish-checklist.json");
+          fs.writeFileSync(checklistPath, JSON.stringify(checklist, null, 2));
+        }
 
         return { success: true, checklist, sessionId };
       } catch (error: any) {
@@ -359,8 +450,42 @@ export const agentRouter = router({
         version: z.number().optional(),
       })
     )
-    .query(async ({ ctx }) => {
+    .query(async ({ ctx, input }) => {
       const workspacePath = getWorkspaceDir(ctx);
+
+      if (isConnectedMode()) {
+        try {
+          const checklist = await getChecklistFromBackend({
+            slug: input.projectSlug,
+            version: input.version ?? 1,
+          });
+
+          if (!checklist) {
+            return { checklist: null, hasChangesSinceCheck: true };
+          }
+
+          let hasChangesSinceCheck = true;
+          if (checklist.snapshotCommitHash) {
+            try {
+              const git = simpleGit(workspacePath);
+              const log = await git.log({ maxCount: 1 });
+              const currentCommit = log.latest?.hash;
+              const status = await git.status();
+              const hasUncommitted = !status.isClean();
+              hasChangesSinceCheck =
+                currentCommit !== checklist.snapshotCommitHash || hasUncommitted;
+            } catch {
+              hasChangesSinceCheck = true;
+            }
+          }
+
+          return { checklist, hasChangesSinceCheck };
+        } catch (error) {
+          console.warn("[PrePublishChecklist] Backend checklist read failed:", error);
+          return { checklist: null, hasChangesSinceCheck: true };
+        }
+      }
+
       const checklistPath = path.join(
         workspacePath,
         ".vivd",
@@ -423,17 +548,19 @@ export const agentRouter = router({
 **${input.itemLabel}** (${input.itemStatus})
 ${input.itemNote ? `Issue: ${input.itemNote}` : ""}
 
-The checklist file is located at \`.vivd/publish-checklist.json\`.
+${isConnectedMode()
+  ? `Do NOT edit any checklist file. Only fix the actual project code and assets related to this issue.`
+  : `The checklist file is located at \`.vivd/publish-checklist.json\`.
 
 After you fix this issue, please update the checklist file:
 1. Find the item with id "${input.itemId}" in the items array
 2. Change its status from "${input.itemStatus}" to "fixed"
 3. Update the note to briefly describe what you fixed
 4. Update the summary counts (decrement ${
-        input.itemStatus === "fail" ? "failed" : "warnings"
-      }, increment fixed)
+      input.itemStatus === "fail" ? "failed" : "warnings"
+    }, increment fixed)
 
-This marks the issue as fixed but requiring re-verification. The user can then re-run the full checks to confirm everything is correct.`;
+This marks the issue as fixed but requiring re-verification. The user can then re-run the full checks to confirm everything is correct.`}`;
 
       try {
         console.log(
@@ -484,20 +611,63 @@ This marks the issue as fixed but requiring re-verification. The user can then r
           );
         }
 
-        // Read the updated checklist to return
-        const checklistPath = path.join(
-          workspacePath,
-          ".vivd",
-          "publish-checklist.json"
-        );
         let updatedChecklist: PrePublishChecklist | null = null;
 
-        if (fs.existsSync(checklistPath)) {
-          try {
-            const content = fs.readFileSync(checklistPath, "utf-8");
-            updatedChecklist = JSON.parse(content);
-          } catch {
-            // Ignore parse errors
+        if (isConnectedMode()) {
+          const existing = await getChecklistFromBackend({
+            slug: input.projectSlug,
+            version: input.version ?? 1,
+          });
+          if (existing) {
+            const items = existing.items.map((item) => {
+              if (item.id !== input.itemId) return item;
+              return {
+                ...item,
+                status: "fixed" as const,
+                note: `Marked as fixed after agent run${input.itemNote ? `: ${input.itemNote}` : ""}`,
+              };
+            });
+
+            const summary = {
+              ...existing.summary,
+              failed:
+                input.itemStatus === "fail"
+                  ? Math.max(0, existing.summary.failed - 1)
+                  : existing.summary.failed,
+              warnings:
+                input.itemStatus === "warning"
+                  ? Math.max(0, existing.summary.warnings - 1)
+                  : existing.summary.warnings,
+              fixed: (existing.summary.fixed ?? 0) + 1,
+            };
+
+            updatedChecklist = {
+              ...existing,
+              runAt: new Date().toISOString(),
+              items,
+              summary,
+            };
+
+            await upsertChecklistToBackend({
+              slug: input.projectSlug,
+              version: input.version ?? 1,
+              checklist: updatedChecklist,
+            });
+          }
+        } else {
+          // Standalone mode: read local checklist file.
+          const checklistPath = path.join(
+            workspacePath,
+            ".vivd",
+            "publish-checklist.json"
+          );
+          if (fs.existsSync(checklistPath)) {
+            try {
+              const content = fs.readFileSync(checklistPath, "utf-8");
+              updatedChecklist = JSON.parse(content);
+            } catch {
+              // Ignore parse errors
+            }
           }
         }
 

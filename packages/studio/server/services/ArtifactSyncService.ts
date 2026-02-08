@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { detectProjectType, hasNodeModules } from "./projectType.js";
 
 type ArtifactKind = "source" | "preview" | "published";
@@ -284,7 +285,7 @@ async function deletePrefixSdk(options: {
         new sdk.DeleteObjectsCommand({
           Bucket: bucket,
           Delete: {
-            Objects: batch.map((Key) => ({ Key })),
+            Objects: batch.map((Key: string) => ({ Key })),
             Quiet: true,
           },
         })
@@ -462,6 +463,7 @@ export async function syncSourceToBucket(options: {
   projectDir: string;
   slug: string;
   version: number;
+  commitHash?: string;
 }): Promise<void> {
   const bucket = getBucket();
   if (!bucket) return;
@@ -481,6 +483,26 @@ export async function syncSourceToBucket(options: {
     ],
     label: "SourceSync",
   });
+
+  // Source artifact metadata used by publish-state/readiness checks.
+  const metaDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-source-meta-"));
+  try {
+    writeBuildMeta(metaDir, {
+      status: "ready",
+      framework: "generic",
+      commitHash: options.commitHash,
+      completedAt: new Date().toISOString(),
+    });
+    await syncDirectoryToBucket({
+      source: metaDir,
+      bucket,
+      keyPrefix,
+      delete: false,
+      label: "SourceMetaUpload",
+    });
+  } finally {
+    fs.rmSync(metaDir, { recursive: true, force: true });
+  }
 }
 
 async function ensureAstroBuild(projectDir: string, commitHash?: string): Promise<string> {
