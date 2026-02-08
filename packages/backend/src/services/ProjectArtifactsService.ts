@@ -9,9 +9,11 @@ import {
 } from "./ObjectStorageService";
 import {
   getProjectArtifactKeyPrefix,
+  getProjectBasePrefix,
   getProjectPreviewBuildMetaKey,
   getProjectPublishedBuildMetaKey,
   getProjectThumbnailKey,
+  getProjectVersionBasePrefix,
 } from "./ProjectStoragePaths";
 import { getActiveTenantId } from "../generator/versionUtils";
 
@@ -215,8 +217,76 @@ export async function uploadProjectThumbnailToBucket(options: {
   return { uploaded: true, key };
 }
 
+export async function uploadProjectThumbnailBufferToBucket(options: {
+  buffer: Buffer | Uint8Array;
+  slug: string;
+  version: number;
+}): Promise<{ uploaded: boolean; key?: string }> {
+  const storage = getStorage();
+  if (!storage) return { uploaded: false };
+
+  const key = getProjectThumbnailKey({
+    tenantId: storage.tenantId,
+    slug: options.slug,
+    version: options.version,
+  });
+
+  await storage.client.send(
+    new PutObjectCommand({
+      Bucket: storage.bucket,
+      Key: key,
+      Body: options.buffer,
+      ContentType: "image/webp",
+    }),
+  );
+
+  return { uploaded: true, key };
+}
+
 export function getProjectPreviewMetaPathOnDisk(options: {
   versionDir: string;
 }): string {
   return path.join(options.versionDir, ".vivd", "preview-build.json");
+}
+
+export async function deleteProjectArtifactsFromBucket(options: {
+  slug: string;
+}): Promise<{ deleted: boolean; objectsDeleted: number }> {
+  const storage = getStorage();
+  if (!storage) return { deleted: false, objectsDeleted: 0 };
+
+  const keyPrefix = getProjectBasePrefix({
+    tenantId: storage.tenantId,
+    slug: options.slug,
+  });
+
+  const res = await deleteBucketPrefix({
+    client: storage.client,
+    bucket: storage.bucket,
+    keyPrefix,
+  });
+
+  return { deleted: true, objectsDeleted: res.objectsDeleted };
+}
+
+export async function deleteProjectVersionArtifactsFromBucket(options: {
+  slug: string;
+  version: number;
+}): Promise<{ deleted: boolean; objectsDeleted: number }> {
+  const storage = getStorage();
+  if (!storage) return { deleted: false, objectsDeleted: 0 };
+
+  const keyPrefix = getProjectVersionBasePrefix({
+    tenantId: storage.tenantId,
+    slug: options.slug,
+    version: options.version,
+  });
+
+  const res = await deleteBucketPrefix({
+    client: storage.client,
+    bucket: storage.bucket,
+    keyPrefix,
+  });
+
+  return { deleted: true, objectsDeleted: res.objectsDeleted };
 }

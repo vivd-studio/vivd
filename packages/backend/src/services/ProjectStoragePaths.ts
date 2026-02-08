@@ -2,13 +2,20 @@ import { getActiveTenantId } from "../generator/versionUtils";
 
 export type ProjectArtifactKind = "source" | "preview" | "published" | "thumbnails";
 
+export function getProjectBasePrefix(options: {
+  tenantId?: string;
+  slug: string;
+}): string {
+  const tenantId = (options.tenantId || getActiveTenantId()).trim() || "default";
+  return `tenants/${tenantId}/projects/${options.slug}`;
+}
+
 export function getProjectVersionBasePrefix(options: {
   tenantId?: string;
   slug: string;
   version: number;
 }): string {
-  const tenantId = (options.tenantId || getActiveTenantId()).trim() || "default";
-  return `tenants/${tenantId}/projects/${options.slug}/v${options.version}`;
+  return `${getProjectBasePrefix(options)}/v${options.version}`;
 }
 
 export function getProjectArtifactKeyPrefix(options: {

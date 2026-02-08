@@ -52,12 +52,24 @@ export const studioProcedures = {
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const backendOrigin =
-        process.env.BACKEND_URL ||
-        process.env.BETTER_AUTH_URL ||
-        "http://localhost:3000";
-
-      const mainBackendUrl = new URL("/vivd-studio", backendOrigin).toString().replace(/\/$/, "");
+      // Studio machines need a backend URL that is reachable *from the machine*.
+      // - Local provider spawns the studio as a child-process inside this backend container,
+      //   so `DOMAIN` (usually `http://localhost` via Caddy on :80) is not reachable.
+      // - Fly provider needs the public `DOMAIN`.
+      const backendOriginRaw =
+        studioMachineProvider.kind === "local"
+          ? process.env.BETTER_AUTH_URL ||
+            process.env.DOMAIN ||
+            `http://127.0.0.1:${process.env.PORT || 3000}`
+          : process.env.DOMAIN ||
+            process.env.BETTER_AUTH_URL ||
+            `http://127.0.0.1:${process.env.PORT || 3000}`;
+      const backendOrigin = backendOriginRaw.startsWith("http")
+        ? backendOriginRaw
+        : `https://${backendOriginRaw}`;
+      const mainBackendUrl = new URL("/vivd-studio", backendOrigin)
+        .toString()
+        .replace(/\/$/, "");
 
       // Resolve the user's session token for machine-to-backend authentication.
       // The auth session shape we expose to the app does not include the raw token.

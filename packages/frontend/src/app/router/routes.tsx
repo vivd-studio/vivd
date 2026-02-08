@@ -4,7 +4,7 @@ import Dashboard from "@/pages/Dashboard";
 import Signup from "@/pages/Signup";
 import Admin from "@/pages/Admin";
 import Settings from "@/pages/Settings";
-import PreviewPage from "@/pages/PreviewPage";
+import ProjectFullscreen from "@/pages/ProjectFullscreen";
 import EmbeddedStudio from "@/pages/EmbeddedStudio";
 import StudioFullscreen from "@/pages/StudioFullscreen";
 import ScratchWizard from "@/pages/ScratchWizard";
@@ -61,7 +61,7 @@ function EmbeddedStudioRoute() {
 function FullscreenProjectRoute() {
   return (
     <RequireAssignedProject>
-      <PreviewPage />
+      <ProjectFullscreen />
     </RequireAssignedProject>
   );
 }
@@ -152,7 +152,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         <Route path="projects/:projectSlug" element={<EmbeddedStudioRoute />} />
       </Route>
 
-      {/* Fullscreen PreviewPage - outside Layout for immersive editing */}
+      {/* Fullscreen project view (no layout chrome) */}
       <Route
         path="/vivd-studio/projects/:projectSlug/fullscreen"
         element={

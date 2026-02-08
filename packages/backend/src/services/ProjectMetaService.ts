@@ -231,6 +231,8 @@ class ProjectMetaService {
           eq(projectVersion.version, options.version),
         ),
       );
+
+    await this.touchUpdatedAt(options.slug);
   }
 
   async upsertPublishChecklist(checklist: PrePublishChecklist): Promise<void> {
@@ -256,6 +258,8 @@ class ProjectMetaService {
           updatedAt: new Date(),
         },
       });
+
+    await this.touchUpdatedAt(checklist.projectSlug);
   }
 
   async getPublishChecklist(options: {

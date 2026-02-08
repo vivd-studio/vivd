@@ -4,7 +4,7 @@ import {
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
 } from "../generator/vivdPaths";
-import { uploadProjectThumbnailToBucket } from "./ProjectArtifactsService";
+import { uploadProjectThumbnailBufferToBucket } from "./ProjectArtifactsService";
 import { projectMetaService } from "./ProjectMetaService";
 
 // Base URL for the scraper (in Docker) to reach this backend's preview endpoint.
@@ -17,23 +17,28 @@ const PREVIEW_BASE_URL =
       : `https://${process.env.DOMAIN}`;
 const DEBOUNCE_MS = 5000; // 5 second debounce window
 
+type PendingGeneration = {
+  timeout: NodeJS.Timeout;
+  resolve: () => void;
+};
+
 /**
  * Service for generating project thumbnails.
  * Captures screenshots of preview URLs and resizes them for project cards.
  */
 class ThumbnailService {
-  private pendingGenerations: Map<string, NodeJS.Timeout> = new Map();
+  private pendingGenerations: Map<string, PendingGeneration> = new Map();
 
   /**
    * Generate a thumbnail for a project version.
    * Uses debouncing to avoid rapid regeneration on frequent saves.
    *
-   * @param versionDir - Path to the version directory
+   * @param versionDir - Path to the version directory (optional; used only for local persistence)
    * @param slug - Project slug
    * @param version - Version number
    */
   async generateThumbnail(
-    versionDir: string,
+    versionDir: string | null | undefined,
     slug: string,
     version: number
   ): Promise<void> {
@@ -42,7 +47,9 @@ class ThumbnailService {
     // Clear any pending generation for this version
     const existing = this.pendingGenerations.get(key);
     if (existing) {
-      clearTimeout(existing);
+      clearTimeout(existing.timeout);
+      existing.resolve();
+      this.pendingGenerations.delete(key);
     }
 
     // Debounce: wait before generating to avoid rapid regeneration
@@ -57,7 +64,7 @@ class ThumbnailService {
         }
       }, DEBOUNCE_MS);
 
-      this.pendingGenerations.set(key, timeout);
+      this.pendingGenerations.set(key, { timeout, resolve });
     });
   }
 
@@ -66,7 +73,7 @@ class ThumbnailService {
    * Use this for initial generation after project creation.
    */
   async generateThumbnailImmediate(
-    versionDir: string,
+    versionDir: string | null | undefined,
     slug: string,
     version: number
   ): Promise<void> {
@@ -75,7 +82,8 @@ class ThumbnailService {
     // Clear any pending debounced generation
     const existing = this.pendingGenerations.get(key);
     if (existing) {
-      clearTimeout(existing);
+      clearTimeout(existing.timeout);
+      existing.resolve();
       this.pendingGenerations.delete(key);
     }
 
@@ -83,16 +91,10 @@ class ThumbnailService {
   }
 
   private async doGenerateThumbnail(
-    versionDir: string,
+    versionDir: string | null | undefined,
     slug: string,
     version: number
   ): Promise<void> {
-    // Skip if version directory doesn't exist
-    if (!fs.existsSync(versionDir)) {
-      console.log(`[Thumbnail] Skipping - version dir not found: ${versionDir}`);
-      return;
-    }
-
     // Construct preview URL that the scraper can reach
     const previewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
 
@@ -106,18 +108,25 @@ class ThumbnailService {
         400
       );
 
-      // Ensure .vivd directory exists
-      ensureVivdInternalFilesDir(versionDir);
-
-      // Save thumbnail
-      const thumbnailPath = getVivdInternalFilesPath(versionDir, "thumbnail.webp");
       const thumbnailBuffer = Buffer.from(base64Thumbnail, "base64");
-      fs.writeFileSync(thumbnailPath, thumbnailBuffer);
+
+      // Optionally persist thumbnail to the local project directory (best-effort).
+      if (versionDir && fs.existsSync(versionDir)) {
+        try {
+          ensureVivdInternalFilesDir(versionDir);
+          const thumbnailPath = getVivdInternalFilesPath(versionDir, "thumbnail.webp");
+          fs.writeFileSync(thumbnailPath, thumbnailBuffer);
+        } catch (writeErr) {
+          const message =
+            writeErr instanceof Error ? writeErr.message : String(writeErr);
+          console.warn(`[Thumbnail] Local write failed: ${message}`);
+        }
+      }
 
       // Upload thumbnail to object storage (best-effort) and persist key in DB.
       try {
-        const uploaded = await uploadProjectThumbnailToBucket({
-          localFilePath: thumbnailPath,
+        const uploaded = await uploadProjectThumbnailBufferToBucket({
+          buffer: thumbnailBuffer,
           slug,
           version,
         });
@@ -135,7 +144,7 @@ class ThumbnailService {
         console.warn(`[Thumbnail] Bucket upload failed: ${message}`);
       }
 
-      console.log(`[Thumbnail] Generated successfully: ${thumbnailPath}`);
+      console.log(`[Thumbnail] Generated successfully for ${slug} v${version}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[Thumbnail] Failed for ${slug} v${version}: ${message}`);

@@ -7,6 +7,8 @@ import {
 } from "../../trpc";
 import {
   getActiveTenantId,
+  getProjectsRootDir,
+  getTenantProjectsDir,
   getProjectDir,
   getVersionDir,
   getManifest,
@@ -16,31 +18,15 @@ import {
   isLegacyProject,
   migrateProjectIfNeeded,
   listProjectSlugs,
-  touchProjectUpdatedAt,
   deleteVersion as deleteVersionUtil,
 } from "../../generator/versionUtils";
 import path from "path";
 import fs from "fs";
 import { publishService } from "../../services/PublishService";
 import { db } from "../../db";
-import { projectMember, publishedSite } from "../../db/schema";
+import { projectMember, projectMeta, publishedSite } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
-import { devServerManager } from "../../devserver/devServerManager";
-import { serverManager as opencodeServerManager } from "../../opencode/serverManager";
 import {
-  applyHtmlPatches,
-  type HtmlPatch,
-} from "../../services/HtmlPatchService";
-import {
-  applyAstroPatches,
-  type AstroTextPatch,
-} from "../../services/AstroPatchService";
-import {
-  applyI18nJsonPatches,
-  type I18nJsonPatch,
-} from "../../services/I18nJsonPatchService";
-import {
-  hasDotSegment,
   getVivdInternalFilesPath,
   migrateVivdInternalArtifactsInVersion,
   VIVD_INTERNAL_ARTIFACT_FILENAMES,
@@ -54,178 +40,13 @@ import {
   uploadDirectoryToBucket,
 } from "../../services/ObjectStorageService";
 import { migrateProjectMetadataToDbFromFilesystem } from "../../services/ProjectMetaMigrationService";
+import {
+  deleteProjectArtifactsFromBucket,
+  deleteProjectVersionArtifactsFromBucket,
+} from "../../services/ProjectArtifactsService";
+import { studioMachineProvider } from "../../services/studioMachines";
 
 export const projectMaintenanceProcedures = {
-  applyHtmlPatches: projectMemberProcedure
-    .input(
-      z.object({
-        slug: z.string(),
-        version: z.number(),
-        filePath: z.string().default("index.html"),
-        patches: z
-          .array(
-            z.discriminatedUnion("type", [
-              z.object({
-                type: z.literal("setTextNode"),
-                selector: z.string().min(1),
-                index: z.number().int().min(1),
-                value: z.string(),
-              }),
-              z.object({
-                type: z.literal("setI18n"),
-                key: z.string().min(1),
-                lang: z.string().min(2),
-                value: z.string(),
-              }),
-              z.object({
-                type: z.literal("setAttr"),
-                selector: z.string().min(1),
-                name: z.literal("src"),
-                value: z.string(),
-              }),
-              // Astro component text patches - uses source file info from dev server
-              z.object({
-                type: z.literal("setAstroText"),
-                sourceFile: z.string().min(1),
-                sourceLoc: z.string().optional(),
-                oldValue: z.string(),
-                newValue: z.string(),
-              }),
-            ])
-          )
-          .min(1, "At least one patch is required"),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const { slug, version, filePath, patches } = input;
-      const versionDir = getVersionDir(slug, version);
-
-      if (!fs.existsSync(versionDir)) {
-        throw new Error("Project version not found");
-      }
-
-      const absoluteVersionDir = path.resolve(versionDir);
-
-      // Separate patches by type
-      const astroPatches = patches.filter(
-        (p): p is AstroTextPatch => p.type === "setAstroText"
-      );
-      const i18nPatches = patches
-        .filter(
-          (
-            p
-          ): p is {
-            type: "setI18n";
-            key: string;
-            lang: string;
-            value: string;
-          } => p.type === "setI18n"
-        )
-        .map(
-          (p): I18nJsonPatch => ({ key: p.key, lang: p.lang, value: p.value })
-        );
-      // Filter out Astro and i18n patches, keep only HTML patches
-      const htmlPatches = patches.filter(
-        (p) => p.type !== "setAstroText" && p.type !== "setI18n"
-      ) as HtmlPatch[];
-
-      let totalApplied = 0;
-      let totalSkipped = 0;
-      const allErrors: Array<{
-        selector?: string;
-        file?: string;
-        reason: string;
-      }> = [];
-
-      // Apply Astro patches if any
-      if (astroPatches.length > 0) {
-        // Validate source file paths (security check)
-        for (const patch of astroPatches) {
-          if (hasDotSegment(patch.sourceFile)) {
-            throw new Error("Cannot edit hidden files");
-          }
-          const resolvedPath = path.resolve(versionDir, patch.sourceFile);
-          if (!resolvedPath.startsWith(absoluteVersionDir)) {
-            throw new Error("Invalid source file path");
-          }
-        }
-
-        const astroResult = applyAstroPatches(versionDir, astroPatches);
-        totalApplied += astroResult.applied;
-        totalSkipped += astroResult.skipped;
-        allErrors.push(
-          ...astroResult.errors.map((e) => ({ file: e.file, reason: e.reason }))
-        );
-      }
-
-      // Apply i18n JSON patches if any
-      if (i18nPatches.length > 0) {
-        const i18nResult = applyI18nJsonPatches(versionDir, i18nPatches);
-        totalApplied += i18nResult.applied;
-        totalSkipped += i18nResult.skipped;
-        allErrors.push(
-          ...i18nResult.errors.map((e) => ({
-            selector: `i18n:${e.key}`,
-            reason: e.reason,
-          }))
-        );
-      }
-
-      // Apply HTML patches if any
-      if (htmlPatches.length > 0) {
-        if (hasDotSegment(filePath)) {
-          throw new Error("Cannot edit hidden files");
-        }
-
-        // Security check to prevent directory traversal
-        const targetPath = path.join(versionDir, filePath);
-        const resolvedPath = path.resolve(targetPath);
-
-        if (!resolvedPath.startsWith(absoluteVersionDir)) {
-          throw new Error("Invalid file path");
-        }
-
-        if (!filePath.endsWith(".html") && !filePath.endsWith(".htm")) {
-          throw new Error("Only HTML files can be patched");
-        }
-
-        if (!fs.existsSync(targetPath)) {
-          throw new Error("File not found");
-        }
-
-        const original = fs.readFileSync(targetPath, "utf-8");
-        const result = applyHtmlPatches(original, htmlPatches);
-
-        if (result.html !== original) {
-          fs.writeFileSync(targetPath, result.html, "utf-8");
-        }
-
-        totalApplied += result.applied;
-        totalSkipped += result.skipped;
-        allErrors.push(
-          ...result.errors.map((e) => ({
-            selector: e.selector,
-            reason: e.reason,
-          }))
-        );
-      }
-
-      const noChanges = totalApplied === 0;
-
-      // Update project's updatedAt timestamp if changes were applied
-      if (!noChanges) {
-        await touchProjectUpdatedAt(slug);
-      }
-
-      return {
-        success: true,
-        noChanges,
-        applied: totalApplied,
-        skipped: totalSkipped,
-        errors: allErrors,
-      };
-    }),
-
   /**
    * Admin endpoint to hard reset a stuck project's status.
    * Use this when a project is stuck in a processing state.
@@ -684,11 +505,8 @@ export const projectMaintenanceProcedures = {
         );
       }
 
-      const projectDir = getProjectDir(slug);
-
-      if (!fs.existsSync(projectDir)) {
-        throw new Error("Project not found");
-      }
+      const manifest = await getManifest(slug);
+      if (!manifest) throw new Error("Project not found");
 
       // Check if project is published - cannot delete published projects
       const publishInfo = await publishService.getPublishedInfo(slug);
@@ -698,29 +516,75 @@ export const projectMaintenanceProcedures = {
         );
       }
 
-      // Delete project_member records from database
-      await db.delete(projectMember).where(eq(projectMember.projectSlug, slug));
-      console.log(`[Delete] Removed project_member records for: ${slug}`);
+      const projectDir = getProjectDir(slug);
+      const legacyProjectDir = path.join(getProjectsRootDir(), slug);
+      const tenantProjectDir = path.join(getTenantProjectsDir(), slug);
+      const projectDirPrefixes = Array.from(
+        new Set([projectDir, legacyProjectDir, tenantProjectDir]),
+      );
 
-      // Stop any running dev servers for this project (all versions)
-      const devServersStopped = devServerManager.stopByProjectPrefix(projectDir);
-      if (devServersStopped > 0) {
-        console.log(`[Delete] Stopped ${devServersStopped} dev server(s) for: ${slug}`);
+      // Stop any running studio machines for this project (all versions).
+      // This prevents a studio from writing new artifacts after we delete DB/bucket state.
+      for (const v of manifest.versions) {
+        try {
+          await studioMachineProvider.stop(slug, v.version);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[Delete] Failed to stop studio for ${slug}/v${v.version}: ${message}`,
+          );
+        }
       }
 
-      // Stop any running OpenCode servers for this project (all versions)
-      const opencodeStopped = await opencodeServerManager.stopByProjectPrefix(projectDir);
-      if (opencodeStopped > 0) {
-        console.log(`[Delete] Stopped ${opencodeStopped} OpenCode server(s) for: ${slug}`);
-      }
+      // Delete DB records (DB is source of truth for project listing).
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(projectMember)
+          .where(eq(projectMember.projectSlug, slug));
+        await tx.delete(projectMeta).where(eq(projectMeta.slug, slug));
+        await tx
+          .delete(publishedSite)
+          .where(eq(publishedSite.projectSlug, slug));
+      });
+      console.log(`[Delete] Removed DB records for: ${slug}`);
 
-      // Delete the entire project directory
-      fs.rmSync(projectDir, { recursive: true, force: true });
-      console.log(`[Delete] Permanently deleted project: ${slug}`);
+      // Delete the project directory (best-effort; project could be bucket-backed).
+      for (const dir of projectDirPrefixes) {
+        if (!fs.existsSync(dir)) continue;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+      console.log(`[Delete] Permanently deleted project files: ${slug}`);
+
+      let bucketCleanup: {
+        attempted: boolean;
+        objectsDeleted?: number;
+        error?: string;
+      } | null = null;
+
+      try {
+        const res = await deleteProjectArtifactsFromBucket({ slug });
+        bucketCleanup = res.deleted
+          ? { attempted: true, objectsDeleted: res.objectsDeleted }
+          : { attempted: false };
+        if (res.deleted) {
+          console.log(
+            `[Delete] Deleted ${res.objectsDeleted} object(s) from bucket for: ${slug}`,
+          );
+        }
+      } catch (e) {
+        bucketCleanup = {
+          attempted: true,
+          error: e instanceof Error ? e.message : String(e),
+        };
+        console.warn(
+          `[Delete] Bucket cleanup failed for ${slug}: ${bucketCleanup.error}`,
+        );
+      }
 
       return {
         success: true,
         slug,
+        bucketCleanup,
         message: `Project "${slug}" has been permanently deleted.`,
       };
     }),
@@ -749,16 +613,11 @@ export const projectMaintenanceProcedures = {
         );
       }
 
-      const projectDir = getProjectDir(slug);
-      const versionDir = getVersionDir(slug, version);
+      const manifest = await getManifest(slug);
+      if (!manifest) throw new Error("Project not found");
 
-      if (!fs.existsSync(projectDir)) {
-        throw new Error("Project not found");
-      }
-
-      if (!fs.existsSync(versionDir)) {
-        throw new Error(`Version ${version} not found`);
-      }
+      const versionExists = manifest.versions.some((v) => v.version === version);
+      if (!versionExists) throw new Error(`Version ${version} not found`);
 
       // Check if this version is published
       const publishedVersions = await db
@@ -779,29 +638,57 @@ export const projectMaintenanceProcedures = {
       }
 
       // Check if this is the only version
-      const manifest = await getManifest(slug);
-      if (!manifest || manifest.versions.length <= 1) {
+      if (manifest.versions.length <= 1) {
         throw new Error(
           "Cannot delete the only remaining version. Delete the entire project instead."
         );
       }
 
-      // Stop any running dev servers for this version
-      devServerManager.stopDevServer(versionDir);
-      console.log(`[DeleteVersion] Stopped dev server for: ${slug}/v${version}`);
-
-      // Stop any running OpenCode servers for this version
-      await opencodeServerManager.stopServer(versionDir);
-      console.log(`[DeleteVersion] Stopped OpenCode server for: ${slug}/v${version}`);
+      // Stop any running studio machine for this version.
+      try {
+        await studioMachineProvider.stop(slug, version);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[DeleteVersion] Failed to stop studio for ${slug}/v${version}: ${message}`,
+        );
+      }
 
       // Delete the version using the utility function
       await deleteVersionUtil(slug, version);
       console.log(`[DeleteVersion] Permanently deleted version: ${slug}/v${version}`);
 
+      let bucketCleanup: {
+        attempted: boolean;
+        objectsDeleted?: number;
+        error?: string;
+      } | null = null;
+
+      try {
+        const res = await deleteProjectVersionArtifactsFromBucket({ slug, version });
+        bucketCleanup = res.deleted
+          ? { attempted: true, objectsDeleted: res.objectsDeleted }
+          : { attempted: false };
+        if (res.deleted) {
+          console.log(
+            `[DeleteVersion] Deleted ${res.objectsDeleted} object(s) from bucket for: ${slug}/v${version}`,
+          );
+        }
+      } catch (e) {
+        bucketCleanup = {
+          attempted: true,
+          error: e instanceof Error ? e.message : String(e),
+        };
+        console.warn(
+          `[DeleteVersion] Bucket cleanup failed for ${slug}/v${version}: ${bucketCleanup.error}`,
+        );
+      }
+
       return {
         success: true,
         slug,
         version,
+        bucketCleanup,
         message: `Version ${version} of "${slug}" has been permanently deleted.`,
       };
     }),

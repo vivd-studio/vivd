@@ -6,6 +6,7 @@ import sizeOf from "image-size";
 import ignore from "ignore";
 import sharp from "sharp";
 import { WEBP_QUALITY } from "../config.js";
+import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
 
 function safeJoin(root: string, targetPath: string): string {
   const resolvedRoot = path.resolve(root);
@@ -390,6 +391,7 @@ export const assetsRouter = router({
         fs.rmSync(targetPath, { force: true });
       }
 
+      projectTouchReporter.touch(input.slug);
       return { success: true, deleted: relativePath };
     }),
 
@@ -430,6 +432,7 @@ export const assetsRouter = router({
 
       fs.mkdirSync(fullPath, { recursive: true });
 
+      projectTouchReporter.touch(input.slug);
       return {
         success: true,
         path: path.join(relativePath, sanitizedName),
@@ -529,6 +532,7 @@ export const assetsRouter = router({
       }
 
       fs.writeFileSync(targetPath, content, "utf-8");
+      projectTouchReporter.touch(input.slug);
       return { success: true, path: relativePath };
     }),
 
@@ -587,6 +591,7 @@ export const assetsRouter = router({
       }
 
       fs.renameSync(sourceFullPath, destFullPath);
+      projectTouchReporter.touch(input.slug);
       return { success: true, oldPath: sourcePath, newPath: destinationPath };
     }),
 

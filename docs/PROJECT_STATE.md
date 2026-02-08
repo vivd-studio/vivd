@@ -20,8 +20,8 @@ This document tracks the current state of development and serves as the canonica
 
 ```
 packages/
-├── backend/         Express + tRPC backend (still contains some legacy studio routes)
-├── frontend/        React frontend (still contains legacy studio UI)
+├── backend/         Express + tRPC backend (control plane: auth, metadata, publishing, studio orchestration)
+├── frontend/        React frontend (project list + view-only preview + embeds studio)
 ├── studio/          NEW standalone studio (server + client) for isolated editing
 ├── shared/          Shared types, mode detection, config
 ├── scraper/         Puppeteer service for thumbnails
@@ -79,9 +79,9 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] Verify backend-unavailable behavior blocks usage (no bypass)
 
 - [ ] **Clean up legacy studio code from packages**
-  - [ ] Remove studio-specific routes from `packages/backend/`
-  - [ ] Remove studio UI components from `packages/frontend/`
-  - [ ] Confirm no production paths still rely on the legacy studio
+  - [x] Remove legacy editor routes from `packages/backend/`
+  - [x] Remove legacy editor UI from `packages/frontend/`
+  - [x] Confirm main app only embeds `@vivd/studio` for editing
 
 ### 0.3 Object Storage Sync (R2) (In Progress)
 
@@ -122,11 +122,38 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [ ] Decide where builds run long-term (backend vs studio vs dedicated builder)
   - [ ] Define preview artifact contract (`preview/` in R2, public vs signed)
 
+### 0.5.1 Publishing / Checklist Consolidation (Decided 2026-02-08)
+
+- [ ] **Bucket-first publish + preview (no local project dir dependency in runtime paths)**
+  - [ ] Publish pipeline must not read from local `projects/<slug>/vN` as source
+  - [ ] Preview serving must not depend on local `versionDir` detection/fallback in connected/prod mode
+  - [ ] Generation flows may continue using temporary local workspace, then sync artifacts to bucket on completion
+- [ ] **Reuse preview artifacts for publish**
+  - [ ] Astro publish uses ready `preview/` artifact (no rebuild on publish)
+  - [ ] Static publish uses `source/` artifact
+  - [ ] Add readiness/race checks (`artifact_not_ready`, optional expected-hash compare-and-swap)
+- [ ] **Unified publish UX across Studio + app shell**
+  - [ ] Keep publish/unpublish available in Studio and preview/dashboard
+  - [ ] Route all publish/unpublish through backend publish APIs (single behavior)
+  - [ ] Use non-technical labels ("Publish changes", "Unpublish site")
+  - [ ] In connected mode, Studio publish dialog shows backend publish status (URL/domain, version, publishedAt)
+  - [ ] In connected mode, Studio publish dialog exposes unpublish action using backend API
+  - [ ] Show explicit unsaved-changes warning when Studio has newer unsynced edits
+  - [ ] Add CTA button in publish dialog: "Open Studio to save changes"
+  - [ ] Show deterministic publish dialog states: Ready / Build in progress / Unsaved changes in Studio
+  - [ ] Show exact artifact being published (source kind, built time, short hash) before confirmation
+- [ ] **Checklist DB-only**
+  - [ ] Studio checklist run/fix must upsert into `project_publish_checklist`
+  - [ ] Remove `.vivd/publish-checklist.json` as authoritative source
+  - [ ] Expose checklist state/freshness for publish dialogs outside Studio
+- [ ] **Studio provider parity**
+  - [ ] Keep local studio provider behavior aligned with production flow (hydrate/sync via bucket, publish consumes bucket artifacts)
+
 - [ ] **Thumbnail generation**
   - Current: Scraper service generates thumbnails
   - [x] Fix screenshot clipping on sites where `document.body.scrollHeight` is `0`
-  - [ ] Decide scraper placement (centralized recommended)
-  - [ ] Ensure scraper works with the new storage workflow (R2 artifacts)
+  - [x] Decide scraper placement: centralized in backend (studio requests regen after snapshot sync)
+  - [x] Ensure scraper works with the new storage workflow (bucket-backed previews; no local FS dependency)
 
 - [ ] **Preview without studio machine**
   - [x] Serve bucket-backed prebuilt previews for quick preview
@@ -147,9 +174,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ## Phase 1: SaaS Foundation (DONE)
 
 - [x] Create `packages/shared` with types and mode detection
-- [x] `SAAS_MODE` environment variable support (backend)
-- [x] Auth provider abstraction (local vs control plane)
-- [x] Limits service with control plane support
+- [x] Remove `SAAS_MODE` / control-plane dual-mode complexity (always local Better Auth + env-based limits)
 - [x] Create `docker-compose.self-hosted.yml` (best-effort; not a priority)
 
 ---
@@ -176,6 +201,8 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Migration script for existing projects (`npm run migrate:project-meta -w @vivd/backend`)
   - [x] Maintenance tab action for migration (Admin → Maintenance → "Migrate Project Metadata to DB")
   - [x] Runtime uses DB as source of truth (no legacy file reads/writes)
+  - [x] Touch `project_meta.updatedAt` on editor actions (snapshots/edits) so UI sorting reflects real activity
+  - [x] Project/version deletion removes DB records + bucket artifacts (prevents ghost projects and storage leaks)
 
 ---
 
@@ -232,6 +259,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 - [x] Lazy machine config/image reconciliation on next start (update `config.image` + service autostart/autostop via Machines API)
 - [x] Auto studio image selection from GHCR semver tags by default (optional `FLY_STUDIO_IMAGE_REPO` source override and `FLY_STUDIO_IMAGE` pin override)
 - [ ] Provision studio machine on demand (or per org)
+- [ ] **Decision needed:** Fly app strategy per tenant/org (single app vs app-per-tenant)
+  - Fly apps have a machine quota limit (often ~50 machines/app by default); might require a support request to increase.
+  - App-per-tenant can improve isolation and quota control, but adds operational overhead (deployments, secrets, routing, monitoring).
+  - Likely start with a single shared app + quota increase; consider dedicated apps for very large/enterprise tenants later.
 - [x] Auto-suspend/resume (cost control)
 - [ ] Preview → Edit transition (route user to the right machine)
 - [ ] Machine auth: control plane issues scoped, short-lived tokens
@@ -284,10 +315,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 |----------|---------|--------|
 | Bucket layout for projects | `tenants/<tenantId>/projects/<slug>[/vN]/{source,preview}/` | In progress |
 | Studio URL pattern | Iframe `/studio/...` vs redirect vs `{org}.vivd.studio` | TBD |
-| Build + preview artifacts | Build-in-backend vs build-in-studio vs dedicated builder | TBD |
+| Build + preview artifacts | Build preview on save; publish reuses ready artifacts from bucket | Decided (2026-02-08) |
 | Thumbnails pipeline | Central scraper vs per-tenant scraper | TBD |
 | Artifact storage | Object storage (R2) | Decided |
-| Published sites serving | From object storage (R2) | Decided |
+| Published sites serving | Caddy serves local `/srv/published`, materialized from bucket artifact | Decided (2026-02-08) |
 | Concurrency model | Single-writer lock vs optimistic | TBD |
 
 ---
@@ -315,7 +346,7 @@ OPENCODE_KILL_ORPHANS=0                 # Optional: disable orphan cleanup (need
 
 ### Backend
 ```env
-SAAS_MODE=true                          # Enable SaaS features
+# No SAAS_MODE: backend runs single-mode (Better Auth + env-based limits).
 # Studio Machines (Fly.io)
 # STUDIO_MACHINE_PROVIDER=fly
 # FLY_API_TOKEN=fly_xxx
@@ -349,7 +380,8 @@ SAAS_MODE=true                          # Enable SaaS features
 - `docs/multi-tenant-refactor/` - detailed SaaS planning docs
 - `docs/multi-tenant-saas-architecture-plan.md` - control plane vs tenant machine split rationale
 - `docs/studio-package-refactor-plan.md` - standalone studio design notes
+- `docs/publishing-bucket-first-plan.md` - agreed plan for bucket-first publish/preview + checklist DB-only
 
 ---
 
-*Last updated: 2026-02-07*
+*Last updated: 2026-02-08*

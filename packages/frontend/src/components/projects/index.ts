@@ -11,7 +11,7 @@ export {
 } from "./create";
 
 // Versioning
-export { VersionSelector, VersionDialog, VersionHistoryPanel } from "./versioning";
+export { VersionSelector, VersionDialog } from "./versioning";
 export type { VersionSelectorVersion } from "./versioning";
 
 // Dialogs

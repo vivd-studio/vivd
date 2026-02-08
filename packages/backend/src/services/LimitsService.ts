@@ -1,7 +1,5 @@
 import { usageService } from "./UsageService";
-import { isSaasMode } from "@vivd/shared/config";
 import type { LimitsConfig } from "@vivd/shared/types";
-import { getControlPlaneLimits } from "../lib/controlPlaneClient";
 
 // Default configuration values (in credits, where 1 credit = 1 cent)
 // Original dollar defaults halved, then multiplied by 100
@@ -94,20 +92,7 @@ function getEnvConfig(): LimitsConfig {
   };
 }
 
-/**
- * Get limits configuration based on mode.
- * - Self-hosted: Returns env-based config
- * - SaaS: Fetches from control plane (cached 5min), falls back to env
- */
 async function getConfig(): Promise<LimitsConfig> {
-  if (isSaasMode()) {
-    const controlPlaneLimits = await getControlPlaneLimits();
-    if (controlPlaneLimits) {
-      return controlPlaneLimits;
-    }
-    // Fallback to env config if control plane unavailable
-    console.warn("[LimitsService] Control plane unavailable, using env config");
-  }
   return getEnvConfig();
 }
 

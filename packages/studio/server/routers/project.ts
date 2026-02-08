@@ -26,6 +26,8 @@ import {
   buildAndUploadPublished,
   syncSourceToBucket,
 } from "../services/ArtifactSyncService.js";
+import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
+import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
 
 // Dotfiles that are allowed in asset paths
 const ALLOWED_DOTFILES = [".vivd", ".gitignore", ".env.example"];
@@ -250,6 +252,10 @@ export const projectRouter = router({
 
       const noChanges = totalApplied === 0;
 
+      if (!noChanges) {
+        projectTouchReporter.touch(input.slug);
+      }
+
       return {
         success: true,
         noChanges,
@@ -333,25 +339,48 @@ export const projectRouter = router({
         };
       }
 
+      projectTouchReporter.touch(input.slug);
+
       const projectDir = ctx.workspace.getProjectPath();
+      const config = detectProjectType(projectDir);
       // Keep bucket-backed preview up to date (best-effort, async).
-      void syncSourceToBucket({
-        projectDir,
-        slug: input.slug,
-        version: input.version,
-      }).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[Artifacts] Source sync failed: ${msg}`);
-      });
-      void buildAndUploadPreview({
-        projectDir,
-        slug: input.slug,
-        version: input.version,
-        commitHash: hash,
-      }).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[Artifacts] Preview build/upload failed: ${msg}`);
-      });
+      if (config.framework === "astro") {
+        void syncSourceToBucket({
+          projectDir,
+          slug: input.slug,
+          version: input.version,
+        }).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Artifacts] Source sync failed: ${msg}`);
+        });
+
+        void buildAndUploadPreview({
+          projectDir,
+          slug: input.slug,
+          version: input.version,
+          commitHash: hash,
+        })
+          .then(() => {
+            thumbnailGenerationReporter.request(input.slug, input.version);
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Preview build/upload failed: ${msg}`);
+          });
+      } else {
+        void syncSourceToBucket({
+          projectDir,
+          slug: input.slug,
+          version: input.version,
+        })
+          .then(() => {
+            thumbnailGenerationReporter.request(input.slug, input.version);
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Source sync failed: ${msg}`);
+          });
+      }
 
       return {
         success: true,
@@ -368,12 +397,13 @@ export const projectRouter = router({
         version: z.number(),
       }),
     )
-    .mutation(async ({ ctx }) => {
+    .mutation(async ({ ctx, input }) => {
       if (!ctx.workspace.isInitialized()) {
         throw new Error("Workspace not initialized");
       }
 
       await ctx.workspace.discardChanges();
+      projectTouchReporter.touch(input.slug);
 
       return {
         success: true,
@@ -444,6 +474,7 @@ export const projectRouter = router({
       }
 
       await ctx.workspace.loadVersion(input.commitHash);
+      projectTouchReporter.touch(input.slug);
 
       const shortHash = input.commitHash.substring(0, 7);
       return {
@@ -504,6 +535,8 @@ export const projectRouter = router({
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[Artifacts] Published build/upload failed: ${msg}`);
         });
+
+        projectTouchReporter.touch(input.slug);
 
         return {
           success: true,

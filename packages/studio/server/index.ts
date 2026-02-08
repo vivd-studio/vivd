@@ -17,6 +17,7 @@ import { detectProjectType } from "./services/projectType.js";
 import { devServerService } from "./services/DevServerService.js";
 import { serverManager as opencodeServerManager } from "./opencode/serverManager.js";
 import { usageReporter } from "./services/UsageReporter.js";
+import { projectTouchReporter } from "./services/ProjectTouchReporter.js";
 import { validateStudioConfig } from "@vivd/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -495,6 +496,7 @@ async function startServer() {
         const filePath = path.join(droppedImagesDir, uniqueFilename);
 
         await writeUploadedFile(filePath, file.buffer);
+        projectTouchReporter.touch(req.params.slug);
 
         const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
         return res.json({ success: true, path: relativePath });
@@ -564,6 +566,7 @@ async function startServer() {
           );
         }
 
+        projectTouchReporter.touch(req.params.slug);
         return res.json({ success: true, uploaded });
       } catch (error) {
         console.error("Upload error:", error);
