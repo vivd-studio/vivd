@@ -71,6 +71,13 @@
       "when": 1770727217352,
       "tag": "0009_organization_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1770727217353,
+      "tag": "0010_org_github_repo_prefix",
+      "breakpoints": true
     }
   ]
 }

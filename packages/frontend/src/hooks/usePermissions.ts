@@ -1,34 +1,43 @@
 import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/lib/trpc";
 
-export type UserRole = "super_admin" | "admin" | "user" | "client_editor";
+export type UserRole = "super_admin" | "user" | "admin" | "client_editor";
+export type OrganizationRole = "owner" | "admin" | "member" | "client_editor" | null;
 
 /**
  * Hook for checking user permissions based on their role.
  *
- * Role Hierarchy:
- * - admin: Full access including user management and system maintenance
- * - user: Team member with AI features but no admin access
- * - client_editor: Customer with access only to assigned project, no AI features
+ * In multi-tenant mode:
+ * - Global role (`session.user.role`) is only for super-admin capabilities.
+ * - Tenant capabilities come from organization membership role.
  */
 export function usePermissions() {
   const { data: session } = authClient.useSession();
+  const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
+    enabled: !!session && session.user.role !== "super_admin",
+  });
   const role = (session?.user?.role ?? "user") as UserRole;
+  const organizationRole = (membership?.organizationRole ?? null) as OrganizationRole;
   const isSuperAdmin = role === "super_admin";
-  const isAdmin = isSuperAdmin || role === "admin";
+  const isOrgAdmin =
+    organizationRole === "owner" || organizationRole === "admin";
+  const isClientEditor = organizationRole === "client_editor";
+  const isAdmin = isSuperAdmin || isOrgAdmin;
 
   return {
     role,
+    organizationRole,
     isSuperAdmin,
+    isOrgAdmin,
     isAdmin,
-    isUser: role === "user",
-    isClientEditor: role === "client_editor",
+    isUser: !isSuperAdmin && !isClientEditor,
+    isClientEditor,
 
     // Feature gates
-    canUseAgent: role !== "client_editor",
-    canUseAiImages: role !== "client_editor",
-    canManageProjects: role !== "client_editor",
-    // System-level controls are super-admin only in multi-tenant mode.
-    canManageUsers: isSuperAdmin,
+    canUseAgent: !isClientEditor,
+    canUseAiImages: !isClientEditor,
+    canManageProjects: !isClientEditor,
+    canManageUsers: isAdmin,
     canAccessMaintenance: isSuperAdmin,
   };
 }

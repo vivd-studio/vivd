@@ -1,14 +1,13 @@
 import { useSearchParams } from "react-router-dom";
-import { Activity, Shield, Wrench } from "lucide-react";
+import { Building2, Shield, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UsageStatsCard, TenantMaintenanceTab } from "@/components/admin";
-import { TeamSettings } from "@/components/settings/TeamSettings";
+import { MaintenanceTab, OrganizationsTab, UsersTab } from "@/components/admin";
 
-export default function Admin() {
+export default function SuperAdmin() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab");
   const currentTab =
-    tab === "usage" || tab === "maintenance" ? tab : "users";
+    tab === "users" || tab === "maintenance" ? tab : "orgs";
 
   const handleTabChange = (value: string) => {
     setSearchParams({ tab: value });
@@ -17,21 +16,21 @@ export default function Admin() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Super Admin</h1>
         <p className="text-muted-foreground mt-1">
-          Manage users, usage, and maintenance for your organization.
+          Manage organizations, global users, and platform maintenance.
         </p>
       </div>
 
       <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="w-full justify-start">
+          <TabsTrigger value="orgs" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Organizations
+          </TabsTrigger>
           <TabsTrigger value="users" className="gap-2">
             <Shield className="h-4 w-4" />
-            Users
-          </TabsTrigger>
-          <TabsTrigger value="usage" className="gap-2">
-            <Activity className="h-4 w-4" />
-            Usage
+            System Users
           </TabsTrigger>
           <TabsTrigger value="maintenance" className="gap-2">
             <Wrench className="h-4 w-4" />
@@ -39,16 +38,16 @@ export default function Admin() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="users" className="mt-6">
-          <TeamSettings />
+        <TabsContent value="orgs" className="mt-6">
+          <OrganizationsTab />
         </TabsContent>
 
-        <TabsContent value="usage" className="mt-6">
-          <UsageStatsCard />
+        <TabsContent value="users" className="mt-6">
+          <UsersTab />
         </TabsContent>
 
         <TabsContent value="maintenance" className="mt-6">
-          <TenantMaintenanceTab />
+          <MaintenanceTab />
         </TabsContent>
       </Tabs>
     </div>

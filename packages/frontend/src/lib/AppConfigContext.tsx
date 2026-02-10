@@ -8,6 +8,8 @@ import { trpc } from "@/lib/trpc";
 export interface AppConfig {
   /** When true, the app operates with a single project and bypasses the project list */
   singleProjectMode: boolean;
+  /** Whether the current host is allowed to show super-admin UI. */
+  isSuperAdminHost: boolean;
 }
 
 interface AppConfigContextValue {
@@ -17,6 +19,7 @@ interface AppConfigContextValue {
 
 const defaultConfig: AppConfig = {
   singleProjectMode: false,
+  isSuperAdminHost: false,
 };
 
 const AppConfigContext = createContext<AppConfigContextValue>({

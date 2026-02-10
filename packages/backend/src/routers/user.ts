@@ -27,7 +27,7 @@ export const userRouter = router({
    */
   getMyAssignedProject: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const role = ctx.session.user.role;
+    const role = ctx.organizationRole;
     const organizationId = ctx.organizationId;
 
     // Only client_editors have project assignments

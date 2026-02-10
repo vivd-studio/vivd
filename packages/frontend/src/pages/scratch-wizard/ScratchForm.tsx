@@ -72,17 +72,20 @@ export function ScratchForm() {
   };
 
   return (
-    <div className="flex-[4] border-l border-border bg-card flex flex-col">
-      <div className="p-6 border-b border-border">
+    <div className="flex flex-1 min-h-0 flex-col bg-card md:flex-[4] md:border-l md:border-border">
+      <div className="p-4 sm:p-6 border-b border-border">
         <h2 className="text-lg font-semibold">Settings</h2>
         <p className="text-sm text-muted-foreground mt-1">
           The better the brief, the better the result
         </p>
       </div>
 
-      <ScrollArea className="flex-1">
-        <form onSubmit={form.handleSubmit(submit)} className="p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+      <ScrollArea className="flex-1 min-h-0">
+        <form
+          onSubmit={form.handleSubmit(submit)}
+          className="p-4 sm:p-6 space-y-6"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Business name</label>
               <Input
@@ -213,7 +216,7 @@ export function ScratchForm() {
             </div>
           )}
 
-          <div className="sticky bottom-0 pt-4 pb-2 -mx-6 px-6 bg-card">
+          <div className="sticky bottom-0 border-t border-border pt-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))] -mx-4 sm:-mx-6 px-4 sm:px-6 bg-card">
             <Button
               type="submit"
               disabled={isDisabled}

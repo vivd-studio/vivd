@@ -10,7 +10,29 @@ import {
   publishedSite,
   session as sessionTable,
 } from "./db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
+
+type UserMembership = {
+  organizationId: string;
+  role: string;
+};
+
+function pickPreferredOrganizationId(memberships: UserMembership[]): string | null {
+  if (memberships.length === 0) return null;
+  if (memberships.length === 1) return memberships[0]?.organizationId ?? null;
+
+  const preferredAdminOrg = memberships.find(
+    (m) =>
+      m.organizationId !== "default" &&
+      (m.role === "owner" || m.role === "admin"),
+  );
+  if (preferredAdminOrg) return preferredAdminOrg.organizationId;
+
+  const preferredNonDefault = memberships.find((m) => m.organizationId !== "default");
+  if (preferredNonDefault) return preferredNonDefault.organizationId;
+
+  return memberships[0]?.organizationId ?? null;
+}
 
 function getRequestHost(req: trpcExpress.CreateExpressContextOptions["req"]): string | null {
   const raw = req.headers.host;
@@ -85,6 +107,9 @@ export const createContext = async ({
   let session = await getSession(headers);
   const requestHost = getRequestHost(req);
   const requestDomain = requestHost ? normalizeDomainForLookup(requestHost) : null;
+  const isSuperAdminHost = requestHost
+    ? getSuperAdminHosts().has(normalizeDomainForLookup(requestHost))
+    : false;
 
   // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
   // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
@@ -157,32 +182,56 @@ export const createContext = async ({
     }
   }
 
-  const hostOrg = requestDomain
-    ? await db.query.publishedSite.findFirst({
-        where: eq(publishedSite.domain, requestDomain),
-        columns: { organizationId: true },
-      })
-    : null;
+  // Domain-based tenant resolution should only apply on tenant domains, not on the
+  // super-admin host (e.g. `localhost` / main `DOMAIN`). Otherwise publishing a site
+  // on the main host would "pin" the studio to that tenant.
+  const hostOrg =
+    requestDomain && !isSuperAdminHost
+      ? await db.query.publishedSite.findFirst({
+          where: eq(publishedSite.domain, requestDomain),
+          columns: { organizationId: true },
+        })
+      : null;
   const hostOrganizationId = hostOrg?.organizationId ?? null;
 
   let organizationId =
     hostOrganizationId ?? sessionRecordFromDb?.activeOrganizationId ?? null;
 
-  // Fallback: if session has no active org and user belongs to exactly one org, auto-select it.
+  const memberships = session
+    ? await db.query.organizationMember.findMany({
+        where: eq(organizationMember.userId, session.user.id),
+        columns: { organizationId: true, role: true },
+        orderBy: [asc(organizationMember.createdAt)],
+      })
+    : [];
+  const membershipRoleByOrg = new Map(
+    memberships.map((m) => [m.organizationId, m.role] as const),
+  );
+
+  // If an org is selected from session state but user no longer belongs to it,
+  // clear it (except for host-forced tenant domains).
+  if (
+    session &&
+    session.user.role !== "super_admin" &&
+    !hostOrganizationId &&
+    organizationId &&
+    !membershipRoleByOrg.has(organizationId)
+  ) {
+    organizationId = null;
+  }
+
+  // Fallback: pick a preferred org whenever none is selected.
   if (!organizationId && session) {
-    const memberships = await db.query.organizationMember.findMany({
-      where: eq(organizationMember.userId, session.user.id),
-      columns: { organizationId: true },
-      limit: 2,
-    });
-
-    if (memberships.length === 1) {
-      organizationId = memberships[0]?.organizationId ?? null;
-
-      if (organizationId && sessionRecordFromDb) {
+    const preferredOrganizationId = pickPreferredOrganizationId(memberships);
+    if (preferredOrganizationId) {
+      organizationId = preferredOrganizationId;
+      if (
+        sessionRecordFromDb &&
+        sessionRecordFromDb.activeOrganizationId !== preferredOrganizationId
+      ) {
         await db
           .update(sessionTable)
-          .set({ activeOrganizationId: organizationId })
+          .set({ activeOrganizationId: preferredOrganizationId })
           .where(eq(sessionTable.id, sessionRecordFromDb.id));
       }
     }
@@ -190,15 +239,7 @@ export const createContext = async ({
 
   const organizationRole =
     session && organizationId && session.user.role !== "super_admin"
-      ? (
-          await db.query.organizationMember.findFirst({
-            where: and(
-              eq(organizationMember.userId, session.user.id),
-              eq(organizationMember.organizationId, organizationId),
-            ),
-            columns: { role: true },
-          })
-        )?.role ?? null
+      ? membershipRoleByOrg.get(organizationId) ?? null
       : null;
 
   return {
@@ -206,6 +247,7 @@ export const createContext = async ({
     res,
     session,
     requestHost,
+    isSuperAdminHost,
     organizationId,
     organizationRole,
   };
@@ -291,9 +333,7 @@ const enforceSuperAdminHost = t.middleware(async ({ ctx, next }) => {
     });
   }
 
-  const allowed = getSuperAdminHosts();
-  const host = ctx.requestHost ? normalizeDomainForLookup(ctx.requestHost) : null;
-  if (!host || !allowed.has(host)) {
+  if (!ctx.isSuperAdminHost) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
       message: "Super-admin panel not available on this host",
@@ -309,7 +349,7 @@ const projectSlugSchema = z.object({ slug: z.string().min(1) });
 const enforceClientEditorProjectAccess = t.middleware(
   async ({ ctx, getRawInput, next }) => {
     if (!ctx.session) return next();
-    if (ctx.session.user.role !== "client_editor") return next();
+    if (ctx.organizationRole !== "client_editor") return next();
 
     if (!ctx.organizationId) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -354,7 +394,7 @@ export const adminProcedure = orgProcedure.use(
   async function isTeamMember(opts) {
     const { ctx } = opts;
     // Team-level: blocks client_editors (allows admin + user)
-    if (ctx.session.user.role === "client_editor" || ctx.organizationRole === "client_editor") {
+    if (ctx.organizationRole === "client_editor") {
       throw new TRPCError({
         code: "UNAUTHORIZED",
         message: "This feature is not available for your account",

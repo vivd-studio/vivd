@@ -3,7 +3,11 @@ import { Palette } from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
 import { useTheme } from "@/components/theme";
 
-export function ScratchPreview() {
+export function ScratchPreview({
+  variant = "panel",
+}: {
+  variant?: "panel" | "sheet";
+}) {
   const { watchedTitle, stylePreset, siteTheme } = useScratchWizard();
   const { theme } = useTheme();
 
@@ -18,15 +22,17 @@ export function ScratchPreview() {
   const borderClass = isDark ? "border-zinc-700" : "border-zinc-200";
 
   return (
-    <div className="flex-[6] p-8 flex flex-col">
-      <div className="flex items-center gap-2 mb-4">
-        <Palette className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold">Preview Idea</h2>
-      </div>
+    <div className="p-4 sm:p-6 md:p-8 flex h-full min-h-0 flex-col">
+      {variant === "panel" ? (
+        <div className="flex items-center gap-2 mb-4">
+          <Palette className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold">Preview Idea</h2>
+        </div>
+      ) : null}
 
       {/* Large preview card */}
       <Card
-        className={`flex-1 relative overflow-hidden ${bgClass} ${borderClass} border transition-colors duration-300`}
+        className={`flex-1 min-h-0 relative overflow-hidden ${bgClass} ${borderClass} border transition-colors duration-300`}
       >
         {/* Dynamic background based on selected palette */}
         {stylePreset ? (
@@ -42,16 +48,16 @@ export function ScratchPreview() {
           />
         ) : null}
 
-        <div className="relative h-full p-8 flex flex-col">
+        <div className="relative h-full p-4 sm:p-6 md:p-8 flex flex-col">
           {/* Mock header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6 sm:mb-8 gap-4">
             <div
               className={`text-xl font-bold tracking-tight transition-colors duration-300 ${textClass}`}
               style={{ color: stylePreset?.palette[1] }}
             >
               {watchedTitle || "Your Brand"}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-4">
               {["Home", "About", "Services", "Contact"].map((item) => (
                 <div
                   key={item}
@@ -91,7 +97,7 @@ export function ScratchPreview() {
           </div>
 
           {/* Mock feature cards */}
-          <div className="grid grid-cols-3 gap-4 mt-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mt-6 sm:mt-8">
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
@@ -108,7 +114,7 @@ export function ScratchPreview() {
 
         {/* Style indicator */}
         <div
-          className={`absolute bottom-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full border ${borderClass} ${cardBgClass}`}
+          className={`absolute bottom-3 right-3 sm:bottom-4 sm:right-4 flex items-center gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border ${borderClass} ${cardBgClass}`}
         >
           <span
             className={`h-2 w-2 rounded-full ${

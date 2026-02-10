@@ -17,11 +17,12 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
 import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
+import { checkOrganizationAccess } from "./lib/organizationAccess";
 import { getVersionDir } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
 import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
-import { projectMember } from "./db/schema";
+import { organizationMember, projectMember } from "./db/schema";
 import { and, eq } from "drizzle-orm";
 import { buildService } from "./services/BuildService";
 import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
@@ -249,8 +250,18 @@ function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   );
 }
 
-function getSessionUserRole(session: any): string {
-  return session?.user?.role ?? "user";
+async function getSessionOrganizationRole(
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
+  const membership = await db.query.organizationMember.findFirst({
+    where: and(
+      eq(organizationMember.organizationId, organizationId),
+      eq(organizationMember.userId, userId),
+    ),
+    columns: { role: true },
+  });
+  return membership?.role ?? null;
 }
 
 async function getAssignedProjectSlug(
@@ -273,7 +284,7 @@ async function enforceProjectAccess(
   organizationId: string,
   slug: string,
 ): Promise<boolean> {
-  const role = getSessionUserRole(session);
+  const role = await getSessionOrganizationRole(organizationId, session.user.id);
   if (role !== "client_editor") return true;
 
   const assigned = await getAssignedProjectSlug(organizationId, session.user.id);
@@ -693,6 +704,13 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
       if (!session) {
         return res.status(404).json({ error: "Not found" });
       }
+      const access = await checkOrganizationAccess({
+        session,
+        organizationId,
+      });
+      if (!access.ok) {
+        return res.status(404).json({ error: "Not found" });
+      }
       const ok = await enforceProjectAccess(req, res, session, organizationId, slug);
       if (!ok) return;
     }
@@ -870,6 +888,16 @@ app.post(
       if (!organizationId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const access = await checkOrganizationAccess({
+        session,
+        organizationId,
+      });
+      if (!access.ok) {
+        if (access.reason === "organization_suspended") {
+          return res.status(403).json({ error: "Organization is suspended" });
+        }
+        return res.status(403).json({ error: "Forbidden" });
+      }
 
       const slug = getRouteParam(req, "slug");
       const version = getRouteParam(req, "version");
@@ -956,6 +984,16 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     const organizationId = requestContext.organizationId;
     if (!organizationId) {
       return res.status(401).json({ error: "Unauthorized" });
+    }
+    const access = await checkOrganizationAccess({
+      session,
+      organizationId,
+    });
+    if (!access.ok) {
+      if (access.reason === "organization_suspended") {
+        return res.status(403).json({ error: "Organization is suspended" });
+      }
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     const slug = getRouteParam(req, "slug");

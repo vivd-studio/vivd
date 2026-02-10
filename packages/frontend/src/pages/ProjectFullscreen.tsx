@@ -3,6 +3,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
@@ -10,6 +16,7 @@ import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { toast } from "sonner";
+import { Copy, Image, Loader2, MoreHorizontal, X } from "lucide-react";
 
 /**
  * ProjectFullscreen
@@ -72,6 +79,19 @@ export default function ProjectFullscreen() {
     { slug: projectSlug!, version },
     { enabled: !!projectSlug && !!project },
   );
+  const regenerateThumbnailMutation = trpc.project.regenerateThumbnail.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success("Thumbnail regenerated", {
+        description: `${variables.slug} v${variables.version}`,
+      });
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to regenerate thumbnail", {
+        description: error.message,
+      });
+    },
+  });
 
   useEffect(() => {
     setEditRequested(false);
@@ -209,7 +229,16 @@ export default function ProjectFullscreen() {
       });
   };
 
+  const handleRegenerateThumbnail = () => {
+    if (!projectSlug) return;
+    regenerateThumbnailMutation.mutate({ slug: projectSlug, version });
+  };
+
   const thumbnailSrc = project?.thumbnailUrl ?? null;
+  const selectedVersionInfo = project?.versions?.find((v) => v.version === version);
+  const isSelectedVersionCompleted =
+    selectedVersionInfo?.status === "completed" ||
+    (version === project?.currentVersion && project?.status === "completed");
 
   if (isLoading) {
     return (
@@ -250,8 +279,8 @@ export default function ProjectFullscreen() {
           <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
+            <X className="h-4 w-4" />
           </Button>
         </header>
         <div className="flex flex-1 min-h-0 items-center justify-center">
@@ -276,8 +305,8 @@ export default function ProjectFullscreen() {
           <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
+            <X className="h-4 w-4" />
           </Button>
         </header>
         <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3">
@@ -307,8 +336,8 @@ export default function ProjectFullscreen() {
           </Button>
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
+            <X className="h-4 w-4" />
           </Button>
         </header>
         <StudioStartupLoading fullScreen />
@@ -328,24 +357,49 @@ export default function ProjectFullscreen() {
           </Link>
           <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
           {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
-          {previewIframeSrc ? (
-            publicPreviewEnabled ? (
-              <Button variant="outline" onClick={handleCopyPreviewUrl}>
-                {previewUrlCopied ? "Copied!" : "Copy preview URL"}
-              </Button>
-            ) : (
-              <Button variant="outline" disabled>
-                Preview URL disabled
-              </Button>
-            )
-          ) : null}
           <Button variant="outline" onClick={() => setPublishDialogOpen(true)}>
-            Publish site
+            Publish
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={handleCopyPreviewUrl}
+                disabled={!previewIframeSrc || !publicPreviewEnabled}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                {previewUrlCopied
+                  ? "Copied!"
+                  : publicPreviewEnabled
+                    ? "Copy preview URL"
+                    : "Preview URL disabled"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleRegenerateThumbnail}
+                disabled={
+                  !isSelectedVersionCompleted ||
+                  regenerateThumbnailMutation.isPending
+                }
+              >
+                {regenerateThumbnailMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Image className="h-4 w-4 mr-2" />
+                )}
+                {regenerateThumbnailMutation.isPending
+                  ? "Regenerating thumbnail..."
+                  : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
+            <X className="h-4 w-4" />
           </Button>
         </header>
       ) : null}

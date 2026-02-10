@@ -23,6 +23,13 @@ export function UserTable({
   onEdit,
   onDelete,
 }: UserTableProps) {
+  const getGlobalRoleLabel = (role: User["role"]): string => {
+    if (role === "super_admin") return "Super Admin";
+    if (role === "admin") return "User (legacy admin)";
+    if (role === "client_editor") return "User (legacy client editor)";
+    return "User";
+  };
+
   return (
     <div className="relative w-full overflow-auto">
       <table className="w-full caption-bottom text-sm text-left">
@@ -35,10 +42,10 @@ export function UserTable({
               Email
             </th>
             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Role
+              Global Role
             </th>
             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-              Assigned Project
+              Assigned Project (Legacy)
             </th>
             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
               Created At
@@ -59,18 +66,12 @@ export function UserTable({
               <td className="p-4 align-middle">
                 <span
                   className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
-                    user.role === "admin" || user.role === "super_admin"
+                    user.role === "super_admin"
                       ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                      : user.role === "client_editor"
-                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                        : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                      : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                   }`}
                 >
-                  {user.role === "client_editor"
-                    ? "Client Editor"
-                    : user.role === "super_admin"
-                      ? "Super Admin"
-                      : user.role}
+                  {getGlobalRoleLabel(user.role)}
                 </span>
               </td>
               <td className="p-4 align-middle">

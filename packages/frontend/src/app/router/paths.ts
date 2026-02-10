@@ -19,6 +19,12 @@ export const ROUTES = {
   DASHBOARD: "/vivd-studio",
   SETTINGS: "/vivd-studio/settings",
   ADMIN: "/vivd-studio/admin",
+  ORG: "/vivd-studio/org",
+  SUPERADMIN_BASE: "/vivd-studio/superadmin",
+  SUPERADMIN_ORGS: "/vivd-studio/superadmin/orgs",
+  SUPERADMIN_USERS: "/vivd-studio/superadmin/users",
+  SUPERADMIN_USAGE: "/vivd-studio/superadmin/usage",
+  SUPERADMIN_MAINTENANCE: "/vivd-studio/superadmin/maintenance",
   NO_PROJECT: "/vivd-studio/no-project",
 
   // Single project mode (outside layout)

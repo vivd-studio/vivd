@@ -7,6 +7,7 @@ export { OrganizationsTab } from "./organizations";
 
 // Maintenance module
 export { MaintenanceTab } from "./maintenance";
+export { TenantMaintenanceTab } from "./maintenance";
 
 // Usage module
 export { UsageStatsCard } from "./usage";

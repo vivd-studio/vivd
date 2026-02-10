@@ -5,12 +5,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { X, Sparkles } from "lucide-react";
+import { Eye, X, Sparkles } from "lucide-react";
 import { ModeToggle } from "@/components/theme";
 import faviconSvg from "/favicon-transparent.svg";
 import { ROUTES } from "@/app/router";
 
-export function ScratchHeader() {
+export function ScratchHeader({
+  onOpenPreview,
+}: {
+  onOpenPreview?: () => void;
+}) {
   const navigate = useNavigate();
 
   const handleClose = () => {
@@ -42,6 +46,17 @@ export function ScratchHeader() {
 
       {/* Right Section: Theme Toggle + Close */}
       <div className="flex items-center gap-1">
+        {onOpenPreview ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onOpenPreview}
+            className="h-8 w-8 md:hidden"
+            aria-label="Open preview"
+          >
+            <Eye className="w-4 h-4" />
+          </Button>
+        ) : null}
         <ModeToggle />
 
         <div className="hidden md:block h-5 w-px bg-border mx-1" />

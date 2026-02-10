@@ -132,6 +132,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Preview serving must not depend on local `versionDir` detection/fallback in connected/prod mode
   - [x] Generation flows may continue using temporary local workspace, then sync artifacts to bucket on completion
   - [x] Restore backend scratch multipart upload route and post-generation artifact sync for 3-step scratch flow
+  - [x] Make Scratch Wizard mobile-responsive (form-first layout + mobile preview sheet)
 - [ ] **Reuse preview artifacts for publish**
   - [x] Astro publish uses ready `preview/` artifact (no rebuild on publish)
   - [x] Static publish uses `source/` artifact
@@ -161,10 +162,13 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Ensure scraper works with the new storage workflow (bucket-backed previews; no local FS dependency)
   - [x] Prevent generation-time race: only generate initial thumbnails after artifact sync, require `index.html` for preview readiness, and retry transient preview-not-ready responses
   - [x] Make maintenance action "Generate missing thumbnails" bucket/DB-aware (no local directory scan dependency; checks `thumbnailKey` + object existence when storage is configured)
+  - [x] Disable bulk "regenerate all thumbnails" maintenance action to control compute costs
+  - [x] Add per-project thumbnail regeneration action in project card and preview header actions
 
 - [ ] **Preview without studio machine**
   - [x] Serve bucket-backed prebuilt previews for quick preview
   - [x] Support disabling public preview URLs per project (fallback to authenticated access)
+  - [x] Public preview URLs copied on the shared host include `__vivd_org` for unauthenticated tenant resolution (temporary; consider per-tenant subdomains later)
   - [ ] User clicks "Edit" → spin up / route to studio machine
 
 ### 0.6 Docker & CI
@@ -225,7 +229,8 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Disable open self-registration (sign-up allowed only for bootstrap and/or org invitations)
   - [x] Bootstrap super-admin for new installs (first-run only; then lock down)
   - [x] Super-admin provisions organizations + initial org owner/admin (tRPC `superadmin.*`)
-  - [x] Org admins add members (set passwords) and manage org membership (Settings → Team)
+  - [x] Org admins add/manage members (set passwords) via org admin panel (`/vivd-studio/admin`)
+  - [x] Org admin member table supports inline role/project updates (owner-protected, self-role guarded)
   - [ ] (Later) Invite-only signup + email links (requires SES)
 
 - [ ] **Password reset flow** (requires email)
@@ -234,6 +239,9 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Domain-based tenant resolution: visiting `<tenant-domain>/vivd-studio` lands in that org
   - [ ] Host/org mismatch UX: block access + guide user to correct domain (prevents “logged-in on wrong tenant domain”)
   - [x] Role-based permissions (org roles vs super-admin role; host-gated superadmin)
+  - [x] Consolidate role semantics: tenant permissions derive from `organization_member.role`; global role is for super-admin/system scope only
+  - [x] Tenant admin dashboard restored as tabbed single page (`users`, `usage`, `maintenance`) with grouped sidebar navigation
+  - [x] Recover from stale/missing `active_organization_id` by auto-selecting a preferred membership org (restores tenant admin/member routing)
   - [x] Enforce org suspension (blocked for non-super-admins)
 
 ### Email Integration
@@ -250,7 +258,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ## Phase 4: Multi-Tenant Control Plane Adaptation
 
 - [x] **Query scoping** - all tenant data queries include `organization_id` (no cross-tenant reads/writes)
+  - [x] Non-tRPC endpoints (`/preview`, `/upload`, `/download`, `/import`) enforce org membership/suspension (private access)
 - [x] **Limits enforcement** - per-org limits from DB (set via super-admin panel)
+  - [x] Credits + image generation limits (agent/generation gating)
+  - [x] `maxProjects` enforced (blocks new projects/imports)
 - [x] **Object storage isolation** - project sources/artifacts namespaced by org/tenant + enforced in backend + studio machine env
 - [x] **Publishing isolation** - domains/sites scoped to org; domain uniqueness remains server-wide
 - [ ] **Audit log** - record security-relevant actions (studio start/stop, storage writes, publish, invites)
@@ -294,11 +305,13 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ### Super-Admin Panel
 
 - [x] Super-admin authentication (special role; bootstrap existing admin → super-admin)
-- [x] Super-admin panel access strategy (restricted host + dedicated route under `/vivd-studio`)
+- [x] Super-admin panel access strategy (host-gated via `SUPERADMIN_HOSTS`; routes under `/vivd-studio/superadmin/*`)
 - [x] Create organizations + initial org owner/admin
 - [x] List/view all organizations + members
 - [x] Modify org limits + suspend/activate orgs
-- [x] System-wide usage dashboard (per-org breakdown; basic)
+- [x] Set per-org GitHub repo prefix (used by studio machines)
+- [x] Super-admin dashboard grouped/tabs for `organizations`, `system users`, and `maintenance`
+- [x] Usage dashboard positioned as tenant-admin concern (per active org), not super-admin navigation
 
 ---
 
@@ -335,7 +348,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 | Bucket layout for projects | `tenants/<tenantId>/projects/<slug>[/vN]/{source,preview}/` | In progress |
 | Studio URL pattern | Iframe `/studio/...` vs redirect vs `{org}.vivd.studio` | TBD |
 | Super-admin panel access | Default tenant only vs dedicated admin host | Decided (2026-02-10): default tenant only |
-| Tenant resolution source | Host-based (`<domain>/vivd-studio`) vs session active-org vs hybrid | TBD |
+| Tenant resolution source | Host-based (`<domain>/vivd-studio`) vs session active-org vs hybrid | Decided (2026-02-10): hybrid |
 | Build + preview artifacts | Build preview on save; publish reuses ready artifacts from bucket | Decided (2026-02-08) |
 | Thumbnails pipeline | Central scraper vs per-tenant scraper | TBD |
 | Artifact storage | Object storage (R2) | Decided |

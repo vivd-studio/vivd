@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { getProjectLastModified } from "@/lib/project-utils";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { ROUTES } from "@/app/router";
 import {
   FolderKanban,
@@ -51,12 +52,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function AppSidebar() {
   const { data: session } = authClient.useSession();
+  const { config, isLoading: isConfigLoading } = useAppConfig();
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
-  const isAdmin = session?.user?.role === "super_admin";
   const isCollapsed = state === "collapsed";
   const [showAllProjects, setShowAllProjects] = React.useState(false);
+
+  const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
+    enabled: !!session,
+  });
+  const isOrgAdmin = !!membership?.isOrganizationAdmin;
+  const isSuperAdmin = session?.user?.role === "super_admin";
+  const showSuperAdmin = isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
 
   // Fetch projects for the collapsible sidebar list
   const { data: projectsData } = trpc.project.list.useQuery(undefined, {
@@ -82,6 +90,23 @@ export function AppSidebar() {
       return location.pathname === url;
     }
     return location.pathname.startsWith(url);
+  };
+
+  const searchParams = React.useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
+  const isAdminTabActive = (tab: "users" | "usage" | "maintenance") => {
+    if (!isActive(ROUTES.ADMIN, true)) return false;
+    const currentTab = searchParams.get("tab") ?? "users";
+    return currentTab === tab;
+  };
+  const isSuperAdminTabActive = (
+    tab: "orgs" | "users" | "maintenance",
+  ) => {
+    if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
+    const currentTab = searchParams.get("tab") ?? "orgs";
+    return currentTab === tab;
   };
 
   return (
@@ -208,10 +233,26 @@ export function AppSidebar() {
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
-              </Collapsible>
+	              </Collapsible>
+
+	              {/* Organization */}
+	              {isOrgAdmin && (
+	                <SidebarMenuItem>
+	                  <SidebarMenuButton
+	                    asChild
+	                    isActive={isActive(ROUTES.ORG)}
+	                    tooltip="Organization"
+	                  >
+	                    <Link to={ROUTES.ORG}>
+	                      <Users />
+	                      <span>Organization</span>
+	                    </Link>
+	                  </SidebarMenuButton>
+	                </SidebarMenuItem>
+	              )}
 
               {/* Admin - collapsible with sub-items */}
-              {isAdmin && (
+              {isOrgAdmin && (
                 <Collapsible
                   asChild
                   defaultOpen={isActive(ROUTES.ADMIN)}
@@ -239,22 +280,7 @@ export function AppSidebar() {
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location.search.includes("tab=orgs")}
-                          >
-                            <Link to={`${ROUTES.ADMIN}?tab=orgs`}>
-                              <Shield className="size-4" />
-                              <span>Orgs</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={
-                              isActive(ROUTES.ADMIN) &&
-                              (location.search === "" ||
-                                location.search.includes("tab=users"))
-                            }
+                            isActive={isAdminTabActive("users")}
                           >
                             <Link to={`${ROUTES.ADMIN}?tab=users`}>
                               <Users className="size-4" />
@@ -265,7 +291,7 @@ export function AppSidebar() {
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location.search.includes("tab=usage")}
+                            isActive={isAdminTabActive("usage")}
                           >
                             <Link to={`${ROUTES.ADMIN}?tab=usage`}>
                               <Activity className="size-4" />
@@ -276,9 +302,7 @@ export function AppSidebar() {
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location.search.includes(
-                              "tab=maintenance",
-                            )}
+                            isActive={isAdminTabActive("maintenance")}
                           >
                             <Link to={`${ROUTES.ADMIN}?tab=maintenance`}>
                               <Wrench className="size-4" />
@@ -308,6 +332,77 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Super-admin (host-gated) */}
+        {showSuperAdmin && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <Collapsible
+                  asChild
+                  defaultOpen={isActive(ROUTES.SUPERADMIN_BASE)}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        tooltip="Super Admin"
+                        isActive={isActive(ROUTES.SUPERADMIN_BASE)}
+                        onClick={(e) => {
+                          if (isCollapsed) {
+                            e.preventDefault();
+                            navigate(`${ROUTES.SUPERADMIN_BASE}?tab=orgs`);
+                          }
+                        }}
+                      >
+                        <Shield />
+                        <span>Super Admin</span>
+                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isSuperAdminTabActive("orgs")}
+                          >
+                            <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=orgs`}>
+                              <Shield className="size-4" />
+                              <span>Organizations</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isSuperAdminTabActive("users")}
+                          >
+                            <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=users`}>
+                              <Users className="size-4" />
+                              <span>System Users</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={isSuperAdminTabActive("maintenance")}
+                          >
+                            <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=maintenance`}>
+                              <Wrench className="size-4" />
+                              <span>Maintenance</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter>

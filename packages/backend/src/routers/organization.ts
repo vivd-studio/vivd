@@ -16,10 +16,8 @@ import { auth } from "../auth";
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 
 function getGlobalUserRoleForMemberRole(
-  role: z.infer<typeof memberRoleSchema>,
-): "admin" | "user" | "client_editor" {
-  if (role === "client_editor") return "client_editor";
-  if (role === "admin") return "admin";
+  _role: z.infer<typeof memberRoleSchema>,
+): "user" {
   return "user";
 }
 
@@ -38,18 +36,19 @@ export const organizationRouter = router({
 
   getMyOrganization: orgProcedure.query(async ({ ctx }) => {
     const organizationId = ctx.organizationId!;
-    const org = await db.query.organization.findFirst({
-      where: eq(organization.id, organizationId),
-      columns: {
-        id: true,
-        slug: true,
-        name: true,
-        status: true,
-        limits: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, organizationId),
+        columns: {
+          id: true,
+          slug: true,
+          name: true,
+          status: true,
+          limits: true,
+          githubRepoPrefix: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
 
     if (!org) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });

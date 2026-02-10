@@ -34,7 +34,7 @@
 
 ### Tenant resolution rules (recommended hybrid)
 
-1. **If Host matches a published domain** (in `published_site.domain`):
+1. **If Host matches a published domain** (in `published_site.domain`) **and Host is not a super-admin host**:
    - `tenantId := published_site.organization_id`
    - Require the signed-in user to be a member of that org (or super-admin).
 2. **Else** (control-plane host / unknown host):
@@ -112,7 +112,7 @@ Requirements:
 - Must be hard-gated server-side.
 
 Implemented (v1):
-- Route: `GET /vivd-studio/admin` (frontend, super-admin only) + tRPC `superadmin.*` (backend)
+- Routes: `GET /vivd-studio/superadmin/*` (frontend, super-admin only) + tRPC `superadmin.*` (backend)
 - Allowed hosts: `SUPERADMIN_HOSTS` (env, defaults to main `DOMAIN`) — **decided:** only default-tenant host(s)
 - Guard conditions:
   - `user.role === "super_admin"`

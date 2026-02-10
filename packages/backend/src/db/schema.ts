@@ -21,6 +21,7 @@ export const organization = pgTable(
     name: text("name").notNull(),
     status: text("status").notNull().default("active"), // 'active' | 'suspended'
     limits: jsonb("limits").notNull().default({}),
+    githubRepoPrefix: text("github_repo_prefix").notNull().default(""),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

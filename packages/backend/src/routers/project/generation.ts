@@ -704,7 +704,7 @@ export const projectGenerationProcedures = {
   list: orgProcedure.query(async ({ ctx }) => {
     const organizationId = ctx.organizationId!;
     // Check if user is a client_editor
-    const isClientEditor = ctx.session.user.role === "client_editor";
+    const isClientEditor = ctx.organizationRole === "client_editor";
     let assignedProjectSlug: string | null = null;
 
     if (isClientEditor) {

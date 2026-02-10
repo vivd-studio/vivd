@@ -2,8 +2,14 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import { router, superAdminProcedure } from "../trpc";
 import { db } from "../db";
-import { organization, organizationMember } from "../db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import {
+  organization,
+  organizationMember,
+  projectMember,
+  projectMeta,
+  user as userTable,
+} from "../db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { auth } from "../auth";
 import { limitsService } from "../services/LimitsService";
 import { usageService } from "../services/UsageService";
@@ -35,6 +41,14 @@ const organizationRoleSchema = z.enum([
   "client_editor",
 ]);
 
+const orgMemberRoleSchema = z.enum(["admin", "member", "client_editor"]);
+
+function getGlobalUserRoleForOrganizationRole(
+  _role: z.infer<typeof organizationRoleSchema>,
+): "user" {
+  return "user";
+}
+
 const limitsPatchSchema = z
   .object({
     dailyCreditLimit: z.number().nonnegative().optional(),
@@ -42,22 +56,24 @@ const limitsPatchSchema = z
     monthlyCreditLimit: z.number().nonnegative().optional(),
     imageGenPerMonth: z.number().int().nonnegative().optional(),
     warningThreshold: z.number().min(0).max(1).optional(),
+    maxProjects: z.number().int().nonnegative().optional(),
   })
   .strict();
 
 export const superAdminRouter = router({
   listOrganizations: superAdminProcedure.query(async () => {
-    const rows = await db
-      .select({
-        id: organization.id,
-        slug: organization.slug,
-        name: organization.name,
-        status: organization.status,
-        limits: organization.limits,
-        createdAt: organization.createdAt,
-        updatedAt: organization.updatedAt,
-        memberCount: sql<number>`count(${organizationMember.userId})`,
-      })
+      const rows = await db
+        .select({
+          id: organization.id,
+          slug: organization.slug,
+          name: organization.name,
+          status: organization.status,
+          limits: organization.limits,
+          githubRepoPrefix: organization.githubRepoPrefix,
+          createdAt: organization.createdAt,
+          updatedAt: organization.updatedAt,
+          memberCount: sql<number>`count(${organizationMember.userId})`,
+        })
       .from(organization)
       .leftJoin(
         organizationMember,
@@ -80,14 +96,33 @@ export const superAdminRouter = router({
       }),
     )
     .query(async ({ input }) => {
-      const [limits, currentUsage] = await Promise.all([
+      const [limits, currentUsage, projectCountRow, org] = await Promise.all([
         limitsService.checkLimits(input.organizationId),
         usageService.getCurrentUsage(input.organizationId),
+        db
+          .select({
+            count: sql<number>`count(*)`,
+          })
+          .from(projectMeta)
+          .where(eq(projectMeta.organizationId, input.organizationId)),
+        db.query.organization.findFirst({
+          where: eq(organization.id, input.organizationId),
+          columns: { limits: true },
+        }),
       ]);
+
+      const maxProjectsRaw = (org?.limits as any)?.maxProjects;
+      const maxProjects =
+        typeof maxProjectsRaw === "number" && Number.isFinite(maxProjectsRaw) && maxProjectsRaw > 0
+          ? Math.floor(maxProjectsRaw)
+          : null;
+      const projectCount = Number(projectCountRow?.[0]?.count ?? 0);
 
       return {
         limits,
         currentUsage,
+        projectCount,
+        maxProjects,
       };
     }),
 
@@ -108,7 +143,14 @@ export const superAdminRouter = router({
         slug: input.slug,
         name: input.name,
         status: "active",
-        limits: {},
+        limits: {
+          dailyCreditLimit: 1000,
+          weeklyCreditLimit: 2500,
+          monthlyCreditLimit: 5000,
+          imageGenPerMonth: 25,
+          warningThreshold: 0.8,
+        },
+        githubRepoPrefix: input.slug,
       });
 
       return { success: true, organizationId: input.slug };
@@ -157,6 +199,22 @@ export const superAdminRouter = router({
       return { success: true };
     }),
 
+  setOrganizationGitHubRepoPrefix: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        githubRepoPrefix: z.string().max(64),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await db
+        .update(organization)
+        .set({ githubRepoPrefix: input.githubRepoPrefix.trim() })
+        .where(eq(organization.id, input.organizationId));
+
+      return { success: true };
+    }),
+
   listOrganizationMembers: superAdminProcedure
     .input(
       z.object({
@@ -171,6 +229,19 @@ export const superAdminRouter = router({
         },
       });
 
+      const userIds = members.map((m) => m.userId);
+      const assignments =
+        userIds.length > 0
+          ? await db.query.projectMember.findMany({
+              where: and(
+                eq(projectMember.organizationId, input.organizationId),
+                inArray(projectMember.userId, userIds),
+              ),
+              columns: { userId: true, projectSlug: true },
+            })
+          : [];
+      const projectByUserId = new Map(assignments.map((a) => [a.userId, a.projectSlug]));
+
       return {
         members: members.map((m) => ({
           id: m.id,
@@ -178,6 +249,7 @@ export const superAdminRouter = router({
           userId: m.userId,
           role: m.role,
           createdAt: m.createdAt,
+          assignedProjectSlug: projectByUserId.get(m.userId) ?? null,
           user: {
             id: m.user.id,
             email: m.user.email,
@@ -186,6 +258,32 @@ export const superAdminRouter = router({
             createdAt: m.user.createdAt,
             updatedAt: m.user.updatedAt,
           },
+        })),
+      };
+    }),
+
+  listOrganizationProjects: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+      }),
+    )
+    .query(async ({ input }) => {
+      const projects = await db.query.projectMeta.findMany({
+        where: eq(projectMeta.organizationId, input.organizationId),
+        columns: {
+          slug: true,
+          title: true,
+          updatedAt: true,
+        },
+        orderBy: (table, { desc }) => [desc(table.updatedAt)],
+      });
+
+      return {
+        projects: projects.map((p) => ({
+          slug: p.slug,
+          title: p.title,
+          updatedAt: p.updatedAt,
         })),
       };
     }),
@@ -211,6 +309,143 @@ export const superAdminRouter = router({
       return { success: true };
     }),
 
+  updateOrganizationMemberRole: superAdminProcedure
+    .input(
+      z
+        .object({
+          organizationId: organizationIdSchema,
+          userId: z.string().min(1),
+          role: orgMemberRoleSchema,
+          projectSlug: z.string().min(1).optional(),
+        })
+        .refine((data) => (data.role === "client_editor" ? !!data.projectSlug : true), {
+          message: "Project is required for client editor accounts",
+          path: ["projectSlug"],
+        }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.session.user.id) {
+        throw new Error("You cannot change your own role");
+      }
+
+      const membership = await db.query.organizationMember.findFirst({
+        where: and(
+          eq(organizationMember.organizationId, input.organizationId),
+          eq(organizationMember.userId, input.userId),
+        ),
+        columns: { role: true },
+      });
+
+      if (!membership) {
+        throw new Error("Member not found");
+      }
+
+      if (membership.role === "owner") {
+        throw new Error("Owner role cannot be changed in v1");
+      }
+
+      if (input.role === "client_editor" && input.projectSlug) {
+        const project = await db.query.projectMeta.findFirst({
+          where: and(
+            eq(projectMeta.organizationId, input.organizationId),
+            eq(projectMeta.slug, input.projectSlug),
+          ),
+          columns: { slug: true },
+        });
+        if (!project) {
+          throw new Error("Project not found");
+        }
+      }
+
+      await db
+        .update(organizationMember)
+        .set({ role: input.role })
+        .where(
+          and(
+            eq(organizationMember.organizationId, input.organizationId),
+            eq(organizationMember.userId, input.userId),
+          ),
+        );
+
+      const globalRole = getGlobalUserRoleForOrganizationRole(input.role);
+      await db.update(userTable).set({ role: globalRole }).where(eq(userTable.id, input.userId));
+
+      if (input.role === "client_editor" && input.projectSlug) {
+        await db
+          .insert(projectMember)
+          .values({
+            id: crypto.randomUUID(),
+            organizationId: input.organizationId,
+            userId: input.userId,
+            projectSlug: input.projectSlug,
+          })
+          .onConflictDoUpdate({
+            target: [projectMember.organizationId, projectMember.userId],
+            set: { projectSlug: input.projectSlug },
+          });
+      } else {
+        await db
+          .delete(projectMember)
+          .where(
+            and(
+              eq(projectMember.organizationId, input.organizationId),
+              eq(projectMember.userId, input.userId),
+            ),
+          );
+      }
+
+      return { success: true };
+    }),
+
+  removeOrganizationMember: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        userId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.session.user.id) {
+        throw new Error("You cannot remove yourself");
+      }
+
+      const membership = await db.query.organizationMember.findFirst({
+        where: and(
+          eq(organizationMember.organizationId, input.organizationId),
+          eq(organizationMember.userId, input.userId),
+        ),
+        columns: { role: true },
+      });
+
+      if (!membership) {
+        return { success: true };
+      }
+
+      if (membership.role === "owner") {
+        throw new Error("Owner cannot be removed in v1");
+      }
+
+      await db
+        .delete(projectMember)
+        .where(
+          and(
+            eq(projectMember.organizationId, input.organizationId),
+            eq(projectMember.userId, input.userId),
+          ),
+        );
+
+      await db
+        .delete(organizationMember)
+        .where(
+          and(
+            eq(organizationMember.organizationId, input.organizationId),
+            eq(organizationMember.userId, input.userId),
+          ),
+        );
+
+      return { success: true };
+    }),
+
   createOrganizationUser: superAdminProcedure
     .input(
       z.object({
@@ -219,17 +454,35 @@ export const superAdminRouter = router({
         name: z.string().min(1).max(128),
         password: z.string().min(8),
         userRole: z
-          .enum(["super_admin", "admin", "user", "client_editor"])
+          .enum(["super_admin", "user"])
           .optional(),
         organizationRole: organizationRoleSchema.optional().default("admin"),
+        projectSlug: z.string().min(1).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const headers = headersFromNode(ctx.req.headers as any);
 
+      if (input.organizationRole === "client_editor" && !input.projectSlug) {
+        throw new Error("Project is required for client editor accounts");
+      }
+
       const userRole =
         input.userRole ??
-        (input.organizationRole === "client_editor" ? "client_editor" : "user");
+        getGlobalUserRoleForOrganizationRole(input.organizationRole);
+
+      if (input.organizationRole === "client_editor" && input.projectSlug) {
+        const project = await db.query.projectMeta.findFirst({
+          where: and(
+            eq(projectMeta.organizationId, input.organizationId),
+            eq(projectMeta.slug, input.projectSlug),
+          ),
+          columns: { slug: true },
+        });
+        if (!project) {
+          throw new Error("Project not found");
+        }
+      }
 
       const created = await auth.api.createUser({
         headers,
@@ -257,6 +510,21 @@ export const superAdminRouter = router({
         .onConflictDoNothing({
           target: [organizationMember.organizationId, organizationMember.userId],
         });
+
+      if (input.organizationRole === "client_editor" && input.projectSlug) {
+        await db
+          .insert(projectMember)
+          .values({
+            id: crypto.randomUUID(),
+            organizationId: input.organizationId,
+            userId: createdUserId,
+            projectSlug: input.projectSlug,
+          })
+          .onConflictDoUpdate({
+            target: [projectMember.organizationId, projectMember.userId],
+            set: { projectSlug: input.projectSlug },
+          });
+      }
 
       return { success: true, userId: createdUserId };
     }),

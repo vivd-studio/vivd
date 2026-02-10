@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
+  organization,
   projectMeta,
   projectPublishChecklist,
   projectVersion,
@@ -22,6 +23,14 @@ export type CreateProjectVersionInput = {
   status: string;
   createdAt: Date;
 };
+
+function parseMaxProjectsLimit(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = (value as Record<string, unknown>).maxProjects;
+  if (typeof raw !== "number") return null;
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  return Math.floor(raw);
+}
 
 class ProjectMetaService {
   async listProjects(organizationId: string): Promise<ProjectMetaRow[]> {
@@ -90,6 +99,41 @@ class ProjectMetaService {
 
   async createProjectVersion(input: CreateProjectVersionInput): Promise<void> {
     await db.transaction(async (tx) => {
+      const existingProject = await tx.query.projectMeta.findFirst({
+        where: and(
+          eq(projectMeta.organizationId, input.organizationId),
+          eq(projectMeta.slug, input.slug),
+        ),
+        columns: { slug: true },
+      });
+
+      // Organization limit: maxProjects (0/undefined = unlimited)
+      if (!existingProject) {
+        // Lock org row so concurrent project creations can't exceed the limit.
+        const orgRows = await tx
+          .select({ limits: organization.limits })
+          .from(organization)
+          .where(eq(organization.id, input.organizationId))
+          .for("update");
+
+        const maxProjects = parseMaxProjectsLimit(orgRows[0]?.limits);
+        if (maxProjects !== null) {
+          const rows = await tx
+            .select({
+              count: sql<number>`count(*)`,
+            })
+            .from(projectMeta)
+            .where(eq(projectMeta.organizationId, input.organizationId));
+
+          const currentCount = Number(rows[0]?.count ?? 0);
+          if (currentCount >= maxProjects) {
+            throw new Error(
+              `Project limit reached for this organization (${currentCount}/${maxProjects}).`,
+            );
+          }
+        }
+      }
+
       // Ensure project exists
       await tx
         .insert(projectMeta)

@@ -3,6 +3,8 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Signup from "@/pages/Signup";
 import Admin from "@/pages/Admin";
+import Organization from "@/pages/Organization";
+import SuperAdmin from "@/pages/SuperAdmin";
 import Settings from "@/pages/Settings";
 import ProjectFullscreen from "@/pages/ProjectFullscreen";
 import EmbeddedStudio from "@/pages/EmbeddedStudio";
@@ -15,8 +17,9 @@ import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "./paths";
 import {
   RequireAuth,
-  RequireAdmin,
+  RequireOrgAdmin,
   RequireAssignedProject,
+  RequireSuperAdmin,
   SingleProjectModeLayoutGuard,
   DashboardClientEditorGuard,
   ScratchWizardClientEditorGuard,
@@ -139,13 +142,61 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
       >
         <Route index element={<DashboardRoute />} />
         <Route path="settings" element={<Settings />} />
+        <Route
+          path="org"
+          element={
+            <RequireOrgAdmin>
+              <Organization />
+            </RequireOrgAdmin>
+          }
+        />
         <Route path="no-project" element={<NoProjectAssigned />} />
         <Route
           path="admin"
           element={
-            <RequireAdmin>
+            <RequireOrgAdmin>
               <Admin />
-            </RequireAdmin>
+            </RequireOrgAdmin>
+          }
+        />
+        <Route
+          path="superadmin"
+          element={
+            <RequireSuperAdmin>
+              <SuperAdmin />
+            </RequireSuperAdmin>
+          }
+        />
+        <Route
+          path="superadmin/users"
+          element={
+            <RequireSuperAdmin>
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=users`} replace />
+            </RequireSuperAdmin>
+          }
+        />
+        <Route
+          path="superadmin/orgs"
+          element={
+            <RequireSuperAdmin>
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=orgs`} replace />
+            </RequireSuperAdmin>
+          }
+        />
+        <Route
+          path="superadmin/maintenance"
+          element={
+            <RequireSuperAdmin>
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=maintenance`} replace />
+            </RequireSuperAdmin>
+          }
+        />
+        <Route
+          path="superadmin/usage"
+          element={
+            <RequireSuperAdmin>
+              <Navigate to={`${ROUTES.ADMIN}?tab=usage`} replace />
+            </RequireSuperAdmin>
           }
         />
         {/* Embedded studio view inside Layout */}

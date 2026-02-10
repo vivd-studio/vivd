@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/form";
 import { toast } from "sonner";
 import { useEffect } from "react";
-import { TeamSettings } from "@/components/settings/TeamSettings";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -222,8 +221,6 @@ export default function Settings() {
           </Form>
         </CardContent>
       </Card>
-
-      <TeamSettings />
     </div>
   );
 }

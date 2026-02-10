@@ -21,26 +21,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
-import { trpc } from "@/lib/trpc";
 import { addUserSchema, type AddUserFormValues } from "./schemas";
 
-interface Project {
-  slug: string;
-  title?: string | null;
-}
-
 interface AddUserFormProps {
-  projects: Project[];
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-export function AddUserForm({ projects, onSuccess, onCancel }: AddUserFormProps) {
+export function AddUserForm({ onSuccess, onCancel }: AddUserFormProps) {
   const [error, setError] = useState("");
   const queryClient = useQueryClient();
-  const utils = trpc.useUtils();
-  const { mutateAsync: assignUserToProject } =
-    trpc.user.assignUserToProject.useMutation();
 
   const form = useForm<AddUserFormValues>({
     resolver: zodResolver(addUserSchema),
@@ -52,8 +42,6 @@ export function AddUserForm({ projects, onSuccess, onCancel }: AddUserFormProps)
     },
   });
 
-  const selectedRole = form.watch("role");
-
   const addUserMutation = useMutation({
     mutationFn: async (data: AddUserFormValues) => {
       const res = await authClient.admin.createUser({
@@ -64,23 +52,12 @@ export function AddUserForm({ projects, onSuccess, onCancel }: AddUserFormProps)
       });
       if (res.error) throw res.error;
 
-      if (data.role === "client_editor" && data.projectSlug) {
-        if (!res.data?.user?.id) {
-          throw new Error("Failed to get user ID for project assignment");
-        }
-        await assignUserToProject({
-          userId: res.data.user.id,
-          projectSlug: data.projectSlug,
-        });
-      }
-
       return res.data;
     },
     onSuccess: () => {
       form.reset();
       setError("");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      utils.user.listProjectMembers.invalidate();
       onSuccess();
     },
     onError: (err: Error) => {
@@ -147,11 +124,11 @@ export function AddUserForm({ projects, onSuccess, onCancel }: AddUserFormProps)
               )}
             />
             <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Role</FormLabel>
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Global Role</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -160,40 +137,13 @@ export function AddUserForm({ projects, onSuccess, onCancel }: AddUserFormProps)
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="client_editor">Client Editor</SelectItem>
+                      <SelectItem value="super_admin">Super Admin</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {selectedRole === "client_editor" && (
-              <FormField
-                control={form.control}
-                name="projectSlug"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Assigned Project</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a project" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {projects.map((project) => (
-                          <SelectItem key={project.slug} value={project.slug}>
-                            {project.title || project.slug}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
           </div>
 
           {error && <p className="text-red-500 text-sm">{error}</p>}

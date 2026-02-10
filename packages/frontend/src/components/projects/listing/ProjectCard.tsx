@@ -30,6 +30,7 @@ import {
   Settings2,
   Eye,
   EyeOff,
+  Image,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -95,6 +96,9 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
+  const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
+    enabled: !!session,
+  });
   const isSuperAdmin = session?.user?.role === "super_admin";
   const utils = trpc.useUtils();
 
@@ -123,6 +127,20 @@ export function ProjectCard({
     },
   });
 
+  const regenerateThumbnailMutation = trpc.project.regenerateThumbnail.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success("Thumbnail regenerated", {
+        description: `${variables.slug} v${variables.version}`,
+      });
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to regenerate thumbnail", {
+        description: error.message,
+      });
+    },
+  });
+
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1,
   );
@@ -131,7 +149,7 @@ export function ProjectCard({
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
-  const canManagePreview = session?.user?.role !== "client_editor";
+  const canManagePreview = membership?.organizationRole !== "client_editor";
 
   const handleCopyPreview = () => {
     if (!publicPreviewEnabled) {
@@ -139,7 +157,13 @@ export function ProjectCard({
       return;
     }
     const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
-    const absoluteUrl = `${window.location.origin}${shareablePath}`;
+    const shareableUrl = new URL(shareablePath, window.location.origin);
+    if (membership?.organizationId) {
+      // Needed for unauthenticated access on the shared control-plane host.
+      // On tenant domains, the backend resolves the org from the Host header and ignores this param.
+      shareableUrl.searchParams.set("__vivd_org", membership.organizationId);
+    }
+    const absoluteUrl = shareableUrl.toString();
 
     navigator.clipboard.writeText(absoluteUrl);
     setCopied(true);
@@ -463,6 +487,24 @@ export function ProjectCard({
               >
                 <Download className="w-4 h-4 mr-2" />
                 Download as ZIP
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  regenerateThumbnailMutation.mutate({
+                    slug: project.slug,
+                    version: selectedVersion,
+                  })
+                }
+                disabled={!isCompleted || regenerateThumbnailMutation.isPending}
+              >
+                {regenerateThumbnailMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Image className="w-4 h-4 mr-2" />
+                )}
+                {regenerateThumbnailMutation.isPending
+                  ? "Regenerating thumbnail..."
+                  : "Regenerate thumbnail"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

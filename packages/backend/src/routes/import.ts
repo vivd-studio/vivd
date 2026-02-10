@@ -10,6 +10,7 @@ import { initializeGitRepository } from "../generator/gitUtils";
 import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
 import { projectMetaService } from "../services/ProjectMetaService";
 import { createContext } from "../trpc";
+import { checkOrganizationAccess } from "../lib/organizationAccess";
 
 type AuthLike = {
   api: {
@@ -117,8 +118,27 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const role = session.user.role ?? "user";
-      if (role === "client_editor") {
+      const organizationId = requestContext.organizationId;
+      if (!organizationId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (session.user.role === "client_editor") {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const access = await checkOrganizationAccess({
+        session,
+        organizationId,
+      });
+      if (!access.ok) {
+        if (access.reason === "organization_suspended") {
+          return res.status(403).json({ error: "Organization is suspended" });
+        }
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      if (!access.isSuperAdmin && access.organizationRole === "client_editor") {
         return res.status(403).json({ error: "Forbidden" });
       }
 
@@ -194,10 +214,6 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         : title
         ? slugifyTitle(title)
         : "project";
-      const organizationId = requestContext.organizationId;
-      if (!organizationId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
       const slug = await findAvailableSlug(organizationId, slugBase);
 
       const projectDir = getProjectDir(organizationId, slug);

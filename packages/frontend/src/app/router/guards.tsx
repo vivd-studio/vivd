@@ -23,12 +23,46 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 /**
  * Requires admin role.
- * Redirects to dashboard if user is not a super admin.
+ * Redirects to dashboard if user is not an org admin.
  */
-export function RequireAdmin({ children }: { children: ReactNode }) {
+export function RequireOrgAdmin({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
+  const { data: membership, isLoading } =
+    trpc.organization.getMyMembership.useQuery(undefined, {
+      enabled: !!session,
+    });
 
-  if (session?.user?.role !== "super_admin") {
+  if (!session) {
+    return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (isLoading) {
+    return <Loading />;
+  }
+
+  if (!membership?.isOrganizationAdmin) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
+  }
+
+  return <>{children}</>;
+}
+
+/**
+ * Requires super-admin role AND that the current host is allowed for the super-admin panel.
+ */
+export function RequireSuperAdmin({ children }: { children: ReactNode }) {
+  const { data: session } = authClient.useSession();
+  const { config, isLoading } = useAppConfig();
+
+  if (!session) {
+    return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (isLoading) {
+    return <Loading />;
+  }
+
+  if (session.user.role !== "super_admin" || !config.isSuperAdminHost) {
     return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 
@@ -100,9 +134,11 @@ export function SingleProjectModeLayoutGuard({
   if (config.singleProjectMode) {
     const isAdminRoute = location.pathname.startsWith(ROUTES.ADMIN);
     const isSettingsRoute = location.pathname.startsWith(ROUTES.SETTINGS);
+    const isSuperAdminRoute = location.pathname.startsWith(ROUTES.SUPERADMIN_BASE);
+    const isOrgRoute = location.pathname.startsWith(ROUTES.ORG);
 
     // Allow admin and settings pages through
-    if (isAdminRoute || isSettingsRoute) {
+    if (isAdminRoute || isSettingsRoute || isSuperAdminRoute || isOrgRoute) {
       return <>{children}</>;
     }
 

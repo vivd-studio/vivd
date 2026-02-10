@@ -23,8 +23,7 @@ type MaintenanceAction =
   | "templateAddMissing"
   | "templateOverwrite"
   | "fixGitignore"
-  | "thumbnailsMissing"
-  | "thumbnailsAll";
+  | "thumbnailsMissing";
 
 export function MaintenanceTab() {
   const [confirmAction, setConfirmAction] = useState<MaintenanceAction | null>(
@@ -184,15 +183,6 @@ export function MaintenanceTab() {
           confirmLabel: "Generate Missing",
           isPending: thumbnailsMutation.isPending,
           onConfirm: () => thumbnailsMutation.mutate({ onlyMissing: true }),
-        };
-      case "thumbnailsAll":
-        return {
-          title: "Regenerate all thumbnails?",
-          description:
-            "This will regenerate thumbnails for ALL completed project versions, replacing existing ones. This may take a while as each thumbnail is processed sequentially.",
-          confirmLabel: "Regenerate All",
-          isPending: thumbnailsMutation.isPending,
-          onConfirm: () => thumbnailsMutation.mutate({ onlyMissing: false }),
         };
       default:
         return null;
@@ -485,8 +475,8 @@ export function MaintenanceTab() {
 
           <div className="border-t pt-3 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Generate or regenerate project card thumbnails. Thumbnails are
-              captured from the preview URL and stored in{" "}
+              Generate missing project card thumbnails. Thumbnails are captured
+              from the preview URL and stored in{" "}
               <code>.vivd/thumbnail.webp</code>. This operation processes
               versions sequentially to avoid overloading the scraper.
             </p>
@@ -499,16 +489,6 @@ export function MaintenanceTab() {
                   <Loader2 className="animate-spin h-4 w-4 mr-2" />
                 ) : null}
                 Generate Missing Thumbnails
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setConfirmAction("thumbnailsAll")}
-                disabled={thumbnailsMutation.isPending}
-              >
-                {thumbnailsMutation.isPending ? (
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                ) : null}
-                Regenerate All Thumbnails
               </Button>
               {thumbnailsMutation.data ? (
                 <span className="text-sm text-muted-foreground">

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   protectedProcedure,
   adminProcedure,
+  orgAdminProcedure,
   ownerProcedure,
   projectMemberProcedure,
 } from "../../trpc";
@@ -24,7 +25,7 @@ import path from "path";
 import fs from "fs";
 import { publishService } from "../../services/PublishService";
 import { db } from "../../db";
-import { projectMember, projectMeta, publishedSite } from "../../db/schema";
+import { organization, projectMember, projectMeta, publishedSite } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import {
   getVivdInternalFilesPath,
@@ -327,16 +328,24 @@ export const projectMaintenanceProcedures = {
   /**
    * Get application configuration (exposed to frontend)
    */
-  getConfig: protectedProcedure.query(() => {
+  getConfig: protectedProcedure.query(async ({ ctx }) => {
     const domain = process.env.DOMAIN || null;
+    const organizationId = ctx.organizationId ?? getActiveTenantId();
+    const org = ctx.organizationId
+      ? await db.query.organization.findFirst({
+          where: eq(organization.id, ctx.organizationId),
+          columns: { githubRepoPrefix: true },
+        })
+      : null;
     return {
       // The current domain where vivd-studio is running
       domain,
-      tenantId: getActiveTenantId(),
+      tenantId: organizationId,
       github: {
         enabled: process.env.GITHUB_SYNC_ENABLED === "true",
         org: process.env.GITHUB_ORG || null,
-        repoPrefix: process.env.GITHUB_REPO_PREFIX || "",
+        repoPrefix:
+          org?.githubRepoPrefix ?? process.env.GITHUB_REPO_PREFIX ?? "",
       },
     };
   }),
@@ -780,7 +789,7 @@ export const projectMaintenanceProcedures = {
    * Untracks build cache directories (.astro, node_modules, etc.) that were
    * accidentally committed before being added to .gitignore.
    */
-  fixGitignoreAll: ownerProcedure.mutation(async ({ ctx }) => {
+  fixGitignoreAll: orgAdminProcedure.mutation(async ({ ctx }) => {
     const organizationId = ctx.organizationId ?? "default";
     const projectDirs = await listProjectSlugs(organizationId);
     if (projectDirs.length === 0) {
@@ -867,11 +876,61 @@ export const projectMaintenanceProcedures = {
   }),
 
   /**
+   * Regenerate a thumbnail for a single project version.
+   * Only completed versions are supported.
+   */
+  regenerateThumbnail: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const { slug, version } = input;
+
+      const manifest = await getManifest(organizationId, slug);
+      if (!manifest) {
+        throw new Error("Project not found");
+      }
+
+      const versionRecord = await projectMetaService.getProjectVersion(
+        organizationId,
+        slug,
+        version,
+      );
+      if (!versionRecord) {
+        throw new Error(`Version ${version} does not exist for this project`);
+      }
+      if (versionRecord.status !== "completed") {
+        throw new Error(
+          "Thumbnail regeneration is only available for completed versions",
+        );
+      }
+
+      const versionDir = getVersionDir(organizationId, slug, version);
+      await thumbnailService.generateThumbnailImmediate(
+        fs.existsSync(versionDir) ? versionDir : null,
+        organizationId,
+        slug,
+        version,
+      );
+
+      return {
+        success: true,
+        slug,
+        version,
+        message: `Thumbnail regenerated for ${slug} v${version}`,
+      };
+    }),
+
+  /**
    * Admin maintenance: regenerate thumbnails for all completed project versions.
    * Processes versions sequentially to avoid overwhelming the scraper service.
    * Only regenerates for versions with status "completed".
    */
-  regenerateAllThumbnails: ownerProcedure
+  regenerateAllThumbnails: orgAdminProcedure
     .input(
       z
         .object({
@@ -883,6 +942,11 @@ export const projectMaintenanceProcedures = {
     .mutation(async ({ ctx, input }) => {
       const organizationId = ctx.organizationId ?? "default";
       const onlyMissing = input?.onlyMissing ?? true;
+      if (!onlyMissing) {
+        throw new Error(
+          "Full thumbnail regeneration is disabled to limit compute usage"
+        );
+      }
       const thumbnailStorage = (() => {
         try {
           const config = getObjectStorageConfigFromEnv();

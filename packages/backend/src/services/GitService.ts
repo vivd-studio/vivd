@@ -451,8 +451,16 @@ export class GitService {
     version: number;
   }): string {
     const settings = getGitHubSyncSettings();
-    const base = `${args.tenantId}-${args.slug}-v${args.version}`;
-    const withPrefix = `${settings.repoPrefix}${base}`;
+    const base = `${args.slug}-v${args.version}`;
+    const rawPrefix = settings.repoPrefix.trim();
+    const normalizedPrefix = rawPrefix
+      ? rawPrefix.endsWith("-")
+        ? rawPrefix
+        : `${rawPrefix}-`
+      : "";
+    const withPrefix = normalizedPrefix
+      ? `${normalizedPrefix}${base}`
+      : `${args.tenantId}-${base}`;
     return withPrefix
       .toLowerCase()
       .replace(/[^a-z0-9._-]+/g, "-")

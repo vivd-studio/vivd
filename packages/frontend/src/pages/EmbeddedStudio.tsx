@@ -13,6 +13,12 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
@@ -20,6 +26,7 @@ import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { toast } from "sonner";
+import { Copy, Image, Loader2, MoreHorizontal } from "lucide-react";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -76,6 +83,19 @@ export default function EmbeddedStudio() {
     { slug: projectSlug!, version: studioVersion },
     { enabled: !!projectSlug && !!project },
   );
+  const regenerateThumbnailMutation = trpc.project.regenerateThumbnail.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success("Thumbnail regenerated", {
+        description: `${variables.slug} v${variables.version}`,
+      });
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to regenerate thumbnail", {
+        description: error.message,
+      });
+    },
+  });
 
   // Reset local state when navigating between projects.
   useEffect(() => {
@@ -99,10 +119,6 @@ export default function EmbeddedStudio() {
       document.title = formatDocumentTitle();
     };
   }, [project?.slug]);
-
-  const handleClose = () => {
-    navigate(ROUTES.DASHBOARD);
-  };
 
   const handleEdit = () => {
     if (!projectSlug || !project) return;
@@ -228,9 +244,20 @@ export default function EmbeddedStudio() {
       });
   };
 
+  const handleRegenerateThumbnail = () => {
+    if (!projectSlug) return;
+    regenerateThumbnailMutation.mutate({ slug: projectSlug, version: studioVersion });
+  };
+
   const thumbnailSrc = useMemo(() => {
     return project?.thumbnailUrl ?? null;
   }, [project?.thumbnailUrl]);
+  const selectedVersionInfo = project?.versions?.find(
+    (v) => v.version === studioVersion,
+  );
+  const isSelectedVersionCompleted =
+    selectedVersionInfo?.status === "completed" ||
+    (studioVersion === project?.currentVersion && project?.status === "completed");
 
   if (isLoading) {
     return (
@@ -280,9 +307,6 @@ export default function EmbeddedStudio() {
           <div className="flex-1" />
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
-          </Button>
         </header>
         <div className="flex flex-1 min-h-0 items-center justify-center">
           <div className="text-destructive">
@@ -315,9 +339,6 @@ export default function EmbeddedStudio() {
           <div className="flex-1" />
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
-          </Button>
         </header>
         <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3">
           <div className="text-destructive">
@@ -355,9 +376,6 @@ export default function EmbeddedStudio() {
           </Button>
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
-          </Button>
         </header>
         <StudioStartupLoading />
       </div>
@@ -385,28 +403,51 @@ export default function EmbeddedStudio() {
           </Breadcrumb>
           <div className="flex-1" />
           {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
-          {previewIframeSrc ? (
-            publicPreviewEnabled ? (
-              <Button variant="outline" onClick={handleCopyPreviewUrl}>
-                {previewUrlCopied ? "Copied!" : "Copy preview URL"}
-              </Button>
-            ) : (
-              <Button variant="outline" disabled>
-                Preview URL disabled
-              </Button>
-            )
-          ) : null}
           <Button
             variant="outline"
             onClick={() => setPublishDialogOpen(true)}
           >
-            Publish site
+            Publish
           </Button>
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={handleCopyPreviewUrl}
+                disabled={!previewIframeSrc || !publicPreviewEnabled}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                {previewUrlCopied
+                  ? "Copied!"
+                  : publicPreviewEnabled
+                    ? "Copy preview URL"
+                    : "Preview URL disabled"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleRegenerateThumbnail}
+                disabled={
+                  !isSelectedVersionCompleted ||
+                  regenerateThumbnailMutation.isPending
+                }
+              >
+                {regenerateThumbnailMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Image className="h-4 w-4 mr-2" />
+                )}
+                {regenerateThumbnailMutation.isPending
+                  ? "Regenerating thumbnail..."
+                  : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ModeToggle />
           <HeaderProfileMenu />
-          <Button variant="ghost" onClick={handleClose}>
-            Close
-          </Button>
         </header>
       ) : null}
 

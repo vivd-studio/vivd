@@ -4,8 +4,9 @@ export { ROUTES, isRoutePrefix } from "./paths";
 // Guard components
 export {
   RequireAuth,
-  RequireAdmin,
+  RequireOrgAdmin,
   RequireAssignedProject,
+  RequireSuperAdmin,
   SingleProjectModeLayoutGuard,
   DashboardClientEditorGuard,
   ScratchWizardClientEditorGuard,

@@ -28,35 +28,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { authClient } from "@/lib/auth-client";
-import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { updateUserSchema, type UpdateUserFormValues } from "./schemas";
 import type { User } from "../types";
 
-interface Project {
-  slug: string;
-  title?: string | null;
-}
-
 interface EditUserDialogProps {
   user: User | null;
-  projects: Project[];
-  assignedProjectSlug: string | null;
   onClose: () => void;
+}
+
+function normalizeGlobalRole(role: User["role"]): "super_admin" | "user" {
+  return role === "super_admin" ? "super_admin" : "user";
 }
 
 export function EditUserDialog({
   user,
-  projects,
-  assignedProjectSlug,
   onClose,
 }: EditUserDialogProps) {
   const queryClient = useQueryClient();
-  const utils = trpc.useUtils();
-  const { mutateAsync: assignUserToProject } =
-    trpc.user.assignUserToProject.useMutation();
-  const { mutateAsync: unassignUserFromProject } =
-    trpc.user.unassignUserFromProject.useMutation();
 
   const form = useForm<UpdateUserFormValues>({
     resolver: zodResolver(updateUserSchema),
@@ -64,23 +53,19 @@ export function EditUserDialog({
       name: "",
       email: "",
       role: "user",
-      projectSlug: "__unassigned__",
       newPassword: "",
     },
   });
-
-  const selectedRole = form.watch("role");
 
   useEffect(() => {
     if (!user) return;
     form.reset({
       name: user.name,
       email: user.email,
-      role: user.role,
-      projectSlug: assignedProjectSlug ?? "__unassigned__",
+      role: normalizeGlobalRole(user.role),
       newPassword: "",
     });
-  }, [user, form, assignedProjectSlug]);
+  }, [user, form]);
 
   const updateUserMutation = useMutation({
     mutationFn: async (data: UpdateUserFormValues) => {
@@ -104,26 +89,12 @@ export function EditUserDialog({
         if (pwRes.error) throw pwRes.error;
       }
 
-      if (data.role === "client_editor") {
-        if (data.projectSlug) {
-          await assignUserToProject({
-            userId: user.id,
-            projectSlug: data.projectSlug,
-          });
-        } else {
-          await unassignUserFromProject({ userId: user.id });
-        }
-      } else {
-        await unassignUserFromProject({ userId: user.id });
-      }
-
       return res.data;
     },
     onSuccess: () => {
       toast.success("User updated");
       onClose();
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      utils.user.listProjectMembers.invalidate();
     },
     onError: (err: Error) => {
       toast.error("Failed to update user", {
@@ -179,57 +150,22 @@ export function EditUserDialog({
                 name="role"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Role</FormLabel>
+                    <FormLabel>Global Role</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a role" />
                         </SelectTrigger>
 	                      </FormControl>
-	                      <SelectContent>
-	                        <SelectItem value="super_admin">Super Admin</SelectItem>
-	                        <SelectItem value="user">User</SelectItem>
-	                        <SelectItem value="admin">Admin</SelectItem>
-	                        <SelectItem value="client_editor">Client Editor</SelectItem>
-	                      </SelectContent>
-	                    </Select>
+                      <SelectContent>
+                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                        <SelectItem value="user">User</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              {selectedRole === "client_editor" ? (
-                <FormField
-                  control={form.control}
-                  name="projectSlug"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Assigned Project</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={
-                          ((field.value as string | undefined) ??
-                            "__unassigned__") as string
-                        }
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a project (optional)" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                          {projects.map((project) => (
-                            <SelectItem key={project.slug} value={project.slug}>
-                              {project.title || project.slug}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ) : null}
               <FormField
                 control={form.control}
                 name="newPassword"

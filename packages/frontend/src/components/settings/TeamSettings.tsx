@@ -43,6 +43,11 @@ const createUserSchema = z
   );
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
+type EditableMemberRole = "admin" | "member" | "client_editor";
+type MemberEditState = {
+  role: EditableMemberRole;
+  projectSlug: string;
+};
 
 function formatRole(role: string): string {
   switch (role) {
@@ -51,7 +56,7 @@ function formatRole(role: string): string {
     case "admin":
       return "Admin";
     case "member":
-      return "Member";
+      return "User";
     case "client_editor":
       return "Client Editor";
     default:
@@ -59,10 +64,20 @@ function formatRole(role: string): string {
   }
 }
 
+function toEditableMemberRole(role: string): EditableMemberRole {
+  if (role === "admin" || role === "member" || role === "client_editor") {
+    return role;
+  }
+  return "member";
+}
+
 export function TeamSettings() {
   const { data: session } = authClient.useSession();
   const utils = trpc.useUtils();
   const [isAdding, setIsAdding] = useState(false);
+  const [memberEdits, setMemberEdits] = useState<Record<string, MemberEditState>>(
+    {},
+  );
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery();
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
@@ -116,6 +131,16 @@ export function TeamSettings() {
     },
     onError: (error) => {
       toast.error("Failed to remove member", { description: error.message });
+    },
+  });
+
+  const updateMemberRoleMutation = trpc.organization.updateMemberRole.useMutation({
+    onSuccess: () => {
+      toast.success("Member updated");
+      utils.organization.listMembers.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to update member", { description: error.message });
     },
   });
 
@@ -197,7 +222,7 @@ export function TeamSettings() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="member">User</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="client_editor">Client Editor</SelectItem>
                         </SelectContent>
@@ -291,6 +316,29 @@ export function TeamSettings() {
                   const isOwner = member.role === "owner";
                   const isSelf = member.userId === session?.user?.id;
                   const canRemove = !isOwner && !isSelf;
+                  const currentEdit =
+                    memberEdits[member.userId] ??
+                    (isOwner
+                      ? null
+                      : {
+                          role: toEditableMemberRole(member.role),
+                          projectSlug: member.assignedProjectSlug ?? "",
+                        });
+                  const hasRoleChanges = Boolean(
+                    currentEdit &&
+                      (currentEdit.role !== member.role ||
+                        (currentEdit.role === "client_editor" &&
+                          currentEdit.projectSlug !==
+                            (member.assignedProjectSlug ?? ""))),
+                  );
+                  const canSaveRole = Boolean(
+                    currentEdit &&
+                      !isOwner &&
+                      !isSelf &&
+                      hasRoleChanges &&
+                      (currentEdit.role !== "client_editor" ||
+                        Boolean(currentEdit.projectSlug)),
+                  );
 
                   return (
                     <tr key={member.id} className="border-b">
@@ -299,31 +347,103 @@ export function TeamSettings() {
                       </td>
                       <td className="p-4 align-middle">{member.user.email}</td>
                       <td className="p-4 align-middle">
-                        {formatRole(member.role)}
+                        {isOwner || !currentEdit ? (
+                          formatRole(member.role)
+                        ) : (
+                          <Select
+                            value={currentEdit.role}
+                            onValueChange={(value) =>
+                              setMemberEdits((prev) => ({
+                                ...prev,
+                                [member.userId]: {
+                                  role: value as EditableMemberRole,
+                                  projectSlug: currentEdit.projectSlug,
+                                },
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-[160px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="member">User</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="client_editor">Client Editor</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </td>
                       <td className="p-4 align-middle text-muted-foreground">
-                        {member.assignedProjectSlug ?? "—"}
+                        {currentEdit?.role === "client_editor" ? (
+                          <Select
+                            value={currentEdit.projectSlug}
+                            onValueChange={(value) =>
+                              setMemberEdits((prev) => ({
+                                ...prev,
+                                [member.userId]: {
+                                  role: currentEdit.role,
+                                  projectSlug: value,
+                                },
+                              }))
+                            }
+                            disabled={isOwner}
+                          >
+                            <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="Select a project" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {projects.map((project) => (
+                                <SelectItem key={project.slug} value={project.slug}>
+                                  {project.title || project.slug}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          member.assignedProjectSlug ?? "—"
+                        )}
                       </td>
                       <td className="p-4 align-middle">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          disabled={!canRemove || removeMemberMutation.isPending}
-                          aria-label={`Remove ${member.user.email}`}
-                          onClick={() => {
-                            if (!canRemove) return;
-                            if (
-                              !window.confirm(
-                                `Remove ${member.user.email} from this organization?`,
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!canSaveRole || updateMemberRoleMutation.isPending}
+                            onClick={() => {
+                              if (!currentEdit) return;
+                              updateMemberRoleMutation.mutate({
+                                userId: member.userId,
+                                role: currentEdit.role,
+                                projectSlug:
+                                  currentEdit.role === "client_editor"
+                                    ? currentEdit.projectSlug
+                                    : undefined,
+                              });
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={!canRemove || removeMemberMutation.isPending}
+                            aria-label={`Remove ${member.user.email}`}
+                            onClick={() => {
+                              if (!canRemove) return;
+                              if (
+                                !window.confirm(
+                                  `Remove ${member.user.email} from this organization?`,
+                                )
                               )
-                            )
-                              return;
-                            removeMemberMutation.mutate({ userId: member.userId });
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                                return;
+                              removeMemberMutation.mutate({ userId: member.userId });
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -336,4 +456,3 @@ export function TeamSettings() {
     </Card>
   );
 }
-

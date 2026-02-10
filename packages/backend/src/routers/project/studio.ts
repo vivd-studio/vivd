@@ -2,7 +2,7 @@ import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { db } from "../../db";
-import { session as sessionTable } from "../../db/schema";
+import { organization, session as sessionTable } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -55,6 +55,11 @@ export const studioProcedures = {
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, organizationId),
+        columns: { githubRepoPrefix: true },
+      });
+      const githubRepoPrefix = (org?.githubRepoPrefix ?? "").trim();
       // Studio machines need a backend URL that is reachable *from the machine*.
       // - Local provider spawns the studio as a child-process inside this backend container,
       //   so `DOMAIN` (usually `http://localhost` via Caddy on :80) is not reachable.
@@ -89,15 +94,16 @@ export const studioProcedures = {
       }
 
       try {
-        const { studioId, url, port } = await studioMachineProvider.ensureRunning({
-          organizationId,
-          projectSlug: input.slug,
-          version: input.version,
-          env: {
-            MAIN_BACKEND_URL: mainBackendUrl,
-            SESSION_TOKEN: sessionToken,
-          },
-        });
+          const { studioId, url, port } = await studioMachineProvider.ensureRunning({
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
+            env: {
+              MAIN_BACKEND_URL: mainBackendUrl,
+              SESSION_TOKEN: sessionToken,
+              GITHUB_REPO_PREFIX: githubRepoPrefix,
+            },
+          });
 
         return {
           success: true as const,

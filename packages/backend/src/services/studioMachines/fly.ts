@@ -926,9 +926,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     };
 
     for (const [k, v] of Object.entries(args.env)) {
-      if (typeof v === "string" && v.length > 0) {
-        env[k] = v;
-      }
+      if (typeof v === "string") env[k] = v;
     }
 
     // Optional passthrough for local-first testing (keeps config explicit).

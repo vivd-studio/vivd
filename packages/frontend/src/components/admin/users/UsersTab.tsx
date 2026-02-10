@@ -17,7 +17,6 @@ export function UsersTab() {
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
 
   const { data: session } = authClient.useSession();
-  const { data: projectsData } = trpc.project.list.useQuery();
   const { data: membersData } = trpc.user.listProjectMembers.useQuery();
 
   const {
@@ -41,12 +40,6 @@ export function UsersTab() {
     membersData?.members.map((m) => [m.userId, m.projectSlug]) || [],
   );
 
-  const projects = projectsData?.projects ?? [];
-
-  const getAssignedProjectSlug = (userId: string): string | null => {
-    return membersData?.members.find((m) => m.userId === userId)?.projectSlug ?? null;
-  };
-
   if (isLoading) {
     return (
       <div className="flex justify-center p-10">
@@ -68,10 +61,15 @@ export function UsersTab() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-blue-600" />
-              Users ({users?.length})
-            </CardTitle>
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-blue-600" />
+                Users ({users?.length})
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Global roles are system-wide. Organization roles are managed per org.
+              </p>
+            </div>
             <Button
               onClick={() => setIsAddUserOpen(!isAddUserOpen)}
               className="gap-2"
@@ -84,7 +82,6 @@ export function UsersTab() {
         <CardContent className="space-y-6">
           {isAddUserOpen && (
             <AddUserForm
-              projects={projects}
               onSuccess={() => setIsAddUserOpen(false)}
               onCancel={() => setIsAddUserOpen(false)}
             />
@@ -104,8 +101,6 @@ export function UsersTab() {
 
       <EditUserDialog
         user={editingUser}
-        projects={projects}
-        assignedProjectSlug={editingUser ? getAssignedProjectSlug(editingUser.id) : null}
         onClose={() => setEditingUser(null)}
       />
 

@@ -97,7 +97,7 @@ export function FileDropzone({
       </label>
 
       {files.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {files.map((file, idx) => (
             <div
               key={`${file.name}-${idx}`}
