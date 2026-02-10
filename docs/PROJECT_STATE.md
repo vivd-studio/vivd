@@ -7,6 +7,7 @@ This document tracks the current state of development and serves as the canonica
 Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability and refactoring backlog for developer productivity.
 - Progress (2026-02-10): started execution; added transaction safety to superadmin member/user mutations and removed unused legacy role mutation route.
+- Progress (2026-02-10): split `OrganizationsTab` and `AppSidebar` into smaller units; reduced sidebar project polling from 5s to 30s with focus refetch.
 
 ---
 

@@ -4,16 +4,16 @@ Purpose: improve developer efficiency, readability, and maintainability with low
 
 ## 1) Split Oversized Frontend Components
 
-- [ ] Split `packages/frontend/src/components/admin/organizations/OrganizationsTab.tsx` into:
-  - [ ] `useOrganizationsAdmin` hook (queries/mutations/form state)
-  - [ ] `UsageLimitsPanel`
-  - [ ] `MembersPanel`
-  - [ ] `OrganizationSettingsPanel`
-- [ ] Split `packages/frontend/src/components/shell/AppSidebar.tsx` into:
-  - [ ] navigation data hook
-  - [ ] `ProjectsNavSection`
-  - [ ] `AdminNavSection`
-  - [ ] `UserNavFooter`
+- [x] Split `packages/frontend/src/components/admin/organizations/OrganizationsTab.tsx` into:
+  - [x] `useOrganizationsAdmin` hook (queries/mutations/form state)
+  - [x] `UsageLimitsPanel`
+  - [x] `MembersPanel`
+  - [x] `OrganizationSettingsPanel`
+- [x] Split `packages/frontend/src/components/shell/AppSidebar.tsx` into:
+  - [x] navigation data hook
+  - [x] `ProjectsNavSection`
+  - [x] `AdminNavSection`
+  - [x] `UserNavFooter`
 - [ ] Add/adjust targeted tests for extracted utility logic.
 
 ## 2) Thin Routers, Move Business Logic to Services
@@ -61,7 +61,7 @@ Purpose: improve developer efficiency, readability, and maintainability with low
 
 ## 9) Reduce Expensive Polling in Sidebar
 
-- [ ] Replace always-on 5s polling in `AppSidebar` with smarter invalidation.
+- [x] Replace always-on 5s polling in `AppSidebar` with smarter invalidation.
 - [ ] Use query invalidation on mutations + refetch-on-focus.
 - [ ] Keep optional short polling only where it is strictly required.
 
