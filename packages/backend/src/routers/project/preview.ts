@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { projectMemberProcedure } from "../../trpc";
+import { TRPCError } from "@trpc/server";
+import { adminProcedure, projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
 import { buildService } from "../../services/BuildService";
 import { detectProjectType } from "../../devserver/projectType";
 import fs from "node:fs";
 import { resolvePublishableArtifactState } from "../../services/ProjectArtifactStateService";
+import { projectMetaService } from "../../services/ProjectMetaService";
 
 export const previewProcedures = {
   /**
@@ -25,6 +27,12 @@ export const previewProcedures = {
       // External preview URL is always /preview/ (static serving)
       const url = `/vivd-studio/api/preview/${slug}/v${version}/`;
 
+      const project = await projectMetaService.getProject(slug);
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      }
+      const publicPreviewEnabled = project.publicPreviewEnabled;
+
       const artifactState = await resolvePublishableArtifactState({ slug, version });
       if (artifactState.storageEnabled) {
         if (artifactState.readiness === "ready") {
@@ -32,6 +40,7 @@ export const previewProcedures = {
             mode: artifactState.sourceKind === "preview" ? ("built" as const) : ("static" as const),
             status: "ready" as const,
             url,
+            publicPreviewEnabled,
           };
         }
         if (artifactState.readiness === "build_in_progress") {
@@ -39,6 +48,7 @@ export const previewProcedures = {
             mode: "built" as const,
             status: "building" as const,
             url,
+            publicPreviewEnabled,
             error: artifactState.error ?? undefined,
           };
         }
@@ -47,6 +57,7 @@ export const previewProcedures = {
             mode: "built" as const,
             status: "error" as const,
             url,
+            publicPreviewEnabled,
             error: artifactState.error ?? undefined,
           };
         }
@@ -55,6 +66,7 @@ export const previewProcedures = {
           mode: "built" as const,
           status: "pending" as const,
           url,
+          publicPreviewEnabled,
           error: artifactState.error ?? undefined,
         };
       }
@@ -70,6 +82,7 @@ export const previewProcedures = {
           mode: "static" as const,
           status: "ready" as const,
           url,
+          publicPreviewEnabled,
         };
       }
 
@@ -80,6 +93,7 @@ export const previewProcedures = {
           mode: "built" as const,
           status: "ready" as const,
           url,
+          publicPreviewEnabled,
         };
       }
 
@@ -88,7 +102,33 @@ export const previewProcedures = {
         mode: "built" as const,
         status: buildStatus?.status || ("pending" as const),
         url,
+        publicPreviewEnabled,
         error: buildStatus?.error,
+      };
+    }),
+
+  setPublicPreviewEnabled: adminProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        enabled: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const project = await projectMetaService.getProject(input.slug);
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      }
+
+      await projectMetaService.setPublicPreviewEnabled({
+        slug: input.slug,
+        enabled: input.enabled,
+      });
+
+      return {
+        success: true,
+        slug: input.slug,
+        publicPreviewEnabled: input.enabled,
       };
     }),
 };

@@ -141,6 +141,9 @@ export const projectMeta = pgTable(
     title: text("title").notNull().default(""),
     description: text("description").notNull().default(""),
     currentVersion: integer("current_version").notNull().default(1),
+    publicPreviewEnabled: boolean("public_preview_enabled")
+      .notNull()
+      .default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

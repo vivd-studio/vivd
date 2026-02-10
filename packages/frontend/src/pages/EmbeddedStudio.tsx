@@ -19,6 +19,7 @@ import { ROUTES } from "@/app/router";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
+import { toast } from "sonner";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -33,6 +34,7 @@ export default function EmbeddedStudio() {
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const [editRequested, setEditRequested] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Fetch project data to get current version
@@ -40,6 +42,7 @@ export default function EmbeddedStudio() {
 
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
+  const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
 
   const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const resumeStudio = urlParams.get("view") === "studio";
@@ -191,6 +194,7 @@ export default function EmbeddedStudio() {
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
+    url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
     // Used by the "fullscreen/open in new tab" studio view to navigate back.
     url.searchParams.set(
       "returnTo",
@@ -200,13 +204,29 @@ export default function EmbeddedStudio() {
       ).toString(),
     );
     return url.toString();
-  }, [projectSlug, studioBaseUrl, studioVersion]);
+  }, [projectSlug, publicPreviewEnabled, studioBaseUrl, studioVersion]);
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;
     if (externalPreview?.status !== "ready") return null;
     return externalPreview.url;
   }, [externalPreview, projectSlug, project]);
+
+  const handleCopyPreviewUrl = () => {
+    if (!externalPreview || externalPreview.status !== "ready") return;
+    const absoluteUrl = new URL(externalPreview.url, window.location.origin).toString();
+
+    navigator.clipboard
+      .writeText(absoluteUrl)
+      .then(() => {
+        setPreviewUrlCopied(true);
+        setTimeout(() => setPreviewUrlCopied(false), 2000);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error("Failed to copy preview URL", { description: message });
+      });
+  };
 
   const thumbnailSrc = useMemo(() => {
     return project?.thumbnailUrl ?? null;
@@ -365,6 +385,17 @@ export default function EmbeddedStudio() {
           </Breadcrumb>
           <div className="flex-1" />
           {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
+          {previewIframeSrc ? (
+            publicPreviewEnabled ? (
+              <Button variant="outline" onClick={handleCopyPreviewUrl}>
+                {previewUrlCopied ? "Copied!" : "Copy preview URL"}
+              </Button>
+            ) : (
+              <Button variant="outline" disabled>
+                Preview URL disabled
+              </Button>
+            )
+          ) : null}
           <Button
             variant="outline"
             onClick={() => setPublishDialogOpen(true)}

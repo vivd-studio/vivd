@@ -6,6 +6,7 @@ import {
 } from "../generator/vivdPaths";
 import { uploadProjectThumbnailBufferToBucket } from "./ProjectArtifactsService";
 import { projectMetaService } from "./ProjectMetaService";
+import { getInternalPreviewAccessToken } from "../config/preview";
 
 // Base URL for the scraper (in Docker) to reach this backend's preview endpoint.
 // In dev/local, use the Docker service name. In production, use the public DOMAIN.
@@ -95,8 +96,31 @@ class ThumbnailService {
     slug: string,
     version: number
   ): Promise<void> {
-    // Construct preview URL that the scraper can reach
-    const previewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
+    const basePreviewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
+
+    const project = await projectMetaService.getProject(slug);
+    if (!project) {
+      console.warn(`[Thumbnail] Skipping for ${slug} v${version}: project not found.`);
+      return;
+    }
+
+    // When a project disables public previews, use an internal token so the scraper can still fetch.
+    // Token is validated server-side and stored in a short-lived cookie for subsequent asset requests.
+    const previewUrl = (() => {
+      if (project.publicPreviewEnabled) return basePreviewUrl;
+
+      const token = getInternalPreviewAccessToken();
+      if (!token) {
+        console.warn(
+          `[Thumbnail] Skipping for ${slug} v${version}: public preview URLs are disabled but no PREVIEW_INTERNAL_TOKEN/SCRAPER_API_KEY configured.`,
+        );
+        return null;
+      }
+
+      return `${basePreviewUrl}?__vivd_preview_token=${encodeURIComponent(token)}`;
+    })();
+
+    if (!previewUrl) return;
 
     console.log(`[Thumbnail] Generating for ${slug} v${version}...`);
 

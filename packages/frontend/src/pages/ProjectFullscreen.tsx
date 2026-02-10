@@ -9,6 +9,7 @@ import { ROUTES } from "@/app/router";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
+import { toast } from "sonner";
 
 /**
  * ProjectFullscreen
@@ -27,12 +28,14 @@ export default function ProjectFullscreen() {
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const [editRequested, setEditRequested] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
 
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const currentVersion = project?.currentVersion || 1;
+  const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
 
   const urlParams = useMemo(
     () => new URLSearchParams(location.search),
@@ -176,18 +179,35 @@ export default function ProjectFullscreen() {
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(version));
+    url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
     url.searchParams.set(
       "returnTo",
       new URL(ROUTES.PROJECT_FULLSCREEN(projectSlug || ""), window.location.origin).toString(),
     );
     return url.toString();
-  }, [projectSlug, studioBaseUrl, version]);
+  }, [projectSlug, publicPreviewEnabled, studioBaseUrl, version]);
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;
     if (externalPreview?.status !== "ready") return null;
     return externalPreview.url;
   }, [externalPreview, projectSlug, project]);
+
+  const handleCopyPreviewUrl = () => {
+    if (!externalPreview || externalPreview.status !== "ready") return;
+    const absoluteUrl = new URL(externalPreview.url, window.location.origin).toString();
+
+    navigator.clipboard
+      .writeText(absoluteUrl)
+      .then(() => {
+        setPreviewUrlCopied(true);
+        setTimeout(() => setPreviewUrlCopied(false), 2000);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error("Failed to copy preview URL", { description: message });
+      });
+  };
 
   const thumbnailSrc = project?.thumbnailUrl ?? null;
 
@@ -308,6 +328,17 @@ export default function ProjectFullscreen() {
           </Link>
           <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
           {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
+          {previewIframeSrc ? (
+            publicPreviewEnabled ? (
+              <Button variant="outline" onClick={handleCopyPreviewUrl}>
+                {previewUrlCopied ? "Copied!" : "Copy preview URL"}
+              </Button>
+            ) : (
+              <Button variant="outline" disabled>
+                Preview URL disabled
+              </Button>
+            )
+          ) : null}
           <Button variant="outline" onClick={() => setPublishDialogOpen(true)}>
             Publish site
           </Button>

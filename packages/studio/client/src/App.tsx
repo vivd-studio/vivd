@@ -11,6 +11,12 @@ export function App() {
   const versionParam = Number.parseInt(params.get("version") || "", 10);
   const version = Number.isFinite(versionParam) && versionParam > 0 ? versionParam : 1;
   const returnTo = params.get("returnTo");
+  const publicPreviewEnabledParam = params.get("publicPreviewEnabled");
+  const publicPreviewEnabled =
+    publicPreviewEnabledParam === null
+      ? true
+      : publicPreviewEnabledParam === "1" ||
+        publicPreviewEnabledParam === "true";
 
   const onClose = () => {
     if (embedded) {
@@ -31,6 +37,7 @@ export function App() {
         originalUrl={null}
         projectSlug={projectSlug}
         version={version}
+        publicPreviewEnabled={publicPreviewEnabled}
         onClose={onClose}
         embedded={embedded}
       >

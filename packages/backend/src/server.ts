@@ -30,6 +30,8 @@ import { buildService } from "./services/BuildService";
 import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
 import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
 import { resolvePublishableArtifactState } from "./services/ProjectArtifactStateService";
+import { projectMetaService } from "./services/ProjectMetaService";
+import { getInternalPreviewAccessToken } from "./config/preview";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +41,68 @@ function getRouteParam(req: express.Request, key: string): string | undefined {
   if (typeof value === "string") return value;
   if (Array.isArray(value) && typeof value[0] === "string") return value[0];
   return undefined;
+}
+
+const PREVIEW_TOKEN_QUERY_PARAM = "__vivd_preview_token";
+const PREVIEW_TOKEN_COOKIE_NAME = "vivd_preview_token";
+const PREVIEW_TOKEN_HEADER_NAME = "x-vivd-preview-token";
+
+function getQueryParam(req: express.Request, key: string): string | undefined {
+  const value = (req.query as Record<string, unknown>)[key];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
+
+function getCookieValue(req: express.Request, key: string): string | undefined {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return undefined;
+
+  const entries = cookieHeader.split(";").map((part) => part.trim());
+  for (const entry of entries) {
+    const eqIndex = entry.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const name = entry.slice(0, eqIndex);
+    if (name !== key) continue;
+    const raw = entry.slice(eqIndex + 1);
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return undefined;
+}
+
+function isHttpsRequest(req: express.Request): boolean {
+  if (req.secure) return true;
+  const xfProto = req.headers["x-forwarded-proto"];
+  if (typeof xfProto === "string") return xfProto.split(",")[0].trim() === "https";
+  if (Array.isArray(xfProto) && typeof xfProto[0] === "string") {
+    return xfProto[0].split(",")[0].trim() === "https";
+  }
+  return false;
+}
+
+type CachedPublicPreviewSetting = { enabled: boolean; fetchedAt: number };
+const publicPreviewEnabledCache = new Map<string, CachedPublicPreviewSetting>();
+const PUBLIC_PREVIEW_ENABLED_CACHE_TTL_MS = 10_000;
+
+async function getCachedPublicPreviewEnabled(slug: string): Promise<boolean | null> {
+  const now = Date.now();
+  const cached = publicPreviewEnabledCache.get(slug);
+  if (cached && now - cached.fetchedAt < PUBLIC_PREVIEW_ENABLED_CACHE_TTL_MS) {
+    return cached.enabled;
+  }
+
+  const project = await projectMetaService.getProject(slug);
+  if (!project) return null;
+
+  publicPreviewEnabledCache.set(slug, {
+    enabled: project.publicPreviewEnabled,
+    fetchedAt: now,
+  });
+  return project.publicPreviewEnabled;
 }
 
 function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
@@ -492,6 +556,46 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
     return res.status(400).json({ error: "Invalid route parameters" });
   }
 
+  const publicPreviewEnabled = await getCachedPublicPreviewEnabled(slug);
+  if (publicPreviewEnabled === null) {
+    return res.status(404).json({ error: "Not found" });
+  }
+
+  // Project-level gating: disable unauthenticated access to preview URLs.
+  // - When public previews are disabled, require a valid session OR an internal access token.
+  // - The internal token is primarily used by internal services (e.g. thumbnail scraper).
+  if (!publicPreviewEnabled) {
+    const internalToken = getInternalPreviewAccessToken();
+    const tokenCandidate =
+      req.get(PREVIEW_TOKEN_HEADER_NAME) ||
+      getQueryParam(req, PREVIEW_TOKEN_QUERY_PARAM) ||
+      getCookieValue(req, PREVIEW_TOKEN_COOKIE_NAME);
+
+    const tokenOk = Boolean(
+      internalToken && tokenCandidate && tokenCandidate === internalToken,
+    );
+
+    if (tokenOk && internalToken) {
+      // Persist token for subsequent asset requests (e.g. scraper loads HTML first, then assets).
+      if (getCookieValue(req, PREVIEW_TOKEN_COOKIE_NAME) !== internalToken) {
+        res.cookie(PREVIEW_TOKEN_COOKIE_NAME, internalToken, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: isHttpsRequest(req),
+          maxAge: 5 * 60 * 1000,
+          path: "/vivd-studio/api/preview",
+        });
+      }
+    } else {
+      const session = await getSessionFromRequest(req);
+      if (!session) {
+        return res.status(404).json({ error: "Not found" });
+      }
+      const ok = await enforceProjectAccess(req, res, session, slug);
+      if (!ok) return;
+    }
+  }
+
   // req.url contains the path relative to the mount point (e.g. "/" or "/index.html")
   // If mounted at /vivd-studio/api/preview/:slug/v:version, then:
   // - Request to .../v1/          -> req.url = "/"
@@ -635,6 +739,91 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
 
   return res.sendFile(resolvedPath);
 });
+
+// Scratch wizard multipart upload endpoint.
+// Keeps local generation workflow intact before post-generation bucket sync.
+app.post(
+  "/vivd-studio/api/upload/:slug/:version",
+  upload.array("files", 20),
+  async (req, res) => {
+    try {
+      const session = await getSessionFromRequest(req);
+      if (!session) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const slug = getRouteParam(req, "slug");
+      const version = getRouteParam(req, "version");
+      if (!slug || !version) {
+        return res.status(400).json({ error: "Invalid route parameters" });
+      }
+
+      const ok = await enforceProjectAccess(req, res, session, slug);
+      if (!ok) return;
+
+      const versionNumber = Number.parseInt(version, 10);
+      if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+        return res.status(400).json({ error: "Invalid version" });
+      }
+
+      const rawRelativePath =
+        typeof req.query.path === "string" ? req.query.path : "";
+      const relativePath = rawRelativePath
+        .replace(/\\/g, "/")
+        .replace(/^\/+|\/+$/g, "");
+
+      if (relativePath !== "images" && relativePath !== "references") {
+        return res.status(400).json({
+          error: 'Invalid upload path. Allowed paths: "images", "references".',
+        });
+      }
+
+      const versionDir = getVersionDir(slug, versionNumber);
+      if (!fs.existsSync(versionDir)) {
+        return res.status(404).json({ error: "Project version not found" });
+      }
+
+      let targetDir: string;
+      try {
+        targetDir = safeJoin(versionDir, relativePath);
+      } catch {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      const files = req.files as Express.Multer.File[] | undefined;
+      if (!files?.length) {
+        return res.status(400).json({ error: "No files provided" });
+      }
+
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const sanitizedName =
+          file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_") || "upload";
+
+        let filePath: string;
+        try {
+          const rel = path.posix.join(relativePath, sanitizedName);
+          filePath = safeJoin(versionDir, rel);
+        } catch {
+          return res.status(400).json({ error: "Invalid filename" });
+        }
+
+        fs.writeFileSync(filePath, file.buffer);
+        uploaded.push(path.posix.join(relativePath, sanitizedName));
+      }
+
+      await projectMetaService.touchUpdatedAt(slug);
+      return res.json({ success: true, uploaded });
+    } catch (error) {
+      console.error("Upload error:", error);
+      return res.status(500).json({ error: "Upload failed" });
+    }
+  },
+);
 
 // Download project version as ZIP
 app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {

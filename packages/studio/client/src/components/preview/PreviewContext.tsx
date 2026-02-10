@@ -48,6 +48,7 @@ interface PreviewContextValue {
   originalUrl?: string | null;
   projectSlug?: string;
   version?: number;
+  publicPreviewEnabled: boolean;
 
   // State
   copied: boolean;
@@ -154,6 +155,7 @@ interface PreviewProviderProps {
   originalUrl?: string | null;
   projectSlug?: string;
   version?: number;
+  publicPreviewEnabled?: boolean;
   onClose: () => void;
   embedded?: boolean;
 }
@@ -164,6 +166,7 @@ export function PreviewProvider({
   originalUrl,
   projectSlug,
   version,
+  publicPreviewEnabled = true,
   onClose,
   embedded = false,
 }: PreviewProviderProps) {
@@ -893,14 +896,48 @@ export function PreviewProvider({
           : `/vivd-studio/api${url}`;
   const fullUrl = baseUrl || "";
 
+  const getShareablePreviewOrigin = () => {
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("returnTo");
+    if (returnTo) {
+      try {
+        return new URL(returnTo).origin;
+      } catch {
+        // Ignore invalid returnTo values.
+      }
+    }
+
+    if (document.referrer) {
+      try {
+        return new URL(document.referrer).origin;
+      } catch {
+        // Ignore invalid referrers.
+      }
+    }
+
+    return window.location.origin;
+  };
+
   const handleCopy = () => {
     // Always copy the external preview URL, not the internal dev server URL
+    if (!projectSlug) return;
+    if (!publicPreviewEnabled) {
+      toast.error("Preview URL is disabled for this project");
+      return;
+    }
     const shareablePath = `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/`;
-    const absoluteUrl = `${window.location.origin}${shareablePath}`;
+    const absoluteUrl = `${getShareablePreviewOrigin()}${shareablePath}`;
 
-    navigator.clipboard.writeText(absoluteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard
+      .writeText(absoluteUrl)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error("Failed to copy preview URL", { description: message });
+      });
   };
 
   const handleTaskComplete = () => {
@@ -1123,6 +1160,7 @@ export function PreviewProvider({
 
     // Mode
     embedded,
+    publicPreviewEnabled,
   };
 
   return (

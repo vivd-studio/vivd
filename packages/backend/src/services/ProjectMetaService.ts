@@ -195,6 +195,16 @@ class ProjectMetaService {
       .where(eq(projectMeta.slug, slug));
   }
 
+  async setPublicPreviewEnabled(options: {
+    slug: string;
+    enabled: boolean;
+  }): Promise<void> {
+    await db
+      .update(projectMeta)
+      .set({ publicPreviewEnabled: options.enabled, updatedAt: new Date() })
+      .where(eq(projectMeta.slug, options.slug));
+  }
+
   async updateVersionStatus(options: {
     slug: string;
     version: number;

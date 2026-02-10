@@ -26,6 +26,7 @@ interface QuickActionsProps {
   fullUrl: string;
   originalUrl: string | null | undefined;
   copied: boolean;
+  publicPreviewEnabled: boolean;
   handleCopy: () => void;
   handleRefresh: () => void;
   historyPanelOpen: boolean;
@@ -47,6 +48,7 @@ export function QuickActions({
   fullUrl,
   originalUrl,
   copied,
+  publicPreviewEnabled,
   handleCopy,
   handleRefresh,
   historyPanelOpen,
@@ -57,6 +59,7 @@ export function QuickActions({
   publishStatus,
   gradientId = "favicon-gradient",
 }: QuickActionsProps) {
+  const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
   return (
     <>
       {/* Publish Button */}
@@ -156,13 +159,17 @@ export function QuickActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleCopy}>
+          <DropdownMenuItem onClick={handleCopy} disabled={!canCopyPreviewUrl}>
             {copied ? (
               <Check className="w-4 h-4 mr-2 text-green-600" />
             ) : (
               <Copy className="w-4 h-4 mr-2" />
             )}
-            {copied ? "Copied!" : "Copy URL"}
+            {copied
+              ? "Copied!"
+              : publicPreviewEnabled
+                ? "Copy preview URL"
+                : "Preview URL disabled"}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => window.open(fullUrl, "_blank")}>
             <ExternalLink className="w-4 h-4 mr-2" />

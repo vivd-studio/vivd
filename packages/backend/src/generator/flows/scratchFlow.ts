@@ -41,6 +41,25 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+function normalizeReferenceUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(withScheme);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function runScratchFlow(
   ctx: GenerationContext,
   input: ScratchFlowInput,
@@ -78,10 +97,22 @@ export async function runScratchFlow(
     fs.writeFileSync(briefPath, brief);
   }
 
-  // Only write reference URLs if urls.txt doesn't exist and we have URLs
+  const normalizedReferenceUrls = (input.referenceUrls ?? [])
+    .map(normalizeReferenceUrl)
+    .filter((url): url is string => Boolean(url));
+
+  // Keep urls.txt normalized; this ensures plain domains become valid URLs.
   const urlsPath = path.join(ctx.outputDir, "references", "urls.txt");
-  if (input.referenceUrls?.length && !fs.existsSync(urlsPath)) {
-    fs.writeFileSync(urlsPath, input.referenceUrls.join("\n") + "\n");
+  if (normalizedReferenceUrls.length) {
+    const normalizedContent = normalizedReferenceUrls.join("\n") + "\n";
+    if (!fs.existsSync(urlsPath)) {
+      fs.writeFileSync(urlsPath, normalizedContent);
+    } else {
+      const currentContent = fs.readFileSync(urlsPath, "utf-8");
+      if (currentContent !== normalizedContent) {
+        fs.writeFileSync(urlsPath, normalizedContent);
+      }
+    }
   }
 
   // Write base64 assets only if provided (for legacy flow)
@@ -106,10 +137,10 @@ export async function runScratchFlow(
     }
   }
 
-  if (input.referenceUrls?.length) {
+  if (normalizedReferenceUrls.length) {
     ctx.updateStatus("capturing_references");
     await scraperClient.captureScreenshots(
-      input.referenceUrls,
+      normalizedReferenceUrls,
       ctx.outputDir,
       4,
     );

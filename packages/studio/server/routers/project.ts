@@ -26,6 +26,7 @@ import {
   buildAndUploadPublished,
   syncSourceToBucket,
 } from "../services/ArtifactSyncService.js";
+import { syncPushToGitHub } from "../services/GitHubSyncService.js";
 import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
 import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
 import {
@@ -407,6 +408,7 @@ export const projectRouter = router({
           success: true,
           hash: "",
           noChanges: true,
+          github: { attempted: false, success: true } as const,
           message: "No changes to save",
         };
       }
@@ -414,6 +416,12 @@ export const projectRouter = router({
       projectTouchReporter.touch(input.slug);
 
       const projectDir = ctx.workspace.getProjectPath();
+      const github = await syncPushToGitHub({
+        cwd: projectDir,
+        slug: input.slug,
+        version: input.version,
+      });
+
       const config = detectProjectType(projectDir);
       // Keep bucket-backed preview up to date (best-effort, async).
       if (config.framework === "astro") {
@@ -460,6 +468,7 @@ export const projectRouter = router({
         success: true,
         hash,
         noChanges: false,
+        github,
         message: `Saved version with commit ${hash.substring(0, 7)}`,
       };
     }),

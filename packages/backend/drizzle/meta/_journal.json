@@ -57,6 +57,13 @@
       "when": 1770488200993,
       "tag": "0007_slippery_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770720984636,
+      "tag": "0008_graceful_forge",
+      "breakpoints": true
     }
   ]
 }

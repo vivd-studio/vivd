@@ -66,6 +66,7 @@ export function StudioToolbar() {
     hasGitChanges,
     isPublished,
     publishStatus,
+    publicPreviewEnabled,
     handleLoadVersion,
     utils,
     handleClose,
@@ -180,6 +181,7 @@ export function StudioToolbar() {
             fullUrl={fullUrl}
             originalUrl={originalUrl}
             copied={copied}
+            publicPreviewEnabled={publicPreviewEnabled}
             handleCopy={handleCopy}
             handleRefresh={handleRefresh}
             historyPanelOpen={historyPanelOpen}
@@ -210,6 +212,7 @@ export function StudioToolbar() {
             originalUrl={originalUrl}
             fullUrl={fullUrl}
             copied={copied}
+            publicPreviewEnabled={publicPreviewEnabled}
             assetsOpen={assetsOpen}
             setAssetsOpen={setAssetsOpen}
             chatOpen={chatOpen}

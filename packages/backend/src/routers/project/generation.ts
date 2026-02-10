@@ -86,6 +86,32 @@ async function syncArtifactsAfterGeneration(options: {
   });
 }
 
+function normalizeReferenceUrls(urls?: string[]): string[] | undefined {
+  if (!urls?.length) return undefined;
+
+  const normalized = urls
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((raw) =>
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : `https://${raw}`,
+    )
+    .map((candidate) => {
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return null;
+        }
+        return parsed.toString();
+      } catch {
+        return null;
+      }
+    })
+    .filter((url): url is string => Boolean(url));
+
+  if (!normalized.length) return undefined;
+  return Array.from(new Set(normalized));
+}
+
 export const projectGenerationProcedures = {
   generate: adminProcedure
     .input(
@@ -329,6 +355,7 @@ export const projectGenerationProcedures = {
       await checkSingleProjectModeLimit();
 
       validateConfig();
+      const normalizedReferenceUrls = normalizeReferenceUrls(input.referenceUrls);
 
       // Create context with "uploading_assets" status
       const ctx = await createGenerationContext({
@@ -371,10 +398,10 @@ export const projectGenerationProcedures = {
 
       fs.writeFileSync(path.join(ctx.outputDir, "scratch_brief.txt"), brief);
 
-      if (input.referenceUrls?.length) {
+      if (normalizedReferenceUrls?.length) {
         fs.writeFileSync(
           path.join(ctx.outputDir, "references", "urls.txt"),
-          input.referenceUrls.join("\n") + "\n",
+          normalizedReferenceUrls.join("\n") + "\n",
         );
       }
 
@@ -390,7 +417,7 @@ export const projectGenerationProcedures = {
           stylePalette: input.stylePalette,
           styleMode: input.styleMode,
           siteTheme: input.siteTheme,
-          referenceUrls: input.referenceUrls,
+          referenceUrls: normalizedReferenceUrls,
         }),
       );
 
@@ -461,6 +488,15 @@ export const projectGenerationProcedures = {
           console.log(
             `Finished scratch generation for ${slug} (version ${version})`,
           );
+          void syncArtifactsAfterGeneration({
+            versionDir,
+            slug,
+            version,
+          }).catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Post-generation upload failed: ${msg}`);
+          });
+
           // Clean up draft metadata
           try {
             fs.unlinkSync(draftMetaPath);
@@ -692,6 +728,7 @@ export const projectGenerationProcedures = {
             createdAt: manifest.createdAt,
             updatedAt: manifest.updatedAt,
             currentVersion,
+            publicPreviewEnabled: manifest.publicPreviewEnabled,
             totalVersions: manifest.versions.length,
             versions: manifest.versions,
             publishedDomain: publishInfo?.domain ?? null,

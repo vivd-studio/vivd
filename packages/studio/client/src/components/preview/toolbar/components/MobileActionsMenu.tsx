@@ -43,6 +43,7 @@ interface MobileActionsMenuProps {
   originalUrl: string | null | undefined;
   fullUrl: string;
   copied: boolean;
+  publicPreviewEnabled: boolean;
 
   // Edit state
   assetsOpen: boolean;
@@ -89,6 +90,7 @@ export function MobileActionsMenu({
   originalUrl,
   fullUrl,
   copied,
+  publicPreviewEnabled,
   assetsOpen,
   setAssetsOpen,
   chatOpen,
@@ -108,6 +110,7 @@ export function MobileActionsMenu({
   canUseAgent,
   userMenuContent,
 }: MobileActionsMenuProps) {
+  const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -193,9 +196,13 @@ export function MobileActionsMenu({
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh Preview
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleCopy}>
+        <DropdownMenuItem onClick={handleCopy} disabled={!canCopyPreviewUrl}>
           <Copy className="w-4 h-4 mr-2" />
-          {copied ? "Copied!" : "Copy Link"}
+          {copied
+            ? "Copied!"
+            : publicPreviewEnabled
+              ? "Copy preview URL"
+              : "Preview URL disabled"}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => window.open(fullUrl, "_blank")}>
           <ExternalLink className="w-4 h-4 mr-2" />

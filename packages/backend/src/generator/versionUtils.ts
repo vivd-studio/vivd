@@ -55,6 +55,7 @@ export interface ProjectManifest {
   createdAt: string;
   updatedAt?: string; // Last time any file in the project was modified
   currentVersion: number;
+  publicPreviewEnabled: boolean;
   versions: VersionInfo[];
 }
 
@@ -154,6 +155,7 @@ export async function getManifest(slug: string): Promise<ProjectManifest | null>
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt?.toISOString(),
     currentVersion: project.currentVersion,
+    publicPreviewEnabled: project.publicPreviewEnabled,
     versions: versions.map((v) => ({
       version: v.version,
       createdAt: v.createdAt.toISOString(),

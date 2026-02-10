@@ -28,6 +28,8 @@ import {
   Download,
   ExternalLink,
   Settings2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -66,6 +68,7 @@ export interface Project {
   publishedDomain?: string | null;
   publishedVersion?: number | null;
   thumbnailUrl?: string | null;
+  publicPreviewEnabled?: boolean;
 }
 
 interface ProjectCardProps {
@@ -127,8 +130,14 @@ export function ProjectCard({
   const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
+  const canManagePreview = session?.user?.role !== "client_editor";
 
   const handleCopyPreview = () => {
+    if (!publicPreviewEnabled) {
+      toast.error("Preview URL is disabled for this project");
+      return;
+    }
     const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
     const absoluteUrl = `${window.location.origin}${shareablePath}`;
 
@@ -136,6 +145,25 @@ export function ProjectCard({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const setPublicPreviewEnabledMutation =
+    trpc.project.setPublicPreviewEnabled.useMutation({
+      onSuccess: (data) => {
+        toast.success(
+          data.publicPreviewEnabled ? "Preview URL enabled" : "Preview URL disabled",
+        );
+        utils.project.list.invalidate();
+        utils.project.getExternalPreviewStatus.invalidate({
+          slug: project.slug,
+          version: selectedVersion,
+        });
+      },
+      onError: (error) => {
+        toast.error("Failed to update preview URL setting", {
+          description: error.message,
+        });
+      },
+    });
 
   // Sync selectedVersion with project.currentVersion when it changes
   // This ensures we switch to the new version when one is created
@@ -384,15 +412,37 @@ export function ProjectCard({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleCopyPreview}
-                disabled={!isCompleted}
+                disabled={!isCompleted || !publicPreviewEnabled}
               >
                 {copied ? (
                   <Check className="w-4 h-4 mr-2" />
                 ) : (
                   <Copy className="w-4 h-4 mr-2" />
                 )}
-                {copied ? "Copied!" : "Copy preview link"}
+                {copied
+                  ? "Copied!"
+                  : publicPreviewEnabled
+                    ? "Copy preview URL"
+                    : "Preview URL disabled"}
               </DropdownMenuItem>
+              {canManagePreview && (
+                <DropdownMenuItem
+                  onClick={() =>
+                    setPublicPreviewEnabledMutation.mutate({
+                      slug: project.slug,
+                      enabled: !publicPreviewEnabled,
+                    })
+                  }
+                  disabled={setPublicPreviewEnabledMutation.isPending}
+                >
+                  {publicPreviewEnabled ? (
+                    <EyeOff className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Eye className="w-4 h-4 mr-2" />
+                  )}
+                  {publicPreviewEnabled ? "Disable preview URL" : "Enable preview URL"}
+                </DropdownMenuItem>
+              )}
               {isUrlProject && project.url && (
                 <DropdownMenuItem
                   onClick={() => window.open(project.url, "_blank")}

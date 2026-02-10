@@ -71,6 +71,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
     - [x] Snapshots: restore older commit + working-commit tracking
     - [x] Snapshot naming uses total git commit count (not truncated history length)
     - [x] Ignore stale working-commit marker after HEAD-only auto snapshots (prevents persistent false "unsaved changes")
+    - [x] Restore optional GitHub org sync on Studio save (env-driven; best-effort unless `GITHUB_SYNC_STRICT=true`)
 
 - [ ] **Test connected mode end-to-end**
   - [x] Start studio with `MAIN_BACKEND_URL`, `SESSION_TOKEN`, `STUDIO_ID`
@@ -122,13 +123,15 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - Current: Build happens in backend on publish (Astro) and can run in the background on save
   - [ ] Decide where builds run long-term (backend vs studio vs dedicated builder)
   - [ ] Define preview artifact contract (`preview/` in R2, public vs signed)
+  - [x] Add per-project toggle for public preview URLs (`project_meta.publicPreviewEnabled`)
 
 ### 0.5.1 Publishing / Checklist Consolidation (Decided 2026-02-08)
 
 - [ ] **Bucket-first publish + preview (no local project dir dependency in runtime paths)**
   - [x] Publish pipeline must not read from local `projects/<slug>/vN` as source
   - [x] Preview serving must not depend on local `versionDir` detection/fallback in connected/prod mode
-  - [ ] Generation flows may continue using temporary local workspace, then sync artifacts to bucket on completion
+  - [x] Generation flows may continue using temporary local workspace, then sync artifacts to bucket on completion
+  - [x] Restore backend scratch multipart upload route and post-generation artifact sync for 3-step scratch flow
 - [ ] **Reuse preview artifacts for publish**
   - [x] Astro publish uses ready `preview/` artifact (no rebuild on publish)
   - [x] Static publish uses `source/` artifact
@@ -159,6 +162,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 - [ ] **Preview without studio machine**
   - [x] Serve bucket-backed prebuilt previews for quick preview
+  - [x] Support disabling public preview URLs per project (fallback to authenticated access)
   - [ ] User clicks "Edit" → spin up / route to studio machine
 
 ### 0.6 Docker & CI
@@ -184,10 +188,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ## Phase 2: Control Plane Data Model (Organizations + Project Metadata)
 
 - [ ] **New tables**
-  - [ ] `organization` - tenant info, limits, machine reference
-  - [ ] `organization_member` - user-org membership with roles
-  - [ ] `organization_invitation` - pending invites
-  - [ ] `domain` - global domain registry
+  - [ ] `organization` - tenant info, status, limits, machine reference
+  - [ ] `organization_member` - user↔org membership with roles (owner/admin/member/client_editor)
+  - [ ] `organization_invitation` - pending invites (invite-only onboarding)
+  - [ ] `domain` - global domain registry (unique across server)
   - [ ] `subscription_tier` - plan definitions
   - [ ] `tenant_machine` - studio machine registry (url, status, last_active, fly ids)
   - [x] `project_meta` - project list + metadata (slug, title/desc, current version)
@@ -195,7 +199,12 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] `project_publish_checklist` - DB-backed publish checklist
 
 - [ ] **Existing table modifications**
-  - [ ] Add `organization_id` to user, usage_record, usage_period
+  - [ ] Add `active_organization_id` to Better Auth `session` (single-org UX default; supports future multi-org)
+  - [ ] Add `organization_id` to all tenant-scoped tables:
+    - [ ] `project_meta`, `project_version`, `project_publish_checklist`
+    - [ ] `project_member`
+    - [ ] `published_site` (domain stays globally unique)
+    - [ ] `usage_record`, `usage_period`
 
 - [x] **Move metadata to database**
   - Previously: `manifest.json`, `.vivd/project.json`, `.vivd/publish-checklist.json` were file-backed
@@ -210,16 +219,18 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ## Phase 3: Authentication, Organizations, and Email
 
-- [ ] **User registration flow**
-  - [ ] Email/password registration
-  - [ ] Email verification
+- [ ] **Onboarding model (no public signup)**
+  - [ ] Disable open self-registration (sign-up allowed only for bootstrap and/or org invitations)
+  - [ ] Bootstrap super-admin for new installs (first-run only; then lock down)
+  - [ ] Super-admin provisions organizations + initial org owner/admin
+  - [ ] Org admins invite members (invite-only signup) and manage org membership
 
 - [ ] **Password reset flow** (requires email)
 
 - [ ] **Organization management**
-  - [ ] Create org on signup
-  - [ ] Invite users to organization
-  - [ ] Role-based permissions
+  - [ ] Domain-based tenant resolution: visiting `<tenant-domain>/vivd-studio` lands in that org
+  - [ ] Host/org mismatch UX: block access + guide user to correct domain (prevents “logged-in on wrong tenant domain”)
+  - [ ] Role-based permissions (org roles vs super-admin role)
 
 ### Email Integration
 
@@ -234,10 +245,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ## Phase 4: Multi-Tenant Control Plane Adaptation
 
-- [ ] **Query scoping** - all DB queries include `organization_id`
-- [ ] **Limits enforcement** - per-org limits from DB/control plane
-- [ ] **Object storage isolation** - project sources/artifacts namespaced by org/tenant + permissions enforced
-- [ ] **Publishing isolation** - domains/sites scoped to org
+- [ ] **Query scoping** - all tenant data queries include `organization_id` (no cross-tenant reads/writes)
+- [ ] **Limits enforcement** - per-org limits from DB (set via super-admin panel)
+- [ ] **Object storage isolation** - project sources/artifacts namespaced by org/tenant + enforced in backend + studio machine env
+- [ ] **Publishing isolation** - domains/sites scoped to org; domain uniqueness remains server-wide
 - [ ] **Audit log** - record security-relevant actions (studio start/stop, storage writes, publish, invites)
 
 ---
@@ -278,11 +289,12 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ### Super-Admin Panel
 
-- [ ] Super-admin authentication (special role)
-- [ ] List/view all organizations
-- [ ] Modify org limits
-- [ ] Suspend/activate orgs
-- [ ] System-wide usage dashboard
+- [ ] Super-admin authentication (special role; bootstrap existing admin → super-admin)
+- [ ] Super-admin panel access strategy (restricted host + dedicated route under `/vivd-studio`)
+- [ ] Create organizations + initial org owner/admin
+- [ ] List/view all organizations + members
+- [ ] Modify org limits + suspend/activate orgs
+- [ ] System-wide usage dashboard (per-org breakdown)
 
 ---
 
@@ -318,6 +330,8 @@ Studio Machine (isolated; per-tenant or per-edit session)
 |----------|---------|--------|
 | Bucket layout for projects | `tenants/<tenantId>/projects/<slug>[/vN]/{source,preview}/` | In progress |
 | Studio URL pattern | Iframe `/studio/...` vs redirect vs `{org}.vivd.studio` | TBD |
+| Super-admin panel access | Default tenant only vs dedicated admin host | TBD |
+| Tenant resolution source | Host-based (`<domain>/vivd-studio`) vs session active-org vs hybrid | TBD |
 | Build + preview artifacts | Build preview on save; publish reuses ready artifacts from bucket | Decided (2026-02-08) |
 | Thumbnails pipeline | Central scraper vs per-tenant scraper | TBD |
 | Artifact storage | Object storage (R2) | Decided |
@@ -371,6 +385,11 @@ OPENCODE_KILL_ORPHANS=0                 # Optional: disable orphan cleanup (need
 # DEVSERVER_INSTALL_TIMEOUT_MS=900000
 # VIVD_PACKAGE_CACHE_DIR=/home/studio/opencode-data/package-cache
 # DEVSERVER_NODE_MODULES_CACHE=1
+# GitHub sync (forwarded to Fly studio machines by default):
+# GITHUB_SYNC_ENABLED=true
+# GITHUB_ORG=vivd-studio
+# GITHUB_TOKEN=ghp_xxx
+# GITHUB_REPO_PREFIX=dev-
 # STUDIO_HOST=0.0.0.0
 # FLY_STUDIO_ENV_PASSTHROUGH=GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS
 # ... existing env vars
@@ -384,7 +403,8 @@ OPENCODE_KILL_ORPHANS=0                 # Optional: disable orphan cleanup (need
 - `docs/multi-tenant-saas-architecture-plan.md` - control plane vs tenant machine split rationale
 - `docs/studio-package-refactor-plan.md` - standalone studio design notes
 - `docs/publishing-bucket-first-plan.md` - agreed plan for bucket-first publish/preview + checklist DB-only
+- `docs/multi-tenant-refactor/organization-auth-plan.md` - org auth + super-admin + tenant scoping plan
 
 ---
 
-*Last updated: 2026-02-08*
+*Last updated: 2026-02-10*

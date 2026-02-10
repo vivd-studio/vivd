@@ -1,0 +1,1 @@
+ALTER TABLE "project_meta" ADD COLUMN "public_preview_enabled" boolean DEFAULT true NOT NULL;
