@@ -17,7 +17,9 @@ import {
   Activity,
   Wrench,
   LayoutGrid,
+  Building2,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -63,6 +65,11 @@ export function AppSidebar() {
     enabled: !!session,
   });
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
+
+  const { data: orgData } = trpc.organization.getMyOrganization.useQuery(undefined, {
+    enabled: !!session,
+  });
+  const org = orgData?.organization ?? null;
   const isSuperAdmin = session?.user?.role === "super_admin";
   const showSuperAdmin = isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
 
@@ -96,9 +103,9 @@ export function AppSidebar() {
     () => new URLSearchParams(location.search),
     [location.search],
   );
-  const isAdminTabActive = (tab: "users" | "usage" | "maintenance") => {
-    if (!isActive(ROUTES.ADMIN, true)) return false;
-    const currentTab = searchParams.get("tab") ?? "users";
+  const isOrgTabActive = (tab: "members" | "usage" | "maintenance") => {
+    if (!isActive(ROUTES.ORG, true)) return false;
+    const currentTab = searchParams.get("tab") ?? "members";
     return currentTab === tab;
   };
   const isSuperAdminTabActive = (
@@ -114,36 +121,63 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              asChild
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <Link to={ROUTES.DASHBOARD}>
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-amber-500 text-white font-bold">
-                  v
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">
-                    vi
-                    <span
-                      style={{
-                        background:
-                          "linear-gradient(135deg, #10B981 0%, #F59E0B 100%)",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        backgroundClip: "text",
-                      }}
-                    >
-                      vd
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                >
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-amber-500 text-white font-bold">
+                    v
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">
+                      vi
+                      <span
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #10B981 0%, #F59E0B 100%)",
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          backgroundClip: "text",
+                        }}
+                      >
+                        vd
+                      </span>
                     </span>
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    Studio
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {org?.name ?? "Studio"}
+                    </span>
+                  </div>
+                  <ChevronsUpDown className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                side="bottom"
+                align="start"
+                sideOffset={4}
+              >
+                <DropdownMenuLabel className="p-0 font-normal">
+                  <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                    <Building2 className="size-4 text-muted-foreground" />
+                    <span className="truncate font-medium">
+                      {org?.name ?? "Organization"}
+                    </span>
+                    {org && (
+                      <Badge
+                        variant={org.status === "active" ? "default" : "secondary"}
+                        className="ml-auto text-[10px] px-1.5 py-0"
+                      >
+                        {org.status}
+                      </Badge>
+                    )}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {/* Future: multi-org switching options */}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -235,43 +269,27 @@ export function AppSidebar() {
                 </SidebarMenuItem>
 	              </Collapsible>
 
-	              {/* Organization */}
-	              {isOrgAdmin && (
-	                <SidebarMenuItem>
-	                  <SidebarMenuButton
-	                    asChild
-	                    isActive={isActive(ROUTES.ORG)}
-	                    tooltip="Organization"
-	                  >
-	                    <Link to={ROUTES.ORG}>
-	                      <Users />
-	                      <span>Organization</span>
-	                    </Link>
-	                  </SidebarMenuButton>
-	                </SidebarMenuItem>
-	              )}
-
-              {/* Admin - collapsible with sub-items */}
+              {/* Organization - collapsible with sub-items */}
               {isOrgAdmin && (
                 <Collapsible
                   asChild
-                  defaultOpen={isActive(ROUTES.ADMIN)}
+                  defaultOpen={isActive(ROUTES.ORG)}
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
-                        tooltip="Admin"
-                        isActive={isActive(ROUTES.ADMIN)}
+                        tooltip="Organization"
+                        isActive={isActive(ROUTES.ORG)}
                         onClick={(e) => {
                           if (isCollapsed) {
                             e.preventDefault();
-                            navigate(`${ROUTES.ADMIN}?tab=users`);
+                            navigate(`${ROUTES.ORG}?tab=members`);
                           }
                         }}
                       >
-                        <Shield />
-                        <span>Admin</span>
+                        <Building2 />
+                        <span>Organization</span>
                         <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
@@ -280,20 +298,20 @@ export function AppSidebar() {
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={isAdminTabActive("users")}
+                            isActive={isOrgTabActive("members")}
                           >
-                            <Link to={`${ROUTES.ADMIN}?tab=users`}>
+                            <Link to={`${ROUTES.ORG}?tab=members`}>
                               <Users className="size-4" />
-                              <span>Users</span>
+                              <span>Members</span>
                             </Link>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={isAdminTabActive("usage")}
+                            isActive={isOrgTabActive("usage")}
                           >
-                            <Link to={`${ROUTES.ADMIN}?tab=usage`}>
+                            <Link to={`${ROUTES.ORG}?tab=usage`}>
                               <Activity className="size-4" />
                               <span>Usage</span>
                             </Link>
@@ -302,9 +320,9 @@ export function AppSidebar() {
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={isAdminTabActive("maintenance")}
+                            isActive={isOrgTabActive("maintenance")}
                           >
-                            <Link to={`${ROUTES.ADMIN}?tab=maintenance`}>
+                            <Link to={`${ROUTES.ORG}?tab=maintenance`}>
                               <Wrench className="size-4" />
                               <span>Maintenance</span>
                             </Link>

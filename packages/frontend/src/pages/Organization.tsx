@@ -1,37 +1,27 @@
+import { useSearchParams } from "react-router-dom";
+import { Users, Activity, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UsageStatsCard, TenantMaintenanceTab } from "@/components/admin";
+import { TeamSettings } from "@/components/settings/TeamSettings";
 import { trpc } from "@/lib/trpc";
-import { UsageStatsCard } from "@/components/admin";
-
-function formatMaxProjects(value: unknown): string {
-  if (typeof value !== "number") return "Unlimited";
-  if (!Number.isFinite(value) || value <= 0) return "Unlimited";
-  return String(Math.floor(value));
-}
 
 export default function Organization() {
-  const { data: orgData, isLoading, error } =
-    trpc.organization.getMyOrganization.useQuery();
-  const { data: projectsData } = trpc.project.list.useQuery();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab");
+  const currentTab =
+    tab === "usage" || tab === "maintenance" ? tab : "members";
 
+  const { data: orgData, isLoading } =
+    trpc.organization.getMyOrganization.useQuery();
   const org = orgData?.organization ?? null;
-  const projectCount = projectsData?.projects?.length ?? 0;
-  const maxProjectsRaw =
-    org?.limits && typeof org.limits === "object"
-      ? (org.limits as Record<string, unknown>).maxProjects
-      : undefined;
-  const maxProjects = formatMaxProjects(maxProjectsRaw);
+
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value });
+  };
 
   if (isLoading) {
     return <div className="text-muted-foreground">Loading organization…</div>;
-  }
-
-  if (error || !org) {
-    return (
-      <div className="text-red-500">
-        Failed to load organization: {String(error ?? "Unknown error")}
-      </div>
-    );
   }
 
   return (
@@ -39,36 +29,47 @@ export default function Organization() {
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight truncate">
-            {org.name}
+            {org?.name ?? "Organization"}
           </h1>
-          <p className="text-muted-foreground mt-1">Organization settings.</p>
+          <p className="text-muted-foreground mt-1">
+            Manage members, usage, and maintenance for your organization.
+          </p>
         </div>
-        <Badge variant={org.status === "active" ? "default" : "secondary"}>
-          {org.status}
-        </Badge>
+        {org && (
+          <Badge variant={org.status === "active" ? "default" : "secondary"}>
+            {org.status}
+          </Badge>
+        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Limits</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-muted-foreground">GitHub repo prefix</span>
-            <span className="font-mono text-xs">{org.githubRepoPrefix || "—"}</span>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-muted-foreground">Max projects</span>
-            <span className="font-medium">{maxProjects}</span>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-muted-foreground">Current projects</span>
-            <span className="font-medium">{projectCount}</span>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="w-full justify-start">
+          <TabsTrigger value="members" className="gap-2">
+            <Users className="h-4 w-4" />
+            Members
+          </TabsTrigger>
+          <TabsTrigger value="usage" className="gap-2">
+            <Activity className="h-4 w-4" />
+            Usage
+          </TabsTrigger>
+          <TabsTrigger value="maintenance" className="gap-2">
+            <Wrench className="h-4 w-4" />
+            Maintenance
+          </TabsTrigger>
+        </TabsList>
 
-      <UsageStatsCard />
+        <TabsContent value="members" className="mt-6">
+          <TeamSettings />
+        </TabsContent>
+
+        <TabsContent value="usage" className="mt-6">
+          <UsageStatsCard />
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="mt-6">
+          <TenantMaintenanceTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

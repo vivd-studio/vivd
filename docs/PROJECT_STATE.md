@@ -4,6 +4,10 @@
 
 This document tracks the current state of development and serves as the canonical implementation plan. Check off items as they are completed.
 
+Related checklist:
+- `docs/refactoring-day-checklist.md` - maintainability and refactoring backlog for developer productivity.
+- Progress (2026-02-10): started execution; added transaction safety to superadmin member/user mutations and removed unused legacy role mutation route.
+
 ---
 
 ## Guiding Principles
@@ -230,10 +234,13 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Bootstrap super-admin for new installs (first-run only; then lock down)
   - [x] Super-admin provisions organizations + initial org owner/admin (tRPC `superadmin.*`)
   - [x] Org admins add/manage members (set passwords) via org admin panel (`/vivd-studio/admin`)
+  - [x] Org admins can reset organization member passwords from tenant org members page (`/vivd-studio/org?tab=members`)
   - [x] Org admin member table supports inline role/project updates (owner-protected, self-role guarded)
   - [ ] (Later) Invite-only signup + email links (requires SES)
 
 - [ ] **Password reset flow** (requires email)
+  - [x] Admin-assisted password reset implemented (org admin sets a new password for a member)
+  - [ ] Self-service password reset via email link (pending SES + templates)
 
 - [ ] **Organization management**
   - [x] Domain-based tenant resolution: visiting `<tenant-domain>/vivd-studio` lands in that org

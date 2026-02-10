@@ -60,20 +60,28 @@ const limitsPatchSchema = z
   })
   .strict();
 
+const authCreateUserResponseSchema = z
+  .object({
+    user: z.object({
+      id: z.string().min(1),
+    }),
+  })
+  .passthrough();
+
 export const superAdminRouter = router({
   listOrganizations: superAdminProcedure.query(async () => {
-      const rows = await db
-        .select({
-          id: organization.id,
-          slug: organization.slug,
-          name: organization.name,
-          status: organization.status,
-          limits: organization.limits,
-          githubRepoPrefix: organization.githubRepoPrefix,
-          createdAt: organization.createdAt,
-          updatedAt: organization.updatedAt,
-          memberCount: sql<number>`count(${organizationMember.userId})`,
-        })
+    const rows = await db
+      .select({
+        id: organization.id,
+        slug: organization.slug,
+        name: organization.name,
+        status: organization.status,
+        limits: organization.limits,
+        githubRepoPrefix: organization.githubRepoPrefix,
+        createdAt: organization.createdAt,
+        updatedAt: organization.updatedAt,
+        memberCount: sql<number>`count(${organizationMember.userId})`,
+      })
       .from(organization)
       .leftJoin(
         organizationMember,
@@ -111,7 +119,8 @@ export const superAdminRouter = router({
         }),
       ]);
 
-      const maxProjectsRaw = (org?.limits as any)?.maxProjects;
+      const maxProjectsRaw = (org?.limits as { maxProjects?: unknown } | null | undefined)
+        ?.maxProjects;
       const maxProjects =
         typeof maxProjectsRaw === "number" && Number.isFinite(maxProjectsRaw) && maxProjectsRaw > 0
           ? Math.floor(maxProjectsRaw)
@@ -288,27 +297,6 @@ export const superAdminRouter = router({
       };
     }),
 
-  setOrganizationMemberRole: superAdminProcedure
-    .input(
-      z.object({
-        organizationId: organizationIdSchema,
-        userId: z.string().min(1),
-        role: organizationRoleSchema,
-      }),
-    )
-    .mutation(async ({ input }) => {
-      await db
-        .update(organizationMember)
-        .set({ role: input.role })
-        .where(
-          and(
-            eq(organizationMember.organizationId, input.organizationId),
-            eq(organizationMember.userId, input.userId),
-          ),
-        );
-      return { success: true };
-    }),
-
   updateOrganizationMemberRole: superAdminProcedure
     .input(
       z
@@ -328,71 +316,73 @@ export const superAdminRouter = router({
         throw new Error("You cannot change your own role");
       }
 
-      const membership = await db.query.organizationMember.findFirst({
-        where: and(
-          eq(organizationMember.organizationId, input.organizationId),
-          eq(organizationMember.userId, input.userId),
-        ),
-        columns: { role: true },
-      });
-
-      if (!membership) {
-        throw new Error("Member not found");
-      }
-
-      if (membership.role === "owner") {
-        throw new Error("Owner role cannot be changed in v1");
-      }
-
-      if (input.role === "client_editor" && input.projectSlug) {
-        const project = await db.query.projectMeta.findFirst({
+      await db.transaction(async (tx) => {
+        const membership = await tx.query.organizationMember.findFirst({
           where: and(
-            eq(projectMeta.organizationId, input.organizationId),
-            eq(projectMeta.slug, input.projectSlug),
-          ),
-          columns: { slug: true },
-        });
-        if (!project) {
-          throw new Error("Project not found");
-        }
-      }
-
-      await db
-        .update(organizationMember)
-        .set({ role: input.role })
-        .where(
-          and(
             eq(organizationMember.organizationId, input.organizationId),
             eq(organizationMember.userId, input.userId),
           ),
-        );
+          columns: { role: true },
+        });
 
-      const globalRole = getGlobalUserRoleForOrganizationRole(input.role);
-      await db.update(userTable).set({ role: globalRole }).where(eq(userTable.id, input.userId));
+        if (!membership) {
+          throw new Error("Member not found");
+        }
 
-      if (input.role === "client_editor" && input.projectSlug) {
-        await db
-          .insert(projectMember)
-          .values({
-            id: crypto.randomUUID(),
-            organizationId: input.organizationId,
-            userId: input.userId,
-            projectSlug: input.projectSlug,
-          })
-          .onConflictDoUpdate({
-            target: [projectMember.organizationId, projectMember.userId],
-            set: { projectSlug: input.projectSlug },
+        if (membership.role === "owner") {
+          throw new Error("Owner role cannot be changed in v1");
+        }
+
+        if (input.role === "client_editor" && input.projectSlug) {
+          const project = await tx.query.projectMeta.findFirst({
+            where: and(
+              eq(projectMeta.organizationId, input.organizationId),
+              eq(projectMeta.slug, input.projectSlug),
+            ),
+            columns: { slug: true },
           });
-      } else {
-        await db
-          .delete(projectMember)
+          if (!project) {
+            throw new Error("Project not found");
+          }
+        }
+
+        await tx
+          .update(organizationMember)
+          .set({ role: input.role })
           .where(
             and(
-              eq(projectMember.organizationId, input.organizationId),
-              eq(projectMember.userId, input.userId),
+              eq(organizationMember.organizationId, input.organizationId),
+              eq(organizationMember.userId, input.userId),
             ),
           );
-      }
+
+        const globalRole = getGlobalUserRoleForOrganizationRole(input.role);
+        await tx.update(userTable).set({ role: globalRole }).where(eq(userTable.id, input.userId));
+
+        if (input.role === "client_editor" && input.projectSlug) {
+          await tx
+            .insert(projectMember)
+            .values({
+              id: crypto.randomUUID(),
+              organizationId: input.organizationId,
+              userId: input.userId,
+              projectSlug: input.projectSlug,
+            })
+            .onConflictDoUpdate({
+              target: [projectMember.organizationId, projectMember.userId],
+              set: { projectSlug: input.projectSlug },
+            });
+        } else {
+          await tx
+            .delete(projectMember)
+            .where(
+              and(
+                eq(projectMember.organizationId, input.organizationId),
+                eq(projectMember.userId, input.userId),
+              ),
+            );
+        }
+      });
 
       return { success: true };
     }),
@@ -461,7 +451,7 @@ export const superAdminRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const headers = headersFromNode(ctx.req.headers as any);
+      const headers = headersFromNode(ctx.req.headers as Record<string, unknown>);
 
       if (input.organizationRole === "client_editor" && !input.projectSlug) {
         throw new Error("Project is required for client editor accounts");
@@ -494,37 +484,40 @@ export const superAdminRouter = router({
         },
       });
 
-      const createdUserId = (created as any)?.user?.id as string | undefined;
-      if (!createdUserId) {
+      const parsedCreateUser = authCreateUserResponseSchema.safeParse(created);
+      if (!parsedCreateUser.success) {
         throw new Error("Failed to create user");
       }
+      const createdUserId = parsedCreateUser.data.user.id;
 
-      await db
-        .insert(organizationMember)
-        .values({
-          id: crypto.randomUUID(),
-          organizationId: input.organizationId,
-          userId: createdUserId,
-          role: input.organizationRole,
-        })
-        .onConflictDoNothing({
-          target: [organizationMember.organizationId, organizationMember.userId],
-        });
-
-      if (input.organizationRole === "client_editor" && input.projectSlug) {
-        await db
-          .insert(projectMember)
+      await db.transaction(async (tx) => {
+        await tx
+          .insert(organizationMember)
           .values({
             id: crypto.randomUUID(),
             organizationId: input.organizationId,
             userId: createdUserId,
-            projectSlug: input.projectSlug,
+            role: input.organizationRole,
           })
-          .onConflictDoUpdate({
-            target: [projectMember.organizationId, projectMember.userId],
-            set: { projectSlug: input.projectSlug },
+          .onConflictDoNothing({
+            target: [organizationMember.organizationId, organizationMember.userId],
           });
-      }
+
+        if (input.organizationRole === "client_editor" && input.projectSlug) {
+          await tx
+            .insert(projectMember)
+            .values({
+              id: crypto.randomUUID(),
+              organizationId: input.organizationId,
+              userId: createdUserId,
+              projectSlug: input.projectSlug,
+            })
+            .onConflictDoUpdate({
+              target: [projectMember.organizationId, projectMember.userId],
+              set: { projectSlug: input.projectSlug },
+            });
+        }
+      });
 
       return { success: true, userId: createdUserId };
     }),

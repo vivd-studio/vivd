@@ -25,6 +25,7 @@ import { useEffect } from "react";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
 });
 
 const passwordSchema = z
@@ -50,6 +51,7 @@ export default function Settings() {
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name: "",
+      email: "",
     },
   });
 
@@ -66,28 +68,56 @@ export default function Settings() {
     if (session?.user) {
       profileForm.reset({
         name: session.user.name,
+        email: session.user.email,
       });
     }
   }, [session, profileForm]);
 
   const handleUpdateProfile = async (data: ProfileFormValues) => {
-    await authClient.updateUser(
-      {
+    if (!session?.user) {
+      toast.error("Error", { description: "Session not available. Please try again." });
+      return;
+    }
+
+    const currentName = session?.user.name ?? "";
+    const currentEmail = session?.user.email ?? "";
+    const changedName = data.name !== currentName;
+    const changedEmail = data.email.toLowerCase() !== currentEmail.toLowerCase();
+
+    if (!changedName && !changedEmail) {
+      toast.message("No changes to save");
+      return;
+    }
+
+    if (changedName) {
+      const result = await authClient.updateUser({
         name: data.name,
-      },
-      {
-        onSuccess: () => {
-          toast.success("Profile updated", {
-            description: "Your name has been updated successfully.",
-          });
-        },
-        onError: (ctx) => {
-          toast.error("Error", {
-            description: ctx.error.message,
-          });
-        },
-      },
-    );
+      });
+      if (result.error) {
+        toast.error("Error", {
+          description: result.error.message,
+        });
+        return;
+      }
+    }
+
+    if (changedEmail) {
+      const result = await authClient.changeEmail({
+        newEmail: data.email,
+      });
+      if (result.error) {
+        toast.error("Error", {
+          description: result.error.message,
+        });
+        return;
+      }
+    }
+
+    toast.success("Profile updated", {
+      description: changedEmail
+        ? "Your profile was updated. If required, confirm your new email address."
+        : "Your profile has been updated successfully.",
+    });
   };
 
   const handleUpdatePassword = async (data: PasswordFormValues) => {
@@ -125,7 +155,7 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle>Profile</CardTitle>
-          <CardDescription>Update your personal information.</CardDescription>
+          <CardDescription>Update your personal information and email.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...profileForm}>
@@ -141,6 +171,19 @@ export default function Settings() {
                     <FormLabel>Name</FormLabel>
                     <FormControl>
                       <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={profileForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { Loader2, UserPlus, Trash2 } from "lucide-react";
+import { Loader2, UserPlus, Trash2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -25,6 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const createUserSchema = z
   .object({
@@ -42,11 +50,26 @@ const createUserSchema = z
     },
   );
 
+const resetMemberPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
+
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
+type ResetMemberPasswordFormValues = z.infer<typeof resetMemberPasswordSchema>;
 type EditableMemberRole = "admin" | "member" | "client_editor";
 type MemberEditState = {
   role: EditableMemberRole;
   projectSlug: string;
+};
+type PasswordResetTarget = {
+  userId: string;
+  email: string;
 };
 
 function formatRole(role: string): string {
@@ -78,6 +101,8 @@ export function TeamSettings() {
   const [memberEdits, setMemberEdits] = useState<Record<string, MemberEditState>>(
     {},
   );
+  const [passwordResetTarget, setPasswordResetTarget] =
+    useState<PasswordResetTarget | null>(null);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery();
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
@@ -107,6 +132,13 @@ export function TeamSettings() {
       password: "",
       role: "member",
       projectSlug: undefined,
+    },
+  });
+  const resetPasswordForm = useForm<ResetMemberPasswordFormValues>({
+    resolver: zodResolver(resetMemberPasswordSchema),
+    defaultValues: {
+      newPassword: "",
+      confirmPassword: "",
     },
   });
 
@@ -143,6 +175,21 @@ export function TeamSettings() {
       toast.error("Failed to update member", { description: error.message });
     },
   });
+  const resetMemberPasswordMutation = trpc.organization.resetMemberPassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password reset");
+      resetPasswordForm.reset();
+      setPasswordResetTarget(null);
+    },
+    onError: (error) => {
+      toast.error("Failed to reset password", { description: error.message });
+    },
+  });
+
+  const closePasswordResetDialog = () => {
+    setPasswordResetTarget(null);
+    resetPasswordForm.reset();
+  };
 
   if (!isOrgAdmin) return null;
 
@@ -316,6 +363,7 @@ export function TeamSettings() {
                   const isOwner = member.role === "owner";
                   const isSelf = member.userId === session?.user?.id;
                   const canRemove = !isOwner && !isSelf;
+                  const canResetPassword = !isOwner && !isSelf;
                   const currentEdit =
                     memberEdits[member.userId] ??
                     (isOwner
@@ -426,6 +474,23 @@ export function TeamSettings() {
                           </Button>
                           <Button
                             type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!canResetPassword || resetMemberPasswordMutation.isPending}
+                            onClick={() => {
+                              if (!canResetPassword) return;
+                              setPasswordResetTarget({
+                                userId: member.userId,
+                                email: member.user.email,
+                              });
+                              resetPasswordForm.reset();
+                            }}
+                          >
+                            <KeyRound className="h-4 w-4 mr-2" />
+                            Reset Password
+                          </Button>
+                          <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             disabled={!canRemove || removeMemberMutation.isPending}
@@ -452,6 +517,76 @@ export function TeamSettings() {
             </table>
           </div>
         )}
+        <Dialog
+          open={!!passwordResetTarget}
+          onOpenChange={(open) => {
+            if (!open) closePasswordResetDialog();
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>
+                Set a new password for {passwordResetTarget?.email ?? "this member"}.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...resetPasswordForm}>
+              <form
+                onSubmit={resetPasswordForm.handleSubmit((values) => {
+                  if (!passwordResetTarget) return;
+                  resetMemberPasswordMutation.mutate({
+                    userId: passwordResetTarget.userId,
+                    newPassword: values.newPassword,
+                  });
+                })}
+                className="space-y-4"
+              >
+                <FormField
+                  control={resetPasswordForm.control}
+                  name="newPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New Password</FormLabel>
+                      <FormControl>
+                        <PasswordInput placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={resetPasswordForm.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <PasswordInput placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={closePasswordResetDialog}
+                    disabled={resetMemberPasswordMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={resetMemberPasswordMutation.isPending}>
+                    {resetMemberPasswordMutation.isPending ? (
+                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    ) : null}
+                    Reset Password
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

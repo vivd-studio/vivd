@@ -18,7 +18,6 @@ export const ROUTES = {
   // Main app (inside layout)
   DASHBOARD: "/vivd-studio",
   SETTINGS: "/vivd-studio/settings",
-  ADMIN: "/vivd-studio/admin",
   ORG: "/vivd-studio/org",
   SUPERADMIN_BASE: "/vivd-studio/superadmin",
   SUPERADMIN_ORGS: "/vivd-studio/superadmin/orgs",

@@ -132,7 +132,7 @@ export function SingleProjectModeLayoutGuard({
   // In single project mode, only redirect project-related routes to fullscreen
   // Admin and Settings pages should remain accessible
   if (config.singleProjectMode) {
-    const isAdminRoute = location.pathname.startsWith(ROUTES.ADMIN);
+    const isAdminRoute = location.pathname.startsWith("/vivd-studio/admin");
     const isSettingsRoute = location.pathname.startsWith(ROUTES.SETTINGS);
     const isSuperAdminRoute = location.pathname.startsWith(ROUTES.SUPERADMIN_BASE);
     const isOrgRoute = location.pathname.startsWith(ROUTES.ORG);

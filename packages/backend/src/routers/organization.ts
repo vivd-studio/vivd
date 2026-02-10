@@ -292,6 +292,60 @@ export const organizationRouter = router({
       return { success: true };
     }),
 
+  resetMemberPassword: orgAdminProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+        newPassword: z.string().min(8),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      if (input.userId === ctx.session.user.id) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Use account settings to change your own password",
+        });
+      }
+
+      const membership = await db.query.organizationMember.findFirst({
+        where: and(
+          eq(organizationMember.organizationId, organizationId),
+          eq(organizationMember.userId, input.userId),
+        ),
+        columns: { role: true },
+      });
+
+      if (!membership) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Member not found",
+        });
+      }
+
+      if (membership.role === "owner" && ctx.session.user.role !== "super_admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Owner password cannot be reset by organization admins",
+        });
+      }
+
+      try {
+        await auth.api.setUserPassword({
+          body: {
+            userId: input.userId,
+            newPassword: input.newPassword,
+          },
+        } as any);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to reset password";
+        throw new TRPCError({ code: "BAD_REQUEST", message });
+      }
+
+      return { success: true };
+    }),
+
   removeMember: orgAdminProcedure
     .input(
       z.object({

@@ -1,8 +1,7 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Signup from "@/pages/Signup";
-import Admin from "@/pages/Admin";
 import Organization from "@/pages/Organization";
 import SuperAdmin from "@/pages/SuperAdmin";
 import Settings from "@/pages/Settings";
@@ -91,6 +90,19 @@ function ScratchWizardRoute() {
   );
 }
 
+/**
+ * Backward-compat redirect from old /admin routes to /org.
+ * Maps ?tab=users → ?tab=members; usage and maintenance pass through.
+ */
+function AdminRedirect() {
+  const [searchParams] = useSearchParams();
+  const tab = searchParams.get("tab");
+  let newTab = "members";
+  if (tab === "usage") newTab = "usage";
+  else if (tab === "maintenance") newTab = "maintenance";
+  return <Navigate to={`${ROUTES.ORG}?tab=${newTab}`} replace />;
+}
+
 interface AppRoutesProps {
   hasUsers: boolean;
 }
@@ -151,14 +163,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           }
         />
         <Route path="no-project" element={<NoProjectAssigned />} />
-        <Route
-          path="admin"
-          element={
-            <RequireOrgAdmin>
-              <Admin />
-            </RequireOrgAdmin>
-          }
-        />
+        <Route path="admin" element={<AdminRedirect />} />
         <Route
           path="superadmin"
           element={
@@ -195,7 +200,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           path="superadmin/usage"
           element={
             <RequireSuperAdmin>
-              <Navigate to={`${ROUTES.ADMIN}?tab=usage`} replace />
+              <Navigate to={`${ROUTES.ORG}?tab=usage`} replace />
             </RequireSuperAdmin>
           }
         />

@@ -35,8 +35,8 @@ function getPageInfo(pathname: string): PageInfo {
   if (pathname === "/vivd-studio" || pathname === "/vivd-studio/") {
     return { title: "Projects", isProjectPage: false };
   }
-  if (pathname.startsWith("/vivd-studio/admin")) {
-    return { title: "Admin", isProjectPage: false };
+  if (pathname.startsWith("/vivd-studio/org")) {
+    return { title: "Organization", isProjectPage: false };
   }
   if (pathname.startsWith("/vivd-studio/settings")) {
     return { title: "Settings", isProjectPage: false };
