@@ -24,12 +24,13 @@ export const projectPublishProcedures = {
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version, domain, expectedCommitHash } = input;
       const userId = ctx.session.user.id;
 
-      const studioRunning = await studioMachineProvider.isRunning(slug, version);
+      const studioRunning = await studioMachineProvider.isRunning(organizationId, slug, version);
       if (studioRunning) {
-        const workspaceState = studioWorkspaceStateService.getRecent(slug, version);
+        const workspaceState = studioWorkspaceStateService.getRecent(organizationId, slug, version);
         if (!workspaceState?.isFresh) {
           throw new TRPCError({
             code: "CONFLICT",
@@ -50,6 +51,7 @@ export const projectPublishProcedures = {
 
       try {
         const result = await publishService.publish({
+          organizationId,
           projectSlug: slug,
           version,
           domain,
@@ -79,10 +81,11 @@ export const projectPublishProcedures = {
         slug: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug } = input;
 
-      await publishService.unpublish(slug);
+      await publishService.unpublish(organizationId, slug);
 
       return {
         success: true,
@@ -99,10 +102,11 @@ export const projectPublishProcedures = {
         slug: z.string(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug } = input;
 
-      const info = await publishService.getPublishedInfo(slug);
+      const info = await publishService.getPublishedInfo(organizationId, slug);
 
       if (!info) {
         return {
@@ -139,7 +143,8 @@ export const projectPublishProcedures = {
         slug: z.string().optional(), // Current project slug for exclusion
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { domain, slug } = input;
 
       // Normalize and validate
@@ -154,7 +159,10 @@ export const projectPublishProcedures = {
         };
       }
 
-      const available = await publishService.isDomainAvailable(normalized, slug);
+      const available = await publishService.isDomainAvailable(
+        normalized,
+        slug ? { organizationId, projectSlug: slug } : undefined,
+      );
 
       return {
         available,
@@ -174,14 +182,15 @@ export const projectPublishProcedures = {
         version: z.number(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version } = input;
 
       const [artifactState, studioRunning] = await Promise.all([
-        resolvePublishableArtifactState({ slug, version }),
-        studioMachineProvider.isRunning(slug, version),
+        resolvePublishableArtifactState({ organizationId, slug, version }),
+        studioMachineProvider.isRunning(organizationId, slug, version),
       ]);
-      const workspaceState = studioWorkspaceStateService.getRecent(slug, version);
+      const workspaceState = studioWorkspaceStateService.getRecent(organizationId, slug, version);
       const studioStateAvailable = Boolean(studioRunning && workspaceState?.isFresh);
       const studioHasUnsavedChanges = Boolean(
         studioStateAvailable && workspaceState?.hasUnsavedChanges,
@@ -217,12 +226,13 @@ export const projectPublishProcedures = {
         version: z.number(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version } = input;
       const [checklist, versionMeta, artifactState] = await Promise.all([
-        projectMetaService.getPublishChecklist({ slug, version }),
-        projectMetaService.getProjectVersion(slug, version),
-        resolvePublishableArtifactState({ slug, version }),
+        projectMetaService.getPublishChecklist({ organizationId, slug, version }),
+        projectMetaService.getProjectVersion(organizationId, slug, version),
+        resolvePublishableArtifactState({ organizationId, slug, version }),
       ]);
 
       if (!checklist) {

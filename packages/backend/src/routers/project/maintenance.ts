@@ -36,6 +36,7 @@ import { applyProjectTemplateFiles } from "../../generator/templateFiles";
 import type { GenerationSource } from "../../generator/flows/types";
 import {
   createS3Client,
+  doesObjectExist,
   getObjectStorageConfigFromEnv,
   uploadDirectoryToBucket,
 } from "../../services/ObjectStorageService";
@@ -45,6 +46,7 @@ import {
   deleteProjectVersionArtifactsFromBucket,
 } from "../../services/ProjectArtifactsService";
 import { studioMachineProvider } from "../../services/studioMachines";
+import { projectMetaService } from "../../services/ProjectMetaService";
 
 export const projectMaintenanceProcedures = {
   /**
@@ -58,21 +60,22 @@ export const projectMaintenanceProcedures = {
         version: z.number().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId ?? "default";
       const { slug, version } = input;
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) throw new Error("Project not found");
 
-      const targetVersion = version ?? (await getCurrentVersion(slug));
+      const targetVersion = version ?? (await getCurrentVersion(organizationId, slug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
 
-      const versionData = await getVersionData(slug, targetVersion);
+      const versionData = await getVersionData(organizationId, slug, targetVersion);
       const currentStatus = versionData?.status || "unknown";
 
       // Update the status to 'failed'
-      await updateVersionStatus(slug, targetVersion, "failed");
+      await updateVersionStatus(organizationId, slug, targetVersion, "failed");
 
       console.log(
         `[Admin] Reset status for ${slug}/v${targetVersion}: ${currentStatus} -> failed`
@@ -92,8 +95,9 @@ export const projectMaintenanceProcedures = {
    * Admin maintenance: move vivd process files into `.vivd/` for all versions.
    * Keeps the version root clean and prevents accidental public access to process artifacts.
    */
-  migrateVivdProcessFiles: ownerProcedure.mutation(async () => {
-    const projectDirs = await listProjectSlugs();
+  migrateVivdProcessFiles: ownerProcedure.mutation(async ({ ctx }) => {
+    const organizationId = ctx.organizationId ?? "default";
+    const projectDirs = await listProjectSlugs(organizationId);
     if (projectDirs.length === 0) {
       return {
         success: true,
@@ -140,17 +144,17 @@ export const projectMaintenanceProcedures = {
       } catch (e) {
         errors.push({
           slug,
-          versionDir: getProjectDir(slug),
+          versionDir: getProjectDir(organizationId, slug),
           error: e instanceof Error ? e.message : String(e),
         });
         continue;
       }
 
-      const projectDir = getProjectDir(slug);
+      const projectDir = getProjectDir(organizationId, slug);
       if (!fs.existsSync(projectDir)) continue;
 
       // Only treat directories with a manifest as projects; legacy projects are handled above.
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) continue;
 
       const versionFolders = fs
@@ -209,7 +213,8 @@ export const projectMaintenanceProcedures = {
         })
         .optional()
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId ?? "default";
       const overwrite = input?.overwrite ?? false;
 
       const written: Record<string, number> = {
@@ -223,7 +228,7 @@ export const projectMaintenanceProcedures = {
       let versionsTouched = 0;
       const errors: Array<{ slug: string; versionDir: string; error: string }> =
         [];
-      const projectDirs = await listProjectSlugs();
+      const projectDirs = await listProjectSlugs(organizationId);
       if (projectDirs.length === 0) {
         return {
           success: true,
@@ -247,16 +252,16 @@ export const projectMaintenanceProcedures = {
         } catch (e) {
           errors.push({
             slug,
-            versionDir: getProjectDir(slug),
+            versionDir: getProjectDir(organizationId, slug),
             error: e instanceof Error ? e.message : String(e),
           });
           continue;
         }
 
-        const manifest = await getManifest(slug);
+        const manifest = await getManifest(organizationId, slug);
         if (!manifest) continue;
 
-        const projectDir = getProjectDir(slug);
+        const projectDir = getProjectDir(organizationId, slug);
         if (!fs.existsSync(projectDir)) continue;
 
         const versionFolders = fs
@@ -271,7 +276,7 @@ export const projectMaintenanceProcedures = {
           const versionNumber = Number(folder.slice(1));
           const versionData =
             Number.isFinite(versionNumber) && versionNumber > 0
-              ? await getVersionData(slug, versionNumber)
+              ? await getVersionData(organizationId, slug, versionNumber)
               : null;
 
           const rawSource = (versionData?.source ??
@@ -354,7 +359,7 @@ export const projectMaintenanceProcedures = {
 
     const tenantId = getActiveTenantId();
 
-    const projectDirs = await listProjectSlugs();
+    const projectDirs = await listProjectSlugs(tenantId);
     if (projectDirs.length === 0) {
       return {
         success: true,
@@ -410,17 +415,17 @@ export const projectMaintenanceProcedures = {
       } catch (e) {
         errors.push({
           slug,
-          versionDir: getProjectDir(slug),
+          versionDir: getProjectDir(tenantId, slug),
           error: e instanceof Error ? e.message : String(e),
         });
         continue;
       }
 
-      const projectDir = getProjectDir(slug);
+      const projectDir = getProjectDir(tenantId, slug);
       if (!fs.existsSync(projectDir)) continue;
 
       // Keep behavior consistent with other migrations: only process projects with a manifest.
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(tenantId, slug);
       if (!manifest) continue;
 
       const versionFolders = fs
@@ -495,7 +500,8 @@ export const projectMaintenanceProcedures = {
         confirmationText: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, confirmationText } = input;
 
       // Safety check: confirmation text must match the project slug
@@ -505,20 +511,20 @@ export const projectMaintenanceProcedures = {
         );
       }
 
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) throw new Error("Project not found");
 
       // Check if project is published - cannot delete published projects
-      const publishInfo = await publishService.getPublishedInfo(slug);
+      const publishInfo = await publishService.getPublishedInfo(organizationId, slug);
       if (publishInfo) {
         throw new Error(
           `Cannot delete a published project. Please unpublish "${publishInfo.domain}" first.`
         );
       }
 
-      const projectDir = getProjectDir(slug);
+      const projectDir = getProjectDir(organizationId, slug);
       const legacyProjectDir = path.join(getProjectsRootDir(), slug);
-      const tenantProjectDir = path.join(getTenantProjectsDir(), slug);
+      const tenantProjectDir = path.join(getTenantProjectsDir(organizationId), slug);
       const projectDirPrefixes = Array.from(
         new Set([projectDir, legacyProjectDir, tenantProjectDir]),
       );
@@ -527,7 +533,7 @@ export const projectMaintenanceProcedures = {
       // This prevents a studio from writing new artifacts after we delete DB/bucket state.
       for (const v of manifest.versions) {
         try {
-          await studioMachineProvider.stop(slug, v.version);
+          await studioMachineProvider.stop(organizationId, slug, v.version);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(
@@ -540,11 +546,23 @@ export const projectMaintenanceProcedures = {
       await db.transaction(async (tx) => {
         await tx
           .delete(projectMember)
-          .where(eq(projectMember.projectSlug, slug));
-        await tx.delete(projectMeta).where(eq(projectMeta.slug, slug));
+          .where(
+            and(
+              eq(projectMember.organizationId, organizationId),
+              eq(projectMember.projectSlug, slug),
+            ),
+          );
+        await tx
+          .delete(projectMeta)
+          .where(and(eq(projectMeta.organizationId, organizationId), eq(projectMeta.slug, slug)));
         await tx
           .delete(publishedSite)
-          .where(eq(publishedSite.projectSlug, slug));
+          .where(
+            and(
+              eq(publishedSite.organizationId, organizationId),
+              eq(publishedSite.projectSlug, slug),
+            ),
+          );
       });
       console.log(`[Delete] Removed DB records for: ${slug}`);
 
@@ -562,7 +580,7 @@ export const projectMaintenanceProcedures = {
       } | null = null;
 
       try {
-        const res = await deleteProjectArtifactsFromBucket({ slug });
+        const res = await deleteProjectArtifactsFromBucket({ organizationId, slug });
         bucketCleanup = res.deleted
           ? { attempted: true, objectsDeleted: res.objectsDeleted }
           : { attempted: false };
@@ -602,7 +620,8 @@ export const projectMaintenanceProcedures = {
         confirmationText: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version, confirmationText } = input;
 
       // Safety check: confirmation text must match "v{N}"
@@ -613,7 +632,7 @@ export const projectMaintenanceProcedures = {
         );
       }
 
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) throw new Error("Project not found");
 
       const versionExists = manifest.versions.some((v) => v.version === version);
@@ -625,6 +644,7 @@ export const projectMaintenanceProcedures = {
         .from(publishedSite)
         .where(
           and(
+            eq(publishedSite.organizationId, organizationId),
             eq(publishedSite.projectSlug, slug),
             eq(publishedSite.projectVersion, version)
           )
@@ -646,7 +666,7 @@ export const projectMaintenanceProcedures = {
 
       // Stop any running studio machine for this version.
       try {
-        await studioMachineProvider.stop(slug, version);
+        await studioMachineProvider.stop(organizationId, slug, version);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(
@@ -655,7 +675,7 @@ export const projectMaintenanceProcedures = {
       }
 
       // Delete the version using the utility function
-      await deleteVersionUtil(slug, version);
+      await deleteVersionUtil(organizationId, slug, version);
       console.log(`[DeleteVersion] Permanently deleted version: ${slug}/v${version}`);
 
       let bucketCleanup: {
@@ -665,7 +685,11 @@ export const projectMaintenanceProcedures = {
       } | null = null;
 
       try {
-        const res = await deleteProjectVersionArtifactsFromBucket({ slug, version });
+        const res = await deleteProjectVersionArtifactsFromBucket({
+          organizationId,
+          slug,
+          version,
+        });
         bucketCleanup = res.deleted
           ? { attempted: true, objectsDeleted: res.objectsDeleted }
           : { attempted: false };
@@ -705,9 +729,9 @@ export const projectMaintenanceProcedures = {
         version: z.number(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version } = input;
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
 
       if (!fs.existsSync(versionDir)) {
         throw new Error("Project version not found");
@@ -756,8 +780,9 @@ export const projectMaintenanceProcedures = {
    * Untracks build cache directories (.astro, node_modules, etc.) that were
    * accidentally committed before being added to .gitignore.
    */
-  fixGitignoreAll: ownerProcedure.mutation(async () => {
-    const projectDirs = await listProjectSlugs();
+  fixGitignoreAll: ownerProcedure.mutation(async ({ ctx }) => {
+    const organizationId = ctx.organizationId ?? "default";
+    const projectDirs = await listProjectSlugs(organizationId);
     if (projectDirs.length === 0) {
       return {
         success: true,
@@ -791,10 +816,10 @@ export const projectMaintenanceProcedures = {
     for (const slug of projectDirs) {
       projectsScanned++;
 
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) continue;
 
-      const projectDir = getProjectDir(slug);
+      const projectDir = getProjectDir(organizationId, slug);
       if (!fs.existsSync(projectDir)) continue;
 
       const versionFolders = fs
@@ -855,9 +880,42 @@ export const projectMaintenanceProcedures = {
         })
         .optional()
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId ?? "default";
       const onlyMissing = input?.onlyMissing ?? true;
-      const projectDirs = await listProjectSlugs();
+      const thumbnailStorage = (() => {
+        try {
+          const config = getObjectStorageConfigFromEnv();
+          return {
+            client: createS3Client(config),
+            bucket: config.bucket,
+          };
+        } catch {
+          return null;
+        }
+      })();
+
+      const hasExistingThumbnail = async (options: {
+        thumbnailKey?: string | null;
+        versionDir: string;
+      }): Promise<boolean> => {
+        if (thumbnailStorage) {
+          if (!options.thumbnailKey) return false;
+          return doesObjectExist({
+            client: thumbnailStorage.client,
+            bucket: thumbnailStorage.bucket,
+            key: options.thumbnailKey,
+          });
+        }
+
+        const thumbnailPath = getVivdInternalFilesPath(
+          options.versionDir,
+          "thumbnail.webp",
+        );
+        return fs.existsSync(thumbnailPath);
+      };
+
+      const projectDirs = await listProjectSlugs(organizationId);
       if (projectDirs.length === 0) {
         return {
           success: true,
@@ -877,40 +935,28 @@ export const projectMaintenanceProcedures = {
 
       for (const slug of projectDirs) {
         projectsScanned++;
-
-        const manifest = await getManifest(slug);
-        if (!manifest) continue;
-
-        const projectDir = getProjectDir(slug);
-        if (!fs.existsSync(projectDir)) continue;
-
-        const versionFolders = fs
-          .readdirSync(projectDir, { withFileTypes: true })
-          .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
-          .map((d) => d.name);
-
-        for (const folder of versionFolders) {
-          const versionNumber = Number(folder.slice(1));
-          if (!Number.isFinite(versionNumber) || versionNumber <= 0) continue;
-
+        const versionRecords = await projectMetaService.listProjectVersions(organizationId, slug);
+        for (const versionRecord of versionRecords) {
+          const versionNumber = versionRecord.version;
+          if (!Number.isFinite(versionNumber) || versionNumber <= 0) {
+            continue;
+          }
           versionsScanned++;
-
-          const versionDir = path.join(projectDir, folder);
-          const versionData = await getVersionData(slug, versionNumber);
+          const versionDir = getVersionDir(organizationId, slug, versionNumber);
 
           // Only generate thumbnails for completed versions
-          if (versionData?.status !== "completed") {
+          if (versionRecord.status !== "completed") {
             thumbnailsSkipped++;
             continue;
           }
 
           // Check if thumbnail already exists (when onlyMissing is true)
           if (onlyMissing) {
-            const thumbnailPath = getVivdInternalFilesPath(
+            const exists = await hasExistingThumbnail({
+              thumbnailKey: versionRecord.thumbnailKey,
               versionDir,
-              "thumbnail.webp"
-            );
-            if (fs.existsSync(thumbnailPath)) {
+            });
+            if (exists) {
               thumbnailsSkipped++;
               continue;
             }
@@ -919,13 +965,14 @@ export const projectMaintenanceProcedures = {
           try {
             // Use immediate generation (no debouncing) for batch operations
             await thumbnailService.generateThumbnailImmediate(
-              versionDir,
+              fs.existsSync(versionDir) ? versionDir : null,
+              organizationId,
               slug,
-              versionNumber
+              versionNumber,
             );
             thumbnailsGenerated++;
             console.log(
-              `[Thumbnail] Regenerated ${slug} v${versionNumber} (${thumbnailsGenerated} done)`
+              `[Thumbnail] Regenerated ${slug} v${versionNumber} (${thumbnailsGenerated} done)`,
             );
           } catch (e) {
             errors.push({

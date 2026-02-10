@@ -64,6 +64,13 @@
       "when": 1770720984636,
       "tag": "0008_graceful_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1770727217352,
+      "tag": "0009_organization_auth",
+      "breakpoints": true
     }
   ]
 }

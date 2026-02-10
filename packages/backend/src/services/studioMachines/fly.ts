@@ -4,7 +4,6 @@ import type {
   StudioMachineStartResult,
 } from "./types";
 import crypto from "node:crypto";
-import { getActiveTenantId } from "../../generator/versionUtils";
 
 type FlyMachineState =
   | "created"
@@ -284,15 +283,21 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     }
   }
 
-  private key(projectSlug: string, version: number): string {
-    return `${projectSlug}:${version}`;
+  private key(organizationId: string, projectSlug: string, version: number): string {
+    return `${organizationId}:${projectSlug}:v${version}`;
   }
 
-  private machineNameFor(projectSlug: string, version: number): string {
-    const machineNameBase = sanitizeForFlyAppId(`studio-${projectSlug}-v${version}`);
-    return machineNameBase.length > 45
-      ? machineNameBase.slice(0, 45)
-      : machineNameBase;
+  private machineNameFor(
+    organizationId: string,
+    projectSlug: string,
+    version: number
+  ): string {
+    const key = `${organizationId}:${projectSlug}:v${version}`;
+    const hash = crypto.createHash("sha1").update(key).digest("hex").slice(0, 10);
+    const base = sanitizeForFlyAppId(`studio-${projectSlug}-v${version}`);
+    const maxBaseLen = 45 - (hash.length + 1);
+    const clippedBase = base.length > maxBaseLen ? base.slice(0, maxBaseLen) : base;
+    return `${clippedBase}-${hash}`;
   }
 
   private get token(): string {
@@ -550,19 +555,27 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
   private findMachine(
     machines: FlyMachine[],
+    organizationId: string,
     projectSlug: string,
     version: number,
   ): FlyMachine | null {
     const v = String(version);
+    const expectedOrg = organizationId.trim() || "default";
     return (
       machines.find((machine) => {
         const metadata = this.getMachineMetadata(machine);
+        const machineOrg = (
+          metadata?.vivd_organization_id ||
+          machine.config?.env?.VIVD_TENANT_ID ||
+          "default"
+        ).trim() || "default";
         const machineSlug =
           metadata?.vivd_project_slug || machine.config?.env?.VIVD_PROJECT_SLUG;
         const machineVersion =
           metadata?.vivd_project_version ||
           machine.config?.env?.VIVD_PROJECT_VERSION;
         return (
+          machineOrg === expectedOrg &&
           machineSlug === projectSlug && machineVersion === v
         );
       }) || null
@@ -575,13 +588,18 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
   private getStudioKeyFromMachine(machine: FlyMachine): string | null {
     const metadata = this.getMachineMetadata(machine);
+    const organizationId = (
+      metadata?.vivd_organization_id ||
+      machine.config?.env?.VIVD_TENANT_ID ||
+      "default"
+    ).trim() || "default";
     const projectSlug =
       metadata?.vivd_project_slug || machine.config?.env?.VIVD_PROJECT_SLUG;
     const version = parseIntOrNull(
       metadata?.vivd_project_version || machine.config?.env?.VIVD_PROJECT_VERSION,
     );
     if (!projectSlug || !version) return null;
-    return this.key(projectSlug, version);
+    return this.key(organizationId, projectSlug, version);
   }
 
   private touchKey(studioKey: string): void {
@@ -794,6 +812,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
       const metadata: Record<string, string> = {
         ...(this.getMachineMetadata(current) || {}),
+        vivd_organization_id: args.organizationId,
         vivd_project_slug: args.projectSlug,
         vivd_project_version: String(args.version),
         vivd_external_port: String(port),
@@ -895,7 +914,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     const env: Record<string, string> = {
       PORT: "3100",
       STUDIO_ID: args.studioId,
-      VIVD_TENANT_ID: getActiveTenantId(),
+      VIVD_TENANT_ID: args.organizationId,
       VIVD_PROJECT_SLUG: args.projectSlug,
       VIVD_PROJECT_VERSION: String(args.version),
       VIVD_WORKSPACE_DIR: workspaceDir,
@@ -928,7 +947,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   async ensureRunning(args: StudioMachineStartArgs): Promise<StudioMachineStartResult> {
-    const key = this.key(args.projectSlug, args.version);
+    const key = this.key(args.organizationId, args.projectSlug, args.version);
     const existingInflight = this.inflight.get(key);
     if (existingInflight) return existingInflight;
 
@@ -942,12 +961,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   private async ensureRunningInner(
     args: StudioMachineStartArgs,
   ): Promise<StudioMachineStartResult> {
-    const studioKey = this.key(args.projectSlug, args.version);
-    const machineName = this.machineNameFor(args.projectSlug, args.version);
+    const studioKey = this.key(args.organizationId, args.projectSlug, args.version);
+    const machineName = this.machineNameFor(args.organizationId, args.projectSlug, args.version);
     const machines = await this.listMachines();
     const existing =
-      this.findMachine(machines, args.projectSlug, args.version) ||
-      this.findMachineByName(machines, machineName);
+      this.findMachineByName(machines, machineName) ||
+      this.findMachine(machines, args.organizationId, args.projectSlug, args.version);
 
     if (existing) {
       return this.ensureExistingMachineRunning(existing, args, studioKey);
@@ -987,6 +1006,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
               },
             ],
             metadata: {
+              vivd_organization_id: args.organizationId,
               vivd_project_slug: args.projectSlug,
               vivd_project_version: String(args.version),
               vivd_external_port: String(port),
@@ -1015,30 +1035,38 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return { studioId, url, port };
   }
 
-  touch(projectSlug: string, version: number): void {
-    this.touchKey(this.key(projectSlug, version));
+  touch(organizationId: string, projectSlug: string, version: number): void {
+    this.touchKey(this.key(organizationId, projectSlug, version));
   }
 
-  async stop(projectSlug: string, version: number): Promise<void> {
-    const studioKey = this.key(projectSlug, version);
+  async stop(organizationId: string, projectSlug: string, version: number): Promise<void> {
+    const studioKey = this.key(organizationId, projectSlug, version);
     this.lastActivityByStudioKey.delete(studioKey);
 
     const machines = await this.listMachines();
     const existing =
-      this.findMachine(machines, projectSlug, version) ||
-      this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
+      this.findMachineByName(
+        machines,
+        this.machineNameFor(organizationId, projectSlug, version),
+      ) || this.findMachine(machines, organizationId, projectSlug, version);
     if (!existing) return;
     if (existing.state === "started") {
       await this.suspendOrStopMachine(existing.id);
     }
   }
 
-  async getUrl(projectSlug: string, version: number): Promise<string | null> {
+  async getUrl(
+    organizationId: string,
+    projectSlug: string,
+    version: number
+  ): Promise<string | null> {
     try {
       const machines = await this.listMachines();
       const existing =
-        this.findMachine(machines, projectSlug, version) ||
-        this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
+        this.findMachineByName(
+          machines,
+          this.machineNameFor(organizationId, projectSlug, version),
+        ) || this.findMachine(machines, organizationId, projectSlug, version);
       if (!existing) return null;
       if (existing.state !== "started") return null;
       const port = this.getMachineExternalPort(existing);
@@ -1047,23 +1075,25 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[FlyMachines] getUrl failed for ${projectSlug}/v${version}: ${message}`,
+        `[FlyMachines] getUrl failed for ${organizationId}:${projectSlug}/v${version}: ${message}`,
       );
       return null;
     }
   }
 
-  async isRunning(projectSlug: string, version: number): Promise<boolean> {
+  async isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean> {
     try {
       const machines = await this.listMachines();
       const existing =
-        this.findMachine(machines, projectSlug, version) ||
-        this.findMachineByName(machines, this.machineNameFor(projectSlug, version));
+        this.findMachineByName(
+          machines,
+          this.machineNameFor(organizationId, projectSlug, version),
+        ) || this.findMachine(machines, organizationId, projectSlug, version);
       return !!existing && existing.state === "started";
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[FlyMachines] isRunning failed for ${projectSlug}/v${version}: ${message}`,
+        `[FlyMachines] isRunning failed for ${organizationId}:${projectSlug}/v${version}: ${message}`,
       );
       return false;
     }

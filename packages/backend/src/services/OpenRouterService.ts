@@ -15,6 +15,7 @@ export const openai = new OpenAI({
 
 export interface FlowContext {
   flowId: string; // e.g., 'scratch', 'url', 'image_edit', 'image_create', 'bg_remove', 'hero_gen'
+  organizationId: string;
   projectSlug?: string;
 }
 
@@ -78,6 +79,7 @@ async function fetchCostWithRetry(
  * Does not block or throw - cost tracking failures are logged but don't affect the main flow.
  */
 export async function recordOpenRouterCost(
+  organizationId: string,
   generationId: string,
   flowId: string,
   projectSlug?: string
@@ -85,6 +87,7 @@ export async function recordOpenRouterCost(
   try {
     const cost = await fetchCostWithRetry(generationId);
     await usageService.recordOpenRouterCost(
+      organizationId,
       cost ?? 0,
       generationId,
       flowId,
@@ -115,6 +118,7 @@ export async function createChatCompletion(
   if (flowContext && completion.id) {
     // Fire and forget - don't block the response
     recordOpenRouterCost(
+      flowContext.organizationId,
       completion.id,
       flowContext.flowId,
       flowContext.projectSlug
@@ -166,6 +170,7 @@ export async function createImageGeneration(
   // Record cost asynchronously if we have flow context
   if (flowContext && generationId) {
     recordOpenRouterCost(
+      flowContext.organizationId,
       generationId,
       flowContext.flowId,
       flowContext.projectSlug

@@ -1,8 +1,31 @@
 import { betterAuth } from "better-auth";
-import { admin } from "better-auth/plugins";
+import { admin, createAccessControl } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
-import { publishedSite } from "./db/schema";
+import { organizationMember, publishedSite } from "./db/schema";
+import { APIError } from "better-call";
+
+const adminStatements = {
+  user: [
+    "create",
+    "list",
+    "set-role",
+    "ban",
+    "impersonate",
+    "delete",
+    "set-password",
+    "get",
+    "update",
+  ],
+  session: ["list", "revoke", "delete"],
+} as const;
+
+const adminAccessControl = createAccessControl(adminStatements);
+const superAdminAccess = adminAccessControl.newRole({
+  user: [...adminStatements.user],
+  session: [...adminStatements.session],
+});
+const noAdminAccess = adminAccessControl.newRole({ user: [], session: [] });
 
 /**
  * Build list of trusted origins dynamically.
@@ -56,22 +79,46 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => {
-          const existingUser = await db.query.user.findFirst();
-          // first user is admin
-          if (!existingUser) {
+        before: async (user, ctx) => {
+          const existingUser = await db.query.user.findFirst({
+            columns: { id: true },
+          });
+
+          const isSignup = ctx?.path?.startsWith("/sign-up/") ?? false;
+          if (existingUser && isSignup) {
+            throw new APIError("BAD_REQUEST", {
+              message: "Sign up is disabled",
+            });
+          }
+
+          // First user bootstraps the install.
+          if (!existingUser && isSignup) {
             return {
               data: {
                 ...user,
-                role: "admin",
+                role: "super_admin",
               },
             };
           }
-          return {
-            data: {
-              ...user,
-            },
-          };
+
+          return { data: { ...user } };
+        },
+        after: async (user, ctx) => {
+          const isSignup = ctx?.path?.startsWith("/sign-up/") ?? false;
+          if (!isSignup) return;
+
+          // Attach bootstrap user to the default org as owner.
+          await db
+            .insert(organizationMember)
+            .values({
+              id: `default:${user.id}`,
+              organizationId: "default",
+              userId: user.id,
+              role: "owner",
+            })
+            .onConflictDoNothing({
+              target: [organizationMember.organizationId, organizationMember.userId],
+            });
         },
       },
     },
@@ -81,5 +128,15 @@ export const auth = betterAuth({
   },
   // Dynamic trusted origins - supports multiple domains for published sites
   trustedOrigins: getTrustedOrigins,
-  plugins: [admin()],
+  plugins: [
+    admin({
+      adminRoles: ["super_admin"],
+      roles: {
+        super_admin: superAdminAccess,
+        admin: noAdminAccess,
+        user: noAdminAccess,
+        client_editor: noAdminAccess,
+      },
+    }),
+  ],
 });

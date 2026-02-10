@@ -37,12 +37,12 @@ export function getActiveTenantId(): string {
   return tenantId || DEFAULT_TENANT_ID;
 }
 
-export function getTenantProjectsDir(tenantId: string = getActiveTenantId()): string {
-  return path.join(getTenantsDir(), tenantId);
+export function getTenantProjectsDir(tenantId: string): string {
+  return path.join(getTenantsDir(), tenantId.trim() || DEFAULT_TENANT_ID);
 }
 
-export async function listProjectSlugs(): Promise<string[]> {
-  const projects = await projectMetaService.listProjects();
+export async function listProjectSlugs(organizationId: string): Promise<string[]> {
+  const projects = await projectMetaService.listProjects(organizationId);
   return projects.map((p) => p.slug).sort((a, b) => a.localeCompare(b));
 }
 
@@ -123,13 +123,16 @@ export function isVersionStale(
 /**
  * Get the base project directory for a slug
  */
-export function getProjectDir(slug: string): string {
-  const tenantDir = getTenantProjectsDir();
+export function getProjectDir(organizationId: string, slug: string): string {
+  const tenantDir = getTenantProjectsDir(organizationId);
   const tenantPath = path.join(tenantDir, slug);
   if (fs.existsSync(tenantPath)) return tenantPath;
 
+  // Legacy single-tenant layout: projects/<slug>/... (only for default tenant).
   const legacyPath = path.join(PROJECTS_DIR, slug);
-  if (fs.existsSync(legacyPath)) return legacyPath;
+  if (organizationId === DEFAULT_TENANT_ID && fs.existsSync(legacyPath)) {
+    return legacyPath;
+  }
 
   // Default to tenant layout for new projects.
   return tenantPath;
@@ -138,15 +141,22 @@ export function getProjectDir(slug: string): string {
 /**
  * Get the version-specific directory
  */
-export function getVersionDir(slug: string, version: number): string {
-  return path.join(getProjectDir(slug), `v${version}`);
+export function getVersionDir(
+  organizationId: string,
+  slug: string,
+  version: number,
+): string {
+  return path.join(getProjectDir(organizationId, slug), `v${version}`);
 }
 
-export async function getManifest(slug: string): Promise<ProjectManifest | null> {
-  const project = await projectMetaService.getProject(slug);
+export async function getManifest(
+  organizationId: string,
+  slug: string,
+): Promise<ProjectManifest | null> {
+  const project = await projectMetaService.getProject(organizationId, slug);
   if (!project) return null;
 
-  const versions = await projectMetaService.listProjectVersions(slug);
+  const versions = await projectMetaService.listProjectVersions(organizationId, slug);
   return {
     url: project.url,
     source: (project.source as "url" | "scratch") ?? undefined,
@@ -166,24 +176,33 @@ export async function getManifest(slug: string): Promise<ProjectManifest | null>
   };
 }
 
-export async function touchProjectUpdatedAt(slug: string): Promise<void> {
-  await projectMetaService.touchUpdatedAt(slug);
+export async function touchProjectUpdatedAt(
+  organizationId: string,
+  slug: string,
+): Promise<void> {
+  await projectMetaService.touchUpdatedAt(organizationId, slug);
 }
 
 /**
  * Get the current (latest) version number for a project
  * Returns 0 if no versions exist
  */
-export async function getCurrentVersion(slug: string): Promise<number> {
-  return projectMetaService.getCurrentVersion(slug);
+export async function getCurrentVersion(
+  organizationId: string,
+  slug: string,
+): Promise<number> {
+  return projectMetaService.getCurrentVersion(organizationId, slug);
 }
 
 /**
  * Get the highest version number for a project
  * Returns 0 if no versions exist
  */
-export async function getHighestVersion(slug: string): Promise<number> {
-  const versions = await projectMetaService.listProjectVersions(slug);
+export async function getHighestVersion(
+  organizationId: string,
+  slug: string,
+): Promise<number> {
+  const versions = await projectMetaService.listProjectVersions(organizationId, slug);
   if (versions.length === 0) return 0;
   return Math.max(...versions.map((v) => v.version));
 }
@@ -192,22 +211,32 @@ export async function getHighestVersion(slug: string): Promise<number> {
  * Get the next version number for a project
  * Based on the highest existing version, not the currently selected version
  */
-export async function getNextVersion(slug: string): Promise<number> {
-  return projectMetaService.getNextVersion(slug);
+export async function getNextVersion(
+  organizationId: string,
+  slug: string,
+): Promise<number> {
+  return projectMetaService.getNextVersion(organizationId, slug);
 }
 
 /**
  * Check if a specific version exists
  */
-export function versionExists(slug: string, version: number): boolean {
-  return fs.existsSync(getVersionDir(slug, version));
+export function versionExists(
+  organizationId: string,
+  slug: string,
+  version: number,
+): boolean {
+  return fs.existsSync(getVersionDir(organizationId, slug, version));
 }
 
 /**
  * List all versions for a project
  */
-export async function listVersions(slug: string): Promise<VersionInfo[]> {
-  const versions = await projectMetaService.listProjectVersions(slug);
+export async function listVersions(
+  organizationId: string,
+  slug: string,
+): Promise<VersionInfo[]> {
+  const versions = await projectMetaService.listProjectVersions(organizationId, slug);
   return versions.map((v) => ({
     version: v.version,
     createdAt: v.createdAt.toISOString(),
@@ -238,6 +267,7 @@ export function migrateProjectIfNeeded(slug: string): boolean {
  * Create or update manifest for a new version
  */
 export function createVersionEntry(
+  organizationId: string,
   slug: string,
   version: number,
   url: string,
@@ -246,6 +276,7 @@ export function createVersionEntry(
   const now = new Date();
   const source: "url" | "scratch" = url ? "url" : "scratch";
   return projectMetaService.createProjectVersion({
+    organizationId,
     slug,
     version,
     source,
@@ -265,22 +296,24 @@ export function createVersionEntry(
  * @param errorMessage - Optional error message when status is 'failed'
  */
 export async function updateVersionStatus(
+  organizationId: string,
   slug: string,
   version: number,
   status: string,
   errorMessage?: string,
 ): Promise<void> {
-  await projectMetaService.updateVersionStatus({ slug, version, status, errorMessage });
+  await projectMetaService.updateVersionStatus({ organizationId, slug, version, status, errorMessage });
 }
 
 /**
  * Get version data from a specific version's project.json
  */
 export async function getVersionData(
+  organizationId: string,
   slug: string,
   version: number,
 ): Promise<VersionData | null> {
-  const record = await projectMetaService.getProjectVersion(slug, version);
+  const record = await projectMetaService.getProjectVersion(organizationId, slug, version);
   if (!record) return null;
   return {
     url: record.url,
@@ -299,12 +332,16 @@ export async function getVersionData(
 /**
  * Delete a specific version
  */
-export async function deleteVersion(slug: string, version: number): Promise<void> {
-  const versionDir = getVersionDir(slug, version);
+export async function deleteVersion(
+  organizationId: string,
+  slug: string,
+  version: number,
+): Promise<void> {
+  const versionDir = getVersionDir(organizationId, slug, version);
 
   if (fs.existsSync(versionDir)) {
     fs.rmSync(versionDir, { recursive: true, force: true });
   }
 
-  await projectMetaService.deleteProjectVersion({ slug, version });
+  await projectMetaService.deleteProjectVersion({ organizationId, slug, version });
 }

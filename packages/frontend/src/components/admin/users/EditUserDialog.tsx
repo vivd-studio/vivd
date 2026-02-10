@@ -185,13 +185,14 @@ export function EditUserDialog({
                         <SelectTrigger>
                           <SelectValue placeholder="Select a role" />
                         </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="client_editor">Client Editor</SelectItem>
-                      </SelectContent>
-                    </Select>
+	                      </FormControl>
+	                      <SelectContent>
+	                        <SelectItem value="super_admin">Super Admin</SelectItem>
+	                        <SelectItem value="user">User</SelectItem>
+	                        <SelectItem value="admin">Admin</SelectItem>
+	                        <SelectItem value="client_editor">Client Editor</SelectItem>
+	                      </SelectContent>
+	                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

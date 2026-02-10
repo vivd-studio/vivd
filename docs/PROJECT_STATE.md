@@ -159,6 +159,8 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] Fix screenshot clipping on sites where `document.body.scrollHeight` is `0`
   - [x] Decide scraper placement: centralized in backend (studio requests regen after snapshot sync)
   - [x] Ensure scraper works with the new storage workflow (bucket-backed previews; no local FS dependency)
+  - [x] Prevent generation-time race: only generate initial thumbnails after artifact sync, require `index.html` for preview readiness, and retry transient preview-not-ready responses
+  - [x] Make maintenance action "Generate missing thumbnails" bucket/DB-aware (no local directory scan dependency; checks `thumbnailKey` + object existence when storage is configured)
 
 - [ ] **Preview without studio machine**
   - [x] Serve bucket-backed prebuilt previews for quick preview
@@ -187,10 +189,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ## Phase 2: Control Plane Data Model (Organizations + Project Metadata)
 
-- [ ] **New tables**
-  - [ ] `organization` - tenant info, status, limits, machine reference
-  - [ ] `organization_member` - user↔org membership with roles (owner/admin/member/client_editor)
-  - [ ] `organization_invitation` - pending invites (invite-only onboarding)
+- [x] **New tables**
+  - [x] `organization` - tenant info, status, limits, machine reference
+  - [x] `organization_member` - user↔org membership with roles (owner/admin/member/client_editor)
+  - [x] `organization_invitation` - pending invites (invite-only onboarding)
   - [ ] `domain` - global domain registry (unique across server)
   - [ ] `subscription_tier` - plan definitions
   - [ ] `tenant_machine` - studio machine registry (url, status, last_active, fly ids)
@@ -198,13 +200,13 @@ Studio Machine (isolated; per-tenant or per-edit session)
   - [x] `project_version` - per-version status/meta + thumbnail key
   - [x] `project_publish_checklist` - DB-backed publish checklist
 
-- [ ] **Existing table modifications**
-  - [ ] Add `active_organization_id` to Better Auth `session` (single-org UX default; supports future multi-org)
-  - [ ] Add `organization_id` to all tenant-scoped tables:
-    - [ ] `project_meta`, `project_version`, `project_publish_checklist`
-    - [ ] `project_member`
-    - [ ] `published_site` (domain stays globally unique)
-    - [ ] `usage_record`, `usage_period`
+- [x] **Existing table modifications**
+  - [x] Add `active_organization_id` to Better Auth `session` (single-org UX default; supports future multi-org)
+  - [x] Add `organization_id` to all tenant-scoped tables:
+    - [x] `project_meta`, `project_version`, `project_publish_checklist`
+    - [x] `project_member`
+    - [x] `published_site` (domain stays globally unique)
+    - [x] `usage_record`, `usage_period`
 
 - [x] **Move metadata to database**
   - Previously: `manifest.json`, `.vivd/project.json`, `.vivd/publish-checklist.json` were file-backed
@@ -220,17 +222,19 @@ Studio Machine (isolated; per-tenant or per-edit session)
 ## Phase 3: Authentication, Organizations, and Email
 
 - [ ] **Onboarding model (no public signup)**
-  - [ ] Disable open self-registration (sign-up allowed only for bootstrap and/or org invitations)
-  - [ ] Bootstrap super-admin for new installs (first-run only; then lock down)
-  - [ ] Super-admin provisions organizations + initial org owner/admin
-  - [ ] Org admins invite members (invite-only signup) and manage org membership
+  - [x] Disable open self-registration (sign-up allowed only for bootstrap and/or org invitations)
+  - [x] Bootstrap super-admin for new installs (first-run only; then lock down)
+  - [x] Super-admin provisions organizations + initial org owner/admin (tRPC `superadmin.*`)
+  - [x] Org admins add members (set passwords) and manage org membership (Settings → Team)
+  - [ ] (Later) Invite-only signup + email links (requires SES)
 
 - [ ] **Password reset flow** (requires email)
 
 - [ ] **Organization management**
-  - [ ] Domain-based tenant resolution: visiting `<tenant-domain>/vivd-studio` lands in that org
+  - [x] Domain-based tenant resolution: visiting `<tenant-domain>/vivd-studio` lands in that org
   - [ ] Host/org mismatch UX: block access + guide user to correct domain (prevents “logged-in on wrong tenant domain”)
-  - [ ] Role-based permissions (org roles vs super-admin role)
+  - [x] Role-based permissions (org roles vs super-admin role; host-gated superadmin)
+  - [x] Enforce org suspension (blocked for non-super-admins)
 
 ### Email Integration
 
@@ -245,10 +249,10 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ## Phase 4: Multi-Tenant Control Plane Adaptation
 
-- [ ] **Query scoping** - all tenant data queries include `organization_id` (no cross-tenant reads/writes)
-- [ ] **Limits enforcement** - per-org limits from DB (set via super-admin panel)
-- [ ] **Object storage isolation** - project sources/artifacts namespaced by org/tenant + enforced in backend + studio machine env
-- [ ] **Publishing isolation** - domains/sites scoped to org; domain uniqueness remains server-wide
+- [x] **Query scoping** - all tenant data queries include `organization_id` (no cross-tenant reads/writes)
+- [x] **Limits enforcement** - per-org limits from DB (set via super-admin panel)
+- [x] **Object storage isolation** - project sources/artifacts namespaced by org/tenant + enforced in backend + studio machine env
+- [x] **Publishing isolation** - domains/sites scoped to org; domain uniqueness remains server-wide
 - [ ] **Audit log** - record security-relevant actions (studio start/stop, storage writes, publish, invites)
 
 ---
@@ -289,12 +293,12 @@ Studio Machine (isolated; per-tenant or per-edit session)
 
 ### Super-Admin Panel
 
-- [ ] Super-admin authentication (special role; bootstrap existing admin → super-admin)
-- [ ] Super-admin panel access strategy (restricted host + dedicated route under `/vivd-studio`)
-- [ ] Create organizations + initial org owner/admin
-- [ ] List/view all organizations + members
-- [ ] Modify org limits + suspend/activate orgs
-- [ ] System-wide usage dashboard (per-org breakdown)
+- [x] Super-admin authentication (special role; bootstrap existing admin → super-admin)
+- [x] Super-admin panel access strategy (restricted host + dedicated route under `/vivd-studio`)
+- [x] Create organizations + initial org owner/admin
+- [x] List/view all organizations + members
+- [x] Modify org limits + suspend/activate orgs
+- [x] System-wide usage dashboard (per-org breakdown; basic)
 
 ---
 
@@ -330,7 +334,7 @@ Studio Machine (isolated; per-tenant or per-edit session)
 |----------|---------|--------|
 | Bucket layout for projects | `tenants/<tenantId>/projects/<slug>[/vN]/{source,preview}/` | In progress |
 | Studio URL pattern | Iframe `/studio/...` vs redirect vs `{org}.vivd.studio` | TBD |
-| Super-admin panel access | Default tenant only vs dedicated admin host | TBD |
+| Super-admin panel access | Default tenant only vs dedicated admin host | Decided (2026-02-10): default tenant only |
 | Tenant resolution source | Host-based (`<domain>/vivd-studio`) vs session active-org vs hybrid | TBD |
 | Build + preview artifacts | Build preview on save; publish reuses ready artifacts from bucket | Decided (2026-02-08) |
 | Thumbnails pipeline | Central scraper vs per-tenant scraper | TBD |

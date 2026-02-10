@@ -30,6 +30,36 @@ type PendingGeneration = {
 class ThumbnailService {
   private pendingGenerations: Map<string, PendingGeneration> = new Map();
 
+  private async captureThumbnailWithRetry(
+    previewUrl: string,
+    slug: string,
+    version: number,
+  ): Promise<string> {
+    const maxAttempts = 4;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await scraperClient.captureThumbnail(previewUrl, 640, 400);
+      } catch (err) {
+        lastError = err;
+        const message = err instanceof Error ? err.message : String(err);
+        if (attempt >= maxAttempts) break;
+
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+        console.warn(
+          `[Thumbnail] Capture attempt ${attempt}/${maxAttempts} failed for ${slug} v${version}: ${message}. Retrying in ${delayMs}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw (
+      lastError ??
+      new Error(`Thumbnail capture failed after ${maxAttempts} attempts`)
+    );
+  }
+
   /**
    * Generate a thumbnail for a project version.
    * Uses debouncing to avoid rapid regeneration on frequent saves.
@@ -40,10 +70,11 @@ class ThumbnailService {
    */
   async generateThumbnail(
     versionDir: string | null | undefined,
+    organizationId: string,
     slug: string,
     version: number
   ): Promise<void> {
-    const key = `${slug}-v${version}`;
+    const key = `${organizationId}:${slug}-v${version}`;
 
     // Clear any pending generation for this version
     const existing = this.pendingGenerations.get(key);
@@ -58,7 +89,7 @@ class ThumbnailService {
       const timeout = setTimeout(async () => {
         this.pendingGenerations.delete(key);
         try {
-          await this.doGenerateThumbnail(versionDir, slug, version);
+          await this.doGenerateThumbnail(versionDir, organizationId, slug, version);
           resolve();
         } catch (err) {
           reject(err);
@@ -75,10 +106,11 @@ class ThumbnailService {
    */
   async generateThumbnailImmediate(
     versionDir: string | null | undefined,
+    organizationId: string,
     slug: string,
     version: number
   ): Promise<void> {
-    const key = `${slug}-v${version}`;
+    const key = `${organizationId}:${slug}-v${version}`;
 
     // Clear any pending debounced generation
     const existing = this.pendingGenerations.get(key);
@@ -88,17 +120,18 @@ class ThumbnailService {
       this.pendingGenerations.delete(key);
     }
 
-    await this.doGenerateThumbnail(versionDir, slug, version);
+    await this.doGenerateThumbnail(versionDir, organizationId, slug, version);
   }
 
   private async doGenerateThumbnail(
     versionDir: string | null | undefined,
+    organizationId: string,
     slug: string,
     version: number
   ): Promise<void> {
     const basePreviewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
 
-    const project = await projectMetaService.getProject(slug);
+    const project = await projectMetaService.getProject(organizationId, slug);
     if (!project) {
       console.warn(`[Thumbnail] Skipping for ${slug} v${version}: project not found.`);
       return;
@@ -107,7 +140,10 @@ class ThumbnailService {
     // When a project disables public previews, use an internal token so the scraper can still fetch.
     // Token is validated server-side and stored in a short-lived cookie for subsequent asset requests.
     const previewUrl = (() => {
-      if (project.publicPreviewEnabled) return basePreviewUrl;
+      const url = new URL(basePreviewUrl);
+      url.searchParams.set("__vivd_org", organizationId);
+
+      if (project.publicPreviewEnabled) return url.toString();
 
       const token = getInternalPreviewAccessToken();
       if (!token) {
@@ -117,7 +153,8 @@ class ThumbnailService {
         return null;
       }
 
-      return `${basePreviewUrl}?__vivd_preview_token=${encodeURIComponent(token)}`;
+      url.searchParams.set("__vivd_preview_token", token);
+      return url.toString();
     })();
 
     if (!previewUrl) return;
@@ -126,10 +163,10 @@ class ThumbnailService {
 
     try {
       // Capture thumbnail via scraper service
-      const base64Thumbnail = await scraperClient.captureThumbnail(
+      const base64Thumbnail = await this.captureThumbnailWithRetry(
         previewUrl,
-        640,
-        400
+        slug,
+        version,
       );
 
       const thumbnailBuffer = Buffer.from(base64Thumbnail, "base64");
@@ -150,6 +187,7 @@ class ThumbnailService {
       // Upload thumbnail to object storage (best-effort) and persist key in DB.
       try {
         const uploaded = await uploadProjectThumbnailBufferToBucket({
+          organizationId,
           buffer: thumbnailBuffer,
           slug,
           version,
@@ -157,6 +195,7 @@ class ThumbnailService {
 
         if (uploaded.uploaded && uploaded.key) {
           await projectMetaService.setVersionThumbnailKey({
+            organizationId,
             slug,
             version,
             thumbnailKey: uploaded.key,

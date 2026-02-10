@@ -23,12 +23,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 /**
  * Requires admin role.
- * Redirects to dashboard if user is not an admin.
+ * Redirects to dashboard if user is not a super admin.
  */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
 
-  if (session?.user?.role !== "admin") {
+  if (session?.user?.role !== "super_admin") {
     return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 

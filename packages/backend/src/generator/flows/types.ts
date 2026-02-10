@@ -1,6 +1,7 @@
 export type GenerationSource = "url" | "scratch";
 
 export interface GenerationContext {
+  organizationId: string;
   source: GenerationSource;
   slug: string;
   version: number;
@@ -12,4 +13,3 @@ export interface GenerationContext {
    */
   updateStatus: (status: string, errorMessage?: string) => void;
 }
-

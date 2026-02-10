@@ -31,16 +31,16 @@ export const assetsAiImageProcedures = {
         prompt: z.string().min(1), // edit instructions
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, relativePath, prompt } = input;
 
       // Check usage limits before proceeding
-      await limitsService.assertImageGenNotBlocked();
+      await limitsService.assertImageGenNotBlocked(ctx.organizationId!);
 
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const imagePath = path.join(versionDir, relativePath);
 
       // Validate image exists
@@ -97,7 +97,7 @@ export const assetsAiImageProcedures = {
             ],
             modalities: ["image", "text"],
           },
-          { flowId: "image_edit", projectSlug: slug },
+          { flowId: "image_edit", organizationId: ctx.organizationId!, projectSlug: slug },
         );
 
         const imageUrl = extractImageFromResponse(result);
@@ -148,7 +148,7 @@ export const assetsAiImageProcedures = {
         console.log(`[AI Edit] Saved edited image to: ${newRelativePath}`);
 
         // Cost is automatically tracked by OpenRouterService
-        await touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(ctx.organizationId!, slug);
 
         return {
           success: true,
@@ -181,13 +181,13 @@ export const assetsAiImageProcedures = {
         targetPath: z.string().optional().default(""), // where to save the image (relative path)
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, prompt, referenceImages, targetPath } = input;
 
       // Check usage limits before proceeding
-      await limitsService.assertImageGenNotBlocked();
+      await limitsService.assertImageGenNotBlocked(ctx.organizationId!);
 
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
 
       // Validate versionDir exists
       if (!fs.existsSync(versionDir)) {
@@ -247,7 +247,7 @@ export const assetsAiImageProcedures = {
             messages: messages,
             modalities: ["image", "text"],
           },
-          { flowId: "image_create", projectSlug: slug },
+          { flowId: "image_create", organizationId: ctx.organizationId!, projectSlug: slug },
         );
 
         const imageUrl = extractImageFromResponse(result);
@@ -299,7 +299,7 @@ export const assetsAiImageProcedures = {
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
 
         // Cost is automatically tracked by OpenRouterService
-        await touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(ctx.organizationId!, slug);
 
         return {
           success: true,
@@ -329,16 +329,16 @@ export const assetsAiImageProcedures = {
         relativePath: z.string(), // path to the image file
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, relativePath } = input;
 
       // Check usage limits before proceeding
-      await limitsService.assertImageGenNotBlocked();
+      await limitsService.assertImageGenNotBlocked(ctx.organizationId!);
 
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const imagePath = path.join(versionDir, relativePath);
 
       // Validate image exists
@@ -394,7 +394,7 @@ export const assetsAiImageProcedures = {
             ],
             modalities: ["image", "text"],
           },
-          { flowId: "bg_remove", projectSlug: slug },
+          { flowId: "bg_remove", organizationId: ctx.organizationId!, projectSlug: slug },
         );
 
         const imageUrl = extractImageFromResponse(result);
@@ -443,7 +443,7 @@ export const assetsAiImageProcedures = {
         );
 
         // Cost is automatically tracked by OpenRouterService
-        await touchProjectUpdatedAt(slug);
+        await touchProjectUpdatedAt(ctx.organizationId!, slug);
 
         return {
           success: true,

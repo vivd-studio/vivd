@@ -91,25 +91,17 @@ In super-admin panel:
 1. Create organization (name, slug, initial limits, status=active)
 2. Create initial org owner/admin user
 3. Attach user to organization as `owner` (or `admin`)
-4. Provide onboarding path:
-   - **Option A (preferred once email exists):** send invite / set-password link
-   - **Option B (no email yet):** show a one-time temporary password to copy
+4. Set a password directly (no email/invite flow in v1):
+   - Show a one-time temporary password to copy/share
+   - (Optional later) force password reset/change on first login
 
-### 4) Org admin invites members (invite-only signup)
+### 4) Org admin adds members (password set)
 
-We want “no public signup”, but allow invited onboarding:
-- Org admin creates an invitation for an email + org role.
-- Invitee can create an account **only if** they have a valid pending invitation.
-- On successful signup:
-  - Accept invitation automatically
-  - Set `activeOrganizationId` to that org
-  - Redirect into `/vivd-studio` in that org context
+We want “no public signup”, and we also want to keep v1 simple:
+- Org admin creates users directly (email + name + password) and assigns org role.
+- New user logs in on their org domain and is automatically placed into that org (no org picker).
 
-Implementation detail:
-- Keep Better Auth email/password enabled.
-- Gate `/sign-up/email` to:
-  - allow when no users exist (bootstrap), OR
-  - allow when request includes an invitation ID/token that is valid for that email.
+(Later) We can add “invite-only signup” + email links once SES is in place.
 
 ---
 
@@ -119,9 +111,9 @@ Requirements:
 - Must not be discoverable/usable from tenant domains.
 - Must be hard-gated server-side.
 
-Recommended:
-- Route: `GET /vivd-studio/superadmin/*` (frontend) + `/vivd-studio/api/superadmin/*` (backend)
-- Allowed hosts: `SUPERADMIN_HOSTS` (env, defaults to main `DOMAIN`)
+Implemented (v1):
+- Route: `GET /vivd-studio/admin` (frontend, super-admin only) + tRPC `superadmin.*` (backend)
+- Allowed hosts: `SUPERADMIN_HOSTS` (env, defaults to main `DOMAIN`) — **decided:** only default-tenant host(s)
 - Guard conditions:
   - `user.role === "super_admin"`
   - request Host is in allowed hosts list
@@ -210,7 +202,6 @@ Global (server-wide):
 
 ## Open questions
 
-- Do we want to allow “invite-only signup” (recommended) or “super-admin creates all accounts + distributes passwords” (no signup at all)?
+- Do we want to add “invite-only signup” later (email links + accept-invite flow), or keep “admins create users” permanently?
 - Should super-admin be able to impersonate an org member (Better Auth admin plugin supports impersonation)?
 - Do we want a dedicated `domain` table early, or treat `published_site` as the first domain registry?
-

@@ -7,7 +7,6 @@ import { initializeGitRepository } from "../gitUtils";
 import { log } from "../logger";
 import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
-import { thumbnailService } from "../../services/ThumbnailService";
 import type { FlowContext } from "../../services/OpenRouterService";
 import {
   ensureVivdInternalFilesDir,
@@ -27,7 +26,11 @@ export interface UrlFlowInput {
 
 export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
   // Create flow context for cost tracking
-  const flowContext: FlowContext = { flowId: "url", projectSlug: ctx.slug };
+  const flowContext: FlowContext = {
+    flowId: "url",
+    organizationId: ctx.organizationId,
+    projectSlug: ctx.slug,
+  };
 
   ctx.updateStatus("scraping");
 
@@ -55,12 +58,14 @@ export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
 
           try {
             const uploaded = await uploadProjectThumbnailToBucket({
+              organizationId: ctx.organizationId,
               localFilePath: thumbnailPath,
               slug: ctx.slug,
               version: ctx.version,
             });
             if (uploaded.uploaded && uploaded.key) {
               await projectMetaService.setVersionThumbnailKey({
+                organizationId: ctx.organizationId,
                 slug: ctx.slug,
                 version: ctx.version,
                 thumbnailKey: uploaded.key,
@@ -112,9 +117,4 @@ export async function runUrlFlow(ctx: GenerationContext, input: UrlFlowInput) {
   } catch (gitError) {
     log(`[Git] Warning: Failed to initialize/commit git: ${gitError}`);
   }
-
-  // Generate thumbnail (fire-and-forget)
-  thumbnailService
-    .generateThumbnailImmediate(ctx.outputDir, ctx.slug, ctx.version)
-    .catch((err) => log(`[Thumbnail] Warning: ${err.message}`));
 }

@@ -6,7 +6,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name?: string | null;
-  role: "admin" | "user" | "client_editor";
+  role: "super_admin" | "admin" | "user" | "client_editor";
   emailVerified: boolean;
   image?: string | null;
   createdAt: Date;

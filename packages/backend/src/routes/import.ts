@@ -9,6 +9,7 @@ import { getProjectDir, getVersionDir } from "../generator/versionUtils";
 import { initializeGitRepository } from "../generator/gitUtils";
 import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
 import { projectMetaService } from "../services/ProjectMetaService";
+import { createContext } from "../trpc";
 
 type AuthLike = {
   api: {
@@ -41,15 +42,27 @@ function getSlugFromUrl(targetUrl: string): string {
   }
 }
 
-function findAvailableSlug(baseSlug: string): string {
+async function slugExists(
+  organizationId: string,
+  slug: string,
+): Promise<boolean> {
+  const existing = await projectMetaService.getProject(organizationId, slug);
+  if (existing) return true;
+  return fs.existsSync(getProjectDir(organizationId, slug));
+}
+
+async function findAvailableSlug(
+  organizationId: string,
+  baseSlug: string,
+): Promise<string> {
   const normalizedBase = baseSlug.trim().toLowerCase();
-  if (!fs.existsSync(getProjectDir(normalizedBase))) return normalizedBase;
+  if (!(await slugExists(organizationId, normalizedBase))) return normalizedBase;
 
   let i = 2;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const candidate = `${normalizedBase}-${i}`;
-    if (!fs.existsSync(getProjectDir(candidate))) return candidate;
+    if (!(await slugExists(organizationId, candidate))) return candidate;
     i++;
   }
 }
@@ -90,22 +103,21 @@ function findExtractRoot(extractedDir: string): string | null {
 
 export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
   const router = express.Router();
-  const { auth, upload } = deps;
+  const { upload } = deps;
 
   router.post("/import", upload.single("file"), async (req, res) => {
     let tmpDir: string | null = null;
     let createdProjectDir: string | null = null;
 
     try {
-      const session = await auth.api.getSession({
-        headers: req.headers as any,
-      });
+      const requestContext = await createContext({ req, res } as any);
+      const session = requestContext.session;
 
       if (!session) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const role = (session as any)?.user?.role ?? "user";
+      const role = session.user.role ?? "user";
       if (role === "client_editor") {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -182,18 +194,15 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         : title
         ? slugifyTitle(title)
         : "project";
-      const slug = findAvailableSlug(slugBase);
-
-      const existing = await projectMetaService.getProject(slug);
-      if (existing) {
-        return res.status(409).json({
-          error: "Project already exists",
-        });
+      const organizationId = requestContext.organizationId;
+      if (!organizationId) {
+        return res.status(401).json({ error: "Unauthorized" });
       }
+      const slug = await findAvailableSlug(organizationId, slugBase);
 
-      const projectDir = getProjectDir(slug);
+      const projectDir = getProjectDir(organizationId, slug);
       const version = 1;
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(organizationId, slug, version);
 
       if (fs.existsSync(projectDir)) {
         return res.status(409).json({
@@ -236,6 +245,7 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
       ensureVivdInternalFilesDir(versionDir);
 
       await projectMetaService.createProjectVersion({
+        organizationId,
         slug,
         version,
         source,

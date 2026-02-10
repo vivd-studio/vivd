@@ -146,10 +146,11 @@ function listVersionNumbers(projectDir: string): number[] {
 }
 
 async function migrateOneProject(options: {
+  organizationId: string;
   slug: string;
   projectDir: string;
 }): Promise<ProjectMetaMigrationProjectResult> {
-  const { slug, projectDir } = options;
+  const { organizationId, slug, projectDir } = options;
 
   const manifestPath = path.join(projectDir, "manifest.json");
   const manifest = fs.existsSync(manifestPath)
@@ -205,6 +206,7 @@ async function migrateOneProject(options: {
   await db
     .insert(projectMeta)
     .values({
+      organizationId,
       slug,
       source,
       url,
@@ -215,7 +217,7 @@ async function migrateOneProject(options: {
       updatedAt: new Date(updatedAtIso),
     })
     .onConflictDoUpdate({
-      target: projectMeta.slug,
+      target: [projectMeta.organizationId, projectMeta.slug],
       set: {
         source,
         url,
@@ -290,6 +292,7 @@ async function migrateOneProject(options: {
       .insert(projectVersion)
       .values({
         id: randomUUID(),
+        organizationId,
         projectSlug: slug,
         version,
         source: versionSource,
@@ -303,7 +306,11 @@ async function migrateOneProject(options: {
         updatedAt: new Date(updatedAtIso),
       })
       .onConflictDoUpdate({
-        target: [projectVersion.projectSlug, projectVersion.version],
+        target: [
+          projectVersion.organizationId,
+          projectVersion.projectSlug,
+          projectVersion.version,
+        ],
         set: {
           source: versionSource,
           url: versionUrl,
@@ -331,6 +338,7 @@ async function migrateOneProject(options: {
           .insert(projectPublishChecklist)
           .values({
             id: randomUUID(),
+            organizationId,
             projectSlug: slug,
             version,
             runAt: new Date(runAtIso),
@@ -344,6 +352,7 @@ async function migrateOneProject(options: {
           })
           .onConflictDoUpdate({
             target: [
+              projectPublishChecklist.organizationId,
               projectPublishChecklist.projectSlug,
               projectPublishChecklist.version,
             ],
@@ -367,6 +376,7 @@ async function migrateOneProject(options: {
     if (fs.existsSync(thumbnailPath)) {
       try {
         const uploaded = await uploadProjectThumbnailToBucket({
+          organizationId,
           localFilePath: thumbnailPath,
           slug,
           version,
@@ -378,6 +388,7 @@ async function migrateOneProject(options: {
             .set({ thumbnailKey: uploaded.key, updatedAt: new Date(updatedAtIso) })
             .where(
               and(
+                eq(projectVersion.organizationId, organizationId),
                 eq(projectVersion.projectSlug, slug),
                 eq(projectVersion.version, version),
               ),
@@ -429,7 +440,7 @@ export async function migrateProjectMetadataToDbFromFilesystem(options?: {
   for (const project of projects) {
     projectsScanned++;
     try {
-      const res = await migrateOneProject(project);
+      const res = await migrateOneProject({ ...project, organizationId: tenantId });
       projectsMigrated++;
       versionsUpserted += res.versionsUpserted;
       checklistsUpserted += res.checklistsUpserted;
@@ -455,4 +466,3 @@ export async function migrateProjectMetadataToDbFromFilesystem(options?: {
     errors,
   };
 }
-

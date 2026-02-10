@@ -16,7 +16,7 @@ import {
 } from "./eventEmitter";
 import { serverManager } from "./serverManager";
 import { usageService } from "../services/UsageService";
-import { touchProjectUpdatedAt } from "../generator/versionUtils";
+import { getActiveTenantId, touchProjectUpdatedAt } from "../generator/versionUtils";
 
 export { useEvents };
 export { agentEventEmitter } from "./eventEmitter";
@@ -156,6 +156,7 @@ export async function runTask(
       // Pass partId for idempotency to prevent duplicate recordings
       usageService
         .recordAiCost(
+          getActiveTenantId(),
           data.cost,
           data.tokens,
           currentSessionId,
@@ -185,7 +186,7 @@ export async function runTask(
       const projectSlug =
         versionIndex > 0 ? pathParts[versionIndex - 1] : undefined;
       if (projectSlug) {
-        void touchProjectUpdatedAt(projectSlug).catch((err) => {
+        void touchProjectUpdatedAt(getActiveTenantId(), projectSlug).catch((err) => {
           console.warn("[OpenCode] Failed to touch project updatedAt:", err);
         });
       }

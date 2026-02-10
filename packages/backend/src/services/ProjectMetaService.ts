@@ -12,6 +12,7 @@ export type ProjectMetaRow = typeof projectMeta.$inferSelect;
 export type ProjectVersionRow = typeof projectVersion.$inferSelect;
 
 export type CreateProjectVersionInput = {
+  organizationId: string;
   slug: string;
   version: number;
   source: "url" | "scratch";
@@ -23,25 +24,31 @@ export type CreateProjectVersionInput = {
 };
 
 class ProjectMetaService {
-  async listProjects(): Promise<ProjectMetaRow[]> {
+  async listProjects(organizationId: string): Promise<ProjectMetaRow[]> {
     return db.query.projectMeta.findMany({
+      where: eq(projectMeta.organizationId, organizationId),
       orderBy: desc(projectMeta.updatedAt),
     });
   }
 
-  async getProject(slug: string): Promise<ProjectMetaRow | null> {
+  async getProject(organizationId: string, slug: string): Promise<ProjectMetaRow | null> {
     const record = await db.query.projectMeta.findFirst({
-      where: eq(projectMeta.slug, slug),
+      where: and(
+        eq(projectMeta.organizationId, organizationId),
+        eq(projectMeta.slug, slug),
+      ),
     });
     return record ?? null;
   }
 
   async getProjectVersion(
+    organizationId: string,
     slug: string,
     version: number,
   ): Promise<ProjectVersionRow | null> {
     const record = await db.query.projectVersion.findFirst({
       where: and(
+        eq(projectVersion.organizationId, organizationId),
         eq(projectVersion.projectSlug, slug),
         eq(projectVersion.version, version),
       ),
@@ -49,25 +56,33 @@ class ProjectMetaService {
     return record ?? null;
   }
 
-  async listProjectVersions(slug: string): Promise<ProjectVersionRow[]> {
+  async listProjectVersions(organizationId: string, slug: string): Promise<ProjectVersionRow[]> {
     return db.query.projectVersion.findMany({
-      where: eq(projectVersion.projectSlug, slug),
+      where: and(
+        eq(projectVersion.organizationId, organizationId),
+        eq(projectVersion.projectSlug, slug),
+      ),
       orderBy: projectVersion.version,
     });
   }
 
-  async getCurrentVersion(slug: string): Promise<number> {
-    const project = await this.getProject(slug);
+  async getCurrentVersion(organizationId: string, slug: string): Promise<number> {
+    const project = await this.getProject(organizationId, slug);
     return project?.currentVersion ?? 0;
   }
 
-  async getNextVersion(slug: string): Promise<number> {
+  async getNextVersion(organizationId: string, slug: string): Promise<number> {
     const rows = await db
       .select({
         maxVersion: sql<number | null>`max(${projectVersion.version})`,
       })
       .from(projectVersion)
-      .where(eq(projectVersion.projectSlug, slug));
+      .where(
+        and(
+          eq(projectVersion.organizationId, organizationId),
+          eq(projectVersion.projectSlug, slug),
+        ),
+      );
 
     const maxVersion = rows[0]?.maxVersion ?? null;
     return (maxVersion ?? 0) + 1;
@@ -79,6 +94,7 @@ class ProjectMetaService {
       await tx
         .insert(projectMeta)
         .values({
+          organizationId: input.organizationId,
           slug: input.slug,
           source: input.source,
           url: input.url,
@@ -89,7 +105,7 @@ class ProjectMetaService {
           updatedAt: input.createdAt,
         })
         .onConflictDoUpdate({
-          target: projectMeta.slug,
+          target: [projectMeta.organizationId, projectMeta.slug],
           set: {
             source: input.source,
             url: input.url,
@@ -106,6 +122,7 @@ class ProjectMetaService {
         .insert(projectVersion)
         .values({
           id: randomUUID(),
+          organizationId: input.organizationId,
           projectSlug: input.slug,
           version: input.version,
           source: input.source,
@@ -118,7 +135,11 @@ class ProjectMetaService {
           updatedAt: input.createdAt,
         })
         .onConflictDoUpdate({
-          target: [projectVersion.projectSlug, projectVersion.version],
+          target: [
+            projectVersion.organizationId,
+            projectVersion.projectSlug,
+            projectVersion.version,
+          ],
           set: {
             source: input.source,
             url: input.url,
@@ -134,6 +155,7 @@ class ProjectMetaService {
   }
 
   async deleteProjectVersion(options: {
+    organizationId: string;
     slug: string;
     version: number;
   }): Promise<void> {
@@ -142,6 +164,7 @@ class ProjectMetaService {
         .delete(projectPublishChecklist)
         .where(
           and(
+            eq(projectPublishChecklist.organizationId, options.organizationId),
             eq(projectPublishChecklist.projectSlug, options.slug),
             eq(projectPublishChecklist.version, options.version),
           ),
@@ -151,6 +174,7 @@ class ProjectMetaService {
         .delete(projectVersion)
         .where(
           and(
+            eq(projectVersion.organizationId, options.organizationId),
             eq(projectVersion.projectSlug, options.slug),
             eq(projectVersion.version, options.version),
           ),
@@ -161,12 +185,20 @@ class ProjectMetaService {
           maxVersion: sql<number | null>`max(${projectVersion.version})`,
         })
         .from(projectVersion)
-        .where(eq(projectVersion.projectSlug, options.slug));
+        .where(
+          and(
+            eq(projectVersion.organizationId, options.organizationId),
+            eq(projectVersion.projectSlug, options.slug),
+          ),
+        );
 
       const maxVersion = remaining[0]?.maxVersion ?? null;
 
       const project = await tx.query.projectMeta.findFirst({
-        where: eq(projectMeta.slug, options.slug),
+        where: and(
+          eq(projectMeta.organizationId, options.organizationId),
+          eq(projectMeta.slug, options.slug),
+        ),
       });
 
       const max = maxVersion ?? 0;
@@ -177,35 +209,51 @@ class ProjectMetaService {
       await tx
         .update(projectMeta)
         .set({ currentVersion: nextCurrent, updatedAt: new Date() })
-        .where(eq(projectMeta.slug, options.slug));
+        .where(
+          and(
+            eq(projectMeta.organizationId, options.organizationId),
+            eq(projectMeta.slug, options.slug),
+          ),
+        );
     });
   }
 
-  async setCurrentVersion(slug: string, version: number): Promise<void> {
+  async setCurrentVersion(
+    organizationId: string,
+    slug: string,
+    version: number,
+  ): Promise<void> {
     await db
       .update(projectMeta)
       .set({ currentVersion: version })
-      .where(eq(projectMeta.slug, slug));
+      .where(and(eq(projectMeta.organizationId, organizationId), eq(projectMeta.slug, slug)));
   }
 
-  async touchUpdatedAt(slug: string): Promise<void> {
+  async touchUpdatedAt(organizationId: string, slug: string): Promise<void> {
     await db
       .update(projectMeta)
       .set({ updatedAt: new Date() })
-      .where(eq(projectMeta.slug, slug));
+      .where(and(eq(projectMeta.organizationId, organizationId), eq(projectMeta.slug, slug)));
   }
 
   async setPublicPreviewEnabled(options: {
+    organizationId: string;
     slug: string;
     enabled: boolean;
   }): Promise<void> {
     await db
       .update(projectMeta)
       .set({ publicPreviewEnabled: options.enabled, updatedAt: new Date() })
-      .where(eq(projectMeta.slug, options.slug));
+      .where(
+        and(
+          eq(projectMeta.organizationId, options.organizationId),
+          eq(projectMeta.slug, options.slug),
+        ),
+      );
   }
 
   async updateVersionStatus(options: {
+    organizationId: string;
     slug: string;
     version: number;
     status: string;
@@ -219,15 +267,17 @@ class ProjectMetaService {
       })
       .where(
         and(
+          eq(projectVersion.organizationId, options.organizationId),
           eq(projectVersion.projectSlug, options.slug),
           eq(projectVersion.version, options.version),
         ),
       );
 
-    await this.touchUpdatedAt(options.slug);
+    await this.touchUpdatedAt(options.organizationId, options.slug);
   }
 
   async setVersionThumbnailKey(options: {
+    organizationId: string;
     slug: string;
     version: number;
     thumbnailKey: string;
@@ -237,47 +287,55 @@ class ProjectMetaService {
       .set({ thumbnailKey: options.thumbnailKey })
       .where(
         and(
+          eq(projectVersion.organizationId, options.organizationId),
           eq(projectVersion.projectSlug, options.slug),
           eq(projectVersion.version, options.version),
         ),
       );
 
-    await this.touchUpdatedAt(options.slug);
+    await this.touchUpdatedAt(options.organizationId, options.slug);
   }
 
-  async upsertPublishChecklist(checklist: PrePublishChecklist): Promise<void> {
+  async upsertPublishChecklist(options: {
+    organizationId: string;
+    checklist: PrePublishChecklist;
+  }): Promise<void> {
     await db
       .insert(projectPublishChecklist)
       .values({
         id: randomUUID(),
-        projectSlug: checklist.projectSlug,
-        version: checklist.version,
-        runAt: new Date(checklist.runAt),
-        snapshotCommitHash: checklist.snapshotCommitHash ?? null,
-        checklist,
+        organizationId: options.organizationId,
+        projectSlug: options.checklist.projectSlug,
+        version: options.checklist.version,
+        runAt: new Date(options.checklist.runAt),
+        snapshotCommitHash: options.checklist.snapshotCommitHash ?? null,
+        checklist: options.checklist,
       })
       .onConflictDoUpdate({
         target: [
+          projectPublishChecklist.organizationId,
           projectPublishChecklist.projectSlug,
           projectPublishChecklist.version,
         ],
         set: {
-          runAt: new Date(checklist.runAt),
-          snapshotCommitHash: checklist.snapshotCommitHash ?? null,
-          checklist,
+          runAt: new Date(options.checklist.runAt),
+          snapshotCommitHash: options.checklist.snapshotCommitHash ?? null,
+          checklist: options.checklist,
           updatedAt: new Date(),
         },
       });
 
-    await this.touchUpdatedAt(checklist.projectSlug);
+    await this.touchUpdatedAt(options.organizationId, options.checklist.projectSlug);
   }
 
   async getPublishChecklist(options: {
+    organizationId: string;
     slug: string;
     version: number;
   }): Promise<PrePublishChecklist | null> {
     const record = await db.query.projectPublishChecklist.findFirst({
       where: and(
+        eq(projectPublishChecklist.organizationId, options.organizationId),
         eq(projectPublishChecklist.projectSlug, options.slug),
         eq(projectPublishChecklist.version, options.version),
       ),

@@ -10,7 +10,7 @@ import type {
   StudioMachineStartArgs,
   StudioMachineStartResult,
 } from "./types";
-import { getActiveTenantId, getVersionDir } from "../../generator/versionUtils";
+import { getVersionDir } from "../../generator/versionUtils";
 import {
   createS3Client,
   downloadBucketPrefixToDirectory,
@@ -26,6 +26,7 @@ interface StudioProcess {
   process: ChildProcess;
   port: number;
   studioId: string;
+  organizationId: string;
   projectSlug: string;
   version: number;
   lastActivityAt: Date;
@@ -148,16 +149,16 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     }, 60 * 1000);
   }
 
-  private key(projectSlug: string, version: number): string {
-    return `${projectSlug}:${version}`;
+  private key(organizationId: string, projectSlug: string, version: number): string {
+    return `${organizationId}:${projectSlug}:v${version}`;
   }
 
   async ensureRunning(args: StudioMachineStartArgs): Promise<StudioMachineStartResult> {
-    const key = this.key(args.projectSlug, args.version);
+    const key = this.key(args.organizationId, args.projectSlug, args.version);
 
     const existing = this.studios.get(key);
     if (existing) {
-      this.touch(args.projectSlug, args.version);
+      this.touch(args.organizationId, args.projectSlug, args.version);
       return {
         studioId: existing.studioId,
         url: this.getPublicUrl(existing.port),
@@ -174,19 +175,19 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     const studioId = args.env.STUDIO_ID || crypto.randomUUID();
 
     console.log(
-      `[StudioMachine] Starting local studio for ${args.projectSlug}/v${args.version} on port ${port}`
+      `[StudioMachine] Starting local studio for ${args.organizationId}:${args.projectSlug}/v${args.version} on port ${port}`
     );
 
     const studioPath = this.resolveStudioPackagePath();
     await this.ensureStudioBuilt(studioPath);
 
-    const workspaceDir = getVersionDir(args.projectSlug, args.version);
+    const workspaceDir = getVersionDir(args.organizationId, args.projectSlug, args.version);
 
     const env: Record<string, string> = {
       ...process.env,
       PORT: String(port),
       STUDIO_ID: studioId,
-      VIVD_TENANT_ID: getActiveTenantId(),
+      VIVD_TENANT_ID: args.organizationId,
       VIVD_PROJECT_SLUG: args.projectSlug,
       VIVD_PROJECT_VERSION: String(args.version),
       VIVD_WORKSPACE_DIR: workspaceDir,
@@ -258,6 +259,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     proc.on("exit", (code) => {
       void this.onStudioExit({
         key,
+        organizationId: args.organizationId,
         projectSlug: args.projectSlug,
         version: args.version,
         objectStorageSync,
@@ -269,6 +271,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       process: proc,
       port,
       studioId,
+      organizationId: args.organizationId,
       projectSlug: args.projectSlug,
       version: args.version,
       lastActivityAt: new Date(),
@@ -283,7 +286,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         treeKill(proc.pid, "SIGTERM");
       }
 
-      const lastLine = recentOutput.at(-1);
+      const lastLine = recentOutput.length ? recentOutput[recentOutput.length - 1] : undefined;
       const suffix = lastLine ? `\nLast output: ${lastLine}` : "";
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`${message}${suffix}`);
@@ -292,32 +295,34 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return { studioId, url: this.getPublicUrl(port), port };
   }
 
-  touch(projectSlug: string, version: number): void {
-    const studio = this.studios.get(this.key(projectSlug, version));
+  touch(organizationId: string, projectSlug: string, version: number): void {
+    const studio = this.studios.get(this.key(organizationId, projectSlug, version));
     if (!studio) return;
     studio.lastActivityAt = new Date();
   }
 
-  stop(projectSlug: string, version: number): void {
-    const key = this.key(projectSlug, version);
+  stop(organizationId: string, projectSlug: string, version: number): void {
+    const key = this.key(organizationId, projectSlug, version);
     const studio = this.studios.get(key);
     if (!studio) return;
 
-    console.log(`[StudioMachine] Stopping local studio for ${projectSlug}/v${version}`);
+    console.log(
+      `[StudioMachine] Stopping local studio for ${organizationId}:${projectSlug}/v${version}`
+    );
     if (studio.process.pid) {
       treeKill(studio.process.pid, "SIGTERM");
     }
     this.studios.delete(key);
   }
 
-  async getUrl(projectSlug: string, version: number): Promise<string | null> {
-    const studio = this.studios.get(this.key(projectSlug, version));
+  async getUrl(organizationId: string, projectSlug: string, version: number): Promise<string | null> {
+    const studio = this.studios.get(this.key(organizationId, projectSlug, version));
     if (!studio) return null;
     return this.getPublicUrl(studio.port);
   }
 
-  async isRunning(projectSlug: string, version: number): Promise<boolean> {
-    return this.studios.has(this.key(projectSlug, version));
+  async isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean> {
+    return this.studios.has(this.key(organizationId, projectSlug, version));
   }
 
   stopAll(): void {
@@ -399,7 +404,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     const storageConfig = getObjectStorageConfigFromEnv(envForConfig);
     const client = createS3Client(storageConfig);
 
-    const tenantId = (options.env.VIVD_TENANT_ID || getActiveTenantId()).trim();
+    const tenantId = (options.env.VIVD_TENANT_ID || "default").trim() || "default";
     const defaultSourceBasePrefix = `tenants/${tenantId}/projects/${options.projectSlug}/v${options.version}`;
     const configuredSourceBasePrefix = trimSlashes(
       options.env.VIVD_S3_PREFIX || defaultSourceBasePrefix
@@ -581,6 +586,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
   private async onStudioExit(options: {
     key: string;
+    organizationId: string;
     projectSlug: string;
     version: number;
     objectStorageSync: LocalObjectStorageSync | null;
@@ -595,7 +601,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     }
 
     console.log(
-      `[StudioMachine] ${options.projectSlug}/v${options.version} exited with code ${options.code}`
+      `[StudioMachine] ${options.organizationId}:${options.projectSlug}/v${options.version} exited with code ${options.code}`
     );
     this.studios.delete(options.key);
   }
@@ -716,7 +722,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
       proc.on("exit", (code) => {
         if (code === 0) return resolve();
-        const lastLine = recentOutput.at(-1);
+        const lastLine = recentOutput.length ? recentOutput[recentOutput.length - 1] : undefined;
         const suffix = lastLine ? `\nLast output: ${lastLine}` : "";
         reject(new Error(`Studio build failed (exit code: ${code})${suffix}`));
       });
@@ -731,7 +737,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       }
     }
     if (!oldest) return;
-    this.stop(oldest.projectSlug, oldest.version);
+    this.stop(oldest.organizationId, oldest.projectSlug, oldest.version);
   }
 
   private cleanupIdleStudios(): void {
@@ -739,9 +745,9 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     for (const studio of this.studios.values()) {
       if (now - studio.lastActivityAt.getTime() > IDLE_TIMEOUT_MS) {
         console.log(
-          `[StudioMachine] Stopping idle local studio for ${studio.projectSlug}/v${studio.version}`
+          `[StudioMachine] Stopping idle local studio for ${studio.organizationId}:${studio.projectSlug}/v${studio.version}`
         );
-        this.stop(studio.projectSlug, studio.version);
+        this.stop(studio.organizationId, studio.projectSlug, studio.version);
       }
     }
   }

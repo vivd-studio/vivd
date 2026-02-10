@@ -38,10 +38,24 @@ thumbnailRouter.post("/", async (req, res) => {
     });
 
     // Navigate to the URL
-    await page.goto(url, {
+    const response = await page.goto(url, {
       waitUntil: "networkidle2",
       timeout: 30000,
     });
+
+    if (!response) {
+      throw new Error("No response from preview URL");
+    }
+
+    const status = response.status();
+    if (status >= 400) {
+      throw new Error(`Preview returned HTTP ${status}`);
+    }
+
+    const contentType = response.headers()["content-type"] || "";
+    if (contentType.toLowerCase().includes("application/json")) {
+      throw new Error(`Preview returned JSON instead of HTML (${contentType})`);
+    }
 
     // Wait a bit for any animations/transitions to settle
     await new Promise((resolve) => setTimeout(resolve, 500));

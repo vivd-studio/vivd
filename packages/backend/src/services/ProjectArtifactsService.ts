@@ -16,7 +16,6 @@ import {
   getProjectThumbnailKey,
   getProjectVersionBasePrefix,
 } from "./ProjectStoragePaths";
-import { getActiveTenantId } from "../generator/versionUtils";
 
 export type ArtifactBuildStatus = "pending" | "building" | "ready" | "error";
 
@@ -29,7 +28,7 @@ export type ArtifactBuildMeta = {
   error?: string;
 };
 
-type Storage = { client: S3Client; bucket: string; tenantId: string };
+type Storage = { client: S3Client; bucket: string };
 
 let storageCache: Storage | null | undefined;
 
@@ -41,7 +40,6 @@ function getStorage(): Storage | null {
     storageCache = {
       client: createS3Client(config),
       bucket: config.bucket,
-      tenantId: getActiveTenantId(),
     };
   } catch {
     storageCache = null;
@@ -68,6 +66,7 @@ async function putJsonObject(options: {
 }
 
 export async function uploadProjectSourceToBucket(options: {
+  organizationId: string;
   versionDir: string;
   slug: string;
   version: number;
@@ -79,7 +78,7 @@ export async function uploadProjectSourceToBucket(options: {
   if (!fs.existsSync(options.versionDir)) return { uploaded: false };
 
   const keyPrefix = getProjectArtifactKeyPrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: "source",
@@ -99,7 +98,7 @@ export async function uploadProjectSourceToBucket(options: {
       client: storage.client,
       bucket: storage.bucket,
       key: getProjectSourceBuildMetaKey({
-        tenantId: storage.tenantId,
+        tenantId: options.organizationId,
         slug: options.slug,
         version: options.version,
       }),
@@ -111,6 +110,7 @@ export async function uploadProjectSourceToBucket(options: {
 }
 
 export async function uploadProjectPreviewToBucket(options: {
+  organizationId: string;
   localDir: string;
   slug: string;
   version: number;
@@ -122,7 +122,7 @@ export async function uploadProjectPreviewToBucket(options: {
   if (!fs.existsSync(options.localDir)) return { uploaded: false };
 
   const keyPrefix = getProjectArtifactKeyPrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: "preview",
@@ -146,7 +146,7 @@ export async function uploadProjectPreviewToBucket(options: {
       client: storage.client,
       bucket: storage.bucket,
       key: getProjectPreviewBuildMetaKey({
-        tenantId: storage.tenantId,
+        tenantId: options.organizationId,
         slug: options.slug,
         version: options.version,
       }),
@@ -158,6 +158,7 @@ export async function uploadProjectPreviewToBucket(options: {
 }
 
 export async function uploadProjectPublishedToBucket(options: {
+  organizationId: string;
   localDir: string;
   slug: string;
   version: number;
@@ -169,7 +170,7 @@ export async function uploadProjectPublishedToBucket(options: {
   if (!fs.existsSync(options.localDir)) return { uploaded: false };
 
   const keyPrefix = getProjectArtifactKeyPrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: "published",
@@ -193,7 +194,7 @@ export async function uploadProjectPublishedToBucket(options: {
       client: storage.client,
       bucket: storage.bucket,
       key: getProjectPublishedBuildMetaKey({
-        tenantId: storage.tenantId,
+        tenantId: options.organizationId,
         slug: options.slug,
         version: options.version,
       }),
@@ -205,6 +206,7 @@ export async function uploadProjectPublishedToBucket(options: {
 }
 
 export async function uploadProjectThumbnailToBucket(options: {
+  organizationId: string;
   localFilePath: string;
   slug: string;
   version: number;
@@ -215,7 +217,7 @@ export async function uploadProjectThumbnailToBucket(options: {
   if (!fs.existsSync(options.localFilePath)) return { uploaded: false };
 
   const key = getProjectThumbnailKey({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
   });
@@ -233,6 +235,7 @@ export async function uploadProjectThumbnailToBucket(options: {
 }
 
 export async function uploadProjectThumbnailBufferToBucket(options: {
+  organizationId: string;
   buffer: Buffer | Uint8Array;
   slug: string;
   version: number;
@@ -241,7 +244,7 @@ export async function uploadProjectThumbnailBufferToBucket(options: {
   if (!storage) return { uploaded: false };
 
   const key = getProjectThumbnailKey({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
   });
@@ -265,13 +268,14 @@ export function getProjectPreviewMetaPathOnDisk(options: {
 }
 
 export async function deleteProjectArtifactsFromBucket(options: {
+  organizationId: string;
   slug: string;
 }): Promise<{ deleted: boolean; objectsDeleted: number }> {
   const storage = getStorage();
   if (!storage) return { deleted: false, objectsDeleted: 0 };
 
   const keyPrefix = getProjectBasePrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
   });
 
@@ -285,6 +289,7 @@ export async function deleteProjectArtifactsFromBucket(options: {
 }
 
 export async function deleteProjectVersionArtifactsFromBucket(options: {
+  organizationId: string;
   slug: string;
   version: number;
 }): Promise<{ deleted: boolean; objectsDeleted: number }> {
@@ -292,7 +297,7 @@ export async function deleteProjectVersionArtifactsFromBucket(options: {
   if (!storage) return { deleted: false, objectsDeleted: 0 };
 
   const keyPrefix = getProjectVersionBasePrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
   });

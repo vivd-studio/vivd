@@ -94,6 +94,7 @@ function getPeriodId(type: PeriodType, periodStart: Date): string {
 
 class UsageService {
   async updateSessionTitle(
+    organizationId: string,
     sessionId: string,
     sessionTitle: string,
     projectSlug?: string,
@@ -113,7 +114,12 @@ class UsageService {
           sessionTitle: title,
           ...(projectSlug ? { projectSlug } : {}),
         })
-        .where(eq(usageRecord.sessionId, sessionId));
+        .where(
+          and(
+            eq(usageRecord.organizationId, organizationId),
+            eq(usageRecord.sessionId, sessionId),
+          ),
+        );
     } catch (error) {
       console.error("[UsageService] Failed to update session title:", error);
     }
@@ -125,6 +131,7 @@ class UsageService {
    * All operations are wrapped in a transaction to ensure consistency
    */
   async recordAiCost(
+    organizationId: string,
     cost: number,
     tokens?: TokenData,
     sessionId?: string,
@@ -144,6 +151,7 @@ class UsageService {
           .insert(usageRecord)
           .values({
             id: randomUUID(),
+            organizationId,
             eventType: "ai_cost",
             cost: cost.toString(),
             tokens: tokens ?? null,
@@ -159,7 +167,7 @@ class UsageService {
         // If we hit a conflict, skip aggregates to avoid double counting
         if (inserted.length === 0) return false;
 
-        await this.updatePeriodAggregatesInTx(tx, cost, 0, now);
+        await this.updatePeriodAggregatesInTx(tx, organizationId, cost, 0, now);
         return true;
       });
 
@@ -182,6 +190,7 @@ class UsageService {
    * Uses generationId as idempotency key to prevent duplicate recordings
    */
   async recordOpenRouterCost(
+    organizationId: string,
     cost: number,
     generationId: string,
     flowId: string,
@@ -196,6 +205,7 @@ class UsageService {
           .insert(usageRecord)
           .values({
             id: randomUUID(),
+            organizationId,
             eventType: flowId,
             cost: cost.toString(),
             tokens: null,
@@ -210,7 +220,7 @@ class UsageService {
 
         if (inserted.length === 0) return false;
 
-        await this.updatePeriodAggregatesInTx(tx, cost, 0, now);
+        await this.updatePeriodAggregatesInTx(tx, organizationId, cost, 0, now);
         return true;
       });
 
@@ -233,7 +243,10 @@ class UsageService {
    * Record an image generation event
    * Uses transaction for consistency
    */
-  async recordImageGeneration(projectSlug?: string): Promise<void> {
+  async recordImageGeneration(
+    organizationId: string,
+    projectSlug?: string,
+  ): Promise<void> {
     const now = new Date();
     // Generate a unique idempotency key for image gen (timestamp-based since no partId)
     const idempotencyKey = `image_gen:${
@@ -246,6 +259,7 @@ class UsageService {
           .insert(usageRecord)
           .values({
             id: randomUUID(),
+            organizationId,
             eventType: "image_gen",
             cost: "0",
             tokens: null,
@@ -260,7 +274,7 @@ class UsageService {
 
         if (inserted.length === 0) return false;
 
-        await this.updatePeriodAggregatesInTx(tx, 0, 1, now);
+        await this.updatePeriodAggregatesInTx(tx, organizationId, 0, 1, now);
         return true;
       });
 
@@ -283,6 +297,7 @@ class UsageService {
    */
   private async updatePeriodAggregatesInTx(
     tx: typeof db | PgTransaction<any, any, any>,
+    organizationId: string,
     costDelta: number,
     imageDelta: number,
     now: Date
@@ -297,6 +312,7 @@ class UsageService {
       await tx
         .insert(usagePeriod)
         .values({
+          organizationId,
           id: periodId,
           periodType,
           periodStart,
@@ -305,7 +321,7 @@ class UsageService {
           updatedAt: now,
         })
         .onConflictDoUpdate({
-          target: usagePeriod.id,
+          target: [usagePeriod.organizationId, usagePeriod.id],
           set: {
             totalCost: sql`${usagePeriod.totalCost} + ${costDelta}`,
             imageCount: sql`${usagePeriod.imageCount} + ${imageDelta}`,
@@ -318,7 +334,7 @@ class UsageService {
   /**
    * Get current usage for all periods
    */
-  async getCurrentUsage(): Promise<CurrentUsage> {
+  async getCurrentUsage(organizationId: string): Promise<CurrentUsage> {
     const now = new Date();
     const result: CurrentUsage = {
       daily: {
@@ -347,7 +363,12 @@ class UsageService {
       const [period] = await db
         .select()
         .from(usagePeriod)
-        .where(eq(usagePeriod.id, periodId))
+        .where(
+          and(
+            eq(usagePeriod.organizationId, organizationId),
+            eq(usagePeriod.id, periodId),
+          ),
+        )
         .limit(1);
 
       if (period) {
@@ -365,14 +386,19 @@ class UsageService {
   /**
    * Get usage history for dashboard (individual records)
    */
-  async getUsageHistory(days: number = 30): Promise<UsageRecord[]> {
+  async getUsageHistory(organizationId: string, days: number = 30): Promise<UsageRecord[]> {
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - days);
 
     const records = await db
       .select()
       .from(usageRecord)
-      .where(gte(usageRecord.createdAt, since))
+      .where(
+        and(
+          eq(usageRecord.organizationId, organizationId),
+          gte(usageRecord.createdAt, since),
+        ),
+      )
       .orderBy(usageRecord.createdAt);
 
     return records.map((r) => ({
@@ -384,7 +410,7 @@ class UsageService {
   /**
    * Get usage aggregated by session
    */
-  async getSessionUsage(days: number = 30) {
+  async getSessionUsage(organizationId: string, days: number = 30) {
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - days);
 
@@ -400,6 +426,7 @@ class UsageService {
       .from(usageRecord)
       .where(
         and(
+          eq(usageRecord.organizationId, organizationId),
           gte(usageRecord.createdAt, since),
           sql`${usageRecord.sessionId} IS NOT NULL`
         )
@@ -420,7 +447,7 @@ class UsageService {
   /**
    * Get usage aggregated by flow (for OpenRouter direct calls without session)
    */
-  async getFlowUsage(days: number = 30) {
+  async getFlowUsage(organizationId: string, days: number = 30) {
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - days);
 
@@ -435,6 +462,7 @@ class UsageService {
       .from(usageRecord)
       .where(
         and(
+          eq(usageRecord.organizationId, organizationId),
           gte(usageRecord.createdAt, since),
           sql`${usageRecord.sessionId} IS NULL`,
           // Exclude image_gen events (legacy counting-only records)

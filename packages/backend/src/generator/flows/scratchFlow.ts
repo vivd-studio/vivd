@@ -6,7 +6,6 @@ import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
 import { scraperClient } from "../scraper-client";
 import { analyzeImages } from "../image_analyzer";
-import { thumbnailService } from "../../services/ThumbnailService";
 import type { FlowContext } from "../../services/OpenRouterService";
 
 export interface ScratchAssetInput {
@@ -65,7 +64,11 @@ export async function runScratchFlow(
   input: ScratchFlowInput,
 ) {
   // Create flow context for cost tracking
-  const flowContext: FlowContext = { flowId: "scratch", projectSlug: ctx.slug };
+  const flowContext: FlowContext = {
+    flowId: "scratch",
+    organizationId: ctx.organizationId,
+    projectSlug: ctx.slug,
+  };
 
   const imagesDir = path.join(ctx.outputDir, "images");
   const referencesDir = path.join(ctx.outputDir, "references");
@@ -172,9 +175,4 @@ export async function runScratchFlow(
   } catch (gitError) {
     log(`[Git] Warning: Failed to initialize/commit git: ${gitError}`);
   }
-
-  // Generate thumbnail (fire-and-forget)
-  thumbnailService
-    .generateThumbnailImmediate(ctx.outputDir, ctx.slug, ctx.version)
-    .catch((err) => log(`[Thumbnail] Warning: ${err.message}`));
 }

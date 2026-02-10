@@ -1,5 +1,6 @@
 type StudioWorkspaceStateRecord = {
   studioId: string;
+  organizationId: string;
   slug: string;
   version: number;
   hasUnsavedChanges: boolean;
@@ -10,6 +11,7 @@ type StudioWorkspaceStateRecord = {
 
 type ReportWorkspaceStateInput = {
   studioId: string;
+  organizationId: string;
   slug: string;
   version: number;
   hasUnsavedChanges: boolean;
@@ -19,6 +21,7 @@ type ReportWorkspaceStateInput = {
 
 type RecentWorkspaceState = {
   studioId: string;
+  organizationId: string;
   slug: string;
   version: number;
   hasUnsavedChanges: boolean;
@@ -31,8 +34,8 @@ type RecentWorkspaceState = {
 const DEFAULT_STUDIO_STATE_MAX_AGE_MS = 30_000;
 const CLEANUP_FACTOR = 6;
 
-function keyFor(slug: string, version: number): string {
-  return `${slug}:v${version}`;
+function keyFor(organizationId: string, slug: string, version: number): string {
+  return `${organizationId}:${slug}:v${version}`;
 }
 
 class StudioWorkspaceStateService {
@@ -40,10 +43,11 @@ class StudioWorkspaceStateService {
 
   report(input: ReportWorkspaceStateInput): void {
     const now = Date.now();
-    const key = keyFor(input.slug, input.version);
+    const key = keyFor(input.organizationId, input.slug, input.version);
 
     this.records.set(key, {
       studioId: input.studioId,
+      organizationId: input.organizationId,
       slug: input.slug,
       version: input.version,
       hasUnsavedChanges: input.hasUnsavedChanges,
@@ -55,8 +59,12 @@ class StudioWorkspaceStateService {
     this.cleanup(now);
   }
 
-  getRecent(slug: string, version: number): RecentWorkspaceState | null {
-    const key = keyFor(slug, version);
+  getRecent(
+    organizationId: string,
+    slug: string,
+    version: number
+  ): RecentWorkspaceState | null {
+    const key = keyFor(organizationId, slug, version);
     const record = this.records.get(key);
     if (!record) return null;
 
@@ -66,6 +74,7 @@ class StudioWorkspaceStateService {
 
     return {
       studioId: record.studioId,
+      organizationId: record.organizationId,
       slug: record.slug,
       version: record.version,
       hasUnsavedChanges: record.hasUnsavedChanges,

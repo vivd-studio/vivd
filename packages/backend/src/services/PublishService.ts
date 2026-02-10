@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import { db } from "../db";
 import { publishedSite } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { GitHubSyncResult } from "./GitService";
 import {
   uploadProjectPublishedToBucket,
@@ -31,6 +31,7 @@ export interface PublishResult {
 
 export interface PublishedSiteInfo {
   id: string;
+  organizationId: string;
   domain: string;
   commitHash: string;
   publishedAt: Date;
@@ -57,16 +58,21 @@ export class PublishConflictError extends Error {
 export class PublishService {
   private activePublishes = new Set<string>();
 
-  private async withPublishLock<T>(projectSlug: string, work: () => Promise<T>): Promise<T> {
-    while (this.activePublishes.has(projectSlug)) {
+  private async withPublishLock<T>(
+    organizationId: string,
+    projectSlug: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const lockKey = `${organizationId}:${projectSlug}`;
+    while (this.activePublishes.has(lockKey)) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    this.activePublishes.add(projectSlug);
+    this.activePublishes.add(lockKey);
 
     try {
       return await work();
     } finally {
-      this.activePublishes.delete(projectSlug);
+      this.activePublishes.delete(lockKey);
     }
   }
 
@@ -132,7 +138,7 @@ export class PublishService {
    */
   async isDomainAvailable(
     domain: string,
-    excludeProjectSlug?: string
+    exclude?: { organizationId: string; projectSlug: string }
   ): Promise<boolean> {
     const normalized = this.normalizeDomain(domain);
 
@@ -147,7 +153,11 @@ export class PublishService {
     }
 
     // If checking for the same project, allow it (republishing)
-    if (excludeProjectSlug && existing[0].projectSlug === excludeProjectSlug) {
+    if (
+      exclude &&
+      existing[0].organizationId === exclude.organizationId &&
+      existing[0].projectSlug === exclude.projectSlug
+    ) {
       return true;
     }
 
@@ -158,14 +168,15 @@ export class PublishService {
    * Publish a project version to a domain
    */
   async publish(params: {
+    organizationId: string;
     projectSlug: string;
     version: number;
     domain: string;
     userId: string;
     expectedCommitHash?: string;
   }): Promise<PublishResult> {
-    return await this.withPublishLock(params.projectSlug, async () => {
-      const { projectSlug, version, domain, userId, expectedCommitHash } = params;
+    return await this.withPublishLock(params.organizationId, params.projectSlug, async () => {
+      const { organizationId, projectSlug, version, domain, userId, expectedCommitHash } = params;
       const normalizedDomain = this.normalizeDomain(domain);
 
       // Validate domain format
@@ -175,7 +186,10 @@ export class PublishService {
       }
 
       // Check domain availability
-      const available = await this.isDomainAvailable(normalizedDomain, projectSlug);
+      const available = await this.isDomainAvailable(normalizedDomain, {
+        organizationId,
+        projectSlug,
+      });
       if (!available) {
         throw new Error(
           `Domain "${normalizedDomain}" is already in use by another project`,
@@ -184,6 +198,7 @@ export class PublishService {
 
       // Resolve publish source from bucket artifacts.
       const artifactState = await resolvePublishableArtifactState({
+        organizationId,
         slug: projectSlug,
         version,
       });
@@ -219,7 +234,7 @@ export class PublishService {
         );
       }
 
-      const publishedPath = path.join(PUBLISHED_DIR, projectSlug);
+      const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
       const stagingDir = fs.mkdtempSync(
         path.join(os.tmpdir(), `vivd-publish-${projectSlug}-`),
       );
@@ -227,6 +242,7 @@ export class PublishService {
       try {
         // Hydrate artifact from bucket into a temporary staging directory.
         const downloadResult = await downloadArtifactToDirectory({
+          organizationId,
           slug: projectSlug,
           version,
           kind: artifactState.sourceKind,
@@ -248,6 +264,7 @@ export class PublishService {
 
       // Keep published artifact in bucket in sync (best-effort).
       await uploadProjectPublishedToBucket({
+        organizationId,
         localDir: publishedPath,
         slug: projectSlug,
         version,
@@ -263,14 +280,19 @@ export class PublishService {
       const existingRecord = await db
         .select()
         .from(publishedSite)
-        .where(eq(publishedSite.projectSlug, projectSlug))
+        .where(
+          and(
+            eq(publishedSite.organizationId, organizationId),
+            eq(publishedSite.projectSlug, projectSlug),
+          ),
+        )
         .limit(1);
 
       if (existingRecord.length > 0 && existingRecord[0].domain !== normalizedDomain) {
         this.removeCaddyConfig(existingRecord[0].domain);
       }
 
-      await this.generateCaddyConfig(normalizedDomain, projectSlug);
+      await this.generateCaddyConfig(normalizedDomain, organizationId, projectSlug);
       await this.reloadCaddy();
 
       const now = new Date();
@@ -291,6 +313,7 @@ export class PublishService {
       } else {
         await db.insert(publishedSite).values({
           id: recordId,
+          organizationId,
           projectSlug,
           projectVersion: version,
           domain: normalizedDomain,
@@ -315,16 +338,23 @@ export class PublishService {
   /**
    * Unpublish a project (remove from Caddy and optionally delete files)
    */
-  async unpublish(projectSlug: string, deleteFiles = true): Promise<void> {
+  async unpublish(
+    organizationId: string,
+    projectSlug: string,
+    deleteFiles = true,
+  ): Promise<void> {
     const existing = await db
       .select()
       .from(publishedSite)
-      .where(eq(publishedSite.projectSlug, projectSlug))
+      .where(
+        and(
+          eq(publishedSite.organizationId, organizationId),
+          eq(publishedSite.projectSlug, projectSlug),
+        ),
+      )
       .limit(1);
 
-    if (existing.length === 0) {
-      throw new Error("Project is not published");
-    }
+    if (existing.length === 0) throw new Error("Project is not published");
 
     const { domain } = existing[0];
 
@@ -335,13 +365,11 @@ export class PublishService {
     await this.reloadCaddy();
 
     // Delete database record
-    await db
-      .delete(publishedSite)
-      .where(eq(publishedSite.projectSlug, projectSlug));
+    await db.delete(publishedSite).where(eq(publishedSite.id, existing[0].id));
 
     // Optionally delete published files
     if (deleteFiles) {
-      const publishedPath = path.join(PUBLISHED_DIR, projectSlug);
+      const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
       if (fs.existsSync(publishedPath)) {
         fs.rmSync(publishedPath, { recursive: true, force: true });
       }
@@ -356,8 +384,32 @@ export class PublishService {
 
     const map = new Map<string, PublishedSiteInfo>();
     for (const record of results) {
+      map.set(`${record.organizationId}:${record.projectSlug}`, {
+        id: record.id,
+        organizationId: record.organizationId,
+        domain: record.domain,
+        commitHash: record.commitHash,
+        publishedAt: record.publishedAt,
+        projectSlug: record.projectSlug,
+        projectVersion: record.projectVersion,
+      });
+    }
+    return map;
+  }
+
+  async getPublishedSitesForOrganization(
+    organizationId: string,
+  ): Promise<Map<string, PublishedSiteInfo>> {
+    const results = await db
+      .select()
+      .from(publishedSite)
+      .where(eq(publishedSite.organizationId, organizationId));
+
+    const map = new Map<string, PublishedSiteInfo>();
+    for (const record of results) {
       map.set(record.projectSlug, {
         id: record.id,
+        organizationId: record.organizationId,
         domain: record.domain,
         commitHash: record.commitHash,
         publishedAt: record.publishedAt,
@@ -372,21 +424,26 @@ export class PublishService {
    * Get published info for a project
    */
   async getPublishedInfo(
-    projectSlug: string
+    organizationId: string,
+    projectSlug: string,
   ): Promise<PublishedSiteInfo | null> {
     const result = await db
       .select()
       .from(publishedSite)
-      .where(eq(publishedSite.projectSlug, projectSlug))
+      .where(
+        and(
+          eq(publishedSite.organizationId, organizationId),
+          eq(publishedSite.projectSlug, projectSlug),
+        ),
+      )
       .limit(1);
 
-    if (result.length === 0) {
-      return null;
-    }
+    if (result.length === 0) return null;
 
     const record = result[0];
     return {
       id: record.id,
+      organizationId: record.organizationId,
       domain: record.domain,
       commitHash: record.commitHash,
       publishedAt: record.publishedAt,
@@ -453,6 +510,7 @@ export class PublishService {
    */
   private async generateCaddyConfig(
     domain: string,
+    organizationId: string,
     projectSlug: string
   ): Promise<void> {
     // Ensure Caddy sites directory exists
@@ -475,7 +533,7 @@ export class PublishService {
     const frontendPort = process.env.NODE_ENV === "development" ? "5173" : "80";
 
     // Check if the site has a custom 404.html
-    const publishedPath = path.join(PUBLISHED_DIR, projectSlug);
+    const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
     const hasCustom404 = fs.existsSync(path.join(publishedPath, "404.html"));
 
     // Prepare error handler block
@@ -485,14 +543,14 @@ export class PublishService {
       // Use site's custom 404
       errorHandlerBlock = `
     # Custom 404 handling: use site's 404.html
-    handle_errors {
-        @404 expression {err.status_code} == 404
-        handle @404 {
-            root * /srv/published/${projectSlug}
-            rewrite * /404.html
-            file_server {
-                status {err.status_code}
-            }
+	    handle_errors {
+	        @404 expression {err.status_code} == 404
+	        handle @404 {
+	            root * ${publishedPath}
+	            rewrite * /404.html
+	            file_server {
+	                status {err.status_code}
+	            }
         }
     }`;
     } else {
@@ -519,12 +577,12 @@ ${domainSpec} {
     @notVivdStudio not path /vivd-studio /vivd-studio/*
 
     # Serve published site only for non-studio paths
-    handle @notVivdStudio {
-        root * /srv/published/${projectSlug}
-        try_files {path} {path}/index.html
-        file_server {
-            hide .vivd .git .vivd-working-commit
-        }
+	    handle @notVivdStudio {
+	        root * ${publishedPath}
+	        try_files {path} {path}/index.html
+	        file_server {
+	            hide .vivd .git .vivd-working-commit
+	        }
     }
 ${errorHandlerBlock}
 

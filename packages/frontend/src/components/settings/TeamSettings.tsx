@@ -1,0 +1,339 @@
+import { useMemo, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { Loader2, UserPlus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const createUserSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    role: z.enum(["member", "admin", "client_editor"]),
+    projectSlug: z.string().optional(),
+  })
+  .refine(
+    (data) => (data.role === "client_editor" ? !!data.projectSlug : true),
+    {
+      message: "Project is required for Client Editor",
+      path: ["projectSlug"],
+    },
+  );
+
+type CreateUserFormValues = z.infer<typeof createUserSchema>;
+
+function formatRole(role: string): string {
+  switch (role) {
+    case "owner":
+      return "Owner";
+    case "admin":
+      return "Admin";
+    case "member":
+      return "Member";
+    case "client_editor":
+      return "Client Editor";
+    default:
+      return role;
+  }
+}
+
+export function TeamSettings() {
+  const { data: session } = authClient.useSession();
+  const utils = trpc.useUtils();
+  const [isAdding, setIsAdding] = useState(false);
+
+  const { data: membership } = trpc.organization.getMyMembership.useQuery();
+  const isOrgAdmin = !!membership?.isOrganizationAdmin;
+
+  const { data: projectsData } = trpc.project.list.useQuery(undefined, {
+    enabled: isOrgAdmin,
+  });
+
+  const {
+    data: membersData,
+    isLoading: isMembersLoading,
+    error: membersError,
+  } = trpc.organization.listMembers.useQuery(undefined, {
+    enabled: isOrgAdmin,
+  });
+
+  const projects = useMemo(
+    () => projectsData?.projects ?? [],
+    [projectsData?.projects],
+  );
+
+  const form = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      role: "member",
+      projectSlug: undefined,
+    },
+  });
+
+  const selectedRole = form.watch("role");
+
+  const createUserMutation = trpc.organization.createUser.useMutation({
+    onSuccess: () => {
+      toast.success("User created");
+      form.reset();
+      setIsAdding(false);
+      utils.organization.listMembers.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to create user", { description: error.message });
+    },
+  });
+
+  const removeMemberMutation = trpc.organization.removeMember.useMutation({
+    onSuccess: () => {
+      toast.success("Member removed");
+      utils.organization.listMembers.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to remove member", { description: error.message });
+    },
+  });
+
+  if (!isOrgAdmin) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <CardTitle>Team</CardTitle>
+            <CardDescription>Invite members to your organization.</CardDescription>
+          </div>
+          <Button onClick={() => setIsAdding((v) => !v)} className="gap-2">
+            <UserPlus className="h-4 w-4" />
+            {isAdding ? "Close" : "Add member"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {isAdding && (
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit((values) =>
+                createUserMutation.mutate(values),
+              )}
+              className="space-y-4 rounded-lg border p-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Jane Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="jane@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <PasswordInput placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="client_editor">Client Editor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {selectedRole === "client_editor" && (
+                  <FormField
+                    control={form.control}
+                    name="projectSlug"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Assigned Project</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a project" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {projects.map((project) => (
+                              <SelectItem key={project.slug} value={project.slug}>
+                                {project.title || project.slug}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsAdding(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createUserMutation.isPending}>
+                  {createUserMutation.isPending ? (
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  ) : null}
+                  Create user
+                </Button>
+              </div>
+            </form>
+          </Form>
+        )}
+
+        {membersError && (
+          <p className="text-sm text-destructive">
+            Failed to load team: {membersError.message}
+          </p>
+        )}
+
+        {isMembersLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading team…
+          </div>
+        ) : (
+          <div className="relative w-full overflow-auto">
+            <table className="w-full caption-bottom text-sm text-left">
+              <thead className="[&_tr]:border-b">
+                <tr className="border-b">
+                  <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
+                    Name
+                  </th>
+                  <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
+                    Email
+                  </th>
+                  <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
+                    Role
+                  </th>
+                  <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
+                    Assigned Project
+                  </th>
+                  <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="[&_tr:last-child]:border-0">
+                {(membersData?.members ?? []).map((member) => {
+                  const isOwner = member.role === "owner";
+                  const isSelf = member.userId === session?.user?.id;
+                  const canRemove = !isOwner && !isSelf;
+
+                  return (
+                    <tr key={member.id} className="border-b">
+                      <td className="p-4 align-middle font-medium">
+                        {member.user.name}
+                      </td>
+                      <td className="p-4 align-middle">{member.user.email}</td>
+                      <td className="p-4 align-middle">
+                        {formatRole(member.role)}
+                      </td>
+                      <td className="p-4 align-middle text-muted-foreground">
+                        {member.assignedProjectSlug ?? "—"}
+                      </td>
+                      <td className="p-4 align-middle">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={!canRemove || removeMemberMutation.isPending}
+                          aria-label={`Remove ${member.user.email}`}
+                          onClick={() => {
+                            if (!canRemove) return;
+                            if (
+                              !window.confirm(
+                                `Remove ${member.user.email} from this organization?`,
+                              )
+                            )
+                              return;
+                            removeMemberMutation.mutate({ userId: member.userId });
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+

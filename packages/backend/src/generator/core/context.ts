@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import {
+  getActiveTenantId,
   getNextVersion,
   getProjectDir,
   getVersionDir,
@@ -26,26 +27,27 @@ function getSlugFromUrl(targetUrl: string): string {
   return hostname.split(".")[0] || "project";
 }
 
-async function slugExists(slug: string): Promise<boolean> {
-  const existing = await projectMetaService.getProject(slug);
+async function slugExists(organizationId: string, slug: string): Promise<boolean> {
+  const existing = await projectMetaService.getProject(organizationId, slug);
   if (existing) return true;
-  return fs.existsSync(getProjectDir(slug));
+  return fs.existsSync(getProjectDir(organizationId, slug));
 }
 
-async function findAvailableSlug(baseSlug: string): Promise<string> {
+async function findAvailableSlug(organizationId: string, baseSlug: string): Promise<string> {
   const normalizedBase = baseSlug.trim().toLowerCase();
-  if (!(await slugExists(normalizedBase))) return normalizedBase;
+  if (!(await slugExists(organizationId, normalizedBase))) return normalizedBase;
 
   let i = 2;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const candidate = `${normalizedBase}-${i}`;
-    if (!(await slugExists(candidate))) return candidate;
+    if (!(await slugExists(organizationId, candidate))) return candidate;
     i++;
   }
 }
 
 export interface CreateGenerationContextInput {
+  organizationId?: string;
   source: GenerationSource;
   url?: string;
   title?: string;
@@ -59,6 +61,7 @@ export interface CreateGenerationContextInput {
 export async function createGenerationContext(
   input: CreateGenerationContextInput,
 ): Promise<GenerationContext> {
+  const organizationId = input.organizationId ?? getActiveTenantId();
   const now = new Date();
   const source = input.source;
   const initialStatus = input.initialStatus ?? "pending";
@@ -75,17 +78,18 @@ export async function createGenerationContext(
   }
 
   if (input.allowSlugSuffix) {
-    slug = await findAvailableSlug(slug);
+    slug = await findAvailableSlug(organizationId, slug);
   }
 
-  const version = input.version ?? (await getNextVersion(slug));
-  const projectDir = getProjectDir(slug);
-  const outputDir = getVersionDir(slug, version);
+  const version = input.version ?? (await getNextVersion(organizationId, slug));
+  const projectDir = getProjectDir(organizationId, slug);
+  const outputDir = getVersionDir(organizationId, slug, version);
 
   if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
   await projectMetaService.createProjectVersion({
+    organizationId,
     slug,
     version,
     source,
@@ -111,12 +115,12 @@ export async function createGenerationContext(
 
   const updateStatus = (status: string, errorMessage?: string) => {
     void projectMetaService
-      .updateVersionStatus({ slug, version, status, errorMessage })
+      .updateVersionStatus({ organizationId, slug, version, status, errorMessage })
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(`[ProjectMeta] Failed to update status for ${slug}/v${version}: ${message}`);
       });
   };
 
-  return { source, slug, version, outputDir, updateStatus };
+  return { organizationId, source, slug, version, outputDir, updateStatus };
 }

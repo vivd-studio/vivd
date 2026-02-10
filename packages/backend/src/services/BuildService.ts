@@ -8,13 +8,32 @@ import { uploadProjectPreviewToBucket } from "./ProjectArtifactsService";
 
 /**
  * Parse slug and version from a version directory path.
- * Path format: .../projects/<slug>/v<N>/...
+ * Path formats:
+ * - .../projects/tenants/<orgId>/<slug>/v<N>
+ * - .../projects/<slug>/v<N> (legacy)
  */
-function parseVersionDir(versionDir: string): { slug: string; version: number } | null {
+function parseVersionDir(versionDir: string): {
+  organizationId: string;
+  slug: string;
+  version: number;
+} | null {
   const normalized = versionDir.replace(/\\/g, "/").replace(/\/+$/, "");
-  const match = normalized.match(/\/([^/]+)\/v(\d+)$/);
-  if (!match) return null;
-  return { slug: match[1], version: parseInt(match[2], 10) };
+  const tenantMatch = normalized.match(/\/tenants\/([^/]+)\/([^/]+)\/v(\d+)$/);
+  if (tenantMatch) {
+    return {
+      organizationId: tenantMatch[1] ?? "default",
+      slug: tenantMatch[2],
+      version: parseInt(tenantMatch[3] ?? "0", 10),
+    };
+  }
+
+  const legacyMatch = normalized.match(/\/([^/]+)\/v(\d+)$/);
+  if (!legacyMatch) return null;
+  return {
+    organizationId: "default",
+    slug: legacyMatch[1],
+    version: parseInt(legacyMatch[2] ?? "0", 10),
+  };
 }
 
 export interface BuildInfo {
@@ -232,6 +251,7 @@ class BuildService {
       if (parsed) {
         const startedAt = this.builds.get(versionDir)?.startedAt;
         await uploadProjectPreviewToBucket({
+          organizationId: parsed.organizationId,
           localDir: outputPath,
           slug: parsed.slug,
           version: parsed.version,
@@ -251,7 +271,12 @@ class BuildService {
       // Generate thumbnail after successful build
       if (parsed) {
         thumbnailService
-          .generateThumbnail(versionDir, parsed.slug, parsed.version)
+          .generateThumbnail(
+            versionDir,
+            parsed.organizationId,
+            parsed.slug,
+            parsed.version,
+          )
           .catch((err) => {
             console.error("[Thumbnail] Post-build warning:", err.message);
           });

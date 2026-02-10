@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { router, protectedProcedure, projectMemberProcedure } from "../trpc";
+import { router, orgProcedure, projectMemberProcedure } from "../trpc";
 import { usageService, type TokenData } from "../services/UsageService";
 import { limitsService } from "../services/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
@@ -68,7 +68,7 @@ export const studioApiRouter = router({
    * Called by studio's UsageReporter service to sync usage data.
    * Authenticated via user's session token.
    */
-  reportUsage: protectedProcedure
+  reportUsage: orgProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -76,6 +76,7 @@ export const studioApiRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
       const userId = ctx.session.user.id;
 
       console.log(
@@ -85,6 +86,7 @@ export const studioApiRouter = router({
       // Record each report via UsageService
       for (const report of input.reports) {
         await usageService.recordAiCost(
+          organizationId,
           report.cost,
           report.tokens as TokenData | undefined,
           report.sessionId,
@@ -102,7 +104,7 @@ export const studioApiRouter = router({
    * This allows the usage table to reflect the latest session titles even if no
    * further usage events are emitted after the rename.
    */
-  updateSessionTitle: protectedProcedure
+  updateSessionTitle: orgProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -112,6 +114,7 @@ export const studioApiRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
       const userId = ctx.session.user.id;
 
       console.log(
@@ -119,6 +122,7 @@ export const studioApiRouter = router({
       );
 
       await usageService.updateSessionTitle(
+        organizationId,
         input.sessionId,
         input.sessionTitle,
         input.projectSlug,
@@ -132,17 +136,18 @@ export const studioApiRouter = router({
    * Studio calls this to get limit information for display.
    * Authenticated via user's session token.
    */
-  getStatus: protectedProcedure
+  getStatus: orgProcedure
     .input(
       z.object({
         studioId: z.string(),
       })
     )
     .query(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
       const userId = ctx.session.user.id;
 
       // Return current limit status
-      const status = await limitsService.checkLimits();
+      const status = await limitsService.checkLimits(organizationId);
 
       console.log(
         `[StudioAPI] Status request from studio ${input.studioId} (user: ${userId}): blocked=${status.blocked}`
@@ -163,8 +168,8 @@ export const studioApiRouter = router({
         slug: z.string().min(1),
       }),
     )
-    .mutation(async ({ input }) => {
-      await touchProjectUpdatedAt(input.slug);
+    .mutation(async ({ ctx, input }) => {
+      await touchProjectUpdatedAt(ctx.organizationId!, input.slug);
       return { success: true };
     }),
 
@@ -181,9 +186,9 @@ export const studioApiRouter = router({
         version: z.number().int().positive(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       // Also touch project activity so list sorting updates immediately.
-      void touchProjectUpdatedAt(input.slug).catch((err) => {
+      void touchProjectUpdatedAt(ctx.organizationId!, input.slug).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(
           `[StudioAPI] touchProjectUpdatedAt failed for ${input.slug}: ${message}`,
@@ -191,9 +196,9 @@ export const studioApiRouter = router({
       });
 
       // Fire-and-forget; thumbnail generation is debounced internally.
-      const versionDir = getVersionDir(input.slug, input.version);
+      const versionDir = getVersionDir(ctx.organizationId!, input.slug, input.version);
       thumbnailService
-        .generateThumbnail(versionDir, input.slug, input.version)
+        .generateThumbnail(versionDir, ctx.organizationId!, input.slug, input.version)
         .catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(
@@ -219,9 +224,10 @@ export const studioApiRouter = router({
         workingCommitHash: z.string().nullable().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       studioWorkspaceStateService.report({
         studioId: input.studioId,
+        organizationId: ctx.organizationId!,
         slug: input.slug,
         version: input.version,
         hasUnsavedChanges: input.hasUnsavedChanges,
@@ -244,11 +250,14 @@ export const studioApiRouter = router({
         checklist: prePublishChecklistSchema,
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       await projectMetaService.upsertPublishChecklist({
-        ...input.checklist,
-        projectSlug: input.slug,
-        version: input.version,
+        organizationId: ctx.organizationId!,
+        checklist: {
+          ...input.checklist,
+          projectSlug: input.slug,
+          version: input.version,
+        },
       });
       return { success: true };
     }),
@@ -264,8 +273,9 @@ export const studioApiRouter = router({
         version: z.number().int().positive(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const checklist = await projectMetaService.getPublishChecklist({
+        organizationId: ctx.organizationId!,
         slug: input.slug,
         version: input.version,
       });

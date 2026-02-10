@@ -95,7 +95,7 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
-  const isAdmin = session?.user?.role === "admin";
+  const isSuperAdmin = session?.user?.role === "super_admin";
   const utils = trpc.useUtils();
 
   const resetMutation = trpc.project.resetStatus.useMutation({
@@ -352,7 +352,7 @@ export function ProjectCard({
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="text-sm font-medium">{statusLabel}...</span>
               </div>
-              {isAdmin && (
+              {isSuperAdmin && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -370,7 +370,7 @@ export function ProjectCard({
                   />
                   {resetMutation.isPending
                     ? "Resetting..."
-                    : "Force Reset (Admin)"}
+                    : "Force Reset (Super Admin)"}
                 </Button>
               )}
             </div>

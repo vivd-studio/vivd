@@ -21,9 +21,11 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       // Check if studio is already running
       const existingUrl = await studioMachineProvider.getUrl(
+        organizationId,
         input.slug,
         input.version,
       );
@@ -52,6 +54,7 @@ export const studioProcedures = {
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
       // Studio machines need a backend URL that is reachable *from the machine*.
       // - Local provider spawns the studio as a child-process inside this backend container,
       //   so `DOMAIN` (usually `http://localhost` via Caddy on :80) is not reachable.
@@ -87,6 +90,7 @@ export const studioProcedures = {
 
       try {
         const { studioId, url, port } = await studioMachineProvider.ensureRunning({
+          organizationId,
           projectSlug: input.slug,
           version: input.version,
           env: {
@@ -120,8 +124,8 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .mutation(async ({ input }) => {
-      await studioMachineProvider.stop(input.slug, input.version);
+    .mutation(async ({ ctx, input }) => {
+      await studioMachineProvider.stop(ctx.organizationId!, input.slug, input.version);
       return { success: true };
     }),
 
@@ -135,8 +139,8 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .mutation(async ({ input }) => {
-      await studioMachineProvider.touch(input.slug, input.version);
+    .mutation(async ({ ctx, input }) => {
+      await studioMachineProvider.touch(ctx.organizationId!, input.slug, input.version);
       return { success: true };
     }),
 
@@ -150,12 +154,13 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const running = await studioMachineProvider.isRunning(
+        ctx.organizationId!,
         input.slug,
         input.version,
       );
-      const url = await studioMachineProvider.getUrl(input.slug, input.version);
+      const url = await studioMachineProvider.getUrl(ctx.organizationId!, input.slug, input.version);
       return {
         running,
         url,

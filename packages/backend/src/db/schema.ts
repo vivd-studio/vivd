@@ -9,7 +9,29 @@ import {
   integer,
   numeric,
   jsonb,
+  primaryKey,
+  foreignKey,
 } from "drizzle-orm/pg-core";
+
+export const organization = pgTable(
+  "organization",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    status: text("status").notNull().default("active"), // 'active' | 'suspended'
+    limits: jsonb("limits").notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("organization_slug_unique").on(table.slug),
+    index("organization_status_idx").on(table.status),
+  ],
+);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -40,11 +62,15 @@ export const session = pgTable(
       .notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    activeOrganizationId: text("active_organization_id"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [index("session_userId_idx").on(table.userId)]
+  (table) => [
+    index("session_userId_idx").on(table.userId),
+    index("session_active_org_idx").on(table.activeOrganizationId),
+  ],
 );
 
 export const account = pgTable(
@@ -87,11 +113,60 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)]
 );
 
+export const organizationMember = pgTable(
+  "organization_member",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // 'owner' | 'admin' | 'member' | 'client_editor'
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("organization_member_org_user_unique").on(
+      table.organizationId,
+      table.userId,
+    ),
+    index("organization_member_org_idx").on(table.organizationId),
+    index("organization_member_user_idx").on(table.userId),
+  ],
+);
+
+export const organizationInvitation = pgTable(
+  "organization_invitation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role").notNull(),
+    status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'rejected' | 'canceled'
+    inviterId: text("inviter_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("organization_invitation_org_idx").on(table.organizationId),
+    index("organization_invitation_email_idx").on(table.email),
+    index("organization_invitation_status_idx").on(table.status),
+  ],
+);
+
 // Project members - binds client_editors to specific projects
 export const projectMember = pgTable(
   "project_member",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -99,8 +174,12 @@ export const projectMember = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
+    uniqueIndex("project_member_org_user_unique").on(
+      table.organizationId,
+      table.userId,
+    ),
     index("project_member_user_idx").on(table.userId),
-    index("project_member_project_idx").on(table.projectSlug),
+    index("project_member_project_idx").on(table.organizationId, table.projectSlug),
   ]
 );
 
@@ -108,6 +187,7 @@ export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   projectMembers: many(projectMember),
+  organizationMembers: many(organizationMember),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -125,6 +205,10 @@ export const accountRelations = relations(account, ({ one }) => ({
 }));
 
 export const projectMemberRelations = relations(projectMember, ({ one }) => ({
+  organization: one(organization, {
+    fields: [projectMember.organizationId],
+    references: [organization.id],
+  }),
   user: one(user, {
     fields: [projectMember.userId],
     references: [user.id],
@@ -135,7 +219,10 @@ export const projectMemberRelations = relations(projectMember, ({ one }) => ({
 export const projectMeta = pgTable(
   "project_meta",
   {
-    slug: text("slug").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
     source: text("source").notNull().default("scratch"), // 'url' | 'scratch'
     url: text("url").notNull().default(""),
     title: text("title").notNull().default(""),
@@ -150,16 +237,24 @@ export const projectMeta = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("project_meta_slug_idx").on(table.slug)]
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.slug] }),
+    index("project_meta_org_slug_idx").on(table.organizationId, table.slug),
+    index("project_meta_org_updated_idx").on(
+      table.organizationId,
+      table.updatedAt,
+    ),
+  ]
 );
 
 export const projectVersion = pgTable(
   "project_version",
   {
     id: text("id").primaryKey(),
-    projectSlug: text("project_slug")
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => projectMeta.slug, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
     version: integer("version").notNull(),
     source: text("source").notNull().default("scratch"),
     url: text("url").notNull().default(""),
@@ -176,10 +271,18 @@ export const projectVersion = pgTable(
       .notNull(),
   },
   (table) => [
-    index("project_version_project_idx").on(table.projectSlug),
-    uniqueIndex("project_version_slug_version_unique").on(
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("project_version_org_project_idx").on(
+      table.organizationId,
       table.projectSlug,
-      table.version
+    ),
+    uniqueIndex("project_version_org_slug_version_unique").on(
+      table.organizationId,
+      table.projectSlug,
+      table.version,
     ),
   ]
 );
@@ -188,9 +291,10 @@ export const projectPublishChecklist = pgTable(
   "project_publish_checklist",
   {
     id: text("id").primaryKey(),
-    projectSlug: text("project_slug")
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => projectMeta.slug, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
     version: integer("version").notNull(),
     runAt: timestamp("run_at").notNull(),
     snapshotCommitHash: text("snapshot_commit_hash"),
@@ -202,13 +306,27 @@ export const projectPublishChecklist = pgTable(
       .notNull(),
   },
   (table) => [
-    index("project_publish_checklist_project_idx").on(
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug, table.version],
+      foreignColumns: [
+        projectVersion.organizationId,
+        projectVersion.projectSlug,
+        projectVersion.version,
+      ],
+    }).onDelete("cascade"),
+    index("project_publish_checklist_org_project_idx").on(
+      table.organizationId,
       table.projectSlug,
-      table.version
+      table.version,
     ),
-    uniqueIndex("project_publish_checklist_slug_version_unique").on(
+    uniqueIndex("project_publish_checklist_org_slug_version_unique").on(
+      table.organizationId,
       table.projectSlug,
-      table.version
+      table.version,
     ),
   ]
 );
@@ -218,24 +336,38 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   publishChecklists: many(projectPublishChecklist),
 }));
 
-export const projectVersionRelations = relations(projectVersion, ({ one, many }) => ({
-  project: one(projectMeta, {
-    fields: [projectVersion.projectSlug],
-    references: [projectMeta.slug],
+export const projectVersionRelations = relations(
+  projectVersion,
+  ({ one, many }) => ({
+    project: one(projectMeta, {
+      fields: [projectVersion.organizationId, projectVersion.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    publishChecklists: many(projectPublishChecklist),
   }),
-  publishChecklists: many(projectPublishChecklist),
-}));
+);
 
 export const projectPublishChecklistRelations = relations(
   projectPublishChecklist,
   ({ one }) => ({
     project: one(projectMeta, {
-      fields: [projectPublishChecklist.projectSlug],
-      references: [projectMeta.slug],
+      fields: [
+        projectPublishChecklist.organizationId,
+        projectPublishChecklist.projectSlug,
+      ],
+      references: [projectMeta.organizationId, projectMeta.slug],
     }),
     projectVersion: one(projectVersion, {
-      fields: [projectPublishChecklist.projectSlug, projectPublishChecklist.version],
-      references: [projectVersion.projectSlug, projectVersion.version],
+      fields: [
+        projectPublishChecklist.organizationId,
+        projectPublishChecklist.projectSlug,
+        projectPublishChecklist.version,
+      ],
+      references: [
+        projectVersion.organizationId,
+        projectVersion.projectSlug,
+        projectVersion.version,
+      ],
     }),
   })
 );
@@ -245,6 +377,9 @@ export const publishedSite = pgTable(
   "published_site",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     projectSlug: text("project_slug").notNull(),
     projectVersion: integer("project_version").notNull(),
     domain: text("domain").notNull().unique(), // Normalized (no www.)
@@ -262,9 +397,11 @@ export const publishedSite = pgTable(
   (table) => [
     index("published_site_domain_idx").on(table.domain),
     index("published_site_project_idx").on(
+      table.organizationId,
       table.projectSlug,
       table.projectVersion
     ),
+    index("published_site_org_idx").on(table.organizationId),
   ]
 );
 
@@ -280,6 +417,9 @@ export const usageRecord = pgTable(
   "usage_record",
   {
     id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull(), // 'ai_cost' | 'image_gen'
     cost: numeric("cost", { precision: 10, scale: 6 }).notNull(), // stored in dollars, displayed as credits (×100) in frontend
     tokens: jsonb("tokens"), // token breakdown if available
@@ -293,6 +433,7 @@ export const usageRecord = pgTable(
   (table) => [
     index("usage_record_created_at_idx").on(table.createdAt),
     index("usage_record_event_type_idx").on(table.eventType),
+    index("usage_record_org_idx").on(table.organizationId),
   ]
 );
 
@@ -300,7 +441,10 @@ export const usageRecord = pgTable(
 export const usagePeriod = pgTable(
   "usage_period",
   {
-    id: text("id").primaryKey(), // e.g., "daily:2026-01-13", "weekly:2026-W03", "monthly:2026-01"
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    id: text("id").notNull(), // e.g., "daily:2026-01-13", "weekly:2026-W03", "monthly:2026-01"
     periodType: text("period_type").notNull(), // 'daily' | 'weekly' | 'monthly'
     periodStart: timestamp("period_start").notNull(),
     totalCost: numeric("total_cost", { precision: 10, scale: 6 })
@@ -313,7 +457,44 @@ export const usagePeriod = pgTable(
       .notNull(),
   },
   (table) => [
+    primaryKey({ columns: [table.organizationId, table.id] }),
     index("usage_period_type_idx").on(table.periodType),
     index("usage_period_start_idx").on(table.periodStart),
+    index("usage_period_org_idx").on(table.organizationId),
   ]
+);
+
+export const organizationRelations = relations(organization, ({ many }) => ({
+  members: many(organizationMember),
+  invitations: many(organizationInvitation),
+  publishedSites: many(publishedSite),
+  projectMetas: many(projectMeta),
+}));
+
+export const organizationMemberRelations = relations(
+  organizationMember,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [organizationMember.organizationId],
+      references: [organization.id],
+    }),
+    user: one(user, {
+      fields: [organizationMember.userId],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const organizationInvitationRelations = relations(
+  organizationInvitation,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [organizationInvitation.organizationId],
+      references: [organization.id],
+    }),
+    inviter: one(user, {
+      fields: [organizationInvitation.inviterId],
+      references: [user.id],
+    }),
+  }),
 );

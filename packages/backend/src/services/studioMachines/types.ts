@@ -1,6 +1,7 @@
 export type StudioMachineProviderKind = "local" | "fly";
 
 export interface StudioMachineStartArgs {
+  organizationId: string;
   projectSlug: string;
   version: number;
   /**
@@ -20,8 +21,8 @@ export interface StudioMachineProvider {
   kind: StudioMachineProviderKind;
 
   ensureRunning(args: StudioMachineStartArgs): Promise<StudioMachineStartResult>;
-  touch(projectSlug: string, version: number): void | Promise<void>;
-  stop(projectSlug: string, version: number): void | Promise<void>;
-  getUrl(projectSlug: string, version: number): Promise<string | null>;
-  isRunning(projectSlug: string, version: number): Promise<boolean>;
+  touch(organizationId: string, projectSlug: string, version: number): void | Promise<void>;
+  stop(organizationId: string, projectSlug: string, version: number): void | Promise<void>;
+  getUrl(organizationId: string, projectSlug: string, version: number): Promise<string | null>;
+  isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean>;
 }

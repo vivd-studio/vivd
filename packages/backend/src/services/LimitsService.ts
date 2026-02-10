@@ -1,5 +1,8 @@
 import { usageService } from "./UsageService";
 import type { LimitsConfig } from "@vivd/shared/types";
+import { db } from "../db";
+import { organization } from "../db/schema";
+import { eq } from "drizzle-orm";
 
 // Default configuration values (in credits, where 1 credit = 1 cent)
 // Original dollar defaults halved, then multiplied by 100
@@ -92,8 +95,53 @@ function getEnvConfig(): LimitsConfig {
   };
 }
 
-async function getConfig(): Promise<LimitsConfig> {
-  return getEnvConfig();
+function parseConfigOverrides(value: unknown): Partial<LimitsConfig> {
+  if (!value || typeof value !== "object") return {};
+  const record = value as Record<string, unknown>;
+
+  const pickNumber = (key: keyof LimitsConfig): number | undefined => {
+    const raw = record[key as string];
+    if (typeof raw !== "number") return undefined;
+    if (!Number.isFinite(raw) || raw < 0) return undefined;
+    return raw;
+  };
+
+  const pickInt = (key: keyof LimitsConfig): number | undefined => {
+    const raw = pickNumber(key);
+    if (raw === undefined) return undefined;
+    return Math.floor(raw);
+  };
+
+  const warningThreshold = (() => {
+    const raw = pickNumber("warningThreshold");
+    if (raw === undefined) return undefined;
+    return Math.min(1, Math.max(0.1, raw));
+  })();
+
+  return {
+    dailyCreditLimit: pickNumber("dailyCreditLimit"),
+    weeklyCreditLimit: pickNumber("weeklyCreditLimit"),
+    monthlyCreditLimit: pickNumber("monthlyCreditLimit"),
+    imageGenPerMonth: pickInt("imageGenPerMonth"),
+    warningThreshold,
+  };
+}
+
+async function getConfig(organizationId: string): Promise<LimitsConfig> {
+  const envConfig = getEnvConfig();
+  try {
+    const org = await db.query.organization.findFirst({
+      where: eq(organization.id, organizationId),
+      columns: { limits: true },
+    });
+    const overrides = parseConfigOverrides(org?.limits);
+    return {
+      ...envConfig,
+      ...overrides,
+    };
+  } catch {
+    return envConfig;
+  }
 }
 
 export interface UsageInfo {
@@ -157,9 +205,9 @@ class LimitsService {
   /**
    * Check usage limits and return current status
    */
-  async checkLimits(): Promise<LimitStatus> {
-    const config = await getConfig();
-    const currentUsage = await usageService.getCurrentUsage();
+  async checkLimits(organizationId: string): Promise<LimitStatus> {
+    const config = await getConfig(organizationId);
+    const currentUsage = await usageService.getCurrentUsage(organizationId);
     const now = new Date();
 
     const warnings: string[] = [];
@@ -296,8 +344,8 @@ class LimitsService {
    * Quick check - throws an error if usage is blocked
    * Use this in procedures to prevent actions when limits are exceeded
    */
-  async assertNotBlocked(): Promise<void> {
-    const status = await this.checkLimits();
+  async assertNotBlocked(organizationId: string): Promise<void> {
+    const status = await this.checkLimits(organizationId);
     if (status.blocked) {
       throw new Error(`Usage limit exceeded: ${status.warnings.join("; ")}`);
     }
@@ -309,8 +357,8 @@ class LimitsService {
    * - Cost limits are exceeded (general block)
    * - Image generation limit is exceeded (image-specific block)
    */
-  async assertImageGenNotBlocked(): Promise<void> {
-    const status = await this.checkLimits();
+  async assertImageGenNotBlocked(organizationId: string): Promise<void> {
+    const status = await this.checkLimits(organizationId);
 
     // Check general cost limits first
     if (status.blocked) {

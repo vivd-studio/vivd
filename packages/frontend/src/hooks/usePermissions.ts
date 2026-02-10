@@ -1,6 +1,6 @@
 import { authClient } from "@/lib/auth-client";
 
-export type UserRole = "admin" | "user" | "client_editor";
+export type UserRole = "super_admin" | "admin" | "user" | "client_editor";
 
 /**
  * Hook for checking user permissions based on their role.
@@ -13,10 +13,13 @@ export type UserRole = "admin" | "user" | "client_editor";
 export function usePermissions() {
   const { data: session } = authClient.useSession();
   const role = (session?.user?.role ?? "user") as UserRole;
+  const isSuperAdmin = role === "super_admin";
+  const isAdmin = isSuperAdmin || role === "admin";
 
   return {
     role,
-    isAdmin: role === "admin",
+    isSuperAdmin,
+    isAdmin,
     isUser: role === "user",
     isClientEditor: role === "client_editor",
 
@@ -24,7 +27,8 @@ export function usePermissions() {
     canUseAgent: role !== "client_editor",
     canUseAiImages: role !== "client_editor",
     canManageProjects: role !== "client_editor",
-    canManageUsers: role === "admin",
-    canAccessMaintenance: role === "admin",
+    // System-level controls are super-admin only in multi-tenant mode.
+    canManageUsers: isSuperAdmin,
+    canAccessMaintenance: isSuperAdmin,
   };
 }

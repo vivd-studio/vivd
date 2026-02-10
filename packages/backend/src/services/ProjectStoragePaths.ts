@@ -1,17 +1,15 @@
-import { getActiveTenantId } from "../generator/versionUtils";
-
 export type ProjectArtifactKind = "source" | "preview" | "published" | "thumbnails";
 
 export function getProjectBasePrefix(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
 }): string {
-  const tenantId = (options.tenantId || getActiveTenantId()).trim() || "default";
+  const tenantId = options.tenantId.trim() || "default";
   return `tenants/${tenantId}/projects/${options.slug}`;
 }
 
 export function getProjectVersionBasePrefix(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
   version: number;
 }): string {
@@ -19,7 +17,7 @@ export function getProjectVersionBasePrefix(options: {
 }
 
 export function getProjectArtifactKeyPrefix(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
   version: number;
   kind: ProjectArtifactKind;
@@ -29,7 +27,7 @@ export function getProjectArtifactKeyPrefix(options: {
 }
 
 export function getProjectPreviewBuildMetaKey(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
   version: number;
 }): string {
@@ -37,7 +35,7 @@ export function getProjectPreviewBuildMetaKey(options: {
 }
 
 export function getProjectSourceBuildMetaKey(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
   version: number;
 }): string {
@@ -45,7 +43,7 @@ export function getProjectSourceBuildMetaKey(options: {
 }
 
 export function getProjectPublishedBuildMetaKey(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
   version: number;
 }): string {
@@ -53,7 +51,7 @@ export function getProjectPublishedBuildMetaKey(options: {
 }
 
 export function getProjectThumbnailKey(options: {
-  tenantId?: string;
+  tenantId: string;
   slug: string;
   version: number;
 }): string {

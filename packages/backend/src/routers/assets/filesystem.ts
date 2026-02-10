@@ -37,12 +37,12 @@ export const assetsFilesystemProcedures = {
         relativePath: z.string().optional().default(""),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const { slug, version, relativePath } = input;
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const targetDir = path.join(versionDir, relativePath);
 
       if (!fs.existsSync(targetDir)) {
@@ -131,12 +131,12 @@ export const assetsFilesystemProcedures = {
         relativePath: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, relativePath } = input;
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const targetPath = path.join(versionDir, relativePath);
 
       if (!fs.existsSync(targetPath)) {
@@ -163,7 +163,7 @@ export const assetsFilesystemProcedures = {
         fs.unlinkSync(targetPath);
       }
 
-      await touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(ctx.organizationId!, slug);
       return { success: true, deleted: relativePath };
     }),
 
@@ -179,12 +179,12 @@ export const assetsFilesystemProcedures = {
         folderName: z.string().min(1),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, relativePath, folderName } = input;
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
 
       // Sanitize folder name
       const sanitizedName = folderName.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -198,7 +198,7 @@ export const assetsFilesystemProcedures = {
       }
 
       fs.mkdirSync(sanitizedPath, { recursive: true });
-      await touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(ctx.organizationId!, slug);
 
       return {
         success: true,
@@ -218,12 +218,12 @@ export const assetsFilesystemProcedures = {
         relativePath: z.string(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const { slug, version, relativePath } = input;
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const targetPath = path.join(versionDir, relativePath);
 
       if (!fs.existsSync(targetPath)) {
@@ -268,12 +268,12 @@ export const assetsFilesystemProcedures = {
         content: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, relativePath, content } = input;
       if (hasDotSegment(relativePath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const targetPath = path.join(versionDir, relativePath);
 
       // Security: ensure we're still within the version directory
@@ -294,7 +294,7 @@ export const assetsFilesystemProcedures = {
       }
 
       fs.writeFileSync(targetPath, content, "utf-8");
-      await touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(ctx.organizationId!, slug);
       return { success: true, path: relativePath };
     }),
 
@@ -310,7 +310,7 @@ export const assetsFilesystemProcedures = {
         destinationPath: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { slug, version, sourcePath, destinationPath } = input;
 
       // Validate paths
@@ -318,7 +318,7 @@ export const assetsFilesystemProcedures = {
         throw new Error("Invalid path");
       }
 
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const sourceFullPath = path.join(versionDir, sourcePath);
       const destFullPath = path.join(versionDir, destinationPath);
 
@@ -357,7 +357,7 @@ export const assetsFilesystemProcedures = {
 
       // Move the file/folder
       fs.renameSync(sourceFullPath, destFullPath);
-      await touchProjectUpdatedAt(slug);
+      await touchProjectUpdatedAt(ctx.organizationId!, slug);
 
       return { success: true, oldPath: sourcePath, newPath: destinationPath };
     }),
@@ -373,12 +373,12 @@ export const assetsFilesystemProcedures = {
         rootPath: z.string().optional().default(""),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const { slug, version, rootPath } = input;
       if (hasDotSegment(rootPath)) {
         throw new Error("Invalid path");
       }
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(ctx.organizationId!, slug, version);
       const targetDir = path.join(versionDir, rootPath);
 
       if (!fs.existsSync(targetDir)) {

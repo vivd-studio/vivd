@@ -1,13 +1,22 @@
 import { type S3Client } from "@aws-sdk/client-s3";
-import { createS3Client, doesObjectExist, doesPrefixHaveObjects, downloadBucketPrefixToDirectory, getObjectBuffer, getObjectStorageConfigFromEnv } from "./ObjectStorageService";
-import { getProjectArtifactKeyPrefix, getProjectPreviewBuildMetaKey, getProjectSourceBuildMetaKey } from "./ProjectStoragePaths";
-import { getActiveTenantId } from "../generator/versionUtils";
+import {
+  createS3Client,
+  doesObjectExist,
+  doesPrefixHaveObjects,
+  downloadBucketPrefixToDirectory,
+  getObjectBuffer,
+  getObjectStorageConfigFromEnv,
+} from "./ObjectStorageService";
+import {
+  getProjectArtifactKeyPrefix,
+  getProjectPreviewBuildMetaKey,
+  getProjectSourceBuildMetaKey,
+} from "./ProjectStoragePaths";
 import type { ArtifactBuildMeta, ArtifactBuildStatus } from "./ProjectArtifactsService";
 
 type Storage = {
   client: S3Client;
   bucket: string;
-  tenantId: string;
 };
 
 export type PublishArtifactKind = "source" | "preview";
@@ -44,7 +53,6 @@ function getStorage(): Storage | null {
     storageCache = {
       client: createS3Client(config),
       bucket: config.bucket,
-      tenantId: getActiveTenantId(),
     };
   } catch {
     storageCache = null;
@@ -55,6 +63,7 @@ function getStorage(): Storage | null {
 
 async function getBuildMeta(options: {
   storage: Storage;
+  organizationId: string;
   slug: string;
   version: number;
   kind: PublishArtifactKind;
@@ -62,12 +71,12 @@ async function getBuildMeta(options: {
   const key =
     options.kind === "preview"
       ? getProjectPreviewBuildMetaKey({
-          tenantId: options.storage.tenantId,
+          tenantId: options.organizationId,
           slug: options.slug,
           version: options.version,
         })
       : getProjectSourceBuildMetaKey({
-          tenantId: options.storage.tenantId,
+          tenantId: options.organizationId,
           slug: options.slug,
           version: options.version,
         });
@@ -94,6 +103,7 @@ export function getArtifactStorageConfig(): Storage | null {
 }
 
 export async function resolvePublishableArtifactState(options: {
+  organizationId: string;
   slug: string;
   version: number;
 }): Promise<PublishableArtifactState> {
@@ -117,13 +127,13 @@ export async function resolvePublishableArtifactState(options: {
   }
 
   const previewPrefix = getProjectArtifactKeyPrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: "preview",
   });
   const sourcePrefix = getProjectArtifactKeyPrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: "source",
@@ -141,12 +151,14 @@ export async function resolvePublishableArtifactState(options: {
     await Promise.all([
       getBuildMeta({
         storage,
+        organizationId: options.organizationId,
         slug: options.slug,
         version: options.version,
         kind: "preview",
       }),
       getBuildMeta({
         storage,
+        organizationId: options.organizationId,
         slug: options.slug,
         version: options.version,
         kind: "source",
@@ -229,7 +241,7 @@ export async function resolvePublishableArtifactState(options: {
       };
     }
 
-    if (previewHasIndex || previewHasAny) {
+    if (previewHasIndex) {
       return {
         storageEnabled: true,
         readiness: "ready",
@@ -246,6 +258,28 @@ export async function resolvePublishableArtifactState(options: {
         previewBuiltAt: previewMeta?.completedAt ?? previewMeta?.startedAt ?? null,
         sourceBuiltAt: sourceMeta?.completedAt ?? sourceMeta?.startedAt ?? null,
         error: null,
+        previewStatus: previewMeta?.status ?? null,
+        sourceStatus: sourceMeta?.status ?? null,
+      };
+    }
+
+    if (previewHasAny) {
+      return {
+        storageEnabled: true,
+        readiness: "artifact_not_ready",
+        sourceKind: "preview",
+        framework: "astro",
+        commitHash: previewMeta?.commitHash ?? sourceMeta?.commitHash ?? null,
+        builtAt:
+          previewMeta?.completedAt ??
+          previewMeta?.startedAt ??
+          sourceMeta?.completedAt ??
+          null,
+        previewCommitHash: previewMeta?.commitHash ?? null,
+        sourceCommitHash: sourceMeta?.commitHash ?? null,
+        previewBuiltAt: previewMeta?.completedAt ?? previewMeta?.startedAt ?? null,
+        sourceBuiltAt: sourceMeta?.completedAt ?? sourceMeta?.startedAt ?? null,
+        error: "Preview artifact upload in progress (index missing)",
         previewStatus: previewMeta?.status ?? null,
         sourceStatus: sourceMeta?.status ?? null,
       };
@@ -268,7 +302,7 @@ export async function resolvePublishableArtifactState(options: {
     };
   }
 
-  if (sourceHasIndex || (sourceHasAny && !sourceHasAstroConfig)) {
+  if (sourceHasIndex) {
     return {
       storageEnabled: true,
       readiness: "ready",
@@ -281,6 +315,24 @@ export async function resolvePublishableArtifactState(options: {
       previewBuiltAt: previewMeta?.completedAt ?? previewMeta?.startedAt ?? null,
       sourceBuiltAt: sourceMeta?.completedAt ?? sourceMeta?.startedAt ?? null,
       error: null,
+      previewStatus: previewMeta?.status ?? null,
+      sourceStatus: sourceMeta?.status ?? null,
+    };
+  }
+
+  if (sourceHasAny && !sourceHasAstroConfig) {
+    return {
+      storageEnabled: true,
+      readiness: "artifact_not_ready",
+      sourceKind: "source",
+      framework: sourceMeta?.framework ?? "generic",
+      commitHash: sourceMeta?.commitHash ?? null,
+      builtAt: sourceMeta?.completedAt ?? sourceMeta?.startedAt ?? null,
+      previewCommitHash: previewMeta?.commitHash ?? null,
+      sourceCommitHash: sourceMeta?.commitHash ?? null,
+      previewBuiltAt: previewMeta?.completedAt ?? previewMeta?.startedAt ?? null,
+      sourceBuiltAt: sourceMeta?.completedAt ?? sourceMeta?.startedAt ?? null,
+      error: "Source artifact upload in progress (index missing)",
       previewStatus: previewMeta?.status ?? null,
       sourceStatus: sourceMeta?.status ?? null,
     };
@@ -304,6 +356,7 @@ export async function resolvePublishableArtifactState(options: {
 }
 
 export async function downloadArtifactToDirectory(options: {
+  organizationId: string;
   slug: string;
   version: number;
   kind: PublishArtifactKind;
@@ -313,7 +366,7 @@ export async function downloadArtifactToDirectory(options: {
   if (!storage) return { downloaded: false, filesDownloaded: 0 };
 
   const keyPrefix = getProjectArtifactKeyPrefix({
-    tenantId: storage.tenantId,
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: options.kind,

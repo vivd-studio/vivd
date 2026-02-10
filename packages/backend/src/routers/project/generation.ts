@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
-  protectedProcedure,
   adminProcedure,
+  orgProcedure,
   projectMemberProcedure,
 } from "../../trpc";
 import { processUrl } from "../../generator/index";
@@ -24,7 +24,7 @@ import { publishService } from "../../services/PublishService";
 import { gitService } from "../../services/GitService";
 import { db } from "../../db";
 import { projectMember } from "../../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { limitsService } from "../../services/LimitsService";
 import { detectProjectType } from "../../devserver/projectType";
 import { buildService } from "../../services/BuildService";
@@ -34,17 +34,18 @@ import {
   uploadProjectSourceToBucket,
 } from "../../services/ProjectArtifactsService";
 import { getObjectDownloadUrl } from "../../services/ObjectStorageService";
+import { thumbnailService } from "../../services/ThumbnailService";
 
 /**
  * Check if single project mode is enabled and a project already exists.
  * In single project mode, only one project is allowed.
  */
-async function checkSingleProjectModeLimit(): Promise<void> {
+async function checkSingleProjectModeLimit(organizationId: string): Promise<void> {
   if (process.env.SINGLE_PROJECT_MODE !== "true") {
     return; // Not in single project mode
   }
 
-  const projectSlugs = await listProjectSlugs();
+  const projectSlugs = await listProjectSlugs(organizationId);
   if (projectSlugs.length > 0) {
     throw new Error(
       "Single project mode is enabled and a project already exists. " +
@@ -55,12 +56,14 @@ async function checkSingleProjectModeLimit(): Promise<void> {
 
 async function syncArtifactsAfterGeneration(options: {
   versionDir: string;
+  organizationId: string;
   slug: string;
   version: number;
 }): Promise<void> {
   const projectConfig = detectProjectType(options.versionDir);
 
   await uploadProjectSourceToBucket({
+    organizationId: options.organizationId,
     versionDir: options.versionDir,
     slug: options.slug,
     version: options.version,
@@ -71,19 +74,33 @@ async function syncArtifactsAfterGeneration(options: {
     },
   });
 
-  if (projectConfig.framework !== "astro") return;
+  if (projectConfig.framework === "astro") {
+    const distPath = await buildService.buildSync(options.versionDir, "dist");
+    await uploadProjectPreviewToBucket({
+      organizationId: options.organizationId,
+      localDir: distPath,
+      slug: options.slug,
+      version: options.version,
+      meta: {
+        status: "ready",
+        framework: "astro",
+        completedAt: new Date().toISOString(),
+      },
+    });
+  }
 
-  const distPath = await buildService.buildSync(options.versionDir, "dist");
-  await uploadProjectPreviewToBucket({
-    localDir: distPath,
-    slug: options.slug,
-    version: options.version,
-    meta: {
-      status: "ready",
-      framework: "astro",
-      completedAt: new Date().toISOString(),
-    },
-  });
+  // Generate thumbnail only after artifacts are synced to storage.
+  try {
+    await thumbnailService.generateThumbnailImmediate(
+      options.versionDir,
+      options.organizationId,
+      options.slug,
+      options.version,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Thumbnail] Post-sync generation failed: ${msg}`);
+  }
 }
 
 function normalizeReferenceUrls(urls?: string[]): string[] | undefined {
@@ -124,9 +141,10 @@ export const projectGenerationProcedures = {
         htmlHint: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       // Check usage limits before allowing generation (costs LLM tokens)
-      await limitsService.assertNotBlocked();
+      await limitsService.assertNotBlocked(organizationId);
 
       // Enforce single project mode limit (only for new projects)
       const { url, createNewVersion } = input;
@@ -139,9 +157,9 @@ export const projectGenerationProcedures = {
           .replace("www.", "")
           .split(".")[0];
 
-        const existing = await getManifest(domainSlug);
+        const existing = await getManifest(organizationId, domainSlug);
         if (!existing) {
-          await checkSingleProjectModeLimit();
+          await checkSingleProjectModeLimit(organizationId);
         }
       }
 
@@ -152,13 +170,13 @@ export const projectGenerationProcedures = {
         .replace("www.", "")
         .split(".")[0];
 
-      const manifest = await getManifest(domainSlug);
+      const manifest = await getManifest(organizationId, domainSlug);
       if (manifest) {
-        const currentVersion = await getCurrentVersion(domainSlug);
+        const currentVersion = await getCurrentVersion(organizationId, domainSlug);
 
         if (manifest && currentVersion > 0) {
           // Check if any version is currently processing (but not stale)
-          const currentVersionData = await getVersionData(domainSlug, currentVersion);
+          const currentVersionData = await getVersionData(organizationId, domainSlug, currentVersion);
           const status = currentVersionData?.status || "unknown";
           const versionInfo = manifest.versions.find(
             (v) => v.version === currentVersion,
@@ -183,8 +201,9 @@ export const projectGenerationProcedures = {
           }
 
           // Create new version
-          const nextVersion = await getNextVersion(domainSlug);
+          const nextVersion = await getNextVersion(organizationId, domainSlug);
           processUrl(url, nextVersion, {
+            organizationId,
             heroHint: input.heroHint,
             htmlHint: input.htmlHint,
           })
@@ -195,6 +214,7 @@ export const projectGenerationProcedures = {
               try {
                 await syncArtifactsAfterGeneration({
                   versionDir: result.outputDir,
+                  organizationId,
                   slug: result.domainSlug,
                   version: result.version,
                 });
@@ -218,6 +238,7 @@ export const projectGenerationProcedures = {
 
       // New project - create version 1
       processUrl(url, 1, {
+        organizationId,
         heroHint: input.heroHint,
         htmlHint: input.htmlHint,
       })
@@ -226,6 +247,7 @@ export const projectGenerationProcedures = {
           try {
             await syncArtifactsAfterGeneration({
               versionDir: result.outputDir,
+              organizationId,
               slug: result.domainSlug,
               version: result.version,
             });
@@ -277,16 +299,18 @@ export const projectGenerationProcedures = {
           .optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       // Check usage limits before allowing scratch generation (costs LLM tokens)
-      await limitsService.assertNotBlocked();
+      await limitsService.assertNotBlocked(organizationId);
 
       // Enforce single project mode limit
-      await checkSingleProjectModeLimit();
+      await checkSingleProjectModeLimit(organizationId);
 
       validateConfig();
 
-      const ctx = await createGenerationContext({
+      const generationCtx = await createGenerationContext({
+        organizationId,
         source: "scratch",
         title: input.title,
         description: input.description,
@@ -294,16 +318,17 @@ export const projectGenerationProcedures = {
         initialStatus: "pending",
       });
 
-      runScratchFlow(ctx, input)
+      runScratchFlow(generationCtx, input)
         .then(async () => {
           console.log(
-            `Finished scratch generation for ${ctx.slug} (version ${ctx.version})`,
+            `Finished scratch generation for ${generationCtx.slug} (version ${generationCtx.version})`,
           );
           try {
             await syncArtifactsAfterGeneration({
-              versionDir: ctx.outputDir,
-              slug: ctx.slug,
-              version: ctx.version,
+              versionDir: generationCtx.outputDir,
+              organizationId,
+              slug: generationCtx.slug,
+              version: generationCtx.version,
             });
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -312,11 +337,11 @@ export const projectGenerationProcedures = {
         })
         .catch((err) => {
           console.error(
-            `Error during scratch generation for ${ctx.slug}:`,
+            `Error during scratch generation for ${generationCtx.slug}:`,
             err,
           );
           try {
-            ctx.updateStatus("failed");
+            generationCtx.updateStatus("failed");
           } catch {
             // ignore
           }
@@ -324,8 +349,8 @@ export const projectGenerationProcedures = {
 
       return {
         status: "processing",
-        slug: ctx.slug,
-        version: ctx.version,
+        slug: generationCtx.slug,
+        version: generationCtx.version,
         message: "Generation started.",
       };
     }),
@@ -347,18 +372,20 @@ export const projectGenerationProcedures = {
         referenceUrls: z.array(z.string().min(1)).optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       // Check usage limits early to prevent disk spam
-      await limitsService.assertNotBlocked();
+      await limitsService.assertNotBlocked(organizationId);
 
       // Enforce single project mode limit
-      await checkSingleProjectModeLimit();
+      await checkSingleProjectModeLimit(organizationId);
 
       validateConfig();
       const normalizedReferenceUrls = normalizeReferenceUrls(input.referenceUrls);
 
       // Create context with "uploading_assets" status
-      const ctx = await createGenerationContext({
+      const generationCtx = await createGenerationContext({
+        organizationId,
         source: "scratch",
         title: input.title,
         description: input.description,
@@ -367,8 +394,8 @@ export const projectGenerationProcedures = {
       });
 
       // Create images and references directories for uploads
-      const imagesDir = path.join(ctx.outputDir, "images");
-      const referencesDir = path.join(ctx.outputDir, "references");
+      const imagesDir = path.join(generationCtx.outputDir, "images");
+      const referencesDir = path.join(generationCtx.outputDir, "references");
       if (!fs.existsSync(imagesDir)) {
         fs.mkdirSync(imagesDir, { recursive: true });
       }
@@ -396,17 +423,17 @@ export const projectGenerationProcedures = {
         .filter(Boolean)
         .join("\n");
 
-      fs.writeFileSync(path.join(ctx.outputDir, "scratch_brief.txt"), brief);
+      fs.writeFileSync(path.join(generationCtx.outputDir, "scratch_brief.txt"), brief);
 
       if (normalizedReferenceUrls?.length) {
         fs.writeFileSync(
-          path.join(ctx.outputDir, "references", "urls.txt"),
+          path.join(generationCtx.outputDir, "references", "urls.txt"),
           normalizedReferenceUrls.join("\n") + "\n",
         );
       }
 
       // Store metadata for startScratchGeneration to use
-      const draftMetaPath = path.join(ctx.outputDir, ".scratch_draft.json");
+      const draftMetaPath = path.join(generationCtx.outputDir, ".scratch_draft.json");
       fs.writeFileSync(
         draftMetaPath,
         JSON.stringify({
@@ -423,8 +450,8 @@ export const projectGenerationProcedures = {
 
       return {
         status: "uploading_assets",
-        slug: ctx.slug,
-        version: ctx.version,
+        slug: generationCtx.slug,
+        version: generationCtx.version,
         message: "Draft created. Upload assets now.",
       };
     }),
@@ -439,13 +466,14 @@ export const projectGenerationProcedures = {
         version: z.number().min(1),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version } = input;
 
       // Re-check usage limits (this is the paid step)
-      await limitsService.assertNotBlocked();
+      await limitsService.assertNotBlocked(organizationId);
 
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(organizationId, slug, version);
 
       if (!fs.existsSync(versionDir)) {
         throw new Error("Project version not found");
@@ -462,7 +490,8 @@ export const projectGenerationProcedures = {
       const draftMeta = JSON.parse(fs.readFileSync(draftMetaPath, "utf-8"));
 
       // Create a generation context pointing to existing version
-      const ctx = await createGenerationContext({
+      const generationCtx = await createGenerationContext({
+        organizationId,
         source: "scratch",
         title: draftMeta.title,
         description: draftMeta.description,
@@ -473,7 +502,7 @@ export const projectGenerationProcedures = {
       });
 
       // Run scratch flow without base64 assets (they're already uploaded)
-      runScratchFlow(ctx, {
+      runScratchFlow(generationCtx, {
         title: draftMeta.title,
         description: draftMeta.description,
         businessType: draftMeta.businessType,
@@ -490,6 +519,7 @@ export const projectGenerationProcedures = {
           );
           void syncArtifactsAfterGeneration({
             versionDir,
+            organizationId,
             slug,
             version,
           }).catch((err) => {
@@ -507,7 +537,7 @@ export const projectGenerationProcedures = {
         .catch((err) => {
           console.error(`Error during scratch generation for ${slug}:`, err);
           try {
-            ctx.updateStatus("failed");
+            generationCtx.updateStatus("failed");
           } catch {
             // ignore
           }
@@ -528,23 +558,24 @@ export const projectGenerationProcedures = {
         version: z.number().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       // Check usage limits before allowing regeneration (costs LLM tokens)
-      await limitsService.assertNotBlocked();
+      await limitsService.assertNotBlocked(organizationId);
 
       const { slug, version } = input;
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) {
         throw new Error("Project not found");
       }
 
-      const targetVersion = version ?? (await getCurrentVersion(slug));
+      const targetVersion = version ?? (await getCurrentVersion(organizationId, slug));
       if (targetVersion === 0) {
         throw new Error("No versions found for this project");
       }
 
-      const versionDir = getVersionDir(slug, targetVersion);
-      const versionData = await getVersionData(slug, targetVersion);
+      const versionDir = getVersionDir(organizationId, slug, targetVersion);
+      const versionData = await getVersionData(organizationId, slug, targetVersion);
 
       if (!versionData) {
         throw new Error("Version metadata not found");
@@ -561,7 +592,7 @@ export const projectGenerationProcedures = {
       }
 
       // Regenerate the same version
-      processUrl(url, targetVersion)
+      processUrl(url, targetVersion, { organizationId })
         .then(async (result) => {
           console.log(
             `Finished regenerating ${url} (version ${targetVersion})`,
@@ -569,6 +600,7 @@ export const projectGenerationProcedures = {
           try {
             await syncArtifactsAfterGeneration({
               versionDir: result.outputDir,
+              organizationId,
               slug: result.domainSlug,
               version: result.version,
             });
@@ -596,9 +628,10 @@ export const projectGenerationProcedures = {
         version: z.number().optional(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version } = input;
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       const targetVersion = version ?? manifest?.currentVersion ?? 0;
 
       if (targetVersion === 0 || !manifest) {
@@ -612,7 +645,7 @@ export const projectGenerationProcedures = {
         };
       }
 
-      const versionData = await getVersionData(slug, targetVersion);
+      const versionData = await getVersionData(organizationId, slug, targetVersion);
       const status = versionData?.status || "unknown";
       const originalUrl = versionData?.url || manifest.url || "";
       const createdAt = versionData?.createdAt || "";
@@ -629,12 +662,13 @@ export const projectGenerationProcedures = {
       // On preview open, sync from GitHub (best-effort).
       // Skips automatically if there are local uncommitted changes.
       if (status === "completed") {
-        const versionDir = getVersionDir(slug, targetVersion);
+        const versionDir = getVersionDir(organizationId, slug, targetVersion);
         if (fs.existsSync(versionDir)) {
           await gitService.syncPullFromGitHub({
             cwd: versionDir,
             slug,
             version: targetVersion,
+            tenantId: organizationId,
           });
         }
       }
@@ -667,14 +701,18 @@ export const projectGenerationProcedures = {
       };
     }),
 
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: orgProcedure.query(async ({ ctx }) => {
+    const organizationId = ctx.organizationId!;
     // Check if user is a client_editor
     const isClientEditor = ctx.session.user.role === "client_editor";
     let assignedProjectSlug: string | null = null;
 
     if (isClientEditor) {
       const membership = await db.query.projectMember.findFirst({
-        where: eq(projectMember.userId, ctx.session.user.id),
+        where: and(
+          eq(projectMember.organizationId, organizationId),
+          eq(projectMember.userId, ctx.session.user.id),
+        ),
       });
       assignedProjectSlug = membership?.projectSlug ?? null;
 
@@ -686,21 +724,22 @@ export const projectGenerationProcedures = {
 
     try {
       // Fetch all published sites upfront for efficient lookup
-      const publishedSites = await publishService.getAllPublishedSites();
+      const publishedSites =
+        await publishService.getPublishedSitesForOrganization(organizationId);
 
-      const projectSlugs = await listProjectSlugs();
+      const projectSlugs = await listProjectSlugs(organizationId);
       const filteredSlugs = isClientEditor
         ? projectSlugs.filter((slug) => slug === assignedProjectSlug)
         : projectSlugs;
 
       const projects = await Promise.all(
         filteredSlugs.map(async (slug) => {
-          const manifest = await getManifest(slug);
+          const manifest = await getManifest(organizationId, slug);
           if (!manifest) return null;
 
           const currentVersion = manifest.currentVersion;
           const versionData =
-            currentVersion > 0 ? await getVersionData(slug, currentVersion) : null;
+            currentVersion > 0 ? await getVersionData(organizationId, slug, currentVersion) : null;
 
           const title = versionData?.title || (manifest as any).title || "";
           const sourceRaw = (versionData?.source ?? manifest.source) as
@@ -759,9 +798,10 @@ export const projectGenerationProcedures = {
         version: z.number(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version } = input;
-      const manifest = await getManifest(slug);
+      const manifest = await getManifest(organizationId, slug);
       if (!manifest) throw new Error("Project not found");
 
       // Validate that the version exists
@@ -772,8 +812,8 @@ export const projectGenerationProcedures = {
         throw new Error(`Version ${version} does not exist for this project`);
       }
 
-      await projectMetaService.setCurrentVersion(slug, version);
-      await projectMetaService.touchUpdatedAt(slug);
+      await projectMetaService.setCurrentVersion(organizationId, slug, version);
+      await projectMetaService.touchUpdatedAt(organizationId, slug);
 
       return {
         success: true,

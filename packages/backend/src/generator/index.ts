@@ -3,7 +3,7 @@ import { analyzeImages } from "./image_analyzer/index";
 import { createHeroImage } from "./hero_creator";
 import { log } from "./logger";
 import { validateConfig } from "./config";
-import { getNextVersion } from "./versionUtils";
+import { getActiveTenantId, getNextVersion } from "./versionUtils";
 import { createGenerationContext } from "./core/context";
 import { runUrlFlow } from "./flows/urlFlow";
 import { runScratchFlow } from "./flows/scratchFlow";
@@ -18,6 +18,7 @@ export {
 import type { ScratchFlowInput } from "./flows/scratchFlow";
 
 export interface ProcessUrlOptions {
+  organizationId?: string;
   /** Optional hint to influence the hero image generation */
   heroHint?: string;
   /** Optional hint to influence the HTML/landing page generation */
@@ -37,6 +38,8 @@ export async function processUrl(
 ) {
   validateConfig();
 
+  const organizationId = options?.organizationId ?? getActiveTenantId();
+
   if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
     targetUrl = "https://" + targetUrl;
   }
@@ -44,8 +47,9 @@ export async function processUrl(
   const domainSlug = new URL(targetUrl).hostname
     .replace("www.", "")
     .split(".")[0];
-  const targetVersion = version ?? (await getNextVersion(domainSlug));
+  const targetVersion = version ?? (await getNextVersion(organizationId, domainSlug));
   const ctx = await createGenerationContext({
+    organizationId,
     source: "url",
     url: targetUrl,
     slug: domainSlug,
@@ -84,7 +88,10 @@ export async function processScratchProject(
 ) {
   validateConfig();
 
+  const organizationId = getActiveTenantId();
+
   const ctx = await createGenerationContext({
+    organizationId,
     source: "scratch",
     title: input.title,
     description: input.description,

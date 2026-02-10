@@ -7,15 +7,15 @@ export const usageRouter = router({
   /**
    * Get current usage status including limits and warnings
    */
-  status: adminProcedure.query(async () => {
-    return await limitsService.checkLimits();
+  status: adminProcedure.query(async ({ ctx }) => {
+    return await limitsService.checkLimits(ctx.organizationId!);
   }),
 
   /**
    * Get current usage aggregates (without limits info)
    */
-  current: adminProcedure.query(async () => {
-    return await usageService.getCurrentUsage();
+  current: adminProcedure.query(async ({ ctx }) => {
+    return await usageService.getCurrentUsage(ctx.organizationId!);
   }),
 
   /**
@@ -29,9 +29,9 @@ export const usageRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const days = input?.days ?? 30;
-      return await usageService.getUsageHistory(days);
+      return await usageService.getUsageHistory(ctx.organizationId!, days);
     }),
 
   /**
@@ -45,9 +45,9 @@ export const usageRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const days = input?.days ?? 30;
-      return await usageService.getSessionUsage(days);
+      return await usageService.getSessionUsage(ctx.organizationId!, days);
     }),
 
   /**
@@ -61,8 +61,8 @@ export const usageRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const days = input?.days ?? 30;
-      return await usageService.getFlowUsage(days);
+      return await usageService.getFlowUsage(ctx.organizationId!, days);
     }),
 });

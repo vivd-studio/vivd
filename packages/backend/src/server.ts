@@ -17,15 +17,12 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { auth } from "./auth";
 import { appRouter } from "./routers/appRouter";
 import { createContext } from "./trpc";
-import {
-  getActiveTenantId,
-  getVersionDir,
-} from "./generator/versionUtils";
+import { getVersionDir } from "./generator/versionUtils";
 import { createImportRouter } from "./routes/import";
 import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
 import { projectMember } from "./db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { buildService } from "./services/BuildService";
 import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
 import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
@@ -46,6 +43,8 @@ function getRouteParam(req: express.Request, key: string): string | undefined {
 const PREVIEW_TOKEN_QUERY_PARAM = "__vivd_preview_token";
 const PREVIEW_TOKEN_COOKIE_NAME = "vivd_preview_token";
 const PREVIEW_TOKEN_HEADER_NAME = "x-vivd-preview-token";
+const PREVIEW_ORG_QUERY_PARAM = "__vivd_org";
+const PREVIEW_ORG_COOKIE_NAME = "vivd_preview_org";
 
 function getQueryParam(req: express.Request, key: string): string | undefined {
   const value = (req.query as Record<string, unknown>)[key];
@@ -84,21 +83,89 @@ function isHttpsRequest(req: express.Request): boolean {
   return false;
 }
 
+function normalizeDomainForLookup(host: string): string {
+  const normalized = host.toLowerCase();
+  return normalized.startsWith("www.") ? normalized.slice("www.".length) : normalized;
+}
+
+function getRequestHost(req: express.Request): string | null {
+  const raw = req.headers.host;
+  if (!raw) return null;
+
+  const first = raw.split(",")[0]?.trim();
+  if (!first) return null;
+
+  try {
+    return new URL(`http://${first}`).hostname.toLowerCase();
+  } catch {
+    return first.toLowerCase();
+  }
+}
+
+function getEnvHostname(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return new URL(trimmed).hostname.toLowerCase();
+    }
+    return new URL(`http://${trimmed}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function getSuperAdminHosts(): Set<string> {
+  const hosts = new Set<string>();
+
+  const raw = process.env.SUPERADMIN_HOSTS?.trim();
+  if (raw) {
+    raw
+      .split(",")
+      .map((h) => h.trim())
+      .filter(Boolean)
+      .forEach((h) => {
+        const host = getEnvHostname(h) ?? h.toLowerCase();
+        hosts.add(normalizeDomainForLookup(host));
+      });
+  } else {
+    const domainHost = getEnvHostname(process.env.DOMAIN) ?? "localhost";
+    hosts.add(normalizeDomainForLookup(domainHost));
+    hosts.add("localhost");
+    hosts.add("127.0.0.1");
+  }
+
+  return hosts;
+}
+
+function isSuperAdminHost(req: express.Request): boolean {
+  const host = getRequestHost(req);
+  if (!host) return false;
+  const normalized = normalizeDomainForLookup(host);
+  return getSuperAdminHosts().has(normalized);
+}
+
 type CachedPublicPreviewSetting = { enabled: boolean; fetchedAt: number };
 const publicPreviewEnabledCache = new Map<string, CachedPublicPreviewSetting>();
 const PUBLIC_PREVIEW_ENABLED_CACHE_TTL_MS = 10_000;
 
-async function getCachedPublicPreviewEnabled(slug: string): Promise<boolean | null> {
+async function getCachedPublicPreviewEnabled(
+  organizationId: string,
+  slug: string,
+): Promise<boolean | null> {
   const now = Date.now();
-  const cached = publicPreviewEnabledCache.get(slug);
+  const cacheKey = `${organizationId}:${slug}`;
+  const cached = publicPreviewEnabledCache.get(cacheKey);
   if (cached && now - cached.fetchedAt < PUBLIC_PREVIEW_ENABLED_CACHE_TTL_MS) {
     return cached.enabled;
   }
 
-  const project = await projectMetaService.getProject(slug);
+  const project = await projectMetaService.getProject(organizationId, slug);
   if (!project) return null;
 
-  publicPreviewEnabledCache.set(slug, {
+  publicPreviewEnabledCache.set(cacheKey, {
     enabled: project.publicPreviewEnabled,
     fetchedAt: now,
   });
@@ -182,19 +249,19 @@ function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   );
 }
 
-async function getSessionFromRequest(req: express.Request) {
-  return auth.api.getSession({
-    headers: req.headers as any,
-  });
-}
-
 function getSessionUserRole(session: any): string {
   return session?.user?.role ?? "user";
 }
 
-async function getAssignedProjectSlug(userId: string): Promise<string | null> {
+async function getAssignedProjectSlug(
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
   const membership = await db.query.projectMember.findFirst({
-    where: eq(projectMember.userId, userId),
+    where: and(
+      eq(projectMember.organizationId, organizationId),
+      eq(projectMember.userId, userId),
+    ),
   });
   return membership?.projectSlug ?? null;
 }
@@ -203,12 +270,13 @@ async function enforceProjectAccess(
   _req: express.Request,
   res: express.Response,
   session: any,
+  organizationId: string,
   slug: string,
 ): Promise<boolean> {
   const role = getSessionUserRole(session);
   if (role !== "client_editor") return true;
 
-  const assigned = await getAssignedProjectSlug(session.user.id);
+  const assigned = await getAssignedProjectSlug(organizationId, session.user.id);
   if (!assigned) {
     res.status(403).json({ error: "No project assigned to your account" });
     return false;
@@ -241,7 +309,19 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 
 // Auth Routes
-app.all("/vivd-studio/api/auth/*path", toNodeHandler(auth));
+const authHandler = toNodeHandler(auth);
+app.all("/vivd-studio/api/auth/*path", async (req, res) => {
+  // Host-gate Better Auth admin endpoints so they aren't reachable from customer domains.
+  if (
+    (req.path === "/vivd-studio/api/auth/admin" ||
+      req.path.startsWith("/vivd-studio/api/auth/admin/")) &&
+    !isSuperAdminHost(req)
+  ) {
+    return res.status(404).json({ error: "Not found" });
+  }
+
+  return authHandler(req, res);
+});
 // Security whitelist for external preview (unauthenticated access)
 const ALLOWED_EXTENSIONS = new Set([
   ".html",
@@ -412,6 +492,7 @@ function isClientDisconnectedError(err: unknown): boolean {
 async function tryServeFromBucket(options: {
   req?: express.Request;
   res: express.Response;
+  organizationId: string;
   slug: string;
   version: number;
   kind: "source" | "preview";
@@ -424,7 +505,7 @@ async function tryServeFromBucket(options: {
   if (rel === null) return "not_found";
 
   const keyPrefix = getProjectArtifactKeyPrefix({
-    tenantId: getActiveTenantId(),
+    tenantId: options.organizationId,
     slug: options.slug,
     version: options.version,
     kind: options.kind,
@@ -550,13 +631,34 @@ async function tryServeFromBucket(options: {
 
 // Secure external preview endpoint (unauthenticated but filtered)
 app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
+  const requestContext = await createContext({ req, res } as any);
+  let organizationId = requestContext.organizationId;
   const slug = getRouteParam(req, "slug");
   const version = getRouteParam(req, "version");
   if (!slug || !version) {
     return res.status(400).json({ error: "Invalid route parameters" });
   }
 
-  const publicPreviewEnabled = await getCachedPublicPreviewEnabled(slug);
+  const internalToken = getInternalPreviewAccessToken();
+  const tokenCandidate =
+    req.get(PREVIEW_TOKEN_HEADER_NAME) ||
+    getQueryParam(req, PREVIEW_TOKEN_QUERY_PARAM) ||
+    getCookieValue(req, PREVIEW_TOKEN_COOKIE_NAME);
+
+  const tokenOk = Boolean(
+    internalToken && tokenCandidate && tokenCandidate === internalToken,
+  );
+
+  if (!organizationId) {
+    const candidate =
+      getQueryParam(req, PREVIEW_ORG_QUERY_PARAM)?.trim() ||
+      getCookieValue(req, PREVIEW_ORG_COOKIE_NAME)?.trim();
+    if (candidate) organizationId = candidate;
+  }
+
+  if (!organizationId) return res.status(404).json({ error: "Not found" });
+
+  const publicPreviewEnabled = await getCachedPublicPreviewEnabled(organizationId, slug);
   if (publicPreviewEnabled === null) {
     return res.status(404).json({ error: "Not found" });
   }
@@ -565,16 +667,6 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   // - When public previews are disabled, require a valid session OR an internal access token.
   // - The internal token is primarily used by internal services (e.g. thumbnail scraper).
   if (!publicPreviewEnabled) {
-    const internalToken = getInternalPreviewAccessToken();
-    const tokenCandidate =
-      req.get(PREVIEW_TOKEN_HEADER_NAME) ||
-      getQueryParam(req, PREVIEW_TOKEN_QUERY_PARAM) ||
-      getCookieValue(req, PREVIEW_TOKEN_COOKIE_NAME);
-
-    const tokenOk = Boolean(
-      internalToken && tokenCandidate && tokenCandidate === internalToken,
-    );
-
     if (tokenOk && internalToken) {
       // Persist token for subsequent asset requests (e.g. scraper loads HTML first, then assets).
       if (getCookieValue(req, PREVIEW_TOKEN_COOKIE_NAME) !== internalToken) {
@@ -586,14 +678,34 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
           path: "/vivd-studio/api/preview",
         });
       }
+
+      if (getCookieValue(req, PREVIEW_ORG_COOKIE_NAME) !== organizationId) {
+        res.cookie(PREVIEW_ORG_COOKIE_NAME, organizationId, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: isHttpsRequest(req),
+          maxAge: 5 * 60 * 1000,
+          path: "/vivd-studio/api/preview",
+        });
+      }
     } else {
-      const session = await getSessionFromRequest(req);
+      const session = requestContext.session;
       if (!session) {
         return res.status(404).json({ error: "Not found" });
       }
-      const ok = await enforceProjectAccess(req, res, session, slug);
+      const ok = await enforceProjectAccess(req, res, session, organizationId, slug);
       if (!ok) return;
     }
+  }
+
+  if (getCookieValue(req, PREVIEW_ORG_COOKIE_NAME) !== organizationId) {
+    res.cookie(PREVIEW_ORG_COOKIE_NAME, organizationId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isHttpsRequest(req),
+      maxAge: 5 * 60 * 1000,
+      path: "/vivd-studio/api/preview",
+    });
   }
 
   // req.url contains the path relative to the mount point (e.g. "/" or "/index.html")
@@ -618,6 +730,7 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   }
 
   const artifactState = await resolvePublishableArtifactState({
+    organizationId,
     slug,
     version: versionNumber,
   });
@@ -650,6 +763,7 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
     const served = await tryServeFromBucket({
       req,
       res,
+      organizationId,
       slug,
       version: versionNumber,
       kind: artifactState.sourceKind,
@@ -661,7 +775,7 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
 
   // Local fallback for standalone mode when object storage is disabled.
   res.setHeader("X-Vivd-Preview-Source", "local");
-  const versionDir = getVersionDir(slug, versionNumber);
+  const versionDir = getVersionDir(organizationId, slug, versionNumber);
   const config = fs.existsSync(versionDir)
     ? detectProjectType(versionDir)
     : { framework: "generic" as const, mode: "static" as const, packageManager: "npm" as const };
@@ -747,8 +861,13 @@ app.post(
   upload.array("files", 20),
   async (req, res) => {
     try {
-      const session = await getSessionFromRequest(req);
+      const requestContext = await createContext({ req, res } as any);
+      const session = requestContext.session;
       if (!session) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const organizationId = requestContext.organizationId;
+      if (!organizationId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
@@ -758,7 +877,7 @@ app.post(
         return res.status(400).json({ error: "Invalid route parameters" });
       }
 
-      const ok = await enforceProjectAccess(req, res, session, slug);
+      const ok = await enforceProjectAccess(req, res, session, organizationId, slug);
       if (!ok) return;
 
       const versionNumber = Number.parseInt(version, 10);
@@ -778,7 +897,7 @@ app.post(
         });
       }
 
-      const versionDir = getVersionDir(slug, versionNumber);
+      const versionDir = getVersionDir(organizationId, slug, versionNumber);
       if (!fs.existsSync(versionDir)) {
         return res.status(404).json({ error: "Project version not found" });
       }
@@ -816,7 +935,7 @@ app.post(
         uploaded.push(path.posix.join(relativePath, sanitizedName));
       }
 
-      await projectMetaService.touchUpdatedAt(slug);
+      await projectMetaService.touchUpdatedAt(organizationId, slug);
       return res.json({ success: true, uploaded });
     } catch (error) {
       console.error("Upload error:", error);
@@ -828,9 +947,14 @@ app.post(
 // Download project version as ZIP
 app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
   try {
-    const session = await getSessionFromRequest(req);
+    const requestContext = await createContext({ req, res } as any);
+    const session = requestContext.session;
 
     if (!session) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const organizationId = requestContext.organizationId;
+    if (!organizationId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -839,14 +963,14 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     if (!slug || !version) {
       return res.status(400).json({ error: "Invalid route parameters" });
     }
-    const ok = await enforceProjectAccess(req, res, session, slug);
+    const ok = await enforceProjectAccess(req, res, session, organizationId, slug);
     if (!ok) return;
 
     const versionNumber = Number.parseInt(version, 10);
     if (!Number.isFinite(versionNumber) || versionNumber < 1) {
       return res.status(400).json({ error: "Invalid version" });
     }
-    const versionDir = getVersionDir(slug, versionNumber);
+    const versionDir = getVersionDir(organizationId, slug, versionNumber);
 
     if (!fs.existsSync(versionDir)) {
       return res.status(404).json({ error: "Project version not found" });

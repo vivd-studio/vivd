@@ -54,7 +54,7 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
-  const isAdmin = session?.user?.role === "admin";
+  const isAdmin = session?.user?.role === "super_admin";
   const isCollapsed = state === "collapsed";
   const [showAllProjects, setShowAllProjects] = React.useState(false);
 
@@ -236,6 +236,17 @@ export function AppSidebar() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location.search.includes("tab=orgs")}
+                          >
+                            <Link to={`${ROUTES.ADMIN}?tab=orgs`}>
+                              <Shield className="size-4" />
+                              <span>Orgs</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild

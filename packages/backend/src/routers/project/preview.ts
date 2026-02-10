@@ -21,19 +21,24 @@ export const previewProcedures = {
         version: z.number(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
       const { slug, version } = input;
 
       // External preview URL is always /preview/ (static serving)
       const url = `/vivd-studio/api/preview/${slug}/v${version}/`;
 
-      const project = await projectMetaService.getProject(slug);
+      const project = await projectMetaService.getProject(organizationId, slug);
       if (!project) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       }
       const publicPreviewEnabled = project.publicPreviewEnabled;
 
-      const artifactState = await resolvePublishableArtifactState({ slug, version });
+      const artifactState = await resolvePublishableArtifactState({
+        organizationId,
+        slug,
+        version,
+      });
       if (artifactState.storageEnabled) {
         if (artifactState.readiness === "ready") {
           return {
@@ -72,7 +77,7 @@ export const previewProcedures = {
       }
 
       // Fallback for local standalone mode without object storage.
-      const versionDir = getVersionDir(slug, version);
+      const versionDir = getVersionDir(organizationId, slug, version);
       const config = fs.existsSync(versionDir)
         ? detectProjectType(versionDir)
         : { framework: "generic" as const, mode: "static" as const, packageManager: "npm" as const };
@@ -114,13 +119,15 @@ export const previewProcedures = {
         enabled: z.boolean(),
       }),
     )
-    .mutation(async ({ input }) => {
-      const project = await projectMetaService.getProject(input.slug);
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const project = await projectMetaService.getProject(organizationId, input.slug);
       if (!project) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       }
 
       await projectMetaService.setPublicPreviewEnabled({
+        organizationId,
         slug: input.slug,
         enabled: input.enabled,
       });

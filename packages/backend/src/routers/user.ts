@@ -2,12 +2,12 @@ import { z } from "zod";
 import {
   publicProcedure,
   protectedProcedure,
-  ownerProcedure,
+  orgAdminProcedure,
   router,
 } from "../trpc";
 import { db } from "../db";
 import { projectMember } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export const userRouter = router({
@@ -28,14 +28,22 @@ export const userRouter = router({
   getMyAssignedProject: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const role = ctx.session.user.role;
+    const organizationId = ctx.organizationId;
 
     // Only client_editors have project assignments
     if (role !== "client_editor") {
       return { projectSlug: null };
     }
 
+    if (!organizationId) {
+      return { projectSlug: null };
+    }
+
     const membership = await db.query.projectMember.findFirst({
-      where: eq(projectMember.userId, userId),
+      where: and(
+        eq(projectMember.organizationId, organizationId),
+        eq(projectMember.userId, userId),
+      ),
     });
 
     return { projectSlug: membership?.projectSlug ?? null };
@@ -45,22 +53,31 @@ export const userRouter = router({
    * Assign a user to a project (admin only).
    * For v1, a user can only be assigned to one project.
    */
-  assignUserToProject: ownerProcedure
+  assignUserToProject: orgAdminProcedure
     .input(
       z.object({
         userId: z.string(),
         projectSlug: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId ?? "default";
       const { userId, projectSlug } = input;
 
       // Remove existing assignment if any
-      await db.delete(projectMember).where(eq(projectMember.userId, userId));
+      await db
+        .delete(projectMember)
+        .where(
+          and(
+            eq(projectMember.organizationId, organizationId),
+            eq(projectMember.userId, userId),
+          ),
+        );
 
       // Create new assignment
       await db.insert(projectMember).values({
         id: randomUUID(),
+        organizationId,
         userId,
         projectSlug,
       });
@@ -71,24 +88,32 @@ export const userRouter = router({
   /**
    * Remove a user's project assignment (admin only).
    */
-  unassignUserFromProject: ownerProcedure
+  unassignUserFromProject: orgAdminProcedure
     .input(
       z.object({
         userId: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId ?? "default";
       await db
         .delete(projectMember)
-        .where(eq(projectMember.userId, input.userId));
+        .where(
+          and(
+            eq(projectMember.organizationId, organizationId),
+            eq(projectMember.userId, input.userId),
+          ),
+        );
       return { success: true };
     }),
 
   /**
    * List all project members (admin only).
    */
-  listProjectMembers: ownerProcedure.query(async () => {
+  listProjectMembers: orgAdminProcedure.query(async ({ ctx }) => {
+    const organizationId = ctx.organizationId ?? "default";
     const members = await db.query.projectMember.findMany({
+      where: eq(projectMember.organizationId, organizationId),
       with: { user: true },
     });
     return { members };
