@@ -8,6 +8,7 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-11: added Fly studio start retry when a machine is in `replacing` state to avoid transient "machine getting replaced" boot failures in the frontend.
 - 2026-02-11: serialized Studio workspace Git operations and auto-cleaned stale `.git/index.lock` to prevent save failures under concurrent requests/restarts.
 - 2026-02-11: optimized release publish workflow to build/push only changed container images between tags and skip deploy when no image-relevant files changed.
 - 2026-02-11: enabled multi-org membership per user (auto-detect existing users by email + org switcher via session active org).

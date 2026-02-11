@@ -22,7 +22,6 @@ import type {
   OrganizationRole,
   UserForm,
 } from "../types";
-import { formatRoleLabel } from "../utils";
 
 type Props = {
   selectedOrg: Organization;

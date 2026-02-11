@@ -632,8 +632,51 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return `${this.publicProtocol}://${this.publicHost}${needsPort ? `:${port}` : ""}`;
   }
 
+  private isMachineGettingReplacedError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("failed_precondition") &&
+      normalized.includes("machine getting replaced")
+    );
+  }
+
   private async startMachine(machineId: string): Promise<void> {
     await this.flyFetch(`/machines/${machineId}/start`, { method: "POST" });
+  }
+
+  private async startMachineHandlingReplacement(machineId: string): Promise<void> {
+    const startedAt = Date.now();
+    const timeoutMs = 60_000;
+    let delayMs = 750;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const machine = await this.getMachine(machineId);
+      const state = machine.state || "unknown";
+
+      if (state === "destroyed" || state === "destroying") {
+        throw new Error(`[FlyMachines] Machine ${machineId} was destroyed`);
+      }
+
+      if (state === "started" || state === "starting") return;
+
+      if (state !== "replacing") {
+        try {
+          await this.startMachine(machineId);
+          return;
+        } catch (err) {
+          if (!this.isMachineGettingReplacedError(err)) throw err;
+          // Fall through to retry loop (state should eventually stop being "replacing").
+        }
+      }
+
+      await sleep(delayMs);
+      delayMs = Math.min(5000, Math.round(delayMs * 1.4));
+    }
+
+    throw new Error(
+      `[FlyMachines] Timed out waiting for machine to finish replacement (${machineId})`,
+    );
   }
 
   private async stopMachine(machineId: string): Promise<void> {
@@ -840,7 +883,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     }
 
     if (existing.state !== "started") {
-      await this.startMachine(existing.id);
+      await this.startMachineHandlingReplacement(existing.id);
     }
 
     const url = this.getPublicUrlForPort(port);
