@@ -16,6 +16,9 @@ export const configRouter = router({
       singleProjectMode: process.env.SINGLE_PROJECT_MODE === "true",
       // Whether the current request host is allowed to access the super-admin panel.
       isSuperAdminHost: ctx.isSuperAdminHost,
+      // When true, the user can switch orgs via session state.
+      // On tenant domains (published domains), org context is pinned to the host.
+      canSelectOrganization: !ctx.hostOrganizationId,
     };
   }),
 });

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   Building2,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
@@ -14,6 +15,7 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { getProjectLastModified } from "@/lib/project-utils";
@@ -53,6 +55,8 @@ import {
 } from "@/components/ui/sidebar";
 
 type SidebarProject = RouterOutputs["project"]["list"]["projects"][number];
+type SwitcherOrganization =
+  RouterOutputs["organization"]["listMyOrganizations"]["organizations"][number];
 
 function useRecentProjects(): SidebarProject[] {
   const { data: projectsData } = trpc.project.list.useQuery(undefined, {
@@ -72,12 +76,40 @@ function useRecentProjects(): SidebarProject[] {
 
 type OrganizationSwitcherProps = {
   org: {
+    id: string;
     name: string;
     status: string;
   } | null;
+  organizations: SwitcherOrganization[];
+  canSelectOrganization: boolean;
+  onSelectOrganization: (organizationId: string) => void;
+  isSwitching: boolean;
 };
 
-function OrganizationSwitcher({ org }: OrganizationSwitcherProps) {
+function formatOrgRole(role: string): string {
+  switch (role) {
+    case "owner":
+      return "Owner";
+    case "admin":
+      return "Admin";
+    case "member":
+      return "User";
+    case "client_editor":
+      return "Client Editor";
+    default:
+      return role;
+  }
+}
+
+function OrganizationSwitcher({
+  org,
+  organizations,
+  canSelectOrganization,
+  onSelectOrganization,
+  isSwitching,
+}: OrganizationSwitcherProps) {
+  const showSwitcher = canSelectOrganization && organizations.length > 1;
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -131,8 +163,37 @@ function OrganizationSwitcher({ org }: OrganizationSwitcherProps) {
                 )}
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {/* Future: multi-org switching options */}
+            {(showSwitcher || !canSelectOrganization) && <DropdownMenuSeparator />}
+            {showSwitcher ? (
+              <>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Switch organization
+                </DropdownMenuLabel>
+                {organizations.map((entry) => (
+                  <DropdownMenuItem
+                    key={entry.id}
+                    disabled={isSwitching || entry.isActive}
+                    onSelect={() => onSelectOrganization(entry.id)}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 w-full">
+                      {entry.isActive ? (
+                        <Check className="size-4 shrink-0" />
+                      ) : (
+                        <span className="size-4 shrink-0" />
+                      )}
+                      <span className="truncate">{entry.name}</span>
+                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                        {formatOrgRole(entry.role)}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : !canSelectOrganization ? (
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                Organization pinned to this domain
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
@@ -438,6 +499,7 @@ function UserMenu({ session, onLogout }: UserMenuProps) {
 
 export function AppSidebar() {
   const { data: session } = authClient.useSession();
+  const utils = trpc.useUtils();
   const { config, isLoading: isConfigLoading } = useAppConfig();
   const location = useLocation();
   const navigate = useNavigate();
@@ -455,6 +517,22 @@ export function AppSidebar() {
     enabled: !!session,
   });
   const org = orgData?.organization ?? null;
+
+  const { data: organizationsData } = trpc.organization.listMyOrganizations.useQuery(
+    undefined,
+    { enabled: !!session },
+  );
+  const organizations = organizationsData?.organizations ?? [];
+
+  const setActiveOrganizationMutation = trpc.organization.setActiveOrganization.useMutation({
+    onSuccess: async () => {
+      await utils.invalidate();
+      navigate(ROUTES.DASHBOARD);
+    },
+    onError: (error) => {
+      toast.error("Failed to switch organization", { description: error.message });
+    },
+  });
 
   const isSuperAdmin = session?.user?.role === "super_admin";
   const showSuperAdmin = isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
@@ -490,7 +568,13 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <OrganizationSwitcher
-          org={org ? { name: org.name, status: org.status } : null}
+          org={org ? { id: org.id, name: org.name, status: org.status } : null}
+          organizations={organizations}
+          canSelectOrganization={config.canSelectOrganization}
+          isSwitching={setActiveOrganizationMutation.isPending}
+          onSelectOrganization={(organizationId) =>
+            setActiveOrganizationMutation.mutate({ organizationId })
+          }
         />
       </SidebarHeader>
 

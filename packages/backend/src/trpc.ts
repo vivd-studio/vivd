@@ -248,6 +248,7 @@ export const createContext = async ({
     session,
     requestHost,
     isSuperAdminHost,
+    hostOrganizationId,
     organizationId,
     organizationRole,
   };

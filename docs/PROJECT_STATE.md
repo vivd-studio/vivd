@@ -8,6 +8,9 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-11: serialized Studio workspace Git operations and auto-cleaned stale `.git/index.lock` to prevent save failures under concurrent requests/restarts.
+- 2026-02-11: optimized release publish workflow to build/push only changed container images between tags and skip deploy when no image-relevant files changed.
+- 2026-02-11: enabled multi-org membership per user (auto-detect existing users by email + org switcher via session active org).
 - 2026-02-10: added transaction safety to superadmin member/user mutations and removed unused legacy role mutation route.
 - 2026-02-10: split `OrganizationsTab` and `AppSidebar` into smaller units; reduced sidebar project polling from 5s to 30s with focus refetch.
 - 2026-02-10: roadmap cleaned up to prioritize open work and key milestones.
@@ -73,6 +76,7 @@ packages/
   - [ ] Confirm backend-unavailable behavior correctly blocks usage.
 - [ ] Move backend project source-of-truth fully to object storage (remove remaining local-FS dependency).
 - [ ] Decide concurrency/locking model (single-writer lock vs optimistic).
+  - [x] Studio Git operations serialized (avoid `.git/index.lock` contention).
 - [ ] Finalize sync exclusions (`dist/`, `.astro/`, caches, large artifacts).
 - [ ] Decide studio URL shape (iframe route vs redirect vs subdomain).
 - [ ] Build strategy decisions:
@@ -121,6 +125,7 @@ packages/
 - [x] Superadmin provisioning flow implemented.
 - [x] Tenant admin/member management and admin-assisted password reset implemented.
 - [x] Role/permission model consolidated around org membership.
+- [x] Users can join multiple orgs and switch active org (main host / session-based selection).
 
 ### Open work
 
@@ -225,4 +230,4 @@ packages/
 
 ---
 
-*Last updated: 2026-02-10*
+*Last updated: 2026-02-11*

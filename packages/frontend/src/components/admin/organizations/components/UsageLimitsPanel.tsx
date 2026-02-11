@@ -128,7 +128,7 @@ export function UsageLimitsPanel({
 
             <Separator />
 
-            <div className="space-y-3">
+            <div className="space-y-3 bg-muted/50 rounded-lg p-4">
               <div>
                 <div className="text-sm font-medium">Edit limits</div>
                 <p className="text-xs text-muted-foreground mt-0.5">

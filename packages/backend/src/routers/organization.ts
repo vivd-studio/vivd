@@ -1,19 +1,26 @@
 import { TRPCError } from "@trpc/server";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { router, orgAdminProcedure, orgProcedure } from "../trpc";
+import { router, orgAdminProcedure, orgProcedure, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import {
   organization,
   organizationMember,
   projectMember,
   projectMeta,
+  session as sessionTable,
   user as userTable,
 } from "../db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { auth } from "../auth";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
+
+const organizationIdSchema = z
+  .string()
+  .min(2)
+  .max(64)
+  .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, "Invalid organization id");
 
 function getGlobalUserRoleForMemberRole(
   _role: z.infer<typeof memberRoleSchema>,
@@ -22,6 +29,105 @@ function getGlobalUserRoleForMemberRole(
 }
 
 export const organizationRouter = router({
+  lookupUserByEmail: orgAdminProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const normalizedEmail = input.email.toLowerCase();
+      const existingUser = await db.query.user.findFirst({
+        where: eq(userTable.email, normalizedEmail),
+        columns: { id: true },
+      });
+      return { exists: !!existingUser };
+    }),
+
+  listMyOrganizations: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db
+      .select({
+        id: organization.id,
+        slug: organization.slug,
+        name: organization.name,
+        status: organization.status,
+        role: organizationMember.role,
+        createdAt: organizationMember.createdAt,
+      })
+      .from(organizationMember)
+      .innerJoin(organization, eq(organization.id, organizationMember.organizationId))
+      .where(eq(organizationMember.userId, ctx.session.user.id))
+      .orderBy(asc(organization.name));
+
+    return {
+      organizations: rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        status: row.status,
+        role: row.role,
+        createdAt: row.createdAt,
+        isActive: row.id === ctx.organizationId,
+      })),
+    };
+  }),
+
+  setActiveOrganization: protectedProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.hostOrganizationId && ctx.hostOrganizationId !== input.organizationId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Organization selection is pinned to this domain",
+        });
+      }
+
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, input.organizationId),
+        columns: { id: true, status: true },
+      });
+      if (!org) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Organization not found",
+        });
+      }
+
+      if (ctx.session.user.role !== "super_admin") {
+        if (org.status === "suspended") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Organization is suspended",
+          });
+        }
+
+        const membership = await db.query.organizationMember.findFirst({
+          where: and(
+            eq(organizationMember.organizationId, input.organizationId),
+            eq(organizationMember.userId, ctx.session.user.id),
+          ),
+          columns: { id: true },
+        });
+        if (!membership) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "You are not a member of this organization",
+          });
+        }
+      }
+
+      await db
+        .update(sessionTable)
+        .set({ activeOrganizationId: input.organizationId })
+        .where(eq(sessionTable.id, ctx.session.session.id));
+
+      return { success: true };
+    }),
+
   getMyMembership: orgProcedure.query(async ({ ctx }) => {
     const organizationId = ctx.organizationId!;
     return {
@@ -36,19 +142,19 @@ export const organizationRouter = router({
 
   getMyOrganization: orgProcedure.query(async ({ ctx }) => {
     const organizationId = ctx.organizationId!;
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
-        columns: {
-          id: true,
-          slug: true,
-          name: true,
-          status: true,
-          limits: true,
-          githubRepoPrefix: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
+    const org = await db.query.organization.findFirst({
+      where: eq(organization.id, organizationId),
+      columns: {
+        id: true,
+        slug: true,
+        name: true,
+        status: true,
+        limits: true,
+        githubRepoPrefix: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
     if (!org) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
@@ -103,8 +209,8 @@ export const organizationRouter = router({
       z
         .object({
           email: z.string().email(),
-          name: z.string().min(1).max(128),
-          password: z.string().min(8),
+          name: z.string().min(1).max(128).optional(),
+          password: z.string().min(8).optional(),
           role: memberRoleSchema.optional().default("member"),
           projectSlug: z.string().min(1).optional(),
         })
@@ -134,6 +240,64 @@ export const organizationRouter = router({
       }
 
       const globalRole = getGlobalUserRoleForMemberRole(input.role);
+
+      const existingUser = await db.query.user.findFirst({
+        where: eq(userTable.email, normalizedEmail),
+        columns: { id: true },
+      });
+
+      const userId = existingUser?.id;
+      if (userId) {
+        const existingMembership = await db.query.organizationMember.findFirst({
+          where: and(
+            eq(organizationMember.organizationId, organizationId),
+            eq(organizationMember.userId, userId),
+          ),
+          columns: { id: true },
+        });
+        if (existingMembership) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "User is already a member of this organization",
+          });
+        }
+
+        await db
+          .insert(organizationMember)
+          .values({
+            id: crypto.randomUUID(),
+            organizationId,
+            userId,
+            role: input.role,
+          })
+          .onConflictDoNothing({
+            target: [organizationMember.organizationId, organizationMember.userId],
+          });
+
+        if (input.role === "client_editor" && input.projectSlug) {
+          await db
+            .insert(projectMember)
+            .values({
+              id: crypto.randomUUID(),
+              organizationId,
+              userId,
+              projectSlug: input.projectSlug,
+            })
+            .onConflictDoUpdate({
+              target: [projectMember.organizationId, projectMember.userId],
+              set: { projectSlug: input.projectSlug },
+            });
+        }
+
+        return { success: true, userId, created: false };
+      }
+
+      if (!input.name || !input.password) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Name and password are required to create a new user",
+        });
+      }
 
       let created: unknown;
       try {
@@ -186,7 +350,7 @@ export const organizationRouter = router({
           });
       }
 
-      return { success: true, userId: createdUserId };
+      return { success: true, userId: createdUserId, created: true };
     }),
 
   updateMemberRole: orgAdminProcedure

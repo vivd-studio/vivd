@@ -10,6 +10,8 @@ export interface AppConfig {
   singleProjectMode: boolean;
   /** Whether the current host is allowed to show super-admin UI. */
   isSuperAdminHost: boolean;
+  /** Whether org selection comes from session state (not pinned to host). */
+  canSelectOrganization: boolean;
 }
 
 interface AppConfigContextValue {
@@ -20,6 +22,7 @@ interface AppConfigContextValue {
 const defaultConfig: AppConfig = {
   singleProjectMode: false,
   isSuperAdminHost: false,
+  canSelectOrganization: false,
 };
 
 const AppConfigContext = createContext<AppConfigContextValue>({

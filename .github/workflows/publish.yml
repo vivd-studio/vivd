@@ -26,6 +26,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Set up QEMU (for multi-platform builds)
@@ -54,7 +55,99 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
 
+      - name: Determine changed images
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT_TAG="${{ steps.tag.outputs.version }}"
+          CURRENT_SHA="$(git rev-list -n 1 "$CURRENT_TAG")"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_SHA}^" 2>/dev/null || true)"
+
+          build_studio=false
+          build_server=false
+          build_ui=false
+          build_caddy=false
+
+          mark_all_apps() {
+            build_studio=true
+            build_server=true
+            build_ui=true
+          }
+
+          mark_all_images() {
+            mark_all_apps
+            build_caddy=true
+          }
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found. Building all images."
+            mark_all_images
+          else
+            echo "Diff range: ${PREVIOUS_TAG}..${CURRENT_SHA}"
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              echo "Changed: $file"
+              case "$file" in
+                package.json|package-lock.json|.npmrc)
+                  mark_all_apps
+                  ;;
+                packages/shared/*)
+                  mark_all_apps
+                  ;;
+                packages/backend/package.json|packages/frontend/package.json|packages/studio/package.json|packages/scraper/package.json|packages/theme/package.json)
+                  mark_all_apps
+                  ;;
+                packages/backend/*)
+                  build_server=true
+                  build_ui=true
+                  ;;
+                packages/frontend/*)
+                  build_ui=true
+                  ;;
+                packages/studio/*)
+                  build_studio=true
+                  ;;
+                packages/theme/*)
+                  build_studio=true
+                  build_ui=true
+                  ;;
+                caddy/*|Caddyfile)
+                  build_caddy=true
+                  ;;
+                docs/*|README.md|LICENSE|AGENTS.md|.gitignore|.dockerignore|Caddyfile.dev|docker-compose.yml|docker-compose.override.yml|docker-compose.prod.yml|docker-compose.self-hosted.yml|.github/*)
+                  ;;
+                *)
+                  echo "Unclassified path '$file' detected. Building all images for safety."
+                  mark_all_images
+                  ;;
+              esac
+            done < <(git diff --name-only "${PREVIOUS_TAG}..${CURRENT_SHA}")
+          fi
+
+          any=false
+          if [ "$build_studio" = true ] || [ "$build_server" = true ] || [ "$build_ui" = true ] || [ "$build_caddy" = true ]; then
+            any=true
+          fi
+
+          echo "build_studio=$build_studio" >> "$GITHUB_OUTPUT"
+          echo "build_server=$build_server" >> "$GITHUB_OUTPUT"
+          echo "build_ui=$build_ui" >> "$GITHUB_OUTPUT"
+          echo "build_caddy=$build_caddy" >> "$GITHUB_OUTPUT"
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Changed image selection"
+            echo "- previous_tag: ${PREVIOUS_TAG:-<none>}"
+            echo "- build_studio: $build_studio"
+            echo "- build_server: $build_server"
+            echo "- build_ui: $build_ui"
+            echo "- build_caddy: $build_caddy"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build and push vivd-studio
+        if: steps.changes.outputs.build_studio == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -70,6 +163,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push vivd-server
+        if: steps.changes.outputs.build_server == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -85,6 +179,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push vivd-ui
+        if: steps.changes.outputs.build_ui == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -100,6 +195,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push vivd-caddy
+        if: steps.changes.outputs.build_caddy == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -114,6 +210,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trigger Dokploy deployments
+        if: steps.changes.outputs.any == 'true'
         run: |
           # Support multiple compose IDs (comma-separated)
           # e.g., DOKPLOY_COMPOSE_IDS="abc123,def456,ghi789"

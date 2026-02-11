@@ -10,7 +10,7 @@ export type LimitsPatch = {
 };
 
 export type OrganizationRole = "owner" | "admin" | "member" | "client_editor";
-export type EditableOrganizationRole = "admin" | "member" | "client_editor";
+export type EditableOrganizationRole = "owner" | "admin" | "member" | "client_editor";
 
 export type Organization =
   RouterOutputs["superadmin"]["listOrganizations"]["organizations"][number];

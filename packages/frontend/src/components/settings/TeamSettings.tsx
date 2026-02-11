@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -16,6 +16,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormDescription,
   FormMessage,
 } from "@/components/ui/form";
 import {
@@ -36,19 +37,39 @@ import {
 
 const createUserSchema = z
   .object({
-    name: z.string().min(2, "Name must be at least 2 characters"),
+    existingUser: z.boolean(),
+    name: z.string().optional(),
     email: z.string().email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    password: z.string().optional(),
     role: z.enum(["member", "admin", "client_editor"]),
     projectSlug: z.string().optional(),
   })
-  .refine(
-    (data) => (data.role === "client_editor" ? !!data.projectSlug : true),
-    {
-      message: "Project is required for Client Editor",
-      path: ["projectSlug"],
-    },
-  );
+  .superRefine((data, ctx) => {
+    if (!data.existingUser) {
+      if (!data.name || data.name.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Name must be at least 2 characters",
+          path: ["name"],
+        });
+      }
+      if (!data.password || data.password.length < 8) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Password must be at least 8 characters",
+          path: ["password"],
+        });
+      }
+    }
+
+    if (data.role === "client_editor" && !data.projectSlug) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Project is required for Client Editor",
+        path: ["projectSlug"],
+      });
+    }
+  });
 
 const resetMemberPasswordSchema = z
   .object({
@@ -127,6 +148,7 @@ export function TeamSettings() {
   const form = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
+      existingUser: false,
       name: "",
       email: "",
       password: "",
@@ -143,10 +165,39 @@ export function TeamSettings() {
   });
 
   const selectedRole = form.watch("role");
+  const isExistingUser = form.watch("existingUser");
+  const emailForLookup = form.watch("email").trim().toLowerCase();
+  const emailIsValid = z.string().email().safeParse(emailForLookup).success;
+
+  const emailLookup = trpc.organization.lookupUserByEmail.useQuery(
+    { email: emailForLookup },
+    {
+      enabled: isAdding && emailIsValid,
+      retry: false,
+      staleTime: 30_000,
+    },
+  );
+
+  useEffect(() => {
+    if (!emailIsValid) {
+      form.setValue("existingUser", false, { shouldValidate: true });
+      return;
+    }
+
+    if (emailLookup.data) {
+      form.setValue("existingUser", emailLookup.data.exists, { shouldValidate: true });
+    }
+  }, [emailIsValid, emailLookup.data, form]);
+
+  useEffect(() => {
+    if (form.getValues("existingUser")) {
+      form.setValue("existingUser", false, { shouldValidate: true });
+    }
+  }, [emailForLookup, form]);
 
   const createUserMutation = trpc.organization.createUser.useMutation({
-    onSuccess: () => {
-      toast.success("User created");
+    onSuccess: (data) => {
+      toast.success(data.created ? "User created" : "Member added");
       form.reset();
       setIsAdding(false);
       utils.organization.listMembers.invalidate();
@@ -211,25 +262,16 @@ export function TeamSettings() {
         {isAdding && (
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit((values) =>
-                createUserMutation.mutate(values),
+              onSubmit={form.handleSubmit(({ existingUser, ...values }) =>
+                createUserMutation.mutate({
+                  ...values,
+                  name: existingUser ? undefined : values.name,
+                  password: existingUser ? undefined : values.password,
+                }),
               )}
               className="space-y-4 rounded-lg border p-4"
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jane Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name="email"
@@ -237,21 +279,19 @@ export function TeamSettings() {
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="jane@example.com" {...field} />
+                        <Input
+                          type="email"
+                          placeholder="jane@example.com"
+                          {...field}
+                        />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <PasswordInput placeholder="••••••••" {...field} />
-                      </FormControl>
+                      {emailLookup.data?.exists ? (
+                        <FormDescription>
+                          Existing account detected — name/password not required.
+                        </FormDescription>
+                      ) : emailLookup.isFetching ? (
+                        <FormDescription>Checking account…</FormDescription>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -278,6 +318,36 @@ export function TeamSettings() {
                     </FormItem>
                   )}
                 />
+                {!isExistingUser && (
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Jane Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {!isExistingUser && (
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <PasswordInput placeholder="••••••••" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 {selectedRole === "client_editor" && (
                   <FormField
                     control={form.control}
@@ -318,7 +388,7 @@ export function TeamSettings() {
                   {createUserMutation.isPending ? (
                     <Loader2 className="animate-spin h-4 w-4 mr-2" />
                   ) : null}
-                  Create user
+                  Add member
                 </Button>
               </div>
             </form>

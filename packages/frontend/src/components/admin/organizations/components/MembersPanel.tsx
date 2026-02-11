@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import * as z from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { trpc } from "@/lib/trpc";
 import type {
   EditableOrganizationRole,
   MemberEdits,
@@ -29,7 +31,7 @@ type Props = {
   setUserForm: Dispatch<SetStateAction<UserForm>>;
   createUserPending: boolean;
   createUserError: unknown;
-  onCreateUser: () => void;
+  onCreateUser: (isExistingAccount: boolean) => void;
   membersLoading: boolean;
   membersError: unknown;
   members: OrganizationMember[];
@@ -91,6 +93,26 @@ export function MembersPanel({
   onSaveMember,
   onRemoveMember,
 }: Props) {
+  const normalizedEmail = userForm.email.trim().toLowerCase();
+  const emailIsValid = z.string().email().safeParse(normalizedEmail).success;
+
+  const emailLookup = trpc.superadmin.lookupUserByEmail.useQuery(
+    { email: normalizedEmail },
+    {
+      enabled: emailIsValid,
+      retry: false,
+      staleTime: 30_000,
+    },
+  );
+
+  const isExistingAccount = emailLookup.data?.exists ?? false;
+
+  const disableAddUser =
+    createUserPending ||
+    !normalizedEmail ||
+    (!isExistingAccount && (!userForm.name.trim() || userForm.password.length < 8)) ||
+    (userForm.organizationRole === "client_editor" && !userForm.projectSlug);
+
   return (
     <Card>
       <CardHeader>
@@ -100,8 +122,8 @@ export function MembersPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-lg border p-4 space-y-3">
-          <div className="text-sm font-medium">Add new user</div>
+        <div className="rounded-lg bg-muted/50 p-4 space-y-3">
+          <div className="text-sm font-medium">Add member</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Email</Label>
@@ -116,33 +138,13 @@ export function MembersPanel({
                   }))
                 }
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input
-                placeholder="Full name"
-                value={userForm.name}
-                onChange={(e) =>
-                  setUserForm((state) => ({
-                    ...state,
-                    name: e.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Password</Label>
-              <Input
-                type="password"
-                placeholder="Min. 8 characters"
-                value={userForm.password}
-                onChange={(e) =>
-                  setUserForm((state) => ({
-                    ...state,
-                    password: e.target.value,
-                  }))
-                }
-              />
+              {emailLookup.data?.exists ? (
+                <div className="text-xs text-muted-foreground mt-1">
+                  Existing account detected — name/password not required.
+                </div>
+              ) : emailLookup.isFetching ? (
+                <div className="text-xs text-muted-foreground mt-1">Checking account…</div>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>
@@ -166,6 +168,37 @@ export function MembersPanel({
                 </SelectContent>
               </Select>
             </div>
+            {!isExistingAccount && (
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input
+                  placeholder="Full name"
+                  value={userForm.name}
+                  onChange={(e) =>
+                    setUserForm((state) => ({
+                      ...state,
+                      name: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            )}
+            {!isExistingAccount && (
+              <div className="space-y-1.5">
+                <Label>Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Min. 8 characters"
+                  value={userForm.password}
+                  onChange={(e) =>
+                    setUserForm((state) => ({
+                      ...state,
+                      password: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            )}
             {userForm.organizationRole === "client_editor" && (
               <div className="space-y-1.5">
                 <Label>Assigned project</Label>
@@ -184,14 +217,8 @@ export function MembersPanel({
           </div>
           <div className="flex justify-end">
             <Button
-              onClick={onCreateUser}
-              disabled={
-                createUserPending ||
-                !userForm.email.trim() ||
-                !userForm.name.trim() ||
-                userForm.password.length < 8 ||
-                (userForm.organizationRole === "client_editor" && !userForm.projectSlug)
-              }
+              onClick={() => onCreateUser(isExistingAccount)}
+              disabled={disableAddUser}
             >
               {createUserPending ? "Creating..." : "Add user"}
             </Button>
@@ -208,7 +235,6 @@ export function MembersPanel({
         ) : (
           <div className="rounded-lg border divide-y">
             {members.map((member) => {
-              const isOwner = member.role === "owner";
               const edit =
                 memberEdits[member.userId] ??
                 ({
@@ -221,9 +247,8 @@ export function MembersPanel({
 
               const originalProjectSlug = member.assignedProjectSlug ?? "";
               const isDirty =
-                !isOwner &&
-                (edit.role !== member.role ||
-                  (edit.role === "client_editor" && edit.projectSlug !== originalProjectSlug));
+                edit.role !== member.role ||
+                (edit.role === "client_editor" && edit.projectSlug !== originalProjectSlug);
 
               const canSave =
                 isDirty &&
@@ -244,38 +269,35 @@ export function MembersPanel({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {isOwner ? (
-                      <Badge variant="outline">{formatRoleLabel(member.role)}</Badge>
-                    ) : (
-                      <Select
-                        value={edit.role}
-                        onValueChange={(value) =>
-                          setMemberEdits((current) => ({
-                            ...current,
-                            [member.userId]: {
-                              role: value as EditableOrganizationRole,
-                              projectSlug:
-                                value === "client_editor"
-                                  ? current[member.userId]?.projectSlug ??
-                                    member.assignedProjectSlug ??
-                                    ""
-                                  : "",
-                            },
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="w-[160px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">User</SelectItem>
-                          <SelectItem value="client_editor">Client Editor</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
+                    <Select
+                      value={edit.role}
+                      onValueChange={(value) =>
+                        setMemberEdits((current) => ({
+                          ...current,
+                          [member.userId]: {
+                            role: value as EditableOrganizationRole,
+                            projectSlug:
+                              value === "client_editor"
+                                ? current[member.userId]?.projectSlug ??
+                                  member.assignedProjectSlug ??
+                                  ""
+                                : "",
+                          },
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="owner">Owner</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="member">User</SelectItem>
+                        <SelectItem value="client_editor">Client Editor</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                    {!isOwner && edit.role === "client_editor" && (
+                    {edit.role === "client_editor" && (
                       <ProjectSelect
                         value={edit.projectSlug}
                         onChange={(value) =>
@@ -296,8 +318,7 @@ export function MembersPanel({
                       <Badge variant="secondary">Super Admin</Badge>
                     )}
 
-                    {!isOwner && (
-                      <>
+                    <>
                         <Button
                           size="sm"
                           disabled={!canSave || updateMemberRolePending}
@@ -325,8 +346,7 @@ export function MembersPanel({
                         >
                           Remove
                         </Button>
-                      </>
-                    )}
+                    </>
                   </div>
                 </div>
               );

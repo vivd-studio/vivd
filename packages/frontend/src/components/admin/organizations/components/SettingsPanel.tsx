@@ -27,7 +27,7 @@ export function SettingsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-3">
+        <div className="space-y-3 bg-muted/50 rounded-lg p-4">
           <div>
             <div className="text-sm font-medium">GitHub repository prefix</div>
             <p className="text-xs text-muted-foreground mt-0.5">

@@ -153,11 +153,11 @@ export function useOrganizationsAdmin() {
   });
 
   const createUser = trpc.superadmin.createOrganizationUser.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       setUserForm(EMPTY_USER_FORM);
       await membersQuery.refetch();
       await utils.superadmin.listOrganizations.invalidate();
-      toast.success("User created");
+      toast.success(data.created ? "User created" : "Member added");
     },
     onError: (err) => {
       toast.error("Failed to create user", { description: err.message });

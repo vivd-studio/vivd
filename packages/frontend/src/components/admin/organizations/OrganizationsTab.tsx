@@ -66,12 +66,12 @@ export function OrganizationsTab() {
               setUserForm={admin.setUserForm}
               createUserPending={admin.createUser.isPending}
               createUserError={admin.createUser.error?.message ?? admin.createUser.error}
-              onCreateUser={() =>
+              onCreateUser={(isExistingAccount) =>
                 admin.createUser.mutate({
                   organizationId: admin.selectedOrg!.id,
                   email: admin.userForm.email,
-                  name: admin.userForm.name,
-                  password: admin.userForm.password,
+                  name: isExistingAccount ? undefined : admin.userForm.name,
+                  password: isExistingAccount ? undefined : admin.userForm.password,
                   organizationRole: admin.userForm.organizationRole,
                   projectSlug:
                     admin.userForm.organizationRole === "client_editor"

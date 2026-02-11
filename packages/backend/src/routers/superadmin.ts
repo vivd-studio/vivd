@@ -41,7 +41,7 @@ const organizationRoleSchema = z.enum([
   "client_editor",
 ]);
 
-const orgMemberRoleSchema = z.enum(["admin", "member", "client_editor"]);
+const orgMemberRoleSchema = z.enum(["owner", "admin", "member", "client_editor"]);
 
 function getGlobalUserRoleForOrganizationRole(
   _role: z.infer<typeof organizationRoleSchema>,
@@ -69,6 +69,21 @@ const authCreateUserResponseSchema = z
   .passthrough();
 
 export const superAdminRouter = router({
+  lookupUserByEmail: superAdminProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const normalizedEmail = input.email.toLowerCase();
+      const existingUser = await db.query.user.findFirst({
+        where: eq(userTable.email, normalizedEmail),
+        columns: { id: true },
+      });
+      return { exists: !!existingUser };
+    }),
+
   listOrganizations: superAdminProcedure.query(async () => {
     const rows = await db
       .select({
@@ -329,10 +344,6 @@ export const superAdminRouter = router({
           throw new Error("Member not found");
         }
 
-        if (membership.role === "owner") {
-          throw new Error("Owner role cannot be changed in v1");
-        }
-
         if (input.role === "client_editor" && input.projectSlug) {
           const project = await tx.query.projectMeta.findFirst({
             where: and(
@@ -411,10 +422,6 @@ export const superAdminRouter = router({
         return { success: true };
       }
 
-      if (membership.role === "owner") {
-        throw new Error("Owner cannot be removed in v1");
-      }
-
       await db
         .delete(projectMember)
         .where(
@@ -441,8 +448,8 @@ export const superAdminRouter = router({
       z.object({
         organizationId: organizationIdSchema,
         email: z.string().email(),
-        name: z.string().min(1).max(128),
-        password: z.string().min(8),
+        name: z.string().min(1).max(128).optional(),
+        password: z.string().min(8).optional(),
         userRole: z
           .enum(["super_admin", "user"])
           .optional(),
@@ -452,6 +459,7 @@ export const superAdminRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const headers = headersFromNode(ctx.req.headers as Record<string, unknown>);
+      const normalizedEmail = input.email.toLowerCase();
 
       if (input.organizationRole === "client_editor" && !input.projectSlug) {
         throw new Error("Project is required for client editor accounts");
@@ -460,6 +468,11 @@ export const superAdminRouter = router({
       const userRole =
         input.userRole ??
         getGlobalUserRoleForOrganizationRole(input.organizationRole);
+
+      const existingUser = await db.query.user.findFirst({
+        where: eq(userTable.email, normalizedEmail),
+        columns: { id: true, role: true },
+      });
 
       if (input.organizationRole === "client_editor" && input.projectSlug) {
         const project = await db.query.projectMeta.findFirst({
@@ -474,10 +487,65 @@ export const superAdminRouter = router({
         }
       }
 
+      if (existingUser) {
+        const existingMembership = await db.query.organizationMember.findFirst({
+          where: and(
+            eq(organizationMember.organizationId, input.organizationId),
+            eq(organizationMember.userId, existingUser.id),
+          ),
+          columns: { id: true },
+        });
+        if (existingMembership) {
+          throw new Error("User is already a member of this organization");
+        }
+
+        await db.transaction(async (tx) => {
+          if (input.userRole) {
+            await tx
+              .update(userTable)
+              .set({ role: userRole })
+              .where(eq(userTable.id, existingUser.id));
+          }
+
+          await tx
+            .insert(organizationMember)
+            .values({
+              id: crypto.randomUUID(),
+              organizationId: input.organizationId,
+              userId: existingUser.id,
+              role: input.organizationRole,
+            })
+            .onConflictDoNothing({
+              target: [organizationMember.organizationId, organizationMember.userId],
+            });
+
+          if (input.organizationRole === "client_editor" && input.projectSlug) {
+            await tx
+              .insert(projectMember)
+              .values({
+                id: crypto.randomUUID(),
+                organizationId: input.organizationId,
+                userId: existingUser.id,
+                projectSlug: input.projectSlug,
+              })
+              .onConflictDoUpdate({
+                target: [projectMember.organizationId, projectMember.userId],
+                set: { projectSlug: input.projectSlug },
+              });
+          }
+        });
+
+        return { success: true, userId: existingUser.id, created: false };
+      }
+
+      if (!input.name || !input.password) {
+        throw new Error("Name and password are required to create a new user");
+      }
+
       const created = await auth.api.createUser({
         headers,
         body: {
-          email: input.email,
+          email: normalizedEmail,
           password: input.password,
           name: input.name,
           role: userRole,
@@ -519,6 +587,6 @@ export const superAdminRouter = router({
         }
       });
 
-      return { success: true, userId: createdUserId };
+      return { success: true, userId: createdUserId, created: true };
     }),
 });

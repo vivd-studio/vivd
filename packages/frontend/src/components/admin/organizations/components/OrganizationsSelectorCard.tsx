@@ -79,7 +79,7 @@ export function OrganizationsSelectorCard({
 
         <Separator />
 
-        <div className="space-y-3">
+        <div className="space-y-3 bg-muted/50 rounded-lg p-4">
           <div className="text-sm font-medium">Create new organization</div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="space-y-1.5 flex-1">
