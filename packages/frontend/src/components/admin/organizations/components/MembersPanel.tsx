@@ -81,7 +81,7 @@ function ProjectSelect({
 }
 
 export function MembersPanel({
-  selectedOrg,
+  selectedOrg: _selectedOrg,
   projects,
   userForm,
   setUserForm,

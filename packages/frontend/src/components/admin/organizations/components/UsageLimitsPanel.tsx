@@ -51,7 +51,7 @@ type Props = {
 };
 
 export function UsageLimitsPanel({
-  selectedOrg,
+  selectedOrg: _selectedOrg,
   usageLoading,
   usageError,
   usage,
