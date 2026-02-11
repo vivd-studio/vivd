@@ -898,6 +898,18 @@ export function PreviewProvider({
 
   const getShareablePreviewOrigin = () => {
     const params = new URLSearchParams(window.location.search);
+
+    // Prefer explicit hostOrigin param set by the parent app.
+    const hostOrigin = params.get("hostOrigin");
+    if (hostOrigin) {
+      try {
+        return new URL(hostOrigin).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    // Fallback: extract origin from returnTo URL.
     const returnTo = params.get("returnTo");
     if (returnTo) {
       try {

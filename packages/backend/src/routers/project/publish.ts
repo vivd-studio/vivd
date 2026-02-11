@@ -47,6 +47,18 @@ export const projectPublishProcedures = {
             cause: { reason: "studio_unsaved_changes" },
           });
         }
+        if (
+          workspaceState.workingCommitHash &&
+          workspaceState.headCommitHash &&
+          workspaceState.workingCommitHash !== workspaceState.headCommitHash
+        ) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "Studio is viewing an older snapshot. Restore it (or switch back to the latest snapshot) before publishing.",
+            cause: { reason: "studio_older_snapshot" },
+          });
+        }
       }
 
       try {

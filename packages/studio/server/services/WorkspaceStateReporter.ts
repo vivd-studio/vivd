@@ -44,6 +44,11 @@ class WorkspaceStateReporter {
     }
   }
 
+  async reportSoon(): Promise<void> {
+    if (!this.running) return;
+    await this.reportNow();
+  }
+
   private async reportNow(): Promise<void> {
     if (!this.options) return;
     if (this.inflight) return;

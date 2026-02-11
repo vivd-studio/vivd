@@ -24,6 +24,16 @@ type AuthLike = {
   };
 };
 
+const ID_LIKE_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+function normalizeIdLike(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return null;
+  if (!ID_LIKE_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
 function slugifyTitle(title: string): string {
   const cleaned = title
     .trim()
@@ -160,6 +170,60 @@ function readImportedProjectMetadata(rootDir: string): Record<string, unknown> {
   return {};
 }
 
+function hasVisibleSourceFiles(versionDir: string): boolean {
+  const excludedDirNames = new Set([
+    "node_modules",
+    "dist",
+    ".astro",
+    ".git",
+    ".vivd",
+    "__MACOSX",
+  ]);
+
+  const stack: string[] = [versionDir];
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) continue;
+
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      if (excludedDirNames.has(entry.name)) continue;
+
+      const absPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(absPath);
+        continue;
+      }
+      if (entry.isFile()) return true;
+    }
+  }
+
+  return false;
+}
+
+function promoteDistToRoot(versionDir: string): boolean {
+  const distDir = path.join(versionDir, "dist");
+  const distIndexPath = path.join(distDir, "index.html");
+  if (!fs.existsSync(distIndexPath)) return false;
+
+  const entries = fs.readdirSync(distDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const src = path.join(distDir, entry.name);
+    const dest = path.join(versionDir, entry.name);
+    if (fs.existsSync(dest)) continue;
+    fs.cpSync(src, dest, { recursive: true });
+  }
+
+  try {
+    fs.rmSync(distDir, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+
+  return true;
+}
+
 async function syncImportedArtifacts(options: {
   organizationId: string;
   slug: string;
@@ -217,9 +281,28 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const organizationId = requestContext.organizationId;
+      const requestedOrganizationId =
+        req.query.organizationId !== undefined
+          ? normalizeIdLike(req.query.organizationId)
+          : "";
+      if (req.query.organizationId !== undefined && !requestedOrganizationId) {
+        return res.status(400).json({ error: "Invalid organizationId" });
+      }
+      const organizationId =
+        requestedOrganizationId || requestContext.organizationId;
       if (!organizationId) {
         return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // On tenant-pinned hosts, do not allow overriding the org via query params.
+      if (
+        requestContext.hostOrganizationId &&
+        requestedOrganizationId &&
+        requestedOrganizationId !== requestContext.hostOrganizationId
+      ) {
+        return res.status(400).json({
+          error: "Organization selection is pinned to this domain",
+        });
       }
 
       if (session.user.role === "client_editor") {
@@ -303,7 +386,10 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
           : "completed";
 
       const requestedSlug =
-        typeof req.query.slug === "string" ? req.query.slug : "";
+        req.query.slug !== undefined ? (normalizeIdLike(req.query.slug) ?? "") : "";
+      if (req.query.slug !== undefined && !requestedSlug) {
+        return res.status(400).json({ error: "Invalid slug" });
+      }
       const slugBase = requestedSlug.trim()
         ? requestedSlug.trim().toLowerCase()
         : url
@@ -353,6 +439,13 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
         }
       } catch {
         // ignore
+      }
+
+      // In bucket-first mode, studio hydrates from `source/` and intentionally excludes `dist/`.
+      // Some exported ZIPs may contain only build output under `dist/` plus metadata files. In
+      // that case, promote `dist/*` to the version root so the studio has editable files.
+      if (!hasVisibleSourceFiles(versionDir)) {
+        promoteDistToRoot(versionDir);
       }
 
       ensureVivdInternalFilesDir(versionDir);

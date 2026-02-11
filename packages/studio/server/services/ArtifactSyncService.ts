@@ -229,6 +229,10 @@ async function mapLimit<T>(
   await Promise.all(runners);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function createS3Client(): Promise<{ client: S3Client; bucket: string } | null> {
   const config = getObjectStorageConfigFromEnv();
   if (!config) return null;
@@ -251,6 +255,24 @@ async function createS3Client(): Promise<{ client: S3Client; bucket: string } | 
   });
 
   return { client, bucket: config.bucket };
+}
+
+function getAwsErrorHttpStatusCode(err: unknown): number | null {
+  const status = (err as any)?.$metadata?.httpStatusCode;
+  return typeof status === "number" ? status : null;
+}
+
+function isRetryableAwsError(err: unknown): boolean {
+  const status = getAwsErrorHttpStatusCode(err);
+  if (status && [408, 429, 500, 502, 503, 504].includes(status)) return true;
+
+  const message = err instanceof Error ? err.message : String(err);
+  return Boolean(
+    message &&
+      /internal error|non-retryable streaming request|timeout|timed out|econnreset|econnrefused|epipe|socket hang up|network/i.test(
+        message
+      )
+  );
 }
 
 async function deletePrefixSdk(options: {
@@ -317,14 +339,26 @@ async function uploadDirectorySdk(options: {
 
   await mapLimit(files, options.concurrency ?? 6, async (file) => {
     const key = `${keyPrefix}${toPosixPath(file.relPath)}`;
-    await options.client.send(
-      new sdk.PutObjectCommand({
-        Bucket: options.bucket,
-        Key: key,
-        Body: fs.createReadStream(file.absPath),
-        ContentLength: file.size,
-      })
-    );
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await options.client.send(
+          new sdk.PutObjectCommand({
+            Bucket: options.bucket,
+            Key: key,
+            // Re-create the stream for each attempt; AWS SDK won't retry non-seekable bodies.
+            Body: fs.createReadStream(file.absPath),
+            ContentLength: file.size,
+          })
+        );
+        break;
+      } catch (err) {
+        if (attempt >= maxAttempts || !isRetryableAwsError(err)) {
+          throw err;
+        }
+        await sleep(Math.min(2_000, 200 * 2 ** (attempt - 1)));
+      }
+    }
   });
 }
 
@@ -412,22 +446,29 @@ async function syncDirectoryToBucket(options: {
 }): Promise<void> {
   const sdkStorage = await createS3Client();
   if (sdkStorage) {
-    if (options.delete) {
-      await deletePrefixSdk({
+    try {
+      if (options.delete) {
+        await deletePrefixSdk({
+          client: sdkStorage.client,
+          bucket: options.bucket,
+          keyPrefix: options.keyPrefix,
+        });
+      }
+
+      await uploadDirectorySdk({
         client: sdkStorage.client,
         bucket: options.bucket,
+        localDir: options.source,
         keyPrefix: options.keyPrefix,
+        exclude: options.exclude,
       });
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[${options.label}] SDK upload failed, falling back to AWS CLI: ${message}`
+      );
     }
-
-    await uploadDirectorySdk({
-      client: sdkStorage.client,
-      bucket: options.bucket,
-      localDir: options.source,
-      keyPrefix: options.keyPrefix,
-      exclude: options.exclude,
-    });
-    return;
   }
 
   // Fallback to AWS CLI (available in studio Docker image).

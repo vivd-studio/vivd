@@ -18,6 +18,7 @@ import {
   Save,
   Loader2,
   Globe,
+  Wand2,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -92,6 +93,7 @@ export function VersionHistoryPanel({
   const [showLoadWarning, setShowLoadWarning] = useState(false);
   const [pendingLoadHash, setPendingLoadHash] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
 
   // Save State
   const [commitMessage, setCommitMessage] = useState("");
@@ -165,11 +167,43 @@ export function VersionHistoryPanel({
   const commits = historyData?.commits || [];
   const hasUncommittedChanges = changesData?.hasChanges || false;
   const workingCommitHash = workingCommitData?.hash || null;
+  const headCommit = commits[0] || null;
+  const workingCommit = workingCommitHash
+    ? commits.find((c: CommitInfo) => c.hash === workingCommitHash) || null
+    : null;
+  const viewingOlderSnapshot = Boolean(
+    headCommit?.hash &&
+      workingCommitHash &&
+      workingCommitHash !== headCommit.hash
+  );
   // Standalone studio publishes by tag; commit hash is not tracked here.
   const publishedCommitHash: string | null = null;
   const isRefreshingAfterSave =
     historyFetching || changesFetching || workingCommitFetching;
   const isSaving = saveMutation.isPending || isRefreshingAfterSave;
+
+  const restoreMutation = trpc.project.gitSave.useMutation({
+    onSuccess: (data) => {
+      if (data.noChanges) {
+        toast.info("Nothing to restore");
+        setShowRestoreConfirm(false);
+        return;
+      }
+
+      toast.success("Snapshot restored");
+      setShowRestoreConfirm(false);
+
+      void Promise.all([
+        utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+      ]);
+      onRefresh?.();
+    },
+    onError: (error) => {
+      toast.error(`Failed to restore snapshot: ${error.message}`);
+    },
+  });
 
   const handleDiscard = () => {
     setShowDiscardConfirm(true);
@@ -183,6 +217,24 @@ export function VersionHistoryPanel({
     }
   };
 
+  const handleLoadCommit = (hash: string) => {
+    if (hasUncommittedChanges) {
+      setPendingLoadHash(hash);
+      setShowLoadWarning(true);
+      return;
+    }
+    onLoadVersion(hash);
+  };
+
+  const handleRestoreSnapshot = () => {
+    const snapshotName = workingCommit?.message?.trim() || "Snapshot";
+    restoreMutation.mutate({
+      slug: projectSlug,
+      version,
+      message: `Restored: ${snapshotName}`,
+    });
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[380px] sm:w-[420px]">
@@ -194,6 +246,77 @@ export function VersionHistoryPanel({
         </SheetHeader>
 
         <div className="mt-6 flex flex-col h-[calc(100vh-120px)] gap-4">
+          {viewingOlderSnapshot && !hasUncommittedChanges ? (
+            <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-amber-900">
+                    You're viewing an older snapshot
+                  </div>
+                  <div className="text-xs text-amber-800">
+                    Restore this snapshot to make it your latest version. This helps ensure
+                    publishing matches what you're viewing.
+                  </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 text-amber-700 border-amber-300 bg-white/60"
+                >
+                  Older Snapshot
+                </Badge>
+              </div>
+
+              <div className="text-xs text-amber-900/80 space-y-1">
+                {workingCommit ? (
+                  <div>
+                    Viewing: <span className="font-medium">{workingCommit.message}</span>{" "}
+                    <span className="text-amber-800">
+                      · {formatDate(workingCommit.date)}
+                    </span>
+                  </div>
+                ) : null}
+                {headCommit ? (
+                  <div>
+                    Latest: <span className="font-medium">{headCommit.message}</span>{" "}
+                    <span className="text-amber-800">· {formatDate(headCommit.date)}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-amber-700 hover:bg-amber-800 text-white"
+                  onClick={() => setShowRestoreConfirm(true)}
+                  disabled={restoreMutation.isPending || isSaving}
+                >
+                  {restoreMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Restoring...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Restore Snapshot
+                    </>
+                  )}
+                </Button>
+                {headCommit ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleLoadCommit(headCommit.hash)}
+                    disabled={restoreMutation.isPending || isSaving}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Back to Latest
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {/* Create Snapshot Section */}
           {hasUncommittedChanges && (
             <div className="p-4 rounded-lg border bg-card shadow-sm space-y-3">
@@ -348,12 +471,7 @@ export function VersionHistoryPanel({
                                 className="shrink-0 h-8 w-8 p-0"
                                 title="Load this version"
                                 onClick={() => {
-                                  if (hasUncommittedChanges) {
-                                    setPendingLoadHash(commit.hash);
-                                    setShowLoadWarning(true);
-                                  } else {
-                                    onLoadVersion(commit.hash);
-                                  }
+                                  handleLoadCommit(commit.hash);
                                 }}
                               >
                                 <RotateCcw className="h-4 w-4 text-muted-foreground hover:text-foreground" />
@@ -401,6 +519,28 @@ export function VersionHistoryPanel({
               }}
             >
               Discard & Load
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showRestoreConfirm} onOpenChange={setShowRestoreConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore this snapshot?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will create a new latest snapshot based on what you're currently viewing. You
+              can still switch back to other snapshots anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoreMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-700 text-white hover:bg-amber-800"
+              disabled={restoreMutation.isPending}
+              onClick={handleRestoreSnapshot}
+            >
+              Restore Snapshot
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

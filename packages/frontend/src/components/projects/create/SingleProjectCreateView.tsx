@@ -26,6 +26,8 @@ export function SingleProjectCreateView() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const { data: membership } = trpc.organization.getMyMembership.useQuery();
+
   const form = useForm<UrlFormValues>({
     resolver: zodResolver(urlFormSchema),
     defaultValues: {
@@ -72,7 +74,9 @@ export function SingleProjectCreateView() {
     if (!importFile) return;
     setIsImporting(true);
     try {
-      const result = await importProjectZip(importFile);
+      const result = await importProjectZip(importFile, {
+        organizationId: membership?.organizationId,
+      });
       // Navigate to fullscreen view in single project mode
       navigate(`/vivd-studio/projects/${result.slug}/fullscreen`);
       toast.success("Project imported");

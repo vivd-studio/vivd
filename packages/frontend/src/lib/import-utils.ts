@@ -7,17 +7,30 @@ export interface ImportResult {
   version?: number;
 }
 
+export interface ImportProjectZipOptions {
+  organizationId?: string;
+}
+
 /**
  * Import a project from a ZIP file.
  * @param file - The ZIP file to import
+ * @param options - Optional import options (like organizationId)
  * @returns The import result with project slug and version
  * @throws Error if import fails
  */
-export async function importProjectZip(file: File): Promise<ImportResult> {
+export async function importProjectZip(
+  file: File,
+  options?: ImportProjectZipOptions,
+): Promise<ImportResult> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch("/vivd-studio/api/import", {
+  const organizationId = options?.organizationId?.trim();
+  const url = organizationId
+    ? `/vivd-studio/api/import?organizationId=${encodeURIComponent(organizationId)}`
+    : "/vivd-studio/api/import";
+
+  const response = await fetch(url, {
     method: "POST",
     body: formData,
     credentials: "include",

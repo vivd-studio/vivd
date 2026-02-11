@@ -29,6 +29,7 @@ import {
 import { syncPushToGitHub } from "../services/GitHubSyncService.js";
 import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
 import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
+import { workspaceStateReporter } from "../services/WorkspaceStateReporter.js";
 import {
   getBackendUrl,
   getSessionToken,
@@ -414,6 +415,8 @@ export const projectRouter = router({
       }
 
       projectTouchReporter.touch(input.slug);
+      // Report state ASAP so publish dialogs reflect the new snapshot without waiting for polling.
+      void workspaceStateReporter.reportSoon();
 
       const projectDir = ctx.workspace.getProjectPath();
       const github = await syncPushToGitHub({
@@ -694,6 +697,8 @@ export const projectRouter = router({
 
       await ctx.workspace.loadVersion(input.commitHash);
       projectTouchReporter.touch(input.slug);
+      // Report state ASAP so connected publish checks see the loaded snapshot quickly.
+      void workspaceStateReporter.reportSoon();
 
       const shortHash = input.commitHash.substring(0, 7);
       return {

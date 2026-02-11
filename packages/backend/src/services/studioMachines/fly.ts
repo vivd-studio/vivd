@@ -1,5 +1,6 @@
 import type {
   StudioMachineProvider,
+  StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
 } from "./types";
@@ -997,6 +998,115 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     });
     this.inflight.set(key, promise);
     return promise;
+  }
+
+  async restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
+    if (args.mode !== "hard") {
+      return this.ensureRunning(args);
+    }
+
+    const key = this.key(args.organizationId, args.projectSlug, args.version);
+    const existingInflight = this.inflight.get(key);
+    if (existingInflight) {
+      try {
+        await existingInflight;
+      } catch {
+        // Ignore and proceed with restart.
+      }
+    }
+
+    const promise = this.restartInner(args).finally(() => {
+      if (this.inflight.get(key) === promise) {
+        this.inflight.delete(key);
+      }
+    });
+    this.inflight.set(key, promise);
+    return promise;
+  }
+
+  private async restartInner(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
+    const studioKey = this.key(args.organizationId, args.projectSlug, args.version);
+    const machineName = this.machineNameFor(args.organizationId, args.projectSlug, args.version);
+
+    const machines = await this.listMachines();
+    const existing =
+      this.findMachineByName(machines, machineName) ||
+      this.findMachine(machines, args.organizationId, args.projectSlug, args.version);
+
+    // No machine exists yet; start normally.
+    if (!existing) {
+      return this.ensureRunningInner(args);
+    }
+
+    const port = this.getMachineExternalPort(existing);
+    if (!port) {
+      throw new Error(
+        `[FlyMachines] Found machine ${existing.id} for ${args.projectSlug}/v${args.version} but could not determine its external port. Destroy it or recreate it.`,
+      );
+    }
+
+    const current = await this.getMachine(existing.id);
+    const state = current.state || "unknown";
+    if (state === "destroyed" || state === "destroying") {
+      // Machine is gone; start normally.
+      this.machinesCache = null;
+      return this.ensureRunningInner(args);
+    }
+
+    // Force a fresh boot so the studio entrypoint rehydrates from S3.
+    if (state !== "stopped") {
+      await this.stopMachine(existing.id);
+      await this.waitForState({
+        machineId: existing.id,
+        state: "stopped",
+        timeoutMs: 60_000,
+      });
+    }
+
+    const desiredImage = await this.getDesiredImage();
+    const studioId =
+      this.getMachineMetadata(current)?.vivd_studio_id ||
+      current.config?.env?.STUDIO_ID ||
+      args.env.STUDIO_ID ||
+      crypto.randomUUID();
+
+    const env = this.buildStudioEnv({ ...args, studioId });
+
+    const metadata: Record<string, string> = {
+      ...(this.getMachineMetadata(current) || {}),
+      vivd_organization_id: args.organizationId,
+      vivd_project_slug: args.projectSlug,
+      vivd_project_version: String(args.version),
+      vivd_external_port: String(port),
+      vivd_studio_id: studioId,
+      vivd_image: desiredImage,
+    };
+
+    const config: FlyMachineConfig = {
+      ...(current.config || {}),
+      image: desiredImage,
+      env,
+      services: this.normalizeServicesForVivd(current.config?.services, port),
+      metadata,
+    };
+
+    await this.updateMachineConfig({
+      machineId: existing.id,
+      config,
+      skipLaunch: true,
+    });
+
+    await this.startMachineHandlingReplacement(existing.id);
+
+    const url = this.getPublicUrlForPort(port);
+    await this.waitForReady({
+      machineId: existing.id,
+      url,
+      timeoutMs: this.startTimeoutMs,
+    });
+
+    this.touchKey(studioKey);
+    return { studioId, url, port };
   }
 
   private async ensureRunningInner(

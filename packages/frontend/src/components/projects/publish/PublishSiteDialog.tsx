@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,17 +48,17 @@ export function PublishSiteDialog({
 
   const publishStatusQuery = trpc.project.publishStatus.useQuery(
     { slug },
-    { enabled: open && !!slug },
+    { enabled: open && !!slug, refetchInterval: open ? 10_000 : false },
   );
 
   const publishStateQuery = trpc.project.publishState.useQuery(
     { slug, version },
-    { enabled: open && !!slug },
+    { enabled: open && !!slug, refetchInterval: open ? 5_000 : false },
   );
 
   const publishChecklistQuery = trpc.project.publishChecklist.useQuery(
     { slug, version },
-    { enabled: open && !!slug },
+    { enabled: open && !!slug, refetchInterval: open ? 10_000 : false },
   );
 
   useEffect(() => {
@@ -126,20 +127,42 @@ export function PublishSiteDialog({
 
   const unsavedChangesWarning = useMemo(() => {
     if (!state?.studioRunning) return false;
-    if (state?.studioHasUnsavedChanges) return true;
-    if (state?.studioStateAvailable === false) return true;
-    if (!state.publishableCommitHash || !state.lastSyncedCommitHash) return false;
-    return state.publishableCommitHash !== state.lastSyncedCommitHash;
+    return Boolean(
+      state?.studioHasUnsavedChanges || state?.studioStateAvailable === false,
+    );
   }, [
     state?.studioRunning,
     state?.studioHasUnsavedChanges,
     state?.studioStateAvailable,
-    state?.publishableCommitHash,
-    state?.lastSyncedCommitHash,
   ]);
 
   const studioStateUnknownWarning = Boolean(
     state?.studioRunning && state?.studioStateAvailable === false,
+  );
+
+  const olderSnapshotWarning = Boolean(
+    state?.studioRunning &&
+      state?.studioStateAvailable &&
+      state?.studioWorkingCommitHash &&
+      state?.studioHeadCommitHash &&
+      state.studioWorkingCommitHash !== state.studioHeadCommitHash,
+  );
+
+  const publishTargetCommitHash =
+    state?.studioRunning && state?.studioStateAvailable && state?.studioHeadCommitHash
+      ? state.studioHeadCommitHash
+      : state?.publishableCommitHash ?? null;
+  const publishableCommitMatchesTarget = Boolean(
+    publishTargetCommitHash &&
+      state?.publishableCommitHash &&
+      state.publishableCommitHash === publishTargetCommitHash,
+  );
+  const preparingLatestSnapshotWarning = Boolean(
+    state?.studioRunning &&
+      state?.studioStateAvailable &&
+      state?.studioHeadCommitHash &&
+      state?.publishableCommitHash &&
+      state.publishableCommitHash !== state.studioHeadCommitHash,
   );
 
   const domainOk = normalizedInput.length > 0 && (checkDomainQuery.data?.available ?? true);
@@ -149,8 +172,10 @@ export function PublishSiteDialog({
     !readyForPublish ||
     !domainOk ||
     !state?.storageEnabled ||
+    olderSnapshotWarning ||
     studioStateUnknownWarning ||
-    Boolean(state?.studioHasUnsavedChanges);
+    Boolean(state?.studioHasUnsavedChanges) ||
+    !publishableCommitMatchesTarget;
 
   const handlePublish = () => {
     setPublishError(null);
@@ -162,7 +187,7 @@ export function PublishSiteDialog({
       slug,
       version,
       domain: normalizedInput,
-      expectedCommitHash: state?.publishableCommitHash ?? undefined,
+      expectedCommitHash: publishTargetCommitHash ?? undefined,
     });
   };
 
@@ -206,9 +231,39 @@ export function PublishSiteDialog({
               </div>
             ) : null}
 
+            {preparingLatestSnapshotWarning && !olderSnapshotWarning && !unsavedChangesWarning ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Your latest snapshot is still being prepared for publishing. Refresh status in a moment.
+              </div>
+            ) : null}
+
             {publishError ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                 {publishError}
+              </div>
+            ) : null}
+
+            {olderSnapshotWarning ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5" />
+                  <div className="space-y-2">
+                    <div>
+                      Studio is currently viewing an older snapshot. Restore it (or switch back to
+                      the latest snapshot) before publishing so you publish what you're seeing.
+                    </div>
+                    {onOpenStudio ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-400 bg-transparent"
+                        onClick={onOpenStudio}
+                      >
+                        Open Studio to restore snapshot
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             ) : null}
 
@@ -305,6 +360,19 @@ export function PublishSiteDialog({
               ) : null}
             </div>
             <div className="flex items-center gap-2">
+              {onOpenStudio && (olderSnapshotWarning || unsavedChangesWarning) ? (
+                <Button
+                  variant="outline"
+                  onClick={onOpenStudio}
+                  className="border-amber-300"
+                >
+                  {olderSnapshotWarning
+                    ? "Restore in Studio"
+                    : studioStateUnknownWarning
+                      ? "Open Studio"
+                      : "Save in Studio"}
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 onClick={() => {
@@ -319,19 +387,41 @@ export function PublishSiteDialog({
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh status
               </Button>
-              <Button onClick={handlePublish} disabled={publishDisabled}>
-                {publishMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Publishing...
-                  </>
-                ) : (
-                  <>
-                    <Globe className="h-4 w-4 mr-2" />
-                    Publish site
-                  </>
-                )}
-              </Button>
+              {publishDisabled && (olderSnapshotWarning || unsavedChangesWarning) ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex" tabIndex={0}>
+                      <Button onClick={handlePublish} disabled>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Publish site
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p className="text-sm">
+                      {olderSnapshotWarning
+                        ? "Studio is viewing an older snapshot. Restore it so you publish what you're seeing."
+                        : studioStateUnknownWarning
+                          ? "Studio is active but its state is unavailable. Open Studio and save before publishing."
+                          : "You have unsaved changes in Studio. Save changes before publishing to include your latest edits."}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button onClick={handlePublish} disabled={publishDisabled}>
+                  {publishMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="h-4 w-4 mr-2" />
+                      Publish site
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </DialogFooter>
         </DialogContent>

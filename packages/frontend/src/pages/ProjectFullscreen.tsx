@@ -36,6 +36,8 @@ export default function ProjectFullscreen() {
   const [editRequested, setEditRequested] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
+  const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
+  const [studioReloadNonce, setStudioReloadNonce] = useState(0);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
@@ -60,6 +62,12 @@ export default function ProjectFullscreen() {
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
+    onSuccess: () => {
+      if (!projectSlug) return;
+      utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
+    },
+  });
+  const hardRestartStudio = trpc.project.hardRestartStudio.useMutation({
     onSuccess: () => {
       if (!projectSlug) return;
       utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
@@ -96,7 +104,10 @@ export default function ProjectFullscreen() {
   useEffect(() => {
     setEditRequested(false);
     startStudio.reset();
-  }, [projectSlug, startStudio.reset]);
+    hardRestartStudio.reset();
+    setStudioUrlOverride(null);
+    setStudioReloadNonce(0);
+  }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
 
   useEffect(() => {
     if (resumeStudio) {
@@ -123,7 +134,43 @@ export default function ProjectFullscreen() {
     startStudio.mutate({ slug: projectSlug, version });
   };
 
+  const handleHardRestart = async (requestedVersion?: number) => {
+    if (!projectSlug || !project) return;
+
+    const targetVersion =
+      typeof requestedVersion === "number" &&
+      Number.isFinite(requestedVersion) &&
+      requestedVersion > 0
+        ? requestedVersion
+        : version;
+
+    setEditRequested(true);
+    setStudioUrlOverride(null);
+
+    try {
+      const result = await hardRestartStudio.mutateAsync({
+        slug: projectSlug,
+        version: targetVersion,
+      });
+      if (!result.success) {
+        toast.error("Failed to restart studio", {
+          description: result.error || "Unknown error",
+        });
+        return;
+      }
+
+      setStudioUrlOverride(result.url);
+      setStudioReloadNonce((n) => n + 1);
+      toast.success("Studio restarted");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error("Failed to restart studio", { description: message });
+    }
+  };
+
   const studioBaseUrl = useMemo(() => {
+    if (hardRestartStudio.isPending) return null;
+    if (studioUrlOverride) return studioUrlOverride;
     return editRequested
       ? startStudio.data?.success
         ? startStudio.data.url
@@ -131,7 +178,13 @@ export default function ProjectFullscreen() {
       : studioUrlQuery.data?.status === "running"
         ? studioUrlQuery.data.url
         : null;
-  }, [editRequested, startStudio.data, studioUrlQuery.data]);
+  }, [
+    editRequested,
+    hardRestartStudio.isPending,
+    startStudio.data,
+    studioUrlOverride,
+    studioUrlQuery.data,
+  ]);
 
   useEffect(() => {
     if (!projectSlug || !studioBaseUrl) return;
@@ -186,6 +239,14 @@ export default function ProjectFullscreen() {
         const nextColorTheme = event.data?.colorTheme;
         if (isTheme(nextTheme)) setTheme(nextTheme);
         if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
+      }
+      if (type === "vivd:studio:hardRestart") {
+        const versionRaw = event.data?.version;
+        const versionFromMessage =
+          typeof versionRaw === "number" ? versionRaw : Number.NaN;
+        void handleHardRestart(
+          Number.isFinite(versionFromMessage) ? versionFromMessage : undefined,
+        );
       }
     };
 
@@ -409,7 +470,7 @@ export default function ProjectFullscreen() {
           <iframe
             ref={studioIframeRef}
             onLoad={syncThemeToStudio}
-            key={`${projectSlug}-${version}-${studioUrlQuery.data?.url ?? startStudio.data?.url ?? ""}`}
+            key={`${projectSlug}-${version}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
             src={studioIframeSrc}
             title={`Vivd Studio - ${projectSlug}`}
             className="h-full w-full border-0"

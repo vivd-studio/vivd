@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import {
   Breadcrumb,
@@ -39,9 +39,12 @@ export default function EmbeddedStudio() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
+  const { toggleSidebar } = useSidebar();
   const [editRequested, setEditRequested] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
+  const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
+  const [studioReloadNonce, setStudioReloadNonce] = useState(0);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Fetch project data to get current version
@@ -62,6 +65,12 @@ export default function EmbeddedStudio() {
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
+    onSuccess: () => {
+      if (!projectSlug) return;
+      utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
+    },
+  });
+  const hardRestartStudio = trpc.project.hardRestartStudio.useMutation({
     onSuccess: () => {
       if (!projectSlug) return;
       utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
@@ -101,7 +110,10 @@ export default function EmbeddedStudio() {
   useEffect(() => {
     setEditRequested(false);
     startStudio.reset();
-  }, [projectSlug, startStudio.reset]);
+    hardRestartStudio.reset();
+    setStudioUrlOverride(null);
+    setStudioReloadNonce(0);
+  }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
 
   // If we navigated back from fullscreen with `?view=studio`, prefer showing the running studio.
   useEffect(() => {
@@ -126,7 +138,43 @@ export default function EmbeddedStudio() {
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
   };
 
+  const handleHardRestart = async (requestedVersion?: number) => {
+    if (!projectSlug || !project) return;
+
+    const targetVersion =
+      typeof requestedVersion === "number" &&
+      Number.isFinite(requestedVersion) &&
+      requestedVersion > 0
+        ? requestedVersion
+        : studioVersion;
+
+    setEditRequested(true);
+    setStudioUrlOverride(null);
+
+    try {
+      const result = await hardRestartStudio.mutateAsync({
+        slug: projectSlug,
+        version: targetVersion,
+      });
+      if (!result.success) {
+        toast.error("Failed to restart studio", {
+          description: result.error || "Unknown error",
+        });
+        return;
+      }
+
+      setStudioUrlOverride(result.url);
+      setStudioReloadNonce((n) => n + 1);
+      toast.success("Studio restarted");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error("Failed to restart studio", { description: message });
+    }
+  };
+
   const studioBaseUrl = useMemo(() => {
+    if (hardRestartStudio.isPending) return null;
+    if (studioUrlOverride) return studioUrlOverride;
     return editRequested
       ? startStudio.data?.success
         ? startStudio.data.url
@@ -134,7 +182,13 @@ export default function EmbeddedStudio() {
       : studioUrlQuery.data?.status === "running"
         ? studioUrlQuery.data.url
         : null;
-  }, [editRequested, startStudio.data, studioUrlQuery.data]);
+  }, [
+    editRequested,
+    hardRestartStudio.isPending,
+    startStudio.data,
+    studioUrlOverride,
+    studioUrlQuery.data,
+  ]);
 
   useEffect(() => {
     if (!projectSlug || !studioBaseUrl) return;
@@ -189,6 +243,14 @@ export default function EmbeddedStudio() {
         if (isTheme(nextTheme)) setTheme(nextTheme);
         if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
       }
+      if (event.data?.type === "vivd:studio:hardRestart") {
+        const versionRaw = event.data?.version;
+        const version = typeof versionRaw === "number" ? versionRaw : Number.NaN;
+        void handleHardRestart(Number.isFinite(version) ? version : undefined);
+      }
+      if (event.data?.type === "vivd:studio:toggleSidebar") {
+        toggleSidebar();
+      }
     };
 
     window.addEventListener("message", onMessage);
@@ -201,6 +263,7 @@ export default function EmbeddedStudio() {
     setColorTheme,
     setTheme,
     studioVersion,
+    toggleSidebar,
   ]);
 
   const studioIframeSrc = useMemo(() => {
@@ -211,6 +274,8 @@ export default function EmbeddedStudio() {
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
     url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
+    // Origin of the host app – used by the studio to construct shareable preview URLs.
+    url.searchParams.set("hostOrigin", window.location.origin);
     // Used by the "fullscreen/open in new tab" studio view to navigate back.
     url.searchParams.set(
       "returnTo",
@@ -456,7 +521,7 @@ export default function EmbeddedStudio() {
           <iframe
             ref={studioIframeRef}
             onLoad={syncThemeToStudio}
-            key={`${projectSlug}-${version}-${studioUrlQuery.data?.url ?? startStudio.data?.url ?? ""}`}
+            key={`${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
             src={studioIframeSrc}
             title={`Vivd Studio - ${projectSlug}`}
             className="h-full w-full border-0"

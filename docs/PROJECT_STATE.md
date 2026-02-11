@@ -8,7 +8,10 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
-- 2026-02-11: fixed ZIP import for bucket-first runtime by accepting metadata-less exported ZIP roots and syncing imported source/preview artifacts to object storage.
+- 2026-02-11: added older-snapshot warnings + one-click "Restore Snapshot" flow; blocked publishing while Studio is pinned to an older snapshot to prevent publishing unexpected content.
+- 2026-02-11: simplified publish dialog: publishing is blocked when Studio has unsaved changes or is viewing an older snapshot; users must save/restore/back-to-latest before publishing (no combined "Save & Publish" / "Restore & Publish").
+- 2026-02-11: fixed ZIP import for bucket-first runtime by accepting metadata-less exported ZIP roots, syncing imported source/preview artifacts to object storage, and hardening tenant selection to prevent default-tenant leakage.
+- 2026-02-11: added in-studio "Hard restart" to force a fresh studio boot (rehydrate source from object storage) when a suspended machine resumes with an empty/stale workspace.
 - 2026-02-11: added Fly studio start retry when a machine is in `replacing` state to avoid transient "machine getting replaced" boot failures in the frontend.
 - 2026-02-11: serialized Studio workspace Git operations and auto-cleaned stale `.git/index.lock` to prevent save failures under concurrent requests/restarts.
 - 2026-02-11: optimized release publish workflow to build/push only changed container images between tags and skip deploy when no image-relevant files changed.

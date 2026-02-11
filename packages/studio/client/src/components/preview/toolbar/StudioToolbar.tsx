@@ -2,7 +2,7 @@ import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
 import faviconSvg from "/favicon-transparent.svg";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelLeft, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
@@ -82,13 +82,48 @@ export function StudioToolbar() {
     );
   };
 
+  const handleHardRestart = () => {
+    if (!embedded) return;
+
+    const message = hasUnsavedChanges
+      ? "Hard restart the studio? You have unsaved changes that may be lost."
+      : "Hard restart the studio? This may interrupt the current session.";
+    if (!window.confirm(message)) return;
+
+    window.parent?.postMessage(
+      {
+        type: "vivd:studio:hardRestart",
+        slug: projectSlug,
+        version: selectedVersion,
+      },
+      "*",
+    );
+  };
+
   return (
     <>
       <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-1 md:gap-2 shrink-0 z-30 bg-background overflow-x-auto">
-        {/* Left Section: App Icon + Preview Identity */}
-        <div className="flex items-center">
-          <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
-        </div>
+        {/* Left Section: Sidebar Toggle (embedded) or App Icon */}
+        {embedded && !fullscreen ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => {
+              window.parent?.postMessage(
+                { type: "vivd:studio:toggleSidebar" },
+                "*",
+              );
+            }}
+          >
+            <PanelLeft />
+            <span className="sr-only">Toggle Sidebar</span>
+          </Button>
+        ) : (
+          <div className="flex items-center">
+            <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
+          </div>
+        )}
 
         {/* Separator */}
         <div className="hidden sm:block h-5 w-px bg-border mx-1" />
@@ -236,6 +271,15 @@ export function StudioToolbar() {
           {embedded ? (
             <>
               <div className="hidden md:block h-5 w-px bg-border mx-1" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleHardRestart}
+                className="h-8 w-8 p-0"
+                title="Hard restart"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"

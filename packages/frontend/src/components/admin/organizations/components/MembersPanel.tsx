@@ -1,8 +1,14 @@
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import * as z from "zod";
+import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -92,6 +98,8 @@ export function MembersPanel({
   onSaveMember,
   onRemoveMember,
 }: Props) {
+  const [addOpen, setAddOpen] = useState(false);
+
   const normalizedEmail = userForm.email.trim().toLowerCase();
   const emailIsValid = z.string().email().safeParse(normalizedEmail).success;
 
@@ -113,249 +121,252 @@ export function MembersPanel({
     (userForm.organizationRole === "client_editor" && !userForm.projectSlug);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Members</CardTitle>
-        <CardDescription>
-          Manage members of <strong>{selectedOrg.name}</strong>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-lg bg-muted/50 p-4 space-y-3">
-          <div className="text-sm font-medium">Add member</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                placeholder="user@example.com"
-                value={userForm.email}
-                onChange={(e) =>
-                  setUserForm((state) => ({
-                    ...state,
-                    email: e.target.value,
-                  }))
-                }
-              />
-              {emailLookup.data?.exists ? (
-                <div className="text-xs text-muted-foreground mt-1">
-                  Existing account detected — name/password not required.
-                </div>
-              ) : emailLookup.isFetching ? (
-                <div className="text-xs text-muted-foreground mt-1">Checking account…</div>
-              ) : null}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Role</Label>
-              <Select
-                value={userForm.organizationRole}
-                onValueChange={(value) =>
-                  setUserForm((state) => ({
-                    ...state,
-                    organizationRole: value as OrganizationRole,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owner">Owner</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="member">User</SelectItem>
-                  <SelectItem value="client_editor">Client Editor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {!isExistingAccount && (
+    <div className="space-y-4">
+      <Collapsible open={addOpen} onOpenChange={setAddOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-1 px-2 -ml-2">
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${addOpen ? "rotate-90" : ""}`}
+            />
+            Add member
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="rounded-lg border p-4 mt-2 space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Name</Label>
+                <Label>Email</Label>
                 <Input
-                  placeholder="Full name"
-                  value={userForm.name}
+                  type="email"
+                  placeholder="user@example.com"
+                  value={userForm.email}
                   onChange={(e) =>
                     setUserForm((state) => ({
                       ...state,
-                      name: e.target.value,
+                      email: e.target.value,
                     }))
                   }
                 />
-              </div>
-            )}
-            {!isExistingAccount && (
-              <div className="space-y-1.5">
-                <Label>Password</Label>
-                <Input
-                  type="password"
-                  placeholder="Min. 8 characters"
-                  value={userForm.password}
-                  onChange={(e) =>
-                    setUserForm((state) => ({
-                      ...state,
-                      password: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            )}
-            {userForm.organizationRole === "client_editor" && (
-              <div className="space-y-1.5">
-                <Label>Assigned project</Label>
-                <ProjectSelect
-                  value={userForm.projectSlug}
-                  onChange={(value) =>
-                    setUserForm((state) => ({
-                      ...state,
-                      projectSlug: value,
-                    }))
-                  }
-                  projects={projects}
-                />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end">
-            <Button
-              onClick={() => onCreateUser(isExistingAccount)}
-              disabled={disableAddUser}
-            >
-              {createUserPending ? "Creating..." : "Add user"}
-            </Button>
-          </div>
-          {Boolean(createUserError) && (
-            <div className="text-sm text-red-500">{String(createUserError)}</div>
-          )}
-        </div>
-
-        {membersLoading ? (
-          <div className="text-muted-foreground">Loading members...</div>
-        ) : membersError ? (
-          <div className="text-red-500">Failed to load members: {String(membersError)}</div>
-        ) : (
-          <div className="rounded-lg border divide-y">
-            {members.map((member) => {
-              const edit =
-                memberEdits[member.userId] ??
-                ({
-                  role: member.role as EditableOrganizationRole,
-                  projectSlug: member.assignedProjectSlug ?? "",
-                } satisfies {
-                  role: EditableOrganizationRole;
-                  projectSlug: string;
-                });
-
-              const originalProjectSlug = member.assignedProjectSlug ?? "";
-              const isDirty =
-                edit.role !== member.role ||
-                (edit.role === "client_editor" && edit.projectSlug !== originalProjectSlug);
-
-              const canSave =
-                isDirty &&
-                (edit.role !== "client_editor" || Boolean(edit.projectSlug));
-
-              return (
-                <div
-                  key={member.id}
-                  className="p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      {member.user.name || member.user.email}
-                    </div>
-                    <div className="text-sm text-muted-foreground truncate">
-                      {member.user.email}
-                    </div>
+                {emailLookup.data?.exists ? (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Existing account detected — name/password not required.
                   </div>
+                ) : emailLookup.isFetching ? (
+                  <div className="text-xs text-muted-foreground mt-1">Checking account…</div>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Select
+                  value={userForm.organizationRole}
+                  onValueChange={(value) =>
+                    setUserForm((state) => ({
+                      ...state,
+                      organizationRole: value as OrganizationRole,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="owner">Owner</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="member">User</SelectItem>
+                    <SelectItem value="client_editor">Client Editor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {!isExistingAccount && (
+                <div className="space-y-1.5">
+                  <Label>Name</Label>
+                  <Input
+                    placeholder="Full name"
+                    value={userForm.name}
+                    onChange={(e) =>
+                      setUserForm((state) => ({
+                        ...state,
+                        name: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              )}
+              {!isExistingAccount && (
+                <div className="space-y-1.5">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    placeholder="Min. 8 characters"
+                    value={userForm.password}
+                    onChange={(e) =>
+                      setUserForm((state) => ({
+                        ...state,
+                        password: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              )}
+              {userForm.organizationRole === "client_editor" && (
+                <div className="space-y-1.5">
+                  <Label>Assigned project</Label>
+                  <ProjectSelect
+                    value={userForm.projectSlug}
+                    onChange={(value) =>
+                      setUserForm((state) => ({
+                        ...state,
+                        projectSlug: value,
+                      }))
+                    }
+                    projects={projects}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={() => onCreateUser(isExistingAccount)}
+                disabled={disableAddUser}
+              >
+                {createUserPending ? "Creating..." : "Add user"}
+              </Button>
+            </div>
+            {Boolean(createUserError) && (
+              <div className="text-sm text-red-500">{String(createUserError)}</div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <Select
-                      value={edit.role}
-                      onValueChange={(value) =>
+      {membersLoading ? (
+        <div className="text-muted-foreground">Loading members...</div>
+      ) : membersError ? (
+        <div className="text-red-500">Failed to load members: {String(membersError)}</div>
+      ) : (
+        <div className="rounded-lg border divide-y">
+          {members.map((member) => {
+            const edit =
+              memberEdits[member.userId] ??
+              ({
+                role: member.role as EditableOrganizationRole,
+                projectSlug: member.assignedProjectSlug ?? "",
+              } satisfies {
+                role: EditableOrganizationRole;
+                projectSlug: string;
+              });
+
+            const originalProjectSlug = member.assignedProjectSlug ?? "";
+            const isDirty =
+              edit.role !== member.role ||
+              (edit.role === "client_editor" && edit.projectSlug !== originalProjectSlug);
+
+            const canSave =
+              isDirty &&
+              (edit.role !== "client_editor" || Boolean(edit.projectSlug));
+
+            return (
+              <div
+                key={member.id}
+                className="p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium truncate">
+                    {member.user.name || member.user.email}
+                  </div>
+                  <div className="text-sm text-muted-foreground truncate">
+                    {member.user.email}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Select
+                    value={edit.role}
+                    onValueChange={(value) =>
+                      setMemberEdits((current) => ({
+                        ...current,
+                        [member.userId]: {
+                          role: value as EditableOrganizationRole,
+                          projectSlug:
+                            value === "client_editor"
+                              ? current[member.userId]?.projectSlug ??
+                                member.assignedProjectSlug ??
+                                ""
+                              : "",
+                        },
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="member">User</SelectItem>
+                      <SelectItem value="client_editor">Client Editor</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {edit.role === "client_editor" && (
+                    <ProjectSelect
+                      value={edit.projectSlug}
+                      onChange={(value) =>
                         setMemberEdits((current) => ({
                           ...current,
                           [member.userId]: {
-                            role: value as EditableOrganizationRole,
-                            projectSlug:
-                              value === "client_editor"
-                                ? current[member.userId]?.projectSlug ??
-                                  member.assignedProjectSlug ??
-                                  ""
-                                : "",
+                            role: "client_editor",
+                            projectSlug: value,
                           },
                         }))
                       }
-                    >
-                      <SelectTrigger className="w-[160px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="owner">Owner</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="member">User</SelectItem>
-                        <SelectItem value="client_editor">Client Editor</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      projects={projects}
+                      triggerClassName="w-[220px]"
+                    />
+                  )}
 
-                    {edit.role === "client_editor" && (
-                      <ProjectSelect
-                        value={edit.projectSlug}
-                        onChange={(value) =>
-                          setMemberEdits((current) => ({
-                            ...current,
-                            [member.userId]: {
-                              role: "client_editor",
-                              projectSlug: value,
-                            },
-                          }))
+                  {member.user.role === "super_admin" && (
+                    <Badge variant="secondary">Super Admin</Badge>
+                  )}
+
+                  <>
+                      <Button
+                        size="sm"
+                        disabled={!canSave || updateMemberRolePending}
+                        onClick={() =>
+                          onSaveMember(
+                            member.userId,
+                            edit.role,
+                            edit.role === "client_editor" ? edit.projectSlug : undefined,
+                          )
                         }
-                        projects={projects}
-                        triggerClassName="w-[220px]"
-                      />
-                    )}
-
-                    {member.user.role === "super_admin" && (
-                      <Badge variant="secondary">Super Admin</Badge>
-                    )}
-
-                    <>
-                        <Button
-                          size="sm"
-                          disabled={!canSave || updateMemberRolePending}
-                          onClick={() =>
-                            onSaveMember(
-                              member.userId,
-                              edit.role,
-                              edit.role === "client_editor" ? edit.projectSlug : undefined,
-                            )
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={removeMemberPending}
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${member.user.email} from this organization?`)) {
+                            return;
                           }
-                        >
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          disabled={removeMemberPending}
-                          onClick={() => {
-                            if (!window.confirm(`Remove ${member.user.email} from this organization?`)) {
-                              return;
-                            }
-                            onRemoveMember(member.userId);
-                          }}
-                        >
-                          Remove
-                        </Button>
-                    </>
-                  </div>
+                          onRemoveMember(member.userId);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                  </>
                 </div>
-              );
-            })}
-            {members.length === 0 && (
-              <div className="p-3 text-sm text-muted-foreground">No members</div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </div>
+            );
+          })}
+          {members.length === 0 && (
+            <div className="p-3 text-sm text-muted-foreground">No members</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -36,7 +36,6 @@ import {
   CheckCircle2,
   ExternalLink,
   Globe,
-  RefreshCw,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -141,17 +140,28 @@ export function PublishDialog({
 
   const publishStateQuery = trpc.project.publishState.useQuery(
     { slug: projectSlug, version },
-    { enabled: open && !!projectSlug && connectedMode }
+    {
+      enabled: open && !!projectSlug && connectedMode,
+      refetchInterval: open && connectedMode ? 5_000 : false,
+    }
   );
   const publishChecklistQuery = trpc.project.publishChecklist.useQuery(
     { slug: projectSlug, version },
-    { enabled: open && !!projectSlug && connectedMode }
+    {
+      enabled: open && !!projectSlug && connectedMode,
+      refetchInterval: open && connectedMode ? 10_000 : false,
+    }
   );
 
   useEffect(() => {
     if (!open || !connectedMode) return;
     setDomain(publishStatus?.domain ?? "");
   }, [open, connectedMode, publishStatus?.domain]);
+
+  useEffect(() => {
+    if (!open || !connectedMode) return;
+    void Promise.all([publishStateQuery.refetch(), publishChecklistQuery.refetch()]);
+  }, [open, connectedMode, projectSlug, version]);
 
   useEffect(() => {
     if (!open) {
@@ -183,7 +193,7 @@ export function PublishDialog({
       const message = error.message || "Failed to publish";
       const detail =
         error.data?.code === "CONFLICT"
-          ? `${message} Refresh status and retry.`
+          ? `${message} Please try again.`
           : message;
       setPublishError(detail);
       toast.error(error.message || "Failed to publish");
@@ -242,6 +252,8 @@ export function PublishDialog({
       toast.error(`Failed to save: ${error.message}`);
     },
   });
+
+  const loadVersionMutation = trpc.project.gitLoadVersion.useMutation();
 
   // Create tag mutation
   const createTagMutation = trpc.project.createTag.useMutation({
@@ -323,22 +335,150 @@ export function PublishDialog({
     const studioStateUnknownWarning = Boolean(
       publishState?.studioRunning && publishState?.studioStateAvailable === false,
     );
-    const unsavedChangesInStudio =
-      Boolean(publishState?.studioRunning) &&
-      (Boolean(publishState?.studioHasUnsavedChanges) ||
-        studioStateUnknownWarning ||
-        (Boolean(publishState?.publishableCommitHash) &&
-          Boolean(publishState?.lastSyncedCommitHash) &&
-          publishState?.publishableCommitHash !== publishState?.lastSyncedCommitHash));
+    const olderSnapshotInStudio = Boolean(
+      publishState?.studioRunning &&
+        publishState?.studioStateAvailable &&
+        publishState?.studioWorkingCommitHash &&
+        publishState?.studioHeadCommitHash &&
+        publishState.studioWorkingCommitHash !== publishState.studioHeadCommitHash,
+    );
+    const unsavedChangesInStudio = Boolean(
+      publishState?.studioRunning &&
+        publishState?.studioStateAvailable &&
+        publishState?.studioHasUnsavedChanges,
+    );
+
+    const publishTargetCommitHash =
+      publishState?.studioRunning &&
+      publishState?.studioStateAvailable &&
+      publishState?.studioHeadCommitHash
+        ? publishState.studioHeadCommitHash
+        : publishState?.publishableCommitHash ?? null;
+    const publishableCommitMatchesTarget = Boolean(
+      publishTargetCommitHash &&
+        publishState?.publishableCommitHash &&
+        publishState.publishableCommitHash === publishTargetCommitHash,
+    );
+    const preparingLatestSnapshotWarning = Boolean(
+      publishState?.studioRunning &&
+        publishState?.studioStateAvailable &&
+        publishState?.studioHeadCommitHash &&
+        publishState?.publishableCommitHash &&
+        publishState.publishableCommitHash !== publishState.studioHeadCommitHash,
+    );
 
     const domainOk =
       normalizedDomain.length > 0 && (checkDomainQuery.data?.available ?? true);
-    const canPublish =
+
+    const canPublishNow =
       publishState?.storageEnabled &&
       publishState?.readiness === "ready" &&
       domainOk &&
       !studioStateUnknownWarning &&
-      !publishState?.studioHasUnsavedChanges;
+      !publishState?.studioHasUnsavedChanges &&
+      !olderSnapshotInStudio &&
+      publishableCommitMatchesTarget;
+
+    const publishDisabled =
+      publishMutation.isPending ||
+      saveMutation.isPending ||
+      loadVersionMutation.isPending ||
+      !canPublishNow;
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    const handleConnectedPublish = async () => {
+      setPublishError(null);
+
+      if (!domainOk) {
+        toast.error(checkDomainQuery.data?.error || "Enter a valid domain");
+        return;
+      }
+
+      try {
+        const latestStateResult = await Promise.race([
+          publishStateQuery.refetch(),
+          sleep(15_000).then(() => {
+            throw new Error("refetch_timeout");
+          }),
+        ]);
+        const latestState = latestStateResult.data;
+        if (!latestState) {
+          toast.error("Publish status is unavailable. Please wait a moment and try again.");
+          return;
+        }
+
+        if (!latestState.storageEnabled) {
+          toast.error("Publishing is not available for this project yet.");
+          return;
+        }
+
+        const latestStudioStateUnknownWarning = Boolean(
+          latestState?.studioRunning && latestState?.studioStateAvailable === false,
+        );
+        if (latestStudioStateUnknownWarning) {
+          toast.error("Studio state is unavailable. Please wait a moment and try again.");
+          return;
+        }
+
+        const latestOlderSnapshotInStudio = Boolean(
+          latestState?.studioRunning &&
+            latestState?.studioStateAvailable &&
+            latestState?.studioWorkingCommitHash &&
+            latestState?.studioHeadCommitHash &&
+            latestState.studioWorkingCommitHash !== latestState.studioHeadCommitHash,
+        );
+        if (latestOlderSnapshotInStudio) {
+          toast.error("You're viewing an older snapshot. Restore it (or go back to latest) before publishing.");
+          return;
+        }
+
+        const latestUnsavedChangesInStudio = Boolean(
+          latestState?.studioRunning &&
+            latestState?.studioStateAvailable &&
+            latestState?.studioHasUnsavedChanges,
+        );
+        if (latestUnsavedChangesInStudio) {
+          toast.error("You have unsaved changes. Save your changes before publishing.");
+          return;
+        }
+
+        const targetCommitHash =
+          latestState?.studioRunning &&
+          latestState?.studioStateAvailable &&
+          latestState?.studioHeadCommitHash
+            ? latestState.studioHeadCommitHash
+            : latestState?.publishableCommitHash ?? undefined;
+        if (!targetCommitHash) {
+          toast.error("No publishable version found.");
+          return;
+        }
+
+        if (
+          latestState?.readiness !== "ready" ||
+          latestState?.publishableCommitHash !== targetCommitHash
+        ) {
+          toast.error("Your latest version is still being prepared for publishing. Please wait a moment and try again.");
+          return;
+        }
+
+        await publishMutation.mutateAsync({
+          slug: projectSlug,
+          version,
+          domain: normalizedDomain,
+          expectedCommitHash: targetCommitHash,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message === "refetch_timeout") {
+          setPublishError("Publish status is taking too long to load. Please try again.");
+          return;
+        }
+        // publishMutation already surfaces errors via its onError handler.
+        const message = err instanceof Error ? err.message : "Failed to publish";
+        setPublishError(message);
+      }
+    };
 
     return (
       <>
@@ -395,11 +535,148 @@ export function PublishDialog({
                 </div>
               ) : null}
 
-              {unsavedChangesInStudio ? (
+              {olderSnapshotInStudio ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+                  <div>
+                    You're viewing an older snapshot. Restore it (or go back to latest) before publishing
+                    so you publish what you're seeing.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-amber-700 hover:bg-amber-800 text-white"
+                      onClick={() => {
+                        setPublishError(null);
+                        saveMutation
+                          .mutateAsync({
+                            slug: projectSlug,
+                            version,
+                            message: "Restore snapshot",
+                          })
+                          .then(() => {
+                            void Promise.all([
+                              publishStateQuery.refetch(),
+                              utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+                            ]);
+                          })
+                          .catch((err) => {
+                            const message = err instanceof Error ? err.message : "Failed to restore snapshot";
+                            toast.error(message);
+                          });
+                      }}
+                      disabled={
+                        publishMutation.isPending ||
+                        saveMutation.isPending ||
+                        loadVersionMutation.isPending
+                      }
+                    >
+                      {saveMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                          Restoring...
+                        </>
+                      ) : (
+                        "Restore snapshot"
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-400 text-amber-900 hover:bg-amber-100"
+                      onClick={() => {
+                        if (!publishState?.studioHeadCommitHash) {
+                          toast.error("Latest snapshot is unavailable. Please wait a moment and try again.");
+                          return;
+                        }
+                        setPublishError(null);
+                        loadVersionMutation
+                          .mutateAsync({
+                            slug: projectSlug,
+                            version,
+                            commitHash: publishState.studioHeadCommitHash,
+                          })
+                          .then(() => {
+                            toast.success("Switched back to latest snapshot");
+                            void publishStateQuery.refetch();
+                          })
+                          .catch((err) => {
+                            const message = err instanceof Error ? err.message : "Failed to switch snapshots";
+                            toast.error(message);
+                          });
+                      }}
+                      disabled={
+                        publishMutation.isPending ||
+                        saveMutation.isPending ||
+                        loadVersionMutation.isPending
+                      }
+                    >
+                      {loadVersionMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Back to latest"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {studioStateUnknownWarning ? (
                 <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                  {studioStateUnknownWarning
-                    ? "Studio is active. Save changes before publishing."
-                    : "You have unsaved changes in Studio. Save changes before publishing to include latest edits."}
+                  Studio is active, but its state is unavailable. Please wait a moment and try again.
+                </div>
+              ) : null}
+
+              {unsavedChangesInStudio ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+                  <div>
+                    You have unsaved changes. Save your changes before publishing to include your latest edits.
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-amber-700 hover:bg-amber-800 text-white"
+                    onClick={() => {
+                      setPublishError(null);
+                      saveMutation
+                        .mutateAsync({
+                          slug: projectSlug,
+                          version,
+                          message: "Save changes",
+                        })
+                        .then(() => {
+                          void publishStateQuery.refetch();
+                        })
+                        .catch((err) => {
+                          const message = err instanceof Error ? err.message : "Failed to save changes";
+                          toast.error(message);
+                        });
+                    }}
+                    disabled={
+                      publishMutation.isPending ||
+                      saveMutation.isPending ||
+                      loadVersionMutation.isPending
+                    }
+                  >
+                    {saveMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save changes"
+                    )}
+                  </Button>
+                </div>
+              ) : null}
+
+              {preparingLatestSnapshotWarning &&
+              !olderSnapshotInStudio &&
+              !unsavedChangesInStudio &&
+              !studioStateUnknownWarning ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  Your latest snapshot is still being prepared for publishing. This may take a moment.
                 </div>
               ) : null}
 
@@ -430,6 +707,11 @@ export function PublishDialog({
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   autoComplete="off"
+                  disabled={
+                    publishMutation.isPending ||
+                    saveMutation.isPending ||
+                    loadVersionMutation.isPending
+                  }
                 />
                 {normalizedDomain.length > 0 && checkDomainQuery.data?.error ? (
                   <p className="text-xs text-destructive">
@@ -484,44 +766,41 @@ export function PublishDialog({
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setPublishError(null);
-                    void Promise.all([
-                      publishStateQuery.refetch(),
-                      publishChecklistQuery.refetch(),
-                      publishStatus && utils.project.publishStatus.invalidate({ slug: projectSlug }),
-                    ]);
-                  }}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh status
-                </Button>
-                <Button
-                  onClick={() => {
-                    setPublishError(null);
-                    publishMutation.mutate({
-                      slug: projectSlug,
-                      version,
-                      domain: normalizedDomain,
-                      expectedCommitHash: publishState?.publishableCommitHash ?? undefined,
-                    });
-                  }}
-                  disabled={!canPublish || publishMutation.isPending}
-                >
-                  {publishMutation.isPending ? (
+                {publishDisabled && (olderSnapshotInStudio || unsavedChangesInStudio || studioStateUnknownWarning) ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex" tabIndex={0}>
+                        <Button onClick={() => void handleConnectedPublish()} disabled>
+                          <Globe className="h-4 w-4 mr-2" />
+                          Publish site
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p className="text-sm">
+                        {olderSnapshotInStudio
+                          ? "You're viewing an older snapshot. Restore it (or go back to latest) before publishing."
+                          : studioStateUnknownWarning
+                            ? "Studio state is unavailable. Please wait a moment and try again."
+                            : "You have unsaved changes. Save changes before publishing to include your latest edits."}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button onClick={() => void handleConnectedPublish()} disabled={publishDisabled}>
+                    {publishMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Publishing...
                     </>
-                  ) : (
-                    <>
-                      <Globe className="h-4 w-4 mr-2" />
-                      Publish site
-                    </>
-                  )}
-                </Button>
+                    ) : (
+                      <>
+                        <Globe className="h-4 w-4 mr-2" />
+                        Publish site
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </DialogFooter>
           </DialogContent>

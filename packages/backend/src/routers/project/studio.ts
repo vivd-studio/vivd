@@ -121,6 +121,82 @@ export const studioProcedures = {
     }),
 
   /**
+   * Hard-restart a studio instance.
+   *
+   * This forces a fresh boot (instead of resuming a suspended snapshot) so the
+   * studio entrypoint rehydrates the workspace from object storage again.
+   */
+  hardRestartStudio: projectMemberProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, organizationId),
+        columns: { githubRepoPrefix: true },
+      });
+      const githubRepoPrefix = (org?.githubRepoPrefix ?? "").trim();
+
+      const backendOriginRaw =
+        studioMachineProvider.kind === "local"
+          ? process.env.BETTER_AUTH_URL ||
+            process.env.DOMAIN ||
+            `http://127.0.0.1:${process.env.PORT || 3000}`
+          : process.env.DOMAIN ||
+            process.env.BETTER_AUTH_URL ||
+            `http://127.0.0.1:${process.env.PORT || 3000}`;
+      const backendOrigin = backendOriginRaw.startsWith("http")
+        ? backendOriginRaw
+        : `https://${backendOriginRaw}`;
+      const mainBackendUrl = new URL("/vivd-studio", backendOrigin)
+        .toString()
+        .replace(/\/$/, "");
+
+      const sessionId = ctx.session.session.id;
+      const sessionRecord = await db.query.session.findFirst({
+        where: eq(sessionTable.id, sessionId),
+      });
+      const sessionToken = sessionRecord?.token;
+      if (!sessionToken) {
+        return {
+          success: false as const,
+          error: "Failed to resolve session token for studio authentication",
+        };
+      }
+
+      try {
+        const { studioId, url, port } = await studioMachineProvider.restart({
+          organizationId,
+          projectSlug: input.slug,
+          version: input.version,
+          mode: "hard",
+          env: {
+            MAIN_BACKEND_URL: mainBackendUrl,
+            SESSION_TOKEN: sessionToken,
+            GITHUB_REPO_PREFIX: githubRepoPrefix,
+          },
+        });
+
+        return {
+          success: true as const,
+          url,
+          port,
+          studioId,
+          provider: studioMachineProvider.kind,
+        };
+      } catch (error) {
+        return {
+          success: false as const,
+          error: error instanceof Error ? error.message : "Failed to restart studio",
+        };
+      }
+    }),
+
+  /**
    * Stop a studio instance.
    */
   stopStudio: projectMemberProcedure

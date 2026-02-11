@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
@@ -16,6 +16,8 @@ export default function StudioFullscreen() {
   const navigate = useNavigate();
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
+  const [studioReloadNonce, setStudioReloadNonce] = useState(0);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
@@ -40,6 +42,12 @@ export default function StudioFullscreen() {
       utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
     },
   });
+  const hardRestartStudio = trpc.project.hardRestartStudio.useMutation({
+    onSuccess: () => {
+      if (!projectSlug) return;
+      utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
+    },
+  });
   const touchStudio = trpc.project.touchStudio.useMutation();
   const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
     { slug: projectSlug!, version },
@@ -56,6 +64,7 @@ export default function StudioFullscreen() {
     if (!projectSlug || !project) return;
     if (studioUrlQuery.data?.status === "running") return;
     if (startStudio.isPending || startStudio.data) return;
+    if (hardRestartStudio.isPending) return;
     startStudio.mutate({ slug: projectSlug, version });
   }, [
     project,
@@ -63,15 +72,55 @@ export default function StudioFullscreen() {
     startStudio,
     startStudio.data,
     startStudio.isPending,
+    hardRestartStudio.isPending,
     studioUrlQuery.data?.status,
     version,
   ]);
 
+  useEffect(() => {
+    setStudioUrlOverride(null);
+    setStudioReloadNonce(0);
+    hardRestartStudio.reset();
+  }, [projectSlug, hardRestartStudio.reset]);
+
+  const handleHardRestart = async (requestedVersion?: number) => {
+    if (!projectSlug || !project) return;
+
+    const targetVersion =
+      typeof requestedVersion === "number" &&
+      Number.isFinite(requestedVersion) &&
+      requestedVersion > 0
+        ? requestedVersion
+        : version;
+
+    setStudioUrlOverride(null);
+
+    const result = await hardRestartStudio.mutateAsync({
+      slug: projectSlug,
+      version: targetVersion,
+    });
+    if (!result.success) {
+      // Fullscreen view doesn't show app chrome; keep failures minimal.
+      console.error("[StudioFullscreen] Failed to restart studio:", result.error);
+      return;
+    }
+
+    setStudioUrlOverride(result.url);
+    setStudioReloadNonce((n) => n + 1);
+  };
+
   const baseUrl = useMemo(() => {
+    if (hardRestartStudio.isPending) return null;
+    if (studioUrlOverride) return studioUrlOverride;
     if (studioUrlQuery.data?.status === "running") return studioUrlQuery.data.url;
     if (startStudio.data?.success) return startStudio.data.url;
     return null;
-  }, [startStudio.data, studioUrlQuery.data]);
+  }, [
+    hardRestartStudio.isPending,
+    startStudio.data,
+    studioUrlOverride,
+    studioUrlQuery.data,
+  ]);
 
   useEffect(() => {
     if (!projectSlug || !baseUrl) return;
@@ -125,6 +174,14 @@ export default function StudioFullscreen() {
         if (isTheme(nextTheme)) setTheme(nextTheme);
         if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
       }
+      if (type === "vivd:studio:hardRestart") {
+        const versionRaw = event.data?.version;
+        const versionFromMessage =
+          typeof versionRaw === "number" ? versionRaw : Number.NaN;
+        void handleHardRestart(
+          Number.isFinite(versionFromMessage) ? versionFromMessage : undefined,
+        );
+      }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -143,6 +200,7 @@ export default function StudioFullscreen() {
     url.searchParams.set("fullscreen", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(version));
+    url.searchParams.set("hostOrigin", window.location.origin);
     url.searchParams.set(
       "returnTo",
       new URL(
@@ -198,6 +256,7 @@ export default function StudioFullscreen() {
       <iframe
         ref={studioIframeRef}
         onLoad={syncThemeToStudio}
+        key={`${projectSlug}-${version}-${baseUrl ?? ""}-${studioReloadNonce}`}
         src={studioIframeSrc}
         title={`Vivd Studio - ${projectSlug}`}
         className="h-full w-full border-0"

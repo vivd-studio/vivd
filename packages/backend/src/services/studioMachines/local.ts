@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import treeKill from "tree-kill";
 import type {
   StudioMachineProvider,
+  StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
 } from "./types";
@@ -293,6 +294,13 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     }
 
     return { studioId, url: this.getPublicUrl(port), port };
+  }
+
+  async restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
+    // Local studios run as child processes; restarting guarantees a fresh
+    // object-storage hydration on the next boot when bucket sync is enabled.
+    await this.stop(args.organizationId, args.projectSlug, args.version);
+    return this.ensureRunning(args);
   }
 
   touch(organizationId: string, projectSlug: string, version: number): void {

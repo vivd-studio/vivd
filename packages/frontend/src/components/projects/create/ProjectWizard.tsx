@@ -43,6 +43,8 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const { data: membership } = trpc.organization.getMyMembership.useQuery();
+
   const form = useForm<UrlFormValues>({
     resolver: zodResolver(urlFormSchema),
     defaultValues: {
@@ -163,7 +165,9 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
     if (!importFile) return;
     setIsImporting(true);
     try {
-      const result = await importProjectZip(importFile);
+      const result = await importProjectZip(importFile, {
+        organizationId: membership?.organizationId,
+      });
       setIsOpen(false);
       onGenerationStarted(result.slug, result.version);
       navigate(ROUTES.PROJECT(result.slug));

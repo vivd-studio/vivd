@@ -11,6 +11,16 @@ export interface StudioMachineStartArgs {
   env: Record<string, string | undefined>;
 }
 
+export type StudioMachineRestartMode = "soft" | "hard";
+
+export interface StudioMachineRestartArgs extends StudioMachineStartArgs {
+  /**
+   * soft: prefer resuming an existing machine (fastest).
+   * hard: force a fresh boot (re-runs S3 hydration on startup).
+   */
+  mode?: StudioMachineRestartMode;
+}
+
 export interface StudioMachineStartResult {
   studioId: string;
   url: string;
@@ -21,6 +31,7 @@ export interface StudioMachineProvider {
   kind: StudioMachineProviderKind;
 
   ensureRunning(args: StudioMachineStartArgs): Promise<StudioMachineStartResult>;
+  restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult>;
   touch(organizationId: string, projectSlug: string, version: number): void | Promise<void>;
   stop(organizationId: string, projectSlug: string, version: number): void | Promise<void>;
   getUrl(organizationId: string, projectSlug: string, version: number): Promise<string | null>;

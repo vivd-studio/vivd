@@ -39,7 +39,13 @@ export function OrganizationsTab() {
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="usage">
+          <TabsContent value="usage" className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold">Usage & Limits</h3>
+              <p className="text-sm text-muted-foreground">
+                Current usage and configured limits for <strong>{admin.selectedOrg.name}</strong>.
+              </p>
+            </div>
             <UsageLimitsPanel
               selectedOrg={admin.selectedOrg}
               usageLoading={admin.usageLoading}
@@ -58,7 +64,13 @@ export function OrganizationsTab() {
             />
           </TabsContent>
 
-          <TabsContent value="members">
+          <TabsContent value="members" className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold">Members</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage members of <strong>{admin.selectedOrg.name}</strong>.
+              </p>
+            </div>
             <MembersPanel
               selectedOrg={admin.selectedOrg}
               projects={admin.projects}
@@ -103,7 +115,13 @@ export function OrganizationsTab() {
             />
           </TabsContent>
 
-          <TabsContent value="settings">
+          <TabsContent value="settings" className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold">Settings</h3>
+              <p className="text-sm text-muted-foreground">
+                Configuration for <strong>{admin.selectedOrg.name}</strong>.
+              </p>
+            </div>
             <SettingsPanel
               selectedOrg={admin.selectedOrg}
               githubPrefixForm={admin.githubPrefixForm}
