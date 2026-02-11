@@ -5,10 +5,16 @@ import os from "os";
 import { randomUUID } from "crypto";
 import type { Multer } from "multer";
 
+import { detectProjectType } from "../devserver/projectType";
 import { getProjectDir, getVersionDir } from "../generator/versionUtils";
 import { initializeGitRepository } from "../generator/gitUtils";
 import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
+import { buildService } from "../services/BuildService";
 import { projectMetaService } from "../services/ProjectMetaService";
+import {
+  uploadProjectPreviewToBucket,
+  uploadProjectSourceToBucket,
+} from "../services/ProjectArtifactsService";
 import { createContext } from "../trpc";
 import { checkOrganizationAccess } from "../lib/organizationAccess";
 
@@ -85,21 +91,114 @@ function containsSymlink(targetDir: string): boolean {
   return false;
 }
 
-function findExtractRoot(extractedDir: string): string | null {
-  const hasProjectJson = (dir: string) =>
+function hasProjectMetadata(dir: string): boolean {
+  return (
     fs.existsSync(path.join(dir, "project.json")) ||
-    fs.existsSync(path.join(dir, ".vivd", "project.json"));
+    fs.existsSync(path.join(dir, ".vivd", "project.json")) ||
+    fs.existsSync(path.join(dir, "manifest.json"))
+  );
+}
 
-  if (hasProjectJson(extractedDir)) return extractedDir;
+function hasAstroConfig(dir: string): boolean {
+  return (
+    fs.existsSync(path.join(dir, "astro.config.mjs")) ||
+    fs.existsSync(path.join(dir, "astro.config.js")) ||
+    fs.existsSync(path.join(dir, "astro.config.ts")) ||
+    fs.existsSync(path.join(dir, "astro.config.cjs"))
+  );
+}
 
-  const entries = fs.readdirSync(extractedDir, { withFileTypes: true });
+function isLikelyProjectRoot(dir: string): boolean {
+  if (hasProjectMetadata(dir)) return true;
+  if (fs.existsSync(path.join(dir, "index.html"))) return true;
+  if (fs.existsSync(path.join(dir, "package.json"))) return true;
+  if (hasAstroConfig(dir)) return true;
+  return false;
+}
+
+function findExtractRoot(extractedDir: string): string | null {
+  if (isLikelyProjectRoot(extractedDir)) return extractedDir;
+
+  const entries = fs
+    .readdirSync(extractedDir, { withFileTypes: true })
+    // Ignore macOS zip metadata folder when picking a single top-level root.
+    .filter((entry) => entry.name !== "__MACOSX");
   const dirs = entries.filter((e) => e.isDirectory());
   if (dirs.length === 1) {
     const candidate = path.join(extractedDir, dirs[0].name);
-    if (hasProjectJson(candidate)) return candidate;
+    if (isLikelyProjectRoot(candidate)) return candidate;
   }
 
   return null;
+}
+
+function readJsonObject(filePath: string): Record<string, unknown> | null {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function readImportedProjectMetadata(rootDir: string): Record<string, unknown> {
+  const candidates = [
+    path.join(rootDir, ".vivd", "project.json"),
+    path.join(rootDir, "project.json"),
+    path.join(rootDir, "manifest.json"),
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = readJsonObject(candidate);
+    if (parsed) return parsed;
+  }
+
+  return {};
+}
+
+async function syncImportedArtifacts(options: {
+  organizationId: string;
+  slug: string;
+  version: number;
+  versionDir: string;
+}): Promise<void> {
+  const projectConfig = detectProjectType(options.versionDir);
+  const completedAt = new Date().toISOString();
+
+  await uploadProjectSourceToBucket({
+    organizationId: options.organizationId,
+    versionDir: options.versionDir,
+    slug: options.slug,
+    version: options.version,
+    meta: {
+      status: "ready",
+      framework: projectConfig.framework,
+      completedAt,
+    },
+  });
+
+  if (projectConfig.framework !== "astro") return;
+
+  const existingDistDir = path.join(options.versionDir, "dist");
+  const previewDir = fs.existsSync(path.join(existingDistDir, "index.html"))
+    ? existingDistDir
+    : await buildService.buildSync(options.versionDir, "dist");
+
+  await uploadProjectPreviewToBucket({
+    organizationId: options.organizationId,
+    localDir: previewDir,
+    slug: options.slug,
+    version: options.version,
+    meta: {
+      status: "ready",
+      framework: "astro",
+      completedAt: new Date().toISOString(),
+    },
+  });
 }
 
 export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
@@ -166,24 +265,22 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
       if (!rootDir) {
         return res.status(400).json({
           error:
-            "Invalid ZIP structure: expected project.json (or .vivd/project.json) at root (or inside a single top-level folder)",
+            "Invalid ZIP structure: expected a project root with index.html, package.json/astro.config.*, or project metadata (project.json/.vivd/project.json/manifest.json)",
         });
       }
 
-      const sourceProjectJsonPath = fs.existsSync(
-        path.join(rootDir, ".vivd", "project.json")
-      )
-        ? path.join(rootDir, ".vivd", "project.json")
-        : path.join(rootDir, "project.json");
-
-      const rawProjectData = JSON.parse(
-        fs.readFileSync(sourceProjectJsonPath, "utf-8")
-      ) as Record<string, unknown>;
+      const rawProjectData = readImportedProjectMetadata(rootDir);
+      const filenameTitle = path
+        .basename(originalName, path.extname(originalName))
+        .replace(/[-_]+/g, " ")
+        .trim();
 
       const url =
         typeof rawProjectData.url === "string" ? rawProjectData.url : "";
       const title =
-        typeof rawProjectData.title === "string" ? rawProjectData.title : "";
+        typeof rawProjectData.title === "string" && rawProjectData.title.trim()
+          ? rawProjectData.title.trim()
+          : filenameTitle;
       const description =
         typeof rawProjectData.description === "string"
           ? rawProjectData.description
@@ -277,6 +374,13 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
       } catch (e) {
         console.warn("[Import] Failed to initialize git:", e);
       }
+
+      await syncImportedArtifacts({
+        organizationId,
+        slug,
+        version,
+        versionDir,
+      });
 
       return res.json({
         success: true,
