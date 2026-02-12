@@ -335,17 +335,23 @@ export class DomainService {
     const isSuperAdminHost = this.isSuperAdminHost(requestDomain);
     const routing = this.getTenantRoutingConfig();
 
-    const controlPlaneHost = routing.controlPlaneHost;
-    const isControlPlaneHost = Boolean(
-      requestDomain &&
-        ((controlPlaneHost && requestDomain === controlPlaneHost) ||
-          isSuperAdminHost),
-    );
-
     const domainRecord =
       routing.enabled && requestDomain
         ? (await this.getActiveDomainRecord(requestDomain)) ?? null
         : null;
+
+    const controlPlaneHost = routing.controlPlaneHost;
+    const isTenantBaseDomain = Boolean(
+      requestDomain && routing.tenantBaseDomain && requestDomain === routing.tenantBaseDomain,
+    );
+    const isControlPlaneHost = Boolean(
+      requestDomain &&
+        ((controlPlaneHost && requestDomain === controlPlaneHost) ||
+          isSuperAdminHost ||
+          // Allow the tenant base domain (e.g. vivd.studio) to act as a control-plane alias
+          // when it is not explicitly registered as an active tenant/publish domain.
+          (isTenantBaseDomain && !domainRecord)),
+    );
 
     let hostKind: HostKind = "unknown";
     if (isControlPlaneHost) {

@@ -66,19 +66,18 @@ export const createContext = async ({
   const requestedOrganizationId = normalizeRequestedOrganizationId(
     headers.get("x-vivd-organization-id"),
   );
+  const authHeader = headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : null;
 
   // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
   // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
   let sessionRecordFromDb: { id: string; activeOrganizationId: string | null } | null = null;
   if (!session) {
-    const authHeader = headers.get("authorization");
-    const bearer = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length).trim()
-      : null;
-
-    if (bearer) {
+    if (bearerToken) {
       const sessionRecord = await db.query.session.findFirst({
-        where: eq(sessionTable.token, bearer),
+        where: eq(sessionTable.token, bearerToken),
         with: {
           user: true,
         },
@@ -140,10 +139,12 @@ export const createContext = async ({
 
   const hostOrganizationId = resolvedHost.hostOrganizationId;
   const canSelectOrganization = resolvedHost.canSelectOrganization;
+  const canUseSessionSelectedOrganization =
+    canSelectOrganization || resolvedHost.hostKind === "unknown";
 
   let organizationId = hostOrganizationId
     ? hostOrganizationId
-    : canSelectOrganization
+    : canUseSessionSelectedOrganization
       ? sessionRecordFromDb?.activeOrganizationId ?? null
       : null;
 
@@ -171,24 +172,55 @@ export const createContext = async ({
     }
   }
 
+  // Additional fallback for machine calls authenticated via bearer token:
+  // when host-based routing cannot determine org (unknown/non-control-plane host),
+  // use session active org or preferred membership org.
+  if (!organizationId && session && bearerToken && !hostOrganizationId) {
+    const activeOrganizationId = sessionRecordFromDb?.activeOrganizationId ?? null;
+    const activeOrgAccessible = Boolean(
+      activeOrganizationId &&
+        (session.user.role === "super_admin" || membershipRoleByOrg.has(activeOrganizationId)),
+    );
+    const preferredOrganizationId = activeOrgAccessible
+      ? activeOrganizationId
+      : pickPreferredOrganizationId(memberships);
+
+    if (preferredOrganizationId) {
+      organizationId = preferredOrganizationId;
+      if (
+        sessionRecordFromDb &&
+        sessionRecordFromDb.activeOrganizationId !== preferredOrganizationId
+      ) {
+        await db
+          .update(sessionTable)
+          .set({ activeOrganizationId: preferredOrganizationId })
+          .where(eq(sessionTable.id, sessionRecordFromDb.id));
+      }
+    }
+  }
+
   // If an org is selected from session state but user no longer belongs to it,
   // clear it (except for host-forced tenant domains).
   if (
     session &&
     session.user.role !== "super_admin" &&
-    canSelectOrganization &&
+    canUseSessionSelectedOrganization &&
     organizationId &&
     !membershipRoleByOrg.has(organizationId)
   ) {
     organizationId = null;
   }
 
-  // Fallback: pick a preferred org whenever none is selected, but only on control-plane hosts.
-  if (!organizationId && session && canSelectOrganization) {
+  // Fallback: pick a preferred org whenever none is selected.
+  // We allow this on:
+  // - control-plane hosts (session-selected org)
+  // - unknown hosts (escape hatch so a misconfigured host can’t hard-fail all orgProcedure calls)
+  if (!organizationId && session && canUseSessionSelectedOrganization) {
     const preferredOrganizationId = pickPreferredOrganizationId(memberships);
     if (preferredOrganizationId) {
       organizationId = preferredOrganizationId;
       if (
+        canSelectOrganization &&
         sessionRecordFromDb &&
         sessionRecordFromDb.activeOrganizationId !== preferredOrganizationId
       ) {

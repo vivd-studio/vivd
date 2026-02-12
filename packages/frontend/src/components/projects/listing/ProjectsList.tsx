@@ -39,7 +39,12 @@ export function ProjectsList() {
     isLoading,
     error,
   } = trpc.project.list.useQuery(undefined, {
-    refetchInterval: 2000, // Poll every 2 seconds to check status
+    // Poll only while there are non-completed projects.
+    // Avoid spamming the backend (and console) on auth/config errors.
+    refetchInterval: (query) => {
+      const projects = query.state.data?.projects ?? [];
+      return projects.some((p) => p.status !== "completed") ? 2000 : false;
+    },
   });
   const { mutateAsync: regenerateProject } =
     trpc.project.regenerate.useMutation();
@@ -198,8 +203,13 @@ export function ProjectsList() {
     );
   }
 
-  if (error)
-    return <div className="text-destructive">Error loading projects</div>;
+  if (error) {
+    return (
+      <div className="text-destructive">
+        Error loading projects: {error.message}
+      </div>
+    );
+  }
 
   const hasProjects = (projectsData?.projects?.length ?? 0) > 0;
 
