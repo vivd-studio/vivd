@@ -1,0 +1,16 @@
+http:
+  routers:
+    vivd-tenants:
+      rule: 'HostRegexp(`^[a-z0-9-]+\.vivd\.studio$`)'
+      entryPoints: [websecure]
+      service: vivd-caddy
+      tls:
+        certResolver: letsencrypt_hetzner
+        domains:
+          - main: "*.vivd.studio"
+
+  services:
+    vivd-caddy:
+      loadBalancer:
+        servers:
+          - url: "http://caddy:80"

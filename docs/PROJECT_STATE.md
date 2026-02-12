@@ -8,6 +8,14 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-12: hardened cross-host org switching: prefer tenant hosts matching the current base domain (e.g. `*.localhost`), redirect to control-plane for orgs without a tenant host (auto-switch via `__vivd_switch_org`), and removed “host redirect” UI copy.
+- 2026-02-12: fixed backend org-switch tenant-host response to return only registered active tenant hosts (removed computed fallback like `default.localhost`).
+- 2026-02-12: fixed control-plane org switcher regression for organizations without a tenant host (e.g. `default`), while keeping tenant-host redirect requirements on host-pinned domains.
+- 2026-02-12: implemented tenant-domain governance core: added `domain` registry + migration/backfill, host-based context resolution (`hostKind`/host-pinned org), super-admin domain management APIs/UI, publish allowlist enforcement, host-aware org switch redirects, and tenant-host canonical preview URLs (with temporary logged `__vivd_org` fallback).
+- 2026-02-12: extended tenant subdomain/domain governance plan with explicit local-development parity (`app.localhost` + `{org}.localhost`, with nip.io as fallback), cross-subdomain session checks, and local smoke checklist.
+- 2026-02-12: locked tenant-domain auth boundary decision: `super_admin` stays a global user role; `default` remains a normal org and does not grant platform-wide permissions.
+- 2026-02-12: added dedicated implementation plan for tenant subdomain routing + domain governance (`docs/tenant-subdomain-domain-governance-plan.md`).
+- 2026-02-12: production Traefik wildcard routing for `*.vivd.studio` validated (DNS + wildcard TLS) and tenant-domain rollout planning started (org hostnames, domain allowlist, publish restrictions).
 - 2026-02-11: added older-snapshot warnings + one-click "Restore Snapshot" flow; blocked publishing while Studio is pinned to an older snapshot to prevent publishing unexpected content.
 - 2026-02-11: simplified publish dialog: publishing is blocked when Studio has unsaved changes or is viewing an older snapshot; users must save/restore/back-to-latest before publishing (no combined "Save & Publish" / "Restore & Publish").
 - 2026-02-11: fixed ZIP import for bucket-first runtime by accepting metadata-less exported ZIP roots, syncing imported source/preview artifacts to object storage, and hardening tenant selection to prevent default-tenant leakage.
@@ -34,6 +42,7 @@ Progress log:
 ## Current Priorities
 
 - [ ] Finalize machine lifecycle reliability (start, stop, sync, stale cleanup).
+- [ ] Complete tenant-domain rollout hardening (verification automation, fallback removal window, and production observability tuning).
 - [ ] Finish remaining auth/org UX edge cases and email-based flows.
 - [ ] Add missing system hardening (audit log, monitoring, rate limits).
 - [ ] Implement superadmin Fly machine visibility and controls.
@@ -116,7 +125,12 @@ packages/
 
 ### Open work
 
-- [ ] Add `domain` table (global uniqueness registry).
+- [x] Add `domain` table (global uniqueness registry) with:
+  - [x] Domain owner org, status (`pending_verification`/`active`/`disabled`), and type (`managed_subdomain`/`custom_domain`).
+  - [x] Domain usage flags (`tenant_host`, `publish_target`) and audit metadata.
+  - [x] Verification data for custom domains (TXT/HTTP token + verified timestamp).
+- [x] Backfill managed tenant host domains (`{orgSlug}.vivd.studio`) for existing orgs and enforce global uniqueness.
+- [x] Add reserved slug/domain labels (e.g. `app`, `www`, `api`, `admin`) and validate them on org creation and any slug-change flow.
 - [ ] Add `subscription_tier` table.
 - [ ] Add `tenant_machine` table (machine URL/status/activity/Fly IDs).
 
@@ -134,7 +148,11 @@ packages/
 
 ### Open work
 
-- [ ] Host/org mismatch UX (guide user to correct tenant domain).
+- [x] Host/org mismatch UX (guide user to correct tenant domain).
+- [x] Cross-subdomain auth/session UX:
+  - [x] Define centralized entrypoint host (`app.vivd.studio`) behavior.
+  - [x] Redirect authenticated users to active tenant host (`{org}.vivd.studio`) when appropriate.
+  - [x] Keep super-admin workflows available on super-admin host(s) without accidental tenant pinning.
 - [ ] Invite-only signup via email links (SES-dependent).
 - [ ] Self-service password reset via email link.
 - [ ] Email integration:
@@ -156,6 +174,8 @@ packages/
 ### Open work
 
 - [ ] Add audit log for security-relevant actions (machine start/stop, storage writes, publish, invites).
+- [x] Enforce publish-domain allowlist checks server-side so users can only publish to org-approved domains.
+- [ ] Remove temporary preview org fallback (`__vivd_org`) after tenant-host routing stability window.
 
 ---
 
@@ -217,6 +237,7 @@ packages/
 | Question | Options | Status |
 |----------|---------|--------|
 | Studio URL pattern | Iframe `/studio/...` vs redirect vs `{org}.vivd.studio` | TBD |
+| Tenant entrypoint strategy | Central `app.vivd.studio` + redirect to active org host vs fully host-pinned only | In progress |
 | Fly app strategy | Single shared app vs app-per-tenant | TBD |
 | Concurrency model | Single-writer lock vs optimistic | TBD |
 | Build execution location | Backend vs studio vs dedicated builder | TBD |
@@ -231,8 +252,9 @@ packages/
 - `docs/multi-tenant-saas-architecture-plan.md` - control-plane vs machine split rationale.
 - `docs/studio-package-refactor-plan.md` - standalone studio design notes.
 - `docs/publishing-bucket-first-plan.md` - bucket-first publish/preview decisions.
+- `docs/tenant-subdomain-domain-governance-plan.md` - implementation plan for `app.vivd.studio` + `{org}.vivd.studio` and publish-domain governance.
 - `docs/multi-tenant-refactor/organization-auth-plan.md` - org auth + superadmin plan.
 
 ---
 
-*Last updated: 2026-02-11*
+*Last updated: 2026-02-12*

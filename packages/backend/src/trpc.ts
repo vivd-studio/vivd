@@ -7,10 +7,10 @@ import {
   organization,
   organizationMember,
   projectMember,
-  publishedSite,
   session as sessionTable,
 } from "./db/schema";
 import { and, asc, eq } from "drizzle-orm";
+import { domainService } from "./services/DomainService";
 
 type UserMembership = {
   organizationId: string;
@@ -34,61 +34,10 @@ function pickPreferredOrganizationId(memberships: UserMembership[]): string | nu
   return memberships[0]?.organizationId ?? null;
 }
 
-function getRequestHost(req: trpcExpress.CreateExpressContextOptions["req"]): string | null {
+function extractRequestHost(req: trpcExpress.CreateExpressContextOptions["req"]): string | null {
   const raw = req.headers.host;
   if (!raw) return null;
-
-  const first = raw.split(",")[0]?.trim();
-  if (!first) return null;
-
-  try {
-    return new URL(`http://${first}`).hostname.toLowerCase();
-  } catch {
-    return first.toLowerCase();
-  }
-}
-
-function normalizeDomainForLookup(host: string): string {
-  const normalized = host.toLowerCase();
-  return normalized.startsWith("www.") ? normalized.slice("www.".length) : normalized;
-}
-
-function getEnvHostname(value: string | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  try {
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      return new URL(trimmed).hostname.toLowerCase();
-    }
-    return new URL(`http://${trimmed}`).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function getSuperAdminHosts(): Set<string> {
-  const hosts = new Set<string>();
-
-  const raw = process.env.SUPERADMIN_HOSTS?.trim();
-  if (raw) {
-    raw
-      .split(",")
-      .map((h) => h.trim())
-      .filter(Boolean)
-      .forEach((h) => {
-        const host = getEnvHostname(h) ?? h.toLowerCase();
-        hosts.add(normalizeDomainForLookup(host));
-      });
-  } else {
-    const domainHost = getEnvHostname(process.env.DOMAIN) ?? "localhost";
-    hosts.add(normalizeDomainForLookup(domainHost));
-    hosts.add("localhost");
-    hosts.add("127.0.0.1");
-  }
-
-  return hosts;
+  return raw.split(",")[0]?.trim() ?? null;
 }
 
 export const createContext = async ({
@@ -105,11 +54,7 @@ export const createContext = async ({
   });
 
   let session = await getSession(headers);
-  const requestHost = getRequestHost(req);
-  const requestDomain = requestHost ? normalizeDomainForLookup(requestHost) : null;
-  const isSuperAdminHost = requestHost
-    ? getSuperAdminHosts().has(normalizeDomainForLookup(requestHost))
-    : false;
+  const resolvedHost = await domainService.resolveHost(extractRequestHost(req));
 
   // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
   // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
@@ -182,20 +127,14 @@ export const createContext = async ({
     }
   }
 
-  // Domain-based tenant resolution should only apply on tenant domains, not on the
-  // super-admin host (e.g. `localhost` / main `DOMAIN`). Otherwise publishing a site
-  // on the main host would "pin" the studio to that tenant.
-  const hostOrg =
-    requestDomain && !isSuperAdminHost
-      ? await db.query.publishedSite.findFirst({
-          where: eq(publishedSite.domain, requestDomain),
-          columns: { organizationId: true },
-        })
-      : null;
-  const hostOrganizationId = hostOrg?.organizationId ?? null;
+  const hostOrganizationId = resolvedHost.hostOrganizationId;
+  const canSelectOrganization = resolvedHost.canSelectOrganization;
 
-  let organizationId =
-    hostOrganizationId ?? sessionRecordFromDb?.activeOrganizationId ?? null;
+  let organizationId = hostOrganizationId
+    ? hostOrganizationId
+    : canSelectOrganization
+      ? sessionRecordFromDb?.activeOrganizationId ?? null
+      : null;
 
   const memberships = session
     ? await db.query.organizationMember.findMany({
@@ -213,15 +152,15 @@ export const createContext = async ({
   if (
     session &&
     session.user.role !== "super_admin" &&
-    !hostOrganizationId &&
+    canSelectOrganization &&
     organizationId &&
     !membershipRoleByOrg.has(organizationId)
   ) {
     organizationId = null;
   }
 
-  // Fallback: pick a preferred org whenever none is selected.
-  if (!organizationId && session) {
+  // Fallback: pick a preferred org whenever none is selected, but only on control-plane hosts.
+  if (!organizationId && session && canSelectOrganization) {
     const preferredOrganizationId = pickPreferredOrganizationId(memberships);
     if (preferredOrganizationId) {
       organizationId = preferredOrganizationId;
@@ -242,13 +181,23 @@ export const createContext = async ({
       ? membershipRoleByOrg.get(organizationId) ?? null
       : null;
 
+  if (resolvedHost.requestHost && process.env.HOST_RESOLUTION_LOGGING !== "false") {
+    console.info(
+      `[HostResolution] host=${resolvedHost.requestHost} kind=${resolvedHost.hostKind} hostOrg=${hostOrganizationId ?? "none"} org=${organizationId ?? "none"} canSelect=${canSelectOrganization}`,
+    );
+  }
+
   return {
     req,
     res,
     session,
-    requestHost,
-    isSuperAdminHost,
+    requestHost: resolvedHost.requestHost,
+    requestDomain: resolvedHost.requestDomain,
+    isSuperAdminHost: resolvedHost.isSuperAdminHost,
+    hostKind: resolvedHost.hostKind,
     hostOrganizationId,
+    hostOrganizationSlug: resolvedHost.hostOrganizationSlug,
+    canSelectOrganization,
     organizationId,
     organizationRole,
   };

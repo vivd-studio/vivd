@@ -3,6 +3,7 @@ import { OrganizationsSelectorCard } from "./components/OrganizationsSelectorCar
 import { UsageLimitsPanel } from "./components/UsageLimitsPanel";
 import { MembersPanel } from "./components/MembersPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { DomainsPanel } from "./components/DomainsPanel";
 import { useOrganizationsAdmin } from "./useOrganizationsAdmin";
 import { toLimitsPatch } from "./utils";
 
@@ -36,6 +37,7 @@ export function OrganizationsTab() {
           <TabsList>
             <TabsTrigger value="usage">Usage & Limits</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="domains">Domains</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
@@ -133,6 +135,33 @@ export function OrganizationsTab() {
                   githubRepoPrefix: admin.githubPrefixForm,
                 })
               }
+            />
+          </TabsContent>
+
+          <TabsContent value="domains" className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold">Domains</h3>
+              <p className="text-sm text-muted-foreground">
+                Domain governance for <strong>{admin.selectedOrg.name}</strong>.
+              </p>
+            </div>
+            <DomainsPanel
+              selectedOrg={admin.selectedOrg}
+              domains={admin.domains}
+              domainsLoading={admin.domainsLoading}
+              domainsError={admin.domainsError}
+              addDomainPending={admin.addDomain.isPending}
+              setDomainStatusPending={admin.setDomainStatus.isPending}
+              setDomainUsagePending={admin.setDomainUsage.isPending}
+              startDomainVerificationPending={admin.startDomainVerification.isPending}
+              checkDomainVerificationPending={admin.checkDomainVerification.isPending}
+              removeDomainPending={admin.removeDomain.isPending}
+              onAddDomain={(input) => admin.addDomain.mutate(input)}
+              onSetDomainStatus={(input) => admin.setDomainStatus.mutate(input)}
+              onSetDomainUsage={(input) => admin.setDomainUsage.mutate(input)}
+              onStartDomainVerification={(input) => admin.startDomainVerification.mutate(input)}
+              onCheckDomainVerification={(input) => admin.checkDomainVerification.mutate(input)}
+              onRemoveDomain={(input) => admin.removeDomain.mutate(input)}
             />
           </TabsContent>
         </Tabs>

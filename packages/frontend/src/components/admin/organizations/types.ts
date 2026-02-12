@@ -19,6 +19,8 @@ export type OrganizationMember =
   RouterOutputs["superadmin"]["listOrganizationMembers"]["members"][number];
 export type OrganizationProject =
   RouterOutputs["superadmin"]["listOrganizationProjects"]["projects"][number];
+export type OrganizationDomain =
+  RouterOutputs["superadmin"]["listOrganizationDomains"]["domains"][number];
 
 export type OrgForm = {
   slug: string;

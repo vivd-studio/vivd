@@ -2,8 +2,9 @@ import { betterAuth } from "better-auth";
 import { admin, createAccessControl } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
-import { organizationMember, publishedSite } from "./db/schema";
+import { domain, organizationMember } from "./db/schema";
 import { APIError } from "better-call";
+import { eq } from "drizzle-orm";
 
 const adminStatements = {
   user: [
@@ -29,7 +30,7 @@ const noAdminAccess = adminAccessControl.newRole({ user: [], session: [] });
 
 /**
  * Build list of trusted origins dynamically.
- * Includes: main DOMAIN, TRUSTED_DOMAINS env var, and all published site domains.
+ * Includes: main DOMAIN, TRUSTED_DOMAINS env var, and all active registered domains.
  */
 async function getTrustedOrigins(): Promise<string[]> {
   const origins: string[] = [];
@@ -55,17 +56,18 @@ async function getTrustedOrigins(): Promise<string[]> {
     });
   }
 
-  // Add all published site domains from database
+  // Add all active domains from registry
   try {
-    const published = await db
-      .select({ domain: publishedSite.domain })
-      .from(publishedSite);
-    published.forEach((site) => {
+    const rows = await db
+      .select({ domain: domain.domain })
+      .from(domain)
+      .where(eq(domain.status, "active"));
+    rows.forEach((site) => {
       origins.push(`https://${site.domain}`, `http://${site.domain}`);
     });
   } catch (error) {
-    // Database might not be ready during initial startup
-    console.warn("Could not fetch published sites for trusted origins:", error);
+    // Database might not be ready during initial startup.
+    console.warn("Could not fetch registered domains for trusted origins:", error);
   }
 
   return origins;

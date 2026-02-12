@@ -13,6 +13,7 @@ import {
 } from "../db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { auth } from "../auth";
+import { domainService } from "../services/DomainService";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 
@@ -59,6 +60,13 @@ export const organizationRouter = router({
       .where(eq(organizationMember.userId, ctx.session.user.id))
       .orderBy(asc(organization.name));
 
+    const tenantHostByOrganizationId = await domainService.getTenantHostsForOrganizations(
+      rows.map((row) => row.id),
+      {
+        preferredTenantBaseDomain: domainService.inferTenantBaseDomainFromHost(ctx.requestDomain),
+      },
+    );
+
     return {
       organizations: rows.map((row) => ({
         id: row.id,
@@ -68,6 +76,7 @@ export const organizationRouter = router({
         role: row.role,
         createdAt: row.createdAt,
         isActive: row.id === ctx.organizationId,
+        tenantHost: tenantHostByOrganizationId.get(row.id) ?? null,
       })),
     };
   }),
@@ -79,7 +88,7 @@ export const organizationRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (ctx.hostOrganizationId && ctx.hostOrganizationId !== input.organizationId) {
+      if (!ctx.canSelectOrganization) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Organization selection is pinned to this domain",
@@ -88,7 +97,7 @@ export const organizationRouter = router({
 
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, input.organizationId),
-        columns: { id: true, status: true },
+        columns: { id: true, slug: true, status: true },
       });
       if (!org) {
         throw new TRPCError({
@@ -120,12 +129,22 @@ export const organizationRouter = router({
         }
       }
 
+      await domainService.ensureManagedTenantDomainForOrganization({
+        organizationId: org.id,
+        organizationSlug: org.slug,
+      });
+
       await db
         .update(sessionTable)
         .set({ activeOrganizationId: input.organizationId })
         .where(eq(sessionTable.id, ctx.session.session.id));
 
-      return { success: true };
+      const tenantHosts = await domainService.getTenantHostsForOrganizations([org.id], {
+        preferredTenantBaseDomain: domainService.inferTenantBaseDomainFromHost(ctx.requestDomain),
+      });
+      const tenantHost = tenantHosts.get(org.id) ?? null;
+
+      return { success: true, tenantHost: tenantHost ?? null };
     }),
 
   getMyMembership: orgProcedure.query(async ({ ctx }) => {

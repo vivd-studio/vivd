@@ -413,6 +413,52 @@ export const publishedSiteRelations = relations(publishedSite, ({ one }) => ({
   }),
 }));
 
+// Domain registry - governs host routing and publish permissions per organization.
+export const domain = pgTable(
+  "domain",
+  {
+    id: text("id").primaryKey(),
+    domain: text("domain").notNull(), // Normalized lowercase (no www.)
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    type: text("type").notNull(), // 'managed_subdomain' | 'custom_domain'
+    usage: text("usage").notNull(), // 'tenant_host' | 'publish_target'
+    status: text("status").notNull(), // 'active' | 'disabled' | 'pending_verification'
+    verificationMethod: text("verification_method"), // 'dns_txt' | 'http_file' | null
+    verificationToken: text("verification_token"),
+    verifiedAt: timestamp("verified_at"),
+    createdById: text("created_by_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("domain_domain_unique").on(table.domain),
+    index("domain_org_usage_status_idx").on(
+      table.organizationId,
+      table.usage,
+      table.status,
+    ),
+    index("domain_org_type_idx").on(table.organizationId, table.type),
+  ],
+);
+
+export const domainRelations = relations(domain, ({ one }) => ({
+  organization: one(organization, {
+    fields: [domain.organizationId],
+    references: [organization.id],
+  }),
+  createdBy: one(user, {
+    fields: [domain.createdById],
+    references: [user.id],
+  }),
+}));
+
 // Usage tracking - individual usage events for audit trail
 export const usageRecord = pgTable(
   "usage_record",
@@ -469,6 +515,7 @@ export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(organizationMember),
   invitations: many(organizationInvitation),
   publishedSites: many(publishedSite),
+  domains: many(domain),
   projectMetas: many(projectMeta),
 }));
 

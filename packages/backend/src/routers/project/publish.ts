@@ -9,6 +9,7 @@ import { resolvePublishableArtifactState } from "../../services/ProjectArtifactS
 import { studioMachineProvider } from "../../services/studioMachines";
 import { projectMetaService } from "../../services/ProjectMetaService";
 import { studioWorkspaceStateService } from "../../services/StudioWorkspaceStateService";
+import { domainService } from "../../services/DomainService";
 
 export const projectPublishProcedures = {
   /**
@@ -27,6 +28,17 @@ export const projectPublishProcedures = {
       const organizationId = ctx.organizationId!;
       const { slug, version, domain, expectedCommitHash } = input;
       const userId = ctx.session.user.id;
+
+      const allowlist = await domainService.ensurePublishDomainEnabled({
+        organizationId,
+        domain,
+      });
+      if (!allowlist.enabled) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: allowlist.message || "Domain is not enabled for this organization",
+        });
+      }
 
       const studioRunning = await studioMachineProvider.isRunning(organizationId, slug, version);
       if (studioRunning) {
@@ -168,6 +180,18 @@ export const projectPublishProcedures = {
           available: false,
           normalizedDomain: normalized,
           error: validation.error,
+        };
+      }
+
+      const allowlist = await domainService.ensurePublishDomainEnabled({
+        organizationId,
+        domain: normalized,
+      });
+      if (!allowlist.enabled) {
+        return {
+          available: false,
+          normalizedDomain: normalized,
+          error: allowlist.message || "Domain is not enabled for this organization",
         };
       }
 

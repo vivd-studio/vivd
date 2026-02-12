@@ -13,6 +13,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { auth } from "../auth";
 import { limitsService } from "../services/LimitsService";
 import { usageService } from "../services/UsageService";
+import { domainService, validateOrganizationSlug } from "../services/DomainService";
 
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
@@ -40,6 +41,9 @@ const organizationRoleSchema = z.enum([
   "member",
   "client_editor",
 ]);
+const domainUsageSchema = z.enum(["tenant_host", "publish_target"]);
+const domainTypeSchema = z.enum(["managed_subdomain", "custom_domain"]);
+const domainStatusSchema = z.enum(["active", "disabled", "pending_verification"]);
 
 const orgMemberRoleSchema = z.enum(["owner", "admin", "member", "client_editor"]);
 
@@ -158,8 +162,9 @@ export const superAdminRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      if (input.slug === "default") {
-        throw new Error('Organization slug "default" is reserved');
+      const slugValidation = validateOrganizationSlug(input.slug);
+      if (!slugValidation.valid) {
+        throw new Error(slugValidation.error || "Invalid organization slug");
       }
 
       await db.insert(organization).values({
@@ -175,6 +180,11 @@ export const superAdminRouter = router({
           warningThreshold: 0.8,
         },
         githubRepoPrefix: input.slug,
+      });
+
+      await domainService.ensureManagedTenantDomainForOrganization({
+        organizationId: input.slug,
+        organizationSlug: input.slug,
       });
 
       return { success: true, organizationId: input.slug };
@@ -309,6 +319,112 @@ export const superAdminRouter = router({
           title: p.title,
           updatedAt: p.updatedAt,
         })),
+      };
+    }),
+
+  listOrganizationDomains: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+      }),
+    )
+    .query(async ({ input }) => {
+      const domains = await domainService.listOrganizationDomains(input.organizationId);
+      return { domains };
+    }),
+
+  addOrganizationDomain: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        domain: z.string().min(1),
+        usage: domainUsageSchema,
+        type: domainTypeSchema,
+        status: domainStatusSchema.optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await domainService.addOrganizationDomain({
+        organizationId: input.organizationId,
+        rawDomain: input.domain,
+        usage: input.usage,
+        type: input.type,
+        status: input.status,
+        createdById: ctx.session.user.id,
+      });
+
+      return {
+        success: true,
+        domainId: result.id,
+        domain: result.domain,
+        created: result.created,
+      };
+    }),
+
+  setOrganizationDomainStatus: superAdminProcedure
+    .input(
+      z.object({
+        domainId: z.string().min(1),
+        status: domainStatusSchema,
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await domainService.setDomainStatus(input.domainId, input.status);
+      return { success: true };
+    }),
+
+  setOrganizationDomainUsage: superAdminProcedure
+    .input(
+      z.object({
+        domainId: z.string().min(1),
+        usage: domainUsageSchema,
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await domainService.setDomainUsage(input.domainId, input.usage);
+      return { success: true };
+    }),
+
+  startDomainVerification: superAdminProcedure
+    .input(
+      z.object({
+        domainId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const data = await domainService.startDomainVerification(input.domainId);
+      return {
+        success: true,
+        verification: data,
+      };
+    }),
+
+  checkDomainVerification: superAdminProcedure
+    .input(
+      z.object({
+        domainId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const result = await domainService.checkDomainVerification(input.domainId);
+      return {
+        success: result.verified,
+        status: result.status,
+        verification: result.verification,
+      };
+    }),
+
+  removeOrganizationDomain: superAdminProcedure
+    .input(
+      z.object({
+        domainId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const result = await domainService.removeOrganizationDomain(input.domainId);
+      return {
+        success: true,
+        removed: result.removed,
       };
     }),
 

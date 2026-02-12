@@ -58,6 +58,25 @@ type SidebarProject = RouterOutputs["project"]["list"]["projects"][number];
 type SwitcherOrganization =
   RouterOutputs["organization"]["listMyOrganizations"]["organizations"][number];
 
+const ORG_SWITCH_QUERY_KEY = "__vivd_switch_org";
+
+function inferSchemeForHost(host: string): "http" | "https" {
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".nip.io")
+  ) {
+    return "http";
+  }
+  return "https";
+}
+
+function buildTenantStudioUrl(host: string): string {
+  return `${inferSchemeForHost(host)}://${host}/vivd-studio`;
+}
+
 function useRecentProjects(): SidebarProject[] {
   const { data: projectsData } = trpc.project.list.useQuery(undefined, {
     // Keep data fresh for cross-tab/background updates without a heavy 5s loop.
@@ -108,7 +127,7 @@ function OrganizationSwitcher({
   onSelectOrganization,
   isSwitching,
 }: OrganizationSwitcherProps) {
-  const showSwitcher = canSelectOrganization && organizations.length > 1;
+  const showSwitcher = organizations.length > 1;
 
   return (
     <SidebarMenu>
@@ -509,12 +528,12 @@ export function AppSidebar() {
   const [showAllProjects, setShowAllProjects] = React.useState(false);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
-    enabled: !!session,
+    enabled: !!session && config.hasHostOrganizationAccess,
   });
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
 
   const { data: orgData } = trpc.organization.getMyOrganization.useQuery(undefined, {
-    enabled: !!session,
+    enabled: !!session && config.hasHostOrganizationAccess,
   });
   const org = orgData?.organization ?? null;
 
@@ -524,15 +543,7 @@ export function AppSidebar() {
   );
   const organizations = organizationsData?.organizations ?? [];
 
-  const setActiveOrganizationMutation = trpc.organization.setActiveOrganization.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
-      navigate(ROUTES.DASHBOARD);
-    },
-    onError: (error) => {
-      toast.error("Failed to switch organization", { description: error.message });
-    },
-  });
+  const setActiveOrganizationMutation = trpc.organization.setActiveOrganization.useMutation();
 
   const isSuperAdmin = session?.user?.role === "super_admin";
   const showSuperAdmin = isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
@@ -559,9 +570,102 @@ export function AppSidebar() {
     return (searchParams.get("tab") ?? "orgs") === tab;
   };
 
+  React.useEffect(() => {
+    const switchOrg = searchParams.get(ORG_SWITCH_QUERY_KEY);
+    if (!switchOrg) return;
+    if (!config.canSelectOrganization) return;
+
+    // Clear param early to avoid retry loops on navigation errors.
+    const nextParams = new URLSearchParams(location.search);
+    nextParams.delete(ORG_SWITCH_QUERY_KEY);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextParams.toString() ? `?${nextParams.toString()}` : "",
+      },
+      { replace: true },
+    );
+
+    setActiveOrganizationMutation.mutate(
+      { organizationId: switchOrg },
+      {
+        onSuccess: async (result) => {
+          await utils.invalidate();
+          const tenantHost = result.tenantHost;
+          if (tenantHost) {
+            window.location.assign(buildTenantStudioUrl(tenantHost));
+          } else {
+            navigate(ROUTES.DASHBOARD);
+          }
+        },
+        onError: (error) => {
+          toast.error("Failed to switch organization", { description: error.message });
+        },
+      },
+    );
+  }, [
+    config.canSelectOrganization,
+    location.pathname,
+    location.search,
+    navigate,
+    searchParams,
+    setActiveOrganizationMutation,
+    utils,
+  ]);
+
   const handleLogout = async () => {
     await authClient.signOut();
     navigate(ROUTES.LOGIN);
+  };
+
+  const handleSelectOrganization = (organizationId: string) => {
+    const target = organizations.find((entry) => entry.id === organizationId);
+    if (!target) return;
+
+    const redirectToTarget = (tenantHost: string) => {
+      console.info(
+        `[OrgSwitch] redirecting from ${window.location.host} to ${tenantHost}`,
+      );
+      window.location.assign(buildTenantStudioUrl(tenantHost));
+    };
+
+    if (!config.canSelectOrganization) {
+      if (target.tenantHost) {
+        redirectToTarget(target.tenantHost);
+        return;
+      }
+
+      if (!config.controlPlaneHost) {
+        toast.error("No tenant host configured for this organization");
+        return;
+      }
+
+      const controlPlaneUrl = new URL(buildTenantStudioUrl(config.controlPlaneHost));
+      controlPlaneUrl.searchParams.set(ORG_SWITCH_QUERY_KEY, target.id);
+      console.info(
+        `[OrgSwitch] redirecting from ${window.location.host} to control plane ${config.controlPlaneHost} to switch org`,
+      );
+      window.location.assign(controlPlaneUrl.toString());
+      return;
+    }
+
+    setActiveOrganizationMutation.mutate(
+      { organizationId },
+      {
+        onSuccess: async (result) => {
+          await utils.invalidate();
+          const tenantHost = result.tenantHost ?? target.tenantHost;
+          if (tenantHost) {
+            redirectToTarget(tenantHost);
+          } else {
+            navigate(ROUTES.DASHBOARD);
+          }
+        },
+        onError: (error) => {
+          toast.error("Failed to switch organization", { description: error.message });
+        },
+      },
+    );
   };
 
   return (
@@ -572,9 +676,7 @@ export function AppSidebar() {
           organizations={organizations}
           canSelectOrganization={config.canSelectOrganization}
           isSwitching={setActiveOrganizationMutation.isPending}
-          onSelectOrganization={(organizationId) =>
-            setActiveOrganizationMutation.mutate({ organizationId })
-          }
+          onSelectOrganization={handleSelectOrganization}
         />
       </SidebarHeader>
 

@@ -35,6 +35,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
@@ -96,8 +97,9 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
+  const { config } = useAppConfig();
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
-    enabled: !!session,
+    enabled: !!session && config.hasHostOrganizationAccess,
   });
   const isSuperAdmin = session?.user?.role === "super_admin";
   const utils = trpc.useUtils();
@@ -157,10 +159,16 @@ export function ProjectCard({
       return;
     }
     const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
-    const shareableUrl = new URL(shareablePath, window.location.origin);
-    if (membership?.organizationId) {
-      // Needed for unauthenticated access on the shared control-plane host.
-      // On tenant domains, the backend resolves the org from the Host header and ignores this param.
+    const tenantHost = config.activeOrganizationTenantHost;
+    const shareableUrl = tenantHost
+      ? new URL(
+          shareablePath,
+          `${isDevDomain(tenantHost) ? "http" : "https"}://${tenantHost}`,
+        )
+      : new URL(shareablePath, window.location.origin);
+
+    if (!tenantHost && membership?.organizationId) {
+      // Temporary fallback for non-tenant hosts during rollout.
       shareableUrl.searchParams.set("__vivd_org", membership.organizationId);
     }
     const absoluteUrl = shareableUrl.toString();

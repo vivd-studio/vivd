@@ -73,6 +73,11 @@ export function useOrganizationsAdmin() {
     { enabled: Boolean(selectedOrgId) },
   );
 
+  const domainsQuery = trpc.superadmin.listOrganizationDomains.useQuery(
+    { organizationId: selectedOrgId },
+    { enabled: Boolean(selectedOrgId) },
+  );
+
   useEffect(() => {
     if (!usageQuery.data) return;
 
@@ -187,6 +192,77 @@ export function useOrganizationsAdmin() {
     },
   });
 
+  const addDomain = trpc.superadmin.addOrganizationDomain.useMutation({
+    onSuccess: async (_data, variables) => {
+      await domainsQuery.refetch();
+      toast.success("Domain added", {
+        description: `${variables.domain} is now tracked for this organization.`,
+      });
+    },
+    onError: (err) => {
+      toast.error("Failed to add domain", { description: err.message });
+    },
+  });
+
+  const setDomainStatus = trpc.superadmin.setOrganizationDomainStatus.useMutation({
+    onSuccess: async () => {
+      await domainsQuery.refetch();
+      toast.success("Domain status updated");
+    },
+    onError: (err) => {
+      toast.error("Failed to update domain status", { description: err.message });
+    },
+  });
+
+  const setDomainUsage = trpc.superadmin.setOrganizationDomainUsage.useMutation({
+    onSuccess: async () => {
+      await domainsQuery.refetch();
+      toast.success("Domain usage updated");
+    },
+    onError: (err) => {
+      toast.error("Failed to update domain usage", { description: err.message });
+    },
+  });
+
+  const startDomainVerification = trpc.superadmin.startDomainVerification.useMutation({
+    onSuccess: async (data) => {
+      await domainsQuery.refetch();
+      const token = data.verification.verificationToken;
+      toast.success(
+        token
+          ? `Verification token generated: ${token}`
+          : "Verification is not required for this domain",
+      );
+    },
+    onError: (err) => {
+      toast.error("Failed to start verification", { description: err.message });
+    },
+  });
+
+  const checkDomainVerification = trpc.superadmin.checkDomainVerification.useMutation({
+    onSuccess: async (data) => {
+      await domainsQuery.refetch();
+      toast.success(
+        data.success
+          ? "Domain verification passed"
+          : "Domain verification still pending",
+      );
+    },
+    onError: (err) => {
+      toast.error("Failed to check verification", { description: err.message });
+    },
+  });
+
+  const removeDomain = trpc.superadmin.removeOrganizationDomain.useMutation({
+    onSuccess: async () => {
+      await domainsQuery.refetch();
+      toast.success("Domain removed");
+    },
+    onError: (err) => {
+      toast.error("Failed to remove domain", { description: err.message });
+    },
+  });
+
   return {
     isLoading,
     error,
@@ -217,6 +293,15 @@ export function useOrganizationsAdmin() {
     usageLoading: usageQuery.isLoading,
     usageError: usageQuery.error,
     projects: projectsQuery.data?.projects ?? [],
+    domains: domainsQuery.data?.domains ?? [],
+    domainsLoading: domainsQuery.isLoading,
+    domainsError: domainsQuery.error,
+    addDomain,
+    setDomainStatus,
+    setDomainUsage,
+    startDomainVerification,
+    checkDomainVerification,
+    removeDomain,
   };
 }
 

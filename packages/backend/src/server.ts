@@ -30,6 +30,7 @@ import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
 import { resolvePublishableArtifactState } from "./services/ProjectArtifactStateService";
 import { projectMetaService } from "./services/ProjectMetaService";
 import { getInternalPreviewAccessToken } from "./config/preview";
+import { domainService } from "./services/DomainService";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -84,68 +85,14 @@ function isHttpsRequest(req: express.Request): boolean {
   return false;
 }
 
-function normalizeDomainForLookup(host: string): string {
-  const normalized = host.toLowerCase();
-  return normalized.startsWith("www.") ? normalized.slice("www.".length) : normalized;
-}
-
-function getRequestHost(req: express.Request): string | null {
+function getRequestHostHeader(req: express.Request): string | null {
   const raw = req.headers.host;
   if (!raw) return null;
-
-  const first = raw.split(",")[0]?.trim();
-  if (!first) return null;
-
-  try {
-    return new URL(`http://${first}`).hostname.toLowerCase();
-  } catch {
-    return first.toLowerCase();
-  }
-}
-
-function getEnvHostname(value: string | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  try {
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      return new URL(trimmed).hostname.toLowerCase();
-    }
-    return new URL(`http://${trimmed}`).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function getSuperAdminHosts(): Set<string> {
-  const hosts = new Set<string>();
-
-  const raw = process.env.SUPERADMIN_HOSTS?.trim();
-  if (raw) {
-    raw
-      .split(",")
-      .map((h) => h.trim())
-      .filter(Boolean)
-      .forEach((h) => {
-        const host = getEnvHostname(h) ?? h.toLowerCase();
-        hosts.add(normalizeDomainForLookup(host));
-      });
-  } else {
-    const domainHost = getEnvHostname(process.env.DOMAIN) ?? "localhost";
-    hosts.add(normalizeDomainForLookup(domainHost));
-    hosts.add("localhost");
-    hosts.add("127.0.0.1");
-  }
-
-  return hosts;
+  return raw.split(",")[0]?.trim() ?? null;
 }
 
 function isSuperAdminHost(req: express.Request): boolean {
-  const host = getRequestHost(req);
-  if (!host) return false;
-  const normalized = normalizeDomainForLookup(host);
-  return getSuperAdminHosts().has(normalized);
+  return domainService.isSuperAdminHost(getRequestHostHeader(req));
 }
 
 type CachedPublicPreviewSetting = { enabled: boolean; fetchedAt: number };
@@ -644,6 +591,8 @@ async function tryServeFromBucket(options: {
 app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   const requestContext = await createContext({ req, res } as any);
   let organizationId = requestContext.organizationId;
+  let orgFallbackUsed = false;
+  let orgFallbackSource: "query" | "cookie" | null = null;
   const slug = getRouteParam(req, "slug");
   const version = getRouteParam(req, "version");
   if (!slug || !version) {
@@ -661,10 +610,17 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   );
 
   if (!organizationId) {
-    const candidate =
-      getQueryParam(req, PREVIEW_ORG_QUERY_PARAM)?.trim() ||
-      getCookieValue(req, PREVIEW_ORG_COOKIE_NAME)?.trim();
+    const queryCandidate = getQueryParam(req, PREVIEW_ORG_QUERY_PARAM)?.trim();
+    const cookieCandidate = getCookieValue(req, PREVIEW_ORG_COOKIE_NAME)?.trim();
+    const candidate = queryCandidate || cookieCandidate;
     if (candidate) organizationId = candidate;
+    if (candidate) {
+      orgFallbackUsed = true;
+      orgFallbackSource = queryCandidate ? "query" : "cookie";
+      console.info(
+        `[Preview] org fallback used (${orgFallbackSource}) hostKind=${requestContext.hostKind} hostOrg=${requestContext.hostOrganizationId ?? "none"} candidate=${candidate}`,
+      );
+    }
   }
 
   if (!organizationId) return res.status(404).json({ error: "Not found" });
@@ -724,6 +680,12 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
       maxAge: 5 * 60 * 1000,
       path: "/vivd-studio/api/preview",
     });
+  }
+
+  if (!orgFallbackUsed) {
+    console.info(
+      `[Preview] org resolved by host/session hostKind=${requestContext.hostKind} org=${organizationId}`,
+    );
   }
 
   // req.url contains the path relative to the mount point (e.g. "/" or "/index.html")
@@ -1065,6 +1027,14 @@ app.get("/vivd-studio/api/health", (_req, res) => {
 });
 
 app.listen(PORT, async () => {
+  try {
+    await domainService.backfillPublishedDomainsIntoRegistry();
+    await domainService.ensureManagedTenantDomainsForExistingOrganizations();
+    console.log("[DomainService] Domain registry backfill complete");
+  } catch (error) {
+    console.error("[DomainService] Failed to backfill domain registry:", error);
+  }
+
   console.log(`Server running on port ${PORT}`);
   console.log(`[OpenCode] Server manager ready (servers spawn on first task)`);
 

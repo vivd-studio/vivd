@@ -6,6 +6,20 @@ import { useAppConfig } from "@/lib/AppConfigContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ROUTES } from "./paths";
 import { CenteredLoading as Loading } from "@/components/common";
+import { Button } from "@/components/ui/button";
+
+function inferSchemeForHost(host: string): "http" | "https" {
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".nip.io")
+  ) {
+    return "http";
+  }
+  return "https";
+}
 
 /**
  * Requires an authenticated session.
@@ -13,9 +27,47 @@ import { CenteredLoading as Loading } from "@/components/common";
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
+  const { config, isLoading } = useAppConfig();
 
   if (!session) {
     return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (isLoading) {
+    return <Loading />;
+  }
+
+  if (!config.hasHostOrganizationAccess) {
+    const controlPlaneUrl = config.controlPlaneHost
+      ? `${inferSchemeForHost(config.controlPlaneHost)}://${config.controlPlaneHost}${ROUTES.DASHBOARD}`
+      : ROUTES.DASHBOARD;
+
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-lg border bg-card p-6 space-y-4">
+          <div>
+            <h1 className="text-lg font-semibold">Wrong tenant host</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              This domain is pinned to an organization your account cannot access.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild>
+              <a href={controlPlaneUrl}>Go to control plane</a>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await authClient.signOut();
+                window.location.assign(ROUTES.LOGIN);
+              }}
+            >
+              Log out
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;

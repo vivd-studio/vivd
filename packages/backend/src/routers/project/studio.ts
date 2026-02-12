@@ -63,15 +63,16 @@ export const studioProcedures = {
       // Studio machines need a backend URL that is reachable *from the machine*.
       // - Local provider spawns the studio as a child-process inside this backend container,
       //   so `DOMAIN` (usually `http://localhost` via Caddy on :80) is not reachable.
-      // - Fly provider needs the public `DOMAIN`.
+      // - Fly provider typically needs a public tunnel / `DOMAIN`.
+      //
+      // `BACKEND_URL` overrides this, and should always be the machine-reachable origin.
       const backendOriginRaw =
-        studioMachineProvider.kind === "local"
-          ? process.env.BETTER_AUTH_URL ||
-            process.env.DOMAIN ||
-            `http://127.0.0.1:${process.env.PORT || 3000}`
+        process.env.BACKEND_URL ||
+        (studioMachineProvider.kind === "local"
+          ? `http://127.0.0.1:${process.env.PORT || 3000}`
           : process.env.DOMAIN ||
             process.env.BETTER_AUTH_URL ||
-            `http://127.0.0.1:${process.env.PORT || 3000}`;
+            `http://127.0.0.1:${process.env.PORT || 3000}`);
       const backendOrigin = backendOriginRaw.startsWith("http")
         ? backendOriginRaw
         : `https://${backendOriginRaw}`;
@@ -142,13 +143,12 @@ export const studioProcedures = {
       const githubRepoPrefix = (org?.githubRepoPrefix ?? "").trim();
 
       const backendOriginRaw =
-        studioMachineProvider.kind === "local"
-          ? process.env.BETTER_AUTH_URL ||
-            process.env.DOMAIN ||
-            `http://127.0.0.1:${process.env.PORT || 3000}`
+        process.env.BACKEND_URL ||
+        (studioMachineProvider.kind === "local"
+          ? `http://127.0.0.1:${process.env.PORT || 3000}`
           : process.env.DOMAIN ||
             process.env.BETTER_AUTH_URL ||
-            `http://127.0.0.1:${process.env.PORT || 3000}`;
+            `http://127.0.0.1:${process.env.PORT || 3000}`);
       const backendOrigin = backendOriginRaw.startsWith("http")
         ? backendOriginRaw
         : `https://${backendOriginRaw}`;

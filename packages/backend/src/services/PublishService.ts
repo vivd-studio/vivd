@@ -12,6 +12,7 @@ import {
   downloadArtifactToDirectory,
   resolvePublishableArtifactState,
 } from "./ProjectArtifactStateService";
+import { domainService } from "./DomainService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
@@ -80,57 +81,17 @@ export class PublishService {
    * Normalize domain: strip www., lowercase, trim whitespace, remove port
    */
   normalizeDomain(input: string): string {
-    let domain = input.toLowerCase().trim();
-
-    // Remove protocol if present
-    domain = domain.replace(/^https?:\/\//, "");
-
-    // Remove trailing slash and path
-    domain = domain.split("/")[0];
-
-    // Remove port number if present (e.g., localhost:5173 -> localhost)
-    domain = domain.split(":")[0];
-
-    // Remove www. prefix
-    if (domain.startsWith("www.")) {
-      domain = domain.substring(4);
-    }
-
-    return domain;
+    return domainService.normalizeDomain(input);
   }
 
   /**
    * Validate domain format
    */
   validateDomain(domain: string): { valid: boolean; error?: string } {
-    if (!domain || domain.length < 1) {
-      return { valid: false, error: "Domain is required" };
-    }
-
-    // Allow localhost and *.local for development
-    if (domain === "localhost" || domain.endsWith(".local")) {
-      return { valid: true };
-    }
-
-    // Basic domain format validation - allows single-part or multi-part domains
-    // Single part: test, mysite (for /etc/hosts entries)
-    // Multi part: example.com, app.example.com
-    const domainRegex =
-      /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
-    if (!domainRegex.test(domain)) {
-      return { valid: false, error: "Invalid domain format" };
-    }
-
-    // Check for reserved domains (IP addresses)
-    const reserved = ["127.0.0.1", "0.0.0.0"];
-    if (reserved.includes(domain)) {
-      return {
-        valid: false,
-        error: "IP addresses are not supported, use a domain name",
-      };
-    }
-
-    return { valid: true };
+    const validation = domainService.validateDomainForRegistry(domain);
+    return validation.valid
+      ? { valid: true }
+      : { valid: false, error: validation.error };
   }
 
   /**
@@ -183,6 +144,14 @@ export class PublishService {
       const validation = this.validateDomain(normalizedDomain);
       if (!validation.valid) {
         throw new Error(validation.error);
+      }
+
+      const allowlist = await domainService.ensurePublishDomainEnabled({
+        organizationId,
+        domain: normalizedDomain,
+      });
+      if (!allowlist.enabled) {
+        throw new Error(allowlist.message || "Domain is not enabled for this organization");
       }
 
       // Check domain availability
