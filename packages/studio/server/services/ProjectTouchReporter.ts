@@ -10,6 +10,7 @@
 import {
   isConnectedMode,
   getBackendUrl,
+  getConnectedOrganizationId,
   getSessionToken,
   getStudioId,
 } from "@vivd/shared";
@@ -26,6 +27,7 @@ class ProjectTouchReporter {
     const backendUrl = getBackendUrl();
     const sessionToken = getSessionToken();
     const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
     if (!backendUrl || !sessionToken || !studioId) return;
 
     const normalizedSlug = slug.trim();
@@ -45,6 +47,9 @@ class ProjectTouchReporter {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${sessionToken}`,
+          ...(organizationId
+            ? { "x-vivd-organization-id": organizationId }
+            : {}),
         },
         body: JSON.stringify({
           studioId,
@@ -71,4 +76,3 @@ class ProjectTouchReporter {
 }
 
 export const projectTouchReporter = new ProjectTouchReporter();
-

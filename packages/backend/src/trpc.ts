@@ -40,6 +40,14 @@ function extractRequestHost(req: trpcExpress.CreateExpressContextOptions["req"])
   return raw.split(",")[0]?.trim() ?? null;
 }
 
+function normalizeRequestedOrganizationId(input: string | null): string | null {
+  if (!input) return null;
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(normalized)) return null;
+  return normalized;
+}
+
 export const createContext = async ({
   req,
   res,
@@ -55,6 +63,9 @@ export const createContext = async ({
 
   let session = await getSession(headers);
   const resolvedHost = await domainService.resolveHost(extractRequestHost(req));
+  const requestedOrganizationId = normalizeRequestedOrganizationId(
+    headers.get("x-vivd-organization-id"),
+  );
 
   // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
   // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
@@ -146,6 +157,19 @@ export const createContext = async ({
   const membershipRoleByOrg = new Map(
     memberships.map((m) => [m.organizationId, m.role] as const),
   );
+
+  if (session && requestedOrganizationId && !hostOrganizationId) {
+    const hasAccess =
+      session.user.role === "super_admin" ||
+      membershipRoleByOrg.has(requestedOrganizationId);
+    if (hasAccess) {
+      organizationId = requestedOrganizationId;
+    } else {
+      console.warn(
+        `[HostResolution] ignoring x-vivd-organization-id="${requestedOrganizationId}" for user=${session.user.id} (no membership)`,
+      );
+    }
+  }
 
   // If an org is selected from session state but user no longer belongs to it,
   // clear it (except for host-forced tenant domains).

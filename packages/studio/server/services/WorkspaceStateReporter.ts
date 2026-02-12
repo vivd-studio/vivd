@@ -1,4 +1,10 @@
-import { getBackendUrl, getSessionToken, getStudioId, isConnectedMode } from "@vivd/shared";
+import {
+  getBackendUrl,
+  getConnectedOrganizationId,
+  getSessionToken,
+  getStudioId,
+  isConnectedMode,
+} from "@vivd/shared";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
 
 type WorkspaceStateReporterStartOptions = {
@@ -56,6 +62,7 @@ class WorkspaceStateReporter {
     const backendUrl = getBackendUrl();
     const sessionToken = getSessionToken();
     const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
     if (!backendUrl || !sessionToken || !studioId) return;
     if (!this.options.workspace.isInitialized()) return;
 
@@ -89,6 +96,9 @@ class WorkspaceStateReporter {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${sessionToken}`,
+            ...(organizationId
+              ? { "x-vivd-organization-id": organizationId }
+              : {}),
           },
           body: JSON.stringify({
             studioId,

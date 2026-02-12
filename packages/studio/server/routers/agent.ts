@@ -25,6 +25,7 @@ import fs from "fs";
 import path from "path";
 import {
   getBackendUrl,
+  getConnectedOrganizationId,
   getSessionToken,
   getStudioId,
   isConnectedMode,
@@ -38,14 +39,20 @@ function getWorkspaceDir(ctx: { workspace: { isInitialized(): boolean; getProjec
 }
 
 function getConnectedChecklistApiConfig():
-  | { backendUrl: string; sessionToken: string; studioId: string }
+  | {
+      backendUrl: string;
+      sessionToken: string;
+      studioId: string;
+      organizationId?: string;
+    }
   | null {
   if (!isConnectedMode()) return null;
   const backendUrl = getBackendUrl();
   const sessionToken = getSessionToken();
   const studioId = getStudioId();
+  const organizationId = getConnectedOrganizationId();
   if (!backendUrl || !sessionToken || !studioId) return null;
-  return { backendUrl, sessionToken, studioId };
+  return { backendUrl, sessionToken, studioId, organizationId };
 }
 
 async function upsertChecklistToBackend(options: {
@@ -63,6 +70,9 @@ async function upsertChecklistToBackend(options: {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.sessionToken}`,
+        ...(config.organizationId
+          ? { "x-vivd-organization-id": config.organizationId }
+          : {}),
       },
       body: JSON.stringify({
         studioId: config.studioId,
@@ -102,6 +112,9 @@ async function getChecklistFromBackend(options: {
       method: "GET",
       headers: {
         Authorization: `Bearer ${config.sessionToken}`,
+        ...(config.organizationId
+          ? { "x-vivd-organization-id": config.organizationId }
+          : {}),
       },
     },
   );

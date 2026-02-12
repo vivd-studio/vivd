@@ -10,6 +10,7 @@
 import {
   isConnectedMode,
   getBackendUrl,
+  getConnectedOrganizationId,
   getSessionToken,
   getStudioId,
 } from "@vivd/shared";
@@ -26,6 +27,7 @@ class ThumbnailGenerationReporter {
     const backendUrl = getBackendUrl();
     const sessionToken = getSessionToken();
     const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
     if (!backendUrl || !sessionToken || !studioId) return;
 
     const normalizedSlug = slug.trim();
@@ -48,6 +50,9 @@ class ThumbnailGenerationReporter {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${sessionToken}`,
+        ...(organizationId
+          ? { "x-vivd-organization-id": organizationId }
+          : {}),
       },
       body: JSON.stringify({
         studioId,
@@ -74,4 +79,3 @@ class ThumbnailGenerationReporter {
 }
 
 export const thumbnailGenerationReporter = new ThumbnailGenerationReporter();
-

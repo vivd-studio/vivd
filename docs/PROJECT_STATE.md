@@ -8,6 +8,8 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-12: fixed connected studio machine 401s after tenant-domain routing rollout by propagating explicit org context (`x-vivd-organization-id` from `VIVD_TENANT_ID`) on studio->backend tRPC calls and honoring it in backend context resolution for authenticated members when host is not org-pinned.
+- 2026-02-12: fixed super-admin host/control-plane env propagation in compose deployments by forwarding `CONTROL_PLANE_HOST`/`SUPERADMIN_HOSTS` (plus tenant routing envs) to backend services, and corrected backend local `.env` bootstrap path to repo root (`packages/backend/src/init-env.ts`).
 - 2026-02-12: fixed stale ZIP exports in bucket-first mode by making backend `download/:slug/:version` object-storage-only (source artifact with Astro preview fallback, no local-FS fallback), reintroduced "Download as ZIP" in studio toolbar options (desktop/mobile), and triggered source-artifact sync after in-studio patch saves so exports reflect latest edits sooner.
 - 2026-02-12: documented production Dokploy/Traefik wildcard setup runbook for `*.vivd.studio`, including Hetzner DNS-challenge resolver wiring, validation commands, and known failure modes (`docs/dokploy-traefik-wildcard-setup.md`).
 - 2026-02-12: hardened cross-host org switching: prefer tenant hosts matching the current base domain (e.g. `*.localhost`), redirect to control-plane for orgs without a tenant host (auto-switch via `__vivd_switch_org`), and removed “host redirect” UI copy.

@@ -8,6 +8,7 @@
 import {
   isConnectedMode,
   getBackendUrl,
+  getConnectedOrganizationId,
   getSessionToken,
   getStudioId,
   type StudioUsageReport,
@@ -102,6 +103,7 @@ class UsageReporter {
     const backendUrl = getBackendUrl();
     const sessionToken = getSessionToken();
     const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
     if (!backendUrl || !sessionToken || !studioId) return;
 
     const title = sessionTitle.trim();
@@ -116,6 +118,9 @@ class UsageReporter {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${sessionToken}`,
+            ...(organizationId
+              ? { "x-vivd-organization-id": organizationId }
+              : {}),
           },
           body: JSON.stringify({
             studioId,
@@ -173,6 +178,7 @@ class UsageReporter {
     const backendUrl = getBackendUrl();
     const sessionToken = getSessionToken();
     const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
 
     if (!backendUrl || !sessionToken || !studioId) {
       console.error("[UsageReporter] Missing backend configuration");
@@ -191,6 +197,9 @@ class UsageReporter {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${sessionToken}`,
+            ...(organizationId
+              ? { "x-vivd-organization-id": organizationId }
+              : {}),
           },
           body: JSON.stringify({
             studioId,
@@ -241,6 +250,7 @@ class UsageReporter {
     const backendUrl = getBackendUrl();
     const sessionToken = getSessionToken();
     const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
 
     if (!backendUrl || !sessionToken || !studioId) {
       console.error("[UsageReporter] Missing backend configuration for status fetch");
@@ -262,6 +272,9 @@ class UsageReporter {
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${sessionToken}`,
+              ...(organizationId
+                ? { "x-vivd-organization-id": organizationId }
+                : {}),
             },
           }
         );

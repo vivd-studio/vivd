@@ -34,7 +34,7 @@ type ThemeProviderState = {
 const initialState: ThemeProviderState = {
   theme: "system",
   setTheme: () => null,
-  colorTheme: "vivd-green",
+  colorTheme: "vivd-sharp",
   setColorTheme: () => null,
 };
 
@@ -43,7 +43,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  defaultColorTheme = "vivd-green",
+  defaultColorTheme = "vivd-sharp",
   storageKey = "vite-ui-theme",
   colorThemeStorageKey = "vite-ui-color-theme",
 }: ThemeProviderProps) {

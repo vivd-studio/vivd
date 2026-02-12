@@ -32,6 +32,7 @@ import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationRepo
 import { workspaceStateReporter } from "../services/WorkspaceStateReporter.js";
 import {
   getBackendUrl,
+  getConnectedOrganizationId,
   getSessionToken,
   getStudioId,
   isConnectedMode,
@@ -50,14 +51,20 @@ function hasDotSegment(relativePath: string): boolean {
 }
 
 function getConnectedBackendConfig():
-  | { backendUrl: string; sessionToken: string; studioId: string }
+  | {
+      backendUrl: string;
+      sessionToken: string;
+      studioId: string;
+      organizationId?: string;
+    }
   | null {
   if (!isConnectedMode()) return null;
   const backendUrl = getBackendUrl();
   const sessionToken = getSessionToken();
   const studioId = getStudioId();
+  const organizationId = getConnectedOrganizationId();
   if (!backendUrl || !sessionToken || !studioId) return null;
-  return { backendUrl, sessionToken, studioId };
+  return { backendUrl, sessionToken, studioId, organizationId };
 }
 
 async function callConnectedBackendQuery<T>(
@@ -75,6 +82,9 @@ async function callConnectedBackendQuery<T>(
       method: "GET",
       headers: {
         Authorization: `Bearer ${config.sessionToken}`,
+        ...(config.organizationId
+          ? { "x-vivd-organization-id": config.organizationId }
+          : {}),
       },
     },
   );
@@ -102,6 +112,9 @@ async function callConnectedBackendMutation<T>(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.sessionToken}`,
+      ...(config.organizationId
+        ? { "x-vivd-organization-id": config.organizationId }
+        : {}),
     },
     body: JSON.stringify(input),
   });

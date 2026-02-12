@@ -51,6 +51,17 @@ export function getSessionToken(): string | undefined {
 }
 
 /**
+ * Get the connected organization id for studio->backend calls.
+ * Comes from machine env (`VIVD_TENANT_ID`) with `TENANT_ID` as fallback.
+ */
+export function getConnectedOrganizationId(): string | undefined {
+  if (!isConnectedMode()) return undefined;
+  const raw = process.env.VIVD_TENANT_ID || process.env.TENANT_ID;
+  const normalized = raw?.trim();
+  return normalized ? normalized : undefined;
+}
+
+/**
  * Get the unique studio instance ID.
  * Returns undefined in standalone mode.
  */
