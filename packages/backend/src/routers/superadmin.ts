@@ -559,6 +559,37 @@ export const superAdminRouter = router({
       return { success: true };
     }),
 
+  deleteOrganization: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (input.organizationId === "default") {
+        throw new Error("The default organization cannot be deleted");
+      }
+      await db
+        .delete(organization)
+        .where(eq(organization.id, input.organizationId));
+      return { success: true };
+    }),
+
+  updateOrganizationName: superAdminProcedure
+    .input(
+      z.object({
+        organizationId: organizationIdSchema,
+        name: z.string().min(1).max(128),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await db
+        .update(organization)
+        .set({ name: input.name })
+        .where(eq(organization.id, input.organizationId));
+      return { success: true };
+    }),
+
   createOrganizationUser: superAdminProcedure
     .input(
       z.object({

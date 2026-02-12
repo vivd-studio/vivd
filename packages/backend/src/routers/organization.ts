@@ -147,6 +147,33 @@ export const organizationRouter = router({
       return { success: true, tenantHost: tenantHost ?? null };
     }),
 
+  updateOrganizationName: orgAdminProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(128),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+
+      if (
+        ctx.organizationRole !== "owner" &&
+        ctx.session.user.role !== "super_admin"
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only organization owners can rename the organization",
+        });
+      }
+
+      await db
+        .update(organization)
+        .set({ name: input.name })
+        .where(eq(organization.id, organizationId));
+
+      return { success: true };
+    }),
+
   getMyMembership: orgProcedure.query(async ({ ctx }) => {
     const organizationId = ctx.organizationId!;
     return {

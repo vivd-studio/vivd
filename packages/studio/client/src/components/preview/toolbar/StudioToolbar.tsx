@@ -2,7 +2,7 @@ import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
 import faviconSvg from "/favicon-transparent.svg";
-import { Maximize2, Minimize2, PanelLeft, RotateCcw, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
@@ -213,6 +213,7 @@ export function StudioToolbar() {
           {/* Quick Actions */}
           <QuickActions
             projectSlug={projectSlug}
+            selectedVersion={selectedVersion}
             fullUrl={fullUrl}
             originalUrl={originalUrl}
             copied={copied}
@@ -226,6 +227,8 @@ export function StudioToolbar() {
             hasGitChanges={hasGitChanges}
             isPublished={isPublished}
             publishStatus={publishStatus}
+            embedded={embedded}
+            onHardRestart={handleHardRestart}
           />
 
           {/* Separator */}
@@ -271,15 +274,6 @@ export function StudioToolbar() {
           {embedded ? (
             <>
               <div className="hidden md:block h-5 w-px bg-border mx-1" />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleHardRestart}
-                className="h-8 w-8 p-0"
-                title="Hard restart"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"

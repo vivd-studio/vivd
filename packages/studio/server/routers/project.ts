@@ -328,6 +328,26 @@ export const projectRouter = router({
 
       if (!noChanges) {
         projectTouchReporter.touch(input.slug);
+
+        // Keep bucket-backed source artifacts fresh after in-studio saves,
+        // even before an explicit snapshot commit.
+        void ctx.workspace
+          .getHeadCommit()
+          .then((head) =>
+            syncSourceToBucket({
+              projectDir,
+              slug: input.slug,
+              version: input.version,
+              commitHash: head?.hash,
+            }),
+          )
+          .then(() => {
+            thumbnailGenerationReporter.request(input.slug, input.version);
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[Artifacts] Source sync failed: ${msg}`);
+          });
       }
 
       return {

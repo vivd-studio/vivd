@@ -1,16 +1,22 @@
 import { useSearchParams } from "react-router-dom";
-import { Users, Activity, Wrench } from "lucide-react";
+import { Users, Activity, Wrench, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UsageStatsCard, TenantMaintenanceTab } from "@/components/admin";
 import { TeamSettings } from "@/components/settings/TeamSettings";
+import { OrgSettings } from "@/components/settings/OrgSettings";
 import { trpc } from "@/lib/trpc";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Organization() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { organizationRole, isSuperAdmin } = usePermissions();
+  const canEditSettings = organizationRole === "owner" || isSuperAdmin;
   const tab = searchParams.get("tab");
   const currentTab =
-    tab === "usage" || tab === "maintenance" ? tab : "members";
+    tab === "usage" || tab === "maintenance" || (tab === "settings" && canEditSettings)
+      ? tab
+      : "members";
 
   const { data: orgData, isLoading } =
     trpc.organization.getMyOrganization.useQuery();
@@ -56,6 +62,12 @@ export default function Organization() {
             <Wrench className="h-4 w-4" />
             Maintenance
           </TabsTrigger>
+          {canEditSettings && (
+            <TabsTrigger value="settings" className="gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              General
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="members" className="mt-6">
@@ -69,6 +81,12 @@ export default function Organization() {
         <TabsContent value="maintenance" className="mt-6">
           <TenantMaintenanceTab />
         </TabsContent>
+
+        {canEditSettings && (
+          <TabsContent value="settings" className="mt-6">
+            <OrgSettings />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -14,15 +14,18 @@ import {
 import {
   Check,
   Copy,
+  Download,
   ExternalLink,
   History,
   MoreHorizontal,
   RefreshCw,
   Rocket,
+  RotateCcw,
 } from "lucide-react";
 
 interface QuickActionsProps {
   projectSlug: string | undefined;
+  selectedVersion: number;
   fullUrl: string;
   originalUrl: string | null | undefined;
   copied: boolean;
@@ -41,10 +44,13 @@ interface QuickActionsProps {
     lastTag?: string | null;
   };
   gradientId?: string;
+  embedded?: boolean;
+  onHardRestart?: () => void;
 }
 
 export function QuickActions({
   projectSlug,
+  selectedVersion,
   fullUrl,
   originalUrl,
   copied,
@@ -58,8 +64,49 @@ export function QuickActions({
   isPublished,
   publishStatus,
   gradientId = "favicon-gradient",
+  embedded,
+  onHardRestart,
 }: QuickActionsProps) {
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
+  const getHostAppOrigin = () => {
+    const params = new URLSearchParams(window.location.search);
+
+    const hostOrigin = params.get("hostOrigin");
+    if (hostOrigin) {
+      try {
+        return new URL(hostOrigin).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    const returnTo = params.get("returnTo");
+    if (returnTo) {
+      try {
+        return new URL(returnTo).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    if (document.referrer) {
+      try {
+        return new URL(document.referrer).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    return window.location.origin;
+  };
+
+  const handleDownloadZip = () => {
+    if (!projectSlug) return;
+    const origin = getHostAppOrigin();
+    const url = `${origin}/vivd-studio/api/download/${encodeURIComponent(projectSlug)}/${selectedVersion}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <>
       {/* Publish Button */}
@@ -177,6 +224,10 @@ export function QuickActions({
           </DropdownMenuItem>
           {projectSlug && (
             <>
+              <DropdownMenuItem onClick={handleDownloadZip}>
+                <Download className="w-4 h-4 mr-2" />
+                Download as ZIP
+              </DropdownMenuItem>
               {originalUrl && (
                 <DropdownMenuItem
                   onClick={() => window.open(originalUrl, "_blank")}
@@ -185,6 +236,15 @@ export function QuickActions({
                   View Original Website
                 </DropdownMenuItem>
               )}
+            </>
+          )}
+          {embedded && onHardRestart && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onHardRestart}>
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Hard Restart
+              </DropdownMenuItem>
             </>
           )}
         </DropdownMenuContent>

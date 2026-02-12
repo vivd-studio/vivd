@@ -8,6 +8,8 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-12: fixed stale ZIP exports in bucket-first mode by making backend `download/:slug/:version` object-storage-only (source artifact with Astro preview fallback, no local-FS fallback), reintroduced "Download as ZIP" in studio toolbar options (desktop/mobile), and triggered source-artifact sync after in-studio patch saves so exports reflect latest edits sooner.
+- 2026-02-12: documented production Dokploy/Traefik wildcard setup runbook for `*.vivd.studio`, including Hetzner DNS-challenge resolver wiring, validation commands, and known failure modes (`docs/dokploy-traefik-wildcard-setup.md`).
 - 2026-02-12: hardened cross-host org switching: prefer tenant hosts matching the current base domain (e.g. `*.localhost`), redirect to control-plane for orgs without a tenant host (auto-switch via `__vivd_switch_org`), and removed “host redirect” UI copy.
 - 2026-02-12: fixed backend org-switch tenant-host response to return only registered active tenant hosts (removed computed fallback like `default.localhost`).
 - 2026-02-12: fixed control-plane org switcher regression for organizations without a tenant host (e.g. `default`), while keeping tenant-host redirect requirements on host-pinned domains.
@@ -253,6 +255,7 @@ packages/
 - `docs/studio-package-refactor-plan.md` - standalone studio design notes.
 - `docs/publishing-bucket-first-plan.md` - bucket-first publish/preview decisions.
 - `docs/tenant-subdomain-domain-governance-plan.md` - implementation plan for `app.vivd.studio` + `{org}.vivd.studio` and publish-domain governance.
+- `docs/dokploy-traefik-wildcard-setup.md` - production steps for Dokploy + Traefik + Hetzner wildcard routing/certs.
 - `docs/multi-tenant-refactor/organization-auth-plan.md` - org auth + superadmin plan.
 
 ---

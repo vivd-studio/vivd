@@ -13,6 +13,7 @@ import {
 import {
   Check,
   Copy,
+  Download,
   Edit3,
   ExternalLink,
   FolderOpen,
@@ -111,6 +112,45 @@ export function MobileActionsMenu({
   userMenuContent,
 }: MobileActionsMenuProps) {
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
+  const getHostAppOrigin = () => {
+    const params = new URLSearchParams(window.location.search);
+
+    const hostOrigin = params.get("hostOrigin");
+    if (hostOrigin) {
+      try {
+        return new URL(hostOrigin).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    const returnTo = params.get("returnTo");
+    if (returnTo) {
+      try {
+        return new URL(returnTo).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    if (document.referrer) {
+      try {
+        return new URL(document.referrer).origin;
+      } catch {
+        // Ignore invalid values.
+      }
+    }
+
+    return window.location.origin;
+  };
+
+  const handleDownloadZip = () => {
+    if (!projectSlug) return;
+    const origin = getHostAppOrigin();
+    const url = `${origin}/vivd-studio/api/download/${encodeURIComponent(projectSlug)}/${selectedVersion}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -208,6 +248,12 @@ export function MobileActionsMenu({
           <ExternalLink className="w-4 h-4 mr-2" />
           Open in New Tab
         </DropdownMenuItem>
+        {projectSlug && (
+          <DropdownMenuItem onClick={handleDownloadZip}>
+            <Download className="w-4 h-4 mr-2" />
+            Download as ZIP
+          </DropdownMenuItem>
+        )}
 
         {projectSlug && (
           <>

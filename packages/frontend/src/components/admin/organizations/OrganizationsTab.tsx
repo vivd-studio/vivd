@@ -126,6 +126,15 @@ export function OrganizationsTab() {
             </div>
             <SettingsPanel
               selectedOrg={admin.selectedOrg}
+              orgNameForm={admin.orgNameForm}
+              setOrgNameForm={admin.setOrgNameForm}
+              renamePending={admin.renameOrg.isPending}
+              onRename={() =>
+                admin.renameOrg.mutate({
+                  organizationId: admin.selectedOrg!.id,
+                  name: admin.orgNameForm.trim(),
+                })
+              }
               githubPrefixForm={admin.githubPrefixForm}
               setGithubPrefixForm={admin.setGithubPrefixForm}
               savePending={admin.saveGitHubPrefix.isPending}
@@ -133,6 +142,12 @@ export function OrganizationsTab() {
                 admin.saveGitHubPrefix.mutate({
                   organizationId: admin.selectedOrg!.id,
                   githubRepoPrefix: admin.githubPrefixForm,
+                })
+              }
+              deletePending={admin.deleteOrg.isPending}
+              onDelete={() =>
+                admin.deleteOrg.mutate({
+                  organizationId: admin.selectedOrg!.id,
                 })
               }
             />

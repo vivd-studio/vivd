@@ -41,6 +41,7 @@ export function useOrganizationsAdmin() {
   const [userForm, setUserForm] = useState<UserForm>(EMPTY_USER_FORM);
   const [limitsForm, setLimitsForm] = useState<LimitsForm>(EMPTY_LIMITS_FORM);
   const [githubPrefixForm, setGithubPrefixForm] = useState<string>("");
+  const [orgNameForm, setOrgNameForm] = useState<string>("");
   const [memberEdits, setMemberEdits] = useState<MemberEdits>({});
 
   useEffect(() => {
@@ -56,7 +57,8 @@ export function useOrganizationsAdmin() {
 
   useEffect(() => {
     setGithubPrefixForm(selectedOrg?.githubRepoPrefix ?? "");
-  }, [selectedOrg?.githubRepoPrefix, selectedOrgId]);
+    setOrgNameForm(selectedOrg?.name ?? "");
+  }, [selectedOrg?.githubRepoPrefix, selectedOrg?.name, selectedOrgId]);
 
   const membersQuery = trpc.superadmin.listOrganizationMembers.useQuery(
     { organizationId: selectedOrgId },
@@ -192,6 +194,28 @@ export function useOrganizationsAdmin() {
     },
   });
 
+  const renameOrg = trpc.superadmin.updateOrganizationName.useMutation({
+    onSuccess: async () => {
+      await utils.superadmin.listOrganizations.invalidate();
+      toast.success("Organization renamed");
+    },
+    onError: (err) => {
+      toast.error("Failed to rename organization", { description: err.message });
+    },
+  });
+
+  const deleteOrg = trpc.superadmin.deleteOrganization.useMutation({
+    onSuccess: async () => {
+      await utils.superadmin.listOrganizations.invalidate();
+      const remaining = organizations.filter((o) => o.id !== selectedOrgId);
+      setSelectedOrgId(remaining[0]?.id ?? "");
+      toast.success("Organization deleted");
+    },
+    onError: (err) => {
+      toast.error("Failed to delete organization", { description: err.message });
+    },
+  });
+
   const addDomain = trpc.superadmin.addOrganizationDomain.useMutation({
     onSuccess: async (_data, variables) => {
       await domainsQuery.refetch();
@@ -282,6 +306,10 @@ export function useOrganizationsAdmin() {
     githubPrefixForm,
     setGithubPrefixForm,
     saveGitHubPrefix,
+    orgNameForm,
+    setOrgNameForm,
+    renameOrg,
+    deleteOrg,
     memberEdits,
     setMemberEdits,
     updateMemberRole,

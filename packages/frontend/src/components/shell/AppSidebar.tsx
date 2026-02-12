@@ -12,6 +12,7 @@ import {
   LogOut,
   Settings,
   Shield,
+  SlidersHorizontal,
   Users,
   Wrench,
 } from "lucide-react";
@@ -75,6 +76,24 @@ function inferSchemeForHost(host: string): "http" | "https" {
 
 function buildTenantStudioUrl(host: string): string {
   return `${inferSchemeForHost(host)}://${host}/vivd-studio`;
+}
+
+function inferControlPlaneHostFallback(currentHost: string): string | null {
+  const hostname = currentHost.split(":")[0]?.trim().toLowerCase() ?? "";
+  if (!hostname) return null;
+
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+    // `*.localhost` cookies are tricky; prefer bouncing through plain localhost.
+    return "localhost";
+  }
+
+  const firstDot = hostname.indexOf(".");
+  if (firstDot === -1) return null;
+  const baseDomain = hostname.slice(firstDot + 1).trim();
+  if (!baseDomain) return null;
+
+  // Matches our convention: `app.<TENANT_BASE_DOMAIN>` (e.g. app.vivd.studio).
+  return `app.${baseDomain}`;
 }
 
 function useRecentProjects(): SidebarProject[] {
@@ -314,14 +333,16 @@ function ProjectsNavSection({
 
 type OrganizationNavSectionProps = {
   isOrgAdmin: boolean;
+  isOrgOwner: boolean;
   isCollapsed: boolean;
   isActive: (url: string, end?: boolean) => boolean;
-  isOrgTabActive: (tab: "members" | "usage" | "maintenance") => boolean;
+  isOrgTabActive: (tab: "members" | "usage" | "maintenance" | "settings") => boolean;
   navigate: (to: string) => void;
 };
 
 function OrganizationNavSection({
   isOrgAdmin,
+  isOrgOwner,
   isCollapsed,
   isActive,
   isOrgTabActive,
@@ -378,6 +399,16 @@ function OrganizationNavSection({
                 </Link>
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
+            {isOrgOwner && (
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton asChild isActive={isOrgTabActive("settings")}>
+                  <Link to={`${ROUTES.ORG}?tab=settings`}>
+                    <SlidersHorizontal className="size-4" />
+                    <span>General</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            )}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>
@@ -531,6 +562,9 @@ export function AppSidebar() {
     enabled: !!session && config.hasHostOrganizationAccess,
   });
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
+  const isOrgOwner =
+    membership?.organizationRole === "owner" ||
+    session?.user?.role === "super_admin";
 
   const { data: orgData } = trpc.organization.getMyOrganization.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,
@@ -560,7 +594,7 @@ export function AppSidebar() {
     [location.search],
   );
 
-  const isOrgTabActive = (tab: "members" | "usage" | "maintenance") => {
+  const isOrgTabActive = (tab: "members" | "usage" | "maintenance" | "settings") => {
     if (!isActive(ROUTES.ORG, true)) return false;
     return (searchParams.get("tab") ?? "members") === tab;
   };
@@ -635,15 +669,19 @@ export function AppSidebar() {
         return;
       }
 
-      if (!config.controlPlaneHost) {
-        toast.error("No tenant host configured for this organization");
+      const controlPlaneHost =
+        config.controlPlaneHost ?? inferControlPlaneHostFallback(window.location.host);
+      if (!controlPlaneHost) {
+        toast.error("Control plane host is not configured", {
+          description: "Set CONTROL_PLANE_HOST (or open Studio on the control plane domain).",
+        });
         return;
       }
 
-      const controlPlaneUrl = new URL(buildTenantStudioUrl(config.controlPlaneHost));
+      const controlPlaneUrl = new URL(buildTenantStudioUrl(controlPlaneHost));
       controlPlaneUrl.searchParams.set(ORG_SWITCH_QUERY_KEY, target.id);
       console.info(
-        `[OrgSwitch] redirecting from ${window.location.host} to control plane ${config.controlPlaneHost} to switch org`,
+        `[OrgSwitch] redirecting from ${window.location.host} to control plane ${controlPlaneHost} to switch org`,
       );
       window.location.assign(controlPlaneUrl.toString());
       return;
@@ -697,6 +735,7 @@ export function AppSidebar() {
 
               <OrganizationNavSection
                 isOrgAdmin={isOrgAdmin}
+                isOrgOwner={isOrgOwner}
                 isCollapsed={isCollapsed}
                 isActive={isActive}
                 isOrgTabActive={isOrgTabActive}

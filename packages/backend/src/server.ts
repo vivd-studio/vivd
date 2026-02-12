@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import multer from "multer";
 import archiver from "archiver";
 import type { S3Client } from "@aws-sdk/client-s3";
@@ -27,7 +28,11 @@ import { and, eq } from "drizzle-orm";
 import { buildService } from "./services/BuildService";
 import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
 import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
-import { resolvePublishableArtifactState } from "./services/ProjectArtifactStateService";
+import {
+  downloadArtifactToDirectory,
+  getArtifactStorageConfig,
+  resolvePublishableArtifactState,
+} from "./services/ProjectArtifactStateService";
 import { projectMetaService } from "./services/ProjectMetaService";
 import { getInternalPreviewAccessToken } from "./config/preview";
 import { domainService } from "./services/DomainService";
@@ -936,6 +941,7 @@ app.post(
 
 // Download project version as ZIP
 app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
+  let cleanupTempDir: string | null = null;
   try {
     const requestContext = await createContext({ req, res } as any);
     const session = requestContext.session;
@@ -970,16 +976,110 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     if (!Number.isFinite(versionNumber) || versionNumber < 1) {
       return res.status(400).json({ error: "Invalid version" });
     }
-    const versionDir = getVersionDir(organizationId, slug, versionNumber);
-
-    if (!fs.existsSync(versionDir)) {
-      return res.status(404).json({ error: "Project version not found" });
+    const storage = getArtifactStorageConfig();
+    if (!storage) {
+      return res.status(503).json({
+        error:
+          "ZIP download is unavailable because object storage is not configured.",
+      });
     }
+
+    let zipSourceDir: string | null = null;
+    let zipSourceLabel: "bucket:source" | "bucket:preview" = "bucket:source";
+    let artifactState:
+      | Awaited<ReturnType<typeof resolvePublishableArtifactState>>
+      | null = null;
+
+    // Bucket-first export: use source artifact from object storage so downloads
+    // reflect the latest synced studio state; local FS fallback is intentionally disabled.
+    const safeSlug = slug.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `vivd-download-${safeSlug}-v${versionNumber}-`),
+    );
+    cleanupTempDir = tempDir;
+
+    const sourceDownload = await downloadArtifactToDirectory({
+      organizationId,
+      slug,
+      version: versionNumber,
+      kind: "source",
+      destinationDir: tempDir,
+    });
+
+    if (sourceDownload.downloaded) {
+      zipSourceDir = tempDir;
+      zipSourceLabel = "bucket:source";
+    } else {
+      // Fallback for older Astro versions where only preview artifacts existed.
+      artifactState = await resolvePublishableArtifactState({
+        organizationId,
+        slug,
+        version: versionNumber,
+      });
+
+      if (
+        artifactState.readiness === "ready" &&
+        artifactState.sourceKind === "preview"
+      ) {
+        const previewDownload = await downloadArtifactToDirectory({
+          organizationId,
+          slug,
+          version: versionNumber,
+          kind: "preview",
+          destinationDir: tempDir,
+        });
+        if (previewDownload.downloaded) {
+          zipSourceDir = tempDir;
+          zipSourceLabel = "bucket:preview";
+        }
+      }
+    }
+
+    if (!zipSourceDir) {
+      if (!artifactState) {
+        artifactState = await resolvePublishableArtifactState({
+          organizationId,
+          slug,
+          version: versionNumber,
+        });
+      }
+      if (cleanupTempDir) {
+        fs.rmSync(cleanupTempDir, { recursive: true, force: true });
+        cleanupTempDir = null;
+      }
+
+      if (artifactState.readiness === "build_in_progress") {
+        return res.status(503).json({
+          error: "Build in progress",
+          status: "building",
+        });
+      }
+
+      if (artifactState.readiness === "artifact_not_ready") {
+        return res.status(503).json({
+          error: artifactState.error || "Artifact not ready",
+          status: "error",
+        });
+      }
+
+      return res
+        .status(404)
+        .json({ error: "Project artifact not found in object storage" });
+    }
+
+    const cleanupTemp = () => {
+      if (!cleanupTempDir) return;
+      fs.rmSync(cleanupTempDir, { recursive: true, force: true });
+      cleanupTempDir = null;
+    };
+    res.on("finish", cleanupTemp);
+    res.on("close", cleanupTemp);
 
     // Set response headers for zip download
     const filename = `${slug}-v${version}.zip`;
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("X-Vivd-Download-Source", zipSourceLabel);
 
     // Create archive
     const archive = archiver("zip", {
@@ -989,7 +1089,12 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     // Handle archive errors
     archive.on("error", (err) => {
       console.error("Archive error:", err);
-      res.status(500).json({ error: "Failed to create archive" });
+      cleanupTemp();
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to create archive" });
+      } else {
+        res.end();
+      }
     });
 
     // Pipe archive to response
@@ -997,7 +1102,7 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
 
     // Add the version directory contents to the archive (excluding node_modules)
     archive.glob("**/*", {
-      cwd: versionDir,
+      cwd: zipSourceDir,
       ignore: ["node_modules/**"],
       dot: true,
     });
@@ -1005,6 +1110,9 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
     // Finalize the archive
     await archive.finalize();
   } catch (error) {
+    if (cleanupTempDir) {
+      fs.rmSync(cleanupTempDir, { recursive: true, force: true });
+    }
     console.error("Download error:", error);
     return res.status(500).json({ error: "Download failed" });
   }
