@@ -222,6 +222,12 @@ export const projectMaintenanceProcedures = {
     .mutation(async ({ ctx, input }) => {
       const organizationId = ctx.organizationId ?? "default";
       const overwrite = input?.overwrite ?? false;
+      const organizationRows = await db
+        .select({ id: organization.id })
+        .from(organization);
+      const tenantIds = organizationRows.length
+        ? organizationRows.map((row) => row.id)
+        : [organizationId];
       const { bucket, endpointUrl, region, accessKeyId, secretAccessKey, sessionToken } =
         getObjectStorageConfigFromEnv();
       const client = createS3Client({
@@ -238,16 +244,21 @@ export const projectMaintenanceProcedures = {
         ".gitignore": 0,
       };
 
+      let tenantsScanned = 0;
       let projectsScanned = 0;
       let legacyProjectsMigrated = 0;
       let versionsScanned = 0;
       let versionsTouched = 0;
-      const errors: Array<{ slug: string; versionDir: string; error: string }> =
-        [];
-      const projectDirs = await listProjectSlugs(organizationId);
-      if (projectDirs.length === 0) {
+      const errors: Array<{
+        organizationId: string;
+        slug: string;
+        versionDir: string;
+        error: string;
+      }> = [];
+      if (tenantIds.length === 0) {
         return {
           success: true,
+          tenantsScanned,
           projectsScanned,
           legacyProjectsMigrated,
           versionsScanned,
@@ -257,82 +268,89 @@ export const projectMaintenanceProcedures = {
         };
       }
 
-      for (const slug of projectDirs) {
-        projectsScanned++;
+      for (const tenantId of tenantIds) {
+        tenantsScanned++;
+        const projectDirs = await listProjectSlugs(tenantId);
 
-        const manifest = await getManifest(organizationId, slug);
-        if (!manifest) continue;
+        for (const slug of projectDirs) {
+          projectsScanned++;
 
-        for (const { version: versionNumber } of manifest.versions) {
-          versionsScanned++;
+          const manifest = await getManifest(tenantId, slug);
+          if (!manifest) continue;
 
-          const versionData =
-            Number.isFinite(versionNumber) && versionNumber > 0
-              ? await getVersionData(organizationId, slug, versionNumber)
-              : null;
+          for (const { version: versionNumber } of manifest.versions) {
+            versionsScanned++;
 
-          const rawSource = (versionData?.source ?? manifest.source) as unknown;
-          const source: GenerationSource =
-            rawSource === "scratch" || rawSource === "url"
-              ? rawSource
-              : manifest.url
-              ? "url"
-              : "scratch";
+            const versionData =
+              Number.isFinite(versionNumber) && versionNumber > 0
+                ? await getVersionData(tenantId, slug, versionNumber)
+                : null;
 
-          const projectName =
-            versionData?.title?.trim() || manifest.title?.trim() || slug;
-          const keyPrefix = getProjectArtifactKeyPrefix({
-            tenantId: organizationId,
-            slug,
-            version: versionNumber,
-            kind: "source",
-          });
-          const versionDir = `s3://${bucket}/${keyPrefix}`;
-          const templates = renderProjectTemplateFiles({
-            source,
-            projectName,
-          });
+            const rawSource = (versionData?.source ?? manifest.source) as unknown;
+            const source: GenerationSource =
+              rawSource === "scratch" || rawSource === "url"
+                ? rawSource
+                : manifest.url
+                ? "url"
+                : "scratch";
 
-          try {
-            let wroteForVersion = false;
-            for (const filename of TEMPLATE_FILES) {
-              const key = `${keyPrefix}/${filename}`;
+            const projectName =
+              versionData?.title?.trim() || manifest.title?.trim() || slug;
+            const keyPrefix = getProjectArtifactKeyPrefix({
+              tenantId,
+              slug,
+              version: versionNumber,
+              kind: "source",
+            });
+            const versionDir = `s3://${bucket}/${keyPrefix}`;
+            const templates = renderProjectTemplateFiles({
+              source,
+              projectName,
+            });
 
-              if (!overwrite) {
-                const alreadyExists = await doesObjectExist({
-                  client,
-                  bucket,
-                  key,
-                });
-                if (alreadyExists) continue;
+            try {
+              let wroteForVersion = false;
+              for (const filename of TEMPLATE_FILES) {
+                const key = `${keyPrefix}/${filename}`;
+
+                if (!overwrite) {
+                  const alreadyExists = await doesObjectExist({
+                    client,
+                    bucket,
+                    key,
+                  });
+                  if (alreadyExists) continue;
+                }
+
+                await client.send(
+                  new PutObjectCommand({
+                    Bucket: bucket,
+                    Key: key,
+                    Body: templates[filename],
+                    ContentType: "text/plain; charset=utf-8",
+                  }),
+                );
+
+                wroteForVersion = true;
+                written[filename] = (written[filename] ?? 0) + 1;
               }
 
-              await client.send(
-                new PutObjectCommand({
-                  Bucket: bucket,
-                  Key: key,
-                  Body: templates[filename],
-                  ContentType: "text/plain; charset=utf-8",
-                }),
-              );
-
-              wroteForVersion = true;
-              written[filename] = (written[filename] ?? 0) + 1;
+              if (wroteForVersion) versionsTouched++;
+            } catch (e) {
+              errors.push({
+                organizationId: tenantId,
+                slug,
+                versionDir,
+                error: e instanceof Error ? e.message : String(e),
+              });
             }
-
-            if (wroteForVersion) versionsTouched++;
-          } catch (e) {
-            errors.push({
-              slug,
-              versionDir,
-              error: e instanceof Error ? e.message : String(e),
-            });
           }
         }
       }
 
       return {
         success: true,
+        tenantsScanned,
         projectsScanned,
         legacyProjectsMigrated,
         versionsScanned,

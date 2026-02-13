@@ -91,9 +91,9 @@ function suggestNextVersion(lastTag: string | null): string {
 }
 
 function formatTimeLabel(iso: string | null | undefined): string {
-  if (!iso) return "Unknown";
+  if (!iso) return "Not available yet";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Unknown";
+  if (Number.isNaN(date.getTime())) return "Not available yet";
   return `${date.toLocaleString()} (${formatDistanceToNow(date, { addSuffix: true })})`;
 }
 
@@ -462,7 +462,7 @@ export function PublishDialog({
         return "Save your changes before publishing.";
       }
       if (!publishState.publishableCommitHash) {
-        return "Save your site once, then try publishing again.";
+        return "Save your site once to enable publishing.";
       }
       if (!publishableCommitMatchesTarget) {
         return "We're preparing your latest changes for publishing. This can take a little while, and we'll update automatically.";
@@ -871,47 +871,49 @@ export function PublishDialog({
                   </Button>
               ) : null}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:items-end">
                 {publishDisabled && publishDisabledReason ? (
-                  <div className="max-w-xs text-right text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground sm:max-w-sm sm:text-right">
                     {publishDisabledReason}
                   </div>
                 ) : null}
-                {publishDisabled && (olderSnapshotInStudio || unsavedChangesInStudio || studioStateUnknownWarning) ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex" tabIndex={0}>
-                        <Button onClick={() => void handleConnectedPublish()} disabled>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {publishDisabled && (olderSnapshotInStudio || unsavedChangesInStudio || studioStateUnknownWarning) ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex" tabIndex={0}>
+                          <Button onClick={() => void handleConnectedPublish()} disabled>
+                            <Globe className="h-4 w-4 mr-2" />
+                            Publish site
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-sm">
+                          {olderSnapshotInStudio
+                            ? "You're viewing an older snapshot. Restore it (or go back to latest) before publishing."
+                            : studioStateUnknownWarning
+                              ? "Studio is still loading. Please wait a little while."
+                              : "You have unsaved changes. Save changes before publishing to include your latest edits."}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Button onClick={() => void handleConnectedPublish()} disabled={publishDisabled}>
+                      {publishMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Publishing...
+                        </>
+                      ) : (
+                        <>
                           <Globe className="h-4 w-4 mr-2" />
                           Publish site
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs">
-                      <p className="text-sm">
-                        {olderSnapshotInStudio
-                          ? "You're viewing an older snapshot. Restore it (or go back to latest) before publishing."
-                          : studioStateUnknownWarning
-                            ? "Studio is still loading. Please wait a little while."
-                            : "You have unsaved changes. Save changes before publishing to include your latest edits."}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Button onClick={() => void handleConnectedPublish()} disabled={publishDisabled}>
-                    {publishMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Publishing...
-                    </>
-                    ) : (
-                      <>
-                        <Globe className="h-4 w-4 mr-2" />
-                        Publish site
-                      </>
-                    )}
-                  </Button>
-                )}
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </DialogFooter>
           </DialogContent>

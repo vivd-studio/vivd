@@ -28,9 +28,9 @@ interface PublishSiteDialogProps {
 }
 
 function formatTimeLabel(iso: string | null | undefined): string {
-  if (!iso) return "Unknown";
+  if (!iso) return "Not available yet";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Unknown";
+  if (Number.isNaN(date.getTime())) return "Not available yet";
   return `${date.toLocaleString()} (${formatDistanceToNow(date, { addSuffix: true })})`;
 }
 
@@ -125,10 +125,7 @@ export function PublishSiteDialog({
     },
     onError: (error) => {
       const message = error.message || "Failed to publish";
-      const detail = error.data?.code === "CONFLICT"
-        ? `${message} Refresh status and retry.`
-        : message;
-      setPublishError(detail);
+      setPublishError(message);
       toast.error(message);
       void utils.project.publishState.invalidate({ slug, version });
     },
@@ -233,12 +230,12 @@ export function PublishSiteDialog({
     if (!state?.storageEnabled) return "Publishing isn't available right now.";
     if (!readyForPublish) {
       if (state?.readiness === "build_in_progress") {
-        return "We're getting your site ready to publish. This can take a little while. The Publish button will become available automatically.";
+        return "We're preparing your site for publishing. This can take a little while, and we'll update automatically.";
       }
       if (state?.readiness === "artifact_not_ready") {
-        return "We're preparing your site for publishing. This can take a little while. The Publish button will become available automatically.";
+        return "We're preparing your site for publishing. This can take a little while, and we'll update automatically.";
       }
-      return "We're preparing your site for publishing. This can take a little while. The Publish button will become available automatically.";
+      return "We're preparing your site for publishing. This can take a little while, and we'll update automatically.";
     }
     if (olderSnapshotWarning) {
       return "Studio is viewing an older snapshot. Restore it before publishing.";
@@ -250,10 +247,10 @@ export function PublishSiteDialog({
       return "You have unsaved changes in Studio.";
     }
     if (!state?.publishableCommitHash) {
-      return "Please open Studio and click Save, then try publishing again.";
+      return "Open Studio and click Save to enable publishing.";
     }
     if (!publishableCommitMatchesTarget) {
-      return "We're preparing your latest changes for publishing. This can take a little while. The Publish button will become available automatically.";
+      return "We're preparing your latest changes for publishing. This can take a little while, and we'll update automatically.";
     }
     if (!hasDomainInput) return "Enter a domain.";
     if (!domainInputComplete) return "Enter a complete domain (for example, example.com).";
@@ -478,76 +475,78 @@ export function PublishSiteDialog({
                 </Button>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:items-end">
               {publishDisabled && publishDisabledReason ? (
-                <div className="max-w-xs text-right text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground sm:max-w-sm sm:text-right">
                   {publishDisabledReason}
                 </div>
               ) : null}
-              {onOpenStudio && (olderSnapshotWarning || unsavedChangesWarning || missingCommitMetadataWarning) ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {onOpenStudio && (olderSnapshotWarning || unsavedChangesWarning || missingCommitMetadataWarning) ? (
+                  <Button
+                    variant="outline"
+                    onClick={onOpenStudio}
+                    className="border-amber-300"
+                  >
+                    {olderSnapshotWarning
+                      ? "Restore in Studio"
+                      : missingCommitMetadataWarning
+                        ? "Open Studio to save"
+                      : studioStateUnknownWarning
+                        ? "Open Studio"
+                        : "Save in Studio"}
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
-                  onClick={onOpenStudio}
-                  className="border-amber-300"
+                  onClick={() => {
+                    setPublishError(null);
+                    void Promise.all([
+                      publishStateQuery.refetch(),
+                      publishChecklistQuery.refetch(),
+                      publishStatusQuery.refetch(),
+                    ]);
+                  }}
                 >
-                  {olderSnapshotWarning
-                    ? "Restore in Studio"
-                    : missingCommitMetadataWarning
-                      ? "Open Studio to save"
-                    : studioStateUnknownWarning
-                      ? "Open Studio"
-                      : "Save in Studio"}
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh status
                 </Button>
-              ) : null}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPublishError(null);
-                  void Promise.all([
-                    publishStateQuery.refetch(),
-                    publishChecklistQuery.refetch(),
-                    publishStatusQuery.refetch(),
-                  ]);
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh status
-              </Button>
-              {publishDisabled && (olderSnapshotWarning || unsavedChangesWarning) ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex" tabIndex={0}>
-                      <Button onClick={handlePublish} disabled>
+                {publishDisabled && (olderSnapshotWarning || unsavedChangesWarning) ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex" tabIndex={0}>
+                        <Button onClick={handlePublish} disabled>
+                          <Globe className="h-4 w-4 mr-2" />
+                          Publish site
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p className="text-sm">
+                        {olderSnapshotWarning
+                          ? "Studio is viewing an older snapshot. Restore it so you publish what you're seeing."
+                          : studioStateUnknownWarning
+                            ? "Studio is active but its state is unavailable. Open Studio and save before publishing."
+                            : "You have unsaved changes in Studio. Save changes before publishing to include your latest edits."}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button onClick={handlePublish} disabled={publishDisabled}>
+                    {publishMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Publishing...
+                      </>
+                    ) : (
+                      <>
                         <Globe className="h-4 w-4 mr-2" />
                         Publish site
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs">
-                    <p className="text-sm">
-                      {olderSnapshotWarning
-                        ? "Studio is viewing an older snapshot. Restore it so you publish what you're seeing."
-                        : studioStateUnknownWarning
-                          ? "Studio is active but its state is unavailable. Open Studio and save before publishing."
-                          : "You have unsaved changes in Studio. Save changes before publishing to include your latest edits."}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button onClick={handlePublish} disabled={publishDisabled}>
-                  {publishMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Publishing...
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="h-4 w-4 mr-2" />
-                      Publish site
-                    </>
-                  )}
-                </Button>
-              )}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogFooter>
         </DialogContent>

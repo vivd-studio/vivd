@@ -8,6 +8,7 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-13: super-admin template maintenance now runs across all tenants (iterates every organization) instead of only the currently selected org.
 - 2026-02-13: studio polling tuning — kept connected-studio workspace-state reporting default at 5s (configurable via `WORKSPACE_STATE_REPORT_INTERVAL_MS`) while retaining host-resolution log throttling to reduce backend log noise.
 - 2026-02-13: publish prepared-time fix — prevented local studio bucket sync from overwriting `.vivd/build.json` so publish status reflects the latest save and doesn't revert.
 - 2026-02-13: publish domain UX + gating fixes — allowed active tenant-host domains to be used for publish, added explicit allowlist denial reasons (missing/other-org/inactive), debounced publish-domain validation to reduce jitter, and surfaced user-friendly disabled-button reasons in publish dialogs (app shell + Studio).
