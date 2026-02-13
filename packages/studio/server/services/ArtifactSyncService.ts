@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -27,6 +27,7 @@ type AwsSdkModule = {
 };
 
 let awsSdkPromise: Promise<AwsSdkModule | null> | null = null;
+let awsCliAvailable: boolean | null = null;
 
 async function loadAwsSdk(): Promise<AwsSdkModule | null> {
   if (!awsSdkPromise) {
@@ -35,6 +36,30 @@ async function loadAwsSdk(): Promise<AwsSdkModule | null> {
       .catch(() => null);
   }
   return awsSdkPromise;
+}
+
+function isMissingFileError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code;
+  if (code === "ENOENT" || code === "ENOTDIR") return true;
+
+  const message = err instanceof Error ? err.message : String(err);
+  return /no such file or directory|cannot find/i.test(message);
+}
+
+function hasAwsCli(): boolean {
+  if (awsCliAvailable !== null) return awsCliAvailable;
+  const check = spawnSync("aws", ["--version"], {
+    stdio: "ignore",
+  });
+
+  if (check.error) {
+    const code = (check.error as NodeJS.ErrnoException).code;
+    awsCliAvailable = code !== "ENOENT";
+    return awsCliAvailable;
+  }
+
+  awsCliAvailable = check.status === 0;
+  return awsCliAvailable;
 }
 
 function trimSlashes(value: string): string {
@@ -197,7 +222,14 @@ async function listFilesRecursively(options: {
       }
 
       if (entry.isFile()) {
-        const stat = await fs.promises.stat(absPath);
+        let stat: fs.Stats;
+        try {
+          stat = await fs.promises.stat(absPath);
+        } catch (err) {
+          // Files like .git/index.lock can disappear mid-walk; skip them.
+          if (isMissingFileError(err)) continue;
+          throw err;
+        }
         files.push({ absPath, relPath, size: stat.size });
       }
     }
@@ -341,6 +373,16 @@ async function uploadDirectorySdk(options: {
     const key = `${keyPrefix}${toPosixPath(file.relPath)}`;
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let size = file.size;
+      try {
+        const stat = await fs.promises.stat(file.absPath);
+        if (!stat.isFile()) return;
+        size = stat.size;
+      } catch (err) {
+        if (isMissingFileError(err)) return;
+        throw err;
+      }
+
       try {
         await options.client.send(
           new sdk.PutObjectCommand({
@@ -348,11 +390,12 @@ async function uploadDirectorySdk(options: {
             Key: key,
             // Re-create the stream for each attempt; AWS SDK won't retry non-seekable bodies.
             Body: fs.createReadStream(file.absPath),
-            ContentLength: file.size,
+            ContentLength: size,
           })
         );
         break;
       } catch (err) {
+        if (isMissingFileError(err)) return;
         if (attempt >= maxAttempts || !isRetryableAwsError(err)) {
           throw err;
         }
@@ -444,34 +487,56 @@ async function syncDirectoryToBucket(options: {
   exclude?: string[];
   label: string;
 }): Promise<void> {
+  let sdkError: unknown = null;
   const sdkStorage = await createS3Client();
   if (sdkStorage) {
-    try {
-      if (options.delete) {
-        await deletePrefixSdk({
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (options.delete) {
+          await deletePrefixSdk({
+            client: sdkStorage.client,
+            bucket: options.bucket,
+            keyPrefix: options.keyPrefix,
+          });
+        }
+
+        await uploadDirectorySdk({
           client: sdkStorage.client,
           bucket: options.bucket,
+          localDir: options.source,
           keyPrefix: options.keyPrefix,
+          exclude: options.exclude,
         });
+        return;
+      } catch (err) {
+        sdkError = err;
+        if (attempt < maxAttempts && isRetryableAwsError(err)) {
+          await sleep(Math.min(2_000, 200 * 2 ** (attempt - 1)));
+          continue;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[${options.label}] SDK upload failed, falling back to AWS CLI: ${message}`
+        );
+        break;
       }
-
-      await uploadDirectorySdk({
-        client: sdkStorage.client,
-        bucket: options.bucket,
-        localDir: options.source,
-        keyPrefix: options.keyPrefix,
-        exclude: options.exclude,
-      });
-      return;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[${options.label}] SDK upload failed, falling back to AWS CLI: ${message}`
-      );
     }
   }
 
-  // Fallback to AWS CLI (available in studio Docker image).
+  if (!hasAwsCli()) {
+    const reason =
+      sdkError instanceof Error
+        ? sdkError.message
+        : sdkError
+          ? String(sdkError)
+          : "AWS SDK storage client unavailable";
+    throw new Error(
+      `[${options.label}] AWS CLI is not installed and SDK sync failed: ${reason}`
+    );
+  }
+
+  // Fallback to AWS CLI when available.
   const endpointUrl = getEndpointUrl();
   const args: string[] = [];
   if (endpointUrl) {
@@ -521,6 +586,7 @@ export async function syncSourceToBucket(options: {
       "dist/*",
       ".astro/*",
       ".vivd/opencode-data/*",
+      ".git/index.lock",
     ],
     label: "SourceSync",
   });

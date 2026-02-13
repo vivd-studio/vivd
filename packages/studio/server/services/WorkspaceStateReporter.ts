@@ -13,7 +13,7 @@ type WorkspaceStateReporterStartOptions = {
   version: number;
 };
 
-const DEFAULT_REPORT_INTERVAL_MS = 5_000;
+const DEFAULT_REPORT_INTERVAL_MS = 10_000;
 
 class WorkspaceStateReporter {
   private intervalHandle: NodeJS.Timeout | null = null;

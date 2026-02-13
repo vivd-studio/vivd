@@ -16,6 +16,12 @@ export interface ApplyProjectTemplateFilesInput {
   overwrite?: boolean;
 }
 
+export interface RenderProjectTemplateFilesInput {
+  source?: GenerationSource;
+  projectName: string;
+  enabledPlugins?: string[];
+}
+
 export interface ApplyProjectTemplateFilesResult {
   written: string[];
   skipped: string[];
@@ -77,11 +83,29 @@ function renderAgentsMd(input: {
     .replace(/{enabled_plugins}/g, formatPlugins(input.enabledPlugins));
 }
 
+export function renderProjectTemplateFiles(
+  input: RenderProjectTemplateFilesInput
+): Record<TemplateFileName, string> {
+  const source: GenerationSource = input.source ?? "url";
+  return {
+    "AGENTS.md": renderAgentsMd({
+      projectName: input.projectName,
+      source,
+      enabledPlugins: input.enabledPlugins,
+    }),
+    ".gitignore": getGitignoreTemplate(),
+  };
+}
+
 export function applyProjectTemplateFiles(
   input: ApplyProjectTemplateFilesInput
 ): ApplyProjectTemplateFilesResult {
-  const source: GenerationSource = input.source ?? "url";
   const overwrite = input.overwrite ?? false;
+  const templates = renderProjectTemplateFiles({
+    source: input.source,
+    projectName: input.projectName,
+    enabledPlugins: input.enabledPlugins,
+  });
 
   const written: string[] = [];
   const skipped: string[] = [];
@@ -95,12 +119,7 @@ export function applyProjectTemplateFiles(
   if (fs.existsSync(agentsPath) && !overwrite) {
     skipped.push("AGENTS.md");
   } else {
-    const content = renderAgentsMd({
-      projectName: input.projectName,
-      source,
-      enabledPlugins: input.enabledPlugins,
-    });
-    fs.writeFileSync(agentsPath, content, "utf-8");
+    fs.writeFileSync(agentsPath, templates["AGENTS.md"], "utf-8");
     written.push("AGENTS.md");
   }
 
@@ -109,8 +128,7 @@ export function applyProjectTemplateFiles(
   if (fs.existsSync(gitignorePath) && !overwrite) {
     skipped.push(".gitignore");
   } else {
-    const gitignoreContent = getGitignoreTemplate();
-    fs.writeFileSync(gitignorePath, gitignoreContent, "utf-8");
+    fs.writeFileSync(gitignorePath, templates[".gitignore"], "utf-8");
     written.push(".gitignore");
   }
 

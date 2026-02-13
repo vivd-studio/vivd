@@ -12,6 +12,7 @@ import {
   downloadArtifactToDirectory,
   resolvePublishableArtifactState,
 } from "./ProjectArtifactStateService";
+import type { PublishArtifactKind } from "./ProjectArtifactStateService";
 import { domainService } from "./DomainService";
 
 // Directory where published site files are stored (Caddy reads from here)
@@ -20,6 +21,15 @@ const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
 const CADDY_SITES_DIR = process.env.CADDY_SITES_DIR || "/etc/caddy/sites.d";
 // Caddy admin API URL for reloading config
 const CADDY_ADMIN_URL = process.env.CADDY_ADMIN_URL || "http://caddy:2019";
+const REDIRECTS_MANIFEST_FILENAME = "redirects.json";
+const REDIRECT_STATUS_CODES = new Set([301, 302, 307, 308]);
+
+type ProjectRedirectRule = {
+  fromPath: string;
+  to: string;
+  statusCode: 301 | 302 | 307 | 308;
+  isPrefix: boolean;
+};
 
 export interface PublishResult {
   success: boolean;
@@ -207,6 +217,7 @@ export class PublishService {
       const stagingDir = fs.mkdtempSync(
         path.join(os.tmpdir(), `vivd-publish-${projectSlug}-`),
       );
+      let redirectRules: ProjectRedirectRule[] = [];
 
       try {
         // Hydrate artifact from bucket into a temporary staging directory.
@@ -225,6 +236,13 @@ export class PublishService {
           fs.rmSync(publishedPath, { recursive: true, force: true });
         }
         this.copyDirectory(stagingDir, publishedPath);
+        redirectRules = await this.loadProjectRedirectRules({
+          organizationId,
+          projectSlug,
+          version,
+          publishSourceKind: artifactState.sourceKind,
+          publishArtifactDir: stagingDir,
+        });
       } finally {
         fs.rmSync(stagingDir, { recursive: true, force: true });
       }
@@ -261,7 +279,12 @@ export class PublishService {
         this.removeCaddyConfig(existingRecord[0].domain);
       }
 
-      await this.generateCaddyConfig(normalizedDomain, organizationId, projectSlug);
+      await this.generateCaddyConfig(
+        normalizedDomain,
+        organizationId,
+        projectSlug,
+        redirectRules,
+      );
       await this.reloadCaddy();
 
       const now = new Date();
@@ -475,12 +498,262 @@ export class PublishService {
   }
 
   /**
+   * Load project redirects from redirects.json.
+   *
+   * For Astro publishes, the published artifact is the built preview output.
+   * If redirects are not present there, fall back to source artifact.
+   */
+  private async loadProjectRedirectRules(options: {
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    publishSourceKind: PublishArtifactKind;
+    publishArtifactDir: string;
+  }): Promise<ProjectRedirectRule[]> {
+    const fromPublishArtifact = this.readRedirectRulesFromDirectory(
+      options.publishArtifactDir,
+    );
+    if (fromPublishArtifact.length > 0) return fromPublishArtifact;
+
+    if (options.publishSourceKind !== "preview") {
+      return [];
+    }
+
+    const sourceStagingDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `vivd-publish-source-${options.projectSlug}-`),
+    );
+    try {
+      const sourceDownload = await downloadArtifactToDirectory({
+        organizationId: options.organizationId,
+        slug: options.projectSlug,
+        version: options.version,
+        kind: "source",
+        destinationDir: sourceStagingDir,
+      });
+      if (!sourceDownload.downloaded) return [];
+      return this.readRedirectRulesFromDirectory(sourceStagingDir);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith(`Invalid ${REDIRECTS_MANIFEST_FILENAME}`)
+      ) {
+        throw error;
+      }
+      console.warn(
+        `[Publish] Could not load ${REDIRECTS_MANIFEST_FILENAME} from source artifact for ${options.organizationId}/${options.projectSlug}:`,
+        error,
+      );
+      return [];
+    } finally {
+      fs.rmSync(sourceStagingDir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Parse redirects.json from an artifact directory.
+   *
+   * Supported formats:
+   * - { "redirects": [{ "from": "/old", "to": "/new", "status": 308 }] }
+   * - [{ "from": "/old", "to": "/new", "status": 308 }]
+   */
+  private readRedirectRulesFromDirectory(
+    artifactDir: string,
+  ): ProjectRedirectRule[] {
+    const manifestPath = path.join(artifactDir, REDIRECTS_MANIFEST_FILENAME);
+    if (!fs.existsSync(manifestPath)) return [];
+
+    let parsed: unknown;
+    try {
+      const raw = fs.readFileSync(manifestPath, "utf-8");
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Invalid ${REDIRECTS_MANIFEST_FILENAME}: failed to parse JSON (${reason})`,
+      );
+    }
+
+    const redirectEntries = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && Array.isArray((parsed as { redirects?: unknown }).redirects)
+        ? (parsed as { redirects: unknown[] }).redirects
+        : null;
+
+    if (!redirectEntries) {
+      throw new Error(
+        `Invalid ${REDIRECTS_MANIFEST_FILENAME}: expected an array or a top-level "redirects" array`,
+      );
+    }
+
+    const rules: ProjectRedirectRule[] = [];
+    for (const [index, entry] of redirectEntries.entries()) {
+      if (!entry || typeof entry !== "object") {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} must be an object`,
+        );
+      }
+
+      const record = entry as Record<string, unknown>;
+      const rawFrom = this.pickFirstString(record, ["from", "source", "path"]);
+      const rawTo = this.pickFirstString(record, ["to", "destination", "target"]);
+      const rawStatus = record.status ?? record.statusCode;
+
+      if (!rawFrom) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} is missing "from"`,
+        );
+      }
+      if (!rawTo) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} is missing "to"`,
+        );
+      }
+
+      const fromPath = rawFrom.trim();
+      const to = rawTo.trim();
+      if (!fromPath.startsWith("/")) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} "from" must start with "/"`,
+        );
+      }
+      if (
+        !to.startsWith("/") &&
+        !to.startsWith("http://") &&
+        !to.startsWith("https://")
+      ) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} "to" must be a path or absolute URL`,
+        );
+      }
+      if (!this.isSafeCaddyToken(fromPath)) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} has unsupported characters in "from"`,
+        );
+      }
+      if (!this.isSafeCaddyToken(to)) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} has unsupported characters in "to"`,
+        );
+      }
+
+      const isPrefix = fromPath.endsWith("*");
+      if (isPrefix) {
+        if (!fromPath.endsWith("/*") || fromPath.slice(0, -1).includes("*")) {
+          throw new Error(
+            `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} wildcard "from" must end with "/*"`,
+          );
+        }
+      } else if (fromPath.includes("*")) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} wildcard is only supported at the end as "/*"`,
+        );
+      }
+      const toWildcardCount = (to.match(/\*/g) || []).length;
+      if (isPrefix) {
+        if (toWildcardCount > 1) {
+          throw new Error(
+            `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} "to" supports at most one "*" placeholder`,
+          );
+        }
+      } else if (toWildcardCount > 0) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} "to" wildcard is only allowed when "from" ends with "/*"`,
+        );
+      }
+      if (
+        fromPath === "/*" ||
+        fromPath === "/vivd-studio" ||
+        fromPath.startsWith("/vivd-studio/")
+      ) {
+        throw new Error(
+          `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} cannot target Studio routes`,
+        );
+      }
+
+      let statusCode: 301 | 302 | 307 | 308 = 308;
+      if (rawStatus !== undefined) {
+        const statusNum =
+          typeof rawStatus === "number" ? rawStatus : Number(String(rawStatus));
+        if (
+          !Number.isInteger(statusNum) ||
+          !REDIRECT_STATUS_CODES.has(statusNum)
+        ) {
+          throw new Error(
+            `Invalid ${REDIRECTS_MANIFEST_FILENAME}: redirect #${index + 1} status must be one of 301, 302, 307, 308`,
+          );
+        }
+        statusCode = statusNum as 301 | 302 | 307 | 308;
+      }
+
+      rules.push({
+        fromPath,
+        to,
+        statusCode,
+        isPrefix,
+      });
+    }
+
+    return rules;
+  }
+
+  private pickFirstString(
+    record: Record<string, unknown>,
+    keys: string[],
+  ): string | null {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+    return null;
+  }
+
+  private isSafeCaddyToken(value: string): boolean {
+    return value.length > 0 && !/[\s\x00-\x1F\x7F]/.test(value);
+  }
+
+  private escapeRegexLiteral(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  private buildRedirectCaddyBlocks(rules: ProjectRedirectRule[]): string {
+    if (rules.length === 0) return "";
+
+    const blocks = rules.map((rule, index) => {
+      const matcherName = `vivd_redirect_${index}`;
+
+      if (!rule.isPrefix) {
+        return `    @${matcherName} path ${rule.fromPath}
+    handle @${matcherName} {
+        redir * ${rule.to} ${rule.statusCode}
+    }`;
+      }
+
+      const prefix = rule.fromPath.slice(0, -1);
+      const regex = `^${this.escapeRegexLiteral(prefix)}(.*)$`;
+      const wildcardTarget = `{re.${matcherName}.1}`;
+      const destination = rule.to.includes("*")
+        ? rule.to.replace("*", wildcardTarget)
+        : rule.to;
+
+      return `    @${matcherName} path_regexp ${matcherName} ${regex}
+    handle @${matcherName} {
+        redir * ${destination} ${rule.statusCode}
+    }`;
+    });
+
+    return `    # Project redirects from ${REDIRECTS_MANIFEST_FILENAME}
+${blocks.join("\n\n")}
+`;
+  }
+
+  /**
    * Generate Caddy config snippet for a domain
    */
   private async generateCaddyConfig(
     domain: string,
     organizationId: string,
-    projectSlug: string
+    projectSlug: string,
+    redirectRules: ProjectRedirectRule[] = [],
   ): Promise<void> {
     // Ensure Caddy sites directory exists
     if (!fs.existsSync(CADDY_SITES_DIR)) {
@@ -540,15 +813,17 @@ export class PublishService {
 
     // Generate config with a matcher to exclude /vivd-studio routes
     // This ensures the main Caddyfile handles studio routes even when a site is published
+    const redirectRulesBlock = this.buildRedirectCaddyBlocks(redirectRules);
     const config = `# Auto-generated by Vivd for ${domain}
 ${domainSpec} {
+${redirectRulesBlock}
     # Matcher to exclude vivd-studio paths
     @notVivdStudio not path /vivd-studio /vivd-studio/*
 
     # Serve published site only for non-studio paths
 	    handle @notVivdStudio {
 	        root * ${publishedPath}
-	        try_files {path} {path}/index.html
+	        try_files {path} {path}.html {path}/index.html
 	        file_server {
 	            hide .vivd .git .vivd-working-commit
 	        }

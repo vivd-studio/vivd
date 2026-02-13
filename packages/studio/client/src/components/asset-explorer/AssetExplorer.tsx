@@ -141,10 +141,10 @@ export function AssetExplorer({
     { enabled: viewMode === "gallery" && currentPath !== null },
   );
 
-  // Query for create image dialog
+  // Query for create image dialog - use detected path (public/images for Astro, images for HTML)
   const allImagesQuery = trpc.assets.listAssets.useQuery(
-    { slug: projectSlug, version, relativePath: "images" },
-    { enabled: isCreateImageOpen },
+    { slug: projectSlug, version, relativePath: currentPath ?? "images" },
+    { enabled: isCreateImageOpen && currentPath !== null },
   );
 
   const availableImages =
@@ -254,6 +254,7 @@ export function AssetExplorer({
       version,
       prompt: createImagePrompt.trim(),
       referenceImages: selectedReferenceImages,
+      targetPath: currentPath ?? "images",
     });
   };
 

@@ -52,7 +52,7 @@ export function CreateImageDialog({
         <DialogHeader>
           <DialogTitle>Create New Image with AI</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+        <div className="space-y-4 flex-1 overflow-hidden flex flex-col px-1">
           <div className="space-y-2">
             <label className="text-sm font-medium">
               Describe the image you want to create

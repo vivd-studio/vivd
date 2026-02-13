@@ -17,6 +17,35 @@ type UserMembership = {
   role: string;
 };
 
+const DEFAULT_HOST_RESOLUTION_LOG_THROTTLE_MS = 10_000;
+const hostResolutionLogAtBySignature = new Map<string, number>();
+
+function getHostResolutionLogThrottleMs(): number {
+  const raw = process.env.HOST_RESOLUTION_LOG_THROTTLE_MS;
+  const parsed = Number.parseInt(raw || "", 10);
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  return DEFAULT_HOST_RESOLUTION_LOG_THROTTLE_MS;
+}
+
+function shouldLogHostResolution(signature: string): boolean {
+  if (process.env.HOST_RESOLUTION_LOGGING === "false") return false;
+
+  const throttleMs = getHostResolutionLogThrottleMs();
+  if (throttleMs <= 0) return true;
+
+  const now = Date.now();
+  const lastLoggedAt = hostResolutionLogAtBySignature.get(signature) ?? 0;
+  if (now - lastLoggedAt < throttleMs) return false;
+
+  hostResolutionLogAtBySignature.set(signature, now);
+  if (hostResolutionLogAtBySignature.size > 500) {
+    const oldestKey = hostResolutionLogAtBySignature.keys().next().value;
+    if (oldestKey) hostResolutionLogAtBySignature.delete(oldestKey);
+  }
+
+  return true;
+}
+
 function pickPreferredOrganizationId(memberships: UserMembership[]): string | null {
   if (memberships.length === 0) return null;
   if (memberships.length === 1) return memberships[0]?.organizationId ?? null;
@@ -237,7 +266,15 @@ export const createContext = async ({
       ? membershipRoleByOrg.get(organizationId) ?? null
       : null;
 
-  if (resolvedHost.requestHost && process.env.HOST_RESOLUTION_LOGGING !== "false") {
+  const hostResolutionSignature = [
+    resolvedHost.requestHost ?? "none",
+    resolvedHost.hostKind,
+    hostOrganizationId ?? "none",
+    organizationId ?? "none",
+    String(canSelectOrganization),
+  ].join("|");
+
+  if (resolvedHost.requestHost && shouldLogHostResolution(hostResolutionSignature)) {
     console.info(
       `[HostResolution] host=${resolvedHost.requestHost} kind=${resolvedHost.hostKind} hostOrg=${hostOrganizationId ?? "none"} org=${organizationId ?? "none"} canSelect=${canSelectOrganization}`,
     );

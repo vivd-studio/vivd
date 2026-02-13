@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   protectedProcedure,
   adminProcedure,
@@ -33,7 +34,10 @@ import {
   VIVD_INTERNAL_ARTIFACT_FILENAMES,
 } from "../../generator/vivdPaths";
 import { thumbnailService } from "../../services/ThumbnailService";
-import { applyProjectTemplateFiles } from "../../generator/templateFiles";
+import {
+  renderProjectTemplateFiles,
+  TEMPLATE_FILES,
+} from "../../generator/templateFiles";
 import type { GenerationSource } from "../../generator/flows/types";
 import {
   createS3Client,
@@ -48,6 +52,7 @@ import {
 } from "../../services/ProjectArtifactsService";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { projectMetaService } from "../../services/ProjectMetaService";
+import { getProjectArtifactKeyPrefix } from "../../services/ProjectStoragePaths";
 
 export const projectMaintenanceProcedures = {
   /**
@@ -217,6 +222,16 @@ export const projectMaintenanceProcedures = {
     .mutation(async ({ ctx, input }) => {
       const organizationId = ctx.organizationId ?? "default";
       const overwrite = input?.overwrite ?? false;
+      const { bucket, endpointUrl, region, accessKeyId, secretAccessKey, sessionToken } =
+        getObjectStorageConfigFromEnv();
+      const client = createS3Client({
+        bucket,
+        endpointUrl,
+        region,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken,
+      });
 
       const written: Record<string, number> = {
         "AGENTS.md": 0,
@@ -245,43 +260,18 @@ export const projectMaintenanceProcedures = {
       for (const slug of projectDirs) {
         projectsScanned++;
 
-        try {
-          if (isLegacyProject(slug)) {
-            const did = migrateProjectIfNeeded(slug);
-            if (did) legacyProjectsMigrated++;
-          }
-        } catch (e) {
-          errors.push({
-            slug,
-            versionDir: getProjectDir(organizationId, slug),
-            error: e instanceof Error ? e.message : String(e),
-          });
-          continue;
-        }
-
         const manifest = await getManifest(organizationId, slug);
         if (!manifest) continue;
 
-        const projectDir = getProjectDir(organizationId, slug);
-        if (!fs.existsSync(projectDir)) continue;
-
-        const versionFolders = fs
-          .readdirSync(projectDir, { withFileTypes: true })
-          .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name))
-          .map((d) => d.name);
-
-        for (const folder of versionFolders) {
-          const versionDir = path.join(projectDir, folder);
+        for (const { version: versionNumber } of manifest.versions) {
           versionsScanned++;
 
-          const versionNumber = Number(folder.slice(1));
           const versionData =
             Number.isFinite(versionNumber) && versionNumber > 0
               ? await getVersionData(organizationId, slug, versionNumber)
               : null;
 
-          const rawSource = (versionData?.source ??
-            (manifest as any).source) as unknown;
+          const rawSource = (versionData?.source ?? manifest.source) as unknown;
           const source: GenerationSource =
             rawSource === "scratch" || rawSource === "url"
               ? rawSource
@@ -290,20 +280,47 @@ export const projectMaintenanceProcedures = {
               : "scratch";
 
           const projectName =
-            (versionData?.title || (manifest as any).title || slug)?.trim?.() ||
-            slug;
+            versionData?.title?.trim() || manifest.title?.trim() || slug;
+          const keyPrefix = getProjectArtifactKeyPrefix({
+            tenantId: organizationId,
+            slug,
+            version: versionNumber,
+            kind: "source",
+          });
+          const versionDir = `s3://${bucket}/${keyPrefix}`;
+          const templates = renderProjectTemplateFiles({
+            source,
+            projectName,
+          });
 
           try {
-            const res = applyProjectTemplateFiles({
-              versionDir,
-              source,
-              projectName,
-              overwrite,
-            });
-            if (res.written.length) versionsTouched++;
-            for (const f of res.written) {
-              written[f] = (written[f] ?? 0) + 1;
+            let wroteForVersion = false;
+            for (const filename of TEMPLATE_FILES) {
+              const key = `${keyPrefix}/${filename}`;
+
+              if (!overwrite) {
+                const alreadyExists = await doesObjectExist({
+                  client,
+                  bucket,
+                  key,
+                });
+                if (alreadyExists) continue;
+              }
+
+              await client.send(
+                new PutObjectCommand({
+                  Bucket: bucket,
+                  Key: key,
+                  Body: templates[filename],
+                  ContentType: "text/plain; charset=utf-8",
+                }),
+              );
+
+              wroteForVersion = true;
+              written[filename] = (written[filename] ?? 0) + 1;
             }
+
+            if (wroteForVersion) versionsTouched++;
           } catch (e) {
             errors.push({
               slug,

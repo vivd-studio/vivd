@@ -152,7 +152,7 @@ export function MaintenanceTab() {
         return {
           title: "Add missing template files?",
           description:
-            "This will add missing template files for all projects/versions.",
+            "This will add missing AGENTS.md and .gitignore files in object storage for all project versions.",
           confirmLabel: "Add Missing Files",
           isPending: templateFilesMutation.isPending,
           onConfirm: () => templateFilesMutation.mutate({ overwrite: false }),
@@ -161,7 +161,7 @@ export function MaintenanceTab() {
         return {
           title: "Overwrite template files?",
           description:
-            "This will overwrite template files for all projects/versions and replace existing AGENTS.md files.",
+            "This will overwrite AGENTS.md and .gitignore in object storage for all project versions.",
           confirmLabel: "Overwrite Files",
           isPending: templateFilesMutation.isPending,
           onConfirm: () => templateFilesMutation.mutate({ overwrite: true }),
@@ -374,9 +374,10 @@ export function MaintenanceTab() {
 
           <div className="border-t pt-3 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Ensure project template files (currently <code>AGENTS.md</code>)
-              exist in every project version. Use overwrite to update all
-              existing <code>AGENTS.md</code> files after changing the template.
+              Ensure project template files (<code>AGENTS.md</code> and{" "}
+              <code>.gitignore</code>) exist in every project version's bucket
+              source artifact. Use overwrite to update all existing template
+              files after changing templates.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -400,7 +401,11 @@ export function MaintenanceTab() {
               </Button>
               {templateFilesMutation.data ? (
                 <span className="text-sm text-muted-foreground">
-                  Wrote {templateFilesMutation.data.written["AGENTS.md"]}/
+                  Wrote {templateFilesMutation.data.written["AGENTS.md"]}{" "}
+                  <code>AGENTS.md</code> and{" "}
+                  {templateFilesMutation.data.written[".gitignore"]}{" "}
+                  <code>.gitignore</code> files across{" "}
+                  {templateFilesMutation.data.versionsTouched}/
                   {templateFilesMutation.data.versionsScanned} versions
                   {templateFilesMutation.data.errors.length
                     ? ` • ${templateFilesMutation.data.errors.length} error(s)`

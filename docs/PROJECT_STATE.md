@@ -8,33 +8,17 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
-- 2026-02-13: fixed production “Copy preview URL” from the embedded Studio to use canonical tenant-host preview URLs (works without authentication) and removed the temporary `__vivd_org` preview fallback.
-- 2026-02-13: fixed host resolution precedence so active registered tenant/publish domains override `SUPERADMIN_HOSTS` control-plane classification; removed remaining default-tenant exceptions for managed tenant hosts.
-- 2026-02-12: fixed prod lockout when visiting the tenant base domain (e.g. `vivd.studio`) by treating it as a control-plane alias when it is not explicitly registered as an active tenant/publish domain; also made backend context resolution auto-select a preferred org even on `hostKind=unknown`, preventing `project.list` 401 loops, and improved frontend project-list polling + error visibility.
-- 2026-02-12: added backend bearer-token org fallback for studio machine calls on non-control-plane hosts: when no org can be resolved by host/header, context now falls back to session active org (or preferred membership org), reducing `No organization selected` 401s during staggered studio image rollouts.
-- 2026-02-12: fixed connected studio machine 401s after tenant-domain routing rollout by propagating explicit org context (`x-vivd-organization-id` from `VIVD_TENANT_ID`) on studio->backend tRPC calls and honoring it in backend context resolution for authenticated members when host is not org-pinned.
-- 2026-02-12: fixed super-admin host/control-plane env propagation in compose deployments by forwarding `CONTROL_PLANE_HOST`/`SUPERADMIN_HOSTS` (plus tenant routing envs) to backend services, and corrected backend local `.env` bootstrap path to repo root (`packages/backend/src/init-env.ts`).
-- 2026-02-12: fixed stale ZIP exports in bucket-first mode by making backend `download/:slug/:version` object-storage-only (source artifact with Astro preview fallback, no local-FS fallback), reintroduced "Download as ZIP" in studio toolbar options (desktop/mobile), and triggered source-artifact sync after in-studio patch saves so exports reflect latest edits sooner.
-- 2026-02-12: documented production Dokploy/Traefik wildcard setup runbook for `*.vivd.studio`, including Hetzner DNS-challenge resolver wiring, validation commands, and known failure modes (`docs/dokploy-traefik-wildcard-setup.md`).
-- 2026-02-12: hardened cross-host org switching: prefer tenant hosts matching the current base domain (e.g. `*.localhost`), redirect to control-plane for orgs without a tenant host (auto-switch via `__vivd_switch_org`), and removed “host redirect” UI copy.
-- 2026-02-12: fixed backend org-switch tenant-host response to return only registered active tenant hosts (removed computed fallback like `default.localhost`).
-- 2026-02-12: fixed control-plane org switcher regression for organizations without a tenant host (e.g. `default`), while keeping tenant-host redirect requirements on host-pinned domains.
-- 2026-02-12: implemented tenant-domain governance core: added `domain` registry + migration/backfill, host-based context resolution (`hostKind`/host-pinned org), super-admin domain management APIs/UI, publish allowlist enforcement, host-aware org switch redirects, and tenant-host canonical preview URLs (with temporary logged `__vivd_org` fallback).
-- 2026-02-12: extended tenant subdomain/domain governance plan with explicit local-development parity (`app.localhost` + `{org}.localhost`, with nip.io as fallback), cross-subdomain session checks, and local smoke checklist.
-- 2026-02-12: locked tenant-domain auth boundary decision: `super_admin` stays a global user role; `default` remains a normal org and does not grant platform-wide permissions.
-- 2026-02-12: added dedicated implementation plan for tenant subdomain routing + domain governance (`docs/tenant-subdomain-domain-governance-plan.md`).
-- 2026-02-12: production Traefik wildcard routing for `*.vivd.studio` validated (DNS + wildcard TLS) and tenant-domain rollout planning started (org hostnames, domain allowlist, publish restrictions).
-- 2026-02-11: added older-snapshot warnings + one-click "Restore Snapshot" flow; blocked publishing while Studio is pinned to an older snapshot to prevent publishing unexpected content.
-- 2026-02-11: simplified publish dialog: publishing is blocked when Studio has unsaved changes or is viewing an older snapshot; users must save/restore/back-to-latest before publishing (no combined "Save & Publish" / "Restore & Publish").
-- 2026-02-11: fixed ZIP import for bucket-first runtime by accepting metadata-less exported ZIP roots, syncing imported source/preview artifacts to object storage, and hardening tenant selection to prevent default-tenant leakage.
-- 2026-02-11: added in-studio "Hard restart" to force a fresh studio boot (rehydrate source from object storage) when a suspended machine resumes with an empty/stale workspace.
-- 2026-02-11: added Fly studio start retry when a machine is in `replacing` state to avoid transient "machine getting replaced" boot failures in the frontend.
-- 2026-02-11: serialized Studio workspace Git operations and auto-cleaned stale `.git/index.lock` to prevent save failures under concurrent requests/restarts.
-- 2026-02-11: optimized release publish workflow to build/push only changed container images between tags and skip deploy when no image-relevant files changed.
-- 2026-02-11: enabled multi-org membership per user (auto-detect existing users by email + org switcher via session active org).
-- 2026-02-10: added transaction safety to superadmin member/user mutations and removed unused legacy role mutation route.
-- 2026-02-10: split `OrganizationsTab` and `AppSidebar` into smaller units; reduced sidebar project polling from 5s to 30s with focus refetch.
-- 2026-02-10: roadmap cleaned up to prioritize open work and key milestones.
+- 2026-02-13: publish improvements — added project-level `redirects.json` (validated + rendered into Caddy snippets), fixed extensionless `.html` routing, fixed `redir` directive generation, and switched template-file maintenance to bucket-only mode.
+- 2026-02-13: tenant routing fixes — fixed host resolution precedence (active domains override `SUPERADMIN_HOSTS`), fixed canonical preview URLs, removed `__vivd_org` fallback, and reduced host-resolution log spam.
+- 2026-02-13: studio sync hardening — ignore transient missing files during artifact upload, retry SDK sync before AWS CLI fallback, and fail with explicit diagnostics on missing CLI.
+- 2026-02-12: tenant-domain governance — implemented `domain` registry + migration/backfill, host-based context resolution (`hostKind`), super-admin domain management UI, publish allowlist enforcement, tenant-host org switching + redirects, and canonical preview URLs.
+- 2026-02-12: tenant routing stabilization — fixed prod lockout on base domain, org context fallback for studio machine calls, connected-studio 401s, cross-host org switching edge cases, and env propagation in compose deployments.
+- 2026-02-12: bucket-first ZIP exports — made downloads object-storage-only, reintroduced "Download as ZIP" in studio toolbar, and triggered source-artifact sync after patch saves.
+- 2026-02-12: documented Dokploy/Traefik wildcard setup runbook (`docs/dokploy-traefik-wildcard-setup.md`).
+- 2026-02-11: studio reliability — added "Hard restart" for stale workspaces, Fly machine `replacing` state retry, serialized Git operations with `.git/index.lock` cleanup, and publish safeguards (block on unsaved changes / older snapshots).
+- 2026-02-11: multi-org membership — enabled per-user multi-org with email-based auto-detect and session-based org switcher.
+- 2026-02-11: misc — fixed bucket-first ZIP import with tenant isolation, optimized CI to build/push only changed images.
+- 2026-02-10: admin cleanup — transaction safety for superadmin mutations, component splitting (`OrganizationsTab`, `AppSidebar`), reduced sidebar polling.
 
 ---
 
@@ -266,4 +250,4 @@ packages/
 
 ---
 
-*Last updated: 2026-02-12*
+*Last updated: 2026-02-13*

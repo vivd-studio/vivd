@@ -25,6 +25,21 @@ Currently you cannot create images on your own. If you need new images, tell the
      ```
    - This enables the visual "edit text" feature to update translations correctly
 6. **Clarify questions**: Do not assume anything or make changes when the user asks a question. Questions should be clarified before editing.
+7. **Redirects for migrated URLs**:
+   - Manage redirects in a project-root `redirects.json` file (not a `Caddyfile`).
+   - Supported rule shape:
+     ```json
+     {
+       "redirects": [
+         { "from": "/old-page", "to": "/new-page", "status": 308 },
+         { "from": "/old-section/*", "to": "/new-section/*", "status": 301 }
+       ]
+     }
+     ```
+   - `from` must start with `/`; wildcard is only supported as `/*` suffix.
+   - `to` must be a site path (`/...`) or absolute URL (`https://...`).
+   - Valid status codes: `301`, `302`, `307`, `308`.
+   - Do not add or rely on project-level Caddy configuration.
 
 ## Internal Tags
 
