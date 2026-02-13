@@ -45,16 +45,6 @@ export const previewProcedures = {
         ? new URL(previewPath, `${scheme}://${urlHost}`).toString()
         : previewPath;
 
-      // Temporary fallback for non-tenant hosts while rollout stabilizes.
-      const usesOrgFallback = !tenantHost;
-      const urlWithFallback = usesOrgFallback && urlHost
-        ? (() => {
-            const withFallback = new URL(url);
-            withFallback.searchParams.set("__vivd_org", organizationId);
-            return withFallback.toString();
-          })()
-        : url;
-
       const project = await projectMetaService.getProject(organizationId, slug);
       if (!project) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
@@ -71,43 +61,39 @@ export const previewProcedures = {
           return {
             mode: artifactState.sourceKind === "preview" ? ("built" as const) : ("static" as const),
             status: "ready" as const,
-            url: urlWithFallback,
+            url,
             canonicalUrl: url,
             publicPreviewEnabled,
-            usesOrgFallback,
           };
         }
         if (artifactState.readiness === "build_in_progress") {
           return {
             mode: "built" as const,
             status: "building" as const,
-            url: urlWithFallback,
+            url,
             canonicalUrl: url,
             publicPreviewEnabled,
             error: artifactState.error ?? undefined,
-            usesOrgFallback,
           };
         }
         if (artifactState.readiness === "artifact_not_ready") {
           return {
             mode: "built" as const,
             status: "error" as const,
-            url: urlWithFallback,
+            url,
             canonicalUrl: url,
             publicPreviewEnabled,
             error: artifactState.error ?? undefined,
-            usesOrgFallback,
           };
         }
 
         return {
           mode: "built" as const,
           status: "pending" as const,
-          url: urlWithFallback,
+          url,
           canonicalUrl: url,
           publicPreviewEnabled,
           error: artifactState.error ?? undefined,
-          usesOrgFallback,
         };
       }
 
@@ -121,10 +107,9 @@ export const previewProcedures = {
         return {
           mode: "static" as const,
           status: "ready" as const,
-          url: urlWithFallback,
+          url,
           canonicalUrl: url,
           publicPreviewEnabled,
-          usesOrgFallback,
         };
       }
 
@@ -134,10 +119,9 @@ export const previewProcedures = {
         return {
           mode: "built" as const,
           status: "ready" as const,
-          url: urlWithFallback,
+          url,
           canonicalUrl: url,
           publicPreviewEnabled,
-          usesOrgFallback,
         };
       }
 
@@ -145,11 +129,10 @@ export const previewProcedures = {
       return {
         mode: "built" as const,
         status: buildStatus?.status || ("pending" as const),
-        url: urlWithFallback,
+        url,
         canonicalUrl: url,
         publicPreviewEnabled,
         error: buildStatus?.error,
-        usesOrgFallback,
       };
     }),
 

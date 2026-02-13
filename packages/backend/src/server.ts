@@ -50,8 +50,6 @@ function getRouteParam(req: express.Request, key: string): string | undefined {
 const PREVIEW_TOKEN_QUERY_PARAM = "__vivd_preview_token";
 const PREVIEW_TOKEN_COOKIE_NAME = "vivd_preview_token";
 const PREVIEW_TOKEN_HEADER_NAME = "x-vivd-preview-token";
-const PREVIEW_ORG_QUERY_PARAM = "__vivd_org";
-const PREVIEW_ORG_COOKIE_NAME = "vivd_preview_org";
 
 function getQueryParam(req: express.Request, key: string): string | undefined {
   const value = (req.query as Record<string, unknown>)[key];
@@ -98,6 +96,14 @@ function getRequestHostHeader(req: express.Request): string | null {
 
 function isSuperAdminHost(req: express.Request): boolean {
   return domainService.isSuperAdminHost(getRequestHostHeader(req));
+}
+
+function normalizeRequestedOrganizationId(input: string | null): string | null {
+  if (!input) return null;
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(normalized)) return null;
+  return normalized;
 }
 
 type CachedPublicPreviewSetting = { enabled: boolean; fetchedAt: number };
@@ -596,8 +602,6 @@ async function tryServeFromBucket(options: {
 app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
   const requestContext = await createContext({ req, res } as any);
   let organizationId = requestContext.organizationId;
-  let orgFallbackUsed = false;
-  let orgFallbackSource: "query" | "cookie" | null = null;
   const slug = getRouteParam(req, "slug");
   const version = getRouteParam(req, "version");
   if (!slug || !version) {
@@ -614,17 +618,14 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
     internalToken && tokenCandidate && tokenCandidate === internalToken,
   );
 
-  if (!organizationId) {
-    const queryCandidate = getQueryParam(req, PREVIEW_ORG_QUERY_PARAM)?.trim();
-    const cookieCandidate = getCookieValue(req, PREVIEW_ORG_COOKIE_NAME)?.trim();
-    const candidate = queryCandidate || cookieCandidate;
-    if (candidate) organizationId = candidate;
+  if (!organizationId && tokenOk) {
+    // Internal services (e.g. scraper) can pass explicit org context via header.
+    // We only honor this when the internal preview token is present.
+    const candidate = normalizeRequestedOrganizationId(
+      req.get("x-vivd-organization-id") ?? null,
+    );
     if (candidate) {
-      orgFallbackUsed = true;
-      orgFallbackSource = queryCandidate ? "query" : "cookie";
-      console.info(
-        `[Preview] org fallback used (${orgFallbackSource}) hostKind=${requestContext.hostKind} hostOrg=${requestContext.hostOrganizationId ?? "none"} candidate=${candidate}`,
-      );
+      organizationId = candidate;
     }
   }
 
@@ -650,16 +651,6 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
           path: "/vivd-studio/api/preview",
         });
       }
-
-      if (getCookieValue(req, PREVIEW_ORG_COOKIE_NAME) !== organizationId) {
-        res.cookie(PREVIEW_ORG_COOKIE_NAME, organizationId, {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: isHttpsRequest(req),
-          maxAge: 5 * 60 * 1000,
-          path: "/vivd-studio/api/preview",
-        });
-      }
     } else {
       const session = requestContext.session;
       if (!session) {
@@ -675,22 +666,6 @@ app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {
       const ok = await enforceProjectAccess(req, res, session, organizationId, slug);
       if (!ok) return;
     }
-  }
-
-  if (getCookieValue(req, PREVIEW_ORG_COOKIE_NAME) !== organizationId) {
-    res.cookie(PREVIEW_ORG_COOKIE_NAME, organizationId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isHttpsRequest(req),
-      maxAge: 5 * 60 * 1000,
-      path: "/vivd-studio/api/preview",
-    });
-  }
-
-  if (!orgFallbackUsed) {
-    console.info(
-      `[Preview] org resolved by host/session hostKind=${requestContext.hostKind} org=${organizationId}`,
-    );
   }
 
   // req.url contains the path relative to the mount point (e.g. "/" or "/index.html")

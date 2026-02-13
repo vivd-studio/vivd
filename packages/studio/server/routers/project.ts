@@ -197,6 +197,46 @@ export const projectRouter = router({
       };
     }),
 
+  getShareablePreviewUrl: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        origin: z.string().optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      if (isConnectedMode()) {
+        const status = await callConnectedBackendQuery<{
+          canonicalUrl?: string;
+        }>("project.getExternalPreviewStatus", {
+          slug: input.slug,
+          version: input.version,
+        });
+
+        const url = status.canonicalUrl;
+        if (typeof url === "string" && url.length > 0) return { url };
+      }
+
+      const shareablePath = `/vivd-studio/api/preview/${input.slug}/v${input.version}/`;
+
+      const origin = (() => {
+        const candidate = input.origin?.trim();
+        if (!candidate) return null;
+        try {
+          return new URL(candidate).origin;
+        } catch {
+          return null;
+        }
+      })();
+
+      if (!origin) {
+        return { url: shareablePath };
+      }
+
+      return { url: new URL(shareablePath, origin).toString() };
+    }),
+
   keepAliveDevServer: publicProcedure
     .input(
       z.object({

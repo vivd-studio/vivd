@@ -16,6 +16,7 @@ thumbnailRouter.post("/", async (req, res) => {
     url,
     width = DEFAULT_OUTPUT_WIDTH,
     height = DEFAULT_OUTPUT_HEIGHT,
+    headers,
   } = req.body;
 
   if (!url || typeof url !== "string") {
@@ -36,6 +37,25 @@ thumbnailRouter.post("/", async (req, res) => {
       height: DEFAULT_VIEWPORT_HEIGHT,
       deviceScaleFactor: 1,
     });
+
+    if (headers && typeof headers === "object" && !Array.isArray(headers)) {
+      const allowedHeaderKeys = new Set([
+        "x-vivd-preview-token",
+        "x-vivd-organization-id",
+      ]);
+      const extraHeaders: Record<string, string> = {};
+
+      for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+        if (typeof value !== "string") continue;
+        const normalizedKey = key.toLowerCase();
+        if (!allowedHeaderKeys.has(normalizedKey)) continue;
+        extraHeaders[normalizedKey] = value;
+      }
+
+      if (Object.keys(extraHeaders).length > 0) {
+        await page.setExtraHTTPHeaders(extraHeaders);
+      }
+    }
 
     // Navigate to the URL
     const response = await page.goto(url, {

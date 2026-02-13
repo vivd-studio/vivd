@@ -30,7 +30,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.983.0",
     "@aws-sdk/s3-request-presigner": "^3.985.0",
-    "@opencode-ai/sdk": "^1.1.28",
+    "@opencode-ai/sdk": "^1.1.65",
     "@openrouter/sdk": "^0.2.9",
     "@trpc/server": "^11.7.2",
     "@types/archiver": "^7.0.0",

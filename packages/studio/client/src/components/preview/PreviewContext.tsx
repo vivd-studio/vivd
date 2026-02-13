@@ -937,11 +937,15 @@ export function PreviewProvider({
       toast.error("Preview URL is disabled for this project");
       return;
     }
-    const shareablePath = `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/`;
-    const absoluteUrl = `${getShareablePreviewOrigin()}${shareablePath}`;
 
-    navigator.clipboard
-      .writeText(absoluteUrl)
+    const origin = getShareablePreviewOrigin();
+    utils.project
+      .getShareablePreviewUrl
+      .fetch({ slug: projectSlug, version: selectedVersion, origin })
+      .then((data) => {
+        const absoluteUrl = new URL(data.url, origin).toString();
+        return navigator.clipboard.writeText(absoluteUrl);
+      })
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);

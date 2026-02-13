@@ -281,6 +281,7 @@ export const scraperClient = {
     url: string,
     width = 640,
     height = 400,
+    headers?: Record<string, string>,
   ): Promise<string> {
     log(`[ScraperClient] Requesting thumbnail: ${url} (${width}x${height})`);
 
@@ -288,7 +289,7 @@ export const scraperClient = {
       `${SCRAPER_URL}/thumbnail`,
       {
         method: "POST",
-        body: JSON.stringify({ url, width, height }),
+        body: JSON.stringify({ url, width, height, headers }),
       },
     );
 

@@ -34,13 +34,14 @@ class ThumbnailService {
     previewUrl: string,
     slug: string,
     version: number,
+    headers?: Record<string, string>,
   ): Promise<string> {
     const maxAttempts = 4;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await scraperClient.captureThumbnail(previewUrl, 640, 400);
+        return await scraperClient.captureThumbnail(previewUrl, 640, 400, headers);
       } catch (err) {
         lastError = err;
         const message = err instanceof Error ? err.message : String(err);
@@ -137,27 +138,19 @@ class ThumbnailService {
       return;
     }
 
-    // When a project disables public previews, use an internal token so the scraper can still fetch.
-    // Token is validated server-side and stored in a short-lived cookie for subsequent asset requests.
-    const previewUrl = (() => {
-      const url = new URL(basePreviewUrl);
-      url.searchParams.set("__vivd_org", organizationId);
+    const token = getInternalPreviewAccessToken();
+    if (!token) {
+      console.warn(
+        `[Thumbnail] Skipping for ${slug} v${version}: no PREVIEW_INTERNAL_TOKEN/SCRAPER_API_KEY configured.`,
+      );
+      return;
+    }
 
-      if (project.publicPreviewEnabled) return url.toString();
-
-      const token = getInternalPreviewAccessToken();
-      if (!token) {
-        console.warn(
-          `[Thumbnail] Skipping for ${slug} v${version}: public preview URLs are disabled but no PREVIEW_INTERNAL_TOKEN/SCRAPER_API_KEY configured.`,
-        );
-        return null;
-      }
-
-      url.searchParams.set("__vivd_preview_token", token);
-      return url.toString();
-    })();
-
-    if (!previewUrl) return;
+    const previewUrl = basePreviewUrl;
+    const previewHeaders = {
+      "x-vivd-preview-token": token,
+      "x-vivd-organization-id": organizationId,
+    };
 
     console.log(`[Thumbnail] Generating for ${slug} v${version}...`);
 
@@ -167,6 +160,7 @@ class ThumbnailService {
         previewUrl,
         slug,
         version,
+        previewHeaders,
       );
 
       const thumbnailBuffer = Buffer.from(base64Thumbnail, "base64");

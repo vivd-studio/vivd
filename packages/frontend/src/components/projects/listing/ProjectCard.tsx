@@ -166,11 +166,6 @@ export function ProjectCard({
           `${isDevDomain(tenantHost) ? "http" : "https"}://${tenantHost}`,
         )
       : new URL(shareablePath, window.location.origin);
-
-    if (!tenantHost && membership?.organizationId) {
-      // Temporary fallback for non-tenant hosts during rollout.
-      shareableUrl.searchParams.set("__vivd_org", membership.organizationId);
-    }
     const absoluteUrl = shareableUrl.toString();
 
     navigator.clipboard.writeText(absoluteUrl);
