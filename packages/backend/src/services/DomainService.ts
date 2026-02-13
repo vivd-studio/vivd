@@ -226,8 +226,6 @@ export class DomainService {
     organizationSlug: string;
     createdById?: string;
   }): Promise<void> {
-    if (options.organizationId === "default") return;
-
     const managedHost = this.buildManagedTenantHost(options.organizationSlug);
     if (!managedHost) return;
 
@@ -354,12 +352,12 @@ export class DomainService {
     );
 
     let hostKind: HostKind = "unknown";
-    if (isControlPlaneHost) {
-      hostKind = "control_plane_host";
-    } else if (domainRecord?.usage === "tenant_host") {
+    if (domainRecord?.usage === "tenant_host") {
       hostKind = "tenant_host";
     } else if (domainRecord?.usage === "publish_target") {
       hostKind = "published_domain";
+    } else if (isControlPlaneHost) {
+      hostKind = "control_plane_host";
     }
 
     const hostOrganizationId =
@@ -483,14 +481,6 @@ export class DomainService {
     status?: DomainStatus;
     createdById?: string;
   }) {
-    if (
-      options.organizationId === "default" &&
-      options.type === "managed_subdomain" &&
-      options.usage === "tenant_host"
-    ) {
-      throw new Error('Default organization cannot use a managed tenant host');
-    }
-
     const validation = this.validateDomainForRegistry(options.rawDomain);
     if (!validation.valid) {
       throw new Error(validation.error || "Invalid domain");

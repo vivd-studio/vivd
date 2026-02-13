@@ -9,6 +9,7 @@ Related checklist:
 
 Progress log:
 - 2026-02-13: fixed production “Copy preview URL” from the embedded Studio to use canonical tenant-host preview URLs (works without authentication) and removed the temporary `__vivd_org` preview fallback.
+- 2026-02-13: fixed host resolution precedence so active registered tenant/publish domains override `SUPERADMIN_HOSTS` control-plane classification; removed remaining default-tenant exceptions for managed tenant hosts.
 - 2026-02-12: fixed prod lockout when visiting the tenant base domain (e.g. `vivd.studio`) by treating it as a control-plane alias when it is not explicitly registered as an active tenant/publish domain; also made backend context resolution auto-select a preferred org even on `hostKind=unknown`, preventing `project.list` 401 loops, and improved frontend project-list polling + error visibility.
 - 2026-02-12: added backend bearer-token org fallback for studio machine calls on non-control-plane hosts: when no org can be resolved by host/header, context now falls back to session active org (or preferred membership org), reducing `No organization selected` 401s during staggered studio image rollouts.
 - 2026-02-12: fixed connected studio machine 401s after tenant-domain routing rollout by propagating explicit org context (`x-vivd-organization-id` from `VIVD_TENANT_ID`) on studio->backend tRPC calls and honoring it in backend context resolution for authenticated members when host is not org-pinned.
