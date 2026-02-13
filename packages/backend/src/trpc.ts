@@ -159,6 +159,27 @@ export const createContext = async ({
     memberships.map((m) => [m.organizationId, m.role] as const),
   );
 
+  // Keep session "active organization" aligned with the tenant host the user is currently on.
+  // This makes control-plane redirects deterministic: visiting `acme.<base>` and then going back
+  // to `app.<base>` should bounce to `acme.<base>` again.
+  if (
+    session &&
+    sessionRecordFromDb &&
+    resolvedHost.hostKind === "tenant_host" &&
+    hostOrganizationId &&
+    sessionRecordFromDb.activeOrganizationId !== hostOrganizationId
+  ) {
+    const canSync =
+      session.user.role === "super_admin" || membershipRoleByOrg.has(hostOrganizationId);
+    if (canSync) {
+      await db
+        .update(sessionTable)
+        .set({ activeOrganizationId: hostOrganizationId })
+        .where(eq(sessionTable.id, sessionRecordFromDb.id));
+      sessionRecordFromDb.activeOrganizationId = hostOrganizationId;
+    }
+  }
+
   if (session && requestedOrganizationId && !hostOrganizationId) {
     const hasAccess =
       session.user.role === "super_admin" ||

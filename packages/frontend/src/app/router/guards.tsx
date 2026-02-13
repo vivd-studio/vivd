@@ -1,5 +1,5 @@
 import { Navigate, useLocation, useParams } from "react-router-dom";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
@@ -7,6 +7,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { ROUTES } from "./paths";
 import { CenteredLoading as Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
+
+const ORG_SWITCH_QUERY_KEY = "__vivd_switch_org";
 
 function inferSchemeForHost(host: string): "http" | "https" {
   if (
@@ -28,12 +30,38 @@ function inferSchemeForHost(host: string): "http" | "https" {
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
   const { config, isLoading } = useAppConfig();
+  const location = useLocation();
 
   if (!session) {
     return <Navigate to={ROUTES.LOGIN} replace />;
   }
 
   if (isLoading) {
+    return <Loading />;
+  }
+
+  const searchParams = new URLSearchParams(location.search);
+  const isSuperAdminRoute = location.pathname.startsWith(ROUTES.SUPERADMIN_BASE);
+  const shouldBounceToTenantHost = Boolean(
+    config.canSelectOrganization &&
+      config.activeOrganizationTenantHost &&
+      !isSuperAdminRoute &&
+      !searchParams.has(ORG_SWITCH_QUERY_KEY) &&
+      window.location.hostname !== config.activeOrganizationTenantHost,
+  );
+
+  useEffect(() => {
+    if (!shouldBounceToTenantHost) return;
+    const targetHost = config.activeOrganizationTenantHost;
+    if (!targetHost) return;
+
+    const url = new URL(window.location.href);
+    url.protocol = `${inferSchemeForHost(targetHost)}:`;
+    url.hostname = targetHost;
+    window.location.assign(url.toString());
+  }, [config.activeOrganizationTenantHost, shouldBounceToTenantHost]);
+
+  if (shouldBounceToTenantHost) {
     return <Loading />;
   }
 
