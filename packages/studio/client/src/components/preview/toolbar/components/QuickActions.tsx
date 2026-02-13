@@ -16,12 +16,28 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   History,
+  Image,
+  Loader2,
   MoreHorizontal,
   RefreshCw,
   Rocket,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
 interface QuickActionsProps {
   projectSlug: string | undefined;
@@ -46,6 +62,15 @@ interface QuickActionsProps {
   gradientId?: string;
   embedded?: boolean;
   onHardRestart?: () => void;
+
+  // Connected-mode actions
+  isConnectedMode?: boolean;
+  handleTogglePreviewUrl?: () => void;
+  isTogglingPreviewUrl?: boolean;
+  handleRegenerateThumbnail?: () => void;
+  isRegeneratingThumbnail?: boolean;
+  handleDeleteProject?: () => void;
+  isDeletingProject?: boolean;
 }
 
 export function QuickActions({
@@ -66,7 +91,15 @@ export function QuickActions({
   gradientId = "favicon-gradient",
   embedded,
   onHardRestart,
+  isConnectedMode,
+  handleTogglePreviewUrl,
+  isTogglingPreviewUrl,
+  handleRegenerateThumbnail,
+  isRegeneratingThumbnail,
+  handleDeleteProject,
+  isDeletingProject,
 }: QuickActionsProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
   const getHostAppOrigin = () => {
     const params = new URLSearchParams(window.location.search);
@@ -238,6 +271,46 @@ export function QuickActions({
               )}
             </>
           )}
+          {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}
+          {isConnectedMode && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleTogglePreviewUrl}
+                disabled={isTogglingPreviewUrl}
+              >
+                {publicPreviewEnabled ? (
+                  <EyeOff className="w-4 h-4 mr-2" />
+                ) : (
+                  <Eye className="w-4 h-4 mr-2" />
+                )}
+                {publicPreviewEnabled
+                  ? "Disable preview URL"
+                  : "Enable preview URL"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleRegenerateThumbnail}
+                disabled={isRegeneratingThumbnail}
+              >
+                {isRegeneratingThumbnail ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Image className="w-4 h-4 mr-2" />
+                )}
+                {isRegeneratingThumbnail
+                  ? "Regenerating thumbnail..."
+                  : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete project
+              </DropdownMenuItem>
+            </>
+          )}
           {embedded && onHardRestart && (
             <>
               <DropdownMenuSeparator />
@@ -249,6 +322,36 @@ export function QuickActions({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Delete confirmation dialog */}
+      {isConnectedMode && (
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete project?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete <strong>{projectSlug}</strong> and
+                all its versions. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeletingProject}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={isDeletingProject}
+                onClick={() => {
+                  handleDeleteProject?.();
+                  setShowDeleteConfirm(false);
+                }}
+              >
+                {isDeletingProject ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

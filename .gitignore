@@ -10,6 +10,7 @@ generated_backup*/
 published/
 packages/backend/published/
 caddy-sites/
+example-projects/
 
 # Test artifacts
 **/test/**/*.png

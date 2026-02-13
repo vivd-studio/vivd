@@ -791,6 +791,49 @@ export const projectRouter = router({
       success: true,
     })),
 
+  setPublicPreviewEnabled: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        enabled: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isConnectedMode()) {
+        throw new Error("Not available in standalone mode");
+      }
+      return await callConnectedBackendMutation<{
+        publicPreviewEnabled: boolean;
+      }>("project.setPublicPreviewEnabled", input);
+    }),
+
+  regenerateThumbnail: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isConnectedMode()) {
+        throw new Error("Not available in standalone mode");
+      }
+      return await callConnectedBackendMutation("project.regenerateThumbnail", input);
+    }),
+
+  deleteProject: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isConnectedMode()) {
+        throw new Error("Not available in standalone mode");
+      }
+      return await callConnectedBackendMutation("project.delete", input);
+    }),
+
   createTag: publicProcedure
     .input(
       z.object({

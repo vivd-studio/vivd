@@ -61,6 +61,7 @@ async function syncArtifactsAfterGeneration(options: {
   version: number;
 }): Promise<void> {
   const projectConfig = detectProjectType(options.versionDir);
+  const commitHash = await gitService.getCurrentCommit(options.versionDir);
 
   await uploadProjectSourceToBucket({
     organizationId: options.organizationId,
@@ -70,6 +71,7 @@ async function syncArtifactsAfterGeneration(options: {
     meta: {
       status: "ready",
       framework: projectConfig.framework,
+      commitHash: commitHash ?? undefined,
       completedAt: new Date().toISOString(),
     },
   });
@@ -84,6 +86,7 @@ async function syncArtifactsAfterGeneration(options: {
       meta: {
         status: "ready",
         framework: "astro",
+        commitHash: commitHash ?? undefined,
         completedAt: new Date().toISOString(),
       },
     });

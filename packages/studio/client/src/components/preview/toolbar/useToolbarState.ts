@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { POLLING_BACKGROUND } from "@/app/config/polling";
 import { toast } from "sonner";
@@ -85,6 +85,72 @@ export function useToolbarState() {
     });
   };
 
+  // Connected-mode only: toggle public preview URL
+  const isConnectedMode = publishStatus?.mode === "connected";
+
+  const setPublicPreviewEnabledMutation =
+    trpc.project.setPublicPreviewEnabled.useMutation({
+      onSuccess: (data) => {
+        toast.success(
+          data.publicPreviewEnabled
+            ? "Preview URL enabled"
+            : "Preview URL disabled",
+        );
+      },
+      onError: (error) => {
+        toast.error("Failed to update preview URL setting", {
+          description: error.message,
+        });
+      },
+    });
+
+  const handleTogglePreviewUrl = useCallback(() => {
+    if (!projectSlug) return;
+    setPublicPreviewEnabledMutation.mutate({
+      slug: projectSlug,
+      enabled: !publicPreviewEnabled,
+    });
+  }, [projectSlug, publicPreviewEnabled, setPublicPreviewEnabledMutation]);
+
+  // Connected-mode only: regenerate thumbnail
+  const regenerateThumbnailMutation =
+    trpc.project.regenerateThumbnail.useMutation({
+      onSuccess: () => {
+        toast.success("Thumbnail regeneration requested");
+      },
+      onError: (error) => {
+        toast.error("Failed to regenerate thumbnail", {
+          description: error.message,
+        });
+      },
+    });
+
+  const handleRegenerateThumbnail = useCallback(() => {
+    if (!projectSlug) return;
+    regenerateThumbnailMutation.mutate({
+      slug: projectSlug,
+      version: selectedVersion,
+    });
+  }, [projectSlug, selectedVersion, regenerateThumbnailMutation]);
+
+  // Connected-mode only: delete project
+  const deleteProjectMutation = trpc.project.deleteProject.useMutation({
+    onSuccess: () => {
+      toast.success("Project deleted");
+      handleClose?.();
+    },
+    onError: (error) => {
+      toast.error("Failed to delete project", {
+        description: error.message,
+      });
+    },
+  });
+
+  const handleDeleteProject = useCallback(() => {
+    if (!projectSlug) return;
+    deleteProjectMutation.mutate({ slug: projectSlug });
+  }, [projectSlug, deleteProjectMutation]);
+
   return {
     // Dialog states
     historyPanelOpen,
@@ -125,6 +191,15 @@ export function useToolbarState() {
 
     // Mutations
     handleLoadVersion,
+
+    // Connected-mode actions
+    isConnectedMode,
+    handleTogglePreviewUrl,
+    isTogglingPreviewUrl: setPublicPreviewEnabledMutation.isPending,
+    handleRegenerateThumbnail,
+    isRegeneratingThumbnail: regenerateThumbnailMutation.isPending,
+    handleDeleteProject,
+    isDeletingProject: deleteProjectMutation.isPending,
 
     // Utils for cache invalidation
     utils,

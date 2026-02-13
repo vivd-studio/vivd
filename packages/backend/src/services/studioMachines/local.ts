@@ -40,6 +40,7 @@ interface StorageSyncTarget {
   keyPrefix: string;
   localDir: string;
   excludeDirNames: string[];
+  exclude?: string[];
 }
 
 interface LocalObjectStorageSync {
@@ -437,6 +438,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         localDir: options.workspaceDir,
         // Keep legacy `.vivd/opencode-data` out of source sync if it still exists.
         excludeDirNames: ["node_modules", "opencode-data", "dist", ".astro"],
+        // Artifact build metadata is uploaded separately; don't overwrite it with stale workspace copies.
+        exclude: [".vivd/build.json", ".git/index.lock"],
       },
       {
         name: "opencode",
@@ -541,6 +544,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
           localDir: target.localDir,
           keyPrefix: target.keyPrefix,
           excludeDirNames: target.excludeDirNames,
+          exclude: target.exclude,
         });
 
         if (result.errors.length > 0) {

@@ -97,6 +97,16 @@ function formatTimeLabel(iso: string | null | undefined): string {
   return `${date.toLocaleString()} (${formatDistanceToNow(date, { addSuffix: true })})`;
 }
 
+function looksLikeCompleteDomain(input: string): boolean {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "localhost") return true;
+  if (normalized.endsWith(".localhost") || normalized.endsWith(".local")) return true;
+
+  const firstDot = normalized.indexOf(".");
+  return firstDot > 0 && firstDot < normalized.length - 1;
+}
+
 /**
  * Standalone studio publish dialog.
  *
@@ -115,6 +125,7 @@ export function PublishDialog({
   const [message, setMessage] = useState("");
   const [showPublishWarning, setShowPublishWarning] = useState(false);
   const [domain, setDomain] = useState("");
+  const [debouncedDomain, setDebouncedDomain] = useState("");
   const [confirmUnpublishOpen, setConfirmUnpublishOpen] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -169,12 +180,57 @@ export function PublishDialog({
     }
   }, [open]);
 
-  const normalizedDomain = domain.trim();
-  const checkDomainQuery = trpc.project.checkDomain.useQuery(
-    { domain: normalizedDomain, slug: projectSlug },
-    {
-      enabled: open && !!projectSlug && connectedMode && normalizedDomain.length > 0,
+  useEffect(() => {
+    if (!open || !connectedMode) {
+      setDebouncedDomain("");
+      return;
     }
+
+    const handle = window.setTimeout(() => {
+      setDebouncedDomain(domain.trim());
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [domain, open, connectedMode]);
+
+  const normalizedDomain = domain.trim();
+  const normalizedDebouncedDomain = debouncedDomain.trim();
+  const hasDomainInput = normalizedDomain.length > 0;
+  const domainInputComplete = looksLikeCompleteDomain(normalizedDomain);
+  const shouldValidateDomain =
+    open &&
+    !!projectSlug &&
+    connectedMode &&
+    normalizedDebouncedDomain.length > 0 &&
+    looksLikeCompleteDomain(normalizedDebouncedDomain);
+  const checkDomainQuery = trpc.project.checkDomain.useQuery(
+    { domain: normalizedDebouncedDomain, slug: projectSlug },
+    {
+      enabled: shouldValidateDomain,
+    }
+  );
+
+  const domainValidationPending = Boolean(
+    connectedMode &&
+      hasDomainInput &&
+      domainInputComplete &&
+      (normalizedDomain !== normalizedDebouncedDomain ||
+        (shouldValidateDomain && checkDomainQuery.isFetching)),
+  );
+  const domainError =
+    connectedMode &&
+    hasDomainInput &&
+    domainInputComplete &&
+    normalizedDomain === normalizedDebouncedDomain &&
+    !domainValidationPending
+      ? checkDomainQuery.data?.error
+      : undefined;
+  const domainOk = Boolean(
+    connectedMode &&
+      hasDomainInput &&
+      domainInputComplete &&
+      !domainValidationPending &&
+      (checkDomainQuery.data?.available ?? false),
   );
 
   const publishMutation = trpc.project.publish.useMutation({
@@ -191,11 +247,7 @@ export function PublishDialog({
     },
     onError: (error) => {
       const message = error.message || "Failed to publish";
-      const detail =
-        error.data?.code === "CONFLICT"
-          ? `${message} Please try again.`
-          : message;
-      setPublishError(detail);
+      setPublishError(message);
       toast.error(error.message || "Failed to publish");
       void utils.project.publishState.invalidate({ slug: projectSlug, version });
     },
@@ -367,9 +419,6 @@ export function PublishDialog({
         publishState.publishableCommitHash !== publishState.studioHeadCommitHash,
     );
 
-    const domainOk =
-      normalizedDomain.length > 0 && (checkDomainQuery.data?.available ?? true);
-
     const canPublishNow =
       publishState?.storageEnabled &&
       publishState?.readiness === "ready" &&
@@ -385,6 +434,48 @@ export function PublishDialog({
       loadVersionMutation.isPending ||
       !canPublishNow;
 
+    const publishDisabledReason: string | null = (() => {
+      if (publishMutation.isPending) return "Publishing is already in progress.";
+      if (saveMutation.isPending) return "Saving your changes...";
+      if (loadVersionMutation.isPending) return "Switching snapshots...";
+
+      if (!publishState) return "Loading publish status...";
+      if (!publishState.storageEnabled) return "Publishing isn't available right now.";
+
+      if (publishState.readiness !== "ready") {
+        if (publishState.readiness === "build_in_progress") {
+          return "We're getting your site ready to publish. This can take a little while, and we'll update automatically.";
+        }
+        if (publishState.readiness === "artifact_not_ready") {
+          return "We're preparing your site for publishing. This can take a little while, and we'll update automatically.";
+        }
+        return "We're preparing your site for publishing. This can take a little while, and we'll update automatically.";
+      }
+
+      if (olderSnapshotInStudio) {
+        return "Restore your snapshot before publishing.";
+      }
+      if (studioStateUnknownWarning) {
+        return "Studio is still loading. This can take a little while.";
+      }
+      if (unsavedChangesInStudio) {
+        return "Save your changes before publishing.";
+      }
+      if (!publishState.publishableCommitHash) {
+        return "Save your site once, then try publishing again.";
+      }
+      if (!publishableCommitMatchesTarget) {
+        return "We're preparing your latest changes for publishing. This can take a little while, and we'll update automatically.";
+      }
+
+      if (!hasDomainInput) return "Enter a domain.";
+      if (!domainInputComplete) return "Enter a complete domain (for example, example.com).";
+      if (domainValidationPending) return "Checking domain...";
+      if (!domainOk) return domainError || "Enter a valid domain.";
+
+      return null;
+    })();
+
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -392,7 +483,19 @@ export function PublishDialog({
       setPublishError(null);
 
       if (!domainOk) {
-        toast.error(checkDomainQuery.data?.error || "Enter a valid domain");
+        if (!hasDomainInput) {
+          toast.error("Enter a domain");
+          return;
+        }
+        if (!domainInputComplete) {
+          toast.error("Enter a complete domain");
+          return;
+        }
+        if (domainValidationPending) {
+          toast.error("Checking domain...");
+          return;
+        }
+        toast.error(domainError || "Enter a valid domain");
         return;
       }
 
@@ -405,7 +508,7 @@ export function PublishDialog({
         ]);
         const latestState = latestStateResult.data;
         if (!latestState) {
-          toast.error("Publish status is unavailable. Please wait a moment and try again.");
+          toast.error("Publishing status is still loading. Please wait a little while.");
           return;
         }
 
@@ -418,7 +521,7 @@ export function PublishDialog({
           latestState?.studioRunning && latestState?.studioStateAvailable === false,
         );
         if (latestStudioStateUnknownWarning) {
-          toast.error("Studio state is unavailable. Please wait a moment and try again.");
+          toast.error("Studio is still loading. Please wait a little while.");
           return;
         }
 
@@ -459,7 +562,7 @@ export function PublishDialog({
           latestState?.readiness !== "ready" ||
           latestState?.publishableCommitHash !== targetCommitHash
         ) {
-          toast.error("Your latest version is still being prepared for publishing. Please wait a moment and try again.");
+          toast.error("Your latest changes are still being prepared for publishing. Please wait a little while.");
           return;
         }
 
@@ -471,7 +574,7 @@ export function PublishDialog({
         });
       } catch (err) {
         if (err instanceof Error && err.message === "refetch_timeout") {
-          setPublishError("Publish status is taking too long to load. Please try again.");
+          setPublishError("Publishing status is taking longer than expected. We'll keep checking automatically.");
           return;
         }
         // publishMutation already surfaces errors via its onError handler.
@@ -525,7 +628,10 @@ export function PublishDialog({
 
               {publishState?.readiness === "artifact_not_ready" ? (
                 <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  {publishState.error || "This site is not ready to publish yet."}
+                  <div>We're still preparing your site for publishing. This can take a little while.</div>
+                  {import.meta.env.DEV && publishState.error ? (
+                    <div className="mt-1 text-xs text-muted-foreground">{publishState.error}</div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -585,7 +691,7 @@ export function PublishDialog({
                       className="border-amber-400 text-amber-900 hover:bg-amber-100"
                       onClick={() => {
                         if (!publishState?.studioHeadCommitHash) {
-                          toast.error("Latest snapshot is unavailable. Please wait a moment and try again.");
+                          toast.error("Latest snapshot isn't available yet. Please wait a little while.");
                           return;
                         }
                         setPublishError(null);
@@ -625,7 +731,7 @@ export function PublishDialog({
 
               {studioStateUnknownWarning ? (
                 <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                  Studio is active, but its state is unavailable. Please wait a moment and try again.
+                  Studio is active, but it's still loading. This will update automatically.
                 </div>
               ) : null}
 
@@ -676,7 +782,7 @@ export function PublishDialog({
               !unsavedChangesInStudio &&
               !studioStateUnknownWarning ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  Your latest snapshot is still being prepared for publishing. This may take a moment.
+                  Your latest changes are being prepared for publishing. This can take a little while.
                 </div>
               ) : null}
 
@@ -713,9 +819,9 @@ export function PublishDialog({
                     loadVersionMutation.isPending
                   }
                 />
-                {normalizedDomain.length > 0 && checkDomainQuery.data?.error ? (
+                {domainError ? (
                   <p className="text-xs text-destructive">
-                    {checkDomainQuery.data.error}
+                    {domainError}
                   </p>
                 ) : null}
               </div>
@@ -763,9 +869,14 @@ export function PublishDialog({
                       "Unpublish site"
                     )}
                   </Button>
-                ) : null}
+              ) : null}
               </div>
               <div className="flex items-center gap-2">
+                {publishDisabled && publishDisabledReason ? (
+                  <div className="max-w-xs text-right text-xs text-muted-foreground">
+                    {publishDisabledReason}
+                  </div>
+                ) : null}
                 {publishDisabled && (olderSnapshotInStudio || unsavedChangesInStudio || studioStateUnknownWarning) ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -781,7 +892,7 @@ export function PublishDialog({
                         {olderSnapshotInStudio
                           ? "You're viewing an older snapshot. Restore it (or go back to latest) before publishing."
                           : studioStateUnknownWarning
-                            ? "Studio state is unavailable. Please wait a moment and try again."
+                            ? "Studio is still loading. Please wait a little while."
                             : "You have unsaved changes. Save changes before publishing to include your latest edits."}
                       </p>
                     </TooltipContent>

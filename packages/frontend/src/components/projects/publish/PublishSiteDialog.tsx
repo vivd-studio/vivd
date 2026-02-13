@@ -34,6 +34,16 @@ function formatTimeLabel(iso: string | null | undefined): string {
   return `${date.toLocaleString()} (${formatDistanceToNow(date, { addSuffix: true })})`;
 }
 
+function looksLikeCompleteDomain(input: string): boolean {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "localhost") return true;
+  if (normalized.endsWith(".localhost") || normalized.endsWith(".local")) return true;
+
+  const firstDot = normalized.indexOf(".");
+  return firstDot > 0 && firstDot < normalized.length - 1;
+}
+
 export function PublishSiteDialog({
   open,
   onOpenChange,
@@ -43,6 +53,7 @@ export function PublishSiteDialog({
 }: PublishSiteDialogProps) {
   const utils = trpc.useUtils();
   const [domain, setDomain] = useState("");
+  const [debouncedDomain, setDebouncedDomain] = useState("");
   const [confirmUnpublishOpen, setConfirmUnpublishOpen] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -72,11 +83,31 @@ export function PublishSiteDialog({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      setDebouncedDomain("");
+      return;
+    }
+
+    const handle = window.setTimeout(() => {
+      setDebouncedDomain(domain.trim());
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [domain, open]);
+
   const normalizedInput = domain.trim();
+  const normalizedDebouncedInput = debouncedDomain.trim();
+  const hasDomainInput = normalizedInput.length > 0;
+  const domainInputComplete = looksLikeCompleteDomain(normalizedInput);
+  const shouldValidateDomain =
+    open &&
+    normalizedDebouncedInput.length > 0 &&
+    looksLikeCompleteDomain(normalizedDebouncedInput);
   const checkDomainQuery = trpc.project.checkDomain.useQuery(
-    { domain: normalizedInput, slug },
+    { domain: normalizedDebouncedInput, slug },
     {
-      enabled: open && normalizedInput.length > 0,
+      enabled: shouldValidateDomain,
     },
   );
 
@@ -165,8 +196,27 @@ export function PublishSiteDialog({
       state.publishableCommitHash !== state.studioHeadCommitHash,
   );
 
-  const domainOk = normalizedInput.length > 0 && (checkDomainQuery.data?.available ?? true);
+  const domainValidationPending = Boolean(
+    hasDomainInput &&
+      domainInputComplete &&
+      (normalizedInput !== normalizedDebouncedInput ||
+        (shouldValidateDomain && checkDomainQuery.isFetching)),
+  );
+  const domainError =
+    hasDomainInput &&
+    domainInputComplete &&
+    normalizedInput === normalizedDebouncedInput &&
+    !domainValidationPending
+      ? checkDomainQuery.data?.error
+      : undefined;
+  const domainOk = Boolean(
+    hasDomainInput &&
+      domainInputComplete &&
+      !domainValidationPending &&
+      (checkDomainQuery.data?.available ?? false),
+  );
   const readyForPublish = state?.readiness === "ready";
+  const missingCommitMetadataWarning = Boolean(readyForPublish && !state?.publishableCommitHash);
   const publishDisabled =
     publishMutation.isPending ||
     !readyForPublish ||
@@ -177,10 +227,76 @@ export function PublishSiteDialog({
     Boolean(state?.studioHasUnsavedChanges) ||
     !publishableCommitMatchesTarget;
 
+  const publishDisabledReason = useMemo(() => {
+    if (publishMutation.isPending) return "Publishing is already in progress.";
+    if (!state) return "Loading publish status...";
+    if (!state?.storageEnabled) return "Publishing isn't available right now.";
+    if (!readyForPublish) {
+      if (state?.readiness === "build_in_progress") {
+        return "We're getting your site ready to publish. This can take a little while. The Publish button will become available automatically.";
+      }
+      if (state?.readiness === "artifact_not_ready") {
+        return "We're preparing your site for publishing. This can take a little while. The Publish button will become available automatically.";
+      }
+      return "We're preparing your site for publishing. This can take a little while. The Publish button will become available automatically.";
+    }
+    if (olderSnapshotWarning) {
+      return "Studio is viewing an older snapshot. Restore it before publishing.";
+    }
+    if (studioStateUnknownWarning) {
+      return "Studio state is unavailable. Open Studio and save before publishing.";
+    }
+    if (state?.studioHasUnsavedChanges) {
+      return "You have unsaved changes in Studio.";
+    }
+    if (!state?.publishableCommitHash) {
+      return "Please open Studio and click Save, then try publishing again.";
+    }
+    if (!publishableCommitMatchesTarget) {
+      return "We're preparing your latest changes for publishing. This can take a little while. The Publish button will become available automatically.";
+    }
+    if (!hasDomainInput) return "Enter a domain.";
+    if (!domainInputComplete) return "Enter a complete domain (for example, example.com).";
+    if (domainValidationPending) return "Validating domain availability...";
+    if (!domainOk) {
+      return domainError || "Domain is not available for publishing.";
+    }
+    return null;
+  }, [
+    domainError,
+    domainInputComplete,
+    domainOk,
+    domainValidationPending,
+    hasDomainInput,
+    olderSnapshotWarning,
+    publishMutation.isPending,
+    publishableCommitMatchesTarget,
+    publishTargetCommitHash,
+    readyForPublish,
+    state?.error,
+    state?.readiness,
+    state?.publishableCommitHash,
+    state?.storageEnabled,
+    state?.studioHasUnsavedChanges,
+    studioStateUnknownWarning,
+  ]);
+
   const handlePublish = () => {
     setPublishError(null);
     if (!domainOk) {
-      toast.error(checkDomainQuery.data?.error || "Enter a valid domain");
+      if (!hasDomainInput) {
+        toast.error("Enter a domain");
+        return;
+      }
+      if (!domainInputComplete) {
+        toast.error("Enter a complete domain");
+        return;
+      }
+      if (domainValidationPending) {
+        toast.error("Domain validation is still in progress");
+        return;
+      }
+      toast.error(domainError || "Enter a valid domain");
       return;
     }
     publishMutation.mutate({
@@ -227,13 +343,16 @@ export function PublishSiteDialog({
 
             {state?.readiness === "artifact_not_ready" ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                {state.error || "This site is not ready to publish yet."}
+                <div>We're still preparing your site for publishing. This can take a little while.</div>
+                {import.meta.env.DEV && state.error ? (
+                  <div className="mt-1 text-xs text-muted-foreground">{state.error}</div>
+                ) : null}
               </div>
             ) : null}
 
             {preparingLatestSnapshotWarning && !olderSnapshotWarning && !unsavedChangesWarning ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Your latest snapshot is still being prepared for publishing. Refresh status in a moment.
+                Your latest changes are being prepared for publishing. This can take a little while.
               </div>
             ) : null}
 
@@ -311,8 +430,8 @@ export function PublishSiteDialog({
                 placeholder="example.com"
                 autoComplete="off"
               />
-              {normalizedInput.length > 0 && checkDomainQuery.data?.error ? (
-                <div className="text-xs text-destructive">{checkDomainQuery.data.error}</div>
+              {domainError ? (
+                <div className="text-xs text-destructive">{domainError}</div>
               ) : null}
             </div>
 
@@ -360,7 +479,12 @@ export function PublishSiteDialog({
               ) : null}
             </div>
             <div className="flex items-center gap-2">
-              {onOpenStudio && (olderSnapshotWarning || unsavedChangesWarning) ? (
+              {publishDisabled && publishDisabledReason ? (
+                <div className="max-w-xs text-right text-xs text-muted-foreground">
+                  {publishDisabledReason}
+                </div>
+              ) : null}
+              {onOpenStudio && (olderSnapshotWarning || unsavedChangesWarning || missingCommitMetadataWarning) ? (
                 <Button
                   variant="outline"
                   onClick={onOpenStudio}
@@ -368,6 +492,8 @@ export function PublishSiteDialog({
                 >
                   {olderSnapshotWarning
                     ? "Restore in Studio"
+                    : missingCommitMetadataWarning
+                      ? "Open Studio to save"
                     : studioStateUnknownWarning
                       ? "Open Studio"
                       : "Save in Studio"}

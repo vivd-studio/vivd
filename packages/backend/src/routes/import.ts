@@ -15,6 +15,7 @@ import {
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
 } from "../services/ProjectArtifactsService";
+import { gitService } from "../services/GitService";
 import { createContext } from "../trpc";
 import { checkOrganizationAccess } from "../lib/organizationAccess";
 
@@ -231,6 +232,7 @@ async function syncImportedArtifacts(options: {
   versionDir: string;
 }): Promise<void> {
   const projectConfig = detectProjectType(options.versionDir);
+  const commitHash = await gitService.getCurrentCommit(options.versionDir);
   const completedAt = new Date().toISOString();
 
   await uploadProjectSourceToBucket({
@@ -241,6 +243,7 @@ async function syncImportedArtifacts(options: {
     meta: {
       status: "ready",
       framework: projectConfig.framework,
+      commitHash: commitHash ?? undefined,
       completedAt,
     },
   });
@@ -260,6 +263,7 @@ async function syncImportedArtifacts(options: {
     meta: {
       status: "ready",
       framework: "astro",
+      commitHash: commitHash ?? undefined,
       completedAt: new Date().toISOString(),
     },
   });

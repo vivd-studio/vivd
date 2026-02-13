@@ -425,6 +425,7 @@ export class DomainService {
     normalizedDomain: string;
     message?: string;
     domainRowId?: string;
+    usage?: DomainUsage;
   }> {
     const validation = this.validateDomainForRegistry(options.domain);
     if (!validation.valid) {
@@ -437,25 +438,58 @@ export class DomainService {
 
     const normalizedDomain = validation.normalized;
     const domainRow = await db.query.domain.findFirst({
-      where: and(
-        eq(domainTable.domain, normalizedDomain),
-        eq(domainTable.organizationId, options.organizationId),
-        eq(domainTable.usage, "publish_target"),
-        eq(domainTable.status, "active"),
-      ),
+      where: eq(domainTable.domain, normalizedDomain),
       columns: {
         id: true,
+        organizationId: true,
+        usage: true,
+        status: true,
       },
     });
 
     if (!domainRow) {
       console.warn(
-        `[PublishAllowlist] Denied domain="${normalizedDomain}" org="${options.organizationId}" (missing active publish_target entry)`,
+        `[PublishAllowlist] Denied domain="${normalizedDomain}" org="${options.organizationId}" (missing domain entry)`,
       );
       return {
         enabled: false,
         normalizedDomain,
-        message: "Domain is not enabled for this organization",
+        message: "Domain is not registered for this organization",
+      };
+    }
+
+    if (domainRow.organizationId !== options.organizationId) {
+      console.warn(
+        `[PublishAllowlist] Denied domain="${normalizedDomain}" org="${options.organizationId}" (assigned to org="${domainRow.organizationId}")`,
+      );
+      return {
+        enabled: false,
+        normalizedDomain,
+        message: "Domain is assigned to another organization",
+      };
+    }
+
+    if (domainRow.status !== "active") {
+      const status = domainRow.status as DomainStatus;
+      const message =
+        status === "pending_verification"
+          ? "This domain isn't verified yet. Verify it before publishing."
+          : status === "disabled"
+            ? "This domain is disabled. Enable it before publishing."
+            : "This domain isn't active yet. Activate it before publishing.";
+      return {
+        enabled: false,
+        normalizedDomain,
+        message,
+      };
+    }
+
+    const publishableUsages: DomainUsage[] = ["publish_target", "tenant_host"];
+    if (!publishableUsages.includes(domainRow.usage as DomainUsage)) {
+      return {
+        enabled: false,
+        normalizedDomain,
+        message: `Domain usage "${domainRow.usage}" cannot be used for publishing`,
       };
     }
 
@@ -463,6 +497,7 @@ export class DomainService {
       enabled: true,
       normalizedDomain,
       domainRowId: domainRow.id,
+      usage: domainRow.usage as DomainUsage,
     };
   }
 

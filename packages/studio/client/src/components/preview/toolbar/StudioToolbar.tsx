@@ -70,6 +70,13 @@ export function StudioToolbar() {
     handleLoadVersion,
     utils,
     handleClose,
+    isConnectedMode,
+    handleTogglePreviewUrl,
+    isTogglingPreviewUrl,
+    handleRegenerateThumbnail,
+    isRegeneratingThumbnail,
+    handleDeleteProject,
+    isDeletingProject,
   } = state;
 
   const showClose = embedded || !!returnTo;
@@ -229,6 +236,13 @@ export function StudioToolbar() {
             publishStatus={publishStatus}
             embedded={embedded}
             onHardRestart={handleHardRestart}
+            isConnectedMode={isConnectedMode}
+            handleTogglePreviewUrl={handleTogglePreviewUrl}
+            isTogglingPreviewUrl={isTogglingPreviewUrl}
+            handleRegenerateThumbnail={handleRegenerateThumbnail}
+            isRegeneratingThumbnail={isRegeneratingThumbnail}
+            handleDeleteProject={handleDeleteProject}
+            isDeletingProject={isDeletingProject}
           />
 
           {/* Separator */}
@@ -268,6 +282,13 @@ export function StudioToolbar() {
             theme={theme}
             setTheme={setTheme}
             canUseAgent={canUseAgent}
+            isConnectedMode={isConnectedMode}
+            handleTogglePreviewUrl={handleTogglePreviewUrl}
+            isTogglingPreviewUrl={isTogglingPreviewUrl}
+            handleRegenerateThumbnail={handleRegenerateThumbnail}
+            isRegeneratingThumbnail={isRegeneratingThumbnail}
+            handleDeleteProject={handleDeleteProject}
+            isDeletingProject={isDeletingProject}
           />
 
           {/* Embedded-only actions */}

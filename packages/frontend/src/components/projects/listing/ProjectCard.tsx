@@ -430,6 +430,7 @@ export function ProjectCard({
               align="end"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
               <DropdownMenuItem
                 onClick={() => window.open(projectEditorUrl, "_blank")}
                 disabled={!isCompleted}

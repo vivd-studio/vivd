@@ -586,6 +586,7 @@ export async function syncSourceToBucket(options: {
       "dist/*",
       ".astro/*",
       ".vivd/opencode-data/*",
+      ".vivd/build.json",
       ".git/index.lock",
     ],
     label: "SourceSync",

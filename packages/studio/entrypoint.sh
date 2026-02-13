@@ -116,7 +116,9 @@ sync_source() {
     --exclude "node_modules/*" \
     --exclude "dist/*" \
     --exclude ".astro/*" \
-    --exclude ".vivd/opencode-data/*"
+    --exclude ".vivd/opencode-data/*" \
+    --exclude ".vivd/build.json" \
+    --exclude ".git/index.lock"
 }
 
 sync_opencode() {
@@ -141,7 +143,9 @@ hydrate_source() {
     --exclude "node_modules/*" \
     --exclude "dist/*" \
     --exclude ".astro/*" \
-    --exclude ".vivd/opencode-data/*"
+    --exclude ".vivd/opencode-data/*" \
+    --exclude ".vivd/build.json" \
+    --exclude ".git/index.lock"
 }
 
 hydrate_opencode() {

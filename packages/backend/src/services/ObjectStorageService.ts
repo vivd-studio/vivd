@@ -160,6 +160,26 @@ function normalizeKeyPrefix(prefix: string): string {
   return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
 }
 
+function normalizeExcludedPrefixes(exclude: string[] | undefined): string[] {
+  return (exclude ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => value.replace(/\\/g, "/"))
+    .map((value) => value.replace(/^\.\//, ""))
+    .map((value) => value.replace(/^\/+/, ""))
+    .map((value) => value.replace(/\*+$/, ""))
+    .map((value) => value.replace(/\/+$/, ""))
+    .filter(Boolean);
+}
+
+function isExcludedByPrefix(relPath: string, excludedPrefixes: string[]): boolean {
+  if (!excludedPrefixes.length) return false;
+  const normalized = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  return excludedPrefixes.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+  );
+}
+
 export function parseS3Uri(uri: string): { bucket: string; keyPrefix: string } {
   const value = uri.trim();
   if (!value.startsWith("s3://")) {
@@ -235,6 +255,7 @@ export async function uploadDirectoryToBucket(options: {
   localDir: string;
   keyPrefix: string;
   excludeDirNames?: string[];
+  exclude?: string[];
   concurrency?: number;
 }): Promise<{
   filesUploaded: number;
@@ -242,6 +263,7 @@ export async function uploadDirectoryToBucket(options: {
   errors: Array<{ file: string; key: string; error: string }>;
 }> {
   const excludeDirNames = new Set(options.excludeDirNames ?? []);
+  const excludedPrefixes = normalizeExcludedPrefixes(options.exclude);
   const keyPrefix = normalizeKeyPrefix(options.keyPrefix);
 
   const files = await listFilesRecursively({
@@ -254,7 +276,10 @@ export async function uploadDirectoryToBucket(options: {
   const errors: Array<{ file: string; key: string; error: string }> = [];
 
   await mapLimit(files, options.concurrency ?? 6, async (file) => {
-    const key = `${keyPrefix}${toPosixPath(file.relPath)}`;
+    const relPath = toPosixPath(file.relPath);
+    if (isExcludedByPrefix(relPath, excludedPrefixes)) return;
+
+    const key = `${keyPrefix}${relPath}`;
     try {
       await options.client.send(
         new PutObjectCommand({

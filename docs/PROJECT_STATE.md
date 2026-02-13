@@ -8,6 +8,10 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-13: studio polling tuning — kept connected-studio workspace-state reporting default at 5s (configurable via `WORKSPACE_STATE_REPORT_INTERVAL_MS`) while retaining host-resolution log throttling to reduce backend log noise.
+- 2026-02-13: publish prepared-time fix — prevented local studio bucket sync from overwriting `.vivd/build.json` so publish status reflects the latest save and doesn't revert.
+- 2026-02-13: publish domain UX + gating fixes — allowed active tenant-host domains to be used for publish, added explicit allowlist denial reasons (missing/other-org/inactive), debounced publish-domain validation to reduce jitter, and surfaced user-friendly disabled-button reasons in publish dialogs (app shell + Studio).
+- 2026-02-13: publish artifact metadata fix — ensured bucket build metadata includes `commitHash` for generated/imported artifacts and made git init commits reliable (prevents publish state from being stuck with “snapshot still being prepared” forever).
 - 2026-02-13: publish improvements — added project-level `redirects.json` (validated + rendered into Caddy snippets), fixed extensionless `.html` routing, fixed `redir` directive generation, and switched template-file maintenance to bucket-only mode.
 - 2026-02-13: tenant routing fixes — fixed host resolution precedence (active domains override `SUPERADMIN_HOSTS`), fixed canonical preview URLs, removed `__vivd_org` fallback, and reduced host-resolution log spam.
 - 2026-02-13: studio sync hardening — ignore transient missing files during artifact upload, retry SDK sync before AWS CLI fallback, and fail with explicit diagnostics on missing CLI.
@@ -81,8 +85,7 @@ packages/
   - [ ] Re-test usage reporting (`studioApi.reportUsage`).
   - [ ] Confirm backend-unavailable behavior correctly blocks usage.
 - [ ] Move backend project source-of-truth fully to object storage (remove remaining local-FS dependency).
-- [ ] Decide concurrency/locking model (single-writer lock vs optimistic).
-  - [x] Studio Git operations serialized (avoid `.git/index.lock` contention).
+- [ ] Decide concurrency/locking model (single-writer lock vs optimistic; Git ops already serialized).
 - [ ] Finalize sync exclusions (`dist/`, `.astro/`, caches, large artifacts).
 - [ ] Decide studio URL shape (iframe route vs redirect vs subdomain).
 - [ ] Build strategy decisions:
@@ -117,12 +120,6 @@ packages/
 
 ### Open work
 
-- [x] Add `domain` table (global uniqueness registry) with:
-  - [x] Domain owner org, status (`pending_verification`/`active`/`disabled`), and type (`managed_subdomain`/`custom_domain`).
-  - [x] Domain usage flags (`tenant_host`, `publish_target`) and audit metadata.
-  - [x] Verification data for custom domains (TXT/HTTP token + verified timestamp).
-- [x] Backfill managed tenant host domains (`{orgSlug}.vivd.studio`) for existing orgs and enforce global uniqueness.
-- [x] Add reserved slug/domain labels (e.g. `app`, `www`, `api`, `admin`) and validate them on org creation and any slug-change flow.
 - [ ] Add `subscription_tier` table.
 - [ ] Add `tenant_machine` table (machine URL/status/activity/Fly IDs).
 
@@ -140,11 +137,6 @@ packages/
 
 ### Open work
 
-- [x] Host/org mismatch UX (guide user to correct tenant domain).
-- [x] Cross-subdomain auth/session UX:
-  - [x] Define centralized entrypoint host (`app.vivd.studio`) behavior.
-  - [x] Redirect authenticated users to active tenant host (`{org}.vivd.studio`) when appropriate.
-  - [x] Keep super-admin workflows available on super-admin host(s) without accidental tenant pinning.
 - [ ] Invite-only signup via email links (SES-dependent).
 - [ ] Self-service password reset via email link.
 - [ ] Email integration:
@@ -166,8 +158,6 @@ packages/
 ### Open work
 
 - [ ] Add audit log for security-relevant actions (machine start/stop, storage writes, publish, invites).
-- [x] Enforce publish-domain allowlist checks server-side so users can only publish to org-approved domains.
-- [x] Remove temporary preview org fallback (`__vivd_org`) after tenant-host routing stability window.
 
 ---
 
@@ -229,7 +219,7 @@ packages/
 | Question | Options | Status |
 |----------|---------|--------|
 | Studio URL pattern | Iframe `/studio/...` vs redirect vs `{org}.vivd.studio` | TBD |
-| Tenant entrypoint strategy | Central `app.vivd.studio` + redirect to active org host vs fully host-pinned only | In progress |
+| Tenant entrypoint strategy | Central `app.vivd.studio` + redirect to active org host vs fully host-pinned only | Implemented |
 | Fly app strategy | Single shared app vs app-per-tenant | TBD |
 | Concurrency model | Single-writer lock vs optimistic | TBD |
 | Build execution location | Backend vs studio vs dedicated builder | TBD |

@@ -16,9 +16,13 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  Eye,
+  EyeOff,
   FolderOpen,
   History,
+  Image,
   Laptop,
+  Loader2,
   Menu,
   MessageSquare,
   Monitor,
@@ -27,7 +31,19 @@ import {
   RefreshCw,
   Smartphone,
   Sun,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 import { DEVICE_PRESETS } from "../../types";
 import type { DevicePreset } from "../../types";
 
@@ -77,6 +93,15 @@ interface MobileActionsMenuProps {
   // Permissions
   canUseAgent: boolean;
 
+  // Connected-mode actions
+  isConnectedMode?: boolean;
+  handleTogglePreviewUrl?: () => void;
+  isTogglingPreviewUrl?: boolean;
+  handleRegenerateThumbnail?: () => void;
+  isRegeneratingThumbnail?: boolean;
+  handleDeleteProject?: () => void;
+  isDeletingProject?: boolean;
+
   // Optional: User menu items (for PreviewToolbar)
   userMenuContent?: React.ReactNode;
 }
@@ -108,9 +133,17 @@ export function MobileActionsMenu({
   publishStatus,
   theme,
   setTheme,
+  isConnectedMode,
+  handleTogglePreviewUrl,
+  isTogglingPreviewUrl,
+  handleRegenerateThumbnail,
+  isRegeneratingThumbnail,
+  handleDeleteProject,
+  isDeletingProject,
   canUseAgent,
   userMenuContent,
 }: MobileActionsMenuProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
   const getHostAppOrigin = () => {
     const params = new URLSearchParams(window.location.search);
@@ -152,6 +185,7 @@ export function MobileActionsMenu({
   };
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 md:hidden">
@@ -286,6 +320,45 @@ export function MobileActionsMenu({
                 <span className="ml-auto h-2 w-2 bg-amber-500 rounded-full" />
               )}
             </DropdownMenuItem>
+            {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}
+            {isConnectedMode && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleTogglePreviewUrl}
+                  disabled={isTogglingPreviewUrl}
+                >
+                  {publicPreviewEnabled ? (
+                    <EyeOff className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Eye className="w-4 h-4 mr-2" />
+                  )}
+                  {publicPreviewEnabled
+                    ? "Disable preview URL"
+                    : "Enable preview URL"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleRegenerateThumbnail}
+                  disabled={isRegeneratingThumbnail}
+                >
+                  {isRegeneratingThumbnail ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Image className="w-4 h-4 mr-2" />
+                  )}
+                  {isRegeneratingThumbnail
+                    ? "Regenerating thumbnail..."
+                    : "Regenerate thumbnail"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete project
+                </DropdownMenuItem>
+              </>
+            )}
           </>
         )}
 
@@ -326,5 +399,36 @@ export function MobileActionsMenu({
         {userMenuContent}
       </DropdownMenuContent>
     </DropdownMenu>
+
+    {/* Delete confirmation dialog */}
+    {isConnectedMode && (
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{projectSlug}</strong> and
+              all its versions. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingProject}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeletingProject}
+              onClick={() => {
+                handleDeleteProject?.();
+                setShowDeleteConfirm(false);
+              }}
+            >
+              {isDeletingProject ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    )}
+    </>
   );
 }

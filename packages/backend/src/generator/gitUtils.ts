@@ -12,7 +12,12 @@ export async function initializeGitRepository(
   try {
     await execa("git", ["init"], { cwd });
     await execa("git", ["branch", "-M", "main"], { cwd });
-    await execa("git", ["add", "."], { cwd });
+
+    // Configure git user for commits (required in containers / CI).
+    await execa("git", ["config", "user.email", "vivd@local"], { cwd });
+    await execa("git", ["config", "user.name", "Vivd"], { cwd });
+
+    await execa("git", ["add", "-A"], { cwd });
     await execa("git", ["commit", "-m", message], { cwd });
     return true;
   } catch (error) {

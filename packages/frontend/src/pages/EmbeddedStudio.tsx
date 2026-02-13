@@ -17,16 +17,38 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
+import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-import { Copy, Image, Loader2, MoreHorizontal } from "lucide-react";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Image,
+  Loader2,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -105,6 +127,40 @@ export default function EmbeddedStudio() {
       });
     },
   });
+  const setPublicPreviewEnabledMutation =
+    trpc.project.setPublicPreviewEnabled.useMutation({
+      onSuccess: (data) => {
+        toast.success(
+          data.publicPreviewEnabled
+            ? "Preview URL enabled"
+            : "Preview URL disabled",
+        );
+        utils.project.list.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to update preview URL setting", {
+          description: error.message,
+        });
+      },
+    });
+  const deleteProjectMutation = trpc.project.delete.useMutation({
+    onSuccess: (data) => {
+      toast.success("Project Deleted", { description: data.message });
+      navigate(ROUTES.DASHBOARD);
+    },
+    onError: (error) => {
+      toast.error("Failed to delete project", {
+        description: error.message,
+      });
+    },
+  });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { data: session } = authClient.useSession();
+  const { data: membership } = trpc.organization.getMyMembership.useQuery(
+    undefined,
+    { enabled: !!session },
+  );
+  const canManagePreview = membership?.organizationRole !== "client_editor";
 
   // Reset local state when navigating between projects.
   useEffect(() => {
@@ -482,6 +538,7 @@ export default function EmbeddedStudio() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
               <DropdownMenuItem
                 onClick={handleCopyPreviewUrl}
                 disabled={!previewIframeSrc || !publicPreviewEnabled}
@@ -492,6 +549,49 @@ export default function EmbeddedStudio() {
                   : publicPreviewEnabled
                     ? "Copy preview URL"
                     : "Preview URL disabled"}
+              </DropdownMenuItem>
+              {canManagePreview && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!projectSlug) return;
+                    setPublicPreviewEnabledMutation.mutate({
+                      slug: projectSlug,
+                      enabled: !publicPreviewEnabled,
+                    });
+                  }}
+                  disabled={setPublicPreviewEnabledMutation.isPending}
+                >
+                  {publicPreviewEnabled ? (
+                    <EyeOff className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Eye className="h-4 w-4 mr-2" />
+                  )}
+                  {publicPreviewEnabled
+                    ? "Disable preview URL"
+                    : "Enable preview URL"}
+                </DropdownMenuItem>
+              )}
+              {project?.url && (
+                <DropdownMenuItem
+                  onClick={() => window.open(project.url, "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Original website
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={() => {
+                  if (!projectSlug) return;
+                  const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                  window.open(
+                    `${baseUrl}/vivd-studio/api/download/${projectSlug}/${studioVersion}`,
+                    "_blank",
+                  );
+                }}
+                disabled={!isSelectedVersionCompleted}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download as ZIP
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleRegenerateThumbnail}
@@ -508,6 +608,14 @@ export default function EmbeddedStudio() {
                 {regenerateThumbnailMutation.isPending
                   ? "Regenerating thumbnail..."
                   : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete project
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -566,6 +674,37 @@ export default function EmbeddedStudio() {
           onOpenStudio={handleEdit}
         />
       ) : null}
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{projectSlug}</strong> and
+              all its versions. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteProjectMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteProjectMutation.isPending}
+              onClick={() => {
+                if (!projectSlug) return;
+                deleteProjectMutation.mutate({
+                  slug: projectSlug,
+                  confirmationText: projectSlug,
+                });
+                setShowDeleteConfirm(false);
+              }}
+            >
+              {deleteProjectMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
