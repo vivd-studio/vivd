@@ -26,7 +26,13 @@ import {
   buildAndUploadPublished,
   syncSourceToBucket,
 } from "../services/ArtifactSyncService.js";
-import { syncPushToGitHub } from "../services/GitHubSyncService.js";
+import {
+  checkGitHubRepoExists,
+  getGitHubSyncProjectInfo,
+  sanitizeGitAuthFromMessage,
+  syncPushToGitHub,
+} from "../services/GitHubSyncService.js";
+import { withBucketSyncPaused } from "../services/SyncPauseService.js";
 import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
 import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
 import { workspaceStateReporter } from "../services/WorkspaceStateReporter.js";
@@ -126,6 +132,26 @@ async function callConnectedBackendMutation<T>(
 
   const body = (await response.json()) as any;
   return (body?.result?.data?.json ?? body?.result?.data ?? body) as T;
+}
+
+async function getGitHubSyncUiGate(): Promise<{ allowed: boolean; reason?: string }> {
+  if (!isConnectedMode()) return { allowed: true };
+  try {
+    const config = await callConnectedBackendQuery<{
+      isSuperAdminUser?: boolean;
+    }>("config.getAppConfig", {});
+    if (config?.isSuperAdminUser) return { allowed: true };
+    return { allowed: false, reason: "GitHub sync is super-admin only." };
+  } catch {
+    return { allowed: false, reason: "GitHub sync is super-admin only." };
+  }
+}
+
+async function assertGitHubSyncAllowed(): Promise<void> {
+  const gate = await getGitHubSyncUiGate();
+  if (!gate.allowed) {
+    throw new Error(gate.reason || "GitHub sync is super-admin only.");
+  }
 }
 
 export const projectRouter = router({
@@ -492,10 +518,12 @@ export const projectRouter = router({
       void workspaceStateReporter.reportSoon();
 
       const projectDir = ctx.workspace.getProjectPath();
-      const github = await syncPushToGitHub({
-        cwd: projectDir,
-        slug: input.slug,
-        version: input.version,
+      const github = await ctx.workspace.runExclusive("githubPush", async ({ cwd }) => {
+        return await syncPushToGitHub({
+          cwd,
+          slug: input.slug,
+          version: input.version,
+        });
       });
 
       const config = detectProjectType(projectDir);
@@ -729,6 +757,352 @@ export const projectRouter = router({
         throw new Error("Unpublish is available in connected mode only.");
       }
       return await callConnectedBackendMutation("project.unpublish", input);
+    }),
+
+  gitHubSyncStatus: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const gate = await getGitHubSyncUiGate();
+      if (!gate.allowed) {
+        return {
+          uiAllowed: false,
+          uiReason: gate.reason ?? "GitHub sync is super-admin only.",
+          enabled: false,
+          configured: false,
+          remoteName: "origin",
+          repoFullName: null as string | null,
+          remoteUrl: null as string | null,
+          sshUrl: null as string | null,
+          remoteRepoExists: null as boolean | null,
+          remoteMainExists: null as boolean | null,
+          headHash: null as string | null,
+          branch: null as string | null,
+          detached: true,
+          hasUncommittedChanges: false,
+          workingCommitPinned: false,
+          ahead: null as number | null,
+          behind: null as number | null,
+          diverged: null as boolean | null,
+          fetchError: null as string | null,
+          pull: {
+            allowed: false,
+            reason: gate.reason ?? "GitHub sync is super-admin only.",
+          },
+          forceSync: {
+            allowed: false,
+            reason: gate.reason ?? "GitHub sync is super-admin only.",
+          },
+          lastFetchedAt: null as string | null,
+        };
+      }
+
+      if (!ctx.workspace.isInitialized()) {
+        return {
+          uiAllowed: true,
+          uiReason: null as string | null,
+          enabled: false,
+          configured: false,
+          remoteName: "origin",
+          repoFullName: null as string | null,
+          remoteUrl: null as string | null,
+          sshUrl: null as string | null,
+          remoteRepoExists: null as boolean | null,
+          remoteMainExists: null as boolean | null,
+          headHash: null as string | null,
+          branch: null as string | null,
+          detached: true,
+          hasUncommittedChanges: false,
+          workingCommitPinned: false,
+          ahead: null as number | null,
+          behind: null as number | null,
+          diverged: null as boolean | null,
+          fetchError: "Workspace not initialized",
+          pull: {
+            allowed: false,
+            reason: "Workspace not initialized",
+          },
+          forceSync: {
+            allowed: false,
+            reason: "Workspace not initialized",
+          },
+          lastFetchedAt: null as string | null,
+        };
+      }
+
+      const info = getGitHubSyncProjectInfo({
+        slug: input.slug,
+        version: input.version,
+      });
+
+      const configuredInfo = info.enabled && info.configured ? info : null;
+      const remoteBranch = "main";
+
+      const status = await ctx.workspace.getRemoteSyncStatus({
+        remoteName: info.remoteName,
+        remoteUrl: configuredInfo?.remoteUrl,
+        remoteBranch: configuredInfo ? remoteBranch : "",
+        authHeader: configuredInfo?.httpAuthHeader,
+        fetch: Boolean(configuredInfo),
+      });
+
+      let remoteRepoExists: boolean | null = null;
+      if (configuredInfo) {
+        try {
+          remoteRepoExists = await checkGitHubRepoExists(configuredInfo);
+        } catch {
+          remoteRepoExists = null;
+        }
+      }
+
+      const fetchError = status.fetchError
+        ? sanitizeGitAuthFromMessage(status.fetchError)
+        : null;
+
+      const pullEligibility = (() => {
+        if (!info.enabled) {
+          return { allowed: false, reason: "GitHub sync is disabled." };
+        }
+        if (!info.configured) {
+          return { allowed: false, reason: info.error };
+        }
+        if (remoteRepoExists === false) {
+          return { allowed: false, reason: "GitHub repo not found." };
+        }
+        if (fetchError) {
+          return { allowed: false, reason: `Fetch failed: ${fetchError}` };
+        }
+        if (status.hasUncommittedChanges) {
+          return { allowed: false, reason: "You have uncommitted changes." };
+        }
+        if (status.workingCommitPinned) {
+          return { allowed: false, reason: "You're viewing an older snapshot." };
+        }
+        if (status.detached) {
+          return { allowed: false, reason: "You're in a detached HEAD state." };
+        }
+        if (status.branch !== remoteBranch) {
+          return {
+            allowed: false,
+            reason: `You're on '${status.branch ?? "detached"}'. Switch to '${remoteBranch}'.`,
+          };
+        }
+        if (status.remoteBranchExists === false) {
+          return { allowed: false, reason: "Remote main branch not found." };
+        }
+        if (status.ahead === null || status.behind === null) {
+          return { allowed: false, reason: "Unable to compare local vs GitHub." };
+        }
+        if (status.ahead > 0 && status.behind > 0) {
+          return { allowed: false, reason: "Your local branch has diverged from GitHub." };
+        }
+        if (status.ahead > 0) {
+          return { allowed: false, reason: "Your local branch is ahead of GitHub." };
+        }
+        if (status.behind === 0) {
+          return { allowed: false, reason: "Already up to date." };
+        }
+        return { allowed: true };
+      })();
+
+      const forceEligibility = (() => {
+        if (!info.enabled) {
+          return { allowed: false, reason: "GitHub sync is disabled." };
+        }
+        if (!info.configured) {
+          return { allowed: false, reason: info.error };
+        }
+        if (remoteRepoExists === false) {
+          return { allowed: false, reason: "GitHub repo not found." };
+        }
+        if (fetchError) {
+          return { allowed: false, reason: `Fetch failed: ${fetchError}` };
+        }
+        if (status.remoteBranchExists === false) {
+          return { allowed: false, reason: "Remote main branch not found." };
+        }
+        return { allowed: true };
+      })();
+
+      const lastFetchedAt =
+        configuredInfo && !fetchError ? new Date().toISOString() : null;
+
+      return {
+        uiAllowed: true,
+        uiReason: null as string | null,
+        enabled: info.enabled,
+        configured: info.configured,
+        remoteName: info.remoteName,
+        repoFullName: configuredInfo ? configuredInfo.repoFullName : null,
+        remoteUrl: configuredInfo ? configuredInfo.remoteUrl : status.remoteUrl,
+        sshUrl: configuredInfo ? configuredInfo.sshUrl : null,
+        remoteRepoExists,
+        remoteMainExists: status.remoteBranchExists,
+        headHash: status.headHash,
+        branch: status.branch,
+        detached: status.detached,
+        hasUncommittedChanges: status.hasUncommittedChanges,
+        workingCommitPinned: status.workingCommitPinned,
+        ahead: status.ahead,
+        behind: status.behind,
+        diverged: status.diverged,
+        fetchError,
+        pull: pullEligibility,
+        forceSync: forceEligibility,
+        lastFetchedAt,
+      };
+    }),
+
+  gitHubPullFastForward: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertGitHubSyncAllowed();
+      if (!ctx.workspace.isInitialized()) {
+        throw new Error("Workspace not initialized");
+      }
+
+      const info = getGitHubSyncProjectInfo({
+        slug: input.slug,
+        version: input.version,
+      });
+      if (!info.enabled) {
+        throw new Error("GitHub sync is disabled.");
+      }
+      if (!info.configured) {
+        throw new Error(info.error);
+      }
+
+      const projectDir = ctx.workspace.getProjectPath();
+      const config = detectProjectType(projectDir);
+
+      try {
+        const result = await withBucketSyncPaused(async () => {
+          const pull = await ctx.workspace.pullFastForwardFromRemote({
+            remoteName: info.remoteName,
+            remoteUrl: info.remoteUrl,
+            remoteBranch: "main",
+            authHeader: info.httpAuthHeader,
+          });
+
+          await syncSourceToBucket({
+            projectDir,
+            slug: input.slug,
+            version: input.version,
+            commitHash: pull.headHash,
+          });
+
+          if (config.framework === "astro") {
+            await buildAndUploadPreview({
+              projectDir,
+              slug: input.slug,
+              version: input.version,
+              commitHash: pull.headHash,
+            });
+          }
+
+          return pull;
+        });
+
+        projectTouchReporter.touch(input.slug);
+        void workspaceStateReporter.reportSoon();
+        thumbnailGenerationReporter.request(input.slug, input.version);
+
+        return {
+          success: true,
+          headHash: result.headHash,
+          previousHeadHash: result.previousHeadHash,
+          message: `Pulled latest from GitHub (${result.headHash.slice(0, 7)})`,
+        };
+      } catch (err) {
+        const message = sanitizeGitAuthFromMessage(
+          err instanceof Error ? err.message : String(err),
+        );
+        throw new Error(message);
+      }
+    }),
+
+  gitHubForceSync: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertGitHubSyncAllowed();
+      if (!ctx.workspace.isInitialized()) {
+        throw new Error("Workspace not initialized");
+      }
+
+      const info = getGitHubSyncProjectInfo({
+        slug: input.slug,
+        version: input.version,
+      });
+      if (!info.enabled) {
+        throw new Error("GitHub sync is disabled.");
+      }
+      if (!info.configured) {
+        throw new Error(info.error);
+      }
+
+      const projectDir = ctx.workspace.getProjectPath();
+      const config = detectProjectType(projectDir);
+
+      try {
+        const result = await withBucketSyncPaused(async () => {
+          const sync = await ctx.workspace.forceSyncFromRemote({
+            remoteName: info.remoteName,
+            remoteUrl: info.remoteUrl,
+            remoteBranch: "main",
+            authHeader: info.httpAuthHeader,
+          });
+
+          await syncSourceToBucket({
+            projectDir,
+            slug: input.slug,
+            version: input.version,
+            commitHash: sync.headHash,
+            exact: true,
+          });
+
+          if (config.framework === "astro") {
+            await buildAndUploadPreview({
+              projectDir,
+              slug: input.slug,
+              version: input.version,
+              commitHash: sync.headHash,
+            });
+          }
+
+          return sync;
+        });
+
+        projectTouchReporter.touch(input.slug);
+        void workspaceStateReporter.reportSoon();
+        thumbnailGenerationReporter.request(input.slug, input.version);
+
+        return {
+          success: true,
+          headHash: result.headHash,
+          backupTag: result.backupTag,
+          backupCommitHash: result.backupCommitHash,
+          message: `Force-synced from GitHub (${result.headHash.slice(0, 7)})`,
+        };
+      } catch (err) {
+        const message = sanitizeGitAuthFromMessage(
+          err instanceof Error ? err.message : String(err),
+        );
+        throw new Error(message);
+      }
     }),
 
   gitWorkingCommit: publicProcedure

@@ -19,6 +19,11 @@ import {
   Loader2,
   Globe,
   Wand2,
+  Github,
+  RefreshCw,
+  ArrowDownToLine,
+  AlertTriangle,
+  Copy,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -90,10 +95,20 @@ export function VersionHistoryPanel({
     { enabled: open && !!projectSlug }
   );
 
+  const {
+    data: gitHubSyncStatus,
+    isFetching: gitHubSyncFetching,
+    refetch: refetchGitHubSyncStatus,
+  } = trpc.project.gitHubSyncStatus.useQuery(
+    { slug: projectSlug, version },
+    { enabled: open && !!projectSlug }
+  );
+
   const [showLoadWarning, setShowLoadWarning] = useState(false);
   const [pendingLoadHash, setPendingLoadHash] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [showForceSyncConfirm, setShowForceSyncConfirm] = useState(false);
 
   // Save State
   const [commitMessage, setCommitMessage] = useState("");
@@ -126,6 +141,7 @@ export function VersionHistoryPanel({
           slug: projectSlug,
           version,
         });
+        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version });
         onRefresh?.();
       }
     },
@@ -157,10 +173,48 @@ export function VersionHistoryPanel({
     onSuccess: (data) => {
       toast.success(data.message);
       utils.project.gitHasChanges.invalidate({ slug: projectSlug, version });
+      utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version });
       onRefresh?.();
     },
     onError: (error) => {
       toast.error(`Failed to discard: ${error.message}`);
+    },
+  });
+
+  const gitHubPullMutation = trpc.project.gitHubPullFastForward.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      void Promise.all([
+        utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+      ]);
+      onRefresh?.();
+    },
+    onError: (error) => {
+      toast.error(`GitHub pull failed: ${error.message}`);
+    },
+  });
+
+  const gitHubForceSyncMutation = trpc.project.gitHubForceSync.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message, {
+        description: data.backupTag
+          ? `Backup tag: ${data.backupTag}`
+          : undefined,
+      });
+      setShowForceSyncConfirm(false);
+      void Promise.all([
+        utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+        utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+      ]);
+      onRefresh?.();
+    },
+    onError: (error) => {
+      toast.error(`GitHub force sync failed: ${error.message}`);
     },
   });
 
@@ -197,6 +251,7 @@ export function VersionHistoryPanel({
         utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
         utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
         utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+        utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
       ]);
       onRefresh?.();
     },
@@ -233,6 +288,129 @@ export function VersionHistoryPanel({
       version,
       message: `Restored: ${snapshotName}`,
     });
+  };
+
+  const gitHubStatusBadge = (() => {
+    const status = gitHubSyncStatus;
+    if (!status) {
+      return (
+        <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+          Loading
+        </Badge>
+      );
+    }
+
+    if (!status.enabled) {
+      return (
+        <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+          Disabled
+        </Badge>
+      );
+    }
+
+    if (!status.configured) {
+      return (
+        <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+          Not configured
+        </Badge>
+      );
+    }
+
+    if (status.fetchError) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 text-red-700 border-red-200 bg-red-50"
+        >
+          Error
+        </Badge>
+      );
+    }
+
+    if (status.hasUncommittedChanges) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 text-amber-700 border-amber-200 bg-amber-50"
+        >
+          Local changes
+        </Badge>
+      );
+    }
+
+    if (status.workingCommitPinned) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 text-amber-700 border-amber-200 bg-amber-50"
+        >
+          Older snapshot
+        </Badge>
+      );
+    }
+
+    if (status.diverged) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 text-purple-700 border-purple-200 bg-purple-50"
+        >
+          Diverged
+        </Badge>
+      );
+    }
+
+    if ((status.behind ?? 0) > 0 && (status.ahead ?? 0) === 0) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 text-blue-700 border-blue-200 bg-blue-50"
+        >
+          Behind {status.behind}
+        </Badge>
+      );
+    }
+
+    if ((status.ahead ?? 0) > 0 && (status.behind ?? 0) === 0) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] h-5 px-1.5 text-slate-700 border-slate-200 bg-slate-50"
+        >
+          Ahead {status.ahead}
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+        Up to date
+      </Badge>
+    );
+  })();
+
+  const showGitHubSync = Boolean(gitHubSyncStatus?.uiAllowed);
+  const gitHubBusy = gitHubPullMutation.isPending || gitHubForceSyncMutation.isPending;
+  const pullAllowed = Boolean(gitHubSyncStatus?.pull.allowed);
+  const forceAllowed = Boolean(gitHubSyncStatus?.forceSync.allowed);
+  const pullDisabled = gitHubBusy || gitHubSyncFetching || !pullAllowed;
+  const forceDisabled = gitHubBusy || gitHubSyncFetching || !forceAllowed;
+
+  const handleCopyGitHubSshUrl = () => {
+    const url = gitHubSyncStatus?.sshUrl;
+    if (!url) return;
+    if (!navigator.clipboard?.writeText) {
+      toast.error("Clipboard is not available");
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success("Copied GitHub SSH URL"))
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error("Failed to copy GitHub SSH URL", { description: message });
+      });
   };
 
   return (
@@ -372,6 +550,141 @@ export function VersionHistoryPanel({
               </div>
             </div>
           )}
+
+          {/* GitHub Sync Section (super-admin only for now) */}
+          {showGitHubSync ? (
+            <div className="p-4 rounded-lg border bg-card shadow-sm space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Github className="h-4 w-4 text-muted-foreground" />
+                  <div className="text-sm font-semibold">GitHub Sync</div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => void refetchGitHubSyncStatus()}
+                    disabled={gitHubBusy || gitHubSyncFetching}
+                    title="Refresh GitHub status"
+                  >
+                    {gitHubSyncFetching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {gitHubStatusBadge}
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground space-y-1">
+                {gitHubSyncStatus?.repoFullName ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span>Repo:</span> <code>{gitHubSyncStatus.repoFullName}</code>
+                  </div>
+                ) : null}
+                {gitHubSyncStatus?.sshUrl ? (
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="shrink-0">SSH:</span>
+                    <code
+                      className="flex-1 min-w-0 truncate"
+                      title={gitHubSyncStatus.sshUrl}
+                    >
+                      {gitHubSyncStatus.sshUrl}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0"
+                      onClick={handleCopyGitHubSshUrl}
+                      title="Copy SSH URL"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : null}
+                {gitHubSyncStatus?.configured &&
+                gitHubSyncStatus?.remoteRepoExists === false ? (
+                  <div className="flex items-start gap-2 text-red-700">
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <span>GitHub repo not found for this project version.</span>
+                  </div>
+                ) : null}
+                {gitHubSyncStatus?.configured && gitHubSyncStatus?.fetchError ? (
+                  <div className="flex items-start gap-2 text-red-700">
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <span>{gitHubSyncStatus.fetchError}</span>
+                  </div>
+                ) : null}
+                {gitHubSyncStatus?.ahead !== null &&
+                gitHubSyncStatus?.ahead !== undefined &&
+                gitHubSyncStatus?.behind !== null &&
+                gitHubSyncStatus?.behind !== undefined ? (
+                  <div>
+                    Local: ahead {gitHubSyncStatus.ahead} • behind{" "}
+                    {gitHubSyncStatus.behind}
+                  </div>
+                ) : null}
+                {gitHubSyncStatus?.lastFetchedAt ? (
+                  <div>Checked: {formatDate(gitHubSyncStatus.lastFetchedAt)}</div>
+                ) : null}
+                {gitHubSyncStatus && !gitHubSyncStatus.enabled ? (
+                  <div>
+                    GitHub sync is disabled in this studio environment.
+                  </div>
+                ) : null}
+                {gitHubSyncStatus?.enabled && !gitHubSyncStatus?.configured ? (
+                  <div>
+                    Configure <code>GITHUB_ORG</code> and <code>GITHUB_TOKEN</code>{" "}
+                    to enable pulls.
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    gitHubPullMutation.mutate({ slug: projectSlug, version })
+                  }
+                  disabled={pullDisabled}
+                >
+                  {gitHubPullMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <ArrowDownToLine className="h-4 w-4 mr-2" />
+                  )}
+                  Pull
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowForceSyncConfirm(true)}
+                  disabled={forceDisabled}
+                  className="border-red-200 text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  {gitHubForceSyncMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                  )}
+                  Force sync
+                </Button>
+              </div>
+
+              {!pullAllowed && gitHubSyncStatus?.pull.reason ? (
+                <div className="text-xs text-muted-foreground">
+                  Pull disabled: {gitHubSyncStatus.pull.reason}
+                </div>
+              ) : null}
+              {!forceAllowed && gitHubSyncStatus?.forceSync.reason ? (
+                <div className="text-xs text-muted-foreground">
+                  Force sync disabled: {gitHubSyncStatus.forceSync.reason}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* Commit list */}
           <div className="flex-1 flex flex-col min-h-0">
@@ -575,6 +888,51 @@ export function VersionHistoryPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {showGitHubSync ? (
+        <AlertDialog
+          open={showForceSyncConfirm}
+          onOpenChange={setShowForceSyncConfirm}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Force sync from GitHub?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will overwrite your local workspace with GitHub’s <code>main</code>{" "}
+                branch and remove files deleted on GitHub. Vivd will create a local
+                backup tag before overwriting.
+                {gitHubSyncStatus?.hasUncommittedChanges
+                  ? " You currently have local changes; Vivd will include them in the backup."
+                  : ""}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={gitHubForceSyncMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={gitHubForceSyncMutation.isPending}
+                onClick={() => {
+                  gitHubForceSyncMutation.mutate({ slug: projectSlug, version });
+                }}
+              >
+                {gitHubForceSyncMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Force syncing...
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Force sync
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </Sheet>
   );
 }

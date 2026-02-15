@@ -969,21 +969,23 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       OPENCODE_PORT_START: "4096",
     };
 
-    for (const [k, v] of Object.entries(args.env)) {
-      if (typeof v === "string") env[k] = v;
-    }
+	    const explicitEnvKeys = new Set(Object.keys(args.env));
+	    for (const [k, v] of Object.entries(args.env)) {
+	      if (typeof v === "string") env[k] = v;
+	    }
 
-    // Optional passthrough for local-first testing (keeps config explicit).
-    const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH ||
-      "GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME")
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
+	    // Optional passthrough for local-first testing (keeps config explicit).
+		    const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH ||
+		      "GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME")
+		      .split(",")
+		      .map((k) => k.trim())
+		      .filter(Boolean);
 
-    for (const key of passthrough) {
-      const value = process.env[key];
-      if (value) env[key] = value;
-    }
+	    for (const key of passthrough) {
+	      if (explicitEnvKeys.has(key)) continue;
+	      const value = process.env[key];
+	      if (value) env[key] = value;
+	    }
 
     return env;
   }

@@ -8,6 +8,8 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-15: implemented Studio GitHub pull + force sync (ff-only + overwrite) with bucket exact-sync, superadmin-only gating, SSH URL copy, and environment repo prefix support via `GITHUB_REPO_PREFIX` (e.g. `dev-<org>-...`).
+- 2026-02-14: documented publishing flow review + hardening/test plan (`docs/publishing-flow-review.md`).
 - 2026-02-13: super-admin template maintenance now runs across all tenants (iterates every organization) instead of only the currently selected org.
 - 2026-02-13: studio polling tuning — kept connected-studio workspace-state reporting default at 5s (configurable via `WORKSPACE_STATE_REPORT_INTERVAL_MS`) while retaining host-resolution log throttling to reduce backend log noise.
 - 2026-02-13: publish prepared-time fix — prevented local studio bucket sync from overwriting `.vivd/build.json` so publish status reflects the latest save and doesn't revert.
@@ -16,6 +18,7 @@ Progress log:
 - 2026-02-13: publish improvements — added project-level `redirects.json` (validated + rendered into Caddy snippets), fixed extensionless `.html` routing, fixed `redir` directive generation, and switched template-file maintenance to bucket-only mode.
 - 2026-02-13: tenant routing fixes — fixed host resolution precedence (active domains override `SUPERADMIN_HOSTS`), fixed canonical preview URLs, removed `__vivd_org` fallback, and reduced host-resolution log spam.
 - 2026-02-13: studio sync hardening — ignore transient missing files during artifact upload, retry SDK sync before AWS CLI fallback, and fail with explicit diagnostics on missing CLI.
+- 2026-02-13: documented GitHub → Studio → bucket git sync design (`docs/git-sync-plan.md`).
 - 2026-02-12: tenant-domain governance — implemented `domain` registry + migration/backfill, host-based context resolution (`hostKind`), super-admin domain management UI, publish allowlist enforcement, tenant-host org switching + redirects, and canonical preview URLs.
 - 2026-02-12: tenant routing stabilization — fixed prod lockout on base domain, org context fallback for studio machine calls, connected-studio 401s, cross-host org switching edge cases, and env propagation in compose deployments.
 - 2026-02-12: bucket-first ZIP exports — made downloads object-storage-only, reintroduced "Download as ZIP" in studio toolbar, and triggered source-artifact sync after patch saves.

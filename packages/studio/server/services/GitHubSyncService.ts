@@ -61,6 +61,37 @@ function getTenantId(): string {
   return (process.env.VIVD_TENANT_ID || process.env.TENANT_ID || "default").trim();
 }
 
+export type GitHubSyncProjectInfo =
+  | {
+      enabled: false;
+      configured: false;
+      strict: boolean;
+      remoteName: string;
+      error?: string;
+    }
+  | {
+      enabled: true;
+      configured: false;
+      strict: boolean;
+      remoteName: string;
+      error: string;
+    }
+  | {
+      enabled: true;
+      configured: true;
+      strict: boolean;
+      org: string;
+      token: string;
+      apiBaseUrl: string;
+      gitHost: string;
+      remoteName: string;
+      repoName: string;
+      repoFullName: string;
+      remoteUrl: string;
+      sshUrl: string;
+      httpAuthHeader: string;
+    };
+
 function buildGitHubRepoName(args: {
   tenantId: string;
   slug: string;
@@ -68,12 +99,14 @@ function buildGitHubRepoName(args: {
 }): string {
   const settings = getGitHubSyncSettings();
   const base = `${args.slug}-v${args.version}`;
+
   const rawPrefix = settings.repoPrefix.trim();
   const normalizedPrefix = rawPrefix
     ? rawPrefix.endsWith("-")
       ? rawPrefix
       : `${rawPrefix}-`
     : "";
+
   const withPrefix = normalizedPrefix
     ? `${normalizedPrefix}${base}`
     : `${args.tenantId}-${base}`;
@@ -89,16 +122,78 @@ function buildGitHubRemoteUrl(org: string, repo: string, gitHost: string): strin
   return `https://${gitHost}/${org}/${repo}.git`;
 }
 
+function buildGitHubSshUrl(org: string, repo: string, gitHost: string): string {
+  return `git@${gitHost}:${org}/${repo}.git`;
+}
+
 function getGitHttpAuthHeaderValue(token: string): string {
   const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
   return `AUTHORIZATION: basic ${basic}`;
 }
 
-function sanitizeGitAuthFromMessage(message: string): string {
+export function sanitizeGitAuthFromMessage(message: string): string {
   return message.replace(
     /http\.extraHeader=AUTHORIZATION:\s*basic\s+[A-Za-z0-9+/=]+/gi,
     "http.extraHeader=AUTHORIZATION: basic <redacted>",
   );
+}
+
+export function getGitHubSyncProjectInfo(params: {
+  slug: string;
+  version: number;
+  tenantId?: string;
+}): GitHubSyncProjectInfo {
+  const settings = getGitHubSyncSettings();
+  if (!settings.enabled) {
+    return {
+      enabled: false,
+      configured: false,
+      strict: settings.strict,
+      remoteName: settings.remoteName,
+    };
+  }
+
+  if (!settings.org || !settings.token) {
+    return {
+      enabled: true,
+      configured: false,
+      strict: settings.strict,
+      remoteName: settings.remoteName,
+      error: "GITHUB_ORG/GITHUB_TOKEN missing",
+    };
+  }
+
+  const tenantId = params.tenantId || getTenantId();
+  const repoName = buildGitHubRepoName({
+    tenantId,
+    slug: params.slug,
+    version: params.version,
+  });
+  const remoteUrl = buildGitHubRemoteUrl(settings.org, repoName, settings.gitHost);
+  const sshUrl = buildGitHubSshUrl(settings.org, repoName, settings.gitHost);
+
+  return {
+    enabled: true,
+    configured: true,
+    strict: settings.strict,
+    org: settings.org,
+    token: settings.token,
+    apiBaseUrl: settings.apiBaseUrl,
+    gitHost: settings.gitHost,
+    remoteName: settings.remoteName,
+    repoName,
+    repoFullName: `${settings.org}/${repoName}`,
+    remoteUrl,
+    sshUrl,
+    httpAuthHeader: getGitHttpAuthHeaderValue(settings.token),
+  };
+}
+
+export async function checkGitHubRepoExists(info: Extract<GitHubSyncProjectInfo, { configured: true }>): Promise<boolean> {
+  const settings = getGitHubSyncSettings();
+  if (!settings.enabled) return false;
+  if (!info.org || !info.repoName) return false;
+  return await repoExists(info.org, info.repoName, settings);
 }
 
 async function runGit(options: {

@@ -24,6 +24,8 @@ export const configRouter = router({
       // Single project mode: when true, the app operates with a single project
       // and bypasses the project list/dashboard view
       singleProjectMode: process.env.SINGLE_PROJECT_MODE === "true",
+      // Whether the current session belongs to a super-admin user.
+      isSuperAdminUser: ctx.session.user.role === "super_admin",
       // Whether the current request host is allowed to access the super-admin panel.
       isSuperAdminHost: ctx.isSuperAdminHost,
       hostKind: ctx.hostKind,

@@ -5,6 +5,26 @@ import { db } from "../../db";
 import { organization, session as sessionTable } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
+function normalizeGitHubRepoPrefix(value: string): string {
+  const trimmed = value.trim().replace(/^-+/, "");
+  if (!trimmed) return "";
+  return trimmed.endsWith("-") ? trimmed : `${trimmed}-`;
+}
+
+function buildStudioGitHubRepoPrefix(options: {
+  organizationId: string;
+  organizationRepoPrefix: string | null;
+}): string {
+  const instancePrefix = normalizeGitHubRepoPrefix(process.env.GITHUB_REPO_PREFIX || "");
+  const orgPrefixRaw = (options.organizationRepoPrefix || "").trim();
+  const orgPrefix = normalizeGitHubRepoPrefix(orgPrefixRaw || options.organizationId);
+
+  if (!instancePrefix) return orgPrefix;
+  if (orgPrefix.startsWith(instancePrefix)) return orgPrefix;
+  if (instancePrefix.endsWith(orgPrefix)) return instancePrefix;
+  return `${instancePrefix}${orgPrefix}`;
+}
+
 /**
  * Studio-related TRPC procedures.
  * These handle starting and managing studio instances for editing projects.
@@ -59,7 +79,10 @@ export const studioProcedures = {
         where: eq(organization.id, organizationId),
         columns: { githubRepoPrefix: true },
       });
-      const githubRepoPrefix = (org?.githubRepoPrefix ?? "").trim();
+      const githubRepoPrefix = buildStudioGitHubRepoPrefix({
+        organizationId,
+        organizationRepoPrefix: org?.githubRepoPrefix ?? null,
+      });
       // Studio machines need a backend URL that is reachable *from the machine*.
       // - Local provider spawns the studio as a child-process inside this backend container,
       //   so `DOMAIN` (usually `http://localhost` via Caddy on :80) is not reachable.
@@ -140,7 +163,10 @@ export const studioProcedures = {
         where: eq(organization.id, organizationId),
         columns: { githubRepoPrefix: true },
       });
-      const githubRepoPrefix = (org?.githubRepoPrefix ?? "").trim();
+      const githubRepoPrefix = buildStudioGitHubRepoPrefix({
+        organizationId,
+        organizationRepoPrefix: org?.githubRepoPrefix ?? null,
+      });
 
       const backendOriginRaw =
         process.env.BACKEND_URL ||

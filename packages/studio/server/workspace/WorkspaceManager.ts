@@ -22,6 +22,7 @@ export class WorkspaceManager {
     await this.cleanupGitIndexLock({ force: true, reason: "workspace open" });
     await this.ensureSafeDirectory(this.workspaceDir);
     this.git = simpleGit(this.workspaceDir);
+    this.git.env({ ...process.env, GIT_TERMINAL_PROMPT: "0" });
 
     let isRepo = false;
     try {
@@ -123,6 +124,19 @@ export class WorkspaceManager {
     return next;
   }
 
+  /**
+   * Runs an arbitrary async function serialized with all other git operations.
+   * The callback must not call other WorkspaceManager methods that also acquire the git lock.
+   */
+  async runExclusive<T>(label: string, fn: (options: { cwd: string }) => Promise<T>): Promise<T> {
+    return await this.withGitLock(label, async () => {
+      if (!this.workspaceDir || !this.git) {
+        throw new Error("Workspace not initialized");
+      }
+      return await fn({ cwd: this.workspaceDir });
+    });
+  }
+
   private async ensureSafeDirectory(directory: string): Promise<void> {
     const resolved = path.resolve(directory);
     if (this.configuredSafeDirectories.has(resolved)) return;
@@ -181,6 +195,7 @@ export class WorkspaceManager {
 
     // Clone repository
     this.git = simpleGit();
+    this.git.env({ ...process.env, GIT_TERMINAL_PROMPT: "0" });
     await this.git.clone(authUrl, this.workspaceDir, [
       "--branch",
       branch,
@@ -190,6 +205,7 @@ export class WorkspaceManager {
     await this.cleanupGitIndexLock({ force: true, reason: "workspace clone" });
     // Initialize git in workspace directory
     this.git = simpleGit(this.workspaceDir);
+    this.git.env({ ...process.env, GIT_TERMINAL_PROMPT: "0" });
 
     // Configure git user for commits
     await this.git.addConfig("user.email", "studio@vivd.dev");
@@ -287,26 +303,31 @@ export class WorkspaceManager {
       }
 
       const workingCommit = await this.getWorkingCommitLocked();
-
-      if (workingCommit) {
-        // Compare against the loaded commit so just loading an older version doesn't count as "changes"
-        const diff = await this.git.raw(["diff", "--name-only", workingCommit]);
-        const diffFiles = this.getRelevantPaths(diff);
-
-        const untracked = await this.git.raw([
-          "ls-files",
-          "--others",
-          "--exclude-standard",
-        ]);
-        const untrackedFiles = this.getRelevantPaths(untracked);
-
-        return diffFiles.length > 0 || untrackedFiles.length > 0;
-      }
-
-      const status = await this.git.raw(["status", "--porcelain"]);
-      const statusLines = this.getRelevantStatusLines(status);
-      return statusLines.length > 0;
+      return await this.hasChangesLocked(workingCommit);
     });
+  }
+
+  private async hasChangesLocked(workingCommit: string | null): Promise<boolean> {
+    if (!this.git) return false;
+
+    if (workingCommit) {
+      // Compare against the loaded commit so just loading an older version doesn't count as "changes"
+      const diff = await this.git.raw(["diff", "--name-only", workingCommit]);
+      const diffFiles = this.getRelevantPaths(diff);
+
+      const untracked = await this.git.raw([
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+      ]);
+      const untrackedFiles = this.getRelevantPaths(untracked);
+
+      return diffFiles.length > 0 || untrackedFiles.length > 0;
+    }
+
+    const status = await this.git.raw(["status", "--porcelain"]);
+    const statusLines = this.getRelevantStatusLines(status);
+    return statusLines.length > 0;
   }
 
   async getStatus(): Promise<{
@@ -530,6 +551,383 @@ export class WorkspaceManager {
       } catch {
         return null;
       }
+    });
+  }
+
+  private withHttpAuthArgs(authHeader: string | undefined, args: string[]): string[] {
+    if (!authHeader) return args;
+    return ["-c", `http.extraHeader=${authHeader}`, ...args];
+  }
+
+  private async getHeadHashLocked(): Promise<string | null> {
+    if (!this.git) return null;
+    try {
+      const stdout = await this.git.raw(["rev-parse", "HEAD"]);
+      const hash = stdout.trim();
+      return hash ? hash : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getBranchLocked(): Promise<{ branch: string | null; detached: boolean }> {
+    if (!this.git) return { branch: null, detached: true };
+    try {
+      const stdout = await this.git.raw(["rev-parse", "--abbrev-ref", "HEAD"]);
+      const value = stdout.trim();
+      if (!value || value === "HEAD") return { branch: null, detached: true };
+      return { branch: value, detached: false };
+    } catch {
+      return { branch: null, detached: true };
+    }
+  }
+
+  private async getRemoteUrlLocked(remoteName: string): Promise<string | null> {
+    if (!this.git) return null;
+    const name = remoteName.trim();
+    if (!name) return null;
+    try {
+      const stdout = await this.git.raw(["remote", "get-url", name]);
+      const url = stdout.trim();
+      return url ? url : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async ensureRemoteUrlLocked(remoteName: string, remoteUrl: string): Promise<void> {
+    if (!this.git) throw new Error("Workspace not initialized");
+    const name = remoteName.trim();
+    const url = remoteUrl.trim();
+    if (!name) throw new Error("Remote name missing");
+    if (!url) throw new Error("Remote URL missing");
+
+    try {
+      const stdout = await this.git.raw(["remote", "get-url", name]);
+      const current = stdout.trim();
+      if (current === url) return;
+      await this.git.raw(["remote", "set-url", name, url]);
+    } catch {
+      await this.git.raw(["remote", "add", name, url]);
+    }
+  }
+
+  private async fetchRemoteLocked(options: {
+    remoteName: string;
+    authHeader?: string;
+  }): Promise<void> {
+    if (!this.git) throw new Error("Workspace not initialized");
+    const name = options.remoteName.trim();
+    if (!name) throw new Error("Remote name missing");
+    await this.git.raw(this.withHttpAuthArgs(options.authHeader, ["fetch", name, "--prune"]));
+  }
+
+  private async remoteRefExistsLocked(remoteRef: string): Promise<boolean> {
+    if (!this.git) return false;
+    try {
+      const stdout = await this.git.raw(["rev-parse", "--verify", remoteRef]);
+      return Boolean(stdout.trim());
+    } catch {
+      return false;
+    }
+  }
+
+  private async getAheadBehindLocked(remoteRef: string): Promise<{ ahead: number; behind: number }> {
+    if (!this.git) return { ahead: 0, behind: 0 };
+    const stdout = await this.git.raw([
+      "rev-list",
+      "--left-right",
+      "--count",
+      `HEAD...${remoteRef}`,
+    ]);
+    const parts = stdout.trim().split(/\s+/).filter(Boolean);
+    const ahead = Number.parseInt(parts[0] ?? "0", 10);
+    const behind = Number.parseInt(parts[1] ?? "0", 10);
+    return {
+      ahead: Number.isFinite(ahead) ? ahead : 0,
+      behind: Number.isFinite(behind) ? behind : 0,
+    };
+  }
+
+  async getRemoteSyncStatus(options: {
+    remoteName: string;
+    remoteUrl?: string;
+    remoteBranch: string;
+    authHeader?: string;
+    fetch?: boolean;
+  }): Promise<{
+    headHash: string | null;
+    branch: string | null;
+    detached: boolean;
+    hasUncommittedChanges: boolean;
+    workingCommitHash: string | null;
+    workingCommitPinned: boolean;
+    remoteUrl: string | null;
+    fetchError: string | null;
+    remoteBranchExists: boolean | null;
+    ahead: number | null;
+    behind: number | null;
+    diverged: boolean | null;
+  }> {
+    return await this.withGitLock("getRemoteSyncStatus", async () => {
+      if (!this.git || !this.workspaceDir) {
+        throw new Error("Workspace not initialized");
+      }
+
+      const headHash = await this.getHeadHashLocked();
+      const workingCommitHash = await this.getWorkingCommitLocked();
+      const hasUncommittedChanges = await this.hasChangesLocked(workingCommitHash);
+      const workingCommitPinned = Boolean(
+        headHash && workingCommitHash && workingCommitHash !== headHash,
+      );
+
+      const { branch, detached } = await this.getBranchLocked();
+
+      const remoteName = options.remoteName.trim();
+      const remoteBranch = options.remoteBranch.trim();
+      const shouldFetch = options.fetch ?? true;
+
+      let remoteUrl = await this.getRemoteUrlLocked(remoteName);
+      let fetchError: string | null = null;
+
+      if (options.remoteUrl) {
+        try {
+          await this.ensureRemoteUrlLocked(remoteName, options.remoteUrl);
+          remoteUrl = options.remoteUrl;
+        } catch (err) {
+          fetchError = err instanceof Error ? err.message : String(err);
+        }
+      }
+
+      if (!fetchError && shouldFetch) {
+        try {
+          await this.fetchRemoteLocked({
+            remoteName,
+            authHeader: options.authHeader,
+          });
+        } catch (err) {
+          fetchError = err instanceof Error ? err.message : String(err);
+        }
+      }
+
+      const remoteRef = remoteName && remoteBranch ? `${remoteName}/${remoteBranch}` : "";
+
+      if (fetchError || !remoteRef) {
+        return {
+          headHash,
+          branch,
+          detached,
+          hasUncommittedChanges,
+          workingCommitHash,
+          workingCommitPinned,
+          remoteUrl,
+          fetchError,
+          remoteBranchExists: null,
+          ahead: null,
+          behind: null,
+          diverged: null,
+        };
+      }
+
+      const remoteBranchExists = await this.remoteRefExistsLocked(remoteRef);
+      if (!remoteBranchExists) {
+        return {
+          headHash,
+          branch,
+          detached,
+          hasUncommittedChanges,
+          workingCommitHash,
+          workingCommitPinned,
+          remoteUrl,
+          fetchError: null,
+          remoteBranchExists: false,
+          ahead: null,
+          behind: null,
+          diverged: null,
+        };
+      }
+
+      let ahead: number | null = null;
+      let behind: number | null = null;
+      let diverged: boolean | null = null;
+      try {
+        const counts = await this.getAheadBehindLocked(remoteRef);
+        ahead = counts.ahead;
+        behind = counts.behind;
+        diverged = counts.ahead > 0 && counts.behind > 0;
+      } catch {
+        ahead = null;
+        behind = null;
+        diverged = null;
+      }
+
+      return {
+        headHash,
+        branch,
+        detached,
+        hasUncommittedChanges,
+        workingCommitHash,
+        workingCommitPinned,
+        remoteUrl,
+        fetchError: null,
+        remoteBranchExists: true,
+        ahead,
+        behind,
+        diverged,
+      };
+    });
+  }
+
+  async pullFastForwardFromRemote(options: {
+    remoteName: string;
+    remoteUrl: string;
+    remoteBranch: string;
+    authHeader?: string;
+  }): Promise<{ headHash: string; previousHeadHash: string }> {
+    return await this.withGitLock("pullFastForwardFromRemote", async () => {
+      if (!this.git || !this.workspaceDir) {
+        throw new Error("Workspace not initialized");
+      }
+
+      const remoteName = options.remoteName.trim();
+      const remoteBranch = options.remoteBranch.trim();
+      if (!remoteName) throw new Error("Remote name missing");
+      if (!remoteBranch) throw new Error("Remote branch missing");
+
+      const previousHeadHash = await this.getHeadHashLocked();
+      if (!previousHeadHash) throw new Error("Unable to resolve HEAD");
+
+      const workingCommitHash = await this.getWorkingCommitLocked();
+      const workingCommitPinned = Boolean(
+        workingCommitHash && workingCommitHash !== previousHeadHash,
+      );
+      if (workingCommitPinned) {
+        throw new Error("You're viewing an older snapshot. Restore it before pulling.");
+      }
+
+      const hasUncommittedChanges = await this.hasChangesLocked(workingCommitHash);
+      if (hasUncommittedChanges) {
+        throw new Error("You have uncommitted changes. Save or discard them before pulling.");
+      }
+
+      const { branch, detached } = await this.getBranchLocked();
+      if (detached) {
+        throw new Error("You're in a detached HEAD state. Restore your main branch before pulling.");
+      }
+      if (branch !== remoteBranch) {
+        throw new Error(`You're on '${branch}'. Switch to '${remoteBranch}' before pulling.`);
+      }
+
+      await this.ensureRemoteUrlLocked(remoteName, options.remoteUrl);
+      await this.fetchRemoteLocked({ remoteName, authHeader: options.authHeader });
+
+      const remoteRef = `${remoteName}/${remoteBranch}`;
+      const remoteExists = await this.remoteRefExistsLocked(remoteRef);
+      if (!remoteExists) {
+        throw new Error(`Remote branch '${remoteRef}' not found.`);
+      }
+
+      const counts = await this.getAheadBehindLocked(remoteRef);
+      if (counts.ahead > 0 && counts.behind > 0) {
+        throw new Error("Your local branch has diverged from GitHub. Use force sync instead.");
+      }
+      if (counts.ahead > 0 && counts.behind === 0) {
+        throw new Error("Your local branch is ahead of GitHub. Push or force sync instead.");
+      }
+      if (counts.behind === 0) {
+        throw new Error("Already up to date.");
+      }
+
+      await this.git.raw(["merge", "--ff-only", remoteRef]);
+
+      const headHash = await this.getHeadHashLocked();
+      if (!headHash) throw new Error("Unable to resolve HEAD after pull");
+
+      return { headHash, previousHeadHash };
+    });
+  }
+
+  private getForceSyncBackupTagName(): string {
+    const iso = new Date().toISOString().replace(/[:.]/g, "-");
+    return `vivd-backup-${iso}`;
+  }
+
+  async forceSyncFromRemote(options: {
+    remoteName: string;
+    remoteUrl: string;
+    remoteBranch: string;
+    authHeader?: string;
+  }): Promise<{ headHash: string; backupTag: string; backupCommitHash: string }> {
+    return await this.withGitLock("forceSyncFromRemote", async () => {
+      if (!this.git || !this.workspaceDir) {
+        throw new Error("Workspace not initialized");
+      }
+
+      const remoteName = options.remoteName.trim();
+      const remoteBranch = options.remoteBranch.trim();
+      if (!remoteName) throw new Error("Remote name missing");
+      if (!remoteBranch) throw new Error("Remote branch missing");
+
+      const preHead = await this.getHeadHashLocked();
+      if (!preHead) throw new Error("Unable to resolve HEAD");
+
+      const workingCommitHash = await this.getWorkingCommitLocked();
+      const hasUncommittedChanges = await this.hasChangesLocked(workingCommitHash);
+
+      let backupCommitHash = preHead;
+      if (hasUncommittedChanges) {
+        await this.git.raw(["add", "-A"]);
+        try {
+          await this.git.raw(["reset", "HEAD", WORKING_COMMIT_MARKER]);
+        } catch {
+          // ignore
+        }
+
+        const staged = await this.git.raw(["diff", "--cached", "--name-only"]);
+        if (staged.trim()) {
+          await this.git.commit(
+            `Backup before force sync from GitHub (${new Date().toISOString()})`,
+          );
+          await this.clearWorkingCommit();
+          const afterCommit = await this.getHeadHashLocked();
+          if (afterCommit) {
+            backupCommitHash = afterCommit;
+          }
+        }
+      }
+
+      let backupTag = this.getForceSyncBackupTagName();
+      try {
+        await this.git.raw(["tag", backupTag]);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("already exists")) {
+          const suffix = Math.random().toString(16).slice(2, 8);
+          backupTag = `${backupTag}-${suffix}`;
+          await this.git.raw(["tag", backupTag]);
+        } else {
+          throw err;
+        }
+      }
+
+      await this.ensureRemoteUrlLocked(remoteName, options.remoteUrl);
+      await this.fetchRemoteLocked({ remoteName, authHeader: options.authHeader });
+
+      const remoteRef = `${remoteName}/${remoteBranch}`;
+      const remoteExists = await this.remoteRefExistsLocked(remoteRef);
+      if (!remoteExists) {
+        throw new Error(`Remote branch '${remoteRef}' not found.`);
+      }
+
+      await this.git.raw(["reset", "--hard", remoteRef]);
+      await this.git.raw(["clean", "-fd"]);
+      // Ensure we're on the expected branch even if HEAD was detached before.
+      await this.git.raw(["checkout", "-B", remoteBranch, remoteRef]);
+
+      const headHash = await this.getHeadHashLocked();
+      if (!headHash) throw new Error("Unable to resolve HEAD after force sync");
+
+      return { headHash, backupTag, backupCommitHash };
     });
   }
 

@@ -570,6 +570,7 @@ export async function syncSourceToBucket(options: {
   slug: string;
   version: number;
   commitHash?: string;
+  exact?: boolean;
 }): Promise<void> {
   const bucket = getBucket();
   if (!bucket) return;
@@ -580,7 +581,7 @@ export async function syncSourceToBucket(options: {
     source: options.projectDir,
     bucket,
     keyPrefix,
-    delete: false,
+    delete: options.exact ?? false,
     exclude: [
       "node_modules/*",
       "dist/*",
