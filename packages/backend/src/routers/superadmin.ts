@@ -14,6 +14,8 @@ import { auth } from "../auth";
 import { limitsService } from "../services/LimitsService";
 import { usageService } from "../services/UsageService";
 import { domainService, validateOrganizationSlug } from "../services/DomainService";
+import { studioMachineProvider } from "../services/studioMachines";
+import type { FlyStudioMachineProvider } from "../services/studioMachines/fly";
 
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
@@ -73,6 +75,72 @@ const authCreateUserResponseSchema = z
   .passthrough();
 
 export const superAdminRouter = router({
+  listStudioMachines: superAdminProcedure.query(async () => {
+    if (studioMachineProvider.kind !== "fly") {
+      return {
+        provider: studioMachineProvider.kind,
+        machines: [],
+      };
+    }
+
+    try {
+      const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
+      const machines = await flyProvider.listStudioMachines();
+      return {
+        provider: studioMachineProvider.kind,
+        machines,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        provider: studioMachineProvider.kind,
+        machines: [],
+        error: message,
+      };
+    }
+  }),
+
+  reconcileStudioMachines: superAdminProcedure.mutation(async () => {
+    if (studioMachineProvider.kind !== "fly") {
+      return {
+        provider: studioMachineProvider.kind,
+        reconciled: false,
+        error: "Studio machine provider is not Fly",
+      };
+    }
+
+    const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
+    const result = await flyProvider.reconcileStudioMachines();
+    return {
+      provider: studioMachineProvider.kind,
+      reconciled: true,
+      result,
+    };
+  }),
+
+  destroyStudioMachine: superAdminProcedure
+    .input(
+      z.object({
+        machineId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (studioMachineProvider.kind !== "fly") {
+        return {
+          provider: studioMachineProvider.kind,
+          destroyed: false,
+          error: "Studio machine provider is not Fly",
+        };
+      }
+
+      const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
+      await flyProvider.destroyStudioMachine(input.machineId);
+      return {
+        provider: studioMachineProvider.kind,
+        destroyed: true,
+      };
+    }),
+
   lookupUserByEmail: superAdminProcedure
     .input(
       z.object({

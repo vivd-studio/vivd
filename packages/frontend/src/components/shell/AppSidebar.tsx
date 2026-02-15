@@ -10,6 +10,7 @@ import {
   FolderKanban,
   LayoutGrid,
   LogOut,
+  Server,
   Settings,
   Shield,
   SlidersHorizontal,
@@ -418,7 +419,7 @@ function OrganizationNavSection({
 
 type SuperAdminNavSectionProps = {
   showSuperAdmin: boolean;
-  isSuperAdminTabActive: (tab: "orgs" | "users" | "maintenance") => boolean;
+  isSuperAdminTabActive: (tab: "orgs" | "users" | "maintenance" | "machines") => boolean;
 };
 
 function SuperAdminNavSection({
@@ -468,6 +469,18 @@ function SuperAdminNavSection({
               <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=maintenance`}>
                 <Wrench />
                 <span>Maintenance</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Machines"
+              isActive={isSuperAdminTabActive("machines")}
+            >
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=machines`}>
+                <Server />
+                <span>Machines</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -599,7 +612,7 @@ export function AppSidebar() {
     return (searchParams.get("tab") ?? "members") === tab;
   };
 
-  const isSuperAdminTabActive = (tab: "orgs" | "users" | "maintenance") => {
+  const isSuperAdminTabActive = (tab: "orgs" | "users" | "maintenance" | "machines") => {
     if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
     return (searchParams.get("tab") ?? "orgs") === tab;
   };

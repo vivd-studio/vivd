@@ -8,6 +8,8 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-15: superadmin Fly machines table now supports sortable columns and manual per-machine destroy action (stop-first, then destroy).
+- 2026-02-15: integrated Fly studio machine management in backend: periodic reconciler (warm outdated images + GC machines older than 7 days) and superadmin tRPC endpoints for listing/reconciling machines.
 - 2026-02-15: documented website plugin system plan (Contact Forms MVP) (`docs/plugin-system-design.md`).
 - 2026-02-15: implemented Studio GitHub pull + force sync (ff-only + overwrite) with bucket exact-sync, superadmin-only gating, SSH URL copy, and environment repo prefix support via `GITHUB_REPO_PREFIX` (e.g. `dev-<org>-...`).
 - 2026-02-14: documented publishing flow review + hardening/test plan (`docs/publishing-flow-review.md`).
@@ -180,12 +182,18 @@ packages/
 - [ ] Provision studio machine on demand (or per-org strategy).
 - [ ] Decide Fly app strategy (single app vs app-per-tenant).
 - [ ] Machine auth: scoped short-lived control-plane-issued tokens.
+- [ ] Add centralized machine lifecycle reconciler in control plane:
+  - [x] Poll/listen for Fly machine state changes (`started`, `suspended`, `stopped`, `starting`, `replacing`, etc.).
+  - [ ] Persist status/age/last-seen metadata for super-admin visibility and lifecycle decisions.
 - [ ] Validate hydration/sync behavior for start/stop cycles under failure scenarios.
 - [ ] Dev-environment multi-machine test coverage.
-- [ ] Stale machine lifecycle cleanup (cost + safety):
-  - [ ] Periodically identify machines older than 7 days.
-  - [ ] Stop first to allow shutdown sync back to bucket.
-  - [ ] Destroy after successful stop/sync (with timeout/fallback handling).
+- [x] Stale machine lifecycle cleanup (cost + safety):
+  - [x] Periodically identify machines older than 7 days.
+  - [x] Stop first to allow shutdown sync back to bucket.
+  - [x] Destroy after successful stop/sync (with timeout/fallback handling).
+- [x] Outdated image reconciliation:
+  - [x] Detect machines running an outdated studio image.
+  - [x] Automatically warm outdated machines (stop suspended → update image → start → suspend) so the next user start is faster.
 
 ---
 
@@ -195,7 +203,8 @@ packages/
 
 - [x] Super-admin auth and host-gated route strategy implemented.
 - [x] Organization lifecycle + limits management implemented.
-- [ ] Add Fly machines overview (org mapping, status, age, last activity, lifecycle actions).
+- [x] Add superadmin backend APIs for Fly studio machine listing + manual reconcile.
+- [x] Add Fly machines overview UI (list + image status + manual reconcile + sortable columns + manual destroy).
 
 ### Billing
 
@@ -246,4 +255,4 @@ packages/
 
 ---
 
-*Last updated: 2026-02-13*
+*Last updated: 2026-02-15*

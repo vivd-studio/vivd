@@ -1,0 +1,2 @@
+export { MachinesTab } from "./MachinesTab";
+

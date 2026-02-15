@@ -197,6 +197,14 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           }
         />
         <Route
+          path="superadmin/machines"
+          element={
+            <RequireSuperAdmin>
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=machines`} replace />
+            </RequireSuperAdmin>
+          }
+        />
+        <Route
           path="superadmin/usage"
           element={
             <RequireSuperAdmin>

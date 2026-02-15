@@ -24,6 +24,7 @@ export const ROUTES = {
   SUPERADMIN_USERS: "/vivd-studio/superadmin/users",
   SUPERADMIN_USAGE: "/vivd-studio/superadmin/usage",
   SUPERADMIN_MAINTENANCE: "/vivd-studio/superadmin/maintenance",
+  SUPERADMIN_MACHINES: "/vivd-studio/superadmin/machines",
   NO_PROJECT: "/vivd-studio/no-project",
 
   // Single project mode (outside layout)

@@ -14,6 +14,11 @@ export const studioMachineProvider: StudioMachineProvider = (() => {
   return new LocalStudioMachineProvider();
 })();
 
+export function startStudioMachineReconciler(): void {
+  if (studioMachineProvider.kind !== "fly") return;
+  (studioMachineProvider as FlyStudioMachineProvider).startReconciler();
+}
+
 // Cleanup local studios on process exit (no-op for non-local providers).
 process.on("exit", () => {
   if (studioMachineProvider.kind === "local") {
@@ -34,4 +39,3 @@ process.on("SIGTERM", () => {
   }
   process.exit(0);
 });
-

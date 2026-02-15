@@ -36,6 +36,7 @@ import {
 import { projectMetaService } from "./services/ProjectMetaService";
 import { getInternalPreviewAccessToken } from "./config/preview";
 import { domainService } from "./services/DomainService";
+import { startStudioMachineReconciler } from "./services/studioMachines";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1120,6 +1121,8 @@ app.listen(PORT, async () => {
 
   console.log(`Server running on port ${PORT}`);
   console.log(`[OpenCode] Server manager ready (servers spawn on first task)`);
+
+  startStudioMachineReconciler();
 
   // Graceful shutdown for all servers
   const cleanup = () => {

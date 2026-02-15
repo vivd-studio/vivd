@@ -9,5 +9,8 @@ export { OrganizationsTab } from "./organizations";
 export { MaintenanceTab } from "./maintenance";
 export { TenantMaintenanceTab } from "./maintenance";
 
+// Machines module (super-admin)
+export { MachinesTab } from "./machines";
+
 // Usage module
 export { UsageStatsCard } from "./usage";
