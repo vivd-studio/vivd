@@ -1,561 +1,260 @@
-# Vivd Plugin System Architecture
+# Website Plugin System Design (MVP: Contact Forms)
 
-A flexible, extensible plugin system that enables server-side functionality for static pages, with support for pre-built plugins, community plugins via Git, and agent-created custom plugins.
+Date: 2026-02-15  
+Owner: backend + frontend + studio  
+Status: plan (no implementation in this doc)
 
----
-
-## Core Design Principles
-
-1. **File-first configuration** – Plugins are enabled/configured via files the agent can edit
-2. **Git-based distribution** – Plugins are Git repos, versioned via tags
-3. **Sandboxed execution** – Agent-written plugins run in isolation
-4. **Standardized interfaces** – Clear contracts for plugin authors
-5. **Single-tenant simplicity** – One DB per instance, plugins share tables with site isolation
-6. **Framework-agnostic** – Works with static HTML, React, Astro, Next.js, etc.
+This document captures a pragmatic, extensible plugin architecture for Vivd-built websites, starting with a **Contact Forms** plugin.
 
 ---
 
-## Architecture Overview
+## Goals
 
-```mermaid
-flowchart TB
-    subgraph Request["Incoming Request"]
-        R[acme.com/_api/contact/send]
-    end
+- Add reusable functionality to published websites (Contact forms now; later: newsletter, booking, etc.).
+- Fit the current Vivd architecture:
+  - central control-plane backend + central Postgres DB
+  - orgs/projects/versions
+  - studio machines (Fly) for editing/building
+  - object storage as source-of-truth for project artifacts
+  - Caddy for serving published sites
+- Ensure plugin features work **even when no Studio machine is running**.
+- Keep it **pragmatic** (low operational overhead), but **extendable** and robust.
+- Ensure the **AI agent can implement everything**: enable plugin, insert snippet(s), configure, and verify.
 
-    subgraph Caddy["Caddy"]
-        Route{"/_api/* ?"}
-    end
+## Non-goals (MVP)
 
-    subgraph Backend["Backend Server"]
-        PR[Plugin Router]
-        PM[Plugin Manager]
-        subgraph Plugins["Plugin Runtime"]
-            CP[Core Plugins]
-            EP[External Plugins]
-            CU[Custom Plugins]
-        end
-        DB[(PostgreSQL)]
-    end
-
-    Request --> Caddy
-    Route -->|Yes| PR
-    PR --> PM
-    PM --> CP & EP & CU
-    CP & EP & CU --> DB
-```
+- Arbitrary third‑party plugin code execution (marketplace / install-anything).
+- Per-plugin compute isolation or custom runtime sandboxes.
+- Interactive conflict-resolution UI for complex workflows (e.g. booking calendars) in v1.
 
 ---
 
-## Plugin Types
+## Recommendation (High-level)
 
-| Type         | Author            | Location                   | Loaded From                 | Example               |
-| ------------ | ----------------- | -------------------------- | --------------------------- | --------------------- |
-| **Core**     | Vivd team         | `plugins/` in monorepo     | Bundled in Docker image     | Contact form, Booking |
-| **External** | Vivd or Community | Git repos                  | Cloned at runtime to volume | Reviews, Analytics    |
-| **Custom**   | Agent             | `projects/<slug>/plugins/` | Project directory           | Site-specific logic   |
+Implement a **first-party plugin platform** inside the existing **control-plane backend** (`packages/backend`):
 
----
+1) **Public plugin endpoints** for website visitors  
+   - designed for plain HTML usage (e.g. `<form action="...">`)
+   - authenticated via per-site access tokens (like Web3Forms)
+2) **Authenticated management endpoints** (tRPC) for Studio/control-plane UI  
+   - enable/disable plugins per project
+   - configure plugin settings
+   - view/export operational data (e.g. contact submissions inbox)
 
-## Repository Structure
-
-```
-vivd/                           # Main monorepo
-├── frontend/
-├── backend/
-├── scraper/
-├── plugins/                    # Core plugins (first-class citizens)
-│   ├── contact-form/
-│   │   ├── manifest.json
-│   │   ├── server/
-│   │   │   ├── index.ts
-│   │   │   ├── handlers.ts
-│   │   │   └── schema.ts
-│   │   ├── client/
-│   │   │   ├── ContactForm.tsx
-│   │   │   └── widget.js
-│   │   └── README.md
-│   ├── booking/
-│   │   ├── manifest.json
-│   │   ├── server/
-│   │   ├── client/
-│   │   └── pages/              # Admin pages
-│   │       └── BookingsAdmin.tsx
-│   ├── newsletter/
-│   └── _template/              # Starter template for new plugins
-├── docs/
-└── docker-compose.yml
-
-# External plugins (separate repos in vivd-studio org)
-github.com/vivd-studio/plugin-reviews
-github.com/vivd-studio/plugin-analytics
-github.com/vivd-studio/plugin-events-calendar
-
-# Community plugins (any org, follows spec)
-github.com/someone/vivd-plugin-testimonials
-```
+Start with **built-in plugins only** (modules shipped in this repo). That gives a “plugin system” without introducing third-party execution risks.
 
 ---
 
-## Plugin Manifest
+## Where Plugin Data Lives
 
-```json
-{
-  "name": "contact-form",
-  "version": "1.0.0",
-  "description": "Simple contact form with email notifications",
-  "author": "Vivd",
+### Website code and assets
 
-  "routes": [
-    {
-      "method": "POST",
-      "path": "/send",
-      "handler": "server/handlers.ts:sendMessage",
-      "rateLimit": { "requests": 10, "window": "1m" }
-    }
-  ],
+- Unchanged: stored and served via existing object-storage → publish → Caddy flow.
 
-  "pages": [
-    {
-      "path": "/admin/contact-submissions",
-      "title": "Contact Submissions",
-      "component": "pages/SubmissionsAdmin.tsx",
-      "access": "admin",
-      "nav": {
-        "label": "Messages",
-        "icon": "mail",
-        "section": "admin"
-      }
-    }
-  ],
+### Plugin configuration (website/customer specific)
 
-  "widgets": [
-    {
-      "name": "contact-form",
-      "script": "client/widget.js",
-      "styles": "client/widget.css"
-    }
-  ],
+- **Central Postgres**, scoped by `organizationId` + `projectSlug`.
+- Examples: recipient emails, redirect URL allowlist, webhook URLs, retention settings.
 
-  "configSchema": "server/schema.ts"
-}
-```
+### Plugin operational data (submissions, bookings, etc.)
+
+- **Central Postgres**, in plugin-specific tables (multi-tenant columns required).
+- Use object storage only for large payloads/attachments (future).
+
+### Website repository contents
+
+- Only **public identifiers** needed for runtime calls (e.g. a `token`).
+- Do **not** embed secrets (SMTP creds, API keys) in the website code.
 
 ---
 
-## Plugin Configuration (Per-Project)
+## Core Concepts
 
-```yaml
-# projects/<slug>/v<N>/vivd.plugins.yaml
+### Plugin registry (code-defined)
 
-plugins:
-  # Core plugin (bundled, no source needed)
-  contact-form:
-    enabled: true
-    config:
-      recipient: "hello@acme.com"
-      subject_prefix: "[Website]"
-      fields:
-        - name: "name"
-          type: "text"
-          required: true
-        - name: "email"
-          type: "email"
-          required: true
-        - name: "message"
-          type: "textarea"
-          required: true
-      success_message: "Thanks! We'll be in touch."
+Maintain an in-repo registry of available plugins:
 
-  # Core plugin with pages
-  booking:
-    enabled: true
-    config:
-      business_name: "Acme Hotel"
-      notification_email: "bookings@acme.com"
-      time_slots: ["09:00", "10:00", "11:00", "14:00", "15:00"]
-      max_guests: 4
+- `pluginId` (stable string, e.g. `contact_form`)
+- name/description/category
+- config schema (zod) + defaults
+- public endpoints exposed by the plugin
+- “agent recipe” (instructions + templates the agent can apply)
 
-  # External plugin (git-based)
-  reviews:
-    source: "github.com/vivd-studio/plugin-reviews"
-    version: "v1.2.0"
-    enabled: true
-    config:
-      moderation: true
-      allow_anonymous: false
+### Plugin instance (per project)
 
-  # Community plugin
-  testimonials:
-    source: "github.com/someone/vivd-plugin-testimonials"
-    version: "v2.0.0"
-    enabled: true
+Enabling a plugin creates a **plugin instance** bound to a project:
 
-  # Custom plugins (agent-written)
-  custom:
-    - path: "./plugins/price-calculator"
-      enabled: true
-```
+- `(organizationId, projectSlug, pluginId)` unique
+- `status`: `enabled | disabled`
+- `configJson`: validated plugin configuration
+- `publicToken`: access token used from the website
+- timestamps
+
+Token recommendation:
+
+- `token = <instanceId>.<randomSecret>`
+  - store a hash of `<randomSecret>`
+  - allows rotation and cheap lookup by `instanceId`
 
 ---
 
-## TypeScript Interfaces
+## Public Plugin API (MVP: Contact Forms)
 
-```typescript
-// backend/src/plugins/runtime/types.ts
+### Endpoint shape
 
-export interface PluginManifest {
-  name: string;
-  version: string;
-  description: string;
-  author?: string;
+MVP uses the existing backend base path:
 
-  routes?: RouteDefinition[];
-  pages?: PageDefinition[];
-  widgets?: WidgetDefinition[];
+- `POST /vivd-studio/api/plugins/contact/v1/submit`
 
-  configSchema?: string; // Path to Zod schema
-  permissions?: Permission[];
-}
+Rationale: it’s already routed to the backend by Caddy on both:
+- the default server, and
+- published-site domain snippets.
 
-export interface RouteDefinition {
-  method: "GET" | "POST" | "PUT" | "DELETE";
-  path: string;
-  handler: string; // "file.ts:functionName"
-  rateLimit?: { requests: number; window: string };
-}
+### Supported request types
 
-export interface PageDefinition {
-  path: string;
-  title: string;
-  component: string;
-  access: "admin" | "public" | "authenticated";
-  nav?: {
-    label: string;
-    icon?: string;
-    section?: "admin" | "main";
-  };
-}
+- `application/x-www-form-urlencoded` (plain HTML `<form>`)
+- `multipart/form-data` (future: attachments)
+- `application/json` (fetch-based forms)
 
-export interface WidgetDefinition {
-  name: string;
-  script: string;
-  styles?: string;
-}
+### Request fields (MVP)
 
-export interface PluginContext {
-  siteSlug: string;
-  siteDomain: string;
-  pluginConfig: Record<string, any>;
+- `token` (required)
+- typical fields:
+  - `name`
+  - `email`
+  - `message`
+- optional system fields:
+  - `_redirect` (optional; must be validated to prevent open redirects)
+  - `_subject` (optional; sanitized/length-limited)
+  - `_honeypot` (optional; must be empty)
 
-  db: PluginDatabase;
-  http: SandboxedHttp;
-  email: EmailService;
-  log: PluginLogger;
-}
+### Response behavior
 
-export interface PluginDatabase {
-  get(key: string): Promise<any>;
-  set(key: string, value: any): Promise<void>;
-  delete(key: string): Promise<void>;
-  list(prefix?: string): Promise<{ key: string; value: any }[]>;
+- HTML form:
+  - `303` redirect to validated `_redirect`, else redirect back with a default success indicator
+- JSON:
+  - `{ ok: true }` or `{ ok: false, error: { code, message } }`
 
-  // For structured data (core plugins only)
-  query?<T>(sql: string, params?: any[]): Promise<T[]>;
-}
-```
+### Abuse prevention / robustness
+
+Minimum set for v1:
+
+- Token verification (instance exists + secret hash matches).
+- Origin validation:
+  - validate `Origin` or `Referer` host against allowlisted hosts for the project:
+    - published domains (`published_site.domain`)
+    - tenant host domain(s) (domain registry)
+    - localhost / local dev allowlist
+- Rate limiting:
+  - per token + per IP (MVP: in-memory; plan Redis later).
+- Spam controls:
+  - honeypot + minimum submit time + basic heuristics.
+
+Storage behavior:
+
+- Always store the submission in DB (inbox is the baseline UX).
+- Optional follow-ups: email delivery, webhooks, integrations.
 
 ---
 
-## Git-Based Plugin Distribution
+## Management API (Control Plane / Studio)
 
-### How it works
+Expose tRPC procedures for:
 
-1. **Core plugins**: Bundled in Docker image from `plugins/` folder
-2. **External plugins**: Git-cloned to a volume at startup
-3. **Custom plugins**: Read from project directory
+- listing available plugins (registry)
+- enabling/disabling plugins per project
+- updating plugin config
+- rotating tokens
+- viewing operational data (e.g. contact submissions inbox)
 
-### Docker configuration
+### UI (MVP)
 
-```dockerfile
-# backend/Dockerfile
-COPY plugins/ /app/plugins/core/
-```
+Add a “Plugins” section per project:
 
-```yaml
-# docker-compose.yml
-services:
-  backend:
-    volumes:
-      - plugin_cache:/app/plugins/external # Persisted plugin cache
-      - backend_data:/app/projects # Contains custom plugins
-```
-
-### Plugin Manager startup
-
-```typescript
-// backend/src/plugins/runtime/PluginManager.ts
-
-async function initPlugins() {
-  // 1. Load core plugins (bundled)
-  await loadPluginsFromDir("/app/plugins/core");
-
-  // 2. Load/install external plugins
-  const siteConfigs = await getAllSitePluginConfigs();
-
-  for (const config of siteConfigs) {
-    for (const [name, plugin] of Object.entries(config.plugins)) {
-      if (plugin.source) {
-        await ensurePluginInstalled(name, plugin.source, plugin.version);
-      }
-    }
-  }
-
-  await loadPluginsFromDir("/app/plugins/external");
-}
-
-async function ensurePluginInstalled(
-  name: string,
-  source: string,
-  version: string
-) {
-  const pluginPath = `/app/plugins/external/${name}`;
-
-  if (!(await exists(pluginPath))) {
-    // Clone the repository
-    await exec(
-      `git clone --depth 1 --branch ${version} https://${source}.git ${pluginPath}`
-    );
-  } else {
-    // Check if version matches, update if needed
-    const currentVersion = await exec(`git -C ${pluginPath} describe --tags`);
-    if (currentVersion !== version) {
-      await exec(`git -C ${pluginPath} fetch --tags`);
-      await exec(`git -C ${pluginPath} checkout ${version}`);
-    }
-  }
-}
-```
+- plugin catalog
+- enable/disable “Contact Forms”
+- show a copy/paste snippet (plain HTML + Astro variants)
+- “Inbox” tab for submissions (list + detail + export)
 
 ---
 
-## Caddy Routing Integration
+## AI Agent Requirements (Must-Have)
 
-When a site is published with plugins enabled:
+The agent should be able to implement plugin features for a customer without manual steps.
 
-```caddyfile
-# Generated in sites.d/<domain>.caddy
-acme.com {
-    # Plugin API routes
-    handle /_api/* {
-        reverse_proxy backend:3000
-    }
+### Agent recipe per plugin
 
-    # Plugin widget/page assets
-    handle /_plugins/* {
-        reverse_proxy backend:3000
-    }
+Each plugin ships:
 
-    # Static files
-    handle {
-        root * /srv/published/acme
-        try_files {path} {path}/index.html =404
-        file_server
-    }
-}
-```
+- snippets/templates (static HTML + Astro)
+- recommended placements (contact page, footer, etc.)
+- config fields and safe defaults
+- checks/detection (to verify installation + ensure idempotent edits)
 
-Backend routes:
+### Agent-callable enablement/config
 
-- `/_api/<plugin-name>/<action>` → Plugin handler
-- `/_plugins/<plugin-name>/widget.js` → Client widget bundle
-- `/_plugins/<plugin-name>/pages/*` → Plugin pages
+Provide an agent-callable operation (Studio connected-mode or backend) that:
+
+- enables/ensures a plugin instance exists for a project, and returns:
+  - `token`
+  - recommended snippet(s)
+  - any config defaults
+
+Optional: persist discovery info into the project:
+
+- `.vivd/plugins.json` (enabled plugins + instance ids + metadata)
+- `.vivd/plugins.md` (human/agent-readable usage instructions)
+
+This makes plugin installs repeatable and easy for the agent to reason about.
 
 ---
 
-## Agent Integration
+## Routing Options (Decision)
 
-### Enabling a plugin
+Two viable approaches; MVP can start with (A) and keep (B) as a refinement.
 
-Agent edits `vivd.plugins.yaml`:
+### (A) Same-origin via existing `/vivd-studio/api/*` routing (recommended for MVP)
 
-```yaml
-plugins:
-  contact-form:
-    enabled: true
-    config:
-      recipient: "hello@acme.com"
-```
+- Website forms post to `/vivd-studio/api/plugins/...` on the same host.
+- Minimal plumbing changes (mostly backend + UI).
 
-### Adding widget to page
+### (B) Dedicated plugin path or host (future)
 
-Agent adds to `index.html`:
-
-```html
-<div data-vivd-plugin="contact-form"></div>
-<script src="/_plugins/contact-form/widget.js"></script>
-```
-
-### Creating custom plugin
-
-Agent creates files in project's `plugins/` directory:
-
-```
-projects/<slug>/v<N>/
-└── plugins/
-    └── availability-checker/
-        ├── manifest.json
-        └── handler.ts
-```
-
-```json
-// manifest.json
-{
-  "name": "availability-checker",
-  "version": "1.0.0",
-  "routes": [
-    {
-      "method": "GET",
-      "path": "/check",
-      "handler": "handler.ts:checkAvailability"
-    }
-  ]
-}
-```
-
-```typescript
-// handler.ts
-export async function checkAvailability(ctx: PluginContext, req: Request) {
-  const date = new URL(req.url).searchParams.get("date");
-  const result = await ctx.http.get(`https://api.hotel.com/avail?date=${date}`);
-  return Response.json({ available: result.rooms > 0 });
-}
-```
+- Cleaner path: `/api/plugins/...` (requires updating Caddy default + snippet generator), or
+- Global host: `https://api.vivd.../plugins/...` (requires CORS + domain binding, but can simplify edge deployments).
 
 ---
 
-## Core Plugins (Initial Set)
+## Phased Delivery Plan
 
-| Plugin           | Description                     | Pages                      |
-| ---------------- | ------------------------------- | -------------------------- |
-| **contact-form** | Email on form submission        | Admin: Submissions list    |
-| **booking**      | Date/time slot booking          | Admin: Bookings management |
-| **newsletter**   | Email signup with double opt-in | Admin: Subscriber list     |
-
-### Future plugins (separate repos)
-
-| Plugin          | Description                              | Complexity |
-| --------------- | ---------------------------------------- | ---------- |
-| reviews         | Submit & display reviews with moderation | Medium     |
-| faq             | Dynamic FAQ with admin editing           | Low        |
-| events-calendar | Event listings with calendar view        | Medium     |
-| gallery         | Image gallery with lightbox              | Low        |
-| comments        | Blog comments system                     | Medium     |
-
----
-
-## Database Schema
-
-```sql
--- Generic plugin state (key-value)
-CREATE TABLE plugin_state (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  site_slug TEXT NOT NULL,
-  plugin_name TEXT NOT NULL,
-  key TEXT NOT NULL,
-  value JSONB NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(site_slug, plugin_name, key)
-);
-
--- Contact submissions
-CREATE TABLE contact_submissions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  site_slug TEXT NOT NULL,
-  data JSONB NOT NULL,
-  read BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Bookings
-CREATE TABLE bookings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  site_slug TEXT NOT NULL,
-  guest_name TEXT NOT NULL,
-  guest_email TEXT NOT NULL,
-  guest_phone TEXT,
-  date DATE NOT NULL,
-  time_slot TEXT NOT NULL,
-  guests INTEGER DEFAULT 1,
-  notes TEXT,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Newsletter subscribers
-CREATE TABLE newsletter_subscribers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  site_slug TEXT NOT NULL,
-  email TEXT NOT NULL,
-  confirmed BOOLEAN DEFAULT false,
-  confirm_token TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(site_slug, email)
-);
-```
+1) Define plugin registry + shared types (manifest, config schemas, IDs).
+2) Add DB tables:
+   - `project_plugin_instance`
+   - plugin-specific tables (start: `contact_form_submission`)
+3) Implement backend:
+   - public plugin router (REST)
+   - management router (tRPC)
+4) Implement frontend:
+   - “Plugins” UI
+   - contact submissions inbox
+5) Implement agent integration:
+   - ensure plugin instance + return snippet tool/action
+   - update agent instructions/recipes
+6) Hardening:
+   - Redis rate limits
+   - captcha option
+   - retention policies
+   - webhook/email delivery
+   - audit log entries for enable/disable/token rotation
 
 ---
 
-## Security
+## Open Decisions
 
-1. **Sandbox for custom plugins**: V8 isolates for agent-written code
-2. **Network allowlist**: Custom plugins can only call whitelisted domains
-3. **Rate limiting**: Per-plugin, per-site rate limits (defined in manifest)
-4. **Input validation**: All plugin inputs validated via Zod schemas
-5. **No filesystem access**: Custom plugins have no direct FS access
-6. **Git source verification**: Only allow trusted sources or require approval
+- MVP delivery target:
+  - store-only + inbox first (fastest), and/or
+  - immediate email/webhook forwarding (depends on provider choice and secret handling).
+- Endpoint surface:
+  - keep under `/vivd-studio/api/plugins/...` for MVP, or
+  - introduce `/api/plugins/...` for cleaner public URLs.
 
----
-
-## Implementation Phases
-
-### Phase 1: Core Runtime
-
-- [ ] Create `plugins/` folder structure
-- [ ] Plugin manifest schema and validation
-- [ ] PluginManager for loading/registering
-- [ ] PluginRouter for request routing
-- [ ] Database schema for plugin state
-
-### Phase 2: Contact Form Plugin
-
-- [ ] Implement contact-form in `plugins/contact-form/`
-- [ ] Email sending integration (Resend)
-- [ ] Client widget
-- [ ] Admin page for submissions
-
-### Phase 3: Booking Plugin
-
-- [ ] Implement booking in `plugins/booking/`
-- [ ] Admin page for managing bookings
-- [ ] Email confirmations
-- [ ] Calendar widget
-
-### Phase 4: External Plugin Support
-
-- [ ] Git-based plugin installation
-- [ ] Plugin version management
-- [ ] Plugin update mechanism
-
-### Phase 5: Custom Plugin Support
-
-- [ ] Sandbox execution environment
-- [ ] Agent can create plugins in project directory
-- [ ] PLUGINS.md auto-generation
-
-### Phase 6: Plugin Development DX
-
-- [ ] `_template/` plugin starter
-- [ ] Plugin development docs
-- [ ] Hot-reload for plugin development

@@ -8,6 +8,7 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-15: documented website plugin system plan (Contact Forms MVP) (`docs/plugin-system-design.md`).
 - 2026-02-15: implemented Studio GitHub pull + force sync (ff-only + overwrite) with bucket exact-sync, superadmin-only gating, SSH URL copy, and environment repo prefix support via `GITHUB_REPO_PREFIX` (e.g. `dev-<org>-...`).
 - 2026-02-14: documented publishing flow review + hardening/test plan (`docs/publishing-flow-review.md`).
 - 2026-02-13: super-admin template maintenance now runs across all tenants (iterates every organization) instead of only the currently selected org.
@@ -44,6 +45,7 @@ Progress log:
 - [ ] Finalize machine lifecycle reliability (start, stop, sync, stale cleanup).
 - [ ] Complete tenant-domain rollout hardening (verification automation, fallback removal window, and production observability tuning).
 - [ ] Finish remaining auth/org UX edge cases and email-based flows.
+- [ ] Ship website plugin system (Contact Forms MVP).
 - [ ] Add missing system hardening (audit log, monitoring, rate limits).
 - [ ] Implement superadmin Fly machine visibility and controls.
 
