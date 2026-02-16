@@ -7,7 +7,7 @@ import {
   projectPublishChecklist,
   projectVersion,
 } from "../db/schema";
-import type { PrePublishChecklist } from "../opencode/checklistTypes";
+import type { PrePublishChecklist } from "../types/checklistTypes";
 
 export type ProjectMetaRow = typeof projectMeta.$inferSelect;
 export type ProjectVersionRow = typeof projectVersion.$inferSelect;

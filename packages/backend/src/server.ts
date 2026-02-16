@@ -11,7 +11,6 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import { serverManager } from "./opencode";
 import { detectProjectType } from "./devserver/projectType";
 import { toNodeHandler } from "better-auth/node";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -1137,14 +1136,11 @@ app.listen(PORT, async () => {
   }
 
   console.log(`Server running on port ${PORT}`);
-  console.log(`[OpenCode] Server manager ready (servers spawn on first task)`);
 
   startStudioMachineReconciler();
 
-  // Graceful shutdown for all servers
   const cleanup = () => {
     console.log("[Server] Shutting down...");
-    serverManager.closeAll();
   };
 
   process.on("SIGTERM", cleanup);

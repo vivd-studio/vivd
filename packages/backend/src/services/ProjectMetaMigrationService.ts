@@ -14,7 +14,7 @@ import {
   getTenantProjectsDir,
 } from "../generator/versionUtils";
 import { getVivdInternalFilesPath } from "../generator/vivdPaths";
-import type { PrePublishChecklist } from "../opencode/checklistTypes";
+import type { PrePublishChecklist } from "../types/checklistTypes";
 import { uploadProjectThumbnailToBucket } from "./ProjectArtifactsService";
 
 type ManifestFile = {

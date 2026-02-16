@@ -1,5 +1,5 @@
-# Stage 1: Dependencies (workspace-aware)
-FROM node:23-slim AS deps
+# Base: shared system dependencies for all stages
+FROM node:23-slim AS base
 WORKDIR /app
 
 # Install git + ca-certs (git clone/push) and python3 (required by opencode-ai).
@@ -17,6 +17,9 @@ RUN npm install -g opencode-ai@1.1.65 \
 # Configure git for automated commits (required for OpenCode undo/revert)
 RUN git config --global user.email "studio@vivd.local" \
   && git config --global user.name "Vivd Studio"
+
+# Stage 1: Dependencies (workspace-aware)
+FROM base AS deps
 
 # Install deps for just the studio workspace (+ theme) via root workspaces/lockfile
 COPY package.json package-lock.json ./
@@ -56,24 +59,7 @@ RUN npm run build -w @vivd/shared
 RUN npm run build -w @vivd/studio
 
 # Stage 4: Production
-FROM node:23-slim AS prod
-WORKDIR /app
-
-# Install git + ca-certs (git clone/push) and python3 (required by opencode-ai).
-# Install awscli for S3/R2 hydration + sync.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates python3 awscli \
-  && rm -rf /var/lib/apt/lists/*
-
-# Install opencode CLI (required for SDK to spawn server)
-# Clean up unused musl binary (saves ~120MB)
-RUN npm install -g opencode-ai@1.1.65 \
-  && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
-  && npm cache clean --force
-
-# Configure git for automated commits (required for OpenCode undo/revert)
-RUN git config --global user.email "studio@vivd.local" \
-  && git config --global user.name "Vivd Studio"
+FROM base AS prod
 
 # Install production deps for the studio workspace (links theme as a workspace dep)
 COPY package.json package-lock.json ./

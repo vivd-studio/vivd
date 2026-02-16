@@ -1,19 +1,12 @@
-# Stage 1: Dependencies (workspace-aware)
-FROM node:23-slim AS deps
+# Base: shared system dependencies for all stages
+FROM node:23-slim AS base
 WORKDIR /app
 
 # Install git and ca-certificates (required for version control features and SSL)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Install opencode CLI (required for SDK to spawn server)
-# Clean up unused musl binary (saves ~120MB)
-RUN npm install -g opencode-ai@1.1.65 \
-    && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
-    && npm cache clean --force
-
-# Configure git for automated commits (required for OpenCode undo/revert)
-RUN git config --global user.email "generator@vivd.local" \
-    && git config --global user.name "Vivd Generator"
+# Stage 1: Dependencies (workspace-aware)
+FROM base AS deps
 
 # Install deps for backend (+ shared) and local studio spawning (dev)
 COPY package.json package-lock.json ./
@@ -60,21 +53,7 @@ RUN mkdir -p /app/packages/backend/dist/templates \
     && cp -R /app/packages/backend/src/generator/templates/* /app/packages/backend/dist/templates/
 
 # Stage 4: Production (minimal runtime image)
-FROM node:23-slim AS prod
-WORKDIR /app
-
-# Install git and ca-certificates (required for version control features and SSL)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 && rm -rf /var/lib/apt/lists/*
-
-# Install opencode CLI (required for SDK to spawn server)
-# Clean up unused musl binary (saves ~120MB)
-RUN npm install -g opencode-ai@1.1.65 \
-    && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
-    && npm cache clean --force
-
-# Configure git for automated commits (required for OpenCode undo/revert)
-RUN git config --global user.email "generator@vivd.local" \
-    && git config --global user.name "Vivd Generator"
+FROM base AS prod
 
 # Install production deps for the backend workspace (links shared as a workspace dep)
 COPY package.json package-lock.json ./

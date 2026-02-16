@@ -1,5 +1,5 @@
 # Stage 1: Dependencies (workspace-aware)
-FROM node:23 AS deps
+FROM node:23-slim AS deps
 WORKDIR /app
 
 # Install deps for the studio frontend + backend types + shared via root workspaces/lockfile
