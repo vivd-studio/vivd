@@ -153,11 +153,7 @@ export function ProjectCard({
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
   const canManagePreview = membership?.organizationRole !== "client_editor";
 
-  const handleCopyPreview = () => {
-    if (!publicPreviewEnabled) {
-      toast.error("Preview URL is disabled for this project");
-      return;
-    }
+  const getPreviewUrl = () => {
     const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
     const tenantHost = config.activeOrganizationTenantHost;
     const shareableUrl = tenantHost
@@ -166,7 +162,15 @@ export function ProjectCard({
           `${isDevDomain(tenantHost) ? "http" : "https"}://${tenantHost}`,
         )
       : new URL(shareablePath, window.location.origin);
-    const absoluteUrl = shareableUrl.toString();
+    return shareableUrl.toString();
+  };
+
+  const handleCopyPreview = () => {
+    if (!publicPreviewEnabled) {
+      toast.error("Preview URL is disabled for this project");
+      return;
+    }
+    const absoluteUrl = getPreviewUrl();
 
     navigator.clipboard.writeText(absoluteUrl);
     setCopied(true);
@@ -272,8 +276,6 @@ export function ProjectCard({
     default:
       statusLabel = project.status;
   }
-
-  const projectEditorUrl = `/vivd-studio/projects/${project.slug}`;
 
   return (
     <>
@@ -432,8 +434,8 @@ export function ProjectCard({
             >
               {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
               <DropdownMenuItem
-                onClick={() => window.open(projectEditorUrl, "_blank")}
-                disabled={!isCompleted}
+                onClick={() => window.open(getPreviewUrl(), "_blank")}
+                disabled={!isCompleted || !publicPreviewEnabled}
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Open in new tab
