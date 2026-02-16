@@ -16,11 +16,18 @@ env:
   IMAGE_PREFIX: ghcr.io/vivd-studio
 
 jobs:
-  build-and-push:
+  detect-changes:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      version_no_v: ${{ steps.tag.outputs.version_no_v }}
+      build_studio: ${{ steps.changes.outputs.build_studio }}
+      build_server: ${{ steps.changes.outputs.build_server }}
+      build_ui: ${{ steps.changes.outputs.build_ui }}
+      build_caddy: ${{ steps.changes.outputs.build_caddy }}
+      any: ${{ steps.changes.outputs.any }}
 
     steps:
       - name: Checkout repository
@@ -28,19 +35,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-
-      - name: Set up QEMU (for multi-platform builds)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
 
       - name: Determine tag
         id: tag
@@ -146,8 +140,33 @@ jobs:
             echo "- build_caddy: $build_caddy"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  build-studio:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_studio == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
       - name: Build and push vivd-studio
-        if: steps.changes.outputs.build_studio == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -156,14 +175,39 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ steps.tag.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ steps.tag.outputs.version_no_v }}
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-studio:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=studio
+          cache-to: type=gha,mode=max,scope=studio
+
+  build-server:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_server == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push vivd-server
-        if: steps.changes.outputs.build_server == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -172,14 +216,39 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ steps.tag.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ steps.tag.outputs.version_no_v }}
+            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-server:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
+
+  build-ui:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_ui == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push vivd-ui
-        if: steps.changes.outputs.build_ui == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -188,14 +257,39 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ steps.tag.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ steps.tag.outputs.version_no_v }}
+            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ needs.detect-changes.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ needs.detect-changes.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-ui:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+
+  build-caddy:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_caddy == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push vivd-caddy
-        if: steps.changes.outputs.build_caddy == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -203,14 +297,18 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-caddy:${{ steps.tag.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-caddy:${{ steps.tag.outputs.version_no_v }}
+            ${{ env.IMAGE_PREFIX }}/vivd-caddy:${{ needs.detect-changes.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-caddy:${{ needs.detect-changes.outputs.version_no_v }}
             ${{ env.IMAGE_PREFIX }}/vivd-caddy:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=caddy
+          cache-to: type=gha,mode=max,scope=caddy
 
+  deploy:
+    needs: [detect-changes, build-studio, build-server, build-ui, build-caddy]
+    if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
       - name: Trigger Dokploy deployments
-        if: steps.changes.outputs.any == 'true'
         run: |
           # Support multiple compose IDs (comma-separated)
           # e.g., DOKPLOY_COMPOSE_IDS="abc123,def456,ghi789"
