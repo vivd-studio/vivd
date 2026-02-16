@@ -140,7 +140,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="px-6 py-4 border-b flex justify-between items-center bg-background z-10">
+      <div className="px-3 py-3 md:px-6 md:py-4 border-b flex justify-between items-center bg-background z-10">
         <div className="flex flex-col gap-2 w-full">
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold">Agent Chat</h2>

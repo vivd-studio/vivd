@@ -319,6 +319,25 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return trimmed ? trimmed : null;
   }
 
+  private getConfiguredStudioImage(machine: FlyMachine, desiredImage?: string): string | null {
+    const metadataImage = this.trimToken(this.getMachineMetadata(machine)?.vivd_image);
+    if (metadataImage) return metadataImage;
+
+    const configImage = this.trimToken(
+      typeof machine.config?.image === "string" ? machine.config.image : null,
+    );
+    if (!configImage) return null;
+
+    // Fly may return tag+digest refs (e.g. "...:v1.2.3@sha256:..."). The digest doesn't
+    // represent drift for our purposes when we're pinning by tag.
+    const digestIndex = !desiredImage?.includes("@") ? configImage.indexOf("@") : -1;
+    if (digestIndex !== -1) {
+      return this.trimToken(configImage.slice(0, digestIndex));
+    }
+
+    return configImage;
+  }
+
   private resolveMachineReconcileState(options: {
     machine: FlyMachine;
     desiredImage: string;
@@ -332,10 +351,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     );
     const preferredToken = this.trimToken(options.preferredAccessToken);
 
-    const configuredImage =
-      typeof options.machine.config?.image === "string"
-        ? options.machine.config.image
-        : null;
+    const configuredImage = this.getConfiguredStudioImage(options.machine, options.desiredImage);
     const needsImageUpdate = configuredImage !== options.desiredImage;
 
     const needsServiceUpdate =
@@ -808,6 +824,35 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     );
   }
 
+  private async waitForReconcileDriftToClear(options: {
+    machineId: string;
+    desiredImage: string;
+    timeoutMs: number;
+  }): Promise<void> {
+    const startedAt = Date.now();
+    let lastNeeds: MachineReconcileNeeds | null = null;
+
+    while (Date.now() - startedAt < options.timeoutMs) {
+      const machine = await this.getMachine(options.machineId);
+      const state = machine.state || "unknown";
+      if (state === "destroyed" || state === "destroying") {
+        throw new Error(`[FlyMachines] Machine ${options.machineId} was destroyed`);
+      }
+
+      const reconcileState = this.resolveMachineReconcileState({
+        machine,
+        desiredImage: options.desiredImage,
+      });
+      lastNeeds = reconcileState.needs;
+
+      if (!this.hasMachineDrift(lastNeeds)) return;
+      await sleep(500);
+    }
+
+    const drift = lastNeeds ? this.getMachineDriftLabels(lastNeeds).join(",") : "unknown";
+    throw new Error(`Drift remains after config update (${drift})`);
+  }
+
   private normalizeServicesForVivd(
     services: FlyMachineService[] | undefined,
     externalPort: number,
@@ -1278,7 +1323,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       if (!identity) continue;
 
       const port = this.getMachineExternalPort(machine);
-      const image = typeof machine.config?.image === "string" ? machine.config.image : null;
+      const image = this.getConfiguredStudioImage(machine, desiredImage);
       const guest = machine.config?.guest;
       const cpuKind = typeof guest?.cpu_kind === "string" ? guest.cpu_kind : null;
       const cpus =
@@ -1535,16 +1580,11 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           skipLaunch: true,
         });
 
-        current = await this.getMachine(machine.id);
-        currentReconcileState = this.resolveMachineReconcileState({
-          machine: current,
+        await this.waitForReconcileDriftToClear({
+          machineId: machine.id,
           desiredImage,
+          timeoutMs: 10_000,
         });
-        if (this.hasMachineDrift(currentReconcileState.needs)) {
-          throw new Error(
-            `Drift remains after config update (${this.getMachineDriftLabels(currentReconcileState.needs).join(",")})`,
-          );
-        }
 
         await this.startMachineHandlingReplacement(machine.id);
         const url = this.getPublicUrlForPort(port);

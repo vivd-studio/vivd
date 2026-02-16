@@ -303,10 +303,10 @@ export function PreviewContent() {
   // Inner content that needs ChatProvider context
   const mainContent = (
     <div className="flex flex-1 min-h-0 relative">
-      {/* Asset Explorer Panel - Left side */}
+      {/* Asset Explorer Panel - Left side (full-screen overlay on mobile) */}
       {projectSlug && version !== undefined && assetsOpen && (
         <div
-          className="relative border-r bg-background flex flex-col h-full shadow-xl z-20 overflow-hidden min-w-0"
+          className="absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:border-r md:min-w-0"
           style={{ width: assetPanel.width }}
         >
           <AssetExplorer
@@ -314,7 +314,9 @@ export function PreviewContent() {
             version={selectedVersion}
             onClose={() => setAssetsOpen(false)}
           />
-          <ResizeHandle side="left" onMouseDown={assetPanel.handleMouseDown} />
+          <div className="hidden md:block">
+            <ResizeHandle side="left" onMouseDown={assetPanel.handleMouseDown} />
+          </div>
         </div>
       )}
 
@@ -518,13 +520,15 @@ export function PreviewContent() {
         </>
       )}
 
-      {/* Chat Panel - Right side */}
+      {/* Chat Panel - Right side (full-screen overlay on mobile) */}
       {projectSlug && chatOpen && (
         <div
-          className="relative min-w-0 overflow-hidden border-l bg-background flex flex-col h-full shadow-xl z-20"
+          className="absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:border-l md:min-w-0"
           style={{ width: chatPanel.width }}
         >
-          <ResizeHandle side="right" onMouseDown={chatPanel.handleMouseDown} />
+          <div className="hidden md:block">
+            <ResizeHandle side="right" onMouseDown={chatPanel.handleMouseDown} />
+          </div>
           <ChatPanelContent onClose={() => setChatOpen(false)} />
         </div>
       )}

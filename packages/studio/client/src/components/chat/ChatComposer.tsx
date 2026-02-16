@@ -189,7 +189,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
   return (
     <div
       className={cn(
-        "p-6 mt-auto transition-colors",
+        "p-3 md:p-6 mt-auto transition-colors",
         isDragOver ? "bg-primary/5" : "",
         className,
       )}

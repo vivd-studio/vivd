@@ -61,7 +61,7 @@ export function MessageList() {
 
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
-      <div className="flex flex-col gap-6 px-6 pt-6 pb-6">
+      <div className="flex flex-col gap-6 px-3 pt-4 pb-4 md:px-6 md:pt-6 md:pb-6">
         {messages.length === 0 &&
           (isSessionHydrating ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

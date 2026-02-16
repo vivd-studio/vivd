@@ -292,6 +292,12 @@ export function StudioToolbar() {
             theme={theme}
             setTheme={setTheme}
             canUseAgent={canUseAgent}
+            previewMode={previewMode}
+            handleRestartDevServer={handleRestartDevServer}
+            isRestartingDevServer={isRestartingDevServer}
+            devServerRestartKind={devServerRestartKind}
+            embedded={embedded}
+            onHardRestart={handleHardRestart}
             isConnectedMode={isConnectedMode}
             handleTogglePreviewUrl={handleTogglePreviewUrl}
             isTogglingPreviewUrl={isTogglingPreviewUrl}

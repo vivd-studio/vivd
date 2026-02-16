@@ -93,6 +93,16 @@ interface MobileActionsMenuProps {
   // Permissions
   canUseAgent: boolean;
 
+  // Dev server actions
+  previewMode?: "static" | "devserver";
+  handleRestartDevServer?: (options?: { clean?: boolean }) => void;
+  isRestartingDevServer?: boolean;
+  devServerRestartKind?: "restart" | "clean" | null;
+
+  // Embedded actions
+  embedded?: boolean;
+  onHardRestart?: () => void;
+
   // Connected-mode actions
   isConnectedMode?: boolean;
   handleTogglePreviewUrl?: () => void;
@@ -133,6 +143,12 @@ export function MobileActionsMenu({
   publishStatus,
   theme,
   setTheme,
+  previewMode,
+  handleRestartDevServer,
+  isRestartingDevServer,
+  devServerRestartKind,
+  embedded,
+  onHardRestart,
   isConnectedMode,
   handleTogglePreviewUrl,
   isTogglingPreviewUrl,
@@ -270,6 +286,38 @@ export function MobileActionsMenu({
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh Preview
         </DropdownMenuItem>
+        {previewMode === "devserver" && handleRestartDevServer && (
+          <>
+            <DropdownMenuItem
+              onClick={() => handleRestartDevServer()}
+              disabled={isRestartingDevServer}
+            >
+              {isRestartingDevServer && devServerRestartKind === "restart" ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Restart dev server
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleRestartDevServer({ clean: true })}
+              disabled={isRestartingDevServer}
+            >
+              {isRestartingDevServer && devServerRestartKind === "clean" ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Clean reinstall
+            </DropdownMenuItem>
+          </>
+        )}
+        {embedded && onHardRestart && (
+          <DropdownMenuItem onClick={onHardRestart}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Hard restart
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={handleCopy} disabled={!canCopyPreviewUrl}>
           <Copy className="w-4 h-4 mr-2" />
           {copied
