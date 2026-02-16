@@ -458,11 +458,14 @@ export const projectRouter = router({
     )
     .query(async ({ ctx }) => {
       try {
-        const hasChanges = await ctx.workspace.hasChanges();
-        return { hasChanges: hasChanges ?? false };
+        const changedFiles = await ctx.workspace.getChangedFiles();
+        return {
+          hasChanges: changedFiles.length > 0,
+          changedFiles,
+        };
       } catch (err) {
         console.error("Error checking git status:", err);
-        return { hasChanges: false };
+        return { hasChanges: false, changedFiles: [] as string[] };
       }
     }),
 

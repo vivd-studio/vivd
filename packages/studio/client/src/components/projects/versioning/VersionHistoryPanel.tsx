@@ -11,6 +11,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   History,
   RotateCcw,
   GitCommit,
@@ -24,6 +29,7 @@ import {
   ArrowDownToLine,
   AlertTriangle,
   Copy,
+  ChevronDown,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -109,6 +115,7 @@ export function VersionHistoryPanel({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [showForceSyncConfirm, setShowForceSyncConfirm] = useState(false);
+  const [changedFilesOpen, setChangedFilesOpen] = useState(false);
 
   // Save State
   const [commitMessage, setCommitMessage] = useState("");
@@ -125,6 +132,12 @@ export function VersionHistoryPanel({
       setCommitMessage(`Version ${nextVersionNumber}`);
     }
   }, [open, commitCount]);
+
+  useEffect(() => {
+    if (!open) {
+      setChangedFilesOpen(false);
+    }
+  }, [open]);
 
   const saveMutation = trpc.project.gitSave.useMutation({
     onSuccess: (data) => {
@@ -220,6 +233,7 @@ export function VersionHistoryPanel({
 
   const commits = historyData?.commits || [];
   const hasUncommittedChanges = changesData?.hasChanges || false;
+  const changedFiles = changesData?.changedFiles || [];
   const workingCommitHash = workingCommitData?.hash || null;
   const headCommit = commits[0] || null;
   const workingCommit = workingCommitHash
@@ -531,6 +545,40 @@ export function VersionHistoryPanel({
                   )}
                 </Button>
               </div>
+
+              {changedFiles.length > 0 ? (
+                <Collapsible open={changedFilesOpen} onOpenChange={setChangedFilesOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <span>
+                        {changedFiles.length} changed file
+                        {changedFiles.length === 1 ? "" : "s"}
+                      </span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${
+                          changedFilesOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2">
+                    <div className="max-h-32 overflow-y-auto rounded-md border bg-muted/30 px-2 py-1.5 space-y-1">
+                      {changedFiles.map((filePath) => (
+                        <div
+                          key={filePath}
+                          className="font-mono text-[11px] leading-4 text-muted-foreground break-all"
+                          title={filePath}
+                        >
+                          {filePath}
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              ) : null}
 
               <div className="flex justify-between items-center pt-1">
                 <span className="text-xs text-muted-foreground">

@@ -252,7 +252,9 @@ export class WorkspaceManager {
       .split("\n")
       .filter((line) => {
         if (!line) return false;
-        const statusPath = this.normalizeGitPath(line.slice(3));
+        const statusPath = this.normalizeGitPath(
+          line.length > 3 && line[2] === " " ? line.slice(3) : line,
+        );
         if (!statusPath) return false;
         if (statusPath.includes(" -> ")) {
           const [fromPath, toPath] = statusPath.split(" -> ").map((p) => p.trim());
@@ -263,6 +265,24 @@ export class WorkspaceManager {
         }
         return !this.isIgnoredWorkspacePath(statusPath);
       });
+  }
+
+  private parseChangedPathFromStatusLine(statusLine: string): string[] {
+    const statusPath = this.normalizeGitPath(
+      statusLine.length > 3 && statusLine[2] === " "
+        ? statusLine.slice(3)
+        : statusLine,
+    );
+    if (!statusPath) return [];
+
+    if (statusPath.includes(" -> ")) {
+      const [fromPath, toPath] = statusPath.split(" -> ").map((p) => p.trim());
+      return [fromPath, toPath].filter(
+        (filePath) => filePath && !this.isIgnoredWorkspacePath(filePath),
+      );
+    }
+
+    return this.isIgnoredWorkspacePath(statusPath) ? [] : [statusPath];
   }
 
   async commit(message: string): Promise<string | null> {
@@ -304,6 +324,38 @@ export class WorkspaceManager {
 
       const workingCommit = await this.getWorkingCommitLocked();
       return await this.hasChangesLocked(workingCommit);
+    });
+  }
+
+  async getChangedFiles(): Promise<string[]> {
+    return await this.withGitLock("getChangedFiles", async () => {
+      if (!this.git) {
+        return [];
+      }
+
+      const workingCommit = await this.getWorkingCommitLocked();
+
+      if (workingCommit) {
+        const diff = await this.git.raw(["diff", "--name-only", workingCommit]);
+        const diffFiles = this.getRelevantPaths(diff);
+
+        const untracked = await this.git.raw([
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+        ]);
+        const untrackedFiles = this.getRelevantPaths(untracked);
+
+        return [...new Set([...diffFiles, ...untrackedFiles])].sort();
+      }
+
+      const status = await this.git.raw(["status", "--porcelain"]);
+      const statusLines = this.getRelevantStatusLines(status);
+      const files = statusLines.flatMap((line) =>
+        this.parseChangedPathFromStatusLine(line),
+      );
+
+      return [...new Set(files)].sort();
     });
   }
 

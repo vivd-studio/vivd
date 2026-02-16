@@ -8,6 +8,8 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-16: fixed studio changed-files filename truncation edge case so paths are parsed defensively and shown without truncating the first character.
+- 2026-02-16: studio snapshots sidepanel now exposes a subtle, collapsible list of changed file paths (collapsed by default) to make pending workspace edits easier to review before saving.
 - 2026-02-15: superadmin Fly machines table now supports sortable columns and manual per-machine destroy action (stop-first, then destroy).
 - 2026-02-15: integrated Fly studio machine management in backend: periodic reconciler (warm outdated images + GC machines older than 7 days) and superadmin tRPC endpoints for listing/reconciling machines.
 - 2026-02-15: documented website plugin system plan (Contact Forms MVP) (`docs/plugin-system-design.md`).
@@ -255,4 +257,4 @@ packages/
 
 ---
 
-*Last updated: 2026-02-15*
+*Last updated: 2026-02-16*
