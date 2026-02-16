@@ -1,10 +1,11 @@
 import { useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 import type { AssetItem } from "./types";
 import { AssetItemCard } from "./AssetItemCard";
-import { buildImageUrl } from "./utils";
+import { buildImageUrl, isTextFile } from "./utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 
@@ -38,7 +39,12 @@ export function ImageGalleryView({
   onDrop,
 }: ImageGalleryViewProps) {
   const { canUseAiImages } = usePermissions();
-  const { setViewingImagePath, viewingImagePath } = usePreview();
+  const {
+    setEditingTextFile,
+    setViewingImagePath,
+    viewingImagePath,
+    setViewingPdfPath,
+  } = usePreview();
 
   const { data, isLoading } = trpc.assets.listAssets.useQuery({
     slug: projectSlug,
@@ -52,12 +58,40 @@ export function ImageGalleryView({
         onNavigate(item.path);
       } else if (item.isImage) {
         // Open image in viewer panel (like code view)
+        setEditingTextFile(null);
+        setViewingPdfPath(null);
         setViewingImagePath(item.path);
-      } else if (item.type === "file") {
+      } else if (item.mimeType?.includes("pdf") || item.name.toLowerCase().endsWith(".pdf")) {
+        setEditingTextFile(null);
+        setViewingImagePath(null);
+        setViewingPdfPath(item.path);
+      } else if (item.type === "file" && isTextFile(item.name)) {
+        setViewingImagePath(null);
+        setViewingPdfPath(null);
         onTextEdit(item.path);
+      } else if (item.type === "file") {
+        const url = buildImageUrl(projectSlug, version, item.path);
+        const opened = window.open(url, "_blank", "noopener,noreferrer");
+        if (!opened) {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = item.name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+        toast.info("Opened file in a new tab", { description: item.name });
       }
     },
-    [onNavigate, setViewingImagePath, onTextEdit]
+    [
+      onNavigate,
+      onTextEdit,
+      projectSlug,
+      setEditingTextFile,
+      setViewingImagePath,
+      setViewingPdfPath,
+      version,
+    ]
   );
 
   const handleDownload = useCallback(

@@ -117,6 +117,10 @@ interface PreviewContextValue {
   viewingImagePath: string | null;
   setViewingImagePath: (path: string | null) => void;
 
+  // PDF Viewer in preview area
+  viewingPdfPath: string | null;
+  setViewingPdfPath: (path: string | null) => void;
+
   // Asset actions (shared between AssetExplorer and ImageViewerPanel)
   editingAsset: AssetItem | FileTreeNode | null;
   setEditingAsset: (asset: AssetItem | FileTreeNode | null) => void;
@@ -207,6 +211,7 @@ export function PreviewProvider({
   } | null>(null);
   const [editingTextFile, setEditingTextFile] = useState<string | null>(null);
   const [viewingImagePath, setViewingImagePath] = useState<string | null>(null);
+  const [viewingPdfPath, setViewingPdfPath] = useState<string | null>(null);
   const [editingAsset, setEditingAsset] = useState<
     AssetItem | FileTreeNode | null
   >(null);
@@ -1163,6 +1168,10 @@ export function PreviewProvider({
     // Image Viewer in preview area
     viewingImagePath,
     setViewingImagePath,
+
+    // PDF Viewer in preview area
+    viewingPdfPath,
+    setViewingPdfPath,
 
     // Asset actions
     editingAsset,

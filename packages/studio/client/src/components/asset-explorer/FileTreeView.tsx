@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import type { FileTreeNode } from "./types";
 import { FileTreeItem } from "./FileTreeItem";
+import { buildImageUrl, isTextFile } from "./utils";
 import { usePreview } from "@/components/preview/PreviewContext";
 
 interface FileTreeViewProps {
@@ -34,7 +35,17 @@ export function FileTreeView({
   const [rootDragOver, setRootDragOver] = useState(false);
   const [isExternalDrag, setIsExternalDrag] = useState(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
-  const { setEditingTextFile, setViewingImagePath, viewingImagePath } = usePreview();
+  const {
+    editingTextFile,
+    setEditingTextFile,
+    viewingImagePath,
+    setViewingImagePath,
+    viewingPdfPath,
+    setViewingPdfPath,
+  } = usePreview();
+
+  const isPdfFile = (item: FileTreeNode) =>
+    item.mimeType?.includes("pdf") || item.name.toLowerCase().endsWith(".pdf");
 
   // Global dragend listener to clean up state when drag is cancelled
   useEffect(() => {
@@ -93,11 +104,31 @@ export function FileTreeView({
     } else if (item.isImage) {
       // Open image in viewer panel - close text editor first
       setEditingTextFile(null);
+      setViewingPdfPath(null);
       setViewingImagePath(item.path);
-    } else {
-      // Text file - open in editor, close image viewer first
+    } else if (isPdfFile(item)) {
+      // Open PDF in viewer panel - close other overlays first
+      setEditingTextFile(null);
       setViewingImagePath(null);
+      setViewingPdfPath(item.path);
+    } else if (isTextFile(item.name)) {
+      // Text file - open in editor, close other overlays first
+      setViewingImagePath(null);
+      setViewingPdfPath(null);
       setEditingTextFile(item.path);
+    } else {
+      // Binary/unknown file - open in a new tab (download fallback)
+      const url = buildImageUrl(projectSlug, version, item.path);
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = item.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      toast.info("Opened file in a new tab", { description: item.name });
     }
   };
 
@@ -258,7 +289,12 @@ export function FileTreeView({
           item={node}
           depth={depth}
           isExpanded={expandedPaths.has(node.path)}
-          isViewing={node.isImage && viewingImagePath === node.path}
+          isViewing={
+            node.type === "file" &&
+            ((node.isImage && viewingImagePath === node.path) ||
+              (isPdfFile(node) && viewingPdfPath === node.path) ||
+              (isTextFile(node.name) && editingTextFile === node.path))
+          }
           onClick={() => handleItemClick(node)}
           onDrop={handleDrop}
           projectSlug={projectSlug}

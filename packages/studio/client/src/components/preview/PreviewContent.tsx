@@ -11,9 +11,11 @@ import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
 import { TextEditorPanel } from "../asset-explorer/TextEditorPanel";
 import { ImageViewerPanel } from "../asset-explorer/ImageViewerPanel";
+import { PdfViewerPanel } from "../asset-explorer/PdfViewerPanel";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2, AlertCircle } from "lucide-react";
 import { AIEditDialog } from "../asset-explorer/AIEditDialog";
+import { isTextFile } from "../asset-explorer/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +54,8 @@ export function PreviewContent() {
     setEditingTextFile,
     viewingImagePath,
     setViewingImagePath,
+    viewingPdfPath,
+    setViewingPdfPath,
     selectedVersion,
     devServerStatus,
     devServerError,
@@ -111,7 +115,9 @@ export function PreviewContent() {
     for (const node of nodes) {
       if (node.type === "file") {
         // Include images and text-based files (non-binary)
-        result.push(node);
+        if (node.isImage || isTextFile(node.name)) {
+          result.push(node);
+        }
       } else if (node.children) {
         result.push(...flattenTree(node.children));
       }
@@ -141,9 +147,11 @@ export function PreviewContent() {
     if (!canNavigatePrevious) return;
     const prevFile = navigableFiles[currentFileIndex - 1];
     if (prevFile.isImage) {
+      setViewingPdfPath(null);
       setViewingImagePath(prevFile.path);
     } else {
       // Switch to text editor
+      setViewingPdfPath(null);
       setViewingImagePath(null);
       setEditingTextFile(prevFile.path);
     }
@@ -152,6 +160,7 @@ export function PreviewContent() {
     navigableFiles,
     currentFileIndex,
     setViewingImagePath,
+    setViewingPdfPath,
     setEditingTextFile,
   ]);
 
@@ -159,9 +168,11 @@ export function PreviewContent() {
     if (!canNavigateNext) return;
     const nextFile = navigableFiles[currentFileIndex + 1];
     if (nextFile.isImage) {
+      setViewingPdfPath(null);
       setViewingImagePath(nextFile.path);
     } else {
       // Switch to text editor
+      setViewingPdfPath(null);
       setViewingImagePath(null);
       setEditingTextFile(nextFile.path);
     }
@@ -170,6 +181,7 @@ export function PreviewContent() {
     navigableFiles,
     currentFileIndex,
     setViewingImagePath,
+    setViewingPdfPath,
     setEditingTextFile,
   ]);
 
@@ -185,6 +197,12 @@ export function PreviewContent() {
       setPendingDeleteAsset(null);
       if (viewingImagePath === pendingDeleteAsset?.path) {
         setViewingImagePath(null);
+      }
+      if (viewingPdfPath === pendingDeleteAsset?.path) {
+        setViewingPdfPath(null);
+      }
+      if (editingTextFile === pendingDeleteAsset?.path) {
+        setEditingTextFile(null);
       }
     },
     onError: (error) => {
@@ -354,6 +372,23 @@ export function PreviewContent() {
               currentAsset
                 ? () => setPendingDeleteAsset(currentAsset)
                 : undefined
+            }
+          />
+        )}
+
+        {/* PDF Viewer - overlay on top of iframe similar to text editor */}
+        {projectSlug && viewingPdfPath && (
+          <PdfViewerPanel
+            projectSlug={projectSlug}
+            version={selectedVersion}
+            filePath={viewingPdfPath}
+            onClose={() => setViewingPdfPath(null)}
+            onDelete={() =>
+              setPendingDeleteAsset({
+                type: "file",
+                name: viewingPdfPath.split("/").pop() || viewingPdfPath,
+                path: viewingPdfPath,
+              })
             }
           />
         )}

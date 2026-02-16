@@ -109,6 +109,16 @@ function safeJoin(root: string, targetPath: string): string {
   return resolvedTarget;
 }
 
+function decodeUriPath(value: string): string | null {
+  try {
+    // decodeURI intentionally does NOT decode reserved characters like "/" so we
+    // don't accidentally turn "%2F" into path separators.
+    return decodeURI(value);
+  } catch {
+    return null;
+  }
+}
+
 function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
   const baseNoLeadingSlash = base.replace(/^\/+/, "");
@@ -502,7 +512,11 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid version" });
       }
 
-      const relativePath = rest.join("/");
+      const relativePathRaw = rest.join("/");
+      const relativePath = decodeUriPath(relativePathRaw);
+      if (!relativePath) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
       if (!isAllowedProjectFile(relativePath)) {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -536,7 +550,11 @@ async function startServer() {
       // Ignore slug and version (single-workspace studio)
       const [, , ...rest] = parts;
 
-      const relativePath = rest.join("/");
+      const relativePathRaw = rest.join("/");
+      const relativePath = decodeUriPath(relativePathRaw);
+      if (!relativePath) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
       if (!isAllowedProjectFile(relativePath)) {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -738,7 +756,11 @@ export default {};
       // Static mode: serve files from the workspace directory.
       // Express has already stripped the "/preview" prefix from req.path.
       const requestedPath = req.path.replace(/^\/+/, "");
-      const relativePath = requestedPath.length ? requestedPath : "index.html";
+      const relativePathRaw = requestedPath.length ? requestedPath : "index.html";
+      const relativePath = decodeUriPath(relativePathRaw);
+      if (!relativePath) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
 
       let resolvedPath: string;
       try {
@@ -793,7 +815,11 @@ export default {};
       const rawFilePath = urlWithoutQuery.startsWith("/")
         ? urlWithoutQuery.slice(1)
         : urlWithoutQuery;
-      const filePath = rawFilePath || "index.html";
+      const filePathRaw = rawFilePath || "index.html";
+      const filePath = decodeUriPath(filePathRaw);
+      if (!filePath) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
 
       if (!isAllowedProjectFile(filePath)) {
         return res.status(403).json({ error: "Forbidden" });

@@ -63,7 +63,12 @@ export function buildImageUrl(
   version: number,
   path: string
 ): string {
-  return `/vivd-studio/api/projects/${projectSlug}/v${version}/${path}`;
+  const normalized = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  const encodedPath = normalized
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `/vivd-studio/api/projects/${encodeURIComponent(projectSlug)}/v${version}/${encodedPath}`;
 }
 
 // Text file extensions that can be edited
