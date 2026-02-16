@@ -51,6 +51,16 @@ function formatAge(value: string | null): string {
   return `${minutes}m`;
 }
 
+function formatMachineSizing(machine: StudioMachine): string {
+  const parts: string[] = [];
+  if (machine.cpuKind) parts.push(machine.cpuKind);
+  if (typeof machine.cpus === "number") {
+    parts.push(`${machine.cpus} vCPU${machine.cpus === 1 ? "" : "s"}`);
+  }
+  if (typeof machine.memoryMb === "number") parts.push(`${machine.memoryMb} MiB`);
+  return parts.length > 0 ? parts.join(" / ") : "unknown";
+}
+
 function badgeVariantForState(state: string | null): "default" | "secondary" | "outline" {
   if (!state) return "outline";
   if (state === "started") return "default";
@@ -312,6 +322,7 @@ export function MachinesTab() {
                         {sortIconFor("age")}
                       </button>
                     </th>
+                    <th className="px-3 py-2 font-medium">Placement</th>
                     <th className="px-3 py-2 font-medium">
                       <button
                         type="button"
@@ -369,14 +380,15 @@ export function MachinesTab() {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={m.imageOutdated ? "destructive" : "secondary"}>
-                            {m.imageOutdated ? "outdated" : "ok"}
-                          </Badge>
-                          {m.region ? (
-                            <Badge variant="outline">{m.region}</Badge>
-                          ) : null}
+                        <div className="font-mono text-xs">{m.region || "unknown"}</div>
+                        <div className="text-[11px] text-muted-foreground mt-1">
+                          {formatMachineSizing(m)}
                         </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant={m.imageOutdated ? "destructive" : "secondary"}>
+                          {m.imageOutdated ? "outdated" : "ok"}
+                        </Badge>
                         <div className="font-mono text-[11px] text-muted-foreground break-all mt-1">
                           {m.image || "unknown"}
                         </div>

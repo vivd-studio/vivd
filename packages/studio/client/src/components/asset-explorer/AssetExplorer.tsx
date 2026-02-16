@@ -17,6 +17,7 @@ import { FileTreeView } from "./FileTreeView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
+import { getVivdStudioToken, VIVD_STUDIO_TOKEN_HEADER } from "@/lib/studioAuth";
 
 interface AssetExplorerProps {
   projectSlug: string;
@@ -187,16 +188,21 @@ export function AssetExplorer({
     setUploadStatus("uploading");
 
     try {
+      const token = getVivdStudioToken();
       const formData = new FormData();
       for (let i = 0; i < files.length; i++) {
         formData.append("files", files[i]);
       }
+
+      const headers = new Headers();
+      if (token) headers.set(VIVD_STUDIO_TOKEN_HEADER, token);
 
       const response = await fetch(
         `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(currentPath)}`,
         {
           method: "POST",
           body: formData,
+          headers,
         },
       );
 

@@ -19,6 +19,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
 // Folders to gray out (build outputs, dependencies, internal)
 const GRAYED_FOLDERS = [
@@ -121,7 +122,10 @@ export function FileTreeItem({
 
     // For images, also set the asset data types so they can be dropped onto the website preview
     if (item.isImage) {
-      const imageUrl = `/vivd-studio/api/assets/${projectSlug}/${version}/${item.path}`;
+      const imageUrl = withVivdStudioTokenQuery(
+        `/vivd-studio/api/assets/${projectSlug}/${version}/${item.path}`,
+        getVivdStudioToken(),
+      );
       e.dataTransfer.setData("text/plain", item.path);
       e.dataTransfer.setData("application/x-asset-path", item.path);
       e.dataTransfer.setData("application/x-asset-url", imageUrl);

@@ -25,6 +25,12 @@ export interface StudioMachineStartResult {
   studioId: string;
   url: string;
   port?: number;
+  accessToken?: string;
+}
+
+export interface StudioMachineUrlResult {
+  url: string;
+  accessToken?: string;
 }
 
 export interface StudioMachineProvider {
@@ -34,6 +40,10 @@ export interface StudioMachineProvider {
   restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult>;
   touch(organizationId: string, projectSlug: string, version: number): void | Promise<void>;
   stop(organizationId: string, projectSlug: string, version: number): void | Promise<void>;
-  getUrl(organizationId: string, projectSlug: string, version: number): Promise<string | null>;
+  getUrl(
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ): Promise<StudioMachineUrlResult | null>;
   isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean>;
 }

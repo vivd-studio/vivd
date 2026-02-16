@@ -19,6 +19,7 @@ export default function StudioFullscreen() {
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
+  const [studioAccessTokenOverride, setStudioAccessTokenOverride] = useState<string | null>(null);
   const [studioReloadNonce, setStudioReloadNonce] = useState(0);
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
@@ -84,6 +85,7 @@ export default function StudioFullscreen() {
 
   useEffect(() => {
     setStudioUrlOverride(null);
+    setStudioAccessTokenOverride(null);
     setStudioReloadNonce(0);
     hardRestartStudio.reset();
   }, [projectSlug, hardRestartStudio.reset]);
@@ -99,6 +101,7 @@ export default function StudioFullscreen() {
         : version;
 
     setStudioUrlOverride(null);
+    setStudioAccessTokenOverride(null);
 
     const result = await hardRestartStudio.mutateAsync({
       slug: projectSlug,
@@ -111,6 +114,7 @@ export default function StudioFullscreen() {
     }
 
     setStudioUrlOverride(result.url);
+    setStudioAccessTokenOverride(result.accessToken);
     setStudioReloadNonce((n) => n + 1);
   };
 
@@ -124,6 +128,19 @@ export default function StudioFullscreen() {
     hardRestartStudio.isPending,
     startStudio.data,
     studioUrlOverride,
+    studioUrlQuery.data,
+  ]);
+
+  const studioAccessToken = useMemo(() => {
+    if (hardRestartStudio.isPending) return null;
+    if (studioAccessTokenOverride) return studioAccessTokenOverride;
+    if (studioUrlQuery.data?.status === "running") return studioUrlQuery.data.accessToken;
+    if (startStudio.data?.success) return startStudio.data.accessToken;
+    return null;
+  }, [
+    hardRestartStudio.isPending,
+    startStudio.data,
+    studioAccessTokenOverride,
     studioUrlQuery.data,
   ]);
 
@@ -219,8 +236,14 @@ export default function StudioFullscreen() {
         window.location.origin,
       ).toString(),
     );
+
+    if (studioAccessToken) {
+      const hashParams = new URLSearchParams();
+      hashParams.set("vivdStudioToken", studioAccessToken);
+      url.hash = hashParams.toString();
+    }
     return url.toString();
-  }, [baseUrl, projectSlug, version]);
+  }, [baseUrl, projectSlug, studioAccessToken, version]);
 
   useEffect(() => {
     if (!studioIframeSrc) {

@@ -75,6 +75,9 @@ export type FlyStudioMachineSummary = {
   name: string | null;
   state: string | null;
   region: string | null;
+  cpuKind: string | null;
+  cpus: number | null;
+  memoryMb: number | null;
   organizationId: string;
   projectSlug: string;
   version: number;
@@ -100,4 +103,3 @@ export type FlyStudioMachineReconcileResult = {
     message: string;
   }>;
 };
-

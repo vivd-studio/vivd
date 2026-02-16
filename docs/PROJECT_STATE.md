@@ -8,10 +8,15 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-16: studio machine security — Fly studio machines now get a per-machine access token (`STUDIO_ACCESS_TOKEN`) and the studio server enforces it for tRPC + file/upload endpoints; embedded/fullscreen host URLs pass the token via URL hash, and static `/preview` serving now applies the same allowlist as `/vivd-studio/api/projects` to block `.git`/env/etc.
+- 2026-02-16: Fly machine update/reconcile paths now include region migration (`region` update) for non-running machines, so env region changes can be applied during normal config updates/hard restarts/image warm-ups.
+- 2026-02-16: Fly studio machine default region changed from `iad` to `fra`; explicit env overrides remain supported via `FLY_STUDIO_REGION` (or `FLY_REGION` fallback).
 - 2026-02-16: source artifact sync switched to exact behavior across studio sync paths (studio source sync default, studio container sync loop, local studio-machine object-storage sync, and backend source artifact uploads) so deleted files are removed from bucket and no longer rehydrate back into workspaces.
 - 2026-02-16: Fly studio machine sizing policy updated — performance machines now enforce RAM floor at `2 GiB * CPU count` (removed hard 4 GiB minimum), and machine config reconciliation now applies desired `guest` sizing (cpu_kind/cpus/memory) on non-running updates/hard restarts/image warm-ups.
+- 2026-02-16: superadmin Fly machines overview now surfaces machine placement details explicitly (region + guest sizing: cpu kind/cpus/memory) in the table.
 - 2026-02-16: studio Fly cold-start hardening — added a lightweight pre-start HTTP listener during S3 hydration to avoid Fly port-probe “connection refused” errors before the real studio server starts.
 - 2026-02-16: studio preview navigation loading — show an explicit loading indicator when the preview iframe is navigating (slow link clicks / page transitions no longer look like “nothing happened”).
+- 2026-02-16: studio edit mode hardening — prevent accidental navigations while editing (clickable elements no longer steal clicks), patch the currently viewed HTML file instead of always `index.html`, and show an actionable “ask the agent” message when an edit can’t be applied.
 - 2026-02-16: studio preview PDF downloads — clicking PDF/download links inside the preview iframe now opens/downloads the file outside the sandbox (avoids Chrome “blocked” page) while preserving base-path URL rewriting.
 - 2026-02-16: studio assets UX — added in-studio PDF viewer overlay and avoid opening binary files in the text editor (fallback: open/download in a new tab).
 - 2026-02-16: studio snapshots history sidebar now runs load-version as a single-flight action with explicit per-item loading feedback, and blocks other git actions while a git mutation is in-flight (prevents queued duplicate operations/toast bursts).

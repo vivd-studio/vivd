@@ -26,6 +26,9 @@ import {
   sleep,
 } from "./utils";
 
+const STUDIO_ACCESS_TOKEN_ENV_KEY = "STUDIO_ACCESS_TOKEN";
+const STUDIO_ACCESS_TOKEN_METADATA_KEY = "vivd_studio_access_token";
+
 export class FlyStudioMachineProvider implements StudioMachineProvider {
   kind = "fly" as const;
 
@@ -102,6 +105,24 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return `${clippedBase}-${hash}`;
   }
 
+  private generateStudioAccessToken(): string {
+    return crypto.randomBytes(32).toString("base64url");
+  }
+
+  private getStudioAccessTokenFromMachine(machine: FlyMachine): string | null {
+    const metadataToken = this.getMachineMetadata(machine)?.[STUDIO_ACCESS_TOKEN_METADATA_KEY];
+    if (typeof metadataToken === "string" && metadataToken.trim()) {
+      return metadataToken.trim();
+    }
+
+    const envToken = machine.config?.env?.[STUDIO_ACCESS_TOKEN_ENV_KEY];
+    if (typeof envToken === "string" && envToken.trim()) {
+      return envToken.trim();
+    }
+
+    return null;
+  }
+
   private get token(): string {
     const token = process.env.FLY_API_TOKEN;
     if (!token) {
@@ -176,7 +197,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   private get region(): string {
-    return process.env.FLY_STUDIO_REGION || process.env.FLY_REGION || "iad";
+    return process.env.FLY_STUDIO_REGION || process.env.FLY_REGION || "fra";
   }
 
   private get portStart(): number {
@@ -659,9 +680,11 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   private async updateMachineConfig(options: {
     machineId: string;
     config: FlyMachineConfig;
+    region?: string;
     skipLaunch?: boolean;
   }): Promise<FlyMachine> {
     const body: Record<string, unknown> = { config: options.config };
+    if (options.region) body.region = options.region;
     if (options.skipLaunch) body.skip_launch = true;
     const machine = await this.flyFetch<FlyMachine>(`/machines/${options.machineId}`, {
       method: "POST",
@@ -683,6 +706,26 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       );
     }
 
+    const metadataTokenRaw =
+      this.getMachineMetadata(existing)?.[STUDIO_ACCESS_TOKEN_METADATA_KEY];
+    const metadataToken =
+      typeof metadataTokenRaw === "string" && metadataTokenRaw.trim()
+        ? metadataTokenRaw.trim()
+        : null;
+    const envTokenRaw = existing.config?.env?.[STUDIO_ACCESS_TOKEN_ENV_KEY];
+    const envToken =
+      typeof envTokenRaw === "string" && envTokenRaw.trim() ? envTokenRaw.trim() : null;
+
+    const accessToken =
+      metadataToken ||
+      envToken ||
+      (typeof args.env[STUDIO_ACCESS_TOKEN_ENV_KEY] === "string"
+        ? args.env[STUDIO_ACCESS_TOKEN_ENV_KEY]?.trim()
+        : null) ||
+      this.generateStudioAccessToken();
+    const needsAccessTokenUpdate =
+      !metadataToken || !envToken || (metadataToken && envToken && metadataToken !== envToken);
+
     const desiredImage = await this.getDesiredImage();
     const configuredImage =
       typeof existing.config?.image === "string" ? existing.config.image : null;
@@ -695,15 +738,36 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         return needsAutostart || needsAutostop;
       }) ?? true;
     const needsGuestUpdate = this.needsGuestUpdate(existing.config?.guest);
+    const needsRegionUpdate =
+      typeof existing.region === "string" && existing.region !== this.region;
+
+    if (existing.state === "started" && needsAccessTokenUpdate) {
+      // Access token must be present in the machine env for @vivd/studio to enforce auth.
+      // Stop the machine so we can update config and boot with the token.
+      await this.stopMachine(existing.id);
+      await this.waitForState({
+        machineId: existing.id,
+        state: "stopped",
+        timeoutMs: 60_000,
+      });
+      existing = await this.getMachine(existing.id);
+    }
 
     // Only reconcile machine config when it's not running, to avoid disrupting an
     // active studio session. This also ensures the next boot uses the latest image.
     if (
       existing.state !== "started" &&
-      (needsImageUpdate || needsServiceUpdate || needsGuestUpdate)
+      (needsImageUpdate ||
+        needsServiceUpdate ||
+        needsGuestUpdate ||
+        needsRegionUpdate ||
+        needsAccessTokenUpdate)
     ) {
       // A suspended machine would resume a snapshot; stop it first to boot fresh.
-      if ((needsImageUpdate || needsGuestUpdate) && existing.state === "suspended") {
+      if (
+        (needsImageUpdate || needsGuestUpdate || needsRegionUpdate) &&
+        existing.state === "suspended"
+      ) {
         await this.stopMachine(existing.id);
         await this.waitForState({
           machineId: existing.id,
@@ -720,6 +784,8 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         args.env.STUDIO_ID ||
         crypto.randomUUID();
 
+      const env = this.buildStudioEnv({ ...args, studioId, accessToken });
+
       const metadata: Record<string, string> = {
         ...(this.getMachineMetadata(current) || {}),
         vivd_organization_id: args.organizationId,
@@ -728,6 +794,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         vivd_external_port: String(port),
         vivd_studio_id: studioId,
         vivd_image: desiredImage,
+        [STUDIO_ACCESS_TOKEN_METADATA_KEY]: accessToken,
       };
 
       const config: FlyMachineConfig = {
@@ -738,12 +805,14 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           ? { services: this.normalizeServicesForVivd(current.config?.services, port) }
           : {}),
         ...(needsGuestUpdate ? { guest: this.desiredGuest } : {}),
+        ...(needsAccessTokenUpdate ? { env } : {}),
         metadata,
       };
 
       await this.updateMachineConfig({
         machineId: existing.id,
         config,
+        region: needsRegionUpdate ? this.region : undefined,
         skipLaunch: true,
       });
 
@@ -768,7 +837,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       crypto.randomUUID();
 
     this.touchKey(studioKey);
-    return { studioId, url, port };
+    return { studioId, url, port, accessToken };
   }
 
   private async recoverCreateNameConflict(
@@ -815,7 +884,9 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     );
   }
 
-  private buildStudioEnv(args: StudioMachineStartArgs & { studioId: string }): Record<string, string> {
+  private buildStudioEnv(
+    args: StudioMachineStartArgs & { studioId: string; accessToken: string },
+  ): Record<string, string> {
     const workspaceDir =
       process.env.FLY_STUDIO_WORKSPACE_DIR || "/home/studio/project";
     const opencodeDataHome =
@@ -825,6 +896,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     const env: Record<string, string> = {
       PORT: "3100",
       STUDIO_ID: args.studioId,
+      [STUDIO_ACCESS_TOKEN_ENV_KEY]: args.accessToken,
       VIVD_TENANT_ID: args.organizationId,
       VIVD_PROJECT_SLUG: args.projectSlug,
       VIVD_PROJECT_VERSION: String(args.version),
@@ -939,7 +1011,14 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       args.env.STUDIO_ID ||
       crypto.randomUUID();
 
-    const env = this.buildStudioEnv({ ...args, studioId });
+    const accessToken =
+      this.getStudioAccessTokenFromMachine(current) ||
+      (typeof args.env[STUDIO_ACCESS_TOKEN_ENV_KEY] === "string"
+        ? args.env[STUDIO_ACCESS_TOKEN_ENV_KEY]?.trim()
+        : null) ||
+      this.generateStudioAccessToken();
+
+    const env = this.buildStudioEnv({ ...args, studioId, accessToken });
 
     const metadata: Record<string, string> = {
       ...(this.getMachineMetadata(current) || {}),
@@ -949,6 +1028,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       vivd_external_port: String(port),
       vivd_studio_id: studioId,
       vivd_image: desiredImage,
+      [STUDIO_ACCESS_TOKEN_METADATA_KEY]: accessToken,
     };
 
     const config: FlyMachineConfig = {
@@ -963,6 +1043,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     await this.updateMachineConfig({
       machineId: existing.id,
       config,
+      region:
+        typeof current.region === "string" && current.region !== this.region
+          ? this.region
+          : undefined,
       skipLaunch: true,
     });
 
@@ -976,7 +1060,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     });
 
     this.touchKey(studioKey);
-    return { studioId, url, port };
+    return { studioId, url, port, accessToken };
   }
 
   private async ensureRunningInner(
@@ -997,7 +1081,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     const studioId = args.env.STUDIO_ID || crypto.randomUUID();
     const desiredImage = await this.getDesiredImage();
 
-    const env = this.buildStudioEnv({ ...args, studioId });
+    const accessToken =
+      (typeof args.env[STUDIO_ACCESS_TOKEN_ENV_KEY] === "string"
+        ? args.env[STUDIO_ACCESS_TOKEN_ENV_KEY]?.trim()
+        : null) || this.generateStudioAccessToken();
+
+    const env = this.buildStudioEnv({ ...args, studioId, accessToken });
 
     let create: FlyMachine;
     try {
@@ -1029,6 +1118,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
               vivd_external_port: String(port),
               vivd_studio_id: studioId,
               vivd_image: desiredImage,
+              [STUDIO_ACCESS_TOKEN_METADATA_KEY]: accessToken,
               vivd_created_at: new Date().toISOString(),
             },
           },
@@ -1050,7 +1140,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     });
 
     this.touchKey(studioKey);
-    return { studioId, url, port };
+    return { studioId, url, port, accessToken };
   }
 
   async listStudioMachines(): Promise<FlyStudioMachineSummary[]> {
@@ -1064,6 +1154,16 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
       const port = this.getMachineExternalPort(machine);
       const image = typeof machine.config?.image === "string" ? machine.config.image : null;
+      const guest = machine.config?.guest;
+      const cpuKind = typeof guest?.cpu_kind === "string" ? guest.cpu_kind : null;
+      const cpus =
+        typeof guest?.cpus === "number" && Number.isFinite(guest.cpus)
+          ? guest.cpus
+          : null;
+      const memoryMb =
+        typeof guest?.memory_mb === "number" && Number.isFinite(guest.memory_mb)
+          ? guest.memory_mb
+          : null;
       const createdAt =
         machine.created_at ||
         this.getMachineMetadata(machine)?.vivd_created_at ||
@@ -1075,6 +1175,9 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         name: machine.name || null,
         state: (machine.state || null) as string | null,
         region: machine.region || null,
+        cpuKind,
+        cpus,
+        memoryMb,
         organizationId: identity.organizationId,
         projectSlug: identity.projectSlug,
         version: identity.version,
@@ -1282,6 +1385,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         await this.updateMachineConfig({
           machineId: machine.id,
           config,
+          region:
+            typeof current.region === "string" && current.region !== this.region
+              ? this.region
+              : undefined,
           skipLaunch: true,
         });
 
@@ -1340,7 +1447,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     organizationId: string,
     projectSlug: string,
     version: number
-  ): Promise<string | null> {
+  ): Promise<{ url: string; accessToken?: string } | null> {
     try {
       const machines = await this.listMachines();
       const existing =
@@ -1352,7 +1459,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       if (existing.state !== "started") return null;
       const port = this.getMachineExternalPort(existing);
       if (!port) return null;
-      return this.getPublicUrlForPort(port);
+      const url = this.getPublicUrlForPort(port);
+      const accessToken = this.getStudioAccessTokenFromMachine(existing);
+      if (!accessToken) return null;
+      return { url, accessToken };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(

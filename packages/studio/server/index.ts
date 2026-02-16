@@ -28,8 +28,71 @@ type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewBasePath?: string;
 };
 
+const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
+const STUDIO_AUTH_QUERY = "vivdStudioToken";
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getStudioAccessToken(): string | null {
+  const raw = process.env.STUDIO_ACCESS_TOKEN;
+  const token = raw?.trim();
+  return token ? token : null;
+}
+
+function safeTokenEquals(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function getRequestStudioToken(req: express.Request): string | null {
+  const headerValue = req.get(STUDIO_AUTH_HEADER);
+  if (typeof headerValue === "string" && headerValue.trim()) {
+    return headerValue.trim();
+  }
+
+  const auth = req.get("authorization");
+  if (typeof auth === "string" && auth.trim()) {
+    const match = auth.trim().match(/^Bearer\s+(.+)$/i);
+    if (match?.[1]) return match[1].trim();
+  }
+
+  const queryValue = (req.query?.[STUDIO_AUTH_QUERY] ?? null) as
+    | string
+    | string[]
+    | null;
+  if (typeof queryValue === "string" && queryValue.trim()) {
+    return queryValue.trim();
+  }
+
+  return null;
+}
+
+function requireStudioAuth(): express.RequestHandler {
+  return (req, res, next) => {
+    const required = getStudioAccessToken();
+    if (!required) return next();
+
+    // Allow CORS preflight without auth (no sensitive data returned).
+    if (req.method === "OPTIONS") return next();
+
+    const provided = getRequestStudioToken(req);
+    if (provided && safeTokenEquals(provided, required)) return next();
+
+    // Prefer JSON for API-ish routes to make debugging easier.
+    const combinedPath = `${req.baseUrl || ""}${req.path || ""}`;
+    const wantsJson =
+      combinedPath.startsWith("/trpc") ||
+      combinedPath.startsWith("/vivd-studio/api/");
+
+    if (wantsJson) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    return res.status(401).send("Unauthorized");
+  };
 }
 
 function isTransientGitCloneError(message: string): boolean {
@@ -463,7 +526,7 @@ async function startServer() {
   });
 
   // Cleanup endpoint for sendBeacon on page leave (fire-and-forget)
-  app.post("/vivd-studio/api/cleanup/preview-leave", (_req, res) => {
+  app.post("/vivd-studio/api/cleanup/preview-leave", requireStudioAuth(), (_req, res) => {
     try {
       if (workspace.isInitialized()) {
         const projectDir = workspace.getProjectPath();
@@ -478,6 +541,7 @@ async function startServer() {
   // TRPC middleware
   app.use(
     "/trpc",
+    requireStudioAuth(),
     createExpressMiddleware({
       router: appRouter,
       createContext: () => createContext(workspace),
@@ -487,6 +551,7 @@ async function startServer() {
   // Backend-compatible tRPC path (frontend expects this)
   app.use(
     "/vivd-studio/api/trpc",
+    requireStudioAuth(),
     createExpressMiddleware({
       router: appRouter,
       createContext: () => createContext(workspace),
@@ -495,7 +560,7 @@ async function startServer() {
 
   // Serve workspace files in a backend-compatible path:
   // /vivd-studio/api/projects/:slug/v:version/<file>
-  app.use("/vivd-studio/api/projects", async (req, res, next) => {
+  app.use("/vivd-studio/api/projects", requireStudioAuth(), async (req, res, next) => {
     try {
       if (!workspace.isInitialized()) {
         return res.status(503).json({ error: "Workspace not initialized" });
@@ -536,7 +601,7 @@ async function startServer() {
 
   // Serve raw asset files in a backend-compatible path:
   // /vivd-studio/api/assets/:slug/:version/<file>
-  app.use("/vivd-studio/api/assets", async (req, res, next) => {
+  app.use("/vivd-studio/api/assets", requireStudioAuth(), async (req, res, next) => {
     try {
       if (!workspace.isInitialized()) {
         return res.status(503).json({ error: "Workspace not initialized" });
@@ -575,6 +640,7 @@ async function startServer() {
   // Dropped file upload endpoint (for chat drag-and-drop)
   app.post(
     "/vivd-studio/api/upload-dropped-file/:slug/:version",
+    requireStudioAuth(),
     upload.single("file"),
     async (req, res) => {
       try {
@@ -618,6 +684,7 @@ async function startServer() {
   // File upload endpoint
   app.post(
     "/vivd-studio/api/upload/:slug/:version",
+    requireStudioAuth(),
     upload.array("files", 20),
     async (req, res) => {
       try {
@@ -757,7 +824,7 @@ export default {};
       // Express has already stripped the "/preview" prefix from req.path.
       const requestedPath = req.path.replace(/^\/+/, "");
       const relativePathRaw = requestedPath.length ? requestedPath : "index.html";
-      const relativePath = decodeUriPath(relativePathRaw);
+      let relativePath = decodeUriPath(relativePathRaw);
       if (!relativePath) {
         return res.status(400).json({ error: "Invalid path" });
       }
@@ -772,6 +839,7 @@ export default {};
       // Directory -> index.html
       if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
         resolvedPath = path.join(resolvedPath, "index.html");
+        relativePath = path.posix.join(relativePath.replace(/\\/g, "/"), "index.html");
       }
 
       // Clean URLs -> try appending .html
@@ -779,11 +847,19 @@ export default {};
         const withHtml = `${resolvedPath}.html`;
         if (fs.existsSync(withHtml)) {
           resolvedPath = withHtml;
+          const normalizedRelativePath = relativePath
+            .replace(/\\/g, "/")
+            .replace(/\/+$/, "");
+          relativePath = `${normalizedRelativePath}.html`;
         }
       }
 
       if (!fs.existsSync(resolvedPath)) {
         return res.status(404).json({ error: "File not found" });
+      }
+
+      if (!isAllowedProjectFile(relativePath.replace(/\\/g, "/"))) {
+        return res.status(403).json({ error: "Forbidden" });
       }
 
       if (resolvedPath.endsWith(".html")) {

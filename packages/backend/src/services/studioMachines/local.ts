@@ -326,10 +326,14 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     this.studios.delete(key);
   }
 
-  async getUrl(organizationId: string, projectSlug: string, version: number): Promise<string | null> {
+  async getUrl(
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ): Promise<{ url: string; accessToken?: string } | null> {
     const studio = this.studios.get(this.key(organizationId, projectSlug, version));
     if (!studio) return null;
-    return this.getPublicUrl(studio.port);
+    return { url: this.getPublicUrl(studio.port) };
   }
 
   async isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean> {

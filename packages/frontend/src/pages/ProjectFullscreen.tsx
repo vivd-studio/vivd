@@ -60,6 +60,7 @@ export default function ProjectFullscreen() {
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
+  const [studioAccessTokenOverride, setStudioAccessTokenOverride] = useState<string | null>(null);
   const [studioReloadNonce, setStudioReloadNonce] = useState(0);
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
@@ -166,6 +167,7 @@ export default function ProjectFullscreen() {
     startStudio.reset();
     hardRestartStudio.reset();
     setStudioUrlOverride(null);
+    setStudioAccessTokenOverride(null);
     setStudioReloadNonce(0);
   }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
 
@@ -191,6 +193,8 @@ export default function ProjectFullscreen() {
   const handleEdit = () => {
     if (!projectSlug || !project) return;
     setEditRequested(true);
+    setStudioUrlOverride(null);
+    setStudioAccessTokenOverride(null);
     startStudio.mutate({ slug: projectSlug, version });
   };
 
@@ -206,6 +210,7 @@ export default function ProjectFullscreen() {
 
     setEditRequested(true);
     setStudioUrlOverride(null);
+    setStudioAccessTokenOverride(null);
 
     try {
       const result = await hardRestartStudio.mutateAsync({
@@ -220,6 +225,7 @@ export default function ProjectFullscreen() {
       }
 
       setStudioUrlOverride(result.url);
+      setStudioAccessTokenOverride(result.accessToken);
       setStudioReloadNonce((n) => n + 1);
       toast.success("Studio restarted");
     } catch (err) {
@@ -243,6 +249,24 @@ export default function ProjectFullscreen() {
     hardRestartStudio.isPending,
     startStudio.data,
     studioUrlOverride,
+    studioUrlQuery.data,
+  ]);
+
+  const studioAccessToken = useMemo(() => {
+    if (hardRestartStudio.isPending) return null;
+    if (studioAccessTokenOverride) return studioAccessTokenOverride;
+    return editRequested
+      ? startStudio.data?.success
+        ? startStudio.data.accessToken
+        : null
+      : studioUrlQuery.data?.status === "running"
+        ? studioUrlQuery.data.accessToken
+        : null;
+  }, [
+    editRequested,
+    hardRestartStudio.isPending,
+    startStudio.data,
+    studioAccessTokenOverride,
     studioUrlQuery.data,
   ]);
 
@@ -331,8 +355,14 @@ export default function ProjectFullscreen() {
       "returnTo",
       new URL(ROUTES.PROJECT_FULLSCREEN(projectSlug || ""), window.location.origin).toString(),
     );
+
+    if (studioAccessToken) {
+      const hashParams = new URLSearchParams();
+      hashParams.set("vivdStudioToken", studioAccessToken);
+      url.hash = hashParams.toString();
+    }
     return url.toString();
-  }, [projectSlug, publicPreviewEnabled, studioBaseUrl, version]);
+  }, [projectSlug, publicPreviewEnabled, studioAccessToken, studioBaseUrl, version]);
 
   useEffect(() => {
     if (!studioIframeSrc) {

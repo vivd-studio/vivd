@@ -44,14 +44,15 @@ export const studioProcedures = {
     .query(async ({ ctx, input }) => {
       const organizationId = ctx.organizationId!;
       // Check if studio is already running
-      const existingUrl = await studioMachineProvider.getUrl(
+      const existing = await studioMachineProvider.getUrl(
         organizationId,
         input.slug,
         input.version,
       );
-      if (existingUrl) {
+      if (existing) {
         return {
-          url: existingUrl,
+          url: existing.url,
+          accessToken: existing.accessToken || null,
           status: "running" as const,
         };
       }
@@ -59,6 +60,7 @@ export const studioProcedures = {
       // For now, return null - studio needs to be started explicitly
       return {
         url: null,
+        accessToken: null,
         status: "stopped" as const,
       };
     }),
@@ -118,7 +120,8 @@ export const studioProcedures = {
       }
 
       try {
-          const { studioId, url, port } = await studioMachineProvider.ensureRunning({
+          const { studioId, url, port, accessToken } =
+            await studioMachineProvider.ensureRunning({
             organizationId,
             projectSlug: input.slug,
             version: input.version,
@@ -134,6 +137,7 @@ export const studioProcedures = {
           url,
           port,
           studioId,
+          accessToken: accessToken || null,
           provider: studioMachineProvider.kind,
         };
       } catch (error) {
@@ -195,7 +199,8 @@ export const studioProcedures = {
       }
 
       try {
-        const { studioId, url, port } = await studioMachineProvider.restart({
+        const { studioId, url, port, accessToken } =
+          await studioMachineProvider.restart({
           organizationId,
           projectSlug: input.slug,
           version: input.version,
@@ -212,6 +217,7 @@ export const studioProcedures = {
           url,
           port,
           studioId,
+          accessToken: accessToken || null,
           provider: studioMachineProvider.kind,
         };
       } catch (error) {
@@ -268,10 +274,15 @@ export const studioProcedures = {
         input.slug,
         input.version,
       );
-      const url = await studioMachineProvider.getUrl(ctx.organizationId!, input.slug, input.version);
+      const info = await studioMachineProvider.getUrl(
+        ctx.organizationId!,
+        input.slug,
+        input.version,
+      );
       return {
         running,
-        url,
+        url: info?.url || null,
+        accessToken: info?.accessToken || null,
       };
     }),
 };

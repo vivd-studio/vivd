@@ -1,5 +1,6 @@
 import { useEffect, useCallback, type RefObject } from "react";
 import { toast } from "sonner";
+import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
 interface UseImageDropZoneOptions {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -74,7 +75,10 @@ export function useImageDropZone({
     // For Astro projects, use absolute API paths to avoid base path issues
     // For static projects, relative paths work fine
     if (projectSlug && version) {
-      return `/vivd-studio/api/projects/${projectSlug}/v${version}/${assetPath}`;
+      return withVivdStudioTokenQuery(
+        `/vivd-studio/api/projects/${projectSlug}/v${version}/${assetPath}`,
+        getVivdStudioToken(),
+      );
     }
     // Fallback to relative path (works for static HTML projects)
     return assetPath;

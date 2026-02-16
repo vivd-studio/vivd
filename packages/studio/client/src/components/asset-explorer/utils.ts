@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import type { AssetItem } from "./types";
+import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
 export function formatSize(bytes?: number): string {
   if (!bytes) return "";
@@ -68,7 +69,10 @@ export function buildImageUrl(
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  return `/vivd-studio/api/projects/${encodeURIComponent(projectSlug)}/v${version}/${encodedPath}`;
+  return withVivdStudioTokenQuery(
+    `/vivd-studio/api/projects/${encodeURIComponent(projectSlug)}/v${version}/${encodedPath}`,
+    getVivdStudioToken(),
+  );
 }
 
 // Text file extensions that can be edited

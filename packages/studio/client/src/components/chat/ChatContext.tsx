@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
+import { getVivdStudioToken, VIVD_STUDIO_TOKEN_HEADER } from "@/lib/studioAuth";
 import {
   POLLING_IDLE,
   POLLING_INFREQUENT,
@@ -1202,12 +1203,17 @@ export function ChatProvider({
           const formData = new FormData();
           formData.append("file", img.file);
 
+          const token = getVivdStudioToken();
+          const headers = new Headers();
+          if (token) headers.set(VIVD_STUDIO_TOKEN_HEADER, token);
+
           const response = await fetch(
             `/vivd-studio/api/upload-dropped-file/${projectSlug}/${version}`,
             {
               method: "POST",
               body: formData,
               credentials: "include",
+              headers,
             },
           );
 
