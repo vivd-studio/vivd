@@ -99,7 +99,7 @@ export type FlyStudioMachineReconcileResult = {
   dryRun: boolean;
   errors: Array<{
     machineId: string;
-    action: "gc" | "warm_outdated_image";
+    action: "gc" | "warm_reconciled_machine";
     message: string;
   }>;
 };

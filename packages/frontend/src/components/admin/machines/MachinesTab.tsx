@@ -111,7 +111,7 @@ export function MachinesTab() {
 
       const result = data.result;
       toast.success("Reconcile completed", {
-        description: `Warmed ${result.warmedOutdatedImages} outdated • destroyed ${result.destroyedOldMachines} old • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
+        description: `Warmed ${result.warmedOutdatedImages} reconciled • destroyed ${result.destroyedOldMachines} old • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
       });
       await utils.superadmin.listStudioMachines.invalidate();
     },
@@ -439,7 +439,9 @@ export function MachinesTab() {
             <AlertDialogDescription>
               This runs the same backend reconciler logic:
               <br />
-              - warm outdated images (update image → start → wait for /health → suspend)
+              - reconcile non-running machine drift (image/services/guest/region/token)
+              <br />
+              - warm reconciled machines (update config → start → wait for /health → suspend)
               <br />- destroy machines older than the configured max age
             </AlertDialogDescription>
           </AlertDialogHeader>

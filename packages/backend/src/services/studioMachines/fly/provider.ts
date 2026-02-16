@@ -29,6 +29,14 @@ import {
 const STUDIO_ACCESS_TOKEN_ENV_KEY = "STUDIO_ACCESS_TOKEN";
 const STUDIO_ACCESS_TOKEN_METADATA_KEY = "vivd_studio_access_token";
 
+type MachineReconcileNeeds = {
+  image: boolean;
+  services: boolean;
+  guest: boolean;
+  region: boolean;
+  accessToken: boolean;
+};
+
 export class FlyStudioMachineProvider implements StudioMachineProvider {
   kind = "fly" as const;
 
@@ -304,6 +312,166 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       guest.cpus !== desiredGuest.cpus ||
       guest.memory_mb !== desiredGuest.memory_mb
     );
+  }
+
+  private trimToken(value: string | null | undefined): string | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private resolveMachineReconcileState(options: {
+    machine: FlyMachine;
+    desiredImage: string;
+    preferredAccessToken?: string | null;
+  }): { accessToken: string; needs: MachineReconcileNeeds } {
+    const metadataToken = this.trimToken(
+      this.getMachineMetadata(options.machine)?.[STUDIO_ACCESS_TOKEN_METADATA_KEY],
+    );
+    const envToken = this.trimToken(
+      options.machine.config?.env?.[STUDIO_ACCESS_TOKEN_ENV_KEY],
+    );
+    const preferredToken = this.trimToken(options.preferredAccessToken);
+
+    const configuredImage =
+      typeof options.machine.config?.image === "string"
+        ? options.machine.config.image
+        : null;
+    const needsImageUpdate = configuredImage !== options.desiredImage;
+
+    const needsServiceUpdate =
+      options.machine.config?.services?.some((service) => {
+        const needsAutostart = service.autostart !== false;
+        const needsAutostop = service.autostop !== "suspend";
+        return needsAutostart || needsAutostop;
+      }) ?? true;
+
+    const needs: MachineReconcileNeeds = {
+      image: needsImageUpdate,
+      services: needsServiceUpdate,
+      guest: this.needsGuestUpdate(options.machine.config?.guest),
+      region:
+        typeof options.machine.region === "string" &&
+        options.machine.region !== this.region,
+      accessToken:
+        !metadataToken ||
+        !envToken ||
+        metadataToken !== envToken,
+    };
+
+    return {
+      accessToken:
+        metadataToken ||
+        envToken ||
+        preferredToken ||
+        this.generateStudioAccessToken(),
+      needs,
+    };
+  }
+
+  private hasMachineDrift(needs: MachineReconcileNeeds): boolean {
+    return (
+      needs.image ||
+      needs.services ||
+      needs.guest ||
+      needs.region ||
+      needs.accessToken
+    );
+  }
+
+  private getMachineDriftLabels(needs: MachineReconcileNeeds): string[] {
+    const labels: string[] = [];
+    if (needs.image) labels.push("image");
+    if (needs.services) labels.push("services");
+    if (needs.guest) labels.push("guest");
+    if (needs.region) labels.push("region");
+    if (needs.accessToken) labels.push("accessToken");
+    return labels;
+  }
+
+  private shouldStopSuspendedBeforeReconcile(
+    state: string | undefined,
+    needs: MachineReconcileNeeds,
+  ): boolean {
+    return state === "suspended" && (needs.image || needs.guest || needs.region);
+  }
+
+  private resolveStudioIdFromMachine(machine: FlyMachine, fallback?: string | null): string {
+    return (
+      this.getMachineMetadata(machine)?.vivd_studio_id ||
+      machine.config?.env?.STUDIO_ID ||
+      this.trimToken(fallback) ||
+      crypto.randomUUID()
+    );
+  }
+
+  private withAccessTokenEnv(
+    env: Record<string, string> | undefined,
+    accessToken: string,
+  ): Record<string, string> {
+    return {
+      ...(env || {}),
+      [STUDIO_ACCESS_TOKEN_ENV_KEY]: accessToken,
+    };
+  }
+
+  private buildReconciledMetadata(options: {
+    machine: FlyMachine;
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    port: number;
+    studioId: string;
+    desiredImage: string;
+    accessToken: string;
+    extra?: Record<string, string>;
+  }): Record<string, string> {
+    return {
+      ...(this.getMachineMetadata(options.machine) || {}),
+      vivd_organization_id: options.organizationId,
+      vivd_project_slug: options.projectSlug,
+      vivd_project_version: String(options.version),
+      vivd_external_port: String(options.port),
+      vivd_studio_id: options.studioId,
+      vivd_image: options.desiredImage,
+      [STUDIO_ACCESS_TOKEN_METADATA_KEY]: options.accessToken,
+      ...(options.extra || {}),
+    };
+  }
+
+  private buildReconciledMachineConfig(options: {
+    machine: FlyMachine;
+    port: number;
+    desiredImage: string;
+    accessToken: string;
+    needs: MachineReconcileNeeds;
+    metadata: Record<string, string>;
+    fullEnv?: Record<string, string>;
+  }): FlyMachineConfig {
+    return {
+      ...(options.machine.config || {}),
+      ...(options.needs.image ? { image: options.desiredImage } : {}),
+      ...(options.needs.services
+        ? {
+            services: this.normalizeServicesForVivd(
+              options.machine.config?.services,
+              options.port,
+            ),
+          }
+        : {}),
+      ...(options.needs.guest ? { guest: this.desiredGuest } : {}),
+      ...(options.needs.accessToken
+        ? {
+            env:
+              options.fullEnv ||
+              this.withAccessTokenEnv(
+                options.machine.config?.env,
+                options.accessToken,
+              ),
+          }
+        : {}),
+      metadata: options.metadata,
+    };
   }
 
   private async flyFetch<T>(
@@ -706,42 +874,18 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       );
     }
 
-    const metadataTokenRaw =
-      this.getMachineMetadata(existing)?.[STUDIO_ACCESS_TOKEN_METADATA_KEY];
-    const metadataToken =
-      typeof metadataTokenRaw === "string" && metadataTokenRaw.trim()
-        ? metadataTokenRaw.trim()
-        : null;
-    const envTokenRaw = existing.config?.env?.[STUDIO_ACCESS_TOKEN_ENV_KEY];
-    const envToken =
-      typeof envTokenRaw === "string" && envTokenRaw.trim() ? envTokenRaw.trim() : null;
-
-    const accessToken =
-      metadataToken ||
-      envToken ||
-      (typeof args.env[STUDIO_ACCESS_TOKEN_ENV_KEY] === "string"
-        ? args.env[STUDIO_ACCESS_TOKEN_ENV_KEY]?.trim()
-        : null) ||
-      this.generateStudioAccessToken();
-    const needsAccessTokenUpdate =
-      !metadataToken || !envToken || (metadataToken && envToken && metadataToken !== envToken);
-
     const desiredImage = await this.getDesiredImage();
-    const configuredImage =
-      typeof existing.config?.image === "string" ? existing.config.image : null;
-    const needsImageUpdate = configuredImage !== desiredImage;
+    const preferredAccessToken = this.trimToken(
+      args.env[STUDIO_ACCESS_TOKEN_ENV_KEY],
+    );
+    let reconcileState = this.resolveMachineReconcileState({
+      machine: existing,
+      desiredImage,
+      preferredAccessToken,
+    });
+    let accessToken = reconcileState.accessToken;
 
-    const needsServiceUpdate =
-      existing.config?.services?.some((service) => {
-        const needsAutostart = service.autostart !== false;
-        const needsAutostop = service.autostop !== "suspend";
-        return needsAutostart || needsAutostop;
-      }) ?? true;
-    const needsGuestUpdate = this.needsGuestUpdate(existing.config?.guest);
-    const needsRegionUpdate =
-      typeof existing.region === "string" && existing.region !== this.region;
-
-    if (existing.state === "started" && needsAccessTokenUpdate) {
+    if (existing.state === "started" && reconcileState.needs.accessToken) {
       // Access token must be present in the machine env for @vivd/studio to enforce auth.
       // Stop the machine so we can update config and boot with the token.
       await this.stopMachine(existing.id);
@@ -751,23 +895,22 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         timeoutMs: 60_000,
       });
       existing = await this.getMachine(existing.id);
+      reconcileState = this.resolveMachineReconcileState({
+        machine: existing,
+        desiredImage,
+        preferredAccessToken,
+      });
+      accessToken = reconcileState.accessToken;
     }
 
     // Only reconcile machine config when it's not running, to avoid disrupting an
     // active studio session. This also ensures the next boot uses the latest image.
     if (
       existing.state !== "started" &&
-      (needsImageUpdate ||
-        needsServiceUpdate ||
-        needsGuestUpdate ||
-        needsRegionUpdate ||
-        needsAccessTokenUpdate)
+      this.hasMachineDrift(reconcileState.needs)
     ) {
       // A suspended machine would resume a snapshot; stop it first to boot fresh.
-      if (
-        (needsImageUpdate || needsGuestUpdate || needsRegionUpdate) &&
-        existing.state === "suspended"
-      ) {
+      if (this.shouldStopSuspendedBeforeReconcile(existing.state, reconcileState.needs)) {
         await this.stopMachine(existing.id);
         await this.waitForState({
           machineId: existing.id,
@@ -777,46 +920,45 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       }
 
       const current = await this.getMachine(existing.id);
-
-      const studioId =
-        this.getMachineMetadata(current)?.vivd_studio_id ||
-        current.config?.env?.STUDIO_ID ||
-        args.env.STUDIO_ID ||
-        crypto.randomUUID();
-
-      const env = this.buildStudioEnv({ ...args, studioId, accessToken });
-
-      const metadata: Record<string, string> = {
-        ...(this.getMachineMetadata(current) || {}),
-        vivd_organization_id: args.organizationId,
-        vivd_project_slug: args.projectSlug,
-        vivd_project_version: String(args.version),
-        vivd_external_port: String(port),
-        vivd_studio_id: studioId,
-        vivd_image: desiredImage,
-        [STUDIO_ACCESS_TOKEN_METADATA_KEY]: accessToken,
-      };
-
-      const config: FlyMachineConfig = {
-        ...(current.config || {}),
-        ...(needsImageUpdate ? { image: desiredImage } : {}),
-        // Keep services stable and prevent wakeups from stray traffic.
-        ...(needsServiceUpdate
-          ? { services: this.normalizeServicesForVivd(current.config?.services, port) }
-          : {}),
-        ...(needsGuestUpdate ? { guest: this.desiredGuest } : {}),
-        ...(needsAccessTokenUpdate ? { env } : {}),
-        metadata,
-      };
-
-      await this.updateMachineConfig({
-        machineId: existing.id,
-        config,
-        region: needsRegionUpdate ? this.region : undefined,
-        skipLaunch: true,
+      reconcileState = this.resolveMachineReconcileState({
+        machine: current,
+        desiredImage,
+        preferredAccessToken,
       });
+      accessToken = reconcileState.accessToken;
 
-      existing = await this.getMachine(existing.id);
+      if (this.hasMachineDrift(reconcileState.needs)) {
+        const studioId = this.resolveStudioIdFromMachine(current, args.env.STUDIO_ID);
+        const env = this.buildStudioEnv({ ...args, studioId, accessToken });
+        const metadata = this.buildReconciledMetadata({
+          machine: current,
+          organizationId: args.organizationId,
+          projectSlug: args.projectSlug,
+          version: args.version,
+          port,
+          studioId,
+          desiredImage,
+          accessToken,
+        });
+        const config = this.buildReconciledMachineConfig({
+          machine: current,
+          port,
+          desiredImage,
+          accessToken,
+          needs: reconcileState.needs,
+          metadata,
+          fullEnv: env,
+        });
+
+        await this.updateMachineConfig({
+          machineId: existing.id,
+          config,
+          region: reconcileState.needs.region ? this.region : undefined,
+          skipLaunch: true,
+        });
+
+        existing = await this.getMachine(existing.id);
+      }
     }
 
     if (existing.state !== "started") {
@@ -830,11 +972,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       timeoutMs: this.startTimeoutMs,
     });
 
-    const studioId =
-      this.getMachineMetadata(existing)?.vivd_studio_id ||
-      existing.config?.env?.STUDIO_ID ||
-      args.env.STUDIO_ID ||
-      crypto.randomUUID();
+    const studioId = this.resolveStudioIdFromMachine(existing, args.env.STUDIO_ID);
 
     this.touchKey(studioKey);
     return { studioId, url, port, accessToken };
@@ -1267,10 +1405,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       const ageMs = createdAtMs ? now - createdAtMs : null;
       const isOld = ageMs !== null && ageMs >= maxAgeMs;
 
-      const configuredImage =
-        typeof machine.config?.image === "string" ? machine.config.image : null;
-      const isOutdatedImage = !!configuredImage && configuredImage !== desiredImage;
-
       // Prefer GC over image warmups for very old machines.
       if (isOld) {
         const state = machine.state || "unknown";
@@ -1320,7 +1454,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         continue;
       }
 
-      if (!isOutdatedImage) continue;
+      const reconcileState = this.resolveMachineReconcileState({
+        machine,
+        desiredImage,
+      });
+      if (!this.hasMachineDrift(reconcileState.needs)) continue;
+      const driftLabels = this.getMachineDriftLabels(reconcileState.needs);
 
       const state = machine.state || "unknown";
       if (state === "started" || state === "starting") {
@@ -1332,19 +1471,23 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
       if (dryRun) {
         console.log(
-          `[FlyMachines] (dry-run) Warm outdated machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} image=${configuredImage}`,
+          `[FlyMachines] (dry-run) Warm reconciled machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} drift=${driftLabels.join(",")}`,
         );
         continue;
       }
 
       try {
         let current = await this.getMachine(machine.id);
-        const currentState = current.state || "unknown";
+        let currentState = current.state || "unknown";
+        let currentReconcileState = this.resolveMachineReconcileState({
+          machine: current,
+          desiredImage,
+        });
 
         if (currentState === "destroyed" || currentState === "destroying") continue;
 
         // Suspended machines would resume a snapshot; stop first to boot the new image.
-        if (currentState === "suspended") {
+        if (this.shouldStopSuspendedBeforeReconcile(currentState, currentReconcileState.needs)) {
           await this.stopMachine(machine.id);
           await this.waitForState({
             machineId: machine.id,
@@ -1352,8 +1495,14 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
             timeoutMs: 60_000,
           });
           current = await this.getMachine(machine.id);
+          currentState = current.state || "unknown";
+          currentReconcileState = this.resolveMachineReconcileState({
+            machine: current,
+            desiredImage,
+          });
         }
 
+        if (!this.hasMachineDrift(currentReconcileState.needs)) continue;
         if (current.state !== "stopped") {
           // Unexpected state (e.g. replacing). Skip and retry next cycle.
           continue;
@@ -1364,33 +1513,52 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           throw new Error("Missing external port; cannot warm image");
         }
 
-        const metadata: Record<string, string> = {
-          ...(this.getMachineMetadata(current) || {}),
-          vivd_organization_id: identity.organizationId,
-          vivd_project_slug: identity.projectSlug,
-          vivd_project_version: String(identity.version),
-          vivd_external_port: String(port),
-          vivd_image: desiredImage,
-          vivd_last_image_reconcile_at: new Date().toISOString(),
-        };
+        const studioId = this.resolveStudioIdFromMachine(current);
+        const accessToken = currentReconcileState.accessToken;
+        const reconciledAt = new Date().toISOString();
+        const metadata = this.buildReconciledMetadata({
+          machine: current,
+          organizationId: identity.organizationId,
+          projectSlug: identity.projectSlug,
+          version: identity.version,
+          port,
+          studioId,
+          desiredImage,
+          accessToken,
+          extra: {
+            vivd_last_machine_reconcile_at: reconciledAt,
+            ...(currentReconcileState.needs.image
+              ? { vivd_last_image_reconcile_at: reconciledAt }
+              : {}),
+          },
+        });
 
-        const config: FlyMachineConfig = {
-          ...(current.config || {}),
-          image: desiredImage,
-          guest: this.desiredGuest,
-          services: this.normalizeServicesForVivd(current.config?.services, port),
+        const config = this.buildReconciledMachineConfig({
+          machine: current,
+          port,
+          desiredImage,
+          accessToken,
+          needs: currentReconcileState.needs,
           metadata,
-        };
+        });
 
         await this.updateMachineConfig({
           machineId: machine.id,
           config,
-          region:
-            typeof current.region === "string" && current.region !== this.region
-              ? this.region
-              : undefined,
+          region: currentReconcileState.needs.region ? this.region : undefined,
           skipLaunch: true,
         });
+
+        current = await this.getMachine(machine.id);
+        currentReconcileState = this.resolveMachineReconcileState({
+          machine: current,
+          desiredImage,
+        });
+        if (this.hasMachineDrift(currentReconcileState.needs)) {
+          throw new Error(
+            `Drift remains after config update (${this.getMachineDriftLabels(currentReconcileState.needs).join(",")})`,
+          );
+        }
 
         await this.startMachineHandlingReplacement(machine.id);
         const url = this.getPublicUrlForPort(port);
@@ -1405,17 +1573,17 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
         result.warmedOutdatedImages++;
         console.log(
-          `[FlyMachines] Warmed outdated machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version})`,
+          `[FlyMachines] Warmed reconciled machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) drift=${driftLabels.join(",")}`,
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         result.errors.push({
           machineId: machine.id,
-          action: "warm_outdated_image",
+          action: "warm_reconciled_machine",
           message,
         });
         console.warn(
-          `[FlyMachines] Warm outdated image failed for machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}): ${message}`,
+          `[FlyMachines] Warm reconciled machine failed for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}): ${message}`,
         );
       }
     }

@@ -8,6 +8,7 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-16: Fly periodic machine reconciliation now reuses the same drift checks as studio startup (`image`, `services`, `guest`, `region`, `STUDIO_ACCESS_TOKEN`) via shared provider logic, and warm-up reconciliation applies to any non-running machine with drift so edit starts are more consistently “ready to use”.
 - 2026-02-16: studio machine security — Fly studio machines now get a per-machine access token (`STUDIO_ACCESS_TOKEN`) and the studio server enforces it for tRPC + file/upload endpoints; embedded/fullscreen host URLs pass the token via URL hash, and static `/preview` serving now applies the same allowlist as `/vivd-studio/api/projects` to block `.git`/env/etc.
 - 2026-02-16: Fly machine update/reconcile paths now include region migration (`region` update) for non-running machines, so env region changes can be applied during normal config updates/hard restarts/image warm-ups.
 - 2026-02-16: Fly studio machine default region changed from `iad` to `fra`; explicit env overrides remain supported via `FLY_STUDIO_REGION` (or `FLY_REGION` fallback).
