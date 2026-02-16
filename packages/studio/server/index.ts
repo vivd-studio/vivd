@@ -111,6 +111,51 @@ function safeJoin(root: string, targetPath: string): string {
 
 function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+  const baseNoLeadingSlash = base.replace(/^\/+/, "");
+  const escapedBaseNoLeadingSlash = baseNoLeadingSlash.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+
+  // Prefix root-relative URLs in common HTML attributes so that in-preview navigation
+  // like `<a href="/de">` stays within `/vivd-studio/api/preview/...` (or any proxy base).
+  const rewriteRootRelativeAttributes = (input: string) =>
+    input.replace(
+      new RegExp(
+        String.raw`\b(href|src|action|poster|data|content)=(["'])\/(?!\/)(?!${escapedBaseNoLeadingSlash}(?:\/|$))([^"']*)\2`,
+        "g",
+      ),
+      `$1=$2${base}/$3$2`,
+    );
+
+  // Best-effort rewrite for common client-side navigations / redirects in inline scripts.
+  const rewriteRootRelativeJsNavigations = (input: string) =>
+    input
+      // Common pattern in generated sites: `const baseUrl = "/";`
+      .replace(
+        /\b(const|let|var)\s+baseUrl\s*=\s*(["'])\/\2/g,
+        `$1 baseUrl = $2${base}/$2`,
+      )
+      .replace(
+        /\bbaseUrl\s*=\s*(["'])\/\1/g,
+        `baseUrl = "${base.replace(/"/g, '\\"')}/"`,
+      )
+      // Direct navigations: location.replace('/foo'), location.assign('/foo')
+      .replace(
+        new RegExp(
+          String.raw`(\b(?:window\.)?location\.(?:assign|replace)\(\s*)(["'])\/(?!\/)(?!${escapedBaseNoLeadingSlash}(?:\/|$))`,
+          "g",
+        ),
+        `$1$2${base}/`,
+      )
+      // Assignments: location.href = '/foo', location.pathname = '/foo'
+      .replace(
+        new RegExp(
+          String.raw`(\b(?:window\.)?location\.(?:href|pathname)\s*=\s*)(["'])\/(?!\/)(?!${escapedBaseNoLeadingSlash}(?:\/|$))`,
+          "g",
+        ),
+        `$1$2${base}/`,
+      );
   const prefixGroups = [
     "images",
     "_astro",
@@ -123,7 +168,7 @@ function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   ].join("|");
 
   return (
-    text
+    rewriteRootRelativeJsNavigations(rewriteRootRelativeAttributes(text))
       .replace(
         new RegExp(`(^|[^\\w/])\\/(${prefixGroups})\\/`, "g"),
         `$1${base}/$2/`
@@ -164,7 +209,7 @@ function stripDevServerToolingFromHtml(html: string): string {
 function createBasePathRewriteScript(basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
   // Minified inline script - runs immediately to intercept all navigation
-  return `<script data-vivd-basepath>(function(B){if(window.__vivdBasePath)return;window.__vivdBasePath=B;var defined=function(x){return typeof x!=='undefined'};var shouldRewrite=function(u){if(!u||typeof u!=='string')return false;if(u.startsWith(B)||u.startsWith('//')||u.startsWith('http:')||u.startsWith('https:')||u.startsWith('#')||u.startsWith('mailto:')||u.startsWith('tel:')||u.startsWith('javascript:')||u.startsWith('data:'))return false;return u.startsWith('/');};var rewrite=function(u){return shouldRewrite(u)?B+u:u;};document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(a){var h=a.getAttribute('href');if(shouldRewrite(h)){e.preventDefault();window.location.href=rewrite(h);}}},true);document.addEventListener('submit',function(e){var f=e.target;if(f&&f.tagName==='FORM'){var action=f.getAttribute('action');if(shouldRewrite(action))f.setAttribute('action',rewrite(action));}},true);if(defined(window.fetch)){var oFetch=window.fetch;window.fetch=function(u,o){return oFetch(rewrite(typeof u==='string'?u:u),o);};}if(defined(window.XMLHttpRequest)){var oOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){return oOpen.call(this,m,rewrite(u));};}if(defined(window.history)){var oPush=history.pushState;var oReplace=history.replaceState;history.pushState=function(s,t,u){return oPush.call(this,s,t,rewrite(u));};history.replaceState=function(s,t,u){return oReplace.call(this,s,t,rewrite(u));};}})('${base}');</script>`;
+  return `<script data-vivd-basepath>(function(B){if(window.__vivdBasePath)return;window.__vivdBasePath=B;var defined=function(x){return typeof x!=='undefined'};var shouldRewrite=function(u){if(!u||typeof u!=='string')return false;if(u===B||u.startsWith(B+'/')||u.startsWith('//')||u.startsWith('http:')||u.startsWith('https:')||u.startsWith('#')||u.startsWith('mailto:')||u.startsWith('tel:')||u.startsWith('javascript:')||u.startsWith('data:'))return false;return u.startsWith('/');};var rewrite=function(u){return shouldRewrite(u)?B+u:u;};document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(a){var h=a.getAttribute('href');if(shouldRewrite(h)){e.preventDefault();window.location.href=rewrite(h);}}},true);document.addEventListener('submit',function(e){var f=e.target;if(f&&f.tagName==='FORM'){var action=f.getAttribute('action');if(shouldRewrite(action))f.setAttribute('action',rewrite(action));}},true);if(defined(window.fetch)){var oFetch=window.fetch;window.fetch=function(u,o){return oFetch(rewrite(typeof u==='string'?u:u),o);};}if(defined(window.XMLHttpRequest)){var oOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){return oOpen.call(this,m,rewrite(u));};}if(defined(window.history)){var oPush=history.pushState;var oReplace=history.replaceState;history.pushState=function(s,t,u){return oPush.call(this,s,t,rewrite(u));};history.replaceState=function(s,t,u){return oReplace.call(this,s,t,rewrite(u));};}})('${base}');</script>`;
 }
 
 /**
@@ -254,9 +299,37 @@ const devPreviewProxy = createProxyMiddleware({
       : "http://127.0.0.1:0";
   },
   on: {
-    proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req) => {
+    proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
       const basePath =
         (req as DevPreviewProxyRequest).vivdDevPreviewBasePath || "";
+      const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+
+      // Rewrite redirects so root-relative Location headers stay within the proxy base.
+      const rawLocation = proxyRes.headers["location"];
+      if (base && rawLocation) {
+        const rewriteLocation = (location: string) => {
+          if (
+            !location ||
+            !location.startsWith("/") ||
+            location.startsWith("//") ||
+            location.startsWith("http://") ||
+            location.startsWith("https://")
+          ) {
+            return location;
+          }
+
+          // Avoid double-prefixing.
+          if (location === base || location.startsWith(`${base}/`)) return location;
+
+          return `${base}${location}`;
+        };
+
+        if (typeof rawLocation === "string") {
+          res.setHeader("location", rewriteLocation(rawLocation));
+        } else if (Array.isArray(rawLocation)) {
+          res.setHeader("location", rawLocation.map(rewriteLocation));
+        }
+      }
 
       const contentType = String(proxyRes.headers["content-type"] || "");
       const ct = contentType.toLowerCase();
@@ -650,14 +723,11 @@ export default {};
           );
         }
 
-        // Restore the full URL - Express strips the mount prefix, but the dev server
-        // is configured with --base and expects the full path.
         if (process.env.DEVSERVER_DEBUG === "1") {
           console.log(
             `[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`
           );
         }
-        req.url = req.originalUrl;
 
         (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
         (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = basePath;
@@ -831,8 +901,6 @@ export default {};
       if (process.env.DEVSERVER_DEBUG === "1") {
         console.log(`[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`);
       }
-
-      req.url = req.originalUrl;
 
       (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
       (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = basePath;

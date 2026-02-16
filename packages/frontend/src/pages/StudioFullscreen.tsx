@@ -3,8 +3,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
+import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
+import { Loader2 } from "lucide-react";
 
 /**
  * Fullscreen studio view (still embedded via iframe).
@@ -18,6 +20,9 @@ export default function StudioFullscreen() {
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
   const [studioReloadNonce, setStudioReloadNonce] = useState(0);
+  const [studioReady, setStudioReady] = useState(false);
+  const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
+  const [studioLoadErrored, setStudioLoadErrored] = useState(false);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
@@ -163,11 +168,17 @@ export default function StudioFullscreen() {
       const studioWindow = studioIframeRef.current?.contentWindow;
       if (!studioWindow || event.source !== studioWindow) return;
       const type = event.data?.type;
+      if (type === "vivd:studio:ready") {
+        setStudioReady(true);
+        syncThemeToStudio();
+        return;
+      }
       if (type === "vivd:studio:close" || type === "vivd:studio:exitFullscreen") {
         navigate(`${ROUTES.PROJECT(projectSlug!)}?view=studio&version=${version}`);
         return;
       }
       if (type === "vivd:studio:theme") {
+        setStudioReady(true);
         const nextTheme = event.data?.theme;
         const nextColorTheme = event.data?.colorTheme;
 
@@ -211,6 +222,25 @@ export default function StudioFullscreen() {
     return url.toString();
   }, [baseUrl, projectSlug, version]);
 
+  useEffect(() => {
+    if (!studioIframeSrc) {
+      setStudioReady(false);
+      setStudioLoadTimedOut(false);
+      setStudioLoadErrored(false);
+      return;
+    }
+
+    setStudioReady(false);
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+
+    const timeout = window.setTimeout(() => {
+      setStudioLoadTimedOut(true);
+    }, 25_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [studioIframeSrc, studioReloadNonce]);
+
   if (isLoading) {
     return (
       <div className="flex h-dvh w-screen items-center justify-center">
@@ -252,10 +282,11 @@ export default function StudioFullscreen() {
   }
 
   return (
-    <div className="h-dvh w-screen">
+    <div className="relative h-dvh w-screen bg-background">
       <iframe
         ref={studioIframeRef}
         onLoad={syncThemeToStudio}
+        onError={() => setStudioLoadErrored(true)}
         key={`${projectSlug}-${version}-${baseUrl ?? ""}-${studioReloadNonce}`}
         src={studioIframeSrc}
         title={`Vivd Studio - ${projectSlug}`}
@@ -263,6 +294,47 @@ export default function StudioFullscreen() {
         allow="fullscreen; clipboard-write"
         allowFullScreen
       />
+
+      {!studioReady ? (
+        <div className="absolute inset-0 z-10 bg-background">
+          {studioLoadTimedOut || studioLoadErrored ? (
+            <div className="flex h-full w-full items-center justify-center px-6">
+              <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+                <div className="text-base font-semibold">
+                  Studio is taking longer than usual
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  The studio machine may still be booting or it might be
+                  unresponsive. Try reloading the iframe or doing a hard restart.
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setStudioReloadNonce((n) => n + 1)}
+                  >
+                    Reload
+                  </Button>
+                  <Button
+                    onClick={() => void handleHardRestart()}
+                    disabled={hardRestartStudio.isPending}
+                  >
+                    {hardRestartStudio.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Restarting…
+                      </>
+                    ) : (
+                      "Hard restart"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <StudioStartupLoading fullScreen />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

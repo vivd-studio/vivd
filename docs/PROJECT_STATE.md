@@ -8,6 +8,11 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-16: studio snapshots history sidebar now runs load-version as a single-flight action with explicit per-item loading feedback, and blocks other git actions while a git mutation is in-flight (prevents queued duplicate operations/toast bursts).
+- 2026-02-16: studio devserver routing fix — run the workspace devserver at base `/` and keep `/preview` + `/vivd-studio/api/devpreview/...` working via proxy path stripping + stronger URL/redirect rewriting (fixes nested routes like `/product/56`).
+- 2026-02-16: embedded studio UX hardening — added studio → host "ready" handshake plus iframe startup overlay + timeout fallback (reload + hard restart) to avoid black-screen hangs when a studio machine is slow/unresponsive.
+- 2026-02-16: studio chat reliability — OpenCode session list now loads on initial open (wait for opencode server readiness + short bootstrap polling while sessions hydrate).
+- 2026-02-16: studio snapshots GitHub Sync section is now collapsible and defaults to collapsed, with key repo/status info visible while collapsed.
 - 2026-02-16: fixed studio changed-files filename truncation edge case so paths are parsed defensively and shown without truncating the first character.
 - 2026-02-16: studio snapshots sidepanel now exposes a subtle, collapsible list of changed file paths (collapsed by default) to make pending workspace edits easier to review before saving.
 - 2026-02-15: superadmin Fly machines table now supports sortable columns and manual per-machine destroy action (stop-first, then destroy).

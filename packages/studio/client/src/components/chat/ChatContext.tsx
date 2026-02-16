@@ -9,6 +9,7 @@ import {
 } from "react";
 import { trpc } from "@/lib/trpc";
 import {
+  POLLING_IDLE,
   POLLING_INFREQUENT,
   getActivePollingInterval,
   getSessionStatusPollingInterval,
@@ -290,6 +291,7 @@ export function ChatProvider({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
   );
+  const bootstrapSessionsPollUntilRef = useRef(Date.now() + 60_000);
   const pendingSessionIdRef = useRef<string | null>(null);
   const autoSelectLockedRef = useRef(false);
   const hasAutoSelectedRunningSessionRef = useRef(false);
@@ -414,6 +416,12 @@ export function ChatProvider({
     setConfirmDialog((prev) => ({ ...prev, open: false }));
   }, []);
 
+  // On studio boot, OpenCode data hydration can lag the initial UI render.
+  // Poll sessions for a short window so existing sessions appear without requiring user interaction.
+  useEffect(() => {
+    bootstrapSessionsPollUntilRef.current = Date.now() + 60_000;
+  }, [projectSlug, version]);
+
   // Poll for sessions to keep the list and status updated
   const {
     data: sessionsData,
@@ -423,7 +431,17 @@ export function ChatProvider({
     { projectSlug, version },
     {
       refetchOnMount: true,
-      refetchInterval: getActivePollingInterval(isWaiting || isStreaming),
+      refetchInterval: (query) => {
+        const activeInterval = getActivePollingInterval(isWaiting || isStreaming);
+        if (activeInterval) return activeInterval;
+
+        const sessionsCount = query.state.data?.length ?? 0;
+        const shouldBootstrapPoll =
+          sessionsCount === 0 &&
+          Date.now() < bootstrapSessionsPollUntilRef.current;
+
+        return shouldBootstrapPoll ? POLLING_IDLE : false;
+      },
     },
   );
 

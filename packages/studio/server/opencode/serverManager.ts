@@ -191,6 +191,10 @@ class OpencodeServerManager {
         this.servers.set(dirKey, server);
         return server;
       })
+      .catch((error) => {
+        this.releasePort(port);
+        throw error;
+      })
       .finally(() => {
         this.startingServers.delete(dirKey);
       });
@@ -272,6 +276,47 @@ class OpencodeServerManager {
     return path.resolve(projectDir);
   }
 
+  private async waitForServerReady(
+    url: string,
+    proc: ChildProcess,
+    timeoutMs = 20_000,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    let attempt = 0;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (proc.exitCode !== null) {
+        throw new Error(
+          `[OpenCode] Server exited before ready (code=${proc.exitCode})`,
+        );
+      }
+
+      attempt += 1;
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1_000);
+
+        const response = await fetch(`${url}/config`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+        // We don't care about the payload — any HTTP response means the server is accepting requests.
+        void response.body?.cancel?.();
+        return;
+      } catch {
+        // Ignore and retry.
+      }
+
+      const backoffMs = Math.min(1_000, 150 + attempt * 100);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+
+    throw new Error(`[OpenCode] Timed out waiting for server to be ready at ${url}`);
+  }
+
   private async spawnServer(
     projectDir: string,
     port: number,
@@ -290,7 +335,16 @@ class OpencodeServerManager {
 
     proc.unref();
 
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    try {
+      await this.waitForServerReady(url, proc);
+    } catch (error) {
+      try {
+        await this.killProcessTree(proc.pid!);
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
 
     return {
       url,

@@ -40,6 +40,15 @@ import { startStudioMachineReconciler } from "./services/studioMachines";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB = 250;
+const parsedZipImportMaxFileSizeMb = Number.parseInt(
+  process.env.ZIP_IMPORT_MAX_FILE_SIZE_MB || "",
+  10,
+);
+const ZIP_IMPORT_MAX_FILE_SIZE_MB =
+  Number.isFinite(parsedZipImportMaxFileSizeMb) && parsedZipImportMaxFileSizeMb > 0
+    ? parsedZipImportMaxFileSizeMb
+    : DEFAULT_ZIP_IMPORT_MAX_FILE_SIZE_MB;
 
 function getRouteParam(req: express.Request, key: string): string | undefined {
   const value = (req.params as Record<string, unknown>)[key];
@@ -263,6 +272,14 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB limit
+  },
+});
+
+// ZIP project imports are larger than regular asset uploads.
+const zipImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: ZIP_IMPORT_MAX_FILE_SIZE_MB * 1024 * 1024,
   },
 });
 
@@ -1095,7 +1112,7 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
 });
 
 // Import Projects endpoint(s)
-app.use("/vivd-studio/api", createImportRouter({ auth, upload }));
+app.use("/vivd-studio/api", createImportRouter({ auth, upload: zipImportUpload }));
 
 // tRPC
 app.use(

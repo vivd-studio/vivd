@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { POLLING_BACKGROUND } from "@/app/config/polling";
 import { toast } from "sonner";
@@ -11,6 +11,8 @@ export function useToolbarState() {
   const utils = trpc.useUtils();
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [loadingVersionHash, setLoadingVersionHash] = useState<string | null>(null);
+  const loadVersionLockRef = useRef(false);
 
   const {
     projectSlug,
@@ -74,10 +76,16 @@ export function useToolbarState() {
     onError: (error) => {
       toast.error(`Failed to load version: ${error.message}`);
     },
+    onSettled: () => {
+      loadVersionLockRef.current = false;
+      setLoadingVersionHash(null);
+    },
   });
 
   const handleLoadVersion = (commitHash: string) => {
-    if (!projectSlug) return;
+    if (!projectSlug || loadVersionMutation.isPending || loadVersionLockRef.current) return;
+    loadVersionLockRef.current = true;
+    setLoadingVersionHash(commitHash);
     loadVersionMutation.mutate({
       slug: projectSlug,
       version: selectedVersion,
@@ -191,6 +199,8 @@ export function useToolbarState() {
 
     // Mutations
     handleLoadVersion,
+    isLoadingVersion: loadVersionMutation.isPending,
+    loadingVersionHash,
 
     // Connected-mode actions
     isConnectedMode,

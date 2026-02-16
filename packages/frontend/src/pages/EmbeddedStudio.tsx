@@ -67,6 +67,9 @@ export default function EmbeddedStudio() {
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
   const [studioReloadNonce, setStudioReloadNonce] = useState(0);
+  const [studioReady, setStudioReady] = useState(false);
+  const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
+  const [studioLoadErrored, setStudioLoadErrored] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Fetch project data to get current version
@@ -286,6 +289,11 @@ export default function EmbeddedStudio() {
     const onMessage = (event: MessageEvent) => {
       const studioWindow = studioIframeRef.current?.contentWindow;
       if (!studioWindow || event.source !== studioWindow) return;
+      if (event.data?.type === "vivd:studio:ready") {
+        setStudioReady(true);
+        syncThemeToStudio();
+        return;
+      }
       if (event.data?.type === "vivd:studio:close") {
         navigate(ROUTES.DASHBOARD);
       }
@@ -293,6 +301,7 @@ export default function EmbeddedStudio() {
         navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${studioVersion}`);
       }
       if (event.data?.type === "vivd:studio:theme") {
+        setStudioReady(true);
         const nextTheme = event.data?.theme;
         const nextColorTheme = event.data?.colorTheme;
 
@@ -342,6 +351,25 @@ export default function EmbeddedStudio() {
     );
     return url.toString();
   }, [projectSlug, publicPreviewEnabled, studioBaseUrl, studioVersion]);
+
+  useEffect(() => {
+    if (!studioIframeSrc) {
+      setStudioReady(false);
+      setStudioLoadTimedOut(false);
+      setStudioLoadErrored(false);
+      return;
+    }
+
+    setStudioReady(false);
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+
+    const timeout = window.setTimeout(() => {
+      setStudioLoadTimedOut(true);
+    }, 25_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [studioIframeSrc, studioReloadNonce]);
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;
@@ -626,16 +654,61 @@ export default function EmbeddedStudio() {
 
       <div className="flex-1 min-h-0">
         {studioIframeSrc ? (
-          <iframe
-            ref={studioIframeRef}
-            onLoad={syncThemeToStudio}
-            key={`${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
-            src={studioIframeSrc}
-            title={`Vivd Studio - ${projectSlug}`}
-            className="h-full w-full border-0"
-            allow="fullscreen; clipboard-write"
-            allowFullScreen
-          />
+          <div className="relative h-full w-full">
+            <iframe
+              ref={studioIframeRef}
+              onLoad={syncThemeToStudio}
+              onError={() => setStudioLoadErrored(true)}
+              key={`${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
+              src={studioIframeSrc}
+              title={`Vivd Studio - ${projectSlug}`}
+              className="h-full w-full border-0"
+              allow="fullscreen; clipboard-write"
+              allowFullScreen
+            />
+
+            {!studioReady ? (
+              <div className="absolute inset-0 z-10 bg-background">
+                {studioLoadTimedOut || studioLoadErrored ? (
+                  <div className="flex h-full w-full items-center justify-center px-6">
+                    <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+                      <div className="text-base font-semibold">
+                        Studio is taking longer than usual
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        The studio machine may still be booting or it might be
+                        unresponsive (common after restarts). Try reloading the
+                        iframe or doing a hard restart.
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setStudioReloadNonce((n) => n + 1)}
+                        >
+                          Reload
+                        </Button>
+                        <Button
+                          onClick={() => void handleHardRestart()}
+                          disabled={hardRestartStudio.isPending}
+                        >
+                          {hardRestartStudio.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Restarting…
+                            </>
+                          ) : (
+                            "Hard restart"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <StudioStartupLoading className="h-full min-h-0" />
+                )}
+              </div>
+            ) : null}
+          </div>
         ) : previewIframeSrc ? (
           <iframe
             key={`${projectSlug}-${version}-preview`}

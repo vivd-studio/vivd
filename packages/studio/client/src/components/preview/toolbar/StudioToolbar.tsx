@@ -68,6 +68,8 @@ export function StudioToolbar() {
     publishStatus,
     publicPreviewEnabled,
     handleLoadVersion,
+    isLoadingVersion,
+    loadingVersionHash,
     utils,
     handleClose,
     isConnectedMode,
@@ -333,6 +335,8 @@ export function StudioToolbar() {
         publishDialogOpen={publishDialogOpen}
         setPublishDialogOpen={setPublishDialogOpen}
         handleLoadVersion={handleLoadVersion}
+        isLoadingVersion={isLoadingVersion}
+        loadingVersionHash={loadingVersionHash}
         handleRefresh={handleRefresh}
         onPublished={() => {
           utils.project.publishStatus.invalidate({ slug: projectSlug! });

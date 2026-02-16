@@ -448,7 +448,7 @@ export class DevServerService {
   /**
    * Start or get an existing dev server for a project.
    * @param projectDir - The project directory path
-   * @param basePath - The base path for the dev server
+   * @param basePath - The base path for the proxy (the dev server itself always runs at "/")
    */
   async getOrStartDevServer(
     projectDir: string,
@@ -477,20 +477,31 @@ export class DevServerService {
       `[DevServer] Starting dev server for ${projectDir} on port ${port}`
     );
 
+    // Important: The dev server itself always runs at base "/".
+    // We serve it behind different prefixes (e.g. /preview, /vivd-studio/api/devpreview/...),
+    // so the proxy layer strips its mount path and rewrites outgoing asset/navigation URLs.
+    const devServerBasePath = "/";
+
     // Create initial entry with installing status
     const serverInfo: DevServerInfo = {
       url: `http://127.0.0.1:${port}`,
       process: null as unknown as ChildProcess,
       port,
       projectDir,
-      basePath,
+      basePath: devServerBasePath,
       lastActivity: Date.now(),
       status: hasNodeModules(projectDir) ? "starting" : "installing",
     };
     this.server = serverInfo;
 
     // Run npm install if needed (async)
-    this.startServerAsync(projectDir, config, port, basePath, serverInfo);
+    this.startServerAsync(
+      projectDir,
+      config,
+      port,
+      devServerBasePath,
+      serverInfo
+    );
 
     return { url: null, status: serverInfo.status };
   }

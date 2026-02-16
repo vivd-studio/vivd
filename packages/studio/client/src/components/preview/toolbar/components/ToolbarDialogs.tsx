@@ -11,6 +11,8 @@ interface ToolbarDialogsProps {
   publishDialogOpen: boolean;
   setPublishDialogOpen: (value: boolean) => void;
   handleLoadVersion: (commitHash: string) => void;
+  isLoadingVersion: boolean;
+  loadingVersionHash: string | null;
   handleRefresh: () => void;
   onPublished: () => void;
 }
@@ -23,6 +25,8 @@ export function ToolbarDialogs({
   publishDialogOpen,
   setPublishDialogOpen,
   handleLoadVersion,
+  isLoadingVersion,
+  loadingVersionHash,
   handleRefresh,
   onPublished,
 }: ToolbarDialogsProps) {
@@ -36,6 +40,8 @@ export function ToolbarDialogs({
         projectSlug={projectSlug}
         version={selectedVersion}
         onLoadVersion={handleLoadVersion}
+        isLoadingVersion={isLoadingVersion}
+        loadingVersionHash={loadingVersionHash}
         onRefresh={handleRefresh}
       />
 
