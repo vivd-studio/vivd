@@ -51,6 +51,7 @@ export function SessionList({
                 ? title
                 : `${session.id.slice(0, 8)}...`;
             const tooltip = title ? `${title} (${session.id})` : session.id;
+            const deleteLabel = title && title.length > 0 ? title : session.id;
 
             return (
               <div
@@ -62,15 +63,18 @@ export function SessionList({
                     selectedSessionId === session.id ? "secondary" : "ghost"
                   }
                   size="sm"
-                  className="text-xs h-7 pr-6 max-w-[150px] truncate justify-start text-left"
+                  className="text-xs h-7 pr-6 max-w-[150px] justify-start text-left overflow-hidden"
                   title={tooltip}
                   onClick={() => onSelectSession(session.id)}
                 >
-                  {label}
+                  <span className="block min-w-0 truncate">{label}</span>
                 </Button>
                 <button
+                  type="button"
                   onClick={(e) => onDeleteSession(e, session.id)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-0.5 hover:bg-destructive/10 rounded-full transition-opacity"
+                  aria-label={`Delete session ${deleteLabel}`}
+                  title={`Delete ${tooltip}`}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 hover:bg-destructive/10 rounded-full transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
                 >
                   <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
                 </button>
