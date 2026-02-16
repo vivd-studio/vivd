@@ -33,7 +33,6 @@ type MachineReconcileNeeds = {
   image: boolean;
   services: boolean;
   guest: boolean;
-  region: boolean;
   accessToken: boolean;
 };
 
@@ -350,9 +349,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       image: needsImageUpdate,
       services: needsServiceUpdate,
       guest: this.needsGuestUpdate(options.machine.config?.guest),
-      region:
-        typeof options.machine.region === "string" &&
-        options.machine.region !== this.region,
       accessToken:
         !metadataToken ||
         !envToken ||
@@ -374,7 +370,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       needs.image ||
       needs.services ||
       needs.guest ||
-      needs.region ||
       needs.accessToken
     );
   }
@@ -384,7 +379,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     if (needs.image) labels.push("image");
     if (needs.services) labels.push("services");
     if (needs.guest) labels.push("guest");
-    if (needs.region) labels.push("region");
     if (needs.accessToken) labels.push("accessToken");
     return labels;
   }
@@ -393,7 +387,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     state: string | undefined,
     needs: MachineReconcileNeeds,
   ): boolean {
-    return state === "suspended" && (needs.image || needs.guest || needs.region);
+    return state === "suspended" && (needs.image || needs.guest);
   }
 
   private resolveStudioIdFromMachine(machine: FlyMachine, fallback?: string | null): string {
@@ -848,11 +842,9 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   private async updateMachineConfig(options: {
     machineId: string;
     config: FlyMachineConfig;
-    region?: string;
     skipLaunch?: boolean;
   }): Promise<FlyMachine> {
     const body: Record<string, unknown> = { config: options.config };
-    if (options.region) body.region = options.region;
     if (options.skipLaunch) body.skip_launch = true;
     const machine = await this.flyFetch<FlyMachine>(`/machines/${options.machineId}`, {
       method: "POST",
@@ -953,7 +945,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         await this.updateMachineConfig({
           machineId: existing.id,
           config,
-          region: reconcileState.needs.region ? this.region : undefined,
           skipLaunch: true,
         });
 
@@ -1181,10 +1172,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     await this.updateMachineConfig({
       machineId: existing.id,
       config,
-      region:
-        typeof current.region === "string" && current.region !== this.region
-          ? this.region
-          : undefined,
       skipLaunch: true,
     });
 
@@ -1545,7 +1532,6 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         await this.updateMachineConfig({
           machineId: machine.id,
           config,
-          region: currentReconcileState.needs.region ? this.region : undefined,
           skipLaunch: true,
         });
 

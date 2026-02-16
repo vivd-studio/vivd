@@ -439,10 +439,11 @@ export function MachinesTab() {
             <AlertDialogDescription>
               This runs the same backend reconciler logic:
               <br />
-              - reconcile non-running machine drift (image/services/guest/region/token)
+              - reconcile non-running machine drift (image/services/guest/token)
               <br />
               - warm reconciled machines (update config → start → wait for /health → suspend)
               <br />- destroy machines older than the configured max age
+              <br />- note: Fly machine region is immutable; destroy/recreate to move regions
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

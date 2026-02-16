@@ -466,6 +466,7 @@ export function PreviewProvider({
       { slug: projectSlug!, version: selectedVersion },
       {
         enabled: !!projectSlug,
+        refetchOnWindowFocus: true,
         refetchInterval: (query) => {
           // Keep polling while dev server is starting
           const status = query.state.data?.status;
@@ -1085,6 +1086,12 @@ export function PreviewProvider({
     setRefreshKey((prev) => prev + 1);
     // Invalidate to restart dev server if it was shut down
     if (projectSlug) {
+      // Cancel any in-flight previewInfo request first so a hung fetch doesn't
+      // keep the UI stuck in a loading state until a full page reload.
+      utils.project.getPreviewInfo.cancel({
+        slug: projectSlug,
+        version: selectedVersion,
+      });
       utils.project.getPreviewInfo.invalidate({
         slug: projectSlug,
         version: selectedVersion,

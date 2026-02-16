@@ -11,9 +11,44 @@ interface PreviewIframeProps {
   selectorMode?: boolean;
 }
 
-// Retry configuration for dev server proxy errors
-const MAX_RETRY_ATTEMPTS = 5;
+// Retry configuration for transient preview errors (cold start / dev server startup).
+const MAX_RETRY_ATTEMPTS = 15;
 const INITIAL_RETRY_DELAY_MS = 300;
+const MAX_RETRY_DELAY_MS = 5000;
+
+const parsePreviewErrorPayload = (
+  bodyText: string,
+): { error: string; status?: string } | null => {
+  const trimmed = bodyText.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const error = typeof parsed.error === "string" ? parsed.error.trim() : "";
+    if (!error) return null;
+
+    const status = typeof parsed.status === "string" ? parsed.status.trim() : undefined;
+    return { error, status };
+  } catch {
+    return null;
+  }
+};
+
+const shouldRetryForPreviewError = (payload: {
+  error: string;
+  status?: string;
+}): boolean => {
+  const status = payload.status?.toLowerCase();
+  if (status === "starting" || status === "installing") return true;
+
+  const message = payload.error.toLowerCase();
+  return (
+    message.includes("dev server proxy error") ||
+    message.includes("dev server is starting") ||
+    message.includes("dev server not running") ||
+    message.includes("workspace not initialized")
+  );
+};
 
 // Scrollbar style injection for the iframe
 const injectScrollbarStyles = (
@@ -471,17 +506,16 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
         const doc = iframe.contentDocument;
         if (doc) {
           const bodyText = doc.body?.textContent?.trim() || "";
-          // Check for the specific proxy error JSON response
-          if (
-            bodyText.includes('"error"') &&
-            (bodyText.includes("Dev server proxy error") ||
-              bodyText.includes("Dev server is starting"))
-          ) {
+          const errorPayload = parsePreviewErrorPayload(bodyText);
+          if (errorPayload && shouldRetryForPreviewError(errorPayload)) {
             // Only retry if we haven't exceeded max attempts
             if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
               retryCountRef.current++;
-              // Exponential backoff: 300ms, 600ms, 1200ms, 2400ms, 4800ms
-              const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCountRef.current - 1);
+              // Exponential backoff with a cap: 300ms, 600ms, 1200ms, 2400ms, 4800ms, 5s, 5s...
+              const delay = Math.min(
+                INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCountRef.current - 1),
+                MAX_RETRY_DELAY_MS,
+              );
               setTimeout(() => {
                 setInternalRefreshKey((prev) => prev + 1);
               }, delay);

@@ -13,6 +13,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { App } from "@/App";
 import "./index.css";
 
+const TRPC_REQUEST_TIMEOUT_MS = 15_000;
+
 function Root() {
   const studioToken = getVivdStudioToken();
 
@@ -45,10 +47,26 @@ function Root() {
                 headers.set(VIVD_STUDIO_TOKEN_HEADER, studioToken);
               }
 
+              const controller = new AbortController();
+              const timeoutId = window.setTimeout(() => {
+                controller.abort();
+              }, TRPC_REQUEST_TIMEOUT_MS);
+
+              const upstreamSignal = options?.signal ?? null;
+              const onAbort = () => controller.abort();
+              if (upstreamSignal) {
+                if (upstreamSignal.aborted) controller.abort();
+                upstreamSignal.addEventListener("abort", onAbort, { once: true });
+              }
+
               return fetch(url, {
                 ...options,
                 credentials: "include",
                 headers,
+                signal: controller.signal,
+              }).finally(() => {
+                window.clearTimeout(timeoutId);
+                upstreamSignal?.removeEventListener("abort", onAbort);
               });
             },
           }),
