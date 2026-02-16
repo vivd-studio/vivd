@@ -1,7 +1,9 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "path";
+import * as net from "node:net";
+import treeKill from "tree-kill";
 import { detectProjectType, hasNodeModules, type ProjectConfig } from "./projectType.js";
 
 interface DevServerInfo {
@@ -13,9 +15,11 @@ interface DevServerInfo {
   lastActivity: number;
   status: "installing" | "starting" | "ready" | "error";
   error?: string;
+  cancelled?: boolean;
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const DEVSERVER_KILL_GRACE_MS = 1_000;
 const DEV_SERVER_PORT_START = Math.max(
   1024,
   Number.parseInt(process.env.DEV_SERVER_PORT_START || "5100", 10) || 5100
@@ -28,6 +32,8 @@ const DEVSERVER_NODE_MODULES_CACHE_ENABLED =
   process.env.DEVSERVER_NODE_MODULES_CACHE !== "0";
 const SYNC_PAUSE_FILE_PATH =
   process.env.VIVD_SYNC_PAUSE_FILE || "/tmp/vivd-sync.pause";
+const DEVSERVER_STATE_DIRNAME = ".vivd";
+const DEVSERVER_DEPS_MARKER_FILENAME = "devserver-deps.json";
 
 const MAX_CAPTURE_BYTES = 64 * 1024;
 
@@ -43,6 +49,15 @@ const debugLog = (...args: unknown[]) => {
   if (!isDebugEnabled) return;
   console.log("[DevServer DEBUG]", ...args);
 };
+
+const hasPsCommand = (() => {
+  try {
+    const result = spawnSync("ps", ["--version"], { stdio: "ignore" });
+    return result.error === undefined;
+  } catch {
+    return false;
+  }
+})();
 
 function resolveInstallCommand(
   projectDir: string,
@@ -205,15 +220,16 @@ function getPackageCacheRoot(): string | null {
   return path.join(opencodeDataHome, "package-cache");
 }
 
-function getNodeModulesCacheArchivePath(
+type DevServerDepsMarker = {
+  digest: string;
+  packageManager: ProjectConfig["packageManager"];
+  updatedAt: string;
+};
+
+function getProjectDependencyDigest(
   projectDir: string,
   packageManager: ProjectConfig["packageManager"]
 ): string | null {
-  if (!DEVSERVER_NODE_MODULES_CACHE_ENABLED) return null;
-
-  const packageCacheRoot = getPackageCacheRoot();
-  if (!packageCacheRoot) return null;
-
   const filesForHash: string[] = [];
   const packageJsonPath = path.join(projectDir, "package.json");
   if (fs.existsSync(packageJsonPath)) {
@@ -244,7 +260,65 @@ function getNodeModulesCacheArchivePath(
     hash.update("\n");
   }
 
-  const digest = hash.digest("hex").slice(0, 24);
+  return hash.digest("hex").slice(0, 24);
+}
+
+function readDevServerDepsMarker(projectDir: string): DevServerDepsMarker | null {
+  try {
+    const markerPath = path.join(
+      projectDir,
+      DEVSERVER_STATE_DIRNAME,
+      DEVSERVER_DEPS_MARKER_FILENAME
+    );
+    if (!fs.existsSync(markerPath)) return null;
+
+    const parsed = JSON.parse(fs.readFileSync(markerPath, "utf-8")) as Partial<DevServerDepsMarker>;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.digest !== "string" || parsed.digest.length < 6) return null;
+    if (
+      parsed.packageManager !== "npm" &&
+      parsed.packageManager !== "pnpm" &&
+      parsed.packageManager !== "yarn"
+    ) {
+      return null;
+    }
+
+    return {
+      digest: parsed.digest,
+      packageManager: parsed.packageManager,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeDevServerDepsMarker(
+  projectDir: string,
+  marker: DevServerDepsMarker
+): void {
+  try {
+    const dir = path.join(projectDir, DEVSERVER_STATE_DIRNAME);
+    fs.mkdirSync(dir, { recursive: true });
+    const markerPath = path.join(dir, DEVSERVER_DEPS_MARKER_FILENAME);
+    fs.writeFileSync(markerPath, JSON.stringify(marker, null, 2), "utf-8");
+  } catch {
+    // Best-effort only.
+  }
+}
+
+function getNodeModulesCacheArchivePath(
+  projectDir: string,
+  packageManager: ProjectConfig["packageManager"]
+): string | null {
+  if (!DEVSERVER_NODE_MODULES_CACHE_ENABLED) return null;
+
+  const packageCacheRoot = getPackageCacheRoot();
+  if (!packageCacheRoot) return null;
+
+  const digest = getProjectDependencyDigest(projectDir, packageManager);
+  if (!digest) return null;
+
   return path.join(packageCacheRoot, "node-modules", `${packageManager}-${digest}.tar.gz`);
 }
 
@@ -404,6 +478,18 @@ function formatInstallFailure(result: RunProcessResult): string {
   return `Exit code ${result.code}`;
 }
 
+function isPortAvailable(port: number, hostname: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+
+    server.on("error", () => resolve(false));
+    server.listen({ port, host: hostname }, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
 /**
  * Manages a single dev server instance for the studio workspace.
  */
@@ -458,7 +544,11 @@ export class DevServerService {
     status: DevServerInfo["status"];
     error?: string;
   }> {
-    if (this.server) {
+    if (
+      this.server &&
+      this.server.projectDir === projectDir &&
+      this.server.status !== "error"
+    ) {
       this.server.lastActivity = Date.now();
       return {
         url: this.server.status === "ready" ? this.server.url : null,
@@ -467,12 +557,21 @@ export class DevServerService {
       };
     }
 
+    if (this.server) {
+      const status = this.server.status;
+      const previousDir = this.server.projectDir;
+      console.warn(
+        `[DevServer] Found stale server state (${status}) for ${previousDir}. Restarting...`,
+      );
+      await this.stopDevServer({ reason: `stale-${status}` });
+    }
+
     const config = detectProjectType(projectDir);
     if (config.mode !== "devserver" || !config.devCommand) {
       return { url: null, status: "error", error: "Not a dev server project" };
     }
 
-    const port = this.nextPort++;
+    const port = await this.getAvailablePort("0.0.0.0");
     console.log(
       `[DevServer] Starting dev server for ${projectDir} on port ${port}`
     );
@@ -506,6 +605,104 @@ export class DevServerService {
     return { url: null, status: serverInfo.status };
   }
 
+  async restartDevServer(
+    projectDir: string,
+    basePath: string,
+    options?: { clean?: boolean }
+  ): Promise<{
+    url: string | null;
+    status: DevServerInfo["status"];
+    error?: string;
+  }> {
+    await this.stopDevServer({ reason: options?.clean ? "restart-clean" : "restart" });
+    if (options?.clean) {
+      this.cleanDevServerCaches(projectDir, { removeNodeModules: true });
+    }
+    return await this.getOrStartDevServer(projectDir, basePath);
+  }
+
+  private cleanDevServerCaches(
+    projectDir: string,
+    options?: { removeNodeModules?: boolean }
+  ): void {
+    const toRemove = [
+      path.join(projectDir, ".astro"),
+      path.join(projectDir, ".vite"),
+      path.join(projectDir, "node_modules", ".astro"),
+      path.join(projectDir, "node_modules", ".vite"),
+      path.join(projectDir, "node_modules", ".cache"),
+    ];
+
+    for (const dir of toRemove) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+
+    if (options?.removeNodeModules) {
+      try {
+        removeNodeModules(projectDir);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  private async getAvailablePort(hostname: string): Promise<number> {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const port = this.nextPort++;
+      try {
+        if (await isPortAvailable(port, hostname)) {
+          return port;
+        }
+      } catch {
+        // ignore and retry
+      }
+    }
+
+    throw new Error(
+      "[DevServer] Could not find an available port for the dev server",
+    );
+  }
+
+  private killProcessTree(pid: number): Promise<void> {
+    if (!hasPsCommand) {
+      return new Promise((resolve) => {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          resolve();
+          return;
+        }
+
+        setTimeout(() => {
+          try {
+            process.kill(pid, 0);
+            process.kill(pid, "SIGKILL");
+          } catch {
+            // ignore
+          }
+          resolve();
+        }, DEVSERVER_KILL_GRACE_MS);
+      });
+    }
+
+    return new Promise((resolve) => {
+      treeKill(pid, "SIGTERM", () => {
+        setTimeout(() => {
+          try {
+            process.kill(pid, 0);
+            treeKill(pid, "SIGKILL", () => resolve());
+          } catch {
+            resolve();
+          }
+        }, DEVSERVER_KILL_GRACE_MS);
+      });
+    });
+  }
+
   private async startServerAsync(
     projectDir: string,
     config: ProjectConfig,
@@ -513,9 +710,42 @@ export class DevServerService {
     basePath: string,
     serverInfo: DevServerInfo
   ): Promise<void> {
+    const isActive = () =>
+      this.server === serverInfo && serverInfo.cancelled !== true;
+
+    let syncPaused = false;
+
     try {
+      if (!isActive()) return;
+
       let installedDependencies = false;
       let needsInstall = !hasNodeModules(projectDir);
+      const initialDepsDigest = getProjectDependencyDigest(
+        projectDir,
+        config.packageManager
+      );
+
+      if (!needsInstall && initialDepsDigest) {
+        const marker = readDevServerDepsMarker(projectDir);
+        const depsChanged = marker?.digest !== initialDepsDigest;
+        const packageManagerChanged = marker?.packageManager !== config.packageManager;
+
+        if (marker && (depsChanged || packageManagerChanged)) {
+          console.warn(
+            "[DevServer] Detected dependency changes (lockfile/package.json). Reinstalling dependencies."
+          );
+          debugLog(
+            "Deps marker mismatch:",
+            JSON.stringify({
+              marker,
+              initialDepsDigest,
+              configPackageManager: config.packageManager,
+            })
+          );
+          removeNodeModules(projectDir);
+          needsInstall = true;
+        }
+      }
 
       if (!needsInstall) {
         const esbuildMismatch = await detectEsbuildBinaryMismatch(projectDir);
@@ -533,87 +763,130 @@ export class DevServerService {
       if (needsInstall) {
         serverInfo.status = "installing";
         setSyncPaused(true);
+        syncPaused = true;
 
-        let restoredFromCache = await restoreNodeModulesFromCache(
-          projectDir,
-          config.packageManager
-        );
+        try {
+          let restoredFromCache = await restoreNodeModulesFromCache(
+            projectDir,
+            config.packageManager
+          );
 
-        if (restoredFromCache) {
-          const esbuildMismatchAfterRestore =
-            await detectEsbuildBinaryMismatch(projectDir);
-          if (esbuildMismatchAfterRestore) {
-            console.warn(
-              "[DevServer] Cached node_modules is stale (esbuild mismatch). Falling back to fresh install."
-            );
+          if (restoredFromCache) {
+            const esbuildMismatchAfterRestore =
+              await detectEsbuildBinaryMismatch(projectDir);
+            if (esbuildMismatchAfterRestore) {
+              console.warn(
+                "[DevServer] Cached node_modules is stale (esbuild mismatch). Falling back to fresh install."
+              );
+              debugLog(
+                "esbuild mismatch after cache restore:",
+                esbuildMismatchAfterRestore
+              );
+              removeNodeModules(projectDir);
+              restoredFromCache = false;
+            }
+          }
+
+          if (!isActive()) return;
+
+          if (!restoredFromCache) {
+            console.log(`[DevServer] Installing dependencies in ${projectDir}`);
+
+            const install = resolveInstallCommand(projectDir, config.packageManager);
+            const installEnv = resolveInstallEnv(projectDir);
             debugLog(
-              "esbuild mismatch after cache restore:",
-              esbuildMismatchAfterRestore
+              `Install command: ${install.cmd} ${install.args.join(" ")}`
             );
-            removeNodeModules(projectDir);
-            restoredFromCache = false;
+
+            const result = await runProcess(install.cmd, install.args, {
+              cwd: projectDir,
+              env: installEnv,
+              timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
+            });
+
+            if (result.code !== 0 || result.timedOut) {
+              const msg = formatInstallFailure(result);
+              console.error(
+                `[DevServer] Failed to install dependencies: ${msg}`
+              );
+              serverInfo.status = "error";
+              serverInfo.error = `${config.packageManager} install failed: ${msg}`;
+              return;
+            }
+
+            if (!isActive()) return;
+
+            const esbuildMismatchAfterInstall =
+              await detectEsbuildBinaryMismatch(projectDir);
+            if (esbuildMismatchAfterInstall) {
+              console.error(
+                "[DevServer] Dependencies installed, but esbuild is still mismatched."
+              );
+              debugLog(
+                "esbuild mismatch after install:",
+                esbuildMismatchAfterInstall
+              );
+              serverInfo.status = "error";
+              serverInfo.error =
+                "Dependency install completed but esbuild binary is incompatible";
+              return;
+            }
+
+            installedDependencies = true;
           }
-        }
 
-        if (!restoredFromCache) {
-          console.log(`[DevServer] Installing dependencies in ${projectDir}`);
+          if (!isActive()) return;
 
-          const install = resolveInstallCommand(projectDir, config.packageManager);
-          const installEnv = resolveInstallEnv(projectDir);
-          debugLog(`Install command: ${install.cmd} ${install.args.join(" ")}`);
-
-          const result = await runProcess(install.cmd, install.args, {
-            cwd: projectDir,
-            env: installEnv,
-            timeoutMs: DEVSERVER_INSTALL_TIMEOUT_MS,
-          });
-
-          if (result.code !== 0 || result.timedOut) {
-            const msg = formatInstallFailure(result);
-            console.error(`[DevServer] Failed to install dependencies: ${msg}`);
-            serverInfo.status = "error";
-            serverInfo.error = `${config.packageManager} install failed: ${msg}`;
+          if (installedDependencies) {
+            await writeNodeModulesCache(projectDir, config.packageManager);
+          }
+        } finally {
+          if (syncPaused) {
             setSyncPaused(false);
-            return;
+            syncPaused = false;
           }
-
-          const esbuildMismatchAfterInstall =
-            await detectEsbuildBinaryMismatch(projectDir);
-          if (esbuildMismatchAfterInstall) {
-            console.error(
-              "[DevServer] Dependencies installed, but esbuild is still mismatched."
-            );
-            debugLog(
-              "esbuild mismatch after install:",
-              esbuildMismatchAfterInstall
-            );
-            serverInfo.status = "error";
-            serverInfo.error =
-              "Dependency install completed but esbuild binary is incompatible";
-            setSyncPaused(false);
-            return;
-          }
-
-          installedDependencies = true;
         }
+      }
 
-        if (installedDependencies) {
-          await writeNodeModulesCache(projectDir, config.packageManager);
-        }
+      if (!isActive()) return;
 
-        setSyncPaused(false);
+      const finalDepsDigest = getProjectDependencyDigest(
+        projectDir,
+        config.packageManager
+      );
+      if (finalDepsDigest) {
+        writeDevServerDepsMarker(projectDir, {
+          digest: finalDepsDigest,
+          packageManager: config.packageManager,
+          updatedAt: new Date().toISOString(),
+        });
       }
 
       serverInfo.status = "starting";
 
       // Start the dev server
       await this.spawnDevServer(projectDir, config, port, basePath, serverInfo);
+
+      if (!isActive()) {
+        const pid = serverInfo.process?.pid;
+        if (typeof pid === "number" && Number.isFinite(pid) && pid > 0) {
+          try {
+            await this.killProcessTree(pid);
+          } catch {
+            // ignore
+          }
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[DevServer] Error starting dev server: ${msg}`);
+      if (!isActive()) return;
       serverInfo.status = "error";
       serverInfo.error = msg;
-      setSyncPaused(false);
+    } finally {
+      if (syncPaused) {
+        setSyncPaused(false);
+      }
     }
   }
 
@@ -774,18 +1047,27 @@ export class DevServerService {
   /**
    * Stop the dev server.
    */
-  stopDevServer(): void {
-    if (this.server) {
-      console.log(
-        `[DevServer] Stopping dev server for ${this.server.projectDir}`
-      );
+  async stopDevServer(options?: { reason?: string }): Promise<boolean> {
+    const server = this.server;
+    if (!server) return false;
+
+    server.cancelled = true;
+    this.server = null;
+
+    console.log(
+      `[DevServer] Stopping dev server for ${server.projectDir}${options?.reason ? ` (${options.reason})` : ""}`,
+    );
+
+    const pid = server.process?.pid;
+    if (typeof pid === "number" && Number.isFinite(pid) && pid > 0) {
       try {
-        this.server.process?.kill();
+        await this.killProcessTree(pid);
       } catch {
-        // Ignore
+        // Best-effort only.
       }
-      this.server = null;
     }
+
+    return true;
   }
 
   /**
@@ -805,19 +1087,19 @@ export class DevServerService {
       console.log(
         `[DevServer] Stopping idle dev server for ${this.server.projectDir}`
       );
-      this.stopDevServer();
+      void this.stopDevServer({ reason: "idle-timeout" });
     }
   }
 
   /**
    * Close all resources gracefully.
    */
-  close(): void {
+  async close(): Promise<void> {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
-    this.stopDevServer();
+    await this.stopDevServer({ reason: "close" });
   }
 
   /**

@@ -146,6 +146,142 @@ const injectSelectorScript = (iframe: HTMLIFrameElement) => {
   }
 };
 
+const inferVivdBasePathFromPathname = (pathname: string): string | undefined => {
+  if (!pathname.startsWith("/")) return undefined;
+
+  if (pathname.startsWith("/preview")) return "/preview";
+
+  const studioMatch = pathname.match(
+    /^(\/vivd-studio\/api\/(?:preview|devpreview)\/[^/]+\/v[^/]+)(?:\/|$)/,
+  );
+  if (studioMatch) return studioMatch[1];
+
+  return undefined;
+};
+
+const getVivdBasePathForIframe = (
+  iframe: HTMLIFrameElement,
+): string | undefined => {
+  try {
+    const win = iframe.contentWindow as any;
+    const fromInjected = win?.__vivdBasePath;
+    if (typeof fromInjected === "string" && fromInjected.startsWith("/")) {
+      return fromInjected;
+    }
+
+    const pathname = win?.location?.pathname;
+    if (typeof pathname === "string") {
+      return inferVivdBasePathFromPathname(pathname);
+    }
+  } catch {
+    // Cross-origin iframe or blocked access.
+  }
+
+  return undefined;
+};
+
+const resolvePreviewHref = (
+  iframe: HTMLIFrameElement,
+  anchor: HTMLAnchorElement,
+  hrefAttr: string,
+): string | undefined => {
+  const href = hrefAttr.trim();
+  if (!href) return undefined;
+
+  // Root-relative URLs need to be prefixed with the preview base path so they stay
+  // inside `/preview` or `/vivd-studio/api/(preview|devpreview)/...`.
+  if (href.startsWith("/")) {
+    const basePath = getVivdBasePathForIframe(iframe);
+    const base = basePath?.endsWith("/") ? basePath.slice(0, -1) : basePath;
+    const prefixed =
+      base && !(href === base || href.startsWith(`${base}/`)) ? `${base}${href}` : href;
+    return new URL(prefixed, window.location.href).toString();
+  }
+
+  // For relative/absolute URLs, rely on the browser's resolution in the iframe.
+  const resolved = anchor.href;
+  if (typeof resolved === "string" && resolved.length > 0) return resolved;
+
+  return undefined;
+};
+
+const triggerBrowserDownload = (url: string, downloadName?: string | null) => {
+  const a = document.createElement("a");
+  a.href = url;
+  if (downloadName !== null && downloadName !== undefined) {
+    a.download = downloadName || "";
+  } else {
+    a.download = "";
+  }
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+
+const openInNewTab = (url: string) => {
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
+const installPreviewPdfDownloadInterceptor = (iframe: HTMLIFrameElement) => {
+  try {
+    const doc = iframe.contentDocument as any;
+    if (!doc) return;
+
+    if (doc.__vivdPreviewPdfDownloadInterceptorInstalled) return;
+    doc.__vivdPreviewPdfDownloadInterceptorInstalled = true;
+
+    doc.addEventListener(
+      "click",
+      (event: MouseEvent) => {
+        // Only intercept real user clicks (avoid scripts abusing downloads/popups).
+        if (!event.isTrusted) return;
+
+        const target: any = event.target;
+        const element = target?.closest ? target : target?.parentElement;
+        const anchor = element?.closest?.("a[href]") as HTMLAnchorElement | null;
+        if (!anchor) return;
+
+        const hrefAttr = anchor.getAttribute("href");
+        if (!hrefAttr) return;
+
+        const url = resolvePreviewHref(iframe, anchor, hrefAttr);
+        if (!url) return;
+
+        const isDownloadLink = anchor.hasAttribute("download");
+        const isPdf = (() => {
+          const hrefLooksPdf = /\.pdf(?:[?#&]|$)/i.test(hrefAttr);
+          try {
+            const u = new URL(url);
+            if (u.pathname.toLowerCase().endsWith(".pdf")) return true;
+            for (const value of u.searchParams.values()) {
+              if (value.toLowerCase().endsWith(".pdf")) return true;
+            }
+          } catch {
+            // fall through
+          }
+          return hrefLooksPdf || /\.pdf(?:[?#&]|$)/i.test(url);
+        })();
+
+        if (!isDownloadLink && !isPdf) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (isDownloadLink) {
+          triggerBrowserDownload(url, anchor.getAttribute("download"));
+          return;
+        }
+
+        openInNewTab(url);
+      },
+      true,
+    );
+  } catch (err) {
+    console.warn("Could not install preview PDF download interceptor", err);
+  }
+};
+
 export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
   function PreviewIframe(
     {
@@ -211,6 +347,8 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 
       // Reset retry count on successful load
       retryCountRef.current = 0;
+
+      installPreviewPdfDownloadInterceptor(iframe);
 
       // Some previewed sites ship strict CSP which blocks inline script/style injection.
       // Only inject editor helpers when we actually need them (selector mode).

@@ -8,11 +8,15 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-16: studio Fly cold-start hardening — added a lightweight pre-start HTTP listener during S3 hydration to avoid Fly port-probe “connection refused” errors before the real studio server starts.
+- 2026-02-16: studio preview PDF downloads — clicking PDF/download links inside the preview iframe now opens/downloads the file outside the sandbox (avoids Chrome “blocked” page) while preserving base-path URL rewriting.
 - 2026-02-16: studio assets UX — added in-studio PDF viewer overlay and avoid opening binary files in the text editor (fallback: open/download in a new tab).
 - 2026-02-16: studio snapshots history sidebar now runs load-version as a single-flight action with explicit per-item loading feedback, and blocks other git actions while a git mutation is in-flight (prevents queued duplicate operations/toast bursts).
 - 2026-02-16: studio devserver routing fix — run the workspace devserver at base `/` and keep `/preview` + `/vivd-studio/api/devpreview/...` working via proxy path stripping + stronger URL/redirect rewriting (fixes nested routes like `/product/56`).
+- 2026-02-16: studio devserver recovery — added 1-click restart/clean-reinstall controls in the preview error overlay, improved process-tree killing, and force-reinstall logic when package.json/lockfiles change (avoids “reboot to recover” after git version switches).
 - 2026-02-16: embedded studio UX hardening — added studio → host "ready" handshake plus iframe startup overlay + timeout fallback (reload + hard restart) to avoid black-screen hangs when a studio machine is slow/unresponsive.
 - 2026-02-16: studio chat reliability — OpenCode session list now loads on initial open (wait for opencode server readiness + short bootstrap polling while sessions hydrate).
+- 2026-02-16: studio chat UX — added an explicit session-loading state when switching sessions to avoid briefly showing the “new session” empty prompt.
 - 2026-02-16: studio snapshots GitHub Sync section is now collapsible and defaults to collapsed, with key repo/status info visible while collapsed.
 - 2026-02-16: fixed studio changed-files filename truncation edge case so paths are parsed defensively and shown without truncating the first character.
 - 2026-02-16: studio snapshots sidepanel now exposes a subtle, collapsible list of changed file paths (collapsed by default) to make pending workspace edits easier to review before saving.

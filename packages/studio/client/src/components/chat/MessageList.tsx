@@ -28,6 +28,7 @@ export function MessageList() {
     isStreaming,
     isWaiting,
     isLoading,
+    isSessionHydrating,
     handleRevert,
     handleUnrevert,
     isReverted,
@@ -61,9 +62,15 @@ export function MessageList() {
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
       <div className="flex flex-col gap-6 px-6 pt-6 pb-6">
-        {messages.length === 0 && (
-          <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
-        )}
+        {messages.length === 0 &&
+          (isSessionHydrating ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mb-3" />
+              <div className="text-sm">Loading session…</div>
+            </div>
+          ) : (
+            <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
+          ))}
         {messages.map((msg, i) => {
           // Skip empty messages (no content and no parts)
           if (!msg.content && (!msg.parts || msg.parts.length === 0)) {

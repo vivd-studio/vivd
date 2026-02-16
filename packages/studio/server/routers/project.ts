@@ -286,9 +286,39 @@ export const projectRouter = router({
         version: z.number(),
       }),
     )
-    .mutation(async () => {
-      devServerService.stopDevServer();
+    .mutation(async ({ ctx }) => {
+      if (!ctx.workspace.isInitialized()) {
+        return { success: false };
+      }
+
+      await devServerService.stopDevServer({ reason: "api-stop" });
       return { success: true };
+    }),
+
+  restartDevServer: publicProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number(),
+        clean: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.workspace.isInitialized()) {
+        return {
+          success: false,
+          status: "error" as const,
+          error: "Workspace not initialized",
+        };
+      }
+
+      const projectDir = ctx.workspace.getProjectPath();
+      const basePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
+      const result = await devServerService.restartDevServer(projectDir, basePath, {
+        clean: input.clean,
+      });
+
+      return { success: true, status: result.status, error: result.error };
     }),
 
   applyHtmlPatches: publicProcedure

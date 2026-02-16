@@ -16,6 +16,7 @@ import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2, AlertCircle } from "lucide-react";
 import { AIEditDialog } from "../asset-explorer/AIEditDialog";
 import { isTextFile } from "../asset-explorer/utils";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +46,7 @@ export function PreviewContent() {
     chatOpen,
     setChatOpen,
     handleTaskComplete,
+    handleRefresh,
     assetPanel,
     chatPanel,
     iframeLoading,
@@ -71,6 +73,28 @@ export function PreviewContent() {
   const { canUseAiImages } = usePermissions();
   const [localEditPrompt, setLocalEditPrompt] = useState("");
   const utils = trpc.useUtils();
+  const [restartKind, setRestartKind] = useState<"restart" | "clean" | null>(
+    null,
+  );
+
+  const restartDevServerMutation = trpc.project.restartDevServer.useMutation({
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error("Dev server restart failed", {
+          description:
+            result.error || "Dev server could not be restarted right now",
+        });
+        return;
+      }
+      handleRefresh();
+    },
+    onError: (error) => {
+      toast.error("Dev server restart failed", { description: error.message });
+    },
+    onSettled: () => {
+      setRestartKind(null);
+    },
+  });
 
   // For dev server projects, don't render iframe until ready
   const isDevServerReady =
@@ -78,15 +102,22 @@ export function PreviewContent() {
     (previewMode === "static" || devServerStatus === "ready");
 
   // Show loading for both iframe loading AND dev server starting
+  const isRestartingDevServer = restartDevServerMutation.isPending;
   const isLoading =
     iframeLoading ||
     isPreviewLoading ||
     devServerStatus === "starting" ||
-    devServerStatus === "installing";
-  const isDevServerError = devServerStatus === "error";
+    devServerStatus === "installing" ||
+    isRestartingDevServer;
+  const isDevServerError = devServerStatus === "error" && !isRestartingDevServer;
 
   // Determine loading message
   const getLoadingMessage = () => {
+    if (isRestartingDevServer) {
+      return restartKind === "clean"
+        ? "Cleaning and restarting dev server..."
+        : "Restarting dev server...";
+    }
     if (isPreviewLoading) {
       return "Loading preview...";
     }
@@ -98,6 +129,19 @@ export function PreviewContent() {
     }
     return "Loading preview...";
   };
+
+  const triggerDevServerRestart = useCallback(
+    (options?: { clean?: boolean }) => {
+      if (!projectSlug) return;
+      setRestartKind(options?.clean ? "clean" : "restart");
+      restartDevServerMutation.mutate({
+        slug: projectSlug,
+        version: selectedVersion,
+        clean: options?.clean,
+      });
+    },
+    [projectSlug, selectedVersion, restartDevServerMutation],
+  );
 
   // ============================================
   // File Navigation Logic (for image viewer arrow keys)
@@ -298,6 +342,23 @@ export function PreviewContent() {
                   {devServerError}
                 </span>
               )}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <Button
+                  size="sm"
+                  onClick={() => triggerDevServerRestart()}
+                  disabled={!projectSlug || restartDevServerMutation.isPending}
+                >
+                  Restart dev server
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => triggerDevServerRestart({ clean: true })}
+                  disabled={!projectSlug || restartDevServerMutation.isPending}
+                >
+                  Clean reinstall
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3">

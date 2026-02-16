@@ -127,7 +127,8 @@ sync_opencode() {
   fi
 
   mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-  aws_s3_sync "$VIVD_OPENCODE_DATA_HOME" "$S3_OPENCODE_URI"
+  aws_s3_sync "$VIVD_OPENCODE_DATA_HOME" "$S3_OPENCODE_URI" \
+    --exclude "opencode/auth.json"
 }
 
 hydrate_source() {
@@ -157,7 +158,8 @@ hydrate_opencode() {
   echo "  Source: ${S3_OPENCODE_URI}"
   echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
   mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-  aws_s3_sync "$S3_OPENCODE_URI" "$VIVD_OPENCODE_DATA_HOME"
+  aws_s3_sync "$S3_OPENCODE_URI" "$VIVD_OPENCODE_DATA_HOME" \
+    --exclude "opencode/auth.json"
 }
 
 SYNC_ENABLED="0"
@@ -170,6 +172,39 @@ if [ "$SYNC_ENABLED" = "1" ]; then
   if [ -d "$LEGACY_OPENCODE_DIR" ] && [ "$LEGACY_OPENCODE_DIR" != "$VIVD_OPENCODE_DATA_HOME" ] && [ ! -e "$VIVD_OPENCODE_DATA_HOME" ]; then
     mkdir -p "$(dirname "$VIVD_OPENCODE_DATA_HOME")"
     mv "$LEGACY_OPENCODE_DIR" "$VIVD_OPENCODE_DATA_HOME" || true
+  fi
+
+  # Fly Machines may probe the internal port while hydration is running. Keep a
+  # lightweight HTTP listener on the expected port to avoid connection-refused
+  # errors during cold starts. We'll replace it with the real studio server
+  # once hydration has completed.
+  STUB_PID=""
+  STUB_PORT="${PORT:-3100}"
+  STUB_HOST="${STUDIO_HOST:-0.0.0.0}"
+
+  if command -v node >/dev/null 2>&1; then
+    STUB_PORT="$STUB_PORT" STUB_HOST="$STUB_HOST" node -e '
+const http = require("http");
+const port = Number.parseInt(process.env.STUB_PORT || "3100", 10);
+const host = process.env.STUB_HOST || "0.0.0.0";
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ status: "starting" }));
+    return;
+  }
+  res.statusCode = 503;
+  res.setHeader("Content-Type", "text/plain");
+  res.end("Studio is starting up. Please retry shortly.");
+});
+
+server.listen(port, host);
+process.on("SIGINT", () => server.close(() => process.exit(0)));
+process.on("SIGTERM", () => server.close(() => process.exit(0)));
+' >/dev/null 2>&1 &
+    STUB_PID="$!"
   fi
 
   HYDRATE_SOURCE_PID=""
@@ -191,6 +226,11 @@ if [ "$SYNC_ENABLED" = "1" ]; then
 
   if [ -n "$HYDRATE_OPENCODE_PID" ]; then
     wait "$HYDRATE_OPENCODE_PID" || true
+  fi
+
+  if [ -n "$STUB_PID" ]; then
+    kill -TERM "$STUB_PID" 2>/dev/null || true
+    wait "$STUB_PID" 2>/dev/null || true
   fi
 
   write_opencode_auth

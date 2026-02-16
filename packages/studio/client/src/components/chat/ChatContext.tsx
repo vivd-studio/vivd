@@ -140,6 +140,7 @@ interface ChatContextValue {
   sessionsLoading: boolean;
   selectedSessionId: string | null;
   setSelectedSessionId: (id: string | null) => void;
+  isSessionHydrating: boolean;
 
   // Messages
   messages: Message[];
@@ -291,6 +292,7 @@ export function ChatProvider({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
   );
+  const [isSessionHydrating, setIsSessionHydrating] = useState(false);
   const bootstrapSessionsPollUntilRef = useRef(Date.now() + 60_000);
   const pendingSessionIdRef = useRef<string | null>(null);
   const autoSelectLockedRef = useRef(false);
@@ -465,6 +467,7 @@ export function ChatProvider({
     setMessages([]);
     setIsStreaming(false);
     setStreamingParts([]);
+    setIsSessionHydrating(false);
     autoSelectLockedRef.current = false;
     hasAutoSelectedRunningSessionRef.current = false;
   }, [projectSlug]);
@@ -482,6 +485,7 @@ export function ChatProvider({
 
     if (isPendingSession) {
       pendingSessionIdRef.current = null;
+      setIsSessionHydrating(false);
       if (isWaitingForAgent.current) {
         setIsWaiting(true);
       }
@@ -491,6 +495,7 @@ export function ChatProvider({
     setMessages([]);
     setIsWaiting(false);
     isWaitingForAgent.current = false;
+    setIsSessionHydrating(Boolean(selectedSessionId));
   }, [selectedSessionId]);
 
   // Handle element selection - attach element and clear from context
@@ -640,8 +645,12 @@ export function ChatProvider({
   }, [selectedSessionId, sessionStatuses, sessions]);
 
   // Poll for messages of the selected session
-  const { data: sessionMessages, refetch: refetchMessages } =
-    trpc.agent.getSessionContent.useQuery(
+  const {
+    data: sessionMessages,
+    refetch: refetchMessages,
+    isError: sessionMessagesIsError,
+    error: sessionMessagesError,
+  } = trpc.agent.getSessionContent.useQuery(
       {
         sessionId: selectedSessionId!,
         projectSlug,
@@ -653,6 +662,18 @@ export function ChatProvider({
         refetchInterval: getActivePollingInterval(isWaiting || isStreaming),
       },
     );
+
+  useEffect(() => {
+    if (!selectedSessionId) return;
+    if (!sessionMessagesIsError) return;
+
+    setIsSessionHydrating(false);
+    setSessionError({
+      type: "load",
+      message:
+        (sessionMessagesError as any)?.message || "Failed to load session",
+    });
+  }, [selectedSessionId, sessionMessagesIsError, sessionMessagesError]);
 
   // Force refetch messages when switching to a session
   // This ensures we get fresh data even if the session completed while we were away
@@ -940,6 +961,7 @@ export function ChatProvider({
 
   useEffect(() => {
     if (sessionMessages && selectedSessionId) {
+      setIsSessionHydrating(false);
       const mappedMessages: Message[] = sessionMessages.map((msg: any) => {
         const role = msg.info?.role === "assistant" ? "agent" : "user";
         const textContent =
@@ -1315,6 +1337,7 @@ export function ChatProvider({
       autoSelectLockedRef.current = true;
       setSelectedSessionId(sessionId);
     },
+    isSessionHydrating,
     messages,
     isStreaming,
     isWaiting,
