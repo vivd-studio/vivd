@@ -39,6 +39,7 @@ export function useToolbarState() {
     handleClose,
     embedded,
     publicPreviewEnabled,
+    previewMode,
   } = usePreview();
 
   // Git changes query
@@ -92,6 +93,42 @@ export function useToolbarState() {
       commitHash,
     });
   };
+
+  const [devServerRestartKind, setDevServerRestartKind] = useState<
+    "restart" | "clean" | null
+  >(null);
+
+  const restartDevServerMutation = trpc.project.restartDevServer.useMutation({
+    onSuccess: (data) => {
+      if (!data.success) {
+        toast.error("Dev server restart failed", {
+          description:
+            data.error || "Dev server could not be restarted right now",
+        });
+        return;
+      }
+      handleRefresh();
+    },
+    onError: (error) => {
+      toast.error("Dev server restart failed", { description: error.message });
+    },
+    onSettled: () => {
+      setDevServerRestartKind(null);
+    },
+  });
+
+  const handleRestartDevServer = useCallback(
+    (options?: { clean?: boolean }) => {
+      if (!projectSlug || previewMode !== "devserver") return;
+      setDevServerRestartKind(options?.clean ? "clean" : "restart");
+      restartDevServerMutation.mutate({
+        slug: projectSlug,
+        version: selectedVersion,
+        clean: options?.clean,
+      });
+    },
+    [projectSlug, previewMode, restartDevServerMutation, selectedVersion],
+  );
 
   // Connected-mode only: toggle public preview URL
   const isConnectedMode = publishStatus?.mode === "connected";
@@ -191,6 +228,7 @@ export function useToolbarState() {
     handleClose,
     embedded,
     publicPreviewEnabled,
+    previewMode,
 
     // Query data
     hasGitChanges,
@@ -210,6 +248,11 @@ export function useToolbarState() {
     isRegeneratingThumbnail: regenerateThumbnailMutation.isPending,
     handleDeleteProject,
     isDeletingProject: deleteProjectMutation.isPending,
+
+    // Dev server actions
+    handleRestartDevServer,
+    isRestartingDevServer: restartDevServerMutation.isPending,
+    devServerRestartKind,
 
     // Utils for cache invalidation
     utils,

@@ -316,6 +316,7 @@ export const projectRouter = router({
       const basePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
       const result = await devServerService.restartDevServer(projectDir, basePath, {
         clean: input.clean,
+        resetCaches: true,
       });
 
       return { success: true, status: result.status, error: result.error };
@@ -1175,10 +1176,34 @@ export const projectRouter = router({
         throw new Error("Workspace not initialized");
       }
 
+      const projectDir = ctx.workspace.getProjectPath();
+      const config = detectProjectType(projectDir);
+      const devPreviewBasePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
+      const hadDevServer = config.mode === "devserver" && devServerService.hasServer();
+
+      if (hadDevServer) {
+        try {
+          await devServerService.stopDevServer({ reason: "git-load-version" });
+        } catch {
+          // Best-effort only.
+        }
+      }
+
       await ctx.workspace.loadVersion(input.commitHash);
       projectTouchReporter.touch(input.slug);
       // Report state ASAP so connected publish checks see the loaded snapshot quickly.
       void workspaceStateReporter.reportSoon();
+
+      if (hadDevServer) {
+        try {
+          await devServerService.restartDevServer(projectDir, devPreviewBasePath, {
+            resetCaches: true,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[DevServer] Failed to restart after loadVersion: ${msg}`);
+        }
+      }
 
       const shortHash = input.commitHash.substring(0, 7);
       return {

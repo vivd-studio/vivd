@@ -14,6 +14,7 @@ import type {
 import { getVersionDir } from "../../generator/versionUtils";
 import {
   createS3Client,
+  deleteBucketPrefix,
   downloadBucketPrefixToDirectory,
   getObjectStorageConfigFromEnv,
   parseS3Uri,
@@ -41,6 +42,7 @@ interface StorageSyncTarget {
   localDir: string;
   excludeDirNames: string[];
   exclude?: string[];
+  exact?: boolean;
 }
 
 interface LocalObjectStorageSync {
@@ -440,6 +442,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         excludeDirNames: ["node_modules", "opencode-data", "dist", ".astro"],
         // Artifact build metadata is uploaded separately; don't overwrite it with stale workspace copies.
         exclude: [".vivd/build.json", ".git/index.lock"],
+        // Keep source bucket in exact sync so deleted files don't reappear on hydrate.
+        exact: true,
       },
       {
         name: "opencode",
@@ -538,6 +542,14 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     const run = (async () => {
       for (const target of sync.targets) {
+        if (target.exact) {
+          await deleteBucketPrefix({
+            client: sync.client,
+            bucket: target.bucket,
+            keyPrefix: target.keyPrefix,
+          });
+        }
+
         const result = await uploadDirectoryToBucket({
           client: sync.client,
           bucket: target.bucket,

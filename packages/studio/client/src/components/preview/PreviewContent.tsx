@@ -50,6 +50,7 @@ export function PreviewContent() {
     assetPanel,
     chatPanel,
     iframeLoading,
+    onIframeNavigateStart,
     onIframeLoad,
     selectorMode,
     editingTextFile,
@@ -384,6 +385,7 @@ export function PreviewContent() {
                   src={fullUrl}
                   refreshKey={refreshKey}
                   isMobile={true}
+                  onNavigateStart={onIframeNavigateStart}
                   onLoad={onIframeLoad}
                   selectorMode={selectorMode}
                 />
@@ -394,6 +396,7 @@ export function PreviewContent() {
                 src={fullUrl}
                 refreshKey={refreshKey}
                 isMobile={false}
+                onNavigateStart={onIframeNavigateStart}
                 onLoad={onIframeLoad}
                 selectorMode={selectorMode}
               />

@@ -42,6 +42,7 @@ export function StudioToolbar() {
     originalUrl,
     copied,
     selectedVersion,
+    previewMode,
     versions,
     hasMultipleVersions,
     handleVersionSelect,
@@ -79,6 +80,9 @@ export function StudioToolbar() {
     isRegeneratingThumbnail,
     handleDeleteProject,
     isDeletingProject,
+    handleRestartDevServer,
+    isRestartingDevServer,
+    devServerRestartKind,
   } = state;
 
   const showClose = embedded || !!returnTo;
@@ -223,12 +227,16 @@ export function StudioToolbar() {
           <QuickActions
             projectSlug={projectSlug}
             selectedVersion={selectedVersion}
+            previewMode={previewMode}
             fullUrl={fullUrl}
             originalUrl={originalUrl}
             copied={copied}
             publicPreviewEnabled={publicPreviewEnabled}
             handleCopy={handleCopy}
             handleRefresh={handleRefresh}
+            handleRestartDevServer={handleRestartDevServer}
+            isRestartingDevServer={isRestartingDevServer}
+            devServerRestartKind={devServerRestartKind}
             historyPanelOpen={historyPanelOpen}
             setHistoryPanelOpen={setHistoryPanelOpen}
             publishDialogOpen={publishDialogOpen}

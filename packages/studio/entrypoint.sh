@@ -113,6 +113,7 @@ sync_source() {
   fi
 
   aws_s3_sync "$VIVD_WORKSPACE_DIR" "$S3_SOURCE_URI" \
+    --delete \
     --exclude "node_modules/*" \
     --exclude "dist/*" \
     --exclude ".astro/*" \

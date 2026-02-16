@@ -247,8 +247,8 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
   private get minimumMemoryMb(): number {
     if (this.cpuKind !== "performance") return 256;
-    // Performance machines require more RAM; enforce a conservative floor.
-    return Math.max(4096, this.cpuCount * 2048);
+    // Fly performance machines should have at least 2 GiB per CPU.
+    return this.cpuCount * 2048;
   }
 
   private get memoryMb(): number {
@@ -261,6 +261,28 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       return minimum;
     }
     return configured;
+  }
+
+  private get desiredGuest(): {
+    cpu_kind: "shared" | "performance";
+    cpus: number;
+    memory_mb: number;
+  } {
+    return {
+      cpu_kind: this.cpuKind,
+      cpus: this.cpuCount,
+      memory_mb: this.memoryMb,
+    };
+  }
+
+  private needsGuestUpdate(guest: FlyMachineConfig["guest"] | undefined): boolean {
+    if (!guest) return true;
+    const desiredGuest = this.desiredGuest;
+    return (
+      guest.cpu_kind !== desiredGuest.cpu_kind ||
+      guest.cpus !== desiredGuest.cpus ||
+      guest.memory_mb !== desiredGuest.memory_mb
+    );
   }
 
   private async flyFetch<T>(
@@ -672,12 +694,16 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         const needsAutostop = service.autostop !== "suspend";
         return needsAutostart || needsAutostop;
       }) ?? true;
+    const needsGuestUpdate = this.needsGuestUpdate(existing.config?.guest);
 
     // Only reconcile machine config when it's not running, to avoid disrupting an
     // active studio session. This also ensures the next boot uses the latest image.
-    if (existing.state !== "started" && (needsImageUpdate || needsServiceUpdate)) {
+    if (
+      existing.state !== "started" &&
+      (needsImageUpdate || needsServiceUpdate || needsGuestUpdate)
+    ) {
       // A suspended machine would resume a snapshot; stop it first to boot fresh.
-      if (needsImageUpdate && existing.state === "suspended") {
+      if ((needsImageUpdate || needsGuestUpdate) && existing.state === "suspended") {
         await this.stopMachine(existing.id);
         await this.waitForState({
           machineId: existing.id,
@@ -711,6 +737,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         ...(needsServiceUpdate
           ? { services: this.normalizeServicesForVivd(current.config?.services, port) }
           : {}),
+        ...(needsGuestUpdate ? { guest: this.desiredGuest } : {}),
         metadata,
       };
 
@@ -927,6 +954,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     const config: FlyMachineConfig = {
       ...(current.config || {}),
       image: desiredImage,
+      guest: this.desiredGuest,
       env,
       services: this.normalizeServicesForVivd(current.config?.services, port),
       metadata,
@@ -980,11 +1008,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           region: this.region,
           config: {
             image: desiredImage,
-            guest: {
-              cpu_kind: this.cpuKind,
-              cpus: this.cpuCount,
-              memory_mb: this.memoryMb,
-            },
+            guest: this.desiredGuest,
             env,
             services: [
               {
@@ -1250,6 +1274,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         const config: FlyMachineConfig = {
           ...(current.config || {}),
           image: desiredImage,
+          guest: this.desiredGuest,
           services: this.normalizeServicesForVivd(current.config?.services, port),
           metadata,
         };

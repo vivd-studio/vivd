@@ -42,12 +42,16 @@ import { useState } from "react";
 interface QuickActionsProps {
   projectSlug: string | undefined;
   selectedVersion: number;
+  previewMode?: "static" | "devserver";
   fullUrl: string;
   originalUrl: string | null | undefined;
   copied: boolean;
   publicPreviewEnabled: boolean;
   handleCopy: () => void;
   handleRefresh: () => void;
+  handleRestartDevServer?: (options?: { clean?: boolean }) => void;
+  isRestartingDevServer?: boolean;
+  devServerRestartKind?: "restart" | "clean" | null;
   historyPanelOpen: boolean;
   setHistoryPanelOpen: (value: boolean) => void;
   publishDialogOpen: boolean;
@@ -76,12 +80,16 @@ interface QuickActionsProps {
 export function QuickActions({
   projectSlug,
   selectedVersion,
+  previewMode,
   fullUrl,
   originalUrl,
   copied,
   publicPreviewEnabled,
   handleCopy,
   handleRefresh,
+  handleRestartDevServer,
+  isRestartingDevServer,
+  devServerRestartKind,
   historyPanelOpen,
   setHistoryPanelOpen,
   setPublishDialogOpen,
@@ -269,6 +277,33 @@ export function QuickActions({
                   View Original Website
                 </DropdownMenuItem>
               )}
+            </>
+          )}
+          {previewMode === "devserver" && projectSlug && handleRestartDevServer && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleRestartDevServer()}
+                disabled={Boolean(isRestartingDevServer)}
+              >
+                {isRestartingDevServer && devServerRestartKind === "restart" ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                )}
+                Restart dev server
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleRestartDevServer({ clean: true })}
+                disabled={Boolean(isRestartingDevServer)}
+              >
+                {isRestartingDevServer && devServerRestartKind === "clean" ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                )}
+                Clean reinstall dev server
+              </DropdownMenuItem>
             </>
           )}
           {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}

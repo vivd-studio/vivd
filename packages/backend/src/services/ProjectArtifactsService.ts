@@ -84,6 +84,12 @@ export async function uploadProjectSourceToBucket(options: {
     kind: "source",
   });
 
+  await deleteBucketPrefix({
+    client: storage.client,
+    bucket: storage.bucket,
+    keyPrefix,
+  });
+
   await uploadDirectoryToBucket({
     client: storage.client,
     bucket: storage.bucket,

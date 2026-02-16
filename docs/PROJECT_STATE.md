@@ -8,12 +8,15 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-16: source artifact sync switched to exact behavior across studio sync paths (studio source sync default, studio container sync loop, local studio-machine object-storage sync, and backend source artifact uploads) so deleted files are removed from bucket and no longer rehydrate back into workspaces.
+- 2026-02-16: Fly studio machine sizing policy updated — performance machines now enforce RAM floor at `2 GiB * CPU count` (removed hard 4 GiB minimum), and machine config reconciliation now applies desired `guest` sizing (cpu_kind/cpus/memory) on non-running updates/hard restarts/image warm-ups.
 - 2026-02-16: studio Fly cold-start hardening — added a lightweight pre-start HTTP listener during S3 hydration to avoid Fly port-probe “connection refused” errors before the real studio server starts.
+- 2026-02-16: studio preview navigation loading — show an explicit loading indicator when the preview iframe is navigating (slow link clicks / page transitions no longer look like “nothing happened”).
 - 2026-02-16: studio preview PDF downloads — clicking PDF/download links inside the preview iframe now opens/downloads the file outside the sandbox (avoids Chrome “blocked” page) while preserving base-path URL rewriting.
 - 2026-02-16: studio assets UX — added in-studio PDF viewer overlay and avoid opening binary files in the text editor (fallback: open/download in a new tab).
 - 2026-02-16: studio snapshots history sidebar now runs load-version as a single-flight action with explicit per-item loading feedback, and blocks other git actions while a git mutation is in-flight (prevents queued duplicate operations/toast bursts).
 - 2026-02-16: studio devserver routing fix — run the workspace devserver at base `/` and keep `/preview` + `/vivd-studio/api/devpreview/...` working via proxy path stripping + stronger URL/redirect rewriting (fixes nested routes like `/product/56`).
-- 2026-02-16: studio devserver recovery — added 1-click restart/clean-reinstall controls in the preview error overlay, improved process-tree killing, and force-reinstall logic when package.json/lockfiles change (avoids “reboot to recover” after git version switches).
+- 2026-02-16: studio devserver recovery — added 1-click restart/clean-reinstall controls (preview overlay + toolbar menu), improved process-tree killing, auto-restart on snapshot loads, and force-reinstall logic when package.json/lockfiles change (avoids “reboot to recover” after git version switches).
 - 2026-02-16: embedded studio UX hardening — added studio → host "ready" handshake plus iframe startup overlay + timeout fallback (reload + hard restart) to avoid black-screen hangs when a studio machine is slow/unresponsive.
 - 2026-02-16: studio chat reliability — OpenCode session list now loads on initial open (wait for opencode server readiness + short bootstrap polling while sessions hydrate).
 - 2026-02-16: studio chat UX — added an explicit session-loading state when switching sessions to avoid briefly showing the “new session” empty prompt.

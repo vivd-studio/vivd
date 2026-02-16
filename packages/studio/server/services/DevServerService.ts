@@ -608,15 +608,22 @@ export class DevServerService {
   async restartDevServer(
     projectDir: string,
     basePath: string,
-    options?: { clean?: boolean }
+    options?: { clean?: boolean; resetCaches?: boolean }
   ): Promise<{
     url: string | null;
     status: DevServerInfo["status"];
     error?: string;
   }> {
-    await this.stopDevServer({ reason: options?.clean ? "restart-clean" : "restart" });
-    if (options?.clean) {
-      this.cleanDevServerCaches(projectDir, { removeNodeModules: true });
+    await this.stopDevServer({
+      reason:
+        options?.clean
+          ? "restart-reinstall"
+          : options?.resetCaches
+            ? "restart-reset-caches"
+            : "restart",
+    });
+    if (options?.clean || options?.resetCaches) {
+      this.cleanDevServerCaches(projectDir, { removeNodeModules: Boolean(options?.clean) });
     }
     return await this.getOrStartDevServer(projectDir, basePath);
   }

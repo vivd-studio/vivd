@@ -76,6 +76,7 @@ interface PreviewContextValue {
 
   // Refs
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  onIframeNavigateStart: () => void;
   onIframeLoad: () => void;
   mobileContainerRef: RefObject<HTMLDivElement | null>;
 
@@ -179,6 +180,7 @@ export function PreviewProvider({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const iframeLoadingDelayTimerRef = useRef<number | null>(null);
   const [selectedVersion, setSelectedVersion] = useState(version || 1);
   const [mobileView, setMobileView] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(
@@ -187,6 +189,35 @@ export function PreviewProvider({
   const [mobileScale, setMobileScale] = useState(1);
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  const clearIframeLoadingDelayTimer = useCallback(() => {
+    if (iframeLoadingDelayTimerRef.current === null) return;
+    window.clearTimeout(iframeLoadingDelayTimerRef.current);
+    iframeLoadingDelayTimerRef.current = null;
+  }, []);
+
+  const beginIframeLoading = useCallback(() => {
+    clearIframeLoadingDelayTimer();
+    setIframeLoading(true);
+  }, [clearIframeLoadingDelayTimer]);
+
+  const beginIframeNavigationLoading = useCallback(() => {
+    clearIframeLoadingDelayTimer();
+    // Avoid flicker for fast navigations.
+    iframeLoadingDelayTimerRef.current = window.setTimeout(() => {
+      iframeLoadingDelayTimerRef.current = null;
+      setIframeLoading(true);
+    }, 150);
+  }, [clearIframeLoadingDelayTimer]);
+
+  const endIframeLoading = useCallback(() => {
+    clearIframeLoadingDelayTimer();
+    setIframeLoading(false);
+  }, [clearIframeLoadingDelayTimer]);
+
+  useEffect(() => {
+    return () => clearIframeLoadingDelayTimer();
+  }, [clearIframeLoadingDelayTimer]);
 
   type SavePatch =
     | VivdPatch
@@ -586,7 +617,7 @@ export function PreviewProvider({
     }
     clearPendingPatches();
     // Refresh iframe to show new version
-    setIframeLoading(true);
+    beginIframeLoading();
     setRefreshKey((prev) => prev + 1);
   };
 
@@ -616,7 +647,7 @@ export function PreviewProvider({
         setEditMode(false);
         clearPendingPatches();
         cleanupEditModeListeners();
-        setIframeLoading(true);
+        beginIframeLoading();
         setRefreshKey((prev) => prev + 1);
         utils.project.gitHasChanges.invalidate();
       },
@@ -632,7 +663,7 @@ export function PreviewProvider({
     cleanupEditModeListeners();
     setRefreshKey((prev) => prev + 1);
     toast.info("Changes discarded");
-    setIframeLoading(true);
+    beginIframeLoading();
   };
 
   const handleClose = () => {
@@ -860,7 +891,7 @@ export function PreviewProvider({
       setEditMode(false);
       clearPendingPatches();
       cleanupEditModeListeners();
-      setIframeLoading(true);
+      beginIframeLoading();
       setRefreshKey((prev) => prev + 1);
       return;
     }
@@ -964,11 +995,11 @@ export function PreviewProvider({
   const handleTaskComplete = () => {
     // Refresh the iframe
     setRefreshKey((prev) => prev + 1);
-    setIframeLoading(true);
+    beginIframeLoading();
   };
 
   const handleRefresh = () => {
-    setIframeLoading(true);
+    beginIframeLoading();
     setRefreshKey((prev) => prev + 1);
     // Invalidate to restart dev server if it was shut down
     if (projectSlug) {
@@ -1132,7 +1163,8 @@ export function PreviewProvider({
 
     // Refs
     iframeRef,
-    onIframeLoad: () => setIframeLoading(false),
+    onIframeNavigateStart: beginIframeNavigationLoading,
+    onIframeLoad: endIframeLoading,
     mobileContainerRef,
 
     // Computed

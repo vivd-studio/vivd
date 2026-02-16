@@ -7,6 +7,7 @@ interface PreviewIframeProps {
   className?: string;
   isMobile?: boolean;
   onLoad?: () => void;
+  onNavigateStart?: () => void;
   selectorMode?: boolean;
 }
 
@@ -223,6 +224,154 @@ const openInNewTab = (url: string) => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
 
+const installPreviewNavigationStartListener = (
+  iframe: HTMLIFrameElement,
+  onNavigateStart?: () => void,
+) => {
+  if (!onNavigateStart) return;
+
+  try {
+    const win = iframe.contentWindow as any;
+    const doc = iframe.contentDocument as any;
+    if (!win || !doc) return;
+
+    if (doc.__vivdPreviewNavigationStartListenerInstalled) return;
+    doc.__vivdPreviewNavigationStartListenerInstalled = true;
+
+    const defer =
+      typeof queueMicrotask === "function"
+        ? queueMicrotask
+        : (fn: () => void) => void Promise.resolve().then(fn);
+
+    const shouldTreatAsFullReloadNavigation = (
+      anchor: HTMLAnchorElement,
+      hrefAttr: string,
+    ): boolean => {
+      const href = hrefAttr.trim();
+      if (!href) return false;
+
+      const lowered = href.toLowerCase();
+      if (
+        lowered.startsWith("#") ||
+        lowered.startsWith("mailto:") ||
+        lowered.startsWith("tel:") ||
+        lowered.startsWith("javascript:") ||
+        lowered.startsWith("data:")
+      ) {
+        return false;
+      }
+
+      // Honor new-tab and named targets.
+      const targetAttr = anchor.getAttribute("target");
+      if (targetAttr && targetAttr !== "_self") return false;
+
+      // Downloads/popups are handled elsewhere and shouldn't trigger preview loading UI.
+      if (anchor.hasAttribute("download")) return false;
+
+      const resolved = resolvePreviewHref(iframe, anchor, hrefAttr);
+      if (!resolved) return false;
+
+      // Ignore same-document navigations (hash-only).
+      try {
+        const currentHref = String(win.location?.href || "");
+        if (currentHref) {
+          const current = new URL(currentHref);
+          const next = new URL(resolved, current);
+          if (
+            current.origin === next.origin &&
+            current.pathname === next.pathname &&
+            current.search === next.search
+          ) {
+            return false;
+          }
+        }
+      } catch {
+        // Best-effort only.
+      }
+
+      // If Vivd's base-path rewrite helper is active, root-relative links are
+      // intentionally intercepted (defaultPrevented) and navigated via location.href.
+      // Treat those as real navigations even when defaultPrevented is true.
+      const basePath = getVivdBasePathForIframe(iframe);
+      const base = basePath?.endsWith("/") ? basePath.slice(0, -1) : basePath;
+      const isRootRelative =
+        href.startsWith("/") &&
+        !href.startsWith("//") &&
+        !href.startsWith("http://") &&
+        !href.startsWith("https://");
+      const isAlreadyPrefixed =
+        !!base && (href === base || href.startsWith(`${base}/`));
+
+      if (isRootRelative && base && !isAlreadyPrefixed) {
+        return true;
+      }
+
+      return true;
+    };
+
+    doc.addEventListener(
+      "click",
+      (event: MouseEvent) => {
+        if (!event.isTrusted) return;
+        if (event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        const target: any = event.target;
+        const element = target?.closest ? target : target?.parentElement;
+        const anchor = element?.closest?.("a[href]") as HTMLAnchorElement | null;
+        if (!anchor) return;
+
+        const hrefAttr = anchor.getAttribute("href");
+        if (!hrefAttr) return;
+
+        // PDF links are opened outside the iframe to avoid the Chrome sandbox interstitial.
+        if (/\.pdf(?:[?#&]|$)/i.test(hrefAttr)) return;
+
+        if (!shouldTreatAsFullReloadNavigation(anchor, hrefAttr)) return;
+
+        defer(() => {
+          // If a client-side router prevented the default navigation, don't show a
+          // loading overlay (it would never receive an iframe onLoad event).
+          if (event.defaultPrevented) {
+            const href = hrefAttr.trim();
+            const basePath = getVivdBasePathForIframe(iframe);
+            const base = basePath?.endsWith("/") ? basePath.slice(0, -1) : basePath;
+            const isRootRelative =
+              href.startsWith("/") &&
+              !href.startsWith("//") &&
+              !href.startsWith("http://") &&
+              !href.startsWith("https://");
+            const isAlreadyPrefixed =
+              !!base && (href === base || href.startsWith(`${base}/`));
+            const isVivdRewriteNavigation = isRootRelative && base && !isAlreadyPrefixed;
+            if (!isVivdRewriteNavigation) return;
+          }
+          onNavigateStart();
+        });
+      },
+      true,
+    );
+
+    doc.addEventListener(
+      "submit",
+      (event: Event) => {
+        if (!event.isTrusted) return;
+
+        defer(() => {
+          if (event.defaultPrevented) return;
+          onNavigateStart();
+        });
+      },
+      true,
+    );
+
+    win.addEventListener("beforeunload", () => onNavigateStart());
+    win.addEventListener("pagehide", () => onNavigateStart());
+  } catch (err) {
+    console.warn("Could not install preview navigation start listener", err);
+  }
+};
+
 const installPreviewPdfDownloadInterceptor = (iframe: HTMLIFrameElement) => {
   try {
     const doc = iframe.contentDocument as any;
@@ -290,6 +439,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       className = "",
       isMobile = false,
       onLoad,
+      onNavigateStart,
       selectorMode = false,
     },
     ref
@@ -348,6 +498,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       // Reset retry count on successful load
       retryCountRef.current = 0;
 
+      installPreviewNavigationStartListener(iframe, onNavigateStart);
       installPreviewPdfDownloadInterceptor(iframe);
 
       // Some previewed sites ship strict CSP which blocks inline script/style injection.

@@ -581,7 +581,8 @@ export async function syncSourceToBucket(options: {
     source: options.projectDir,
     bucket,
     keyPrefix,
-    delete: options.exact ?? false,
+    // Source sync is exact by default so remote keys don't resurrect deleted files.
+    delete: options.exact ?? true,
     exclude: [
       "node_modules/*",
       "dist/*",
