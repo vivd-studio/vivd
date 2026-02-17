@@ -117,7 +117,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   private getStudioAccessTokenFromMachine(machine: FlyMachine): string | null {
-    const metadataToken = this.getMachineMetadata(machine)?.[STUDIO_ACCESS_TOKEN_METADATA_KEY];
+    const metadataToken = this.getMachineMetadataValue(
+      machine,
+      STUDIO_ACCESS_TOKEN_METADATA_KEY,
+    );
     if (typeof metadataToken === "string" && metadataToken.trim()) {
       return metadataToken.trim();
     }
@@ -319,8 +322,21 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return trimmed ? trimmed : null;
   }
 
+  private getMachineMetadataValue(machine: FlyMachine, key: string): string | null {
+    const read = (record: unknown): string | null => {
+      if (!record || typeof record !== "object") return null;
+      const value = (record as Record<string, unknown>)[key];
+      if (typeof value === "string") return value;
+      if (typeof value === "number" && Number.isFinite(value)) return String(value);
+      if (typeof value === "boolean") return value ? "true" : "false";
+      return null;
+    };
+
+    return read(machine.config?.metadata) || read(machine.metadata);
+  }
+
   private getConfiguredStudioImage(machine: FlyMachine, desiredImage?: string): string | null {
-    const metadataImage = this.trimToken(this.getMachineMetadata(machine)?.vivd_image);
+    const metadataImage = this.trimToken(this.getMachineMetadataValue(machine, "vivd_image"));
     if (metadataImage) return metadataImage;
 
     const configImage = this.trimToken(
@@ -344,7 +360,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     preferredAccessToken?: string | null;
   }): { accessToken: string; needs: MachineReconcileNeeds } {
     const metadataToken = this.trimToken(
-      this.getMachineMetadata(options.machine)?.[STUDIO_ACCESS_TOKEN_METADATA_KEY],
+      this.getMachineMetadataValue(options.machine, STUDIO_ACCESS_TOKEN_METADATA_KEY),
     );
     const envToken = this.trimToken(
       options.machine.config?.env?.[STUDIO_ACCESS_TOKEN_ENV_KEY],
@@ -750,17 +766,51 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   private async suspendOrStopMachine(machineId: string): Promise<"suspended" | "stopped"> {
-    try {
-      await this.suspendMachine(machineId);
-      return "suspended";
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[FlyMachines] Failed to suspend machine ${machineId}: ${message}; falling back to stop.`,
-      );
-      await this.stopMachine(machineId);
-      return "stopped";
+    const initial = await this.getMachine(machineId);
+    const initialState = initial.state || "unknown";
+    if (initialState === "suspended") return "suspended";
+    if (initialState === "stopped") return "stopped";
+    if (initialState === "destroyed" || initialState === "destroying") {
+      throw new Error(`[FlyMachines] Machine ${machineId} was destroyed`);
     }
+
+    const attempts = 3;
+    let lastError: string | null = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        await this.suspendMachine(machineId);
+        await this.waitForState({
+          machineId,
+          state: "suspended",
+          timeoutMs: 30_000,
+        });
+        return "suspended";
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        lastError = message;
+
+        if (message.includes("was destroyed")) throw err;
+        if (attempt < attempts) {
+          await sleep(Math.min(5000, 750 * attempt));
+          continue;
+        }
+      }
+    }
+
+    console.warn(
+      `[FlyMachines] Failed to suspend machine ${machineId}: ${lastError || "unknown error"}; falling back to stop.`,
+    );
+    try {
+      await this.stopMachine(machineId);
+      await this.waitForState({
+        machineId,
+        state: "stopped",
+        timeoutMs: 60_000,
+      });
+    } catch {
+      // best-effort
+    }
+    return "stopped";
   }
 
   private async getMachine(machineId: string): Promise<FlyMachine> {
@@ -828,7 +878,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     machineId: string;
     desiredImage: string;
     timeoutMs: number;
-  }): Promise<void> {
+  }): Promise<MachineReconcileNeeds | null> {
     const startedAt = Date.now();
     let lastNeeds: MachineReconcileNeeds | null = null;
 
@@ -845,12 +895,11 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       });
       lastNeeds = reconcileState.needs;
 
-      if (!this.hasMachineDrift(lastNeeds)) return;
+      if (!this.hasMachineDrift(lastNeeds)) return null;
       await sleep(500);
     }
 
-    const drift = lastNeeds ? this.getMachineDriftLabels(lastNeeds).join(",") : "unknown";
-    throw new Error(`Drift remains after config update (${drift})`);
+    return lastNeeds;
   }
 
   private normalizeServicesForVivd(
@@ -1400,6 +1449,138 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     this.lastActivityByStudioKey.delete(studioKey);
   }
 
+  async warmReconcileStudioMachine(machineId: string): Promise<{ desiredImage: string }> {
+    const desiredImage = await this.getDesiredImage();
+
+    const machine = await this.getMachine(machineId);
+    const identity = this.getStudioIdentityFromMachine(machine);
+    if (!identity) {
+      throw new Error(
+        `[FlyMachines] Refusing to warm reconcile non-studio machine ${machineId}`,
+      );
+    }
+
+    const state = machine.state || "unknown";
+    if (state === "destroyed" || state === "destroying") {
+      return { desiredImage };
+    }
+
+    const reconcileState = this.resolveMachineReconcileState({
+      machine,
+      desiredImage,
+    });
+    if (!this.hasMachineDrift(reconcileState.needs)) {
+      return { desiredImage };
+    }
+
+    if (state === "started" || state === "starting") {
+      throw new Error(
+        `[FlyMachines] Refusing to warm reconcile running machine ${machineId} (state=${state})`,
+      );
+    }
+
+    let current = machine;
+    let currentState = state;
+    let currentReconcileState = reconcileState;
+
+    // Suspended machines would resume a snapshot; stop first to boot the new image.
+    if (this.shouldStopSuspendedBeforeReconcile(currentState, currentReconcileState.needs)) {
+      await this.stopMachine(machineId);
+      await this.waitForState({
+        machineId,
+        state: "stopped",
+        timeoutMs: 60_000,
+      });
+      current = await this.getMachine(machineId);
+      currentState = current.state || "unknown";
+      currentReconcileState = this.resolveMachineReconcileState({
+        machine: current,
+        desiredImage,
+      });
+    }
+
+    if (!this.hasMachineDrift(currentReconcileState.needs)) {
+      return { desiredImage };
+    }
+
+    if (currentState !== "stopped") {
+      throw new Error(
+        `[FlyMachines] Cannot warm reconcile machine ${machineId}; expected state=stopped but got state=${currentState}`,
+      );
+    }
+
+    const port = this.getMachineExternalPort(current);
+    if (!port) {
+      throw new Error("Missing external port; cannot warm image");
+    }
+
+    const studioId = this.resolveStudioIdFromMachine(current);
+    const accessToken = currentReconcileState.accessToken;
+    const reconciledAt = new Date().toISOString();
+    const metadata = this.buildReconciledMetadata({
+      machine: current,
+      organizationId: identity.organizationId,
+      projectSlug: identity.projectSlug,
+      version: identity.version,
+      port,
+      studioId,
+      desiredImage,
+      accessToken,
+      extra: {
+        vivd_last_machine_reconcile_at: reconciledAt,
+        ...(currentReconcileState.needs.image ? { vivd_last_image_reconcile_at: reconciledAt } : {}),
+      },
+    });
+
+    const config = this.buildReconciledMachineConfig({
+      machine: current,
+      port,
+      desiredImage,
+      accessToken,
+      needs: currentReconcileState.needs,
+      metadata,
+    });
+
+    await this.updateMachineConfig({
+      machineId,
+      config,
+      skipLaunch: true,
+    });
+
+    const remainingDrift = await this.waitForReconcileDriftToClear({
+      machineId,
+      desiredImage,
+      timeoutMs: 10_000,
+    });
+    if (remainingDrift) {
+      const driftLabels = this.getMachineDriftLabels(remainingDrift).join(",");
+      const refreshed = await this.getMachine(machineId);
+      const configImage =
+        typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
+      const metadataImage = this.trimToken(this.getMachineMetadataValue(refreshed, "vivd_image"));
+      console.warn(
+        `[FlyMachines] Warm reconcile drift did not clear for ${machineId} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${driftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
+      );
+    }
+
+    await this.startMachineHandlingReplacement(machineId);
+    const url = this.getPublicUrlForPort(port);
+    await this.waitForReady({
+      machineId,
+      url,
+      timeoutMs: Math.min(this.startTimeoutMs, 120_000),
+    });
+
+    const parked = await this.suspendOrStopMachine(machineId);
+    if (parked !== "suspended") {
+      throw new Error(
+        `[FlyMachines] Warm reconcile parked machine ${machineId} in state=${parked}; expected suspended`,
+      );
+    }
+
+    return { desiredImage };
+  }
+
   async reconcileStudioMachines(): Promise<FlyStudioMachineReconcileResult> {
     const existing = this.reconcileInFlight;
     if (existing) return existing;
@@ -1580,11 +1761,23 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           skipLaunch: true,
         });
 
-        await this.waitForReconcileDriftToClear({
+        const remainingDrift = await this.waitForReconcileDriftToClear({
           machineId: machine.id,
           desiredImage,
           timeoutMs: 10_000,
         });
+        if (remainingDrift) {
+          const driftLabels = this.getMachineDriftLabels(remainingDrift).join(",");
+          const refreshed = await this.getMachine(machine.id);
+          const configImage =
+            typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
+          const metadataImage = this.trimToken(
+            this.getMachineMetadataValue(refreshed, "vivd_image"),
+          );
+          console.warn(
+            `[FlyMachines] Warm reconcile drift did not clear for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${driftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
+          );
+        }
 
         await this.startMachineHandlingReplacement(machine.id);
         const url = this.getPublicUrlForPort(port);
@@ -1595,7 +1788,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
         });
 
         // Park the machine quickly so the next user start is fast, without leaving it running.
-        await this.suspendOrStopMachine(machine.id);
+        const parked = await this.suspendOrStopMachine(machine.id);
+        if (parked !== "suspended") {
+          throw new Error(
+            `[FlyMachines] Warm reconcile parked machine ${machine.id} in state=${parked}; expected suspended`,
+          );
+        }
 
         result.warmedOutdatedImages++;
         console.log(

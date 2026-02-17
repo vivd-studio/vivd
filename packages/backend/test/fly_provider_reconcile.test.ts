@@ -88,5 +88,27 @@ describe("FlyStudioMachineProvider machine drift", () => {
 
     expect(reconcileState.needs.image).toBe(true);
   });
-});
 
+  it("still reads vivd_image when metadata contains non-string values", () => {
+    const provider = new FlyStudioMachineProvider();
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
+    const machine = buildMachine({
+      image: "registry.fly.io/vivd-studio:deployment-123",
+      metadataImage: desiredImage,
+    });
+
+    // Simulate unexpected metadata shapes (Fly or legacy code may inject non-string values).
+    (machine.config as any).metadata = {
+      ...machine.config?.metadata,
+      vivd_image: desiredImage,
+      vivd_project_version: 1,
+    };
+
+    const reconcileState = (provider as any).resolveMachineReconcileState({
+      machine,
+      desiredImage,
+    }) as { needs: { image: boolean } };
+
+    expect(reconcileState.needs.image).toBe(false);
+  });
+});

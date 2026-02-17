@@ -5,6 +5,7 @@
  * to verify the integration is working correctly.
  *
  * Run with: npm run test:run -- test/integration/openrouter.test.ts
+ * (or: npm run test:integration -w @vivd/backend -- test/integration/openrouter.test.ts)
  *
  * Note: Requires OPENROUTER_API_KEY to be set in environment.
  * Skips automatically if API key is not available.
@@ -26,6 +27,7 @@ describe("OpenRouter Integration", () => {
 
   it.skipIf(!OPENROUTER_API_KEY)(
     "connects to OpenRouter and gets a response",
+    { timeout: 30000 },
     async () => {
       openai = new OpenAI({
         baseURL: "https://openrouter.ai/api/v1",
@@ -51,11 +53,11 @@ describe("OpenRouter Integration", () => {
         completion.choices[0]!.message.content?.toLowerCase() ?? "";
       expect(response).toContain("pong");
     },
-    { timeout: 30000 }
   );
 
   it.skipIf(!OPENROUTER_API_KEY)(
     "handles structured prompt correctly",
+    { timeout: 30000 },
     async () => {
       openai = new OpenAI({
         baseURL: "https://openrouter.ai/api/v1",
@@ -76,6 +78,5 @@ describe("OpenRouter Integration", () => {
       const response = completion.choices[0]!.message.content ?? "";
       expect(response).toContain("4");
     },
-    { timeout: 30000 }
   );
 });

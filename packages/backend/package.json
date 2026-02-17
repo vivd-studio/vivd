@@ -12,7 +12,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest run --exclude test/integration/**",
-    "test:integration": "vitest run --include test/integration/**/*.test.ts",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:coverage": "vitest run --coverage",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
