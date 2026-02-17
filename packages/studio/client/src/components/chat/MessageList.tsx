@@ -142,6 +142,9 @@ export function MessageList() {
                   const elementTag = internalTags.find(
                     (t) => t.type === "element-ref",
                   );
+                  const hasElementRef =
+                    Boolean(elementTag?.selector) ||
+                    Boolean(elementTag?.["source-file"]);
 
                   return (
                     <div className="rounded-lg px-4 py-2 max-w-[90%] min-w-0 overflow-x-hidden bg-muted text-foreground">
@@ -187,7 +190,7 @@ export function MessageList() {
                       {/* Show all attachment pills (images, files, and element refs) */}
                       {(imageTags.length > 0 ||
                         fileTags.length > 0 ||
-                        elementTag?.selector) && (
+                        hasElementRef) && (
                         <div className="mt-2 pt-2 border-t border-foreground/10 flex flex-wrap gap-1.5">
                           {imageTags.map((tag, idx) => (
                             <DroppedImagePill
@@ -201,10 +204,12 @@ export function MessageList() {
                               filename={tag.filename || "file"}
                             />
                           ))}
-                          {elementTag?.selector && (
+                          {hasElementRef && (
                             <ElementRefPill
                               key="element"
-                              html={elementTag.selector}
+                              selector={elementTag?.selector}
+                              sourceFile={elementTag?.["source-file"]}
+                              sourceLoc={elementTag?.["source-loc"]}
                             />
                           )}
                         </div>

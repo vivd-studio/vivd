@@ -2,11 +2,28 @@
 FROM node:23-slim AS base
 WORKDIR /app
 
-# Install git and ca-certificates (required for version control features and SSL)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+# Install git + ca-certificates (git clone/push) required by studio tooling.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Dev base: extra dependencies needed for connected-mode local studio machines.
+# Keep these out of the production backend image (prod stage is FROM base).
+FROM base AS devbase
+
+# python3 is required by opencode-ai (used by the studio OpenCode server).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install opencode CLI (required for the studio OpenCode server when running STUDIO_MACHINE_PROVIDER=local)
+# Clean up unused musl binary (saves ~120MB)
+RUN npm install -g opencode-ai@1.1.65 \
+  && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
+  && npm cache clean --force
 
 # Stage 1: Dependencies (workspace-aware)
-FROM base AS deps
+FROM devbase AS deps
 
 # Install deps for backend (+ shared) and local studio spawning (dev)
 COPY package.json package-lock.json ./

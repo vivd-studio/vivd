@@ -34,28 +34,44 @@ export function SelectedElementPill({
 }
 
 // Simpler pill for display in messages (no remove button, smaller)
-export function ElementRefPill({ html }: { html: string }) {
-  // For XPath, show a shortened version
-  let label = html;
+export function ElementRefPill({
+  selector,
+  sourceFile,
+  sourceLoc,
+}: {
+  selector?: string;
+  sourceFile?: string;
+  sourceLoc?: string;
+}) {
+  // Prefer Astro source info when available; otherwise fall back to XPath selector.
+  const title = selector || sourceFile || "element";
 
-  // If it's an ID-based XPath, show the ID
-  const idMatch = html.match(/\[@id="([^"]+)"\]/);
-  if (idMatch) {
-    label = `#${idMatch[1]}`;
-  } else {
-    // Otherwise show the last part of the path
-    const parts = html.split("/").filter((p) => p);
-    if (parts.length > 0) {
-      const lastPart = parts[parts.length - 1];
-      // Remove position indicator for display
-      label = lastPart.replace(/\[\d+\]$/, "");
+  let label = "element";
+  if (sourceFile) {
+    label = sourceLoc ? `${sourceFile}:${sourceLoc}` : sourceFile;
+  } else if (selector) {
+    // For XPath, show a shortened version
+    label = selector;
+
+    // If it's an ID-based XPath, show the ID
+    const idMatch = selector.match(/\[@id=(?:"([^"]+)"|'([^']+)')\]/);
+    if (idMatch) {
+      label = `#${idMatch[1] ?? idMatch[2]}`;
+    } else {
+      // Otherwise show the last part of the path
+      const parts = selector.split("/").filter((p) => p);
+      if (parts.length > 0) {
+        const lastPart = parts[parts.length - 1];
+        // Remove position indicator for display
+        label = lastPart.replace(/\[\d+\]$/, "");
+      }
     }
   }
 
   return (
     <span
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-mono"
-      title={html}
+      title={title}
     >
       <Code className="w-3 h-3" />
       {label}
@@ -137,30 +153,29 @@ export function formatMessageWithSelector(
   astroSourceFile?: string | null,
   astroSourceLoc?: string | null
 ): string {
+  const escapeAttr = (value: string) =>
+    value.replace(/\r?\n/g, " ").replace(/"/g, "'").trim();
+
   // Build attributes for the tag
   const attrs: string[] = [`type="element-ref"`];
 
   // Prefer Astro source file info over XPath when available
   if (astroSourceFile) {
-    attrs.push(`source-file="${astroSourceFile}"`);
+    attrs.push(`source-file="${escapeAttr(astroSourceFile)}"`);
     if (astroSourceLoc) {
-      attrs.push(`source-loc="${astroSourceLoc}"`);
+      attrs.push(`source-loc="${escapeAttr(astroSourceLoc)}"`);
     }
   } else {
     // Fall back to XPath selector
-    attrs.push(`selector="${selector}"`);
+    attrs.push(`selector="${escapeAttr(selector)}"`);
     if (filename) {
-      attrs.push(`file="${filename}"`);
+      attrs.push(`file="${escapeAttr(filename)}"`);
     }
   }
 
   if (text) {
     // Take first 30 chars of text, clean up whitespace, escape quotes
-    const cleanText = text
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 30)
-      .replace(/"/g, "'");
+    const cleanText = escapeAttr(text.replace(/\s+/g, " ").slice(0, 30));
     if (cleanText) {
       attrs.push(`text="${cleanText}${text.length > 30 ? "..." : ""}"`);
     }
@@ -200,7 +215,7 @@ export function parseVivdInternalTags(message: string): {
     const tag: VivdInternalTag = { type: "" };
 
     // Parse attributes using regex
-    const attrRegex = /(\w+)="([^"]*)"/g;
+    const attrRegex = /([\w-]+)="([^"]*)"/g;
     let attrMatch;
     while ((attrMatch = attrRegex.exec(attrsString)) !== null) {
       const [, key, value] = attrMatch;
