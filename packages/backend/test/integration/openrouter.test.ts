@@ -4,28 +4,36 @@
  * This test makes a real API call to OpenRouter using a cheap/free model
  * to verify the integration is working correctly.
  *
- * Run with: npm run test:run -- test/integration/openrouter.test.ts
+ * Run with:
+ *   VIVD_RUN_INTEGRATION_TESTS=1 npm test
  * (or: npm run test:integration -w @vivd/backend -- test/integration/openrouter.test.ts)
  *
  * Note: Requires OPENROUTER_API_KEY to be set in environment.
- * Skips automatically if API key is not available.
+ * Skips automatically unless explicitly opted in.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const RUN_INTEGRATION = process.env.VIVD_RUN_INTEGRATION_TESTS === "1";
 const TEST_MODEL = "google/gemma-3-12b-it:free"; // Free model for testing
 
 describe("OpenRouter Integration", () => {
   let openai: OpenAI;
 
   beforeAll(() => {
+    if (!RUN_INTEGRATION) {
+      console.log(
+        "Skipping OpenRouter tests: set VIVD_RUN_INTEGRATION_TESTS=1 to enable",
+      );
+      return;
+    }
     if (!OPENROUTER_API_KEY) {
       console.log("Skipping OpenRouter tests: OPENROUTER_API_KEY not set");
     }
   });
 
-  it.skipIf(!OPENROUTER_API_KEY)(
+  it.skipIf(!RUN_INTEGRATION || !OPENROUTER_API_KEY)(
     "connects to OpenRouter and gets a response",
     { timeout: 30000 },
     async () => {
@@ -55,7 +63,7 @@ describe("OpenRouter Integration", () => {
     },
   );
 
-  it.skipIf(!OPENROUTER_API_KEY)(
+  it.skipIf(!RUN_INTEGRATION || !OPENROUTER_API_KEY)(
     "handles structured prompt correctly",
     { timeout: 30000 },
     async () => {

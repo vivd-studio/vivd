@@ -454,7 +454,9 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         bucket: parsedOpencode?.bucket || storageConfig.bucket,
         keyPrefix: opencodeKeyPrefix,
         localDir: opencodeDir,
-        excludeDirNames: [],
+        excludeDirNames: ["package-cache"],
+        // Avoid syncing credentials (OpenCode auth file can contain API keys).
+        exclude: ["opencode/auth.json"],
       },
     ];
 

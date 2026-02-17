@@ -127,9 +127,39 @@ sync_opencode() {
     return 0
   fi
 
-  mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-  aws_s3_sync "$VIVD_OPENCODE_DATA_HOME" "$S3_OPENCODE_URI" \
-    --exclude "opencode/auth.json"
+  sync_opencode_state
+  sync_package_cache
+}
+
+sync_opencode_state() {
+  if [ -z "$S3_OPENCODE_URI" ]; then
+    return 0
+  fi
+
+  mkdir -p "${VIVD_OPENCODE_DATA_HOME}/opencode"
+  aws_s3_sync "${VIVD_OPENCODE_DATA_HOME}/opencode" "${S3_OPENCODE_URI}/opencode" \
+    --exclude "auth.json"
+}
+
+sync_package_cache() {
+  if [ -z "$S3_OPENCODE_URI" ]; then
+    return 0
+  fi
+
+  if [ "${VIVD_S3_SYNC_PACKAGE_CACHE:-1}" = "0" ]; then
+    return 0
+  fi
+
+  mkdir -p "$VIVD_PACKAGE_CACHE_DIR"
+  aws_s3_sync "$VIVD_PACKAGE_CACHE_DIR" "${S3_OPENCODE_URI}/package-cache"
+}
+
+sync_opencode_final() {
+  sync_opencode_state
+
+  if [ "${VIVD_S3_SHUTDOWN_SYNC_PACKAGE_CACHE:-0}" = "1" ]; then
+    sync_package_cache
+  fi
 }
 
 hydrate_source() {
@@ -158,9 +188,31 @@ hydrate_opencode() {
   echo "Hydrating OpenCode data from S3..."
   echo "  Source: ${S3_OPENCODE_URI}"
   echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
-  mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-  aws_s3_sync "$S3_OPENCODE_URI" "$VIVD_OPENCODE_DATA_HOME" \
-    --exclude "opencode/auth.json"
+  hydrate_opencode_state
+  hydrate_package_cache
+}
+
+hydrate_opencode_state() {
+  if [ -z "$S3_OPENCODE_URI" ]; then
+    return 0
+  fi
+
+  mkdir -p "${VIVD_OPENCODE_DATA_HOME}/opencode"
+  aws_s3_sync "${S3_OPENCODE_URI}/opencode" "${VIVD_OPENCODE_DATA_HOME}/opencode" \
+    --exclude "auth.json"
+}
+
+hydrate_package_cache() {
+  if [ -z "$S3_OPENCODE_URI" ]; then
+    return 0
+  fi
+
+  if [ "${VIVD_S3_SYNC_PACKAGE_CACHE:-1}" = "0" ]; then
+    return 0
+  fi
+
+  mkdir -p "$VIVD_PACKAGE_CACHE_DIR"
+  aws_s3_sync "${S3_OPENCODE_URI}/package-cache" "$VIVD_PACKAGE_CACHE_DIR"
 }
 
 SYNC_ENABLED="0"
@@ -175,11 +227,63 @@ if [ "$SYNC_ENABLED" = "1" ]; then
     mv "$LEGACY_OPENCODE_DIR" "$VIVD_OPENCODE_DATA_HOME" || true
   fi
 
+  PID=""
+  STUB_PID=""
+  HYDRATE_SOURCE_PID=""
+  HYDRATE_OPENCODE_PID=""
+
+  SYNC_INTERVAL="${VIVD_S3_SYNC_INTERVAL_SECONDS:-30}"
+
+  on_term() {
+    if [ -n "$PID" ]; then
+      echo "Received shutdown signal. Stopping studio (pid=${PID})..."
+      kill -TERM "$PID" 2>/dev/null || true
+      SHUTDOWN_WAIT_SECONDS="${VIVD_SHUTDOWN_WAIT_SECONDS:-2}"
+      case "$SHUTDOWN_WAIT_SECONDS" in
+        ''|*[!0-9]*) SHUTDOWN_WAIT_SECONDS="2" ;;
+      esac
+
+      END_AT="$(( $(date +%s) + SHUTDOWN_WAIT_SECONDS ))"
+      while kill -0 "$PID" 2>/dev/null && [ "$(date +%s)" -lt "$END_AT" ]; do
+        sleep 0.2
+      done
+
+      if kill -0 "$PID" 2>/dev/null; then
+        kill -KILL "$PID" 2>/dev/null || true
+      fi
+
+      wait "$PID" 2>/dev/null || true
+    else
+      echo "Received shutdown signal."
+    fi
+
+    if [ -n "$STUB_PID" ]; then
+      kill -TERM "$STUB_PID" 2>/dev/null || true
+      wait "$STUB_PID" 2>/dev/null || true
+    fi
+
+    if [ -n "$HYDRATE_SOURCE_PID" ]; then
+      kill -TERM "$HYDRATE_SOURCE_PID" 2>/dev/null || true
+      wait "$HYDRATE_SOURCE_PID" 2>/dev/null || true
+    fi
+
+    if [ -n "$HYDRATE_OPENCODE_PID" ]; then
+      kill -TERM "$HYDRATE_OPENCODE_PID" 2>/dev/null || true
+      wait "$HYDRATE_OPENCODE_PID" 2>/dev/null || true
+    fi
+
+    echo "Final sync to S3..."
+    sync_source || true
+    sync_opencode_final || true
+    exit 0
+  }
+
+  trap on_term INT TERM
+
   # Fly Machines may probe the internal port while hydration is running. Keep a
   # lightweight HTTP listener on the expected port to avoid connection-refused
   # errors during cold starts. We'll replace it with the real studio server
   # once hydration has completed.
-  STUB_PID=""
   STUB_PORT="${PORT:-3100}"
   STUB_HOST="${STUDIO_HOST:-0.0.0.0}"
 
@@ -207,9 +311,6 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
 ' >/dev/null 2>&1 &
     STUB_PID="$!"
   fi
-
-  HYDRATE_SOURCE_PID=""
-  HYDRATE_OPENCODE_PID=""
 
   if [ -n "$S3_SOURCE_URI" ]; then
     (hydrate_source) &
@@ -240,24 +341,14 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
   "$@" &
   PID=$!
 
-  SYNC_INTERVAL="${VIVD_S3_SYNC_INTERVAL_SECONDS:-30}"
-
-  on_term() {
-    echo "Received shutdown signal. Stopping studio (pid=${PID})..."
-    kill -TERM "$PID" 2>/dev/null || true
-    wait "$PID" 2>/dev/null || true
-
-    echo "Final sync to S3..."
-    sync_source || true
-    sync_opencode || true
-    exit 0
-  }
-
-  trap on_term INT TERM
-
   echo "Sync loop enabled (interval=${SYNC_INTERVAL}s)"
+  case "$SYNC_INTERVAL" in
+    ''|*[!0-9]*) SYNC_INTERVAL="30" ;;
+  esac
+  LAST_SYNC_AT="$(date +%s)"
+  SYNC_DUE="0"
   while kill -0 "$PID" 2>/dev/null; do
-    sleep "$SYNC_INTERVAL"
+    sleep 2
     SYNC_PAUSE_FILE="${VIVD_SYNC_PAUSE_FILE:-/tmp/vivd-sync.pause}"
     SYNC_PAUSE_MAX_AGE_SECONDS="${VIVD_SYNC_PAUSE_MAX_AGE_SECONDS:-600}"
     if [ -f "$SYNC_PAUSE_FILE" ]; then
@@ -265,19 +356,26 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
       MTIME="$(stat -c %Y "$SYNC_PAUSE_FILE" 2>/dev/null || echo 0)"
       AGE="$((NOW - MTIME))"
       if [ "$AGE" -le "$SYNC_PAUSE_MAX_AGE_SECONDS" ]; then
+        SYNC_DUE="1"
         continue
       fi
       rm -f "$SYNC_PAUSE_FILE" 2>/dev/null || true
     fi
-    sync_source || true
-    sync_opencode || true
+
+    NOW="$(date +%s)"
+    if [ "$SYNC_DUE" = "1" ] || [ "$((NOW - LAST_SYNC_AT))" -ge "$SYNC_INTERVAL" ]; then
+      SYNC_DUE="0"
+      LAST_SYNC_AT="$NOW"
+      sync_source || true
+      sync_opencode || true
+    fi
   done
 
   wait "$PID"
   EXIT_CODE=$?
   echo "Final sync to S3..."
   sync_source || true
-  sync_opencode || true
+  sync_opencode_final || true
   exit "$EXIT_CODE"
 fi
 

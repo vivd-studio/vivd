@@ -12,12 +12,14 @@
  *   npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
  *
  * Requires:
+ *   VIVD_RUN_INTEGRATION_TESTS=1
  *   FLY_API_TOKEN, FLY_STUDIO_APP
  */
 import { describe, it, expect } from "vitest";
 import { FlyStudioMachineProvider } from "../../src/services/studioMachines/fly/provider";
 import type { FlyMachine } from "../../src/services/studioMachines/fly/types";
 
+const RUN_INTEGRATION = process.env.VIVD_RUN_INTEGRATION_TESTS === "1";
 const FLY_API_TOKEN = (process.env.FLY_API_TOKEN || "").trim();
 const FLY_STUDIO_APP = (process.env.FLY_STUDIO_APP || "").trim();
 
@@ -51,7 +53,7 @@ async function getMachine(
 }
 
 describe("Fly warm reconciliation flow", () => {
-  it.skipIf(!FLY_API_TOKEN || !FLY_STUDIO_APP)(
+  it.skipIf(!RUN_INTEGRATION || !FLY_API_TOKEN || !FLY_STUDIO_APP)(
     "updates drifted machine and leaves it suspended",
     { timeout: 420_000 },
     async () => {

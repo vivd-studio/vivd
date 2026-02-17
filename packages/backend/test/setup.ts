@@ -6,7 +6,8 @@ import { fileURLToPath } from "url";
 // Use __dirname equivalent for ESM to ensure consistent path resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-config({ path: resolve(__dirname, "../../../.env") }); // Load .env from repo root
+// Silence dotenv's noisy v17 "injecting env" tips in test output.
+config({ path: resolve(__dirname, "../../../.env"), quiet: true }); // Load .env from repo root
 
 import { vi } from "vitest";
 
