@@ -12,6 +12,15 @@ const hasPsCommand = (() => {
   }
 })();
 
+const hasOpencodeCommand = (() => {
+  try {
+    const result = spawnSync("opencode", ["--version"], { stdio: "ignore" });
+    return result.error === undefined;
+  } catch {
+    return false;
+  }
+})();
+
 interface OpencodeServerInfo {
   url: string;
   process: ChildProcess;
@@ -321,6 +330,12 @@ class OpencodeServerManager {
     projectDir: string,
     port: number,
   ): Promise<OpencodeServerInfo> {
+    if (!hasOpencodeCommand) {
+      throw new Error(
+        `[OpenCode] Cannot start server because "opencode" was not found in PATH. Install opencode-ai or rebuild the runtime image so the "opencode" CLI is available.`,
+      );
+    }
+
     const url = `http://127.0.0.1:${port}`;
 
     const proc = spawn("opencode", ["serve", "--port", String(port)], {
@@ -331,6 +346,24 @@ class OpencodeServerManager {
       },
       stdio: debugEnabled ? "inherit" : "ignore",
       detached: true,
+    });
+
+    proc.on("error", (error) => {
+      console.error("[OpenCode] opencode process error:", error);
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => {
+        proc.off("spawn", onSpawn);
+        reject(error);
+      };
+      const onSpawn = () => {
+        proc.off("error", onError);
+        resolve();
+      };
+
+      proc.once("spawn", onSpawn);
+      proc.once("error", onError);
     });
 
     proc.unref();

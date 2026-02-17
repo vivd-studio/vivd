@@ -139,7 +139,9 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 }
               }
             } else if (part.type === "reasoning") {
-              if (!isAssistantMessage) continue;
+              // Reasoning parts can arrive before the corresponding assistant message
+              // has been seen via `message.updated`. We still want to stream them so
+              // the UI can show thought blocks during generation.
 
               if (!seenParts.has(part.id)) {
                 callbacks.onStartThinking?.();
@@ -244,4 +246,3 @@ function getEventSessionId(event: any): string | null {
     return null;
   }
 }
-

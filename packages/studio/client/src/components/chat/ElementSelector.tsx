@@ -51,11 +51,28 @@ export function ElementSelector({
 // Script to inject into iframe for element selection
 export const ELEMENT_SELECTOR_SCRIPT = `
 (function() {
+  // If a previous selector instance is still active (e.g. due to hot reload or
+  // missed cleanup), try to clean it up first so we don't accumulate listeners.
+  try {
+    if (typeof window.__vivdSelectorCleanup === 'function') {
+      window.__vivdSelectorCleanup();
+    }
+  } catch {}
+
   if (window.__vivdSelectorActive) return;
   window.__vivdSelectorActive = true;
 
   let hoveredElement = null;
   const originalStyles = new Map();
+
+  function stopEvent(e) {
+    e.stopPropagation();
+    // Stop any other listeners on the same target in the same phase.
+    // This helps prevent e.g. capture-phase handlers from frameworks.
+    if (typeof e.stopImmediatePropagation === 'function') {
+      e.stopImmediatePropagation();
+    }
+  }
 
   function getElementDescription(el) {
     const tag = el.tagName.toLowerCase();
@@ -145,19 +162,47 @@ export const ELEMENT_SELECTOR_SCRIPT = `
   }
 
   function handleMouseOver(e) {
-    e.stopPropagation();
+    stopEvent(e);
     highlightElement(e.target);
   }
 
   function handleMouseOut(e) {
-    e.stopPropagation();
+    stopEvent(e);
     unhighlightElement(e.target);
     hoveredElement = null;
   }
 
+  // Swallow pointer/mouse down events so interactive elements (buttons/links)
+  // don't trigger handlers (some UIs navigate on pointerdown/mousedown).
+  function handlePointerDown(e) {
+    if (e.button !== 0) return;
+    stopEvent(e);
+  }
+
+  function handlePointerUp(e) {
+    if (e.button !== 0) return;
+    stopEvent(e);
+  }
+
+  function handleMouseDown(e) {
+    if (e.button !== 0) return;
+    stopEvent(e);
+  }
+
+  function handleMouseUp(e) {
+    if (e.button !== 0) return;
+    stopEvent(e);
+  }
+
+  // Prevent form submissions triggered by clicking submit buttons.
+  function handleSubmit(e) {
+    e.preventDefault();
+    stopEvent(e);
+  }
+
   function handleClick(e) {
     e.preventDefault();
-    e.stopPropagation();
+    stopEvent(e);
     
     const el = e.target;
     const description = getElementDescription(el);
@@ -210,11 +255,19 @@ export const ELEMENT_SELECTOR_SCRIPT = `
     }
     document.removeEventListener('mouseover', handleMouseOver, true);
     document.removeEventListener('mouseout', handleMouseOut, true);
-    document.removeEventListener('click', handleClick, true);
+    document.removeEventListener('pointerdown', handlePointerDown, true);
+    document.removeEventListener('pointerup', handlePointerUp, true);
+    document.removeEventListener('mousedown', handleMouseDown, true);
+    document.removeEventListener('mouseup', handleMouseUp, true);
+    document.removeEventListener('submit', handleSubmit, true);
+    window.removeEventListener('click', handleClick, true);
     document.removeEventListener('keydown', handleKeyDown, true);
     document.body.style.cursor = '';
     window.__vivdSelectorActive = false;
+    try { delete window.__vivdSelectorCleanup; } catch {}
   }
+
+  window.__vivdSelectorCleanup = cleanup;
 
   // Listen for cleanup message from parent
   window.addEventListener('message', function handler(e) {
@@ -226,7 +279,14 @@ export const ELEMENT_SELECTOR_SCRIPT = `
 
   document.addEventListener('mouseover', handleMouseOver, true);
   document.addEventListener('mouseout', handleMouseOut, true);
-  document.addEventListener('click', handleClick, true);
+  document.addEventListener('pointerdown', handlePointerDown, true);
+  document.addEventListener('pointerup', handlePointerUp, true);
+  document.addEventListener('mousedown', handleMouseDown, true);
+  document.addEventListener('mouseup', handleMouseUp, true);
+  document.addEventListener('submit', handleSubmit, true);
+  // Use window capture so we intercept BEFORE other doc capture handlers
+  // (e.g. Vivd's own navigation loading listener) and prevent stuck "Loading preview...".
+  window.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeyDown, true);
   document.body.style.cursor = 'crosshair';
 })();

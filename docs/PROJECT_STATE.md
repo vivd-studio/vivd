@@ -8,6 +8,10 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-17: studio preview selector mode — selecting elements no longer triggers button clicks/navigation (swallow pointer/mouse down/up + click + submit during selector mode; window-capture click avoids stuck “Loading preview…”).
+- 2026-02-17: studio agent revert — added an opt-in integration test that asserts OpenCode `revert` + `unrevert` actually change files in a temp repo, plus production diagnostics (diff summary + warnings for no-op reverts).
+- 2026-02-17: studio chat UX — element ref pills now render reliably (escape XPath quotes; parse Astro `source-file`/`source-loc` tags) and streaming now shows Thought blocks (reasoning deltas no longer dropped before `message.updated`).
+- 2026-02-17: local studio reliability — backend **dev** Docker image now includes the `opencode` CLI needed for `STUDIO_MACHINE_PROVIDER=local`, and the studio OpenCode server manager now fails gracefully (instead of crashing) when `opencode` is missing.
 - 2026-02-16: Fly periodic machine reconciliation now reuses the same drift checks as studio startup (`image`, `services`, `guest`, `STUDIO_ACCESS_TOKEN`) via shared provider logic, and warm-up reconciliation applies to any non-running machine with drift so edit starts are more consistently “ready to use”.
 - 2026-02-16: Fly warm-up reconciliation reliability — stop treating post-update drift as fatal (Fly may not reflect `skip_launch` config updates immediately), read drift from `vivd_image` metadata (tolerate tag+digest refs), and make parking deterministic by retrying + waiting for `suspended` (otherwise record an error instead of reporting success). Added an integration test for the warm reconciliation flow.
 - 2026-02-16: Fly machine region is immutable; changing `FLY_STUDIO_REGION` requires destroying/recreating existing studio machines (reconciler does not attempt in-place region migration).

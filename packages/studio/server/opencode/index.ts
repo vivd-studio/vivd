@@ -18,7 +18,7 @@ import { serverManager } from "./serverManager.js";
 import { usageReporter } from "../services/UsageReporter.js";
 
 import type { ModelSelection } from "./modelConfig.js";
-import { getDefaultModel, getAvailableModels } from "./modelConfig.js";
+import { getDefaultModel } from "./modelConfig.js";
 
 export { useEvents };
 export { agentEventEmitter } from "./eventEmitter.js";
@@ -326,8 +326,35 @@ export async function abortSession(sessionId: string, directory: string) {
 
 export async function unrevertSession(sessionId: string, directory: string) {
   const client = await serverManager.getClient(directory);
-  const result = await client.session.unrevert({ path: { id: sessionId } });
+
+  const emitterStatus =
+    agentEventEmitter.getSessionStatuses()[sessionId]?.type ?? "idle";
+
+  let beforeRevertMessageId: string | undefined;
+  try {
+    const before = await client.session.get({
+      path: { id: sessionId },
+      query: { directory },
+    });
+    beforeRevertMessageId = before.data?.revert?.messageID;
+  } catch {
+    // Best-effort only.
+  }
+
+  console.log(
+    `[OpenCode][unrevert] requested session=${sessionId} status=${emitterStatus} project=${process.env.VIVD_PROJECT_SLUG || "unknown"} revertMessage=${beforeRevertMessageId || "none"}`,
+  );
+
+  const result = await client.session.unrevert({
+    path: { id: sessionId },
+    query: { directory },
+  });
   if (result.error) throw new Error(JSON.stringify(result.error));
+
+  console.log(
+    `[OpenCode][unrevert] completed session=${sessionId} revertNow=${result.data?.revert?.messageID || "none"}`,
+  );
+
   return result.data;
 }
 
@@ -412,8 +439,46 @@ export async function revertToUserMessage(
   directory: string,
 ) {
   const client = await serverManager.getClient(directory);
+  const emitterStatus =
+    agentEventEmitter.getSessionStatuses()[sessionId]?.type ?? "idle";
+
+  let diffFiles: string[] = [];
+  let diffSummary: { files: number; additions: number; deletions: number } | null =
+    null;
+  try {
+    const diffRes = await client.session.diff({
+      path: { id: sessionId },
+      query: { directory, messageID: userMessageId },
+    });
+    if (!diffRes.error && Array.isArray(diffRes.data)) {
+      diffFiles = diffRes.data.map((d) => d.file).filter(Boolean);
+      diffSummary = diffRes.data.reduce(
+        (acc, d) => {
+          acc.files += 1;
+          acc.additions += Number(d.additions) || 0;
+          acc.deletions += Number(d.deletions) || 0;
+          return acc;
+        },
+        { files: 0, additions: 0, deletions: 0 },
+      );
+    }
+  } catch {
+    // Best-effort only.
+  }
+
+  console.log(
+    `[OpenCode][revert] requested session=${sessionId} status=${emitterStatus} project=${process.env.VIVD_PROJECT_SLUG || "unknown"} message=${userMessageId} trackedFiles=${diffSummary?.files ?? "unknown"} (+${diffSummary?.additions ?? "?"} -${diffSummary?.deletions ?? "?"})`,
+  );
+
+  if (diffSummary && diffSummary.files === 0) {
+    console.warn(
+      `[OpenCode][revert] no tracked diff for message=${userMessageId}. This usually means the agent changed files via shell commands instead of patch edits, so revert will be a no-op.`,
+    );
+  }
+
   const result = await client.session.revert({
     path: { id: sessionId },
+    query: { directory },
     body: { messageID: userMessageId },
   });
 
@@ -421,5 +486,25 @@ export async function revertToUserMessage(
     throw new Error(`Revert failed: ${JSON.stringify(result.error)}`);
   }
 
-  return { reverted: true, messageId: userMessageId };
+  try {
+    const afterDiff = await client.session.diff({
+      path: { id: sessionId },
+      query: { directory, messageID: userMessageId },
+    });
+    if (!afterDiff.error && Array.isArray(afterDiff.data)) {
+      console.log(
+        `[OpenCode][revert] completed session=${sessionId} message=${userMessageId} remainingFiles=${afterDiff.data.length} revertState=${result.data?.revert?.messageID || "none"}`,
+      );
+    }
+  } catch {
+    console.log(
+      `[OpenCode][revert] completed session=${sessionId} message=${userMessageId} revertState=${result.data?.revert?.messageID || "none"}`,
+    );
+  }
+
+  return {
+    reverted: true,
+    messageId: userMessageId,
+    trackedFiles: diffFiles.slice(0, 50),
+  };
 }

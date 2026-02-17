@@ -348,6 +348,9 @@ const installPreviewNavigationStartListener = (
       "click",
       (event: MouseEvent) => {
         if (!event.isTrusted) return;
+        // Element selector mode injects a click interceptor; if it's active we
+        // should not treat clicks as navigations (prevents stuck "Loading preview...").
+        if ((win as any).__vivdSelectorActive) return;
         if (event.button !== 0) return;
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
@@ -391,6 +394,7 @@ const installPreviewNavigationStartListener = (
       "submit",
       (event: Event) => {
         if (!event.isTrusted) return;
+        if ((win as any).__vivdSelectorActive) return;
 
         defer(() => {
           if (event.defaultPrevented) return;

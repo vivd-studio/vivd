@@ -27,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 // Types
 export interface Message {
@@ -1110,9 +1111,18 @@ export function ChatProvider({
   };
 
   const revertMutation = trpc.agent.revertToMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       refetchSessions();
       onTaskComplete?.();
+      if (Array.isArray(data.trackedFiles) && data.trackedFiles.length === 0) {
+        toast.info("Nothing to revert", {
+          description:
+            "No tracked file diff was found for that message. This can happen when files were changed via shell commands instead of patch edits.",
+        });
+      }
+    },
+    onError: (error) => {
+      toast.error("Revert failed", { description: error.message });
     },
   });
 
@@ -1120,6 +1130,9 @@ export function ChatProvider({
     onSuccess: () => {
       refetchSessions();
       onTaskComplete?.();
+    },
+    onError: (error) => {
+      toast.error("Restore failed", { description: error.message });
     },
   });
 
@@ -1133,21 +1146,29 @@ export function ChatProvider({
       destructive: true,
     });
     if (!ok) return;
-    await revertMutation.mutateAsync({
-      sessionId: selectedSessionId,
-      messageId,
-      projectSlug,
-      version,
-    });
+    try {
+      await revertMutation.mutateAsync({
+        sessionId: selectedSessionId,
+        messageId,
+        projectSlug,
+        version,
+      });
+    } catch {
+      // Handled by mutation onError.
+    }
   };
 
   const handleUnrevert = async () => {
     if (!selectedSessionId) return;
-    await unrevertMutation.mutateAsync({
-      sessionId: selectedSessionId,
-      projectSlug,
-      version,
-    });
+    try {
+      await unrevertMutation.mutateAsync({
+        sessionId: selectedSessionId,
+        projectSlug,
+        version,
+      });
+    } catch {
+      // Handled by mutation onError.
+    }
   };
 
   const abortSessionMutation = trpc.agent.abortSession.useMutation({
