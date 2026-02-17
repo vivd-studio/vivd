@@ -8,6 +8,9 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-17: studio OpenCode Vertex support re-enabled — studio entrypoint + local/Fly studio-machine env handling now support `GOOGLE_CLOUD_PROJECT` with automatic `GOOGLE_APPLICATION_CREDENTIALS` default path assignment, optional `GOOGLE_APPLICATION_CREDENTIALS_JSON` file materialization, and default `VERTEX_LOCATION=global` (while keeping legacy `GOOGLE_API_KEY` auth for non-Vertex setups).
+- 2026-02-17: added an opt-in Fly+bucket integration test for shutdown sync across stop/destroy/warm-reconcile restarts (`packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts`); local runs currently fail because newly written source markers are not reaching bucket during those lifecycle transitions.
+- 2026-02-17: Fly superadmin/manual machine reconciliation now runs with bounded parallelism (worker pool) instead of strict one-by-one processing, reducing full reconcile wall-clock time on larger machine sets (`FLY_STUDIO_RECONCILER_CONCURRENCY`, default `100`).
 - 2026-02-17: studio preview selector mode — selecting elements no longer triggers button clicks/navigation (swallow pointer/mouse down/up + click + submit during selector mode; window-capture click avoids stuck “Loading preview…”).
 - 2026-02-17: studio agent revert — added an opt-in integration test that asserts OpenCode `revert` + `unrevert` actually change files in a temp repo, plus production diagnostics (diff summary + warnings for no-op reverts).
 - 2026-02-17: studio chat UX — element ref pills now render reliably (escape XPath quotes; parse Astro `source-file`/`source-loc` tags) and streaming now shows Thought blocks (reasoning deltas no longer dropped before `message.updated`).
@@ -213,6 +216,8 @@ packages/
   - [x] Poll/listen for Fly machine state changes (`started`, `suspended`, `stopped`, `starting`, `replacing`, etc.).
   - [ ] Persist status/age/last-seen metadata for super-admin visibility and lifecycle decisions.
 - [ ] Validate hydration/sync behavior for start/stop cycles under failure scenarios.
+  - [x] Added real Fly+bucket integration test coverage for source/opencode sync across stop, destroy, and warm-reconcile restarts.
+  - [ ] Investigate/fix failing integration result where newly written source files are not uploaded to bucket during these lifecycle transitions.
 - [ ] Dev-environment multi-machine test coverage.
 - [x] Stale machine lifecycle cleanup (cost + safety):
   - [x] Periodically identify machines older than 7 days.
@@ -282,4 +287,4 @@ packages/
 
 ---
 
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-17*

@@ -33,7 +33,35 @@ if [ -z "$YARN_CACHE_FOLDER" ]; then
 fi
 mkdir -p "$npm_config_cache" "$pnpm_config_store_dir" "$YARN_CACHE_FOLDER"
 
+configure_vertex_ai() {
+  if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
+    return 0
+  fi
+
+  if [ -z "$VERTEX_LOCATION" ]; then
+    export VERTEX_LOCATION="global"
+  fi
+
+  if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+    export GOOGLE_APPLICATION_CREDENTIALS="${VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH:-${HOME:-/root}/.config/gcloud/application_default_credentials.json}"
+  fi
+
+  if [ -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
+    mkdir -p "$(dirname "$GOOGLE_APPLICATION_CREDENTIALS")"
+    (umask 077 && printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > "$GOOGLE_APPLICATION_CREDENTIALS")
+  fi
+
+  if [ ! -f "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+    echo "Warning: Vertex AI enabled but credentials file not found at ${GOOGLE_APPLICATION_CREDENTIALS}" >&2
+  fi
+}
+
 write_opencode_auth() {
+  if [ -n "$GOOGLE_CLOUD_PROJECT" ]; then
+    echo "Using Vertex AI authentication for OpenCode (project=${GOOGLE_CLOUD_PROJECT}, location=${VERTEX_LOCATION:-global})."
+    return 0
+  fi
+
   if [ -z "$GOOGLE_API_KEY" ]; then
     return 0
   fi
@@ -50,6 +78,8 @@ write_opencode_auth() {
 }
 EOF
 }
+
+configure_vertex_ai
 
 if [ -z "$AWS_EC2_METADATA_DISABLED" ]; then
   export AWS_EC2_METADATA_DISABLED=true

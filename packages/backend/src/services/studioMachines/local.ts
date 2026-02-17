@@ -92,6 +92,45 @@ async function ensureOpencodeAuthFile(xdgDataHome: string, googleApiKey?: string
   await fs.promises.writeFile(authPath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
 }
 
+async function configureVertexAiForLocalStudio(
+  env: Record<string, string>,
+  workspaceDir: string
+): Promise<void> {
+  if (!env.GOOGLE_CLOUD_PROJECT) return;
+
+  if (!env.VERTEX_LOCATION) {
+    env.VERTEX_LOCATION = "global";
+  }
+
+  if (!env.GOOGLE_APPLICATION_CREDENTIALS) {
+    env.GOOGLE_APPLICATION_CREDENTIALS =
+      env.VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH ||
+      path.join(path.dirname(workspaceDir), ".vivd-gcp", "application-default-credentials.json");
+  }
+
+  if (env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    await fs.promises.mkdir(path.dirname(env.GOOGLE_APPLICATION_CREDENTIALS), {
+      recursive: true,
+    });
+    await fs.promises.writeFile(
+      env.GOOGLE_APPLICATION_CREDENTIALS,
+      env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+      {
+        encoding: "utf-8",
+        mode: 0o600,
+      }
+    );
+    await fs.promises.chmod(env.GOOGLE_APPLICATION_CREDENTIALS, 0o600).catch(() => undefined);
+    delete env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  }
+
+  if (!fs.existsSync(env.GOOGLE_APPLICATION_CREDENTIALS)) {
+    console.warn(
+      `[StudioMachine] Vertex AI enabled but credentials file not found at ${env.GOOGLE_APPLICATION_CREDENTIALS}`
+    );
+  }
+}
+
 async function migrateLegacyOpencodeData(
   workspaceDir: string,
   opencodeDataHome: string
@@ -212,7 +251,10 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     env.VIVD_OPENCODE_DATA_HOME = opencodeDataHome;
     env.XDG_DATA_HOME = opencodeDataHome;
     await migrateLegacyOpencodeData(workspaceDir, opencodeDataHome);
-    await ensureOpencodeAuthFile(opencodeDataHome, env.GOOGLE_API_KEY);
+    await configureVertexAiForLocalStudio(env, workspaceDir);
+    if (!env.GOOGLE_CLOUD_PROJECT) {
+      await ensureOpencodeAuthFile(opencodeDataHome, env.GOOGLE_API_KEY);
+    }
 
     const objectStorageSync = this.createObjectStorageSync({
       env,

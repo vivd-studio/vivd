@@ -15,3 +15,5 @@ example-projects/
 # Test artifacts
 **/test/**/*.png
 **/scripts/**/*.png
+
+.creds/

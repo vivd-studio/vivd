@@ -36,6 +36,28 @@ type MachineReconcileNeeds = {
   accessToken: boolean;
 };
 
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  const concurrency = Math.max(1, Math.floor(limit));
+  let index = 0;
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = index++;
+        if (i >= items.length) return;
+        await worker(items[i]!);
+      }
+    },
+  );
+
+  await Promise.all(runners);
+}
+
 export class FlyStudioMachineProvider implements StudioMachineProvider {
   kind = "fly" as const;
 
@@ -244,6 +266,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
   private get warmOutdatedImages(): boolean {
     return parseBooleanEnv(process.env.FLY_STUDIO_RECONCILER_WARM_OUTDATED_IMAGES, true);
+  }
+
+  private get reconcilerConcurrency(): number {
+    return parsePositiveInt(process.env.FLY_STUDIO_RECONCILER_CONCURRENCY, 100);
   }
 
   private get maxMachineAgeDays(): number {
@@ -1131,23 +1157,27 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       OPENCODE_PORT_START: "4096",
     };
 
-	    const explicitEnvKeys = new Set(Object.keys(args.env));
-	    for (const [k, v] of Object.entries(args.env)) {
-	      if (typeof v === "string") env[k] = v;
-	    }
+    const explicitEnvKeys = new Set(Object.keys(args.env));
+    for (const [k, v] of Object.entries(args.env)) {
+      if (typeof v === "string") env[k] = v;
+    }
 
-	    // Optional passthrough for local-first testing (keeps config explicit).
-		    const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH ||
-		      "GOOGLE_API_KEY,OPENROUTER_API_KEY,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME")
-		      .split(",")
-		      .map((k) => k.trim())
-		      .filter(Boolean);
+    // Optional passthrough for local-first testing (keeps config explicit).
+    const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH ||
+      "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean);
 
-	    for (const key of passthrough) {
-	      if (explicitEnvKeys.has(key)) continue;
-	      const value = process.env[key];
-	      if (value) env[key] = value;
-	    }
+    for (const key of passthrough) {
+      if (explicitEnvKeys.has(key)) continue;
+      const value = process.env[key];
+      if (value) env[key] = value;
+    }
+
+    if (env.GOOGLE_CLOUD_PROJECT && !env.VERTEX_LOCATION) {
+      env.VERTEX_LOCATION = "global";
+    }
 
     return env;
   }
@@ -1609,11 +1639,13 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       errors: [],
     };
 
-    for (const machine of machines) {
+    const studioMachines = machines.flatMap((machine) => {
       const identity = this.getStudioIdentityFromMachine(machine);
-      if (!identity) continue;
-      result.scanned++;
+      return identity ? [{ machine, identity }] : [];
+    });
+    result.scanned = studioMachines.length;
 
+    await mapLimit(studioMachines, this.reconcilerConcurrency, async ({ machine, identity }) => {
       const createdAtMs = this.getMachineCreatedAtMs(machine);
       const ageMs = createdAtMs ? now - createdAtMs : null;
       const isOld = ageMs !== null && ageMs >= maxAgeMs;
@@ -1621,13 +1653,13 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       // Prefer GC over image warmups for very old machines.
       if (isOld) {
         const state = machine.state || "unknown";
-        if (state === "destroyed" || state === "destroying") continue;
+        if (state === "destroyed" || state === "destroying") return;
 
         if (dryRun) {
           console.log(
             `[FlyMachines] (dry-run) GC old machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} ageDays=${ageMs ? Math.floor(ageMs / (24 * 60 * 60 * 1000)) : "?"}`,
           );
-          continue;
+          return;
         }
 
         try {
@@ -1664,29 +1696,29 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           );
         }
 
-        continue;
+        return;
       }
 
       const reconcileState = this.resolveMachineReconcileState({
         machine,
         desiredImage,
       });
-      if (!this.hasMachineDrift(reconcileState.needs)) continue;
+      if (!this.hasMachineDrift(reconcileState.needs)) return;
       const driftLabels = this.getMachineDriftLabels(reconcileState.needs);
 
       const state = machine.state || "unknown";
       if (state === "started" || state === "starting") {
         result.skippedRunningMachines++;
-        continue;
+        return;
       }
 
-      if (!this.warmOutdatedImages) continue;
+      if (!this.warmOutdatedImages) return;
 
       if (dryRun) {
         console.log(
           `[FlyMachines] (dry-run) Warm reconciled machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} drift=${driftLabels.join(",")}`,
         );
-        continue;
+        return;
       }
 
       try {
@@ -1697,7 +1729,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           desiredImage,
         });
 
-        if (currentState === "destroyed" || currentState === "destroying") continue;
+        if (currentState === "destroyed" || currentState === "destroying") return;
 
         // Suspended machines would resume a snapshot; stop first to boot the new image.
         if (this.shouldStopSuspendedBeforeReconcile(currentState, currentReconcileState.needs)) {
@@ -1715,10 +1747,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           });
         }
 
-        if (!this.hasMachineDrift(currentReconcileState.needs)) continue;
+        if (!this.hasMachineDrift(currentReconcileState.needs)) return;
         if (current.state !== "stopped") {
           // Unexpected state (e.g. replacing). Skip and retry next cycle.
-          continue;
+          return;
         }
 
         const port = this.getMachineExternalPort(current);
@@ -1767,7 +1799,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           timeoutMs: 10_000,
         });
         if (remainingDrift) {
-          const driftLabels = this.getMachineDriftLabels(remainingDrift).join(",");
+          const remainingDriftLabels = this.getMachineDriftLabels(remainingDrift).join(",");
           const refreshed = await this.getMachine(machine.id);
           const configImage =
             typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
@@ -1775,7 +1807,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
             this.getMachineMetadataValue(refreshed, "vivd_image"),
           );
           console.warn(
-            `[FlyMachines] Warm reconcile drift did not clear for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${driftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
+            `[FlyMachines] Warm reconcile drift did not clear for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${remainingDriftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
           );
         }
 
@@ -1810,7 +1842,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           `[FlyMachines] Warm reconciled machine failed for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}): ${message}`,
         );
       }
-    }
+    });
 
     return result;
   }
