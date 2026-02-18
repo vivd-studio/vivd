@@ -10,7 +10,7 @@ RUN apt-get update \
 
 # Install opencode CLI (required for SDK to spawn server)
 # Clean up unused musl binary (saves ~120MB)
-RUN npm install -g opencode-ai@1.1.65 \
+RUN npm install -g opencode-ai@1.2.6 \
   && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
   && npm cache clean --force
 

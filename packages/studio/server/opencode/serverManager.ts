@@ -26,6 +26,7 @@ interface OpencodeServerInfo {
   process: ChildProcess;
   port: number;
   lastActivity: number;
+  directory: string;
 }
 
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -165,14 +166,14 @@ class OpencodeServerManager {
     }
   }
 
-  async getOrCreateServer(projectDir: string): Promise<string> {
+  async getOrCreateServerInfo(projectDir: string): Promise<OpencodeServerInfo> {
     const dirKey = this.normalizeProjectDir(projectDir);
 
     const existing = this.servers.get(dirKey);
     if (existing) {
       existing.lastActivity = Date.now();
       debugLog(`Reusing existing server for ${dirKey}`);
-      return existing.url;
+      return existing;
     }
 
     const starting = this.startingServers.get(dirKey);
@@ -180,7 +181,7 @@ class OpencodeServerManager {
       const server = await starting;
       server.lastActivity = Date.now();
       debugLog(`Awaited starting server for ${dirKey}`);
-      return server.url;
+      return server;
     }
 
     if (this.servers.size >= MAX_SERVERS) {
@@ -211,15 +212,24 @@ class OpencodeServerManager {
     this.startingServers.set(dirKey, startPromise);
 
     const server = await startPromise;
-    return server.url;
+    return server;
+  }
+
+  async getClientAndDirectory(
+    projectDir: string,
+  ): Promise<{ client: OpencodeClient; directory: string }> {
+    const server = await this.getOrCreateServerInfo(projectDir);
+    return {
+      client: createOpencodeClient({
+        baseUrl: server.url,
+        directory: server.directory,
+      }),
+      directory: server.directory,
+    };
   }
 
   async getClient(projectDir: string): Promise<OpencodeClient> {
-    const serverUrl = await this.getOrCreateServer(projectDir);
-    return createOpencodeClient({
-      baseUrl: serverUrl,
-      directory: this.normalizeProjectDir(projectDir),
-    });
+    return (await this.getClientAndDirectory(projectDir)).client;
   }
 
   touchProject(projectDir: string): void {
@@ -336,13 +346,15 @@ class OpencodeServerManager {
       );
     }
 
+    const workspaceDir = this.normalizeProjectDir(projectDir);
+
     const url = `http://127.0.0.1:${port}`;
 
     const proc = spawn("opencode", ["serve", "--port", String(port)], {
-      cwd: projectDir,
+      cwd: workspaceDir,
       env: {
         ...process.env,
-        OPENCODE_PROJECT_DIR: projectDir,
+        OPENCODE_PROJECT_DIR: workspaceDir,
       },
       stdio: debugEnabled ? "inherit" : "ignore",
       detached: true,
@@ -384,6 +396,7 @@ class OpencodeServerManager {
       process: proc,
       port,
       lastActivity: Date.now(),
+      directory: workspaceDir,
     };
   }
 

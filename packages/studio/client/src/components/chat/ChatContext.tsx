@@ -1117,7 +1117,7 @@ export function ChatProvider({
       if (Array.isArray(data.trackedFiles) && data.trackedFiles.length === 0) {
         toast.info("Nothing to revert", {
           description:
-            "No tracked file diff was found for that message. This can happen when files were changed via shell commands instead of patch edits.",
+            "We couldn’t find any reversible changes for that message. This can happen when changes were made outside tracked edits (for example via terminal commands).",
         });
       }
     },

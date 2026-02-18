@@ -7,7 +7,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 
 const RUN_REVERT_TESTS = process.env.VIVD_RUN_OPENCODE_REVERT_TESTS === "1";
-const OPENCODE_VERSION = "1.1.65";
+const OPENCODE_VERSION = "1.2.6";
 
 // To run inside the production-like Studio image (no network required):
 // `docker build -f packages/studio/Dockerfile -t vivd-studio:test .`

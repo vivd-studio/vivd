@@ -8,7 +8,12 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-18: added `scripts/delete-ghcr-dev-images.sh` helper to list/delete GHCR container versions with `dev-` tags (dry-run by default, `--apply` to execute).
+- 2026-02-18: OpenCode object-storage sync narrowed to `opencode/storage` only (Fly entrypoint + local provider), with legacy read compatibility for `opencode/opencode/storage` and cleanup of stale non-storage OpenCode objects in bucket.
 - 2026-02-18: superadmin studio machines tab now includes a studio image selector (lists semver + dev-* tags from GHCR, defaults to highest semver, and persists an override tag in DB so Fly reconcile/warmups use the selected image).
+- 2026-02-18: updated OpenCode to `1.2.6` (Studio + backend dev images) and `@opencode-ai/sdk` to `^1.2.6`.
+- 2026-02-18: fixed Fly revert/session-diff tracking by aligning studio OpenCode storage path with OpenCode's default (`~/.local/share/opencode`) and removing forced `XDG_DATA_HOME` overrides.
+- 2026-02-18: added OpenCode bucket compatibility migration: hydrate now flattens legacy nested `opencode/opencode` data into the canonical directory, sync runs with delete semantics for cleanup, and stale `auth.json` bucket keys are removed.
 - 2026-02-17: studio OpenCode Vertex support re-enabled — studio entrypoint + local/Fly studio-machine env handling now support `GOOGLE_CLOUD_PROJECT` with automatic `GOOGLE_APPLICATION_CREDENTIALS` default path assignment, optional `GOOGLE_APPLICATION_CREDENTIALS_JSON` file materialization, and default `VERTEX_LOCATION=global` (while keeping legacy `GOOGLE_API_KEY` auth for non-Vertex setups).
 - 2026-02-17: added an opt-in Fly+bucket integration test for shutdown sync across stop/destroy/warm-reconcile restarts (`packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts`); local runs currently fail because newly written source markers are not reaching bucket during those lifecycle transitions.
 - 2026-02-17: Fly superadmin/manual machine reconciliation now runs with bounded parallelism (worker pool) instead of strict one-by-one processing, reducing full reconcile wall-clock time on larger machine sets (`FLY_STUDIO_RECONCILER_CONCURRENCY`, default `100`).

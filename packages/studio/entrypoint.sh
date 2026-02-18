@@ -6,12 +6,10 @@ if [ -z "$VIVD_WORKSPACE_DIR" ]; then
   export VIVD_WORKSPACE_DIR="${WORKSPACE_DIR:-/home/studio/project}"
 fi
 
-# Keep OpenCode state project-scoped but separate from source files.
+# Keep OpenCode state in OpenCode's native data directory.
 if [ -z "$VIVD_OPENCODE_DATA_HOME" ]; then
-  export VIVD_OPENCODE_DATA_HOME="/home/studio/opencode-data"
-fi
-if [ -z "$XDG_DATA_HOME" ]; then
-  export XDG_DATA_HOME="$VIVD_OPENCODE_DATA_HOME"
+  DEFAULT_XDG_DATA_HOME="${XDG_DATA_HOME:-${HOME:-/root}/.local/share}"
+  export VIVD_OPENCODE_DATA_HOME="${DEFAULT_XDG_DATA_HOME}/opencode"
 fi
 
 if [ -z "$VIVD_PACKAGE_CACHE_DIR" ]; then
@@ -67,9 +65,9 @@ write_opencode_auth() {
   fi
 
   echo "Setting up OpenCode authentication..."
-  mkdir -p "${XDG_DATA_HOME}/opencode"
+  mkdir -p "${VIVD_OPENCODE_DATA_HOME}"
 
-  cat <<EOF > "${XDG_DATA_HOME}/opencode/auth.json"
+  cat <<EOF > "${VIVD_OPENCODE_DATA_HOME}/auth.json"
 {
   "google": {
     "type": "api",
@@ -114,8 +112,40 @@ aws_s3_sync() {
   fi
 }
 
+aws_s3_rm() {
+  TARGET_URI="$1"
+  if [ -n "$VIVD_S3_ENDPOINT_URL" ]; then
+    aws --endpoint-url "$VIVD_S3_ENDPOINT_URL" s3 rm "$TARGET_URI" --only-show-errors
+  else
+    aws s3 rm "$TARGET_URI" --only-show-errors
+  fi
+}
+
+aws_s3_rm_recursive() {
+  TARGET_URI="$1"
+  if [ -n "$VIVD_S3_ENDPOINT_URL" ]; then
+    aws --endpoint-url "$VIVD_S3_ENDPOINT_URL" s3 rm "$TARGET_URI" --recursive --only-show-errors
+  else
+    aws s3 rm "$TARGET_URI" --recursive --only-show-errors
+  fi
+}
+
+migrate_legacy_nested_opencode_dir() {
+  LEGACY_NESTED_STORAGE_DIR="${VIVD_OPENCODE_DATA_HOME}/opencode/storage"
+  if [ ! -d "$LEGACY_NESTED_STORAGE_DIR" ]; then
+    return 0
+  fi
+
+  echo "Migrating legacy nested OpenCode storage from ${LEGACY_NESTED_STORAGE_DIR}..."
+  mkdir -p "${VIVD_OPENCODE_DATA_HOME}/storage"
+  cp -a -n "${LEGACY_NESTED_STORAGE_DIR}/." "${VIVD_OPENCODE_DATA_HOME}/storage/" 2>/dev/null || true
+  rm -rf "${VIVD_OPENCODE_DATA_HOME}/opencode"
+}
+
 S3_SOURCE_URI=""
 S3_OPENCODE_URI=""
+S3_OPENCODE_STORAGE_URI=""
+S3_OPENCODE_LEGACY_STORAGE_URI=""
 
 if [ -n "$VIVD_S3_SOURCE_URI" ]; then
   S3_SOURCE_URI="$VIVD_S3_SOURCE_URI"
@@ -137,6 +167,13 @@ elif [ -n "$VIVD_S3_BUCKET" ] && [ -n "$VIVD_PROJECT_SLUG" ]; then
   S3_OPENCODE_URI="s3://${VIVD_S3_BUCKET}/${OPENCODE_PREFIX}"
 fi
 
+if [ -n "$VIVD_S3_OPENCODE_STORAGE_URI" ]; then
+  S3_OPENCODE_STORAGE_URI="$VIVD_S3_OPENCODE_STORAGE_URI"
+elif [ -n "$S3_OPENCODE_URI" ]; then
+  S3_OPENCODE_STORAGE_URI="${S3_OPENCODE_URI}/storage"
+  S3_OPENCODE_LEGACY_STORAGE_URI="${S3_OPENCODE_URI}/opencode/storage"
+fi
+
 sync_source() {
   if [ -z "$S3_SOURCE_URI" ]; then
     return 0
@@ -153,13 +190,27 @@ sync_source() {
 }
 
 sync_opencode() {
-  if [ -z "$S3_OPENCODE_URI" ]; then
+  if [ -z "$S3_OPENCODE_STORAGE_URI" ]; then
     return 0
   fi
 
-  mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-  aws_s3_sync "$VIVD_OPENCODE_DATA_HOME" "$S3_OPENCODE_URI" \
-    --exclude "opencode/auth.json"
+  OPENCODE_STORAGE_DIR="${VIVD_OPENCODE_DATA_HOME}/storage"
+  mkdir -p "$OPENCODE_STORAGE_DIR"
+  aws_s3_sync "$OPENCODE_STORAGE_DIR" "$S3_OPENCODE_STORAGE_URI" --delete
+
+  if [ -n "$S3_OPENCODE_URI" ]; then
+    aws_s3_rm "${S3_OPENCODE_URI}/auth.json" || true
+    aws_s3_rm "${S3_OPENCODE_URI}/opencode/auth.json" || true
+    aws_s3_rm "${S3_OPENCODE_URI}/opencode.db" || true
+    aws_s3_rm "${S3_OPENCODE_URI}/opencode.db-shm" || true
+    aws_s3_rm "${S3_OPENCODE_URI}/opencode.db-wal" || true
+    aws_s3_rm_recursive "${S3_OPENCODE_URI}/bin/" || true
+    aws_s3_rm_recursive "${S3_OPENCODE_URI}/log/" || true
+    aws_s3_rm_recursive "${S3_OPENCODE_URI}/opentui/" || true
+    aws_s3_rm_recursive "${S3_OPENCODE_URI}/snapshot/" || true
+    aws_s3_rm_recursive "${S3_OPENCODE_URI}/package-cache/" || true
+    aws_s3_rm_recursive "${S3_OPENCODE_URI}/opencode/" || true
+  fi
 }
 
 hydrate_source() {
@@ -181,20 +232,24 @@ hydrate_source() {
 }
 
 hydrate_opencode() {
-  if [ -z "$S3_OPENCODE_URI" ]; then
+  if [ -z "$S3_OPENCODE_STORAGE_URI" ]; then
     return 0
   fi
 
   echo "Hydrating OpenCode data from S3..."
-  echo "  Source: ${S3_OPENCODE_URI}"
-  echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
-  mkdir -p "$VIVD_OPENCODE_DATA_HOME"
-  aws_s3_sync "$S3_OPENCODE_URI" "$VIVD_OPENCODE_DATA_HOME" \
-    --exclude "opencode/auth.json"
+  echo "  Source: ${S3_OPENCODE_STORAGE_URI}"
+  echo "  Target: ${VIVD_OPENCODE_DATA_HOME}/storage"
+  OPENCODE_STORAGE_DIR="${VIVD_OPENCODE_DATA_HOME}/storage"
+  mkdir -p "$OPENCODE_STORAGE_DIR"
+
+  if [ -n "$S3_OPENCODE_LEGACY_STORAGE_URI" ]; then
+    aws_s3_sync "$S3_OPENCODE_LEGACY_STORAGE_URI" "$OPENCODE_STORAGE_DIR" || true
+  fi
+  aws_s3_sync "$S3_OPENCODE_STORAGE_URI" "$OPENCODE_STORAGE_DIR"
 }
 
 SYNC_ENABLED="0"
-if { [ -n "$S3_SOURCE_URI" ] || [ -n "$S3_OPENCODE_URI" ]; } && command -v aws >/dev/null 2>&1; then
+if { [ -n "$S3_SOURCE_URI" ] || [ -n "$S3_OPENCODE_STORAGE_URI" ]; } && command -v aws >/dev/null 2>&1; then
   SYNC_ENABLED="1"
 fi
 
@@ -246,7 +301,7 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
     HYDRATE_SOURCE_PID="$!"
   fi
 
-  if [ -n "$S3_OPENCODE_URI" ]; then
+  if [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
     (hydrate_opencode) &
     HYDRATE_OPENCODE_PID="$!"
   fi
@@ -258,6 +313,8 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
   if [ -n "$HYDRATE_OPENCODE_PID" ]; then
     wait "$HYDRATE_OPENCODE_PID" || true
   fi
+
+  migrate_legacy_nested_opencode_dir
 
   if [ -n "$STUB_PID" ]; then
     kill -TERM "$STUB_PID" 2>/dev/null || true
@@ -311,5 +368,6 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
   exit "$EXIT_CODE"
 fi
 
+migrate_legacy_nested_opencode_dir
 write_opencode_auth
 exec "$@"

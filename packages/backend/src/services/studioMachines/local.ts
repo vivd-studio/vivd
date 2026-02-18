@@ -75,12 +75,22 @@ function trimSlashes(value: string): string {
   return value.replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-async function ensureOpencodeAuthFile(xdgDataHome: string, googleApiKey?: string): Promise<void> {
+function getDefaultOpencodeDataHome(
+  env: Record<string, string>,
+  workspaceDir: string
+): string {
+  const homeDir = env.HOME || process.env.HOME || path.dirname(workspaceDir);
+  return path.join(homeDir, ".local", "share", "opencode");
+}
+
+async function ensureOpencodeAuthFile(
+  opencodeDataHome: string,
+  googleApiKey?: string
+): Promise<void> {
   if (!googleApiKey) return;
 
-  const opencodeDir = path.join(xdgDataHome, "opencode");
-  const authPath = path.join(opencodeDir, "auth.json");
-  await fs.promises.mkdir(opencodeDir, { recursive: true });
+  const authPath = path.join(opencodeDataHome, "auth.json");
+  await fs.promises.mkdir(opencodeDataHome, { recursive: true });
 
   const payload = {
     google: {
@@ -158,6 +168,35 @@ async function migrateLegacyOpencodeData(
   console.warn(
     `[StudioMachine] Legacy OpenCode data exists at ${source} but target ${target} already exists. Keeping both paths unchanged.`
   );
+}
+
+async function migrateNestedOpencodeData(opencodeDataHome: string): Promise<void> {
+  const nestedDir = path.join(opencodeDataHome, "opencode", "storage");
+  if (!fs.existsSync(nestedDir)) return;
+
+  console.log(
+    `[StudioMachine] Migrating legacy nested OpenCode storage from ${nestedDir} to ${path.join(
+      opencodeDataHome,
+      "storage"
+    )}`
+  );
+
+  const storageDir = path.join(opencodeDataHome, "storage");
+  await fs.promises.mkdir(storageDir, { recursive: true });
+  const entries = await fs.promises.readdir(nestedDir);
+  for (const entry of entries) {
+    const source = path.join(nestedDir, entry);
+    const destination = path.join(storageDir, entry);
+    await fs.promises.cp(source, destination, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
+  }
+  await fs.promises.rm(path.join(opencodeDataHome, "opencode"), {
+    recursive: true,
+    force: true,
+  });
 }
 
 async function isPortAvailable(port: number): Promise<boolean> {
@@ -247,9 +286,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     const opencodeDataHome =
       env.VIVD_OPENCODE_DATA_HOME ||
-      path.join(path.dirname(workspaceDir), ".vivd-opencode-data");
+      getDefaultOpencodeDataHome(env, workspaceDir);
     env.VIVD_OPENCODE_DATA_HOME = opencodeDataHome;
-    env.XDG_DATA_HOME = opencodeDataHome;
     await migrateLegacyOpencodeData(workspaceDir, opencodeDataHome);
     await configureVertexAiForLocalStudio(env, workspaceDir);
     if (!env.GOOGLE_CLOUD_PROJECT) {
@@ -268,6 +306,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         args.version,
         objectStorageSync
       );
+      await migrateNestedOpencodeData(opencodeDataHome);
       this.startObjectStorageSyncLoop(
         args.projectSlug,
         args.version,
@@ -416,6 +455,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     const hasAnyStorageEnv =
       Boolean(options.env.VIVD_S3_SOURCE_URI) ||
       Boolean(options.env.VIVD_S3_OPENCODE_URI) ||
+      Boolean(options.env.VIVD_S3_OPENCODE_STORAGE_URI) ||
       Boolean(options.env.VIVD_S3_BUCKET) ||
       Boolean(options.env.R2_BUCKET) ||
       Boolean(options.env.VIVD_S3_PREFIX) ||
@@ -427,6 +467,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     const sourceUri = (options.env.VIVD_S3_SOURCE_URI || "").trim();
     const opencodeUri = (options.env.VIVD_S3_OPENCODE_URI || "").trim();
+    const opencodeStorageUri = (options.env.VIVD_S3_OPENCODE_STORAGE_URI || "").trim();
 
     let parsedSource:
       | {
@@ -440,6 +481,12 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
           keyPrefix: string;
         }
       | undefined;
+    let parsedOpencodeStorage:
+      | {
+          bucket: string;
+          keyPrefix: string;
+        }
+      | undefined;
 
     if (sourceUri) {
       parsedSource = parseS3Uri(sourceUri);
@@ -447,12 +494,17 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     if (opencodeUri) {
       parsedOpencode = parseS3Uri(opencodeUri);
     }
+    if (opencodeStorageUri) {
+      parsedOpencodeStorage = parseS3Uri(opencodeStorageUri);
+    }
 
     // Keep source URI support even when no VIVD_S3_BUCKET/R2_BUCKET is explicitly set.
     const envForConfig: Record<string, string> = { ...options.env };
     if (!envForConfig.VIVD_S3_BUCKET && !envForConfig.R2_BUCKET) {
       if (parsedSource) {
         envForConfig.VIVD_S3_BUCKET = parsedSource.bucket;
+      } else if (parsedOpencodeStorage) {
+        envForConfig.VIVD_S3_BUCKET = parsedOpencodeStorage.bucket;
       } else if (parsedOpencode) {
         envForConfig.VIVD_S3_BUCKET = parsedOpencode.bucket;
       }
@@ -471,12 +523,16 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       : `${configuredSourceBasePrefix}/source`;
 
     const defaultOpencodePrefix = `tenants/${tenantId}/projects/${options.projectSlug}/opencode`;
-    const opencodeKeyPrefix = parsedOpencode
+    const opencodeBasePrefix = parsedOpencode
       ? trimSlashes(parsedOpencode.keyPrefix)
       : trimSlashes(options.env.VIVD_S3_OPENCODE_PREFIX || defaultOpencodePrefix);
+    const opencodeStorageKeyPrefix = parsedOpencodeStorage
+      ? trimSlashes(parsedOpencodeStorage.keyPrefix)
+      : `${opencodeBasePrefix}/storage`;
     const opencodeDir =
       options.env.VIVD_OPENCODE_DATA_HOME ||
-      path.join(path.dirname(options.workspaceDir), ".vivd-opencode-data");
+      getDefaultOpencodeDataHome(options.env, options.workspaceDir);
+    const opencodeStorageDir = path.join(opencodeDir, "storage");
 
     const targets: StorageSyncTarget[] = [
       {
@@ -493,10 +549,12 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       },
       {
         name: "opencode",
-        bucket: parsedOpencode?.bucket || storageConfig.bucket,
-        keyPrefix: opencodeKeyPrefix,
-        localDir: opencodeDir,
+        bucket: parsedOpencodeStorage?.bucket || parsedOpencode?.bucket || storageConfig.bucket,
+        keyPrefix: opencodeStorageKeyPrefix,
+        localDir: opencodeStorageDir,
         excludeDirNames: [],
+        // Keep OpenCode storage prefix exact so stale state is removed.
+        exact: true,
       },
     ];
 

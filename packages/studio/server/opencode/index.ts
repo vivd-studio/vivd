@@ -81,9 +81,9 @@ export async function runTask(
     })`,
   );
 
-  const client = await serverManager.getClient(cwd);
+  const { client, directory } = await serverManager.getClientAndDirectory(cwd);
 
-  const currentSessionId = await getOrCreateSession(client, cwd, sessionId);
+  const currentSessionId = await getOrCreateSession(client, directory, sessionId);
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
 
   const { start, stop } = useEvents(client, {
@@ -163,7 +163,7 @@ export async function runTask(
       );
 
       // Report usage to backend in connected mode
-      const sessionTitle = await getSessionTitle(client, cwd, currentSessionId);
+      const sessionTitle = await getSessionTitle(client, directory, currentSessionId);
       await usageReporter.report(
         data,
         currentSessionId,
@@ -179,7 +179,7 @@ export async function runTask(
         } as SessionCompletedData),
       );
       void (async () => {
-        const sessionTitle = await getSessionTitle(client, cwd, currentSessionId);
+        const sessionTitle = await getSessionTitle(client, directory, currentSessionId);
         if (sessionTitle) {
           await usageReporter.updateSessionTitle(
             currentSessionId,
@@ -211,7 +211,7 @@ export async function runTask(
   }
 
   try {
-    await sendPromptAsync(client, currentSessionId, cwd, task, model);
+    await sendPromptAsync(client, currentSessionId, directory, task, model);
   } catch (error) {
     console.error(`[OpenCode] Task Error:`, error);
     agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
@@ -222,8 +222,9 @@ export async function runTask(
 }
 
 export async function listSessions(directory: string) {
-  const client = await serverManager.getClient(directory);
-  const result = await client.session.list({ query: { directory } });
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
+  const result = await client.session.list({ query: { directory: opencodeDir } });
   if (result.error) throw new Error(JSON.stringify(result.error));
 
   let sessions = result.data || [];
@@ -231,8 +232,8 @@ export async function listSessions(directory: string) {
   sessions = sessions.filter((s: any) => {
     if (!s.directory) return false;
     return (
-      s.directory === directory ||
-      s.directory.replace(/\/$/, "") === directory.replace(/\/$/, "")
+      s.directory === opencodeDir ||
+      s.directory.replace(/\/$/, "") === opencodeDir.replace(/\/$/, "")
     );
   });
 
@@ -240,7 +241,7 @@ export async function listSessions(directory: string) {
 }
 
 export async function listProjects(directory: string) {
-  const client = await serverManager.getClient(directory);
+  const { client } = await serverManager.getClientAndDirectory(directory);
   // @ts-ignore - SDK typings vary by version.
   const result = await client.project.list({});
   if (result.error) throw new Error(JSON.stringify(result.error));
@@ -248,22 +249,27 @@ export async function listProjects(directory: string) {
 }
 
 export async function getSessionContent(sessionId: string, directory: string) {
-  const client = await serverManager.getClient(directory);
-  const result = await client.session.messages({ path: { id: sessionId } });
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
+  const result = await client.session.messages({
+    path: { id: sessionId },
+    // @ts-ignore - SDK typings vary by version.
+    query: { directory: opencodeDir },
+  });
   if (result.error) throw new Error(JSON.stringify(result.error));
   return result.data || [];
 }
 
 async function getOrCreateSession(
   client: OpencodeClient,
-  cwd: string,
+  directory: string,
   sessionId?: string,
 ): Promise<string> {
   if (sessionId) {
     return sessionId;
   }
 
-  const result = await client.session.create({ query: { directory: cwd } });
+  const result = await client.session.create({ query: { directory } });
   if (result.error) {
     throw new Error(`Failed to create session: ${JSON.stringify(result.error)}`);
   }
@@ -275,7 +281,7 @@ async function getOrCreateSession(
 async function sendPromptAsync(
   client: OpencodeClient,
   sessionId: string,
-  cwd: string,
+  directory: string,
   task: string,
   modelSelection?: ModelSelection,
 ): Promise<void> {
@@ -289,7 +295,7 @@ async function sendPromptAsync(
 
   const result = await client.session.promptAsync({
     path: { id: sessionId },
-    query: { directory: cwd },
+    query: { directory },
     body: {
       model: { providerID, modelID },
       parts: [{ type: "text", text: task }],
@@ -302,14 +308,14 @@ async function sendPromptAsync(
 }
 
 export async function deleteSession(sessionId: string, directory: string) {
-  const client = await serverManager.getClient(directory);
+  const { client } = await serverManager.getClientAndDirectory(directory);
   const result = await client.session.delete({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
   return true;
 }
 
 export async function abortSession(sessionId: string, directory: string) {
-  const client = await serverManager.getClient(directory);
+  const { client } = await serverManager.getClientAndDirectory(directory);
   const result = await client.session.abort({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
 
@@ -325,7 +331,8 @@ export async function abortSession(sessionId: string, directory: string) {
 }
 
 export async function unrevertSession(sessionId: string, directory: string) {
-  const client = await serverManager.getClient(directory);
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
 
   const emitterStatus =
     agentEventEmitter.getSessionStatuses()[sessionId]?.type ?? "idle";
@@ -334,7 +341,7 @@ export async function unrevertSession(sessionId: string, directory: string) {
   try {
     const before = await client.session.get({
       path: { id: sessionId },
-      query: { directory },
+      query: { directory: opencodeDir },
     });
     beforeRevertMessageId = before.data?.revert?.messageID;
   } catch {
@@ -347,7 +354,7 @@ export async function unrevertSession(sessionId: string, directory: string) {
 
   const result = await client.session.unrevert({
     path: { id: sessionId },
-    query: { directory },
+    query: { directory: opencodeDir },
   });
   if (result.error) throw new Error(JSON.stringify(result.error));
 
@@ -359,9 +366,10 @@ export async function unrevertSession(sessionId: string, directory: string) {
 }
 
 export async function getSessionsStatus(directory: string) {
-  const client = await serverManager.getClient(directory);
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
   const sessions = await listSessions(directory);
-  const result = await client.session.status({ query: { directory } });
+  const result = await client.session.status({ query: { directory: opencodeDir } });
   if (result.error) throw new Error(JSON.stringify(result.error));
 
   const normalizedStatuses = normalizeSessionStatuses(result.data, sessions);
@@ -438,7 +446,8 @@ export async function revertToUserMessage(
   userMessageId: string,
   directory: string,
 ) {
-  const client = await serverManager.getClient(directory);
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
   const emitterStatus =
     agentEventEmitter.getSessionStatuses()[sessionId]?.type ?? "idle";
 
@@ -448,7 +457,7 @@ export async function revertToUserMessage(
   try {
     const diffRes = await client.session.diff({
       path: { id: sessionId },
-      query: { directory, messageID: userMessageId },
+      query: { directory: opencodeDir, messageID: userMessageId },
     });
     if (!diffRes.error && Array.isArray(diffRes.data)) {
       diffFiles = diffRes.data.map((d) => d.file).filter(Boolean);
@@ -478,7 +487,7 @@ export async function revertToUserMessage(
 
   const result = await client.session.revert({
     path: { id: sessionId },
-    query: { directory },
+    query: { directory: opencodeDir },
     body: { messageID: userMessageId },
   });
 
@@ -489,7 +498,7 @@ export async function revertToUserMessage(
   try {
     const afterDiff = await client.session.diff({
       path: { id: sessionId },
-      query: { directory, messageID: userMessageId },
+      query: { directory: opencodeDir, messageID: userMessageId },
     });
     if (!afterDiff.error && Array.isArray(afterDiff.data)) {
       console.log(
