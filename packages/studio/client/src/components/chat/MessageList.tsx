@@ -42,6 +42,23 @@ export function MessageList() {
 
   // Track dismissed warnings for this session
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
+  const [showRevertNotice, setShowRevertNotice] = useState(false);
+
+  useEffect(() => {
+    try {
+      const key = "vivd_chat_revert_notice_seen_v1";
+      if (window.localStorage.getItem(key) !== "1") {
+        setShowRevertNotice(true);
+        window.localStorage.setItem(key, "1");
+      }
+    } catch {
+      // Ignore storage access issues.
+    }
+  }, []);
+
+  const dismissRevertNotice = () => {
+    setShowRevertNotice(false);
+  };
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
 
@@ -62,6 +79,26 @@ export function MessageList() {
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
       <div className="flex flex-col gap-6 px-3 pt-4 pb-4 md:px-6 md:pt-6 md:pb-6">
+        {showRevertNotice && (
+          <div className="flex justify-center">
+            <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 max-w-[90%] w-full">
+              <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-muted-foreground">
+                  Chat revert is best-effort. For safer rollback, create snapshots in Version History.
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 h-6 w-6 p-0"
+                onClick={dismissRevertNotice}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
         {messages.length === 0 &&
           (isSessionHydrating ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

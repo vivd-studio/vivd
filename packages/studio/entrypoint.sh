@@ -112,6 +112,16 @@ aws_s3_sync() {
   fi
 }
 
+aws_s3_cp() {
+  SRC="$1"
+  DST="$2"
+  if [ -n "$VIVD_S3_ENDPOINT_URL" ]; then
+    aws --endpoint-url "$VIVD_S3_ENDPOINT_URL" s3 cp "$SRC" "$DST" --only-show-errors
+  else
+    aws s3 cp "$SRC" "$DST" --only-show-errors
+  fi
+}
+
 aws_s3_rm() {
   TARGET_URI="$1"
   if [ -n "$VIVD_S3_ENDPOINT_URL" ]; then
@@ -174,6 +184,21 @@ elif [ -n "$S3_OPENCODE_URI" ]; then
   S3_OPENCODE_LEGACY_STORAGE_URI="${S3_OPENCODE_URI}/opencode/storage"
 fi
 
+if [ -z "$S3_OPENCODE_URI" ] && [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
+  NORMALIZED_OPENCODE_STORAGE_URI="${S3_OPENCODE_STORAGE_URI%/}"
+  if [ "${NORMALIZED_OPENCODE_STORAGE_URI##*/}" = "storage" ]; then
+    S3_OPENCODE_URI="${NORMALIZED_OPENCODE_STORAGE_URI%/storage}"
+  fi
+fi
+
+if [ -z "$S3_OPENCODE_STORAGE_URI" ] && [ -n "$S3_OPENCODE_URI" ]; then
+  S3_OPENCODE_STORAGE_URI="${S3_OPENCODE_URI}/storage"
+fi
+
+if [ -n "$S3_OPENCODE_URI" ] && [ -z "$S3_OPENCODE_LEGACY_STORAGE_URI" ]; then
+  S3_OPENCODE_LEGACY_STORAGE_URI="${S3_OPENCODE_URI}/opencode/storage"
+fi
+
 sync_source() {
   if [ -z "$S3_SOURCE_URI" ]; then
     return 0
@@ -190,27 +215,73 @@ sync_source() {
 }
 
 sync_opencode() {
-  if [ -z "$S3_OPENCODE_STORAGE_URI" ]; then
+  if [ -z "$S3_OPENCODE_STORAGE_URI" ] && [ -z "$S3_OPENCODE_URI" ]; then
     return 0
   fi
 
-  OPENCODE_STORAGE_DIR="${VIVD_OPENCODE_DATA_HOME}/storage"
-  mkdir -p "$OPENCODE_STORAGE_DIR"
-  aws_s3_sync "$OPENCODE_STORAGE_DIR" "$S3_OPENCODE_STORAGE_URI" --delete
+  OPENCODE_SESSION_DIFF_DIR="${VIVD_OPENCODE_DATA_HOME}/storage/session_diff"
+  OPENCODE_DB_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db"
+  OPENCODE_DB_SHM_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db-shm"
+  OPENCODE_DB_WAL_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db-wal"
+
+  if [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
+    mkdir -p "$OPENCODE_SESSION_DIFF_DIR"
+    aws_s3_sync "$OPENCODE_SESSION_DIFF_DIR" "${S3_OPENCODE_STORAGE_URI}/session_diff" --delete
+  fi
 
   if [ -n "$S3_OPENCODE_URI" ]; then
+    if [ -f "$OPENCODE_DB_PATH" ]; then
+      aws_s3_cp "$OPENCODE_DB_PATH" "${S3_OPENCODE_URI}/opencode.db"
+    fi
+
+    if [ -f "$OPENCODE_DB_SHM_PATH" ]; then
+      aws_s3_cp "$OPENCODE_DB_SHM_PATH" "${S3_OPENCODE_URI}/opencode.db-shm"
+    fi
+
+    if [ -f "$OPENCODE_DB_WAL_PATH" ]; then
+      aws_s3_cp "$OPENCODE_DB_WAL_PATH" "${S3_OPENCODE_URI}/opencode.db-wal"
+    fi
+
     aws_s3_rm "${S3_OPENCODE_URI}/auth.json" || true
     aws_s3_rm "${S3_OPENCODE_URI}/opencode/auth.json" || true
-    aws_s3_rm "${S3_OPENCODE_URI}/opencode.db" || true
-    aws_s3_rm "${S3_OPENCODE_URI}/opencode.db-shm" || true
-    aws_s3_rm "${S3_OPENCODE_URI}/opencode.db-wal" || true
-    aws_s3_rm_recursive "${S3_OPENCODE_URI}/bin/" || true
-    aws_s3_rm_recursive "${S3_OPENCODE_URI}/log/" || true
-    aws_s3_rm_recursive "${S3_OPENCODE_URI}/opentui/" || true
-    aws_s3_rm_recursive "${S3_OPENCODE_URI}/snapshot/" || true
-    aws_s3_rm_recursive "${S3_OPENCODE_URI}/package-cache/" || true
-    aws_s3_rm_recursive "${S3_OPENCODE_URI}/opencode/" || true
   fi
+}
+
+run_sync_cycle() {
+  REASON="$1"
+  STARTED_AT="$(date +%s)"
+  SOURCE_STATUS=0
+  OPENCODE_STATUS=0
+
+  (sync_source) &
+  SOURCE_PID="$!"
+  (sync_opencode) &
+  OPENCODE_PID="$!"
+
+  wait "$SOURCE_PID" || SOURCE_STATUS=$?
+  wait "$OPENCODE_PID" || OPENCODE_STATUS=$?
+
+  ENDED_AT="$(date +%s)"
+  DURATION_SECONDS="$((ENDED_AT - STARTED_AT))"
+
+  if [ "$SOURCE_STATUS" -ne 0 ]; then
+    echo "Warning: ${REASON} source sync failed (exit=${SOURCE_STATUS})." >&2
+  fi
+  if [ "$OPENCODE_STATUS" -ne 0 ]; then
+    echo "Warning: ${REASON} opencode sync failed (exit=${OPENCODE_STATUS})." >&2
+  fi
+
+  if [ "$DURATION_SECONDS" -gt "$SHUTDOWN_SYNC_BUDGET_SECONDS" ]; then
+    echo "Warning: ${REASON} sync took ${DURATION_SECONDS}s, exceeding shutdown budget ${SHUTDOWN_SYNC_BUDGET_SECONDS}s." >&2
+  fi
+}
+
+consume_sync_trigger() {
+  if [ ! -f "$SYNC_TRIGGER_FILE" ]; then
+    return 1
+  fi
+  rm -f "$SYNC_TRIGGER_FILE" 2>/dev/null || true
+  return 0
 }
 
 hydrate_source() {
@@ -232,24 +303,38 @@ hydrate_source() {
 }
 
 hydrate_opencode() {
-  if [ -z "$S3_OPENCODE_STORAGE_URI" ]; then
+  if [ -z "$S3_OPENCODE_STORAGE_URI" ] && [ -z "$S3_OPENCODE_URI" ]; then
     return 0
   fi
 
-  echo "Hydrating OpenCode data from S3..."
-  echo "  Source: ${S3_OPENCODE_STORAGE_URI}"
-  echo "  Target: ${VIVD_OPENCODE_DATA_HOME}/storage"
-  OPENCODE_STORAGE_DIR="${VIVD_OPENCODE_DATA_HOME}/storage"
-  mkdir -p "$OPENCODE_STORAGE_DIR"
+  OPENCODE_SESSION_DIFF_DIR="${VIVD_OPENCODE_DATA_HOME}/storage/session_diff"
 
-  if [ -n "$S3_OPENCODE_LEGACY_STORAGE_URI" ]; then
-    aws_s3_sync "$S3_OPENCODE_LEGACY_STORAGE_URI" "$OPENCODE_STORAGE_DIR" || true
+  if [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
+    echo "Hydrating OpenCode session diffs from S3..."
+    echo "  Source: ${S3_OPENCODE_STORAGE_URI}/session_diff"
+    echo "  Target: ${OPENCODE_SESSION_DIFF_DIR}"
+
+    mkdir -p "${OPENCODE_SESSION_DIFF_DIR}"
+    if [ -n "$S3_OPENCODE_LEGACY_STORAGE_URI" ]; then
+      aws_s3_sync "${S3_OPENCODE_LEGACY_STORAGE_URI}/session_diff" "$OPENCODE_SESSION_DIFF_DIR" || true
+    fi
+    aws_s3_sync "${S3_OPENCODE_STORAGE_URI}/session_diff" "$OPENCODE_SESSION_DIFF_DIR" || true
   fi
-  aws_s3_sync "$S3_OPENCODE_STORAGE_URI" "$OPENCODE_STORAGE_DIR"
+
+  if [ -n "$S3_OPENCODE_URI" ]; then
+    echo "Hydrating OpenCode DB from S3..."
+    echo "  Source: ${S3_OPENCODE_URI}"
+    echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
+
+    mkdir -p "${VIVD_OPENCODE_DATA_HOME}"
+    aws_s3_cp "${S3_OPENCODE_URI}/opencode.db" "${VIVD_OPENCODE_DATA_HOME}/opencode.db" || true
+    aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-shm" "${VIVD_OPENCODE_DATA_HOME}/opencode.db-shm" || true
+    aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-wal" "${VIVD_OPENCODE_DATA_HOME}/opencode.db-wal" || true
+  fi
 }
 
 SYNC_ENABLED="0"
-if { [ -n "$S3_SOURCE_URI" ] || [ -n "$S3_OPENCODE_STORAGE_URI" ]; } && command -v aws >/dev/null 2>&1; then
+if { [ -n "$S3_SOURCE_URI" ] || [ -n "$S3_OPENCODE_STORAGE_URI" ] || [ -n "$S3_OPENCODE_URI" ]; } && command -v aws >/dev/null 2>&1; then
   SYNC_ENABLED="1"
 fi
 
@@ -301,7 +386,7 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
     HYDRATE_SOURCE_PID="$!"
   fi
 
-  if [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
+  if [ -n "$S3_OPENCODE_STORAGE_URI" ] || [ -n "$S3_OPENCODE_URI" ]; then
     (hydrate_opencode) &
     HYDRATE_OPENCODE_PID="$!"
   fi
@@ -327,24 +412,53 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
   "$@" &
   PID=$!
 
-  SYNC_INTERVAL="${VIVD_S3_SYNC_INTERVAL_SECONDS:-30}"
+  SYNC_TRIGGER_FILE="${VIVD_SYNC_TRIGGER_FILE:-/tmp/vivd-sync.trigger}"
+  SHUTDOWN_SYNC_BUDGET_SECONDS="${VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS:-25}"
+  SHUTDOWN_CHILD_WAIT_SECONDS="${VIVD_SHUTDOWN_CHILD_WAIT_SECONDS:-20}"
+  case "$SHUTDOWN_SYNC_BUDGET_SECONDS" in
+    ''|*[!0-9]*) SHUTDOWN_SYNC_BUDGET_SECONDS="25" ;;
+  esac
+  if [ "$SHUTDOWN_SYNC_BUDGET_SECONDS" -le 0 ]; then
+    SHUTDOWN_SYNC_BUDGET_SECONDS="25"
+  fi
+  case "$SHUTDOWN_CHILD_WAIT_SECONDS" in
+    ''|*[!0-9]*) SHUTDOWN_CHILD_WAIT_SECONDS="20" ;;
+  esac
+  if [ "$SHUTDOWN_CHILD_WAIT_SECONDS" -le 0 ]; then
+    SHUTDOWN_CHILD_WAIT_SECONDS="20"
+  fi
+  TERMINATING="0"
 
   on_term() {
+    if [ "$TERMINATING" = "1" ]; then
+      return
+    fi
+    TERMINATING="1"
+
     echo "Received shutdown signal. Stopping studio (pid=${PID})..."
     kill -TERM "$PID" 2>/dev/null || true
+    WAITED="0"
+    while kill -0 "$PID" 2>/dev/null; do
+      if [ "$WAITED" -ge "$SHUTDOWN_CHILD_WAIT_SECONDS" ]; then
+        echo "Studio did not stop within ${SHUTDOWN_CHILD_WAIT_SECONDS}s; forcing SIGKILL..."
+        kill -KILL "$PID" 2>/dev/null || true
+        break
+      fi
+      sleep 1
+      WAITED="$((WAITED + 1))"
+    done
     wait "$PID" 2>/dev/null || true
 
     echo "Final sync to S3..."
-    sync_source || true
-    sync_opencode || true
+    run_sync_cycle "shutdown"
     exit 0
   }
 
   trap on_term INT TERM
 
-  echo "Sync loop enabled (interval=${SYNC_INTERVAL}s)"
+  echo "Sync loop enabled (trigger_file=${SYNC_TRIGGER_FILE})"
   while kill -0 "$PID" 2>/dev/null; do
-    sleep "$SYNC_INTERVAL"
+    sleep 1
     SYNC_PAUSE_FILE="${VIVD_SYNC_PAUSE_FILE:-/tmp/vivd-sync.pause}"
     SYNC_PAUSE_MAX_AGE_SECONDS="${VIVD_SYNC_PAUSE_MAX_AGE_SECONDS:-600}"
     if [ -f "$SYNC_PAUSE_FILE" ]; then
@@ -356,15 +470,16 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
       fi
       rm -f "$SYNC_PAUSE_FILE" 2>/dev/null || true
     fi
-    sync_source || true
-    sync_opencode || true
+
+    if consume_sync_trigger; then
+      run_sync_cycle "trigger"
+    fi
   done
 
   wait "$PID"
   EXIT_CODE=$?
   echo "Final sync to S3..."
-  sync_source || true
-  sync_opencode || true
+  run_sync_cycle "final-exit"
   exit "$EXIT_CODE"
 fi
 

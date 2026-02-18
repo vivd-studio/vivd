@@ -16,6 +16,7 @@ import {
 } from "./eventEmitter.js";
 import { serverManager } from "./serverManager.js";
 import { usageReporter } from "../services/UsageReporter.js";
+import { requestBucketSyncAfterAgentTask } from "../services/AgentTaskSyncService.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel } from "./modelConfig.js";
@@ -85,6 +86,7 @@ export async function runTask(
 
   const currentSessionId = await getOrCreateSession(client, directory, sessionId);
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
+  let completionHandled = false;
 
   const { start, stop } = useEvents(client, {
     sessionId: currentSessionId,
@@ -172,6 +174,9 @@ export async function runTask(
       );
     },
     onIdle: () => {
+      if (completionHandled) return;
+      completionHandled = true;
+
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
         createAgentEvent(currentSessionId, "session.completed", {
@@ -188,6 +193,10 @@ export async function runTask(
           );
         }
       })();
+      requestBucketSyncAfterAgentTask({
+        sessionId: currentSessionId,
+        projectDir: directory,
+      });
       stop();
     },
     onSessionError: (error) => {

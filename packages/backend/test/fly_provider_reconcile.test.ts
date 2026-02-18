@@ -6,6 +6,7 @@ function buildMachine(options: {
   image: string;
   metadataImage?: string;
   accessToken?: string;
+  killTimeout?: number;
 }): FlyMachine {
   const accessToken = options.accessToken ?? "test-token";
   return {
@@ -13,6 +14,7 @@ function buildMachine(options: {
     state: "stopped",
     config: {
       image: options.image,
+      kill_timeout: options.killTimeout ?? 180,
       env: { STUDIO_ACCESS_TOKEN: accessToken },
       guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
       services: [{ autostop: "suspend", autostart: false }],
@@ -34,6 +36,7 @@ describe("FlyStudioMachineProvider machine drift", () => {
       "FLY_STUDIO_CPU_KIND",
       "FLY_STUDIO_CPUS",
       "FLY_STUDIO_MEMORY_MB",
+      "FLY_STUDIO_KILL_TIMEOUT_SECONDS",
     ]) {
       originalEnv.set(key, process.env[key]);
     }
@@ -45,6 +48,7 @@ describe("FlyStudioMachineProvider machine drift", () => {
     process.env.FLY_STUDIO_CPU_KIND = "shared";
     process.env.FLY_STUDIO_CPUS = "1";
     process.env.FLY_STUDIO_MEMORY_MB = "1024";
+    process.env.FLY_STUDIO_KILL_TIMEOUT_SECONDS = "180";
   });
 
   afterEach(() => {
@@ -110,5 +114,39 @@ describe("FlyStudioMachineProvider machine drift", () => {
     }) as { needs: { image: boolean } };
 
     expect(reconcileState.needs.image).toBe(false);
+  });
+
+  it("does not flag kill-timeout drift when configured timeout matches desired", () => {
+    const provider = new FlyStudioMachineProvider();
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
+    const machine = buildMachine({
+      image: "registry.fly.io/vivd-studio:deployment-123",
+      metadataImage: desiredImage,
+      killTimeout: 180,
+    });
+
+    const reconcileState = (provider as any).resolveMachineReconcileState({
+      machine,
+      desiredImage,
+    }) as { needs: { killTimeout: boolean } };
+
+    expect(reconcileState.needs.killTimeout).toBe(false);
+  });
+
+  it("flags kill-timeout drift when configured timeout differs from desired", () => {
+    const provider = new FlyStudioMachineProvider();
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
+    const machine = buildMachine({
+      image: "registry.fly.io/vivd-studio:deployment-123",
+      metadataImage: desiredImage,
+      killTimeout: 30,
+    });
+
+    const reconcileState = (provider as any).resolveMachineReconcileState({
+      machine,
+      desiredImage,
+    }) as { needs: { killTimeout: boolean } };
+
+    expect(reconcileState.needs.killTimeout).toBe(true);
   });
 });
