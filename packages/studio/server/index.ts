@@ -71,6 +71,17 @@ function getRequestStudioToken(req: express.Request): string | null {
   return null;
 }
 
+function getSingleRouteParam(
+  value: string | string[] | undefined,
+): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0];
+    if (typeof first === "string" && first.trim()) return first;
+  }
+  return null;
+}
+
 function requireStudioAuth(): express.RequestHandler {
   return (req, res, next) => {
     const required = getStudioAccessToken();
@@ -378,7 +389,10 @@ const devPreviewProxy = createProxyMiddleware({
       const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
 
       // Rewrite redirects so root-relative Location headers stay within the proxy base.
-      const rawLocation = proxyRes.headers["location"];
+      const rawLocation = proxyRes.headers["location"] as
+        | string
+        | string[]
+        | undefined;
       if (base && rawLocation) {
         const rewriteLocation = (location: string) => {
           if (
@@ -670,7 +684,11 @@ async function startServer() {
         const filePath = path.join(droppedImagesDir, uniqueFilename);
 
         await writeUploadedFile(filePath, file.buffer);
-        projectTouchReporter.touch(req.params.slug);
+        const slug = getSingleRouteParam(req.params?.slug);
+        if (!slug) {
+          return res.status(400).json({ error: "Invalid slug" });
+        }
+        projectTouchReporter.touch(slug);
 
         const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
         return res.json({ success: true, path: relativePath });
@@ -741,7 +759,11 @@ async function startServer() {
           );
         }
 
-        projectTouchReporter.touch(req.params.slug);
+        const slug = getSingleRouteParam(req.params?.slug);
+        if (!slug) {
+          return res.status(400).json({ error: "Invalid slug" });
+        }
+        projectTouchReporter.touch(slug);
         return res.json({ success: true, uploaded });
       } catch (error) {
         console.error("Upload error:", error);
