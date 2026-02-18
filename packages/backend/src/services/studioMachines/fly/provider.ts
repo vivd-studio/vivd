@@ -17,6 +17,10 @@ import type {
   FlyStudioMachineSummary,
 } from "./types";
 import {
+  getSystemSettingValue,
+  SYSTEM_SETTING_KEYS,
+} from "../../SystemSettingsService";
+import {
   isRecordOfStrings,
   parseBooleanEnv,
   parseIntOrNull,
@@ -28,6 +32,7 @@ import {
 
 const STUDIO_ACCESS_TOKEN_ENV_KEY = "STUDIO_ACCESS_TOKEN";
 const STUDIO_ACCESS_TOKEN_METADATA_KEY = "vivd_studio_access_token";
+const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 type MachineReconcileNeeds = {
   image: boolean;
@@ -197,9 +202,31 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     });
   }
 
-  private async getDesiredImage(): Promise<string> {
-    const configured = process.env.FLY_STUDIO_IMAGE;
-    if (configured && configured.trim().length > 0) return configured;
+  async getDesiredImage(): Promise<string> {
+    const configured = process.env.FLY_STUDIO_IMAGE?.trim();
+    if (configured) return configured;
+
+    const databaseUrl = process.env.DATABASE_URL?.trim();
+    if (databaseUrl) {
+      try {
+        const storedTagRaw = await getSystemSettingValue(
+          SYSTEM_SETTING_KEYS.studioMachineImageTagOverride,
+        );
+        const storedTag = storedTagRaw?.trim() || "";
+        if (storedTag && STUDIO_IMAGE_TAG_PATTERN.test(storedTag)) {
+          let imageBase = "ghcr.io/vivd-studio/vivd-studio";
+          try {
+            imageBase = normalizeGhcrRepository(this.studioImageRepository).imageBase;
+          } catch {
+            // Ignore invalid repo; keep hardcoded fallback base.
+          }
+          return `${imageBase}:${storedTag}`;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[FlyMachines] Failed to load studio image override tag: ${message}`);
+      }
+    }
 
     const now = Date.now();
     const refreshMs = 300_000; // 5 minutes

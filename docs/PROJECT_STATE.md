@@ -8,6 +8,7 @@ Related checklist:
 - `docs/refactoring-day-checklist.md` - maintainability/refactoring backlog.
 
 Progress log:
+- 2026-02-18: superadmin studio machines tab now includes a studio image selector (lists semver + dev-* tags from GHCR, defaults to highest semver, and persists an override tag in DB so Fly reconcile/warmups use the selected image).
 - 2026-02-17: studio OpenCode Vertex support re-enabled — studio entrypoint + local/Fly studio-machine env handling now support `GOOGLE_CLOUD_PROJECT` with automatic `GOOGLE_APPLICATION_CREDENTIALS` default path assignment, optional `GOOGLE_APPLICATION_CREDENTIALS_JSON` file materialization, and default `VERTEX_LOCATION=global` (while keeping legacy `GOOGLE_API_KEY` auth for non-Vertex setups).
 - 2026-02-17: added an opt-in Fly+bucket integration test for shutdown sync across stop/destroy/warm-reconcile restarts (`packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts`); local runs currently fail because newly written source markers are not reaching bucket during those lifecycle transitions.
 - 2026-02-17: Fly superadmin/manual machine reconciliation now runs with bounded parallelism (worker pool) instead of strict one-by-one processing, reducing full reconcile wall-clock time on larger machine sets (`FLY_STUDIO_RECONCILER_CONCURRENCY`, default `100`).

@@ -46,3 +46,12 @@ The generator produces plain HTML (`index.html`) files by default. We also suppo
 ## GIT
 
 - DO NOT COMMIT or PUSH code. Just change and let me handle git. You can use other git commands to help you understand the codebase.
+
+## Studio Image Debugging (GHCR dev tags)
+
+- We can use the `scripts/push-studio.sh` (push-image) helper to push a `dev-*` studio image to GHCR for quick debugging without cutting a full release tag.
+  - Example: `./scripts/push-studio.sh dev-0.3.34` (or run with no args to push `dev-<gitsha>`).
+- In **Super Admin → Machines**, select the `dev-*` tag in the **Studio image** dropdown and run **Reconcile now** to roll studio machines to that image.
+- Select **Latest (auto)** to clear the pin and go back to the latest semver image.
+- If `FLY_STUDIO_IMAGE` is set in the backend environment, the selector is locked (env wins).
+- you can ask the user to help you with testing this

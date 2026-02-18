@@ -14,6 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -99,6 +106,33 @@ export function MachinesTab() {
     staleTime: 5_000,
   });
 
+  const imageOptionsQuery = trpc.superadmin.getStudioMachineImageOptions.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+
+  const setImageOverrideMutation = trpc.superadmin.setStudioMachineImageOverrideTag.useMutation({
+    onSuccess: async (data) => {
+      if (!data.updated) {
+        toast.error("Update skipped", {
+          description: ("error" in data && data.error) || "Unable to update image selection",
+        });
+        return;
+      }
+
+      toast.success("Studio image selection updated");
+      await Promise.all([
+        utils.superadmin.getStudioMachineImageOptions.invalidate(),
+        utils.superadmin.listStudioMachines.invalidate(),
+      ]);
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Update failed", {
+        description: message,
+      });
+    },
+  });
+
   const reconcileMutation = trpc.superadmin.reconcileStudioMachines.useMutation({
     onSuccess: async (data) => {
       if (!data.reconciled || !("result" in data)) {
@@ -115,9 +149,10 @@ export function MachinesTab() {
       });
       await utils.superadmin.listStudioMachines.invalidate();
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Unknown error";
       toast.error("Reconcile failed", {
-        description: err?.message || "Unknown error",
+        description: message,
       });
     },
   });
@@ -137,9 +172,10 @@ export function MachinesTab() {
       });
       await utils.superadmin.listStudioMachines.invalidate();
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Unknown error";
       toast.error("Destroy failed", {
-        description: err?.message || "Unknown error",
+        description: message,
       });
     },
     onSettled: () => {
@@ -147,9 +183,12 @@ export function MachinesTab() {
     },
   });
 
-  const machines = machinesQuery.data?.machines ?? [];
+  const machines = useMemo(() => machinesQuery.data?.machines ?? [], [machinesQuery.data?.machines]);
   const provider = machinesQuery.data?.provider ?? "unknown";
-  const desiredImage = machines[0]?.desiredImage || null;
+  const desiredImage =
+    imageOptionsQuery.data && imageOptionsQuery.data.supported
+      ? imageOptionsQuery.data.desiredImage
+      : machines[0]?.desiredImage || null;
   const listError =
     machinesQuery.data && "error" in machinesQuery.data
       ? machinesQuery.data.error
@@ -216,6 +255,63 @@ export function MachinesTab() {
     return <ChevronDown className="h-3 w-3" />;
   };
 
+  const imageOptions = imageOptionsQuery.data;
+  const imageSelectorDisabled =
+    !imageOptions?.supported ||
+    imageOptions.selectionMode === "unsupported" ||
+    imageOptions.selectionMode === "env" ||
+    setImageOverrideMutation.isPending;
+  const currentImageSelectorValue =
+    imageOptions?.supported && imageOptions.selectionMode === "pinned" && imageOptions.overrideTag
+      ? imageOptions.overrideTag
+      : imageOptions?.supported && imageOptions.selectionMode === "env"
+        ? "__env__"
+        : "__latest__";
+
+  const selectorItems = useMemo(() => {
+    if (!imageOptions?.supported) return [];
+
+    const items: Array<{ value: string; label: string; description?: string }> = [];
+
+    const latestLabel = "Latest (auto)";
+    const latestDescription = imageOptions.latestImage
+      ? `Resolves to ${imageOptions.latestImage}`
+      : "Resolves from GHCR semver tags";
+    items.push({ value: "__latest__", label: latestLabel, description: latestDescription });
+
+    if (imageOptions.selectionMode === "env" && imageOptions.envOverrideImage) {
+      items.push({
+        value: "__env__",
+        label: "Locked (env)",
+        description: imageOptions.envOverrideImage,
+      });
+    }
+
+    const knownTags = new Set<string>();
+    for (const entry of imageOptions.images) {
+      knownTags.add(entry.tag);
+      items.push({
+        value: entry.tag,
+        label: entry.tag,
+        description: entry.image,
+      });
+    }
+
+    if (
+      imageOptions.selectionMode === "pinned" &&
+      imageOptions.overrideTag &&
+      !knownTags.has(imageOptions.overrideTag)
+    ) {
+      items.splice(1, 0, {
+        value: imageOptions.overrideTag,
+        label: imageOptions.overrideTag,
+        description: "Pinned tag (not in fetched list)",
+      });
+    }
+
+    return items;
+  }, [imageOptions]);
+
   return (
     <>
       <Card>
@@ -249,13 +345,77 @@ export function MachinesTab() {
               </Button>
             </div>
           </div>
-          <div className="text-sm text-muted-foreground mt-2">
-            Provider: <code>{provider}</code>
-            {desiredImage ? (
-              <>
-                <span className="mx-2">•</span>
-                Desired image: <code className="break-all">{desiredImage}</code>
-              </>
+          <div className="mt-2 space-y-2">
+            <div className="text-sm text-muted-foreground">
+              Provider: <code>{provider}</code>
+              {desiredImage ? (
+                <>
+                  <span className="mx-2">•</span>
+                  Desired image: <code className="break-all">{desiredImage}</code>
+                </>
+              ) : null}
+            </div>
+
+            {imageOptions?.supported ? (
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Studio image:</span>
+                  <Select
+                    value={currentImageSelectorValue}
+                    onValueChange={(value) => {
+                      if (value === "__env__") return;
+                      if (value === "__latest__") {
+                        setImageOverrideMutation.mutate({ tag: null });
+                        return;
+                      }
+                      setImageOverrideMutation.mutate({ tag: value });
+                    }}
+                    disabled={imageSelectorDisabled}
+                  >
+                    <SelectTrigger className="w-[360px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectorItems.map((item) => (
+                        <SelectItem
+                          key={item.value}
+                          value={item.value}
+                          disabled={item.value === "__env__"}
+                        >
+                          <div className="flex flex-col">
+                            <span>{item.label}</span>
+                            {item.description ? (
+                              <span className="text-xs text-muted-foreground break-all">
+                                {item.description}
+                              </span>
+                            ) : null}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {setImageOverrideMutation.isPending ? (
+                    <span className="text-xs text-muted-foreground">Updating…</span>
+                  ) : null}
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  Latest resolves to the highest semver tag in{" "}
+                  <code className="break-all">{imageOptions.repository}</code> (dev-* tags are also listed).
+                  {imageOptions.error ? (
+                    <span className="text-red-500">
+                      {" "}
+                      Failed to fetch tags: {imageOptions.error}
+                    </span>
+                  ) : null}
+                  {imageOptions.selectionMode === "env" && imageOptions.envOverrideImage ? (
+                    <span>
+                      {" "}
+                      Selector is locked because <code>FLY_STUDIO_IMAGE</code> is set.
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             ) : null}
           </div>
         </CardHeader>

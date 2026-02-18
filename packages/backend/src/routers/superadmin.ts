@@ -15,7 +15,16 @@ import { limitsService } from "../services/LimitsService";
 import { usageService } from "../services/UsageService";
 import { domainService, validateOrganizationSlug } from "../services/DomainService";
 import { studioMachineProvider } from "../services/studioMachines";
+import {
+  getSystemSettingValue,
+  setSystemSettingValue,
+  SYSTEM_SETTING_KEYS,
+} from "../services/SystemSettingsService";
 import type { FlyStudioMachineProvider } from "../services/studioMachines/fly";
+import {
+  listStudioImagesFromGhcr,
+  normalizeGhcrRepository,
+} from "../services/studioMachines/fly/ghcr";
 
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
@@ -74,6 +83,22 @@ const authCreateUserResponseSchema = z
   })
   .passthrough();
 
+function normalizeStudioImageRepoConfigured(): string {
+  const configured = process.env.FLY_STUDIO_IMAGE_REPO?.trim();
+  if (configured) return configured;
+  return "ghcr.io/vivd-studio/vivd-studio";
+}
+
+function fallbackStudioImageBase(repo: string): string {
+  try {
+    return normalizeGhcrRepository(repo).imageBase;
+  } catch {
+    return "ghcr.io/vivd-studio/vivd-studio";
+  }
+}
+
+const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+
 export const superAdminRouter = router({
   listStudioMachines: superAdminProcedure.query(async () => {
     if (studioMachineProvider.kind !== "fly") {
@@ -99,6 +124,146 @@ export const superAdminRouter = router({
       };
     }
   }),
+
+  getStudioMachineImageOptions: superAdminProcedure.query(async () => {
+    const provider = studioMachineProvider.kind;
+    if (provider !== "fly") {
+      return {
+        provider,
+        supported: false,
+        selectionMode: "unsupported" as const,
+        repository: null as string | null,
+        imageBase: null as string | null,
+        envOverrideImage: null as string | null,
+        overrideTag: null as string | null,
+        desiredImage: null as string | null,
+        latestImage: null as string | null,
+        images: [] as Array<{ tag: string; kind: "semver" | "dev"; version: string; image: string }>,
+        error: null as string | null,
+      };
+    }
+
+    const repository = normalizeStudioImageRepoConfigured();
+    const envOverrideImageRaw = process.env.FLY_STUDIO_IMAGE?.trim();
+    const envOverrideImage =
+      envOverrideImageRaw && envOverrideImageRaw.length > 0 ? envOverrideImageRaw : null;
+
+    let overrideTag: string | null = null;
+    try {
+      const stored = await getSystemSettingValue(
+        SYSTEM_SETTING_KEYS.studioMachineImageTagOverride,
+      );
+      const trimmed = typeof stored === "string" ? stored.trim() : "";
+      overrideTag =
+        trimmed.length > 0 && STUDIO_IMAGE_TAG_PATTERN.test(trimmed) ? trimmed : null;
+    } catch (err) {
+      console.warn(
+        `[SuperAdmin] Failed to load studio image override tag: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    const fallbackImageBase = fallbackStudioImageBase(repository);
+    let imageBase: string | null = fallbackImageBase;
+    let images: Array<{ tag: string; kind: "semver" | "dev"; version: string; image: string }> = [];
+    let latestImage: string | null = null;
+    let ghcrError: string | null = null;
+
+    try {
+      const listed = await listStudioImagesFromGhcr({
+        repository,
+        timeoutMs: 10_000,
+        semverLimit: 50,
+        devLimit: 50,
+      });
+      imageBase = listed.imageBase;
+      images = listed.images;
+      latestImage = listed.images.find((image) => image.kind === "semver")?.image ?? null;
+    } catch (err) {
+      ghcrError = err instanceof Error ? err.message : String(err);
+    }
+
+    const desiredImageSource = envOverrideImage
+      ? ("env" as const)
+      : overrideTag
+        ? ("override" as const)
+        : latestImage
+          ? ("ghcr" as const)
+          : ("fallback" as const);
+
+    const desiredImage =
+      envOverrideImage ||
+      (overrideTag
+        ? `${imageBase ?? fallbackImageBase}:${overrideTag}`
+        : latestImage || (await (studioMachineProvider as FlyStudioMachineProvider).getDesiredImage()));
+
+    const selectionMode = envOverrideImage
+      ? ("env" as const)
+      : overrideTag
+        ? ("pinned" as const)
+        : ("latest" as const);
+
+    return {
+      provider,
+      supported: true,
+      selectionMode,
+      repository,
+      imageBase: imageBase ?? fallbackImageBase,
+      envOverrideImage,
+      overrideTag,
+      desiredImage,
+      desiredImageSource,
+      latestImage,
+      images,
+      error: ghcrError,
+    };
+  }),
+
+  setStudioMachineImageOverrideTag: superAdminProcedure
+    .input(
+      z.object({
+        tag: z
+          .string()
+          .trim()
+          .min(1)
+          .max(128)
+          .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/, "Invalid image tag")
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (studioMachineProvider.kind !== "fly") {
+        return {
+          provider: studioMachineProvider.kind,
+          updated: false,
+          error: "Studio machine provider is not Fly",
+        };
+      }
+
+      const envOverrideImageRaw = process.env.FLY_STUDIO_IMAGE?.trim();
+      const envOverrideImage =
+        envOverrideImageRaw && envOverrideImageRaw.length > 0 ? envOverrideImageRaw : null;
+      if (envOverrideImage) {
+        return {
+          provider: studioMachineProvider.kind,
+          updated: false,
+          error:
+            "FLY_STUDIO_IMAGE is set in the backend environment; clear it to use the image selector.",
+        };
+      }
+
+      const tag = input.tag;
+      await setSystemSettingValue(
+        SYSTEM_SETTING_KEYS.studioMachineImageTagOverride,
+        tag,
+      );
+
+      return {
+        provider: studioMachineProvider.kind,
+        updated: true,
+      };
+    }),
 
   reconcileStudioMachines: superAdminProcedure.mutation(async () => {
     if (studioMachineProvider.kind !== "fly") {

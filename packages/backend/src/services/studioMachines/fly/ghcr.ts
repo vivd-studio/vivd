@@ -159,3 +159,151 @@ export async function resolveLatestSemverImageFromGhcr(options: {
   return `${imageBase}:${latestTag}`;
 }
 
+export type GhcrStudioImage = {
+  tag: string;
+  kind: "semver" | "dev";
+  version: string;
+  image: string;
+};
+
+export async function listStudioImagesFromGhcr(options: {
+  repository: string;
+  timeoutMs: number;
+  semverLimit?: number;
+  devLimit?: number;
+}): Promise<{ imageBase: string; images: GhcrStudioImage[] }> {
+  const { ownerRepo, imageBase } = normalizeGhcrRepository(options.repository);
+  const token = await fetchGhcrPullToken({
+    ownerRepo,
+    timeoutMs: options.timeoutMs,
+  });
+  const tags = await fetchGhcrTags({
+    ownerRepo,
+    token,
+    timeoutMs: options.timeoutMs,
+  });
+
+  const byVersion = new Map<
+    string,
+    { version: Semver; tagWithV?: string; tagNoV?: string }
+  >();
+
+  for (const tag of tags) {
+    const parsed = parseSemverTag(tag);
+    if (!parsed) continue;
+    const entry = byVersion.get(parsed.normalized) || { version: parsed.version };
+    if (tag.startsWith("v")) {
+      entry.tagWithV = tag;
+    } else {
+      entry.tagNoV = tag;
+    }
+    byVersion.set(parsed.normalized, entry);
+  }
+
+  const candidates = Array.from(byVersion.entries()).flatMap(([normalized, entry]) => {
+    const tag = entry.tagNoV || entry.tagWithV;
+    if (!tag) return [];
+    return [{ normalized, version: entry.version, tag }];
+  });
+
+  candidates.sort((a, b) => compareSemver(b.version, a.version));
+
+  const semverLimit =
+    typeof options.semverLimit === "number" && Number.isFinite(options.semverLimit)
+      ? Math.max(0, Math.floor(options.semverLimit))
+      : null;
+  const limited =
+    semverLimit === null
+      ? candidates
+      : semverLimit > 0
+        ? candidates.slice(0, semverLimit)
+        : [];
+
+  const semverImages: GhcrStudioImage[] = limited.map((candidate) => ({
+    tag: candidate.tag,
+    kind: "semver",
+    version: candidate.normalized,
+    image: `${imageBase}:${candidate.tag}`,
+  }));
+
+  const devTags = tags.filter((tag) => tag.startsWith("dev-"));
+
+  const devSemverByVersion = new Map<
+    string,
+    { version: Semver; tagWithV?: string; tagNoV?: string }
+  >();
+
+  for (const tag of devTags) {
+    const parsed = parseSemverTag(tag.slice("dev-".length));
+    if (!parsed) continue;
+    const entry = devSemverByVersion.get(parsed.normalized) || { version: parsed.version };
+    const suffix = tag.slice("dev-".length);
+    if (suffix.startsWith("v")) {
+      entry.tagWithV = tag;
+    } else {
+      entry.tagNoV = tag;
+    }
+    devSemverByVersion.set(parsed.normalized, entry);
+  }
+
+  const devSemverCandidates = Array.from(devSemverByVersion.entries()).flatMap(
+    ([normalized, entry]) => {
+      const tag = entry.tagNoV || entry.tagWithV;
+      if (!tag) return [];
+      return [{ normalized, version: entry.version, tag }];
+    },
+  );
+  devSemverCandidates.sort((a, b) => compareSemver(b.version, a.version));
+
+  const devOtherCandidates = devTags
+    .filter((tag) => !parseSemverTag(tag.slice("dev-".length)))
+    .sort((a, b) => b.localeCompare(a))
+    .map((tag) => ({ tag, version: tag.slice("dev-".length) || "dev" }));
+
+  const devCandidates = [
+    ...devSemverCandidates.map((candidate) => ({
+      tag: candidate.tag,
+      version: candidate.normalized,
+    })),
+    ...devOtherCandidates,
+  ];
+
+  const devLimit =
+    typeof options.devLimit === "number" && Number.isFinite(options.devLimit)
+      ? Math.max(0, Math.floor(options.devLimit))
+      : 50;
+  const devLimited = devLimit > 0 ? devCandidates.slice(0, devLimit) : [];
+
+  const devImages: GhcrStudioImage[] = devLimited.map((candidate) => ({
+    tag: candidate.tag,
+    kind: "dev",
+    version: candidate.version,
+    image: `${imageBase}:${candidate.tag}`,
+  }));
+
+  return { imageBase, images: [...semverImages, ...devImages] };
+}
+
+export async function listSemverImagesFromGhcr(options: {
+  repository: string;
+  timeoutMs: number;
+  limit?: number;
+}): Promise<{ imageBase: string; images: Array<Omit<GhcrStudioImage, "kind">> }> {
+  const listed = await listStudioImagesFromGhcr({
+    repository: options.repository,
+    timeoutMs: options.timeoutMs,
+    semverLimit: options.limit,
+    devLimit: 0,
+  });
+
+  return {
+    imageBase: listed.imageBase,
+    images: listed.images
+      .filter((image) => image.kind === "semver")
+      .map((image) => ({
+        tag: image.tag,
+        version: image.version,
+        image: image.image,
+      })),
+  };
+}
