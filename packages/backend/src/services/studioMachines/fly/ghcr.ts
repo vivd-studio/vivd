@@ -23,36 +23,8 @@ function compareSemver(a: Semver, b: Semver): number {
   return a.patch - b.patch;
 }
 
-function pickLatestSemverTag(tags: string[]): string | null {
-  const byVersion = new Map<
-    string,
-    { version: Semver; tagWithV?: string; tagNoV?: string }
-  >();
-
-  for (const tag of tags) {
-    const parsed = parseSemverTag(tag);
-    if (!parsed) continue;
-    const entry = byVersion.get(parsed.normalized) || { version: parsed.version };
-    if (tag.startsWith("v")) {
-      entry.tagWithV = tag;
-    } else {
-      entry.tagNoV = tag;
-    }
-    byVersion.set(parsed.normalized, entry);
-  }
-
-  let best: { version: Semver; tag: string } | null = null;
-  for (const entry of byVersion.values()) {
-    const tag = entry.tagNoV || entry.tagWithV;
-    if (!tag) continue;
-
-    if (!best || compareSemver(entry.version, best.version) > 0) {
-      best = { version: entry.version, tag };
-    }
-  }
-
-  return best?.tag || null;
-}
+const GHCR_MANIFEST_ACCEPT =
+  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json";
 
 export function normalizeGhcrRepository(input: string): { ownerRepo: string; imageBase: string } {
   let value = input.trim();
@@ -76,24 +48,32 @@ export function normalizeGhcrRepository(input: string): { ownerRepo: string; ima
   return { ownerRepo: value, imageBase: `ghcr.io/${value}` };
 }
 
-async function fetchJsonWithTimeout<T>(
+async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number,
-): Promise<T> {
+): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   timeout.unref?.();
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-    return (await response.json()) as T;
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJsonWithTimeout<T>(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<T> {
+  const response = await fetchWithTimeout(url, init, timeoutMs);
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return (await response.json()) as T;
 }
 
 async function fetchGhcrPullToken(options: {
@@ -134,55 +114,11 @@ async function fetchGhcrTags(options: {
   return data.tags.filter((tag): tag is string => typeof tag === "string");
 }
 
-export async function resolveLatestSemverImageFromGhcr(options: {
-  repository: string;
-  timeoutMs: number;
-}): Promise<string> {
-  const { ownerRepo, imageBase } = normalizeGhcrRepository(options.repository);
-  const token = await fetchGhcrPullToken({
-    ownerRepo,
-    timeoutMs: options.timeoutMs,
-  });
-  const tags = await fetchGhcrTags({
-    ownerRepo,
-    token,
-    timeoutMs: options.timeoutMs,
-  });
-
-  const latestTag = pickLatestSemverTag(tags);
-  if (!latestTag) {
-    throw new Error(
-      `No semver tags found for GHCR repository ${ownerRepo} (tags=${tags.length})`,
-    );
-  }
-
-  return `${imageBase}:${latestTag}`;
-}
-
-export type GhcrStudioImage = {
+function buildSemverCandidates(tags: string[]): Array<{
+  normalized: string;
+  version: Semver;
   tag: string;
-  kind: "semver" | "dev";
-  version: string;
-  image: string;
-};
-
-export async function listStudioImagesFromGhcr(options: {
-  repository: string;
-  timeoutMs: number;
-  semverLimit?: number;
-  devLimit?: number;
-}): Promise<{ imageBase: string; images: GhcrStudioImage[] }> {
-  const { ownerRepo, imageBase } = normalizeGhcrRepository(options.repository);
-  const token = await fetchGhcrPullToken({
-    ownerRepo,
-    timeoutMs: options.timeoutMs,
-  });
-  const tags = await fetchGhcrTags({
-    ownerRepo,
-    token,
-    timeoutMs: options.timeoutMs,
-  });
-
+}> {
   const byVersion = new Map<
     string,
     { version: Semver; tagWithV?: string; tagNoV?: string }
@@ -207,25 +143,10 @@ export async function listStudioImagesFromGhcr(options: {
   });
 
   candidates.sort((a, b) => compareSemver(b.version, a.version));
+  return candidates;
+}
 
-  const semverLimit =
-    typeof options.semverLimit === "number" && Number.isFinite(options.semverLimit)
-      ? Math.max(0, Math.floor(options.semverLimit))
-      : null;
-  const limited =
-    semverLimit === null
-      ? candidates
-      : semverLimit > 0
-        ? candidates.slice(0, semverLimit)
-        : [];
-
-  const semverImages: GhcrStudioImage[] = limited.map((candidate) => ({
-    tag: candidate.tag,
-    kind: "semver",
-    version: candidate.normalized,
-    image: `${imageBase}:${candidate.tag}`,
-  }));
-
+function buildDevCandidates(tags: string[]): Array<{ tag: string; version: string }> {
   const devTags = tags.filter((tag) => tag.startsWith("dev-"));
 
   const devSemverByVersion = new Map<
@@ -260,21 +181,224 @@ export async function listStudioImagesFromGhcr(options: {
     .sort((a, b) => b.localeCompare(a))
     .map((tag) => ({ tag, version: tag.slice("dev-".length) || "dev" }));
 
-  const devCandidates = [
+  return [
     ...devSemverCandidates.map((candidate) => ({
       tag: candidate.tag,
       version: candidate.normalized,
     })),
     ...devOtherCandidates,
   ];
+}
 
-  const devLimit =
-    typeof options.devLimit === "number" && Number.isFinite(options.devLimit)
-      ? Math.max(0, Math.floor(options.devLimit))
-      : 50;
-  const devLimited = devLimit > 0 ? devCandidates.slice(0, devLimit) : [];
+function normalizeLimit(value: number | undefined, fallback: number | null): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
+}
 
-  const devImages: GhcrStudioImage[] = devLimited.map((candidate) => ({
+async function ghcrTagHasManifest(options: {
+  ownerRepo: string;
+  token: string;
+  tag: string;
+  timeoutMs: number;
+}): Promise<boolean> {
+  const manifestUrl = `https://ghcr.io/v2/${options.ownerRepo}/manifests/${encodeURIComponent(
+    options.tag,
+  )}`;
+  const headers = {
+    Authorization: `Bearer ${options.token}`,
+    Accept: GHCR_MANIFEST_ACCEPT,
+  };
+
+  try {
+    const head = await fetchWithTimeout(
+      manifestUrl,
+      {
+        method: "HEAD",
+        headers,
+      },
+      options.timeoutMs,
+    );
+    if (head.ok) return true;
+    if (head.status !== 405) return false;
+  } catch {
+    return false;
+  }
+
+  try {
+    const get = await fetchWithTimeout(
+      manifestUrl,
+      {
+        method: "GET",
+        headers,
+      },
+      options.timeoutMs,
+    );
+    void get.body?.cancel?.();
+    return get.ok;
+  } catch {
+    return false;
+  }
+}
+
+function createGhcrTagReadinessChecker(options: {
+  ownerRepo: string;
+  token: string;
+  timeoutMs: number;
+}): (tag: string) => Promise<boolean> {
+  const memo = new Map<string, Promise<boolean>>();
+  const perRequestTimeoutMs = Math.max(500, Math.min(2500, options.timeoutMs));
+
+  return async (tag: string): Promise<boolean> => {
+    const normalized = tag.trim();
+    if (!normalized) return false;
+    const existing = memo.get(normalized);
+    if (existing) return existing;
+
+    const request = ghcrTagHasManifest({
+      ownerRepo: options.ownerRepo,
+      token: options.token,
+      tag: normalized,
+      timeoutMs: perRequestTimeoutMs,
+    });
+    memo.set(normalized, request);
+    return request;
+  };
+}
+
+async function pickReadyCandidates<T extends { tag: string }>(options: {
+  candidates: T[];
+  limit: number | null;
+  batchSize?: number;
+  isReady: (tag: string) => Promise<boolean>;
+}): Promise<T[]> {
+  const target = options.limit === null ? Number.POSITIVE_INFINITY : options.limit;
+  if (target <= 0) return [];
+
+  const batchSize = Math.max(1, Math.floor(options.batchSize ?? 8));
+  const ready: T[] = [];
+
+  let cursor = 0;
+  while (cursor < options.candidates.length && ready.length < target) {
+    const batch = options.candidates.slice(cursor, cursor + batchSize);
+    const statuses = await Promise.all(
+      batch.map(async (candidate) => {
+        try {
+          return await options.isReady(candidate.tag);
+        } catch {
+          return false;
+        }
+      }),
+    );
+
+    for (let i = 0; i < batch.length; i += 1) {
+      if (!statuses[i]) continue;
+      ready.push(batch[i]!);
+      if (ready.length >= target) break;
+    }
+    cursor += batch.length;
+  }
+
+  return ready;
+}
+
+export async function resolveLatestSemverImageFromGhcr(options: {
+  repository: string;
+  timeoutMs: number;
+}): Promise<string> {
+  const { ownerRepo, imageBase } = normalizeGhcrRepository(options.repository);
+  const token = await fetchGhcrPullToken({
+    ownerRepo,
+    timeoutMs: options.timeoutMs,
+  });
+  const tags = await fetchGhcrTags({
+    ownerRepo,
+    token,
+    timeoutMs: options.timeoutMs,
+  });
+
+  const semverCandidates = buildSemverCandidates(tags);
+  if (semverCandidates.length === 0) {
+    throw new Error(
+      `No semver tags found for GHCR repository ${ownerRepo} (tags=${tags.length})`,
+    );
+  }
+
+  const isTagReady = createGhcrTagReadinessChecker({
+    ownerRepo,
+    token,
+    timeoutMs: options.timeoutMs,
+  });
+
+  const [latestReadySemver] = await pickReadyCandidates({
+    candidates: semverCandidates,
+    limit: 1,
+    isReady: isTagReady,
+  });
+
+  if (!latestReadySemver) {
+    throw new Error(
+      `No ready semver tags found for GHCR repository ${ownerRepo} (semverTags=${semverCandidates.length})`,
+    );
+  }
+
+  return `${imageBase}:${latestReadySemver.tag}`;
+}
+
+export type GhcrStudioImage = {
+  tag: string;
+  kind: "semver" | "dev";
+  version: string;
+  image: string;
+};
+
+export async function listStudioImagesFromGhcr(options: {
+  repository: string;
+  timeoutMs: number;
+  semverLimit?: number;
+  devLimit?: number;
+}): Promise<{ imageBase: string; images: GhcrStudioImage[] }> {
+  const { ownerRepo, imageBase } = normalizeGhcrRepository(options.repository);
+  const token = await fetchGhcrPullToken({
+    ownerRepo,
+    timeoutMs: options.timeoutMs,
+  });
+  const tags = await fetchGhcrTags({
+    ownerRepo,
+    token,
+    timeoutMs: options.timeoutMs,
+  });
+
+  const semverCandidates = buildSemverCandidates(tags);
+  const devCandidates = buildDevCandidates(tags);
+
+  const semverLimit = normalizeLimit(options.semverLimit, null);
+  const devLimit = normalizeLimit(options.devLimit, 50);
+
+  const isTagReady = createGhcrTagReadinessChecker({
+    ownerRepo,
+    token,
+    timeoutMs: options.timeoutMs,
+  });
+
+  const readySemverCandidates = await pickReadyCandidates({
+    candidates: semverCandidates,
+    limit: semverLimit,
+    isReady: isTagReady,
+  });
+  const readyDevCandidates = await pickReadyCandidates({
+    candidates: devCandidates,
+    limit: devLimit,
+    isReady: isTagReady,
+  });
+
+  const semverImages: GhcrStudioImage[] = readySemverCandidates.map((candidate) => ({
+    tag: candidate.tag,
+    kind: "semver",
+    version: candidate.normalized,
+    image: `${imageBase}:${candidate.tag}`,
+  }));
+
+  const devImages: GhcrStudioImage[] = readyDevCandidates.map((candidate) => ({
     tag: candidate.tag,
     kind: "dev",
     version: candidate.version,
