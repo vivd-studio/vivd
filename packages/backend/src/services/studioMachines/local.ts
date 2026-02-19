@@ -276,6 +276,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       // Avoid cross-studio port collisions in local mode (Fly machines are isolated).
       DEV_SERVER_PORT_START: String(port + 2000),
       OPENCODE_PORT_START: String(port + 3000),
+      OPENCODE_IDLE_TIMEOUT_MS: "0",
       // Prevent one studio instance from killing another instance's OpenCode processes.
       OPENCODE_KILL_ORPHANS: "0",
     };

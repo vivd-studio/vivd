@@ -13,6 +13,7 @@
 
 ## Progress Log
 
+- 2026-02-19: updated studio-machine defaults: Fly idle suspend timeout increased to 10 minutes (`FLY_STUDIO_IDLE_TIMEOUT_MS=600000` default), and OpenCode idle server cleanup disabled on studio machines by default (`OPENCODE_IDLE_TIMEOUT_MS=0` in Fly/local machine env).
 - 2026-02-19: removed `kill_timeout` from Fly machine drift detection/reconcile triggers to avoid unnecessary warm-reconcile updates; machine create/restart still sets `kill_timeout`.
 - 2026-02-18: added root-level integration test runner shortcut (`npm run test:integration`) delegating to backend integration suite for easier full integration runs from repo root.
 - 2026-02-18: backend test setup now auto-loads `.env*` files for integration runs (`packages/backend/test/setup.ts`) with backend-local-first + repo-root fallback (`.env.test.local`, `.env.test`, `.env.local`, `.env`).

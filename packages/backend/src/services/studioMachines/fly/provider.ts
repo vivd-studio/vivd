@@ -308,7 +308,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   private get idleTimeoutMs(): number {
-    return parseNonNegativeInt(process.env.FLY_STUDIO_IDLE_TIMEOUT_MS, 120_000);
+    return parseNonNegativeInt(process.env.FLY_STUDIO_IDLE_TIMEOUT_MS, 600_000);
   }
 
   private get idleCheckIntervalMs(): number {
@@ -1176,6 +1176,8 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       // Fly machines are isolated; fixed internal ports are fine.
       DEV_SERVER_PORT_START: "5100",
       OPENCODE_PORT_START: "4096",
+      // Keep OpenCode server warm for the lifetime of the studio machine.
+      OPENCODE_IDLE_TIMEOUT_MS: "0",
     };
 
     const explicitEnvKeys = new Set(Object.keys(args.env));

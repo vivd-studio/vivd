@@ -29,7 +29,14 @@ interface OpencodeServerInfo {
   directory: string;
 }
 
-const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+const DEFAULT_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+const IDLE_TIMEOUT_MS = (() => {
+  const raw = (process.env.OPENCODE_IDLE_TIMEOUT_MS || "").trim();
+  if (!raw) return DEFAULT_IDLE_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MS;
+  return parsed;
+})();
 const MAX_SERVERS = 10;
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
 const debugLog = (...args: unknown[]) => {
@@ -52,9 +59,12 @@ class OpencodeServerManager {
     if (process.env.OPENCODE_KILL_ORPHANS !== "0") {
       this.killOrphanedProcesses();
     }
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupIdleServers();
-    }, 60 * 1000);
+    if (IDLE_TIMEOUT_MS > 0) {
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupIdleServers();
+      }, 60 * 1000);
+      this.cleanupInterval.unref?.();
+    }
   }
 
   private killOrphanedProcesses(): void {
