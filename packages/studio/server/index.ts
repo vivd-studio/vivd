@@ -19,6 +19,7 @@ import { serverManager as opencodeServerManager } from "./opencode/serverManager
 import { usageReporter } from "./services/UsageReporter.js";
 import { projectTouchReporter } from "./services/ProjectTouchReporter.js";
 import { workspaceStateReporter } from "./services/WorkspaceStateReporter.js";
+import { requestBucketSync } from "./services/AgentTaskSyncService.js";
 import { validateStudioConfig } from "@vivd/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -688,9 +689,13 @@ async function startServer() {
         if (!slug) {
           return res.status(400).json({ error: "Invalid slug" });
         }
-        projectTouchReporter.touch(slug);
-
         const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
+        projectTouchReporter.touch(slug);
+        requestBucketSync("upload-dropped-file", {
+          slug,
+          relativePath,
+        });
+
         return res.json({ success: true, path: relativePath });
       } catch (error) {
         console.error("Dropped image upload error:", error);
@@ -764,6 +769,11 @@ async function startServer() {
           return res.status(400).json({ error: "Invalid slug" });
         }
         projectTouchReporter.touch(slug);
+        requestBucketSync("upload-files", {
+          slug,
+          uploadedCount: uploaded.length,
+          relativePath,
+        });
         return res.json({ success: true, uploaded });
       } catch (error) {
         console.error("Upload error:", error);

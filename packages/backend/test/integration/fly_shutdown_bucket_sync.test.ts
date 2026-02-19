@@ -281,7 +281,7 @@ async function cleanupBucketPrefixes(prefixes: string[]): Promise<void> {
   }
 }
 
-type LifecycleScenario = "stop" | "destroy" | "reconcile";
+type LifecycleScenario = "stop" | "destroy" | "reconcile" | "trigger";
 
 async function runScenario(scenario: LifecycleScenario): Promise<void> {
   if (!S3_CLIENT || !STORAGE_CONFIG) {
@@ -383,7 +383,19 @@ async function runScenario(scenario: LifecycleScenario): Promise<void> {
     expect(preLifecycleOpencodeRead.stdout).toBe(opencodeMarker);
     log("marker write verified before lifecycle action");
 
-    if (scenario === "stop") {
+    if (scenario === "trigger") {
+      log("triggering immediate sync request");
+      await executeMachineCommand({
+        machineId,
+        timeoutSeconds: 60,
+        command: [
+          "/bin/sh",
+          "-lc",
+          "touch \"${VIVD_SYNC_TRIGGER_FILE:-/tmp/vivd-sync.trigger}\"",
+        ],
+      });
+      log("sync trigger file touched");
+    } else if (scenario === "stop") {
       log("triggering stop");
       await provider.stop(organizationId, projectSlug, version);
       await waitForMachineState({
@@ -450,6 +462,11 @@ async function runScenario(scenario: LifecycleScenario): Promise<void> {
       timeoutMs: 120_000,
     });
     log("bucket markers found");
+
+    if (scenario === "trigger") {
+      log("trigger-driven sync verified");
+      return;
+    }
 
     log("starting machine again for hydration check");
     await provider.ensureRunning({
@@ -524,6 +541,14 @@ describe.sequential("Fly shutdown sync to bucket", () => {
     { timeout: 600_000 },
     async () => {
       await runScenario("reconcile");
+    },
+  );
+
+  it.skipIf(!SHOULD_RUN)(
+    "syncs source + opencode data when sync trigger file is touched",
+    { timeout: 600_000 },
+    async () => {
+      await runScenario("trigger");
     },
   );
 

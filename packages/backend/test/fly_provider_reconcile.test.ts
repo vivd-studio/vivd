@@ -13,6 +13,7 @@ function buildMachine(options: {
     state: "stopped",
     config: {
       image: options.image,
+      kill_timeout: 180,
       env: { STUDIO_ACCESS_TOKEN: accessToken },
       guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
       services: [{ autostop: "suspend", autostart: false }],

@@ -7,6 +7,7 @@ import ignore from "ignore";
 import sharp from "sharp";
 import { WEBP_QUALITY } from "../config.js";
 import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
+import { requestBucketSync } from "../services/AgentTaskSyncService.js";
 
 function safeJoin(root: string, targetPath: string): string {
   const resolvedRoot = path.resolve(root);
@@ -392,6 +393,11 @@ export const assetsRouter = router({
       }
 
       projectTouchReporter.touch(input.slug);
+      requestBucketSync("asset-deleted", {
+        slug: input.slug,
+        version: input.version,
+        relativePath,
+      });
       return { success: true, deleted: relativePath };
     }),
 
@@ -433,6 +439,11 @@ export const assetsRouter = router({
       fs.mkdirSync(fullPath, { recursive: true });
 
       projectTouchReporter.touch(input.slug);
+      requestBucketSync("folder-created", {
+        slug: input.slug,
+        version: input.version,
+        path: path.join(relativePath, sanitizedName),
+      });
       return {
         success: true,
         path: path.join(relativePath, sanitizedName),
@@ -533,6 +544,11 @@ export const assetsRouter = router({
 
       fs.writeFileSync(targetPath, content, "utf-8");
       projectTouchReporter.touch(input.slug);
+      requestBucketSync("text-file-saved", {
+        slug: input.slug,
+        version: input.version,
+        relativePath,
+      });
       return { success: true, path: relativePath };
     }),
 
@@ -592,6 +608,12 @@ export const assetsRouter = router({
 
       fs.renameSync(sourceFullPath, destFullPath);
       projectTouchReporter.touch(input.slug);
+      requestBucketSync("asset-moved", {
+        slug: input.slug,
+        version: input.version,
+        sourcePath,
+        destinationPath,
+      });
       return { success: true, oldPath: sourcePath, newPath: destinationPath };
     }),
 
@@ -802,6 +824,13 @@ export const assetsRouter = router({
 
         const newRelativePath = path.join(originalDir, newFileName);
         console.log(`[AI Edit] Saved edited image to: ${newRelativePath}`);
+        projectTouchReporter.touch(input.slug);
+        requestBucketSync("image-ai-edited", {
+          slug: input.slug,
+          version: input.version,
+          originalPath: relativePath,
+          newPath: newRelativePath,
+        });
 
         return {
           success: true,
@@ -926,6 +955,12 @@ export const assetsRouter = router({
           ? path.posix.join(normalizedTarget, newFileName)
           : newFileName;
         console.log(`[AI Create] Saved new image to: ${newRelativePath}`);
+        projectTouchReporter.touch(input.slug);
+        requestBucketSync("image-ai-created", {
+          slug: input.slug,
+          version: input.version,
+          path: newRelativePath,
+        });
 
         return {
           success: true,

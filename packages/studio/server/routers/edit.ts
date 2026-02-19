@@ -17,6 +17,7 @@ import {
   hasI18nPatches,
   extractI18nPatches,
 } from "../services/I18nJsonPatchService.js";
+import { requestBucketSync } from "../services/AgentTaskSyncService.js";
 
 export const editRouter = router({
   applyPatches: publicProcedure
@@ -109,6 +110,13 @@ export const editRouter = router({
         }
       }
 
+      if (modifiedFiles.length > 0) {
+        requestBucketSync("edit-router-patches", {
+          file: input.file,
+          modifiedFiles: [...new Set(modifiedFiles)],
+        });
+      }
+
       return {
         success: errors.length === 0,
         modifiedFiles: [...new Set(modifiedFiles)],
@@ -173,6 +181,10 @@ export const editRouter = router({
 
         if (result.applied > 0) {
           await fs.writeFile(filePath, result.html, "utf-8");
+          requestBucketSync("edit-router-html-patches", {
+            file: input.file,
+            applied: result.applied,
+          });
         }
 
         return {

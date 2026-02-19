@@ -359,6 +359,10 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     };
   }
 
+  private get desiredKillTimeoutSeconds(): number {
+    return parsePositiveInt(process.env.FLY_STUDIO_KILL_TIMEOUT_SECONDS, 180);
+  }
+
   private needsGuestUpdate(guest: FlyMachineConfig["guest"] | undefined): boolean {
     if (!guest) return true;
     const desiredGuest = this.desiredGuest;
@@ -451,12 +455,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
   }
 
   private hasMachineDrift(needs: MachineReconcileNeeds): boolean {
-    return (
-      needs.image ||
-      needs.services ||
-      needs.guest ||
-      needs.accessToken
-    );
+    return needs.image || needs.services || needs.guest || needs.accessToken;
   }
 
   private getMachineDriftLabels(needs: MachineReconcileNeeds): string[] {
@@ -1190,7 +1189,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
     // Optional passthrough for local-first testing (keeps config explicit).
     const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH ||
-      "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,VIVD_S3_OPENCODE_STORAGE_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME")
+      "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,VIVD_S3_OPENCODE_STORAGE_URI,VIVD_S3_SYNC_INTERVAL_SECONDS,VIVD_SYNC_TRIGGER_FILE,VIVD_SYNC_PAUSE_FILE,VIVD_SYNC_PAUSE_MAX_AGE_SECONDS,VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS,VIVD_SHUTDOWN_CHILD_WAIT_SECONDS,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME")
       .split(",")
       .map((k) => k.trim())
       .filter(Boolean);
@@ -1203,6 +1202,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
 
     if (env.GOOGLE_CLOUD_PROJECT && !env.VERTEX_LOCATION) {
       env.VERTEX_LOCATION = "global";
+    }
+
+    if (!env.VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS) {
+      env.VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS = String(
+        Math.max(5, this.desiredKillTimeoutSeconds - 5),
+      );
     }
 
     return env;
@@ -1314,6 +1319,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       ...(current.config || {}),
       image: desiredImage,
       guest: this.desiredGuest,
+      kill_timeout: this.desiredKillTimeoutSeconds,
       env,
       services: this.normalizeServicesForVivd(current.config?.services, port),
       metadata,
@@ -1373,6 +1379,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           config: {
             image: desiredImage,
             guest: this.desiredGuest,
+            kill_timeout: this.desiredKillTimeoutSeconds,
             env,
             services: [
               {

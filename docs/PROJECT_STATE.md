@@ -7,13 +7,20 @@
 - Architecture split is in place: control plane (`packages/backend`) and isolated studio runtime (`packages/studio`).
 - Bucket-first runtime is active for source, preview, and publish flows.
 - Fly studio orchestration is production-ready for core lifecycle paths (start, suspend, reconcile, image rollout).
-- OpenCode revert/restore reliability is restored by using OpenCode default storage layout and syncing only `opencode/storage`.
+- OpenCode revert/restore reliability is currently being debugged with trigger-driven (non-periodic) OpenCode sync for `opencode.db*` + `storage/session_diff` on Fly.
 - Superadmin machine operations are live (machine list/reconcile/destroy + image selector with semver and `dev-*` tags).
 - Multi-org auth and tenant scoping are implemented across core control-plane paths.
 
 ## Progress Log
 
+- 2026-02-19: removed `kill_timeout` from Fly machine drift detection/reconcile triggers to avoid unnecessary warm-reconcile updates; machine create/restart still sets `kill_timeout`.
+- 2026-02-18: added root-level integration test runner shortcut (`npm run test:integration`) delegating to backend integration suite for easier full integration runs from repo root.
+- 2026-02-18: backend test setup now auto-loads `.env*` files for integration runs (`packages/backend/test/setup.ts`) with backend-local-first + repo-root fallback (`.env.test.local`, `.env.test`, `.env.local`, `.env`).
+- 2026-02-18: added opt-in Fly integration coverage for OpenCode rehydrate/revert flow (`packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts`) validating edit persistence across destroy/recreate and post-hydrate revert behavior.
+- 2026-02-18: added bucket-sync trigger requests for non-agent studio edits (text saves, asset create/move/delete, uploads/dropped files, AI image edits/creates, and project patch/discard flows) so source/opencode sync runs after manual edits too.
+- 2026-02-18: switched Fly studio bucket sync loop to trigger-only (no periodic interval); current test mode syncs/hydrates OpenCode `opencode.db*` plus `storage/session_diff` after agent-task triggers and on shutdown/final exit.
 - 2026-02-18: OpenCode object-storage sync narrowed to `opencode/storage` only (Fly entrypoint + local provider), with legacy read compatibility for `opencode/opencode/storage` and cleanup of stale non-storage OpenCode objects.
+- 2026-02-18: hardened studio bucket sync lifecycle: Fly machines now reconcile `kill_timeout` (configurable via `FLY_STUDIO_KILL_TIMEOUT_SECONDS`, default `180s`), studio entrypoint sync loop now supports immediate trigger-driven sync (`/tmp/vivd-sync.trigger`) and parallelized shutdown/final sync with budget warnings (`VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS`), and agent completion now requests an immediate bucket sync. Added coverage in `packages/backend/test/fly_provider_reconcile.test.ts`, `packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts` (new trigger scenario), and `packages/studio/server/opencode/runTask.bucketSync.test.ts`.
 - 2026-02-18: added `scripts/delete-ghcr-dev-images.sh` helper to list/delete GHCR container versions with `dev-` tags (dry-run default, `--apply` to execute).
 - 2026-02-18: fixed Fly revert/session-diff tracking by aligning studio OpenCode storage path with OpenCode default storage and removing forced `XDG_DATA_HOME` overrides.
 - 2026-02-18: superadmin machine image selector shipped (semver + `dev-*` tags from GHCR with persisted override).
@@ -23,7 +30,7 @@
 
 ## Current Priorities
 
-- [ ] Close machine lifecycle reliability gaps (especially failing stop/destroy/warm-reconcile sync integration case).
+- [ ] Validate lifecycle sync hardening in real Fly runs (stop/destroy/warm-reconcile + trigger-driven sync under larger workspace/opencode payloads).
 - [ ] Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
 - [ ] Complete email-based auth flows (invite-only signup, self-service password reset, SES integration).
 - [ ] Add missing control-plane hardening (audit log, monitoring, rate limiting, abuse controls).
@@ -51,7 +58,7 @@
 
 ## Operational Notes
 
-- OpenCode bucket sync target should be `tenants/<tenant>/projects/<slug>/opencode/storage/`.
+- OpenCode bucket sync (current test mode) writes `opencode.db*` plus `storage/session_diff` under `tenants/<tenant>/projects/<slug>/opencode/`; `snapshot/` and auth/cache/log artifacts remain excluded.
 - Legacy fallback is still supported for hydrate from `.../opencode/opencode/storage/` to avoid data loss during transition.
 - Dev image workflow:
   - Push: `./scripts/push-studio.sh [dev-tag]`
@@ -65,4 +72,4 @@
 - `docs/dokploy-traefik-wildcard-setup.md`
 - `docs/PROJECT_STATE_ARCHIVE.md`
 
-Last updated: 2026-02-18
+Last updated: 2026-02-19

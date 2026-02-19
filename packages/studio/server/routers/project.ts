@@ -36,6 +36,7 @@ import { withBucketSyncPaused } from "../services/SyncPauseService.js";
 import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
 import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
 import { workspaceStateReporter } from "../services/WorkspaceStateReporter.js";
+import { requestBucketSync } from "../services/AgentTaskSyncService.js";
 import {
   getBackendUrl,
   getConnectedOrganizationId,
@@ -438,6 +439,12 @@ export const projectRouter = router({
 
       if (!noChanges) {
         projectTouchReporter.touch(input.slug);
+        requestBucketSync("project-html-patches", {
+          slug: input.slug,
+          version: input.version,
+          filePath: input.filePath,
+          applied: totalApplied,
+        });
 
         // Keep bucket-backed source artifacts fresh after in-studio saves,
         // even before an explicit snapshot commit.
@@ -625,6 +632,10 @@ export const projectRouter = router({
 
       await ctx.workspace.discardChanges();
       projectTouchReporter.touch(input.slug);
+      requestBucketSync("project-discard-changes", {
+        slug: input.slug,
+        version: input.version,
+      });
 
       return {
         success: true,
