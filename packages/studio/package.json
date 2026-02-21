@@ -10,7 +10,7 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite --config client/vite.config.ts",
     "build": "npm run build:server && npm run build:client",
-    "build:server": "tsup server/index.ts --format esm --outDir dist",
+    "build:server": "tsup --config tsup.server.config.ts",
     "build:client": "vite build --config client/vite.config.ts",
     "start": "node dist/index.js",
     "test": "vitest",

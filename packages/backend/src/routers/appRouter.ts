@@ -6,6 +6,7 @@ import { usageRouter } from "./usage";
 import { studioApiRouter } from "./studioApi";
 import { superAdminRouter } from "./superadmin";
 import { organizationRouter } from "./organization";
+import { pluginsRouter } from "./plugins";
 
 export const appRouter = router({
   user: userRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   studioApi: studioApiRouter,
   organization: organizationRouter,
   superadmin: superAdminRouter,
+  plugins: pluginsRouter,
 });
 
 export type AppRouter = typeof appRouter;

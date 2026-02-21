@@ -4,6 +4,12 @@ import os from "node:os";
 import * as path from "node:path";
 import fs from "node:fs";
 import treeKill from "tree-kill";
+import { buildStudioOpencodeConfigContent } from "./configPolicy.js";
+import {
+  buildStudioOpencodeToolSource,
+  getStudioOpencodeToolDefinitions,
+  resolveStudioOpencodeToolPolicy,
+} from "./toolRegistry.js";
 
 const hasPsCommand = (() => {
   try {
@@ -47,20 +53,6 @@ const debugLog = (...args: unknown[]) => {
   }
 };
 
-const VIVD_OPENCODE_TEST_TOOL = `import { tool } from "@opencode-ai/plugin";
-
-export default tool({
-  description: "Vivd test tool (returns a static string).",
-  args: {},
-  async execute(_args, context) {
-    const org = (process.env.VIVD_TENANT_ID || "").trim() || "unknown";
-    const project = (process.env.VIVD_PROJECT_SLUG || "").trim() || "unknown";
-
-    return \`vivd_test: ok (org=\${org}, project=\${project}, directory=\${context.directory})\`;
-  },
-});
-`;
-
 function resolveOpencodeConfigDir(): string {
   const xdgConfigHome = (process.env.XDG_CONFIG_HOME || "").trim();
   if (xdgConfigHome) return path.join(xdgConfigHome, "opencode");
@@ -89,8 +81,32 @@ async function ensureVivdOpencodeToolsInstalled(): Promise<void> {
   ensureVivdOpencodeToolsPromise = (async () => {
     const toolsDir = resolveOpencodeToolsDir();
     await fs.promises.mkdir(toolsDir, { recursive: true });
+    const expectedFiles = new Set<string>();
+    for (const definition of getStudioOpencodeToolDefinitions()) {
+      expectedFiles.add(definition.sourceFile);
+      const source = buildStudioOpencodeToolSource(definition, process.env);
+      await ensureFileContents(
+        path.join(toolsDir, definition.sourceFile),
+        source,
+      );
+    }
 
-    await ensureFileContents(path.join(toolsDir, "vivd_test.ts"), VIVD_OPENCODE_TEST_TOOL);
+    const legacyManagedFiles = new Set([
+      "vivd_test.ts",
+      "vivd_plugins_contact_ensure.ts",
+      "vivd_plugins_contact_snippet.ts",
+    ]);
+    const entries = await fs.promises.readdir(toolsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".ts")) continue;
+      if (!entry.name.startsWith("vivd_")) continue;
+
+      if (expectedFiles.has(entry.name)) continue;
+      if (!legacyManagedFiles.has(entry.name)) continue;
+
+      await fs.promises.rm(path.join(toolsDir, entry.name), { force: true });
+    }
   })().catch((error) => {
     ensureVivdOpencodeToolsPromise = null;
     throw error;
@@ -413,6 +429,13 @@ class OpencodeServerManager {
     const workspaceDir = this.normalizeProjectDir(projectDir);
 
     const url = `http://127.0.0.1:${port}`;
+    const toolPolicy = resolveStudioOpencodeToolPolicy(process.env);
+    const opencodeConfigContent = buildStudioOpencodeConfigContent(
+      process.env.OPENCODE_CONFIG_CONTENT,
+      {
+        toolEnablement: toolPolicy.enabledByName,
+      },
+    );
 
     try {
       await ensureVivdOpencodeToolsInstalled();
@@ -425,6 +448,7 @@ class OpencodeServerManager {
       env: {
         ...process.env,
         OPENCODE_PROJECT_DIR: workspaceDir,
+        OPENCODE_CONFIG_CONTENT: opencodeConfigContent,
       },
       stdio: debugEnabled ? "inherit" : "ignore",
       detached: true,

@@ -92,6 +92,13 @@
       "when": 1771401228141,
       "tag": "0012_system_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1771687908012,
+      "tag": "0013_abnormal_miracleman",
+      "breakpoints": true
     }
   ]
 }

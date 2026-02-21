@@ -102,13 +102,14 @@ Token recommendation:
 
 ### Endpoint shape
 
-MVP uses the existing backend base path:
+MVP uses a dedicated public API host:
 
-- `POST /vivd-studio/api/plugins/contact/v1/submit`
+- `POST https://api.vivd.studio/plugins/contact/v1/submit`
 
-Rationale: it’s already routed to the backend by Caddy on both:
-- the default server, and
-- published-site domain snippets.
+Rationale:
+- clean separation between public website plugin traffic and internal control-plane APIs
+- internal authenticated APIs remain under `/vivd-studio/api/trpc/...`
+- host can be overridden per environment via `VIVD_PUBLIC_PLUGIN_API_BASE_URL`
 
 ### Supported request types
 
@@ -154,6 +155,17 @@ Storage behavior:
 
 - Always store the submission in DB (inbox is the baseline UX).
 - Optional follow-ups: email delivery, webhooks, integrations.
+
+## Email Delivery Abstraction (Required)
+
+For contact-form and future plugin notifications, use a provider-agnostic email layer so provider swaps are low-risk.
+
+- Plugin code must call a backend `EmailDeliveryService` interface, not provider SDKs directly.
+- Implement provider adapters behind that interface (for example: SES, SMTP, Resend, Postmark), selected via config/env.
+- Keep plugin DB schema provider-neutral (canonical recipient/sender/template/payload fields); do not persist provider-specific request shapes.
+- Keep provider-specific secrets/config outside plugin instance payloads (backend secret/config boundary only).
+- Add adapter contract tests so provider changes do not require plugin logic rewrites.
+- Treat provider choice as an implementation detail: switching provider should be an adapter/config change, not a plugin API or schema migration.
 
 ---
 
@@ -232,8 +244,7 @@ This makes plugin installs repeatable and easy for the agent to reason about.
 
 For Vivd-specific operations (plugin enablement, snippet generation, inbox access, etc.), ship a small set of **OpenCode custom tools** into the Studio runtime (e.g. `vivd_plugins_*`).
 
-- Status (2026-02-21): this path is validated in local connected-mode via `vivd_test` end-to-end agent invocation, so new plugin tools can be added on the same custom-tool layer immediately.
-- Temporary tool note: `vivd_test` is a bootstrap-only sanity tool and should be removed once real `vivd_plugins_*` tools are implemented and validated.
+- Status (2026-02-21): this path is validated in local connected-mode with real plugin tools (`vivd_plugins_catalog`, `vivd_plugins_contact_info`) end-to-end.
 - OpenCode loads custom tools from:
   - per-project `.opencode/tools/`, or
   - global `~/.config/opencode/tools/` (recommended for Studio-provisioned tools)
@@ -271,51 +282,85 @@ If we materialize plugin info in the project workspace, treat it as a **read-onl
 
 ---
 
-## Routing Options (Decision)
+## Routing Decision (Locked)
 
-Two viable approaches; MVP can start with (A) and keep (B) as a refinement.
-
-### (A) Same-origin via existing `/vivd-studio/api/*` routing (recommended for MVP)
-
-- Website forms post to `/vivd-studio/api/plugins/...` on the same host.
-- Minimal plumbing changes (mostly backend + UI).
-
-### (B) Dedicated plugin path or host (future)
-
-- Cleaner path: `/api/plugins/...` (requires updating Caddy default + snippet generator), or
-- Global host: `https://api.vivd.../plugins/...` (requires CORS + domain binding, but can simplify edge deployments).
+- Public plugin runtime traffic uses dedicated host `https://api.vivd.studio/plugins/...` (or environment override).
+- Internal authenticated management traffic stays on existing control-plane routes (`/vivd-studio/api/trpc/...`).
+- Local/self-host deployments can point `VIVD_PUBLIC_PLUGIN_API_BASE_URL` at their own API host while keeping the same plugin contract.
 
 ---
 
-## Phased Delivery Plan
+## MVP Scope Decisions (Locked for Start)
 
-1) Define plugin registry + shared types (manifest, config schemas, IDs).
-2) Add DB tables:
-   - `project_plugin_instance`
-   - plugin-specific tables (start: `contact_form_submission`)
-3) Implement backend:
-   - public plugin router (REST)
-   - management router (tRPC)
-4) Implement frontend:
-   - “Plugins” UI
-   - contact submissions inbox
-5) Implement agent integration:
-   - ensure plugin instance + return snippet tool/action
-   - update agent instructions/recipes
-6) Hardening:
-   - Redis rate limits
-   - captcha option
-   - retention policies
-   - webhook/email delivery
-   - audit log entries for enable/disable/token rotation
+- Scope by **project** (not per-environment) for MVP to keep landing-page workflows simple.
+  - If preview/prod divergence becomes necessary later, add an `environment` dimension as an additive schema change.
+- Contact form baseline is **store + inbox** first; email/webhook forwarding are follow-up integrations.
+- Agent integration starts on existing OpenCode custom tools (`vivd_plugins_*`) in Studio runtime.
+- Keep public submit routing on dedicated external API host (`https://api.vivd.studio/plugins/...`) for MVP.
+
+---
+
+## Phased Delivery Plan (Execution-Ready)
+
+### Phase 0 — Foundation + Tooling (start now)
+
+1) Define plugin contracts and registry:
+   - shared `pluginId`, manifest, config schema contracts
+   - backend registry with first built-in plugin: `contact_form`
+2) Add DB tables + indexes:
+   - `project_plugin_instance` (`organizationId + projectSlug + pluginId` unique)
+   - `contact_form_submission` (tenant/project/plugin-instance scoped)
+3) Add provider-agnostic email contract:
+   - `EmailDeliveryService` interface + adapter boundary
+   - initial non-delivery/dev adapter (or provider adapter if chosen)
+4) Add first real custom tools in Studio:
+   - `vivd_plugins_catalog`
+   - `vivd_plugins_contact_info`
+
+### Phase 1 — Contact Form Runtime MVP
+
+1) Public submit endpoint:
+   - `POST https://api.vivd.studio/plugins/contact/v1/submit`
+   - token + origin checks + honeypot + minimal rate limits
+2) Management tRPC endpoints:
+   - list available plugins
+   - enable/disable + config update + token rotation
+3) Submission persistence + read APIs:
+   - write every valid submission
+   - list/detail/export endpoints for inbox UX
+
+### Phase 2 — Control-Plane UX + Agent Recipe
+
+1) Project “Plugins” UI:
+   - enable/configure Contact Form
+   - show generated snippet(s)
+   - basic inbox list/detail
+2) Agent recipe updates:
+   - ensure-instance + snippet insertion flow
+   - idempotent install checks
+3) Optional derived cache:
+   - `.vivd/plugins.json` generation from Studio runtime (not source-of-truth)
+
+### Phase 3 — Hardening + Integrations
+
+- Redis-backed rate limiting
+- captcha option
+- retention/purge policies
+- first production email provider adapter behind `EmailDeliveryService`
+- webhook delivery path
+- audit logs for enable/disable/config/token operations
+
+---
+
+## Custom Tools vs MCP Server (Now vs Later)
+
+- **Now:** use Studio-provisioned OpenCode custom tools as the fast path (`~/.config/opencode/tools/`).
+- **Later (optional):** add a central `vivd-mcp` service in control-plane backend if non-Studio agents need the same capabilities.
+- Rule: keep plugin business logic in backend services; tools/MCP are thin transport layers on top.
 
 ---
 
 ## Open Decisions
 
-- MVP delivery target:
-  - store-only + inbox first (fastest), and/or
-  - immediate email/webhook forwarding (depends on provider choice and secret handling).
-- Endpoint surface:
-  - keep under `/vivd-studio/api/plugins/...` for MVP, or
-  - introduce `/api/plugins/...` for cleaner public URLs.
+- Initial production email provider and cutover strategy between providers (plugin-facing abstraction is required either way).
+- Timing for introducing central `vivd-mcp` beyond Studio custom tools.

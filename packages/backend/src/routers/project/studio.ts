@@ -2,8 +2,8 @@ import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { db } from "../../db";
-import { organization, session as sessionTable } from "../../db/schema";
-import { eq } from "drizzle-orm";
+import { organization, projectPluginInstance, session as sessionTable } from "../../db/schema";
+import { and, eq } from "drizzle-orm";
 
 function normalizeGitHubRepoPrefix(value: string): string {
   const trimmed = value.trim().replace(/^-+/, "");
@@ -23,6 +23,60 @@ function buildStudioGitHubRepoPrefix(options: {
   if (orgPrefix.startsWith(instancePrefix)) return orgPrefix;
   if (instancePrefix.endsWith(orgPrefix)) return instancePrefix;
   return `${instancePrefix}${orgPrefix}`;
+}
+
+async function getEnabledProjectPluginIds(
+  organizationId: string,
+  slug: string,
+): Promise<string[]> {
+  try {
+    const rows = await db.query.projectPluginInstance.findMany({
+      where: and(
+        eq(projectPluginInstance.organizationId, organizationId),
+        eq(projectPluginInstance.projectSlug, slug),
+        eq(projectPluginInstance.status, "enabled"),
+      ),
+      columns: {
+        pluginId: true,
+      },
+    });
+    return rows.map((row) => row.pluginId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[StudioMachine] Failed to resolve enabled plugins for ${organizationId}/${slug}: ${message}`,
+    );
+    return [];
+  }
+}
+
+function buildStudioToolPolicyEnv(input: {
+  organizationRole: string | null;
+  enabledPluginIds: string[];
+}): Record<string, string> {
+  const toolEnv: Record<string, string> = {};
+  if (input.organizationRole) {
+    toolEnv.VIVD_ORGANIZATION_ROLE = input.organizationRole;
+  }
+  if (input.enabledPluginIds.length > 0) {
+    toolEnv.VIVD_ENABLED_PLUGINS = input.enabledPluginIds.join(",");
+  }
+
+  const passthroughKeys = [
+    "VIVD_ORGANIZATION_PLAN",
+    "VIVD_OPENCODE_TOOLS_ENABLE",
+    "VIVD_OPENCODE_TOOLS_DISABLE",
+    "VIVD_OPENCODE_TOOL_FLAGS",
+  ] as const;
+
+  for (const key of passthroughKeys) {
+    const value = (process.env[key] || "").trim();
+    if (value) {
+      toolEnv[key] = value;
+    }
+  }
+
+  return toolEnv;
 }
 
 /**
@@ -77,6 +131,11 @@ export const studioProcedures = {
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
+      const enabledPluginIds = await getEnabledProjectPluginIds(organizationId, input.slug);
+      const studioToolPolicyEnv = buildStudioToolPolicyEnv({
+        organizationRole: ctx.organizationRole,
+        enabledPluginIds,
+      });
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
         columns: { githubRepoPrefix: true },
@@ -129,6 +188,7 @@ export const studioProcedures = {
               MAIN_BACKEND_URL: mainBackendUrl,
               SESSION_TOKEN: sessionToken,
               GITHUB_REPO_PREFIX: githubRepoPrefix,
+              ...studioToolPolicyEnv,
             },
           });
 
@@ -163,6 +223,11 @@ export const studioProcedures = {
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
+      const enabledPluginIds = await getEnabledProjectPluginIds(organizationId, input.slug);
+      const studioToolPolicyEnv = buildStudioToolPolicyEnv({
+        organizationRole: ctx.organizationRole,
+        enabledPluginIds,
+      });
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
         columns: { githubRepoPrefix: true },
@@ -209,6 +274,7 @@ export const studioProcedures = {
             MAIN_BACKEND_URL: mainBackendUrl,
             SESSION_TOKEN: sessionToken,
             GITHUB_REPO_PREFIX: githubRepoPrefix,
+            ...studioToolPolicyEnv,
           },
         });
 

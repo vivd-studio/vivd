@@ -13,6 +13,15 @@
 
 ## Progress Log
 
+- 2026-02-21: extended the concrete test hardening roadmap with a Phase 4 critical E2E smoke layer for cross-service flows, using a small PR smoke subset and a fuller nightly/pre-release suite.
+- 2026-02-21: added a concrete cross-repo test hardening plan focused on production-risk paths (auth/context resolution, publish/import safety, studio workspace/sync, and scraper pipeline behavior), with phased delivery and explicit first-wave targets.
+- 2026-02-21: retired bootstrap `vivd_test` tool after validating the real Studio custom tool path (`vivd_plugins_catalog`, `vivd_plugins_contact_info`); startup now also cleans stale legacy tool files.
+- 2026-02-21: locked public plugin runtime endpoint base to dedicated external host `https://api.vivd.studio` (env override: `VIVD_PUBLIC_PLUGIN_API_BASE_URL`) so website-facing plugin traffic is separated from internal `/vivd-studio/api/*` management APIs.
+- 2026-02-21: refactored Studio OpenCode tool provisioning for scale: moved tool logic into typed modules under `packages/studio/server/opencode/toolModules/`, added centralized registry/policy in `packages/studio/server/opencode/toolRegistry.ts`, replaced tool-level contact ensure/snippet actions with a single `vivd_plugins_contact_info` tool, wired per-start tool enable/disable into OpenCode config via `packages/studio/server/opencode/configPolicy.ts` (`VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS`), and now pass role/plugin context from backend studio start/restart (`VIVD_ORGANIZATION_ROLE`, `VIVD_ENABLED_PLUGINS`).
+- 2026-02-21: hardened plugin Phase-0 migration `packages/backend/drizzle/0013_abnormal_miracleman.sql` to be idempotent (`CREATE TABLE IF NOT EXISTS`, guarded FK creation, `CREATE INDEX IF NOT EXISTS`) so partially applied dev databases do not crash backend startup on `db:migrate`.
+- 2026-02-21: started plugin-system Phase 0 implementation: added plugin persistence schema (`project_plugin_instance`, `contact_form_submission`) + migration `packages/backend/drizzle/0013_abnormal_miracleman.sql`, added backend plugin catalog/ensure/info service surface (`packages/backend/src/routers/plugins.ts`, `packages/backend/src/services/plugins/ProjectPluginService.ts`), added provider-agnostic email service contract scaffold (`packages/backend/src/services/integrations/EmailDeliveryService.ts`), and provisioned Studio OpenCode tools (`vivd_plugins_catalog`, `vivd_plugins_contact_info`) in `packages/studio/server/opencode/serverManager.ts` (with targeted backend/studio builds and backend plugin/email tests passing).
+- 2026-02-21: refactored Studio OpenCode config enforcement into a dedicated policy module (`packages/studio/server/opencode/configPolicy.ts`) with unit coverage (`packages/studio/server/opencode/configPolicy.test.ts`) so future config overrides can be added declaratively.
+- 2026-02-21: disabled the OpenCode built-in `question` tool for Studio agent sessions by enforcing `tools.question=false` in spawned server config (`packages/studio/server/opencode/serverManager.ts`), matching current frontend support.
 - 2026-02-21: grouped service modules into domain subfolders to reduce root-level service sprawl: backend now uses `services/{project,publish,usage,integrations,storage,system}` (with existing `services/studioMachines/fly/*` modular split preserved), and studio server now uses `services/{sync,patching,project,integrations,reporting}`; imports were rewired and targeted backend/studio builds pass.
 - 2026-02-21: restored missing backend domain-service unit coverage at `packages/backend/test/domain_service.test.ts` (reserved organization slug validation).
 - 2026-02-21: maintainability cleanup pass completed for onboarding + boundaries: rewrote root/agent docs for current package layout (`README.md`, `AGENTS.md`, `packages/frontend/README.md`), removed unsafe/invalid migration/client-gen scripts (`db:push`, stale `gen:client`), moved frontend tRPC type import off ad-hoc `@backend/*` alias to a curated backend type export (`packages/backend/src/trpcTypes.ts`), and removed backend runtime patching duplicates/tests so patching ownership is studio-only.
@@ -20,9 +29,8 @@
 - 2026-02-21: continued Fly provider modularization by extracting startup/restart/create workflows to `packages/backend/src/services/studioMachines/fly/runtimeWorkflow.ts` and warm/batch reconcile workflows to `packages/backend/src/services/studioMachines/fly/reconcileWorkflow.ts`; added characterization coverage in `packages/backend/test/fly_provider_orchestration.test.ts` (dedupe, hard-restart inflight gating, create payload, warm-reconcile guardrails).
 - 2026-02-21: further split Fly provider internals into focused modules: Fly Machines API transport/cache (`packages/backend/src/services/studioMachines/fly/apiClient.ts`), lifecycle polling/transition helpers (`packages/backend/src/services/studioMachines/fly/lifecycle.ts`), machine identity/lookup helpers (`packages/backend/src/services/studioMachines/fly/machineInventory.ts`), studio-image resolution/cache (`packages/backend/src/services/studioMachines/fly/imageResolver.ts`), and machine management workflows (`packages/backend/src/services/studioMachines/fly/managementWorkflow.ts`). `provider.ts` now delegates these concerns and remains behavior-compatible under characterization tests.
 - 2026-02-21: extracted Fly environment/naming/instance-shape config into `packages/backend/src/services/studioMachines/fly/providerConfig.ts`, moved service normalization into `packages/backend/src/services/studioMachines/fly/machineModel.ts`, and rewired `provider.ts` to explicit workflow dependency wiring (dropping provider size to 643 LOC from 819 while keeping behavior checks green in `packages/backend/test/fly_provider_orchestration.test.ts` and `packages/backend/test/fly_provider_reconcile.test.ts`).
-- 2026-02-21: added OpenCode custom-tool provisioning in the Studio runtime (starts with a `vivd_test` tool) to enable future agent-callable Vivd plugin operations.
-- 2026-02-21: validated Studio agent custom-tool invocation end-to-end in local connected-mode (`vivd_test` returns org/project-scoped output).
-- 2026-02-21: documented `vivd_test` as temporary bootstrap tooling in plugin-system planning; remove it after `vivd_plugins_*` tools are implemented and validated.
+- 2026-02-21: extended plugin-system planning with a required provider-agnostic email delivery abstraction for contact form notifications so email providers can be swapped via adapters/config without plugin API or schema rewrites.
+- 2026-02-21: made plugin-system plan execution-ready for kickoff: locked MVP scope decisions (project-level scoping, store+inbox baseline, custom-tools-first integration), added phased delivery breakdown, and documented “custom tools now, optional central `vivd-mcp` later” strategy (`docs/plugin-system-design.md`).
 - 2026-02-20: refined website plugin system plan with clearer UI/agent exposure and studio↔bucket sync constraints (`docs/plugin-system-design.md`).
 - 2026-02-19: GHCR studio image selection now filters tags by manifest readiness (not tag presence alone), so superadmin image options and latest-semver resolution exclude in-progress/unpullable workflow tags.
 - 2026-02-19: updated studio-machine defaults: Fly idle suspend timeout increased to 10 minutes (`FLY_STUDIO_IDLE_TIMEOUT_MS=600000` default), and OpenCode idle server cleanup disabled on studio machines by default (`OPENCODE_IDLE_TIMEOUT_MS=0` in Fly/local machine env).
@@ -43,12 +51,99 @@
 
 ## Current Priorities
 
+- [ ] Execute phased test hardening plan across backend/studio/frontend/scraper, starting with auth + publish + import + workspace/sync critical paths.
+- [ ] Add Phase 4 critical E2E smoke coverage for cross-service flows (lean PR suite + nightly/pre-release full suite).
+- [ ] Move plugin-system into Phase 1: implement contact submit runtime endpoint + initial inbox read path on top of Phase 0 scaffolding.
 - [ ] Validate lifecycle sync hardening in real Fly runs (stop/destroy/warm-reconcile + trigger-driven sync under larger workspace/opencode payloads).
 - [ ] Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
 - [ ] Complete email-based auth flows (invite-only signup, self-service password reset, SES integration).
 - [ ] Add missing control-plane hardening (audit log, monitoring, rate limiting, abuse controls).
 - [ ] Implement billing primitives (Stripe products/prices/webhooks + subscription UX).
 - [ ] Finalize build strategy and preview artifact contract (build location, signed vs public artifact access).
+
+## Concrete Test Hardening Plan
+
+### Baseline (2026-02-21)
+
+- Backend statement coverage: `9.14%` (`packages/backend/src/**`).
+- Studio statement coverage: `1.56%` (`packages/studio/**`).
+- Frontend statement coverage: `1.02%` (`packages/frontend/**`).
+- Scraper statement coverage: `5.76%` (`packages/scraper/src/**`).
+
+### Phase 1 (Critical Runtime Safety)
+
+- Backend auth/context + procedure gating:
+  - `packages/backend/src/trpc.ts`
+  - Cases: host-pinned org, unknown-host fallback, bearer session fallback, role gating (`protected/org/orgAdmin/projectMember/superAdmin`).
+- Backend publish correctness:
+  - `packages/backend/src/routers/project/publish.ts`
+  - `packages/backend/src/services/publish/PublishService.ts`
+  - Cases: studio-unsaved/older-snapshot conflicts, domain allowlist denial, artifact readiness conflicts, commit mismatch, caddy update + DB upsert/unpublish.
+- Backend import safety:
+  - `packages/backend/src/routes/import.ts`
+  - Cases: org access denial, pinned-domain org override rejection, symlink archive rejection, root detection, imported artifact sync behavior.
+- Studio workspace + sync fundamentals:
+  - `packages/studio/server/workspace/WorkspaceManager.ts`
+  - `packages/studio/server/services/sync/ArtifactSyncService.ts`
+  - Cases: save/discard transitions, commit hash/state reporting, source/opencode sync trigger behavior and failure handling.
+
+### Phase 2 (Control Plane and Studio Reliability)
+
+- Backend organization/superadmin/usage routers:
+  - `packages/backend/src/routers/organization.ts`
+  - `packages/backend/src/routers/superadmin.ts`
+  - `packages/backend/src/routers/studioApi.ts`
+  - `packages/backend/src/routers/usage.ts`
+- Backend business services:
+  - `packages/backend/src/services/usage/LimitsService.ts`
+  - `packages/backend/src/services/usage/UsageService.ts`
+  - `packages/backend/src/services/plugins/ProjectPluginService.ts`
+- Studio routing/agent flows:
+  - `packages/studio/server/routers/project.ts`
+  - `packages/studio/server/routers/agent.ts`
+  - `packages/studio/server/opencode/serverManager.ts`
+  - `packages/studio/server/opencode/index.ts`
+
+### Phase 3 (UI and Scraper End-to-End Confidence)
+
+- Frontend RTL tests for high-impact flows:
+  - `packages/frontend/src/app/router/guards.tsx`
+  - `packages/frontend/src/components/projects/publish/PublishSiteDialog.tsx`
+  - `packages/frontend/src/pages/EmbeddedStudio.tsx`
+  - `packages/frontend/src/components/admin/machines/MachinesTab.tsx`
+  - `packages/frontend/src/components/projects/listing/ProjectsList.tsx`
+- Scraper route + service tests:
+  - `packages/scraper/src/routes/fullScrape.ts`
+  - `packages/scraper/src/services/scraper.ts`
+  - `packages/scraper/src/services/openrouter.ts`
+  - `packages/scraper/src/routes/findLinks.ts`
+  - `packages/scraper/src/routes/screenshot.ts`
+
+### Phase 4 (Critical E2E Smoke)
+
+- Scope: only high-value cross-service flows that lower-level tests cannot fully validate.
+- Initial scenarios:
+  - auth + organization resolution on control-plane host vs tenant-pinned host
+  - project creation/generation to reachable preview URL
+  - studio edit flow where unsaved changes block publish, then save allows publish
+  - publish/unpublish lifecycle and served-domain behavior
+  - plugin contact submit to inbox/read path (after submit endpoint lands)
+- Run cadence:
+  - PR: run 2-3 fast E2E smoke tests
+  - nightly/pre-release: run the full E2E smoke matrix
+
+### First Wave Backlog (Concrete)
+
+- Add backend tests for `createContext` and `orgProcedure` behavior matrix in `packages/backend/src/trpc.ts`.
+- Add router-level tests for publish conflict branches in `packages/backend/src/routers/project/publish.ts`.
+- Add service-level tests for publish lock + artifact readiness branches in `packages/backend/src/services/publish/PublishService.ts`.
+- Add import route tests for unsafe zip/org mismatch in `packages/backend/src/routes/import.ts`.
+- Add limits/usage tests for blocked state and threshold behavior in `packages/backend/src/services/usage/LimitsService.ts` and `packages/backend/src/services/usage/UsageService.ts`.
+- Add plugin service tests for idempotent ensure + unique-conflict recovery in `packages/backend/src/services/plugins/ProjectPluginService.ts`.
+- Add studio workspace save/discard tests in `packages/studio/server/workspace/WorkspaceManager.ts`.
+- Add studio artifact sync/hydration tests in `packages/studio/server/services/sync/ArtifactSyncService.ts`.
+- Add frontend publish dialog behavior tests in `packages/frontend/src/components/projects/publish/PublishSiteDialog.tsx`.
+- Add scraper full pipeline error/success tests in `packages/scraper/src/routes/fullScrape.ts`.
 
 ## Consolidated Completed Milestones
 

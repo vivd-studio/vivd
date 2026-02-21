@@ -342,9 +342,81 @@ export const projectPublishChecklist = pgTable(
   ]
 );
 
+export const projectPluginInstance = pgTable(
+  "project_plugin_instance",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    status: text("status").notNull().default("enabled"),
+    configJson: jsonb("config_json").notNull().default({}),
+    publicToken: text("public_token").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    uniqueIndex("project_plugin_instance_org_project_plugin_unique").on(
+      table.organizationId,
+      table.projectSlug,
+      table.pluginId,
+    ),
+    uniqueIndex("project_plugin_instance_public_token_unique").on(table.publicToken),
+    index("project_plugin_instance_org_project_idx").on(
+      table.organizationId,
+      table.projectSlug,
+    ),
+  ],
+);
+
+export const contactFormSubmission = pgTable(
+  "contact_form_submission",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    sourceHost: text("source_host"),
+    ipHash: text("ip_hash"),
+    userAgent: text("user_agent"),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("contact_form_submission_org_project_created_idx").on(
+      table.organizationId,
+      table.projectSlug,
+      table.createdAt,
+    ),
+    index("contact_form_submission_plugin_created_idx").on(
+      table.pluginInstanceId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   versions: many(projectVersion),
   publishChecklists: many(projectPublishChecklist),
+  pluginInstances: many(projectPluginInstance),
+  contactFormSubmissions: many(contactFormSubmission),
 }));
 
 export const projectVersionRelations = relations(
@@ -381,6 +453,31 @@ export const projectPublishChecklistRelations = relations(
       ],
     }),
   })
+);
+
+export const projectPluginInstanceRelations = relations(
+  projectPluginInstance,
+  ({ one, many }) => ({
+    project: one(projectMeta, {
+      fields: [projectPluginInstance.organizationId, projectPluginInstance.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    contactFormSubmissions: many(contactFormSubmission),
+  }),
+);
+
+export const contactFormSubmissionRelations = relations(
+  contactFormSubmission,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [contactFormSubmission.organizationId, contactFormSubmission.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [contactFormSubmission.pluginInstanceId],
+      references: [projectPluginInstance.id],
+    }),
+  }),
 );
 
 // Published sites - tracks domain to project mapping for Caddy routing
