@@ -5,7 +5,7 @@ import {
   getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
-import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
+import type { WorkspaceManager } from "../../workspace/WorkspaceManager.js";
 
 type WorkspaceStateReporterStartOptions = {
   workspace: WorkspaceManager;

@@ -1,18 +1,18 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { db } from "../db";
-import { publishedSite } from "../db/schema";
+import { db } from "../../db";
+import { publishedSite } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
-import type { GitHubSyncResult } from "./GitService";
+import type { GitHubSyncResult } from "../integrations/GitService";
 import {
   uploadProjectPublishedToBucket,
-} from "./ProjectArtifactsService";
+} from "../project/ProjectArtifactsService";
 import {
   downloadArtifactToDirectory,
   resolvePublishableArtifactState,
-} from "./ProjectArtifactStateService";
-import type { PublishArtifactKind } from "./ProjectArtifactStateService";
+} from "../project/ProjectArtifactStateService";
+import type { PublishArtifactKind } from "../project/ProjectArtifactStateService";
 import { domainService } from "./DomainService";
 
 // Directory where published site files are stored (Caddy reads from here)

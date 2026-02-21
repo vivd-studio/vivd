@@ -6,8 +6,8 @@ import sizeOf from "image-size";
 import ignore from "ignore";
 import sharp from "sharp";
 import { WEBP_QUALITY } from "../config.js";
-import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
-import { requestBucketSync } from "../services/AgentTaskSyncService.js";
+import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
+import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 
 function safeJoin(root: string, targetPath: string): string {
   const resolvedRoot = path.resolve(root);

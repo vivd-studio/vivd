@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { systemSetting } from "../db/schema";
+import { db } from "../../db";
+import { systemSetting } from "../../db/schema";
 
 export const SYSTEM_SETTING_KEYS = {
   studioMachineImageTagOverride: "studio_machine_image_tag_override",

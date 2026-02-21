@@ -10,7 +10,7 @@ import {
   session as sessionTable,
 } from "./db/schema";
 import { and, asc, eq } from "drizzle-orm";
-import { domainService } from "./services/DomainService";
+import { domainService } from "./services/publish/DomainService";
 
 type UserMembership = {
   organizationId: string;

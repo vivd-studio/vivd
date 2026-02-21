@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RESERVED_ORG_SLUG_LABELS,
   validateOrganizationSlug,
-} from "../src/services/DomainService";
+} from "../src/services/publish/DomainService";
 
 describe("DomainService organization slug validation", () => {
   it("keeps API slug reserved", () => {

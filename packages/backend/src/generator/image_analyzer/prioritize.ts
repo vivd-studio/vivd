@@ -5,7 +5,7 @@ import type { ImageInfo } from "./types";
 import {
   createChatCompletion,
   type FlowContext,
-} from "../../services/OpenRouterService";
+} from "../../services/integrations/OpenRouterService";
 import { parseJsonFromLLM } from "../utils";
 
 export async function prioritizeImages(

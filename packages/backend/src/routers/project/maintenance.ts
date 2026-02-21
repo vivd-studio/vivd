@@ -24,7 +24,7 @@ import {
 } from "../../generator/versionUtils";
 import path from "path";
 import fs from "fs";
-import { publishService } from "../../services/PublishService";
+import { publishService } from "../../services/publish/PublishService";
 import { db } from "../../db";
 import { organization, projectMember, projectMeta, publishedSite } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
@@ -33,7 +33,7 @@ import {
   migrateVivdInternalArtifactsInVersion,
   VIVD_INTERNAL_ARTIFACT_FILENAMES,
 } from "../../generator/vivdPaths";
-import { thumbnailService } from "../../services/ThumbnailService";
+import { thumbnailService } from "../../services/project/ThumbnailService";
 import {
   renderProjectTemplateFiles,
   TEMPLATE_FILES,
@@ -44,15 +44,15 @@ import {
   doesObjectExist,
   getObjectStorageConfigFromEnv,
   uploadDirectoryToBucket,
-} from "../../services/ObjectStorageService";
-import { migrateProjectMetadataToDbFromFilesystem } from "../../services/ProjectMetaMigrationService";
+} from "../../services/storage/ObjectStorageService";
+import { migrateProjectMetadataToDbFromFilesystem } from "../../services/project/ProjectMetaMigrationService";
 import {
   deleteProjectArtifactsFromBucket,
   deleteProjectVersionArtifactsFromBucket,
-} from "../../services/ProjectArtifactsService";
+} from "../../services/project/ProjectArtifactsService";
 import { studioMachineProvider } from "../../services/studioMachines";
-import { projectMetaService } from "../../services/ProjectMetaService";
-import { getProjectArtifactKeyPrefix } from "../../services/ProjectStoragePaths";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
+import { getProjectArtifactKeyPrefix } from "../../services/project/ProjectStoragePaths";
 
 export const projectMaintenanceProcedures = {
   /**
@@ -782,7 +782,7 @@ export const projectMaintenanceProcedures = {
       }
 
       // Import gitService dynamically to avoid circular deps
-      const { gitService } = await import("../../services/GitService");
+      const { gitService } = await import("../../services/integrations/GitService");
 
       // Paths that should be ignored but might have been committed
       const pathsToUntrack = [
@@ -839,7 +839,7 @@ export const projectMaintenanceProcedures = {
     }
 
     // Import gitService dynamically to avoid circular deps
-    const { gitService } = await import("../../services/GitService");
+    const { gitService } = await import("../../services/integrations/GitService");
 
     // Paths that should be ignored but might have been committed
     const pathsToUntrack = [

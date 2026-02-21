@@ -12,11 +12,11 @@ import {
 import { downloadImage, saveImageBuffer } from "../../generator/utils";
 import { safeJoin } from "../../fs/safePaths";
 import { isImageFile } from "./shared";
-import { limitsService } from "../../services/LimitsService";
+import { limitsService } from "../../services/usage/LimitsService";
 import {
   createImageGeneration,
   extractImageFromResponse,
-} from "../../services/OpenRouterService";
+} from "../../services/integrations/OpenRouterService";
 
 export const assetsAiImageProcedures = {
   /**

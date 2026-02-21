@@ -13,7 +13,7 @@ import {
 } from "../db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { auth } from "../auth";
-import { domainService } from "../services/DomainService";
+import { domainService } from "../services/publish/DomainService";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 

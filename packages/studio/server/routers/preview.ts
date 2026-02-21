@@ -2,8 +2,8 @@ import { router, publicProcedure } from "../trpc/trpc.js";
 import {
   devServerService,
   DevServerService,
-} from "../services/DevServerService.js";
-import { detectProjectType } from "../services/projectType.js";
+} from "../services/project/DevServerService.js";
+import { detectProjectType } from "../services/project/projectType.js";
 
 // Use singleton or create instance per workspace
 let studioDevServer: DevServerService | null = null;

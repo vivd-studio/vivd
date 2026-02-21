@@ -7,14 +7,14 @@ import { initializeGitRepository } from "../gitUtils";
 import { log } from "../logger";
 import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
-import type { FlowContext } from "../../services/OpenRouterService";
+import type { FlowContext } from "../../services/integrations/OpenRouterService";
 import {
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
 } from "../vivdPaths";
 import { WEBP_QUALITY } from "../config";
-import { uploadProjectThumbnailToBucket } from "../../services/ProjectArtifactsService";
-import { projectMetaService } from "../../services/ProjectMetaService";
+import { uploadProjectThumbnailToBucket } from "../../services/project/ProjectArtifactsService";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
 
 export interface UrlFlowInput {
   url: string;

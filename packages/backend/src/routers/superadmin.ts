@@ -11,15 +11,15 @@ import {
 } from "../db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { auth } from "../auth";
-import { limitsService } from "../services/LimitsService";
-import { usageService } from "../services/UsageService";
-import { domainService, validateOrganizationSlug } from "../services/DomainService";
+import { limitsService } from "../services/usage/LimitsService";
+import { usageService } from "../services/usage/UsageService";
+import { domainService, validateOrganizationSlug } from "../services/publish/DomainService";
 import { studioMachineProvider } from "../services/studioMachines";
 import {
   getSystemSettingValue,
   setSystemSettingValue,
   SYSTEM_SETTING_KEYS,
-} from "../services/SystemSettingsService";
+} from "../services/system/SystemSettingsService";
 import type { FlyStudioMachineProvider } from "../services/studioMachines/fly";
 import {
   listStudioImagesFromGhcr,

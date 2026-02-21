@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
-import { projectMetaService } from "../services/ProjectMetaService";
+import { projectMetaService } from "../services/project/ProjectMetaService";
 
 function detectProjectsDir(): string {
   const env = process.env.PROJECTS_DIR?.trim();

@@ -1,5 +1,5 @@
 import { protectedProcedure, router } from "../trpc";
-import { domainService } from "../services/DomainService";
+import { domainService } from "../services/publish/DomainService";
 
 /**
  * Configuration router to expose app settings to the frontend.

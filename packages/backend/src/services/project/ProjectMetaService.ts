@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { db } from "../db";
+import { db } from "../../db";
 import {
   organization,
   projectMeta,
   projectPublishChecklist,
   projectVersion,
-} from "../db/schema";
-import type { PrePublishChecklist } from "../types/checklistTypes";
+} from "../../db/schema";
+import type { PrePublishChecklist } from "../../types/checklistTypes";
 
 export type ProjectMetaRow = typeof projectMeta.$inferSelect;
 export type ProjectVersionRow = typeof projectVersion.$inferSelect;

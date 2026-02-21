@@ -27,7 +27,7 @@ import {
   getObjectStorageConfigFromEnv,
   parseS3Uri,
   type ObjectStorageConfig,
-} from "../../src/services/ObjectStorageService";
+} from "../../src/services/storage/ObjectStorageService";
 
 const RUN_STUDIO_BUCKET_SYNC_TESTS =
   process.env.VIVD_RUN_STUDIO_BUCKET_SYNC_TESTS === "1";

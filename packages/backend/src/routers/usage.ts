@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router, adminProcedure } from "../trpc";
-import { usageService } from "../services/UsageService";
-import { limitsService } from "../services/LimitsService";
+import { usageService } from "../services/usage/UsageService";
+import { limitsService } from "../services/usage/LimitsService";
 
 export const usageRouter = router({
   /**

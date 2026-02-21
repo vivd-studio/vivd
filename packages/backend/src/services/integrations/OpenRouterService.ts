@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import axios from "axios";
-import { OPENROUTER_API_KEY } from "../generator/config";
-import { usageService } from "./UsageService";
+import { OPENROUTER_API_KEY } from "../../generator/config";
+import { usageService } from "../usage/UsageService";
 
 // Re-export the OpenAI client for backwards compatibility during migration
 export const openai = new OpenAI({

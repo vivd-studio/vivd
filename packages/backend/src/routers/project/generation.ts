@@ -20,21 +20,21 @@ import { runScratchFlow } from "../../generator/flows/scratchFlow";
 import { validateConfig } from "../../generator/config";
 import fs from "fs";
 import path from "path";
-import { publishService } from "../../services/PublishService";
-import { gitService } from "../../services/GitService";
+import { publishService } from "../../services/publish/PublishService";
+import { gitService } from "../../services/integrations/GitService";
 import { db } from "../../db";
 import { projectMember } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
-import { limitsService } from "../../services/LimitsService";
+import { limitsService } from "../../services/usage/LimitsService";
 import { detectProjectType } from "../../devserver/projectType";
-import { buildService } from "../../services/BuildService";
-import { projectMetaService } from "../../services/ProjectMetaService";
+import { buildService } from "../../services/project/BuildService";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
 import {
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
-} from "../../services/ProjectArtifactsService";
-import { getObjectDownloadUrl } from "../../services/ObjectStorageService";
-import { thumbnailService } from "../../services/ThumbnailService";
+} from "../../services/project/ProjectArtifactsService";
+import { getObjectDownloadUrl } from "../../services/storage/ObjectStorageService";
+import { thumbnailService } from "../../services/project/ThumbnailService";
 
 /**
  * Check if single project mode is enabled and a project already exists.

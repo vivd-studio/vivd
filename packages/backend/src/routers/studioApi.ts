@@ -7,12 +7,12 @@
 
 import { z } from "zod";
 import { router, orgProcedure, projectMemberProcedure } from "../trpc";
-import { usageService, type TokenData } from "../services/UsageService";
-import { limitsService } from "../services/LimitsService";
+import { usageService, type TokenData } from "../services/usage/UsageService";
+import { limitsService } from "../services/usage/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
-import { thumbnailService } from "../services/ThumbnailService";
-import { projectMetaService } from "../services/ProjectMetaService";
-import { studioWorkspaceStateService } from "../services/StudioWorkspaceStateService";
+import { thumbnailService } from "../services/project/ThumbnailService";
+import { projectMetaService } from "../services/project/ProjectMetaService";
+import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
 
 /**
  * Schema for token data in usage reports

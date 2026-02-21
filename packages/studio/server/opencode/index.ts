@@ -15,8 +15,8 @@ import {
   type SessionStatus,
 } from "./eventEmitter.js";
 import { serverManager } from "./serverManager.js";
-import { usageReporter } from "../services/UsageReporter.js";
-import { requestBucketSyncAfterAgentTask } from "../services/AgentTaskSyncService.js";
+import { usageReporter } from "../services/reporting/UsageReporter.js";
+import { requestBucketSyncAfterAgentTask } from "../services/sync/AgentTaskSyncService.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel } from "./modelConfig.js";

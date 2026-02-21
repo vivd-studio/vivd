@@ -6,7 +6,7 @@ import {
   deleteBucketPrefix,
   getObjectStorageConfigFromEnv,
   uploadDirectoryToBucket,
-} from "./ObjectStorageService";
+} from "../storage/ObjectStorageService";
 import {
   getProjectArtifactKeyPrefix,
   getProjectBasePrefix,

@@ -12,7 +12,7 @@ import {
 import { OpenRouterAgent } from "../agent";
 import type { GenerationAgent } from "../agent";
 import type { GenerationSource } from "../flows/types";
-import type { FlowContext } from "../../services/OpenRouterService";
+import type { FlowContext } from "../../services/integrations/OpenRouterService";
 
 export interface GenerateHtmlInput {
   outputDir: string;

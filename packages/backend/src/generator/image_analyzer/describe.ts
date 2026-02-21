@@ -6,7 +6,7 @@ import { IMAGE_DESCRIPTION_PROMPT } from "../prompts";
 import {
   createChatCompletion,
   type FlowContext,
-} from "../../services/OpenRouterService";
+} from "../../services/integrations/OpenRouterService";
 import { parseJsonFromLLM } from "../utils";
 import { convertSvgToPngBuffer } from "./utils";
 import type { ImageInfo } from "./types";

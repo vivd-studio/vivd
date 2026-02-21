@@ -2,13 +2,13 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, projectMemberProcedure } from "../../trpc";
 import { getVersionDir } from "../../generator/versionUtils";
-import { buildService } from "../../services/BuildService";
+import { buildService } from "../../services/project/BuildService";
 import { detectProjectType } from "../../devserver/projectType";
 import fs from "node:fs";
-import { resolvePublishableArtifactState } from "../../services/ProjectArtifactStateService";
-import { projectMetaService } from "../../services/ProjectMetaService";
-import { domainService } from "../../services/DomainService";
-import { publishService } from "../../services/PublishService";
+import { resolvePublishableArtifactState } from "../../services/project/ProjectArtifactStateService";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
+import { domainService } from "../../services/publish/DomainService";
+import { publishService } from "../../services/publish/PublishService";
 
 export const previewProcedures = {
   /**

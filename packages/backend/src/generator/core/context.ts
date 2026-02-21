@@ -8,7 +8,7 @@ import {
 import type { GenerationContext, GenerationSource } from "../flows/types";
 import { ensureVivdInternalFilesDir } from "../vivdPaths";
 import { applyProjectTemplateFiles } from "../templateFiles";
-import { projectMetaService } from "../../services/ProjectMetaService";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
 
 function slugifyTitle(title: string): string {
   const cleaned = title

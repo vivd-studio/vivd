@@ -9,13 +9,13 @@ import { detectProjectType } from "../devserver/projectType";
 import { getProjectDir, getVersionDir } from "../generator/versionUtils";
 import { initializeGitRepository } from "../generator/gitUtils";
 import { ensureVivdInternalFilesDir } from "../generator/vivdPaths";
-import { buildService } from "../services/BuildService";
-import { projectMetaService } from "../services/ProjectMetaService";
+import { buildService } from "../services/project/BuildService";
+import { projectMetaService } from "../services/project/ProjectMetaService";
 import {
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
-} from "../services/ProjectArtifactsService";
-import { gitService } from "../services/GitService";
+} from "../services/project/ProjectArtifactsService";
+import { gitService } from "../services/integrations/GitService";
 import { createContext } from "../trpc";
 import { checkOrganizationAccess } from "../lib/organizationAccess";
 

@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import dns from "node:dns/promises";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { db } from "../db";
-import { domain as domainTable, organization, publishedSite } from "../db/schema";
+import { db } from "../../db";
+import { domain as domainTable, organization, publishedSite } from "../../db/schema";
 
 export const RESERVED_ORG_SLUG_LABELS = [
   "app",

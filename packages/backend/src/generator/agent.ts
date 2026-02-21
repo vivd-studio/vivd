@@ -5,7 +5,7 @@ import { OPENROUTER_API_KEY, GENERATION_MODEL } from "./config";
 import {
   createChatCompletion,
   type FlowContext,
-} from "../services/OpenRouterService";
+} from "../services/integrations/OpenRouterService";
 
 export interface GenerationInput {
   prompt: string;

@@ -6,37 +6,37 @@ import fs from "fs";
 import {
   applyHtmlPatches,
   type HtmlPatch,
-} from "../services/HtmlPatchService.js";
+} from "../services/patching/HtmlPatchService.js";
 import {
   applyAstroPatches,
   extractAstroPatches,
   hasAstroPatches,
   type AstroTextPatch,
-} from "../services/AstroPatchService.js";
+} from "../services/patching/AstroPatchService.js";
 import {
   applyI18nJsonPatches,
   extractI18nPatches,
   hasI18nPatches,
   type I18nJsonPatch,
-} from "../services/I18nJsonPatchService.js";
-import { devServerService } from "../services/DevServerService.js";
-import { detectProjectType } from "../services/projectType.js";
+} from "../services/patching/I18nJsonPatchService.js";
+import { devServerService } from "../services/project/DevServerService.js";
+import { detectProjectType } from "../services/project/projectType.js";
 import {
   buildAndUploadPreview,
   buildAndUploadPublished,
   syncSourceToBucket,
-} from "../services/ArtifactSyncService.js";
+} from "../services/sync/ArtifactSyncService.js";
 import {
   checkGitHubRepoExists,
   getGitHubSyncProjectInfo,
   sanitizeGitAuthFromMessage,
   syncPushToGitHub,
-} from "../services/GitHubSyncService.js";
-import { withBucketSyncPaused } from "../services/SyncPauseService.js";
-import { projectTouchReporter } from "../services/ProjectTouchReporter.js";
-import { thumbnailGenerationReporter } from "../services/ThumbnailGenerationReporter.js";
-import { workspaceStateReporter } from "../services/WorkspaceStateReporter.js";
-import { requestBucketSync } from "../services/AgentTaskSyncService.js";
+} from "../services/integrations/GitHubSyncService.js";
+import { withBucketSyncPaused } from "../services/sync/SyncPauseService.js";
+import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
+import { thumbnailGenerationReporter } from "../services/reporting/ThumbnailGenerationReporter.js";
+import { workspaceStateReporter } from "../services/reporting/WorkspaceStateReporter.js";
+import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import {
   getBackendUrl,
   getConnectedOrganizationId,

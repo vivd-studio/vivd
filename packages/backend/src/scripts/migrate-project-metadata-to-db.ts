@@ -1,4 +1,4 @@
-import { migrateProjectMetadataToDbFromFilesystem } from "../services/ProjectMetaMigrationService";
+import { migrateProjectMetadataToDbFromFilesystem } from "../services/project/ProjectMetaMigrationService";
 
 async function main() {
   const res = await migrateProjectMetadataToDbFromFilesystem({

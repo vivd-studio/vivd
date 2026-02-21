@@ -1,5 +1,5 @@
-import { db } from "../db";
-import { usageRecord, usagePeriod } from "../db/schema";
+import { db } from "../../db";
+import { usageRecord, usagePeriod } from "../../db/schema";
 import { and, eq, gte, sql, desc } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import { randomUUID } from "crypto";

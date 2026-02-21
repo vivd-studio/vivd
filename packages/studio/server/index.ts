@@ -13,13 +13,13 @@ import {
 import { appRouter } from "./trpc/router.js";
 import { createContext } from "./trpc/context.js";
 import { WorkspaceManager } from "./workspace/WorkspaceManager.js";
-import { detectProjectType } from "./services/projectType.js";
-import { devServerService } from "./services/DevServerService.js";
+import { detectProjectType } from "./services/project/projectType.js";
+import { devServerService } from "./services/project/DevServerService.js";
 import { serverManager as opencodeServerManager } from "./opencode/serverManager.js";
-import { usageReporter } from "./services/UsageReporter.js";
-import { projectTouchReporter } from "./services/ProjectTouchReporter.js";
-import { workspaceStateReporter } from "./services/WorkspaceStateReporter.js";
-import { requestBucketSync } from "./services/AgentTaskSyncService.js";
+import { usageReporter } from "./services/reporting/UsageReporter.js";
+import { projectTouchReporter } from "./services/reporting/ProjectTouchReporter.js";
+import { workspaceStateReporter } from "./services/reporting/WorkspaceStateReporter.js";
+import { requestBucketSync } from "./services/sync/AgentTaskSyncService.js";
 import { validateStudioConfig } from "@vivd/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

@@ -7,7 +7,7 @@ import { getImageDimensions } from "./utils";
 import { prioritizeImages } from "./prioritize";
 import { describeImage } from "./describe";
 import { generateImageDescriptionFile } from "./report";
-import type { FlowContext } from "../../services/OpenRouterService";
+import type { FlowContext } from "../../services/integrations/OpenRouterService";
 
 export type { ImageInfo };
 

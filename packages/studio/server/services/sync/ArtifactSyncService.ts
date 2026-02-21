@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { detectProjectType, hasNodeModules } from "./projectType.js";
+import { detectProjectType, hasNodeModules } from "../project/projectType.js";
 
 type ArtifactKind = "source" | "preview" | "published";
 

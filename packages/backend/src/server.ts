@@ -24,17 +24,17 @@ import { safeJoin } from "./fs/safePaths";
 import { db } from "./db";
 import { organizationMember, projectMember } from "./db/schema";
 import { and, eq } from "drizzle-orm";
-import { buildService } from "./services/BuildService";
-import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/ObjectStorageService";
-import { getProjectArtifactKeyPrefix } from "./services/ProjectStoragePaths";
+import { buildService } from "./services/project/BuildService";
+import { createS3Client, getObjectStorageConfigFromEnv, getObjectBuffer } from "./services/storage/ObjectStorageService";
+import { getProjectArtifactKeyPrefix } from "./services/project/ProjectStoragePaths";
 import {
   downloadArtifactToDirectory,
   getArtifactStorageConfig,
   resolvePublishableArtifactState,
-} from "./services/ProjectArtifactStateService";
-import { projectMetaService } from "./services/ProjectMetaService";
+} from "./services/project/ProjectArtifactStateService";
+import { projectMetaService } from "./services/project/ProjectMetaService";
 import { getInternalPreviewAccessToken } from "./config/preview";
-import { domainService } from "./services/DomainService";
+import { domainService } from "./services/publish/DomainService";
 import { startStudioMachineReconciler } from "./services/studioMachines";
 
 const app = express();

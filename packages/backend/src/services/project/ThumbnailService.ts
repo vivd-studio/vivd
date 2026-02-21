@@ -1,12 +1,12 @@
 import * as fs from "fs";
-import { scraperClient } from "../generator/scraper-client";
+import { scraperClient } from "../../generator/scraper-client";
 import {
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,
-} from "../generator/vivdPaths";
+} from "../../generator/vivdPaths";
 import { uploadProjectThumbnailBufferToBucket } from "./ProjectArtifactsService";
 import { projectMetaService } from "./ProjectMetaService";
-import { getInternalPreviewAccessToken } from "../config/preview";
+import { getInternalPreviewAccessToken } from "../../config/preview";
 
 // Base URL for the scraper (in Docker) to reach this backend's preview endpoint.
 // In dev/local, use the Docker service name. In production, use the public DOMAIN.

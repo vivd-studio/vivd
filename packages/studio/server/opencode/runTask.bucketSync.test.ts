@@ -49,11 +49,11 @@ vi.mock("./useEvents.js", () => ({
   }),
 }));
 
-vi.mock("../services/AgentTaskSyncService.js", () => ({
+vi.mock("../services/sync/AgentTaskSyncService.js", () => ({
   requestBucketSyncAfterAgentTask: requestBucketSyncAfterAgentTaskMock,
 }));
 
-vi.mock("../services/UsageReporter.js", () => ({
+vi.mock("../services/reporting/UsageReporter.js", () => ({
   usageReporter: {
     report: usageReportMock,
     updateSessionTitle: updateSessionTitleMock,

@@ -4,12 +4,12 @@ import { projectMemberProcedure } from "../../trpc";
 import {
   publishService,
   PublishConflictError,
-} from "../../services/PublishService";
-import { resolvePublishableArtifactState } from "../../services/ProjectArtifactStateService";
+} from "../../services/publish/PublishService";
+import { resolvePublishableArtifactState } from "../../services/project/ProjectArtifactStateService";
 import { studioMachineProvider } from "../../services/studioMachines";
-import { projectMetaService } from "../../services/ProjectMetaService";
-import { studioWorkspaceStateService } from "../../services/StudioWorkspaceStateService";
-import { domainService } from "../../services/DomainService";
+import { projectMetaService } from "../../services/project/ProjectMetaService";
+import { studioWorkspaceStateService } from "../../services/project/StudioWorkspaceStateService";
+import { domainService } from "../../services/publish/DomainService";
 
 export const projectPublishProcedures = {
   /**

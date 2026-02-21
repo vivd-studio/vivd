@@ -9,7 +9,7 @@ import {
   createImageGeneration,
   extractImageFromResponse,
   type FlowContext,
-} from "../services/OpenRouterService";
+} from "../services/integrations/OpenRouterService";
 import {
   ensureVivdInternalFilesDir,
   getVivdInternalFilesPath,

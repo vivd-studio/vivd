@@ -19,7 +19,7 @@ import {
   getObjectStorageConfigFromEnv,
   parseS3Uri,
   uploadDirectoryToBucket,
-} from "../ObjectStorageService";
+} from "../storage/ObjectStorageService";
 import type { S3Client } from "@aws-sdk/client-s3";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

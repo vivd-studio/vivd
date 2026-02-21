@@ -33,7 +33,7 @@ import {
   getObjectStorageConfigFromEnv,
   parseS3Uri,
   type ObjectStorageConfig,
-} from "../../src/services/ObjectStorageService";
+} from "../../src/services/storage/ObjectStorageService";
 
 const RUN_TESTS =
   process.env.VIVD_RUN_OPENCODE_REHYDRATE_REVERT_TESTS === "1";

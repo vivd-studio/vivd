@@ -1,7 +1,7 @@
 import { usageService } from "./UsageService";
 import type { LimitsConfig } from "@vivd/shared/types";
-import { db } from "../db";
-import { organization } from "../db/schema";
+import { db } from "../../db";
+import { organization } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
 // Default configuration values (in credits, where 1 credit = 1 cent)

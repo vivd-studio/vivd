@@ -6,7 +6,7 @@ import type { GenerationContext } from "./types";
 import { generateHtml } from "../steps/generateHtml";
 import { scraperClient } from "../scraper-client";
 import { analyzeImages } from "../image_analyzer";
-import type { FlowContext } from "../../services/OpenRouterService";
+import type { FlowContext } from "../../services/integrations/OpenRouterService";
 
 export interface ScratchAssetInput {
   filename: string;

@@ -13,7 +13,7 @@ import {
   getStudioId,
   type StudioUsageReport,
 } from "@vivd/shared";
-import type { UsageData } from "../opencode/useEvents.js";
+import type { UsageData } from "../../opencode/useEvents.js";
 
 const MAX_QUEUE_SIZE = 100;
 const FLUSH_INTERVAL_MS = 5000;

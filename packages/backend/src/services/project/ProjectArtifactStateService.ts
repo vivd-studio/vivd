@@ -6,7 +6,7 @@ import {
   downloadBucketPrefixToDirectory,
   getObjectBuffer,
   getObjectStorageConfigFromEnv,
-} from "./ObjectStorageService";
+} from "../storage/ObjectStorageService";
 import {
   getProjectArtifactKeyPrefix,
   getProjectPreviewBuildMetaKey,

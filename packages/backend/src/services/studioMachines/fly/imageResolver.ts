@@ -2,7 +2,7 @@ import { normalizeGhcrRepository, resolveLatestSemverImageFromGhcr } from "./ghc
 import {
   getSystemSettingValue,
   SYSTEM_SETTING_KEYS,
-} from "../../SystemSettingsService";
+} from "../../system/SystemSettingsService";
 
 const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 

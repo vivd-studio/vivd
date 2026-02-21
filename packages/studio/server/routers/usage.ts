@@ -1,6 +1,6 @@
 import { router, publicProcedure } from "../trpc/trpc.js";
 import { isConnectedMode } from "@vivd/shared";
-import { usageReporter, type UsageStatus } from "../services/UsageReporter.js";
+import { usageReporter, type UsageStatus } from "../services/reporting/UsageReporter.js";
 
 function nextReset(period: "daily" | "weekly" | "monthly", now: Date = new Date()): Date {
   const next = new Date(now);

@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { detectProjectType, hasNodeModules } from "../devserver/projectType";
-import { gitService } from "./GitService";
+import { detectProjectType, hasNodeModules } from "../../devserver/projectType";
+import { gitService } from "../integrations/GitService";
 import { thumbnailService } from "./ThumbnailService";
 import { uploadProjectPreviewToBucket } from "./ProjectArtifactsService";
 

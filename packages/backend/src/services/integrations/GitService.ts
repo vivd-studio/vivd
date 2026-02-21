@@ -1,7 +1,7 @@
 import { execa } from "execa";
 import * as fs from "fs";
 import * as path from "path";
-import { getActiveTenantId } from "../generator/versionUtils";
+import { getActiveTenantId } from "../../generator/versionUtils";
 import { getGitHubSyncSettings, gitHubApiService } from "./GitHubApiService";
 
 // Marker file name for tracking working commit

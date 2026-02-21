@@ -2,19 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { db } from "../db";
+import { db } from "../../db";
 import {
   projectMeta,
   projectPublishChecklist,
   projectVersion,
-} from "../db/schema";
+} from "../../db/schema";
 import {
   getActiveTenantId,
   getProjectsRootDir,
   getTenantProjectsDir,
-} from "../generator/versionUtils";
-import { getVivdInternalFilesPath } from "../generator/vivdPaths";
-import type { PrePublishChecklist } from "../types/checklistTypes";
+} from "../../generator/versionUtils";
+import { getVivdInternalFilesPath } from "../../generator/vivdPaths";
+import type { PrePublishChecklist } from "../../types/checklistTypes";
 import { uploadProjectThumbnailToBucket } from "./ProjectArtifactsService";
 
 type ManifestFile = {

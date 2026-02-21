@@ -13,6 +13,7 @@
 
 ## Progress Log
 
+- 2026-02-21: grouped service modules into domain subfolders to reduce root-level service sprawl: backend now uses `services/{project,publish,usage,integrations,storage,system}` (with existing `services/studioMachines/fly/*` modular split preserved), and studio server now uses `services/{sync,patching,project,integrations,reporting}`; imports were rewired and targeted backend/studio builds pass.
 - 2026-02-21: restored missing backend domain-service unit coverage at `packages/backend/test/domain_service.test.ts` (reserved organization slug validation).
 - 2026-02-21: maintainability cleanup pass completed for onboarding + boundaries: rewrote root/agent docs for current package layout (`README.md`, `AGENTS.md`, `packages/frontend/README.md`), removed unsafe/invalid migration/client-gen scripts (`db:push`, stale `gen:client`), moved frontend tRPC type import off ad-hoc `@backend/*` alias to a curated backend type export (`packages/backend/src/trpcTypes.ts`), and removed backend runtime patching duplicates/tests so patching ownership is studio-only.
 - 2026-02-21: started Fly provider modularization by extracting drift/metadata/reconcile-config helpers into `packages/backend/src/services/studioMachines/fly/machineModel.ts`; `provider.ts` now delegates to the new module, and reconcile drift coverage now targets the extracted helper directly (`packages/backend/test/fly_provider_reconcile.test.ts`).

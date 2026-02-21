@@ -6,18 +6,18 @@ import { vivdPatchSchema } from "../../shared/types.js";
 import {
   applyHtmlPatches,
   type HtmlPatch,
-} from "../services/HtmlPatchService.js";
+} from "../services/patching/HtmlPatchService.js";
 import {
   applyAstroPatches,
   hasAstroPatches,
   extractAstroPatches,
-} from "../services/AstroPatchService.js";
+} from "../services/patching/AstroPatchService.js";
 import {
   applyI18nJsonPatches,
   hasI18nPatches,
   extractI18nPatches,
-} from "../services/I18nJsonPatchService.js";
-import { requestBucketSync } from "../services/AgentTaskSyncService.js";
+} from "../services/patching/I18nJsonPatchService.js";
+import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 
 export const editRouter = router({
   applyPatches: publicProcedure
