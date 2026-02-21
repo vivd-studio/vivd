@@ -2,13 +2,14 @@ import type { FlyApiError, FlyMachine, FlyMachineConfig } from "./types";
 
 export class FlyApiClient {
   private machinesCache: { machines: FlyMachine[]; fetchedAt: number } | null = null;
+  private readonly options: {
+    getToken: () => string;
+    getAppName: () => string;
+  };
 
-  constructor(
-    private readonly options: {
-      getToken: () => string;
-      getAppName: () => string;
-    },
-  ) {}
+  constructor(options: { getToken: () => string; getAppName: () => string }) {
+    this.options = options;
+  }
 
   clearMachinesCache(): void {
     this.machinesCache = null;

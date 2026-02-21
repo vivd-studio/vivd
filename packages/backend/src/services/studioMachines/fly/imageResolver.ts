@@ -11,12 +11,13 @@ type ImageCache = { image: string; fetchedAt: number };
 export class FlyStudioImageResolver {
   private resolvedImageCache: ImageCache | null = null;
   private resolveImageInflight: Promise<string> | null = null;
+  private readonly options: {
+    getStudioImageRepository: () => string;
+  };
 
-  constructor(
-    private readonly options: {
-      getStudioImageRepository: () => string;
-    },
-  ) {}
+  constructor(options: { getStudioImageRepository: () => string }) {
+    this.options = options;
+  }
 
   private get fallbackStudioImage(): string {
     try {
