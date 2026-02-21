@@ -486,7 +486,6 @@ export type EnsureRunningInnerDeps = {
     args: StudioMachineStartArgs & { studioId: string; accessToken: string },
   ) => Record<string, string>;
   createMachine: (options: { machineName: string; config: FlyMachineConfig }) => Promise<FlyMachine>;
-  region: string;
   desiredGuest: {
     cpu_kind: "shared" | "performance";
     cpus: number;

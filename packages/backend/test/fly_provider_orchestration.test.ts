@@ -23,6 +23,41 @@ const args: StudioMachineStartArgs = {
   env: {},
 };
 
+function studioMachine(options: {
+  id: string;
+  state: FlyMachine["state"];
+  image: string;
+  metadataImage?: string;
+}): FlyMachine {
+  const accessToken = "token-1";
+  return {
+    id: options.id,
+    state: options.state,
+    config: {
+      image: options.image,
+      kill_timeout: 180,
+      guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
+      env: {
+        STUDIO_ID: "studio-1",
+        STUDIO_ACCESS_TOKEN: accessToken,
+        VIVD_TENANT_ID: "org-1",
+        VIVD_PROJECT_SLUG: "site-1",
+        VIVD_PROJECT_VERSION: "1",
+      },
+      services: [{ autostop: "suspend", autostart: false, ports: [{ port: 4100 }] }],
+      metadata: {
+        vivd_organization_id: "org-1",
+        vivd_project_slug: "site-1",
+        vivd_project_version: "1",
+        vivd_external_port: "4100",
+        vivd_studio_id: "studio-1",
+        vivd_studio_access_token: accessToken,
+        ...(options.metadataImage ? { vivd_image: options.metadataImage } : {}),
+      },
+    },
+  };
+}
+
 describe("FlyStudioMachineProvider orchestration", () => {
   it("deduplicates concurrent ensureRunning calls for the same studio key", async () => {
     const provider = new FlyStudioMachineProvider();
@@ -117,12 +152,10 @@ describe("FlyStudioMachineProvider orchestration", () => {
   it("ensureRunningInner creates a machine with expected metadata and returns start result", async () => {
     const provider = new FlyStudioMachineProvider();
 
-    (provider as any).listMachines = async (): Promise<FlyMachine[]> => [];
-    (provider as any).findMachineByName = () => null;
-    (provider as any).findMachine = () => null;
+    (provider as any).apiClient.listMachines = async (): Promise<FlyMachine[]> => [];
     (provider as any).allocatePort = () => 4100;
     (provider as any).getDesiredImage = async () => "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
-    (provider as any).generateStudioAccessToken = () => "token-generated";
+    (provider as any).config.generateStudioAccessToken = () => "token-generated";
     (provider as any).buildStudioEnv = ({ studioId, accessToken }: any) => ({
       PORT: "3100",
       STUDIO_ID: studioId,
@@ -133,14 +166,14 @@ describe("FlyStudioMachineProvider orchestration", () => {
     });
 
     let createPayload: any = null;
-    (provider as any).flyFetch = async (path: string, init: RequestInit = {}) => {
-      expect(path).toBe("/machines");
-      expect(init.method).toBe("POST");
-      createPayload = JSON.parse(String(init.body));
+    (provider as any).apiClient.createMachine = async ({ machineName, config }: any) => {
+      expect(machineName).toContain("site-1");
+      createPayload = { config };
       return { id: "machine-1" } as FlyMachine;
     };
 
-    (provider as any).getPublicUrlForPort = (port: number) => `https://studio.test:${port}`;
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
     (provider as any).waitForReady = async () => {};
 
     let touchedKey: string | null = null;
@@ -173,12 +206,12 @@ describe("FlyStudioMachineProvider orchestration", () => {
   it("warmReconcileStudioMachine returns desired image immediately for destroyed machines", async () => {
     const provider = new FlyStudioMachineProvider();
     (provider as any).getDesiredImage = async () => "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
-    (provider as any).getMachine = async () => ({ id: "m1", state: "destroyed" });
-    (provider as any).getStudioIdentityFromMachine = () => ({
-      organizationId: "org-1",
-      projectSlug: "site-1",
-      version: 1,
-    });
+    (provider as any).getMachine = async () =>
+      studioMachine({
+        id: "m1",
+        state: "destroyed",
+        image: "ghcr.io/vivd-studio/vivd-studio:v1.0.0",
+      });
 
     const result = await provider.warmReconcileStudioMachine("m1");
     expect(result).toEqual({ desiredImage: "ghcr.io/vivd-studio/vivd-studio:v2.0.0" });
@@ -187,17 +220,12 @@ describe("FlyStudioMachineProvider orchestration", () => {
   it("warmReconcileStudioMachine refuses running machines when drift exists", async () => {
     const provider = new FlyStudioMachineProvider();
     (provider as any).getDesiredImage = async () => "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
-    (provider as any).getMachine = async () => ({ id: "m2", state: "started", config: {} });
-    (provider as any).getStudioIdentityFromMachine = () => ({
-      organizationId: "org-1",
-      projectSlug: "site-1",
-      version: 1,
-    });
-    (provider as any).resolveMachineReconcileState = () => ({
-      accessToken: "token-1",
-      needs: { image: true, services: false, guest: false, accessToken: false },
-    });
-    (provider as any).hasMachineDrift = () => true;
+    (provider as any).getMachine = async () =>
+      studioMachine({
+        id: "m2",
+        state: "started",
+        image: "ghcr.io/vivd-studio/vivd-studio:v1.0.0",
+      });
 
     await expect(provider.warmReconcileStudioMachine("m2")).rejects.toThrow(
       "Refusing to warm reconcile running machine m2",
@@ -206,20 +234,21 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
   it("warmReconcileStudioMachine returns desired image when no drift exists", async () => {
     const provider = new FlyStudioMachineProvider();
-    (provider as any).getDesiredImage = async () => "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
-    (provider as any).getMachine = async () => ({ id: "m3", state: "stopped", config: {} });
-    (provider as any).getStudioIdentityFromMachine = () => ({
-      organizationId: "org-1",
-      projectSlug: "site-1",
-      version: 1,
-    });
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    (provider as any).getDesiredImage = async () => desiredImage;
+    (provider as any).getMachine = async () =>
+      studioMachine({
+        id: "m3",
+        state: "stopped",
+        image: desiredImage,
+        metadataImage: desiredImage,
+      });
     (provider as any).resolveMachineReconcileState = () => ({
       accessToken: "token-1",
       needs: { image: false, services: false, guest: false, accessToken: false },
     });
-    (provider as any).hasMachineDrift = () => false;
 
     const result = await provider.warmReconcileStudioMachine("m3");
-    expect(result).toEqual({ desiredImage: "ghcr.io/vivd-studio/vivd-studio:v2.0.0" });
+    expect(result).toEqual({ desiredImage });
   });
 });

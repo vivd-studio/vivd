@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type {
   FlyMachine,
   FlyMachineConfig,
+  FlyMachinePort,
   FlyMachineService,
 } from "./types";
 import { isRecordOfStrings } from "./utils";
@@ -226,6 +227,37 @@ export function buildReconciledMachineConfig(options: {
       : {}),
     metadata: options.metadata,
   };
+}
+
+export function normalizeServicesForVivd(
+  services: FlyMachineService[] | undefined,
+  externalPort: number,
+): FlyMachineService[] {
+  const normalized = (services && services.length > 0 ? services : [{}]).map(
+    (service) => {
+      const ports = (service.ports && service.ports.length > 0
+        ? service.ports
+        : [{ port: externalPort, handlers: ["tls", "http"] }]) as FlyMachinePort[];
+
+      // Ensure the external port we expect is present.
+      const hasExternalPort = ports.some((p) => p.port === externalPort);
+      if (!hasExternalPort) {
+        ports.push({ port: externalPort, handlers: ["tls", "http"] });
+      }
+
+      return {
+        ...service,
+        protocol: service.protocol || "tcp",
+        internal_port: service.internal_port || 3100,
+        ports,
+        autostop: "suspend",
+        autostart: false,
+        min_machines_running: 0,
+      };
+    },
+  );
+
+  return normalized;
 }
 
 export function getStudioAccessTokenFromMachine(machine: FlyMachine): string | null {
