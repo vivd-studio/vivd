@@ -11,8 +11,6 @@
     "test:integration": "npm run test:integration --workspace=@vivd/backend --",
     "lint": "npm run lint --workspace=@vivd/frontend",
     "check": "npm run lint && npm run test:run",
-    "gen:client": "cd packages/backend && npm run generate:spec && cd ../frontend && npm run generate:client",
-    "db:push": "npm run db:push --workspace=@vivd/backend",
     "db:studio": "npm run db:studio --workspace=@vivd/backend",
     "db:generate": "npm run db:generate --workspace=@vivd/backend",
     "db:migrate": "npm run db:migrate --workspace=@vivd/backend"

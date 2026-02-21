@@ -1,6 +1,6 @@
 import { createTRPCReact } from "@trpc/react-query";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@backend/routers/appRouter";
+import type { AppRouter } from "@vivd/backend/src/trpcTypes";
 
 export const trpc = createTRPCReact<AppRouter>();
 

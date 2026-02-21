@@ -13,6 +13,14 @@
 
 ## Progress Log
 
+- 2026-02-21: restored missing backend domain-service unit coverage at `packages/backend/test/domain_service.test.ts` (reserved organization slug validation).
+- 2026-02-21: maintainability cleanup pass completed for onboarding + boundaries: rewrote root/agent docs for current package layout (`README.md`, `AGENTS.md`, `packages/frontend/README.md`), removed unsafe/invalid migration/client-gen scripts (`db:push`, stale `gen:client`), moved frontend tRPC type import off ad-hoc `@backend/*` alias to a curated backend type export (`packages/backend/src/trpcTypes.ts`), and removed backend runtime patching duplicates/tests so patching ownership is studio-only.
+- 2026-02-21: started Fly provider modularization by extracting drift/metadata/reconcile-config helpers into `packages/backend/src/services/studioMachines/fly/machineModel.ts`; `provider.ts` now delegates to the new module, and reconcile drift coverage now targets the extracted helper directly (`packages/backend/test/fly_provider_reconcile.test.ts`).
+- 2026-02-21: continued Fly provider modularization by extracting startup/restart/create workflows to `packages/backend/src/services/studioMachines/fly/runtimeWorkflow.ts` and warm/batch reconcile workflows to `packages/backend/src/services/studioMachines/fly/reconcileWorkflow.ts`; added characterization coverage in `packages/backend/test/fly_provider_orchestration.test.ts` (dedupe, hard-restart inflight gating, create payload, warm-reconcile guardrails).
+- 2026-02-21: added OpenCode custom-tool provisioning in the Studio runtime (starts with a `vivd_test` tool) to enable future agent-callable Vivd plugin operations.
+- 2026-02-21: validated Studio agent custom-tool invocation end-to-end in local connected-mode (`vivd_test` returns org/project-scoped output).
+- 2026-02-21: documented `vivd_test` as temporary bootstrap tooling in plugin-system planning; remove it after `vivd_plugins_*` tools are implemented and validated.
+- 2026-02-20: refined website plugin system plan with clearer UI/agent exposure and studio↔bucket sync constraints (`docs/plugin-system-design.md`).
 - 2026-02-19: GHCR studio image selection now filters tags by manifest readiness (not tag presence alone), so superadmin image options and latest-semver resolution exclude in-progress/unpullable workflow tags.
 - 2026-02-19: updated studio-machine defaults: Fly idle suspend timeout increased to 10 minutes (`FLY_STUDIO_IDLE_TIMEOUT_MS=600000` default), and OpenCode idle server cleanup disabled on studio machines by default (`OPENCODE_IDLE_TIMEOUT_MS=0` in Fly/local machine env).
 - 2026-02-19: removed `kill_timeout` from Fly machine drift detection/reconcile triggers to avoid unnecessary warm-reconcile updates; machine create/restart still sets `kill_timeout`.
@@ -69,9 +77,9 @@
 ## Related Documents
 
 - `docs/refactoring-day-checklist.md`
-- `docs/publishing-bucket-first-plan.md`
-- `docs/tenant-subdomain-domain-governance-plan.md`
-- `docs/dokploy-traefik-wildcard-setup.md`
+- `docs/old/publishing-bucket-first-plan.md`
+- `docs/old/tenant-subdomain-domain-governance-plan.md`
+- `docs/old/dokploy-traefik-wildcard-setup.md`
 - `docs/PROJECT_STATE_ARCHIVE.md`
 
-Last updated: 2026-02-19
+Last updated: 2026-02-21

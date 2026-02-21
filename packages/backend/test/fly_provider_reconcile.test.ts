@@ -1,6 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { FlyStudioMachineProvider } from "../src/services/studioMachines/fly/provider";
+import { describe, expect, it } from "vitest";
+import {
+  resolveMachineReconcileState,
+  STUDIO_ACCESS_TOKEN_ENV_KEY,
+} from "../src/services/studioMachines/fly/machineModel";
 import type { FlyMachine } from "../src/services/studioMachines/fly/types";
+
+const desiredGuest = { cpu_kind: "shared" as const, cpus: 1, memory_mb: 1024 };
 
 function buildMachine(options: {
   image: string;
@@ -14,7 +19,7 @@ function buildMachine(options: {
     config: {
       image: options.image,
       kill_timeout: 180,
-      env: { STUDIO_ACCESS_TOKEN: accessToken },
+      env: { [STUDIO_ACCESS_TOKEN_ENV_KEY]: accessToken },
       guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
       services: [{ autostop: "suspend", autostart: false }],
       metadata: {
@@ -25,73 +30,41 @@ function buildMachine(options: {
   };
 }
 
-describe("FlyStudioMachineProvider machine drift", () => {
-  const originalEnv = new Map<string, string | undefined>();
-
-  beforeEach(() => {
-    for (const key of [
-      "FLY_API_TOKEN",
-      "FLY_STUDIO_APP",
-      "FLY_STUDIO_CPU_KIND",
-      "FLY_STUDIO_CPUS",
-      "FLY_STUDIO_MEMORY_MB",
-    ]) {
-      originalEnv.set(key, process.env[key]);
-    }
-
-    // Prevent the provider constructor from starting background intervals / network calls.
-    delete process.env.FLY_API_TOKEN;
-    delete process.env.FLY_STUDIO_APP;
-
-    process.env.FLY_STUDIO_CPU_KIND = "shared";
-    process.env.FLY_STUDIO_CPUS = "1";
-    process.env.FLY_STUDIO_MEMORY_MB = "1024";
-  });
-
-  afterEach(() => {
-    for (const [key, value] of originalEnv) {
-      if (typeof value === "string") {
-        process.env[key] = value;
-      } else {
-        delete process.env[key];
-      }
-    }
-    originalEnv.clear();
-  });
-
+describe("Fly machine reconcile model", () => {
   it("does not flag image drift when vivd_image metadata matches desired", () => {
-    const provider = new FlyStudioMachineProvider();
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
     const machine = buildMachine({
       image: "registry.fly.io/vivd-studio:deployment-123",
       metadataImage: desiredImage,
     });
 
-    const reconcileState = (provider as any).resolveMachineReconcileState({
+    const reconcileState = resolveMachineReconcileState({
       machine,
       desiredImage,
-    }) as { needs: { image: boolean } };
+      desiredGuest,
+      generateStudioAccessToken: () => "generated-access-token",
+    });
 
     expect(reconcileState.needs.image).toBe(false);
   });
 
   it("flags image drift when metadata image is missing and config image differs", () => {
-    const provider = new FlyStudioMachineProvider();
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
     const machine = buildMachine({
       image: "ghcr.io/vivd-studio/vivd-studio:v1.2.2",
     });
 
-    const reconcileState = (provider as any).resolveMachineReconcileState({
+    const reconcileState = resolveMachineReconcileState({
       machine,
       desiredImage,
-    }) as { needs: { image: boolean } };
+      desiredGuest,
+      generateStudioAccessToken: () => "generated-access-token",
+    });
 
     expect(reconcileState.needs.image).toBe(true);
   });
 
   it("still reads vivd_image when metadata contains non-string values", () => {
-    const provider = new FlyStudioMachineProvider();
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
     const machine = buildMachine({
       image: "registry.fly.io/vivd-studio:deployment-123",
@@ -105,10 +78,12 @@ describe("FlyStudioMachineProvider machine drift", () => {
       vivd_project_version: 1,
     };
 
-    const reconcileState = (provider as any).resolveMachineReconcileState({
+    const reconcileState = resolveMachineReconcileState({
       machine,
       desiredImage,
-    }) as { needs: { image: boolean } };
+      desiredGuest,
+      generateStudioAccessToken: () => "generated-access-token",
+    });
 
     expect(reconcileState.needs.image).toBe(false);
   });

@@ -207,6 +207,68 @@ Optional: persist discovery info into the project:
 
 This makes plugin installs repeatable and easy for the agent to reason about.
 
+### Agent + UI Exposure (Recommendation)
+
+**Source of truth stays in the control-plane DB.** The Studio workspace should not be treated as the authoritative place for plugin configuration/state.
+
+#### UI (where plugin enable/config lives)
+
+- Add a **Plugins** section to the **control-plane UI** (`packages/frontend`) scoped to a project.
+  - Rationale: plugin runtime must work even when no studio machine is running, so enable/disable/config should not depend on studio.
+- The UI flow for “Contact Forms” MVP:
+  1) Enable plugin
+  2) Configure recipient(s) / redirect allowlist / basic spam controls
+  3) Copy snippet(s) (HTML + optional Astro variant)
+  4) (MVP+) Inbox tab for submissions
+
+#### Agent (how it learns plugin state)
+
+- Provide an authenticated backend procedure like `plugins.ensureInstanceAndGetSnippet(...)` that:
+  - ensures the plugin instance exists for the project
+  - returns `publicToken` + recommended snippet(s) + minimal “recipe” metadata
+- The agent should prefer calling this procedure over relying on project files, so it always sees the latest configuration.
+
+#### Agent tool exposure (OpenCode custom tools)
+
+For Vivd-specific operations (plugin enablement, snippet generation, inbox access, etc.), ship a small set of **OpenCode custom tools** into the Studio runtime (e.g. `vivd_plugins_*`).
+
+- Status (2026-02-21): this path is validated in local connected-mode via `vivd_test` end-to-end agent invocation, so new plugin tools can be added on the same custom-tool layer immediately.
+- Temporary tool note: `vivd_test` is a bootstrap-only sanity tool and should be removed once real `vivd_plugins_*` tools are implemented and validated.
+- OpenCode loads custom tools from:
+  - per-project `.opencode/tools/`, or
+  - global `~/.config/opencode/tools/` (recommended for Studio-provisioned tools)
+- Prefer provisioning the tools in the Studio runtime (global tool dir) so they’re available for every project **without writing into the bucket-synced source**.
+- Tools can authenticate back to the control plane using `MAIN_BACKEND_URL + SESSION_TOKEN`, and should scope requests with `VIVD_TENANT_ID` / `VIVD_PROJECT_SLUG`.
+
+#### Project “bridge files” (`.vivd/plugins.json`) — optional and **derived**
+
+If we materialize plugin info in the project workspace, treat it as a **read-only cache** for humans/agents:
+
+- Must not contain secrets (SMTP creds, API keys, webhook signing secrets, etc.).
+  - It may contain **public tokens** that are already embedded in website HTML (e.g. contact form token).
+- Suggested shape (example):
+  ```json
+  {
+    "schemaVersion": 1,
+    "generatedAt": "2026-02-20T12:00:00.000Z",
+    "project": { "organizationId": "org_...", "slug": "my-site" },
+    "plugins": [
+      {
+        "pluginId": "contact_form",
+        "instanceId": "ppi_...",
+        "status": "enabled",
+        "public": { "token": "ppi_....<random>" }
+      }
+    ]
+  }
+  ```
+- Studio/bucket sync caveat:
+  - Studio source sync is **exact** (local provider deletes the remote prefix; Fly uses `aws s3 sync --delete`).
+  - Therefore **the backend must not “inject” files directly into the source bucket while a studio machine is running** (they can be deleted/overwritten by the next sync).
+- Practical approach if we want the bridge file:
+  - Prefer generating/updating `.vivd/plugins.json` **from inside the studio machine** (single-writer), by fetching current plugin state from the backend using `MAIN_BACKEND_URL + SESSION_TOKEN`, then letting the normal studio→bucket sync persist it.
+  - If no studio machine is running, optionally write the cache into the bucket so it will be present on next hydrate (but still treat it as derived).
+
 ---
 
 ## Routing Options (Decision)
@@ -257,4 +319,3 @@ Two viable approaches; MVP can start with (A) and keep (B) as a refinement.
 - Endpoint surface:
   - keep under `/vivd-studio/api/plugins/...` for MVP, or
   - introduce `/api/plugins/...` for cleaner public URLs.
-

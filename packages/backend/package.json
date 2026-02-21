@@ -14,7 +14,6 @@
     "test:unit": "vitest run --exclude test/integration/**",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:coverage": "vitest run --coverage",
-    "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",

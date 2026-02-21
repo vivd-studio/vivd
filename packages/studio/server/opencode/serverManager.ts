@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess, execSync, spawnSync } from "node:child_process";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
+import os from "node:os";
 import * as path from "node:path";
+import fs from "node:fs";
 import treeKill from "tree-kill";
 
 const hasPsCommand = (() => {
@@ -44,6 +46,58 @@ const debugLog = (...args: unknown[]) => {
     console.log("[OpenCode ServerManager]", ...args);
   }
 };
+
+const VIVD_OPENCODE_TEST_TOOL = `import { tool } from "@opencode-ai/plugin";
+
+export default tool({
+  description: "Vivd test tool (returns a static string).",
+  args: {},
+  async execute(_args, context) {
+    const org = (process.env.VIVD_TENANT_ID || "").trim() || "unknown";
+    const project = (process.env.VIVD_PROJECT_SLUG || "").trim() || "unknown";
+
+    return \`vivd_test: ok (org=\${org}, project=\${project}, directory=\${context.directory})\`;
+  },
+});
+`;
+
+function resolveOpencodeConfigDir(): string {
+  const xdgConfigHome = (process.env.XDG_CONFIG_HOME || "").trim();
+  if (xdgConfigHome) return path.join(xdgConfigHome, "opencode");
+  return path.join(os.homedir(), ".config", "opencode");
+}
+
+function resolveOpencodeToolsDir(): string {
+  return path.join(resolveOpencodeConfigDir(), "tools");
+}
+
+async function ensureFileContents(filePath: string, contents: string): Promise<void> {
+  try {
+    const existing = await fs.promises.readFile(filePath, "utf-8");
+    if (existing === contents) return;
+  } catch {
+    // Ignore and write below.
+  }
+
+  await fs.promises.writeFile(filePath, contents, "utf-8");
+}
+
+let ensureVivdOpencodeToolsPromise: Promise<void> | null = null;
+async function ensureVivdOpencodeToolsInstalled(): Promise<void> {
+  if (ensureVivdOpencodeToolsPromise) return ensureVivdOpencodeToolsPromise;
+
+  ensureVivdOpencodeToolsPromise = (async () => {
+    const toolsDir = resolveOpencodeToolsDir();
+    await fs.promises.mkdir(toolsDir, { recursive: true });
+
+    await ensureFileContents(path.join(toolsDir, "vivd_test.ts"), VIVD_OPENCODE_TEST_TOOL);
+  })().catch((error) => {
+    ensureVivdOpencodeToolsPromise = null;
+    throw error;
+  });
+
+  return ensureVivdOpencodeToolsPromise;
+}
 
 class OpencodeServerManager {
   private servers = new Map<string, OpencodeServerInfo>();
@@ -359,6 +413,12 @@ class OpencodeServerManager {
     const workspaceDir = this.normalizeProjectDir(projectDir);
 
     const url = `http://127.0.0.1:${port}`;
+
+    try {
+      await ensureVivdOpencodeToolsInstalled();
+    } catch (error) {
+      console.error("[OpenCode] Failed to install Vivd OpenCode tools:", error);
+    }
 
     const proc = spawn("opencode", ["serve", "--port", String(port)], {
       cwd: workspaceDir,

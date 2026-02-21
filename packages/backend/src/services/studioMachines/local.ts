@@ -810,7 +810,9 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     await this.studioBuildPromise;
 
     if (!fs.existsSync(entry)) {
-      throw new Error("Studio build completed but dist/index.js was not found");
+      throw new Error(
+        "Studio build completed but expected server output was not found (dist/index.js).",
+      );
     }
   }
 

@@ -1,0 +1,532 @@
+import type { MachineReconcileNeeds } from "./machineModel";
+import type {
+  FlyMachine,
+  FlyMachineConfig,
+  FlyMachineState,
+  FlyStudioMachineReconcileResult,
+} from "./types";
+
+type StudioIdentity = {
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+};
+
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  const concurrency = Math.max(1, Math.floor(limit));
+  let index = 0;
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = index++;
+        if (i >= items.length) return;
+        await worker(items[i]!);
+      }
+    },
+  );
+
+  await Promise.all(runners);
+}
+
+type WaitForStateOptions = {
+  machineId: string;
+  state: FlyMachineState;
+  timeoutMs: number;
+};
+
+type WaitForReadyOptions = {
+  machineId: string;
+  url: string;
+  timeoutMs: number;
+};
+
+export type WarmReconcileStudioMachineDeps = {
+  getDesiredImage: () => Promise<string>;
+  getMachine: (machineId: string) => Promise<FlyMachine>;
+  getStudioIdentityFromMachine: (machine: FlyMachine) => StudioIdentity | null;
+  resolveMachineReconcileState: (options: {
+    machine: FlyMachine;
+    desiredImage: string;
+    preferredAccessToken?: string | null;
+  }) => { accessToken: string; needs: MachineReconcileNeeds };
+  hasMachineDrift: (needs: MachineReconcileNeeds) => boolean;
+  shouldStopSuspendedBeforeReconcile: (
+    state: string | undefined,
+    needs: MachineReconcileNeeds,
+  ) => boolean;
+  stopMachine: (machineId: string) => Promise<void>;
+  waitForState: (options: WaitForStateOptions) => Promise<void>;
+  getMachineExternalPort: (machine: FlyMachine) => number | null;
+  resolveStudioIdFromMachine: (machine: FlyMachine, fallback?: string | null) => string;
+  buildReconciledMetadata: (options: {
+    machine: FlyMachine;
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    port: number;
+    studioId: string;
+    desiredImage: string;
+    accessToken: string;
+    extra?: Record<string, string>;
+  }) => Record<string, string>;
+  buildReconciledMachineConfig: (options: {
+    machine: FlyMachine;
+    port: number;
+    desiredImage: string;
+    accessToken: string;
+    needs: MachineReconcileNeeds;
+    metadata: Record<string, string>;
+    fullEnv?: Record<string, string>;
+  }) => FlyMachineConfig;
+  updateMachineConfig: (options: {
+    machineId: string;
+    config: FlyMachineConfig;
+    skipLaunch?: boolean;
+  }) => Promise<FlyMachine>;
+  waitForReconcileDriftToClear: (options: {
+    machineId: string;
+    desiredImage: string;
+    timeoutMs: number;
+  }) => Promise<MachineReconcileNeeds | null>;
+  getMachineDriftLabels: (needs: MachineReconcileNeeds) => string[];
+  trimToken: (value: string | null | undefined) => string | null;
+  getMachineMetadataValue: (machine: FlyMachine, key: string) => string | null;
+  startMachineHandlingReplacement: (machineId: string) => Promise<void>;
+  getPublicUrlForPort: (port: number) => string;
+  waitForReady: (options: WaitForReadyOptions) => Promise<void>;
+  startTimeoutMs: number;
+  suspendOrStopMachine: (machineId: string) => Promise<"suspended" | "stopped">;
+};
+
+export async function warmReconcileStudioMachineWorkflow(
+  deps: WarmReconcileStudioMachineDeps,
+  machineId: string,
+): Promise<{ desiredImage: string }> {
+  const desiredImage = await deps.getDesiredImage();
+
+  const machine = await deps.getMachine(machineId);
+  const identity = deps.getStudioIdentityFromMachine(machine);
+  if (!identity) {
+    throw new Error(
+      `[FlyMachines] Refusing to warm reconcile non-studio machine ${machineId}`,
+    );
+  }
+
+  const state = machine.state || "unknown";
+  if (state === "destroyed" || state === "destroying") {
+    return { desiredImage };
+  }
+
+  const reconcileState = deps.resolveMachineReconcileState({
+    machine,
+    desiredImage,
+  });
+  if (!deps.hasMachineDrift(reconcileState.needs)) {
+    return { desiredImage };
+  }
+
+  if (state === "started" || state === "starting") {
+    throw new Error(
+      `[FlyMachines] Refusing to warm reconcile running machine ${machineId} (state=${state})`,
+    );
+  }
+
+  let current = machine;
+  let currentState = state;
+  let currentReconcileState = reconcileState;
+
+  // Suspended machines would resume a snapshot; stop first to boot the new image.
+  if (deps.shouldStopSuspendedBeforeReconcile(currentState, currentReconcileState.needs)) {
+    await deps.stopMachine(machineId);
+    await deps.waitForState({
+      machineId,
+      state: "stopped",
+      timeoutMs: 60_000,
+    });
+    current = await deps.getMachine(machineId);
+    currentState = current.state || "unknown";
+    currentReconcileState = deps.resolveMachineReconcileState({
+      machine: current,
+      desiredImage,
+    });
+  }
+
+  if (!deps.hasMachineDrift(currentReconcileState.needs)) {
+    return { desiredImage };
+  }
+
+  if (currentState !== "stopped") {
+    throw new Error(
+      `[FlyMachines] Cannot warm reconcile machine ${machineId}; expected state=stopped but got state=${currentState}`,
+    );
+  }
+
+  const port = deps.getMachineExternalPort(current);
+  if (!port) {
+    throw new Error("Missing external port; cannot warm image");
+  }
+
+  const studioId = deps.resolveStudioIdFromMachine(current);
+  const accessToken = currentReconcileState.accessToken;
+  const reconciledAt = new Date().toISOString();
+  const metadata = deps.buildReconciledMetadata({
+    machine: current,
+    organizationId: identity.organizationId,
+    projectSlug: identity.projectSlug,
+    version: identity.version,
+    port,
+    studioId,
+    desiredImage,
+    accessToken,
+    extra: {
+      vivd_last_machine_reconcile_at: reconciledAt,
+      ...(currentReconcileState.needs.image ? { vivd_last_image_reconcile_at: reconciledAt } : {}),
+    },
+  });
+
+  const config = deps.buildReconciledMachineConfig({
+    machine: current,
+    port,
+    desiredImage,
+    accessToken,
+    needs: currentReconcileState.needs,
+    metadata,
+  });
+
+  await deps.updateMachineConfig({
+    machineId,
+    config,
+    skipLaunch: true,
+  });
+
+  const remainingDrift = await deps.waitForReconcileDriftToClear({
+    machineId,
+    desiredImage,
+    timeoutMs: 10_000,
+  });
+  if (remainingDrift) {
+    const driftLabels = deps.getMachineDriftLabels(remainingDrift).join(",");
+    const refreshed = await deps.getMachine(machineId);
+    const configImage =
+      typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
+    const metadataImage = deps.trimToken(deps.getMachineMetadataValue(refreshed, "vivd_image"));
+    console.warn(
+      `[FlyMachines] Warm reconcile drift did not clear for ${machineId} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${driftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
+    );
+  }
+
+  await deps.startMachineHandlingReplacement(machineId);
+  const url = deps.getPublicUrlForPort(port);
+  await deps.waitForReady({
+    machineId,
+    url,
+    timeoutMs: Math.min(deps.startTimeoutMs, 120_000),
+  });
+
+  const parked = await deps.suspendOrStopMachine(machineId);
+  if (parked !== "suspended") {
+    throw new Error(
+      `[FlyMachines] Warm reconcile parked machine ${machineId} in state=${parked}; expected suspended`,
+    );
+  }
+
+  return { desiredImage };
+}
+
+export type ReconcileStudioMachinesInnerDeps = {
+  getDesiredImage: () => Promise<string>;
+  listMachines: () => Promise<FlyMachine[]>;
+  maxMachineAgeMs: number;
+  reconcilerDryRun: boolean;
+  getStudioIdentityFromMachine: (machine: FlyMachine) => StudioIdentity | null;
+  getMachineCreatedAtMs: (machine: FlyMachine) => number | null;
+  reconcilerConcurrency: number;
+  getMachine: (machineId: string) => Promise<FlyMachine>;
+  stopMachine: (machineId: string) => Promise<void>;
+  waitForState: (options: WaitForStateOptions) => Promise<void>;
+  destroyMachine: (machineId: string) => Promise<void>;
+  resolveMachineReconcileState: (options: {
+    machine: FlyMachine;
+    desiredImage: string;
+    preferredAccessToken?: string | null;
+  }) => { accessToken: string; needs: MachineReconcileNeeds };
+  hasMachineDrift: (needs: MachineReconcileNeeds) => boolean;
+  getMachineDriftLabels: (needs: MachineReconcileNeeds) => string[];
+  warmOutdatedImages: boolean;
+  shouldStopSuspendedBeforeReconcile: (
+    state: string | undefined,
+    needs: MachineReconcileNeeds,
+  ) => boolean;
+  getMachineExternalPort: (machine: FlyMachine) => number | null;
+  resolveStudioIdFromMachine: (machine: FlyMachine, fallback?: string | null) => string;
+  buildReconciledMetadata: (options: {
+    machine: FlyMachine;
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    port: number;
+    studioId: string;
+    desiredImage: string;
+    accessToken: string;
+    extra?: Record<string, string>;
+  }) => Record<string, string>;
+  buildReconciledMachineConfig: (options: {
+    machine: FlyMachine;
+    port: number;
+    desiredImage: string;
+    accessToken: string;
+    needs: MachineReconcileNeeds;
+    metadata: Record<string, string>;
+    fullEnv?: Record<string, string>;
+  }) => FlyMachineConfig;
+  updateMachineConfig: (options: {
+    machineId: string;
+    config: FlyMachineConfig;
+    skipLaunch?: boolean;
+  }) => Promise<FlyMachine>;
+  waitForReconcileDriftToClear: (options: {
+    machineId: string;
+    desiredImage: string;
+    timeoutMs: number;
+  }) => Promise<MachineReconcileNeeds | null>;
+  trimToken: (value: string | null | undefined) => string | null;
+  getMachineMetadataValue: (machine: FlyMachine, key: string) => string | null;
+  startMachineHandlingReplacement: (machineId: string) => Promise<void>;
+  getPublicUrlForPort: (port: number) => string;
+  waitForReady: (options: WaitForReadyOptions) => Promise<void>;
+  startTimeoutMs: number;
+  suspendOrStopMachine: (machineId: string) => Promise<"suspended" | "stopped">;
+};
+
+export async function reconcileStudioMachinesInnerWorkflow(
+  deps: ReconcileStudioMachinesInnerDeps,
+): Promise<FlyStudioMachineReconcileResult> {
+  const desiredImage = await deps.getDesiredImage();
+  const machines = await deps.listMachines();
+  const now = Date.now();
+  const maxAgeMs = deps.maxMachineAgeMs;
+  const dryRun = deps.reconcilerDryRun;
+
+  const result: FlyStudioMachineReconcileResult = {
+    desiredImage,
+    scanned: 0,
+    warmedOutdatedImages: 0,
+    destroyedOldMachines: 0,
+    skippedRunningMachines: 0,
+    dryRun,
+    errors: [],
+  };
+
+  const studioMachines = machines.flatMap((machine) => {
+    const identity = deps.getStudioIdentityFromMachine(machine);
+    return identity ? [{ machine, identity }] : [];
+  });
+  result.scanned = studioMachines.length;
+
+  await mapLimit(studioMachines, deps.reconcilerConcurrency, async ({ machine, identity }) => {
+    const createdAtMs = deps.getMachineCreatedAtMs(machine);
+    const ageMs = createdAtMs ? now - createdAtMs : null;
+    const isOld = ageMs !== null && ageMs >= maxAgeMs;
+
+    // Prefer GC over image warmups for very old machines.
+    if (isOld) {
+      const state = machine.state || "unknown";
+      if (state === "destroyed" || state === "destroying") return;
+
+      if (dryRun) {
+        console.log(
+          `[FlyMachines] (dry-run) GC old machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} ageDays=${ageMs ? Math.floor(ageMs / (24 * 60 * 60 * 1000)) : "?"}`,
+        );
+        return;
+      }
+
+      try {
+        const current = await deps.getMachine(machine.id);
+        const currentState = current.state || "unknown";
+
+        if (
+          currentState !== "stopped" &&
+          currentState !== "destroyed" &&
+          currentState !== "destroying"
+        ) {
+          await deps.stopMachine(machine.id);
+          await deps.waitForState({
+            machineId: machine.id,
+            state: "stopped",
+            timeoutMs: 60_000,
+          });
+        }
+
+        await deps.destroyMachine(machine.id);
+        result.destroyedOldMachines++;
+        console.log(
+          `[FlyMachines] Destroyed old machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version})`,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        result.errors.push({
+          machineId: machine.id,
+          action: "gc",
+          message,
+        });
+        console.warn(
+          `[FlyMachines] GC failed for machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}): ${message}`,
+        );
+      }
+
+      return;
+    }
+
+    const reconcileState = deps.resolveMachineReconcileState({
+      machine,
+      desiredImage,
+    });
+    if (!deps.hasMachineDrift(reconcileState.needs)) return;
+    const driftLabels = deps.getMachineDriftLabels(reconcileState.needs);
+
+    const state = machine.state || "unknown";
+    if (state === "started" || state === "starting") {
+      result.skippedRunningMachines++;
+      return;
+    }
+
+    if (!deps.warmOutdatedImages) return;
+
+    if (dryRun) {
+      console.log(
+        `[FlyMachines] (dry-run) Warm reconciled machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} drift=${driftLabels.join(",")}`,
+      );
+      return;
+    }
+
+    try {
+      let current = await deps.getMachine(machine.id);
+      let currentState = current.state || "unknown";
+      let currentReconcileState = deps.resolveMachineReconcileState({
+        machine: current,
+        desiredImage,
+      });
+
+      if (currentState === "destroyed" || currentState === "destroying") return;
+
+      // Suspended machines would resume a snapshot; stop first to boot the new image.
+      if (deps.shouldStopSuspendedBeforeReconcile(currentState, currentReconcileState.needs)) {
+        await deps.stopMachine(machine.id);
+        await deps.waitForState({
+          machineId: machine.id,
+          state: "stopped",
+          timeoutMs: 60_000,
+        });
+        current = await deps.getMachine(machine.id);
+        currentState = current.state || "unknown";
+        currentReconcileState = deps.resolveMachineReconcileState({
+          machine: current,
+          desiredImage,
+        });
+      }
+
+      if (!deps.hasMachineDrift(currentReconcileState.needs)) return;
+      if (current.state !== "stopped") {
+        // Unexpected state (e.g. replacing). Skip and retry next cycle.
+        return;
+      }
+
+      const port = deps.getMachineExternalPort(current);
+      if (!port) {
+        throw new Error("Missing external port; cannot warm image");
+      }
+
+      const studioId = deps.resolveStudioIdFromMachine(current);
+      const accessToken = currentReconcileState.accessToken;
+      const reconciledAt = new Date().toISOString();
+      const metadata = deps.buildReconciledMetadata({
+        machine: current,
+        organizationId: identity.organizationId,
+        projectSlug: identity.projectSlug,
+        version: identity.version,
+        port,
+        studioId,
+        desiredImage,
+        accessToken,
+        extra: {
+          vivd_last_machine_reconcile_at: reconciledAt,
+          ...(currentReconcileState.needs.image
+            ? { vivd_last_image_reconcile_at: reconciledAt }
+            : {}),
+        },
+      });
+
+      const config = deps.buildReconciledMachineConfig({
+        machine: current,
+        port,
+        desiredImage,
+        accessToken,
+        needs: currentReconcileState.needs,
+        metadata,
+      });
+
+      await deps.updateMachineConfig({
+        machineId: machine.id,
+        config,
+        skipLaunch: true,
+      });
+
+      const remainingDrift = await deps.waitForReconcileDriftToClear({
+        machineId: machine.id,
+        desiredImage,
+        timeoutMs: 10_000,
+      });
+      if (remainingDrift) {
+        const remainingDriftLabels = deps.getMachineDriftLabels(remainingDrift).join(",");
+        const refreshed = await deps.getMachine(machine.id);
+        const configImage =
+          typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
+        const metadataImage = deps.trimToken(
+          deps.getMachineMetadataValue(refreshed, "vivd_image"),
+        );
+        console.warn(
+          `[FlyMachines] Warm reconcile drift did not clear for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${remainingDriftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
+        );
+      }
+
+      await deps.startMachineHandlingReplacement(machine.id);
+      const url = deps.getPublicUrlForPort(port);
+      await deps.waitForReady({
+        machineId: machine.id,
+        url,
+        timeoutMs: Math.min(deps.startTimeoutMs, 120_000),
+      });
+
+      // Park the machine quickly so the next user start is fast, without leaving it running.
+      const parked = await deps.suspendOrStopMachine(machine.id);
+      if (parked !== "suspended") {
+        throw new Error(
+          `[FlyMachines] Warm reconcile parked machine ${machine.id} in state=${parked}; expected suspended`,
+        );
+      }
+
+      result.warmedOutdatedImages++;
+      console.log(
+        `[FlyMachines] Warmed reconciled machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) drift=${driftLabels.join(",")}`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.errors.push({
+        machineId: machine.id,
+        action: "warm_reconciled_machine",
+        message,
+      });
+      console.warn(
+        `[FlyMachines] Warm reconciled machine failed for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}): ${message}`,
+      );
+    }
+  });
+
+  return result;
+}

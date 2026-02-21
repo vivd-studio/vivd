@@ -1,57 +1,82 @@
 # Vivd (Monorepo)
 
-Vivd is an AI-powered website builder: generate a site, preview/edit it in the studio, and publish it via Caddy.
+Vivd is an AI-powered website builder: generate a site, preview/edit it in Studio, and publish it via Caddy.
 
 ## Project State & Roadmap
 
-See **`docs/PROJECT_STATE.md`** for the current implementation roadmap, progress tracking, and open decisions.
+See `docs/PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
 
-**Important:** When the plan changes or tasks are completed, update `docs/PROJECT_STATE.md` to reflect the current state.
+When plans change or work is completed, update `docs/PROJECT_STATE.md` in the same change.
 
-## Repo Layout
+## Core Architecture
 
-Vivd uses an npm workspaces monorepo (`package.json` at repo root, one root `package-lock.json`).
+Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock.json`).
 
-- `packages/backend`: Express + tRPC, Better Auth, Drizzle migrations, OpenCode agent integration. Serves project files and manages publishing (writes Caddy snippets + reloads Caddy).
-- `packages/frontend`: React + Vite studio UI. Uses tRPC, shadcn/ui, `react-hook-form`. Tailwind design tokens come from `@vivd/theme`.
-- `packages/scraper`: Dedicated Express + Puppeteer service (called by backend).
-- `packages/shared`: Shared types + SaaS mode config (`SAAS_MODE`, `CONTROL_PLANE_*`) for the studio backend.
-- `packages/theme`: Shared CSS variables/themes for any frontend apps.
-- `legacy/control-panel`: Legacy/previous control-panel attempt (not the planned SaaS control plane).
+- `packages/backend`: control-plane backend (Express + tRPC, Better Auth, Drizzle migrations, publish/domain orchestration, studio machine orchestration).
+- `packages/frontend`: control-plane React UI.
+- `packages/studio`: isolated studio runtime (server + client) for workspace edits and agent operations.
+- `packages/scraper`: dedicated Express + Puppeteer scraping service.
+- `packages/shared`: shared config/types used across services.
+- `packages/theme`: shared CSS variables/theme tokens.
+
+## Ownership Boundaries (Important)
+
+- Studio file patching/edit logic (HTML/Astro/i18n patching) belongs in `packages/studio` runtime paths.
+- Keep backend and studio responsibilities separated; avoid duplicating runtime patching logic across both.
+- Frontend should not depend on backend internals via ad-hoc local path aliases; prefer explicit shared contracts.
+
+## OpenCode Studio Tools
+
+- Use OpenCode custom tools to provide agent capabilities that are not available via built-in tools (plugin operations, Vivd workflows, external integrations, structured project automation).
+- Target tool namespace: `vivd_plugins_*` for real plugin capabilities. `vivd_test` is temporary bootstrap tooling and should be removed after real tools are validated.
+- Implementation location: `packages/studio/server/opencode/serverManager.ts` provisions tool files into Studio runtime global tools at `~/.config/opencode/tools/` before `opencode serve` starts.
+- When adding a tool:
+  1. Add the tool source in the Studio tool provisioner (`serverManager.ts`) with a stable name (prefer `vivd_plugins_<action>` for plugin tools).
+  2. In tool `execute`, implement only the minimum required capability path (backend API, local workspace logic, or external API), and use connected-mode auth/scope envs when calling Vivd backend (`MAIN_BACKEND_URL`, `SESSION_TOKEN`, `VIVD_TENANT_ID`, `VIVD_PROJECT_SLUG`).
+  3. Keep outputs safe (no secrets), return concise structured text, then verify the tool is callable by the agent in connected mode.
 
 ## Generated Sites
 
-The generator produces plain HTML (`index.html`) files by default. We also support Astro projects, which can be built and served by the devserver.
+The generator outputs plain HTML (`index.html`) by default. Astro projects are also supported and can be built/served by the devserver.
 
 ## Package Manager Rules
 
-- Install deps at repo root; avoid per-package `package-lock.json` files.
-- Run package scripts via workspaces, e.g. `npm run build -w @vivd/backend`.
+- Install dependencies at repo root.
+- Avoid per-package lockfiles.
+- Run scripts via workspaces, e.g. `npm run build -w @vivd/backend`.
 
 ## Docker / Local Dev
 
-- `docker-compose.yml` is the base stack; `docker-compose.override.yml` is local dev overrides.
-- Local URLs (via Caddy): studio at `http://localhost/vivd-studio`, published sites at `http://localhost/`.
-- `docker-compose.self-hosted.yml` is the self-hosted production compose (GHCR images, `SAAS_MODE=false`).
+- `docker-compose.yml`: base stack.
+- `docker-compose.override.yml`: local dev overrides.
+- `docker-compose.self-hosted.yml`: self-hosted production compose (`SAAS_MODE=false`, GHCR images).
+- Local URLs via Caddy:
+  - Studio/control-plane route: `http://localhost/vivd-studio`
+  - Published-site host: `http://localhost/`
 
 ## DB / Migrations
 
-- Drizzle migrations only. Do not use `drizzle-kit push` / `db:push`.
-
+- Drizzle migrations only.
+- Allowed flow: `db:generate` + `db:migrate`.
+- Do not use `drizzle-kit push` / `db:push`.
 
 ## Testing Note
 
-- Avoid running full test suites frequently (some workflows are long-running / use paid APIs). Prefer targeted builds and minimal checks.
+- Avoid running full suites frequently (some flows are long-running and/or paid-API dependent).
+- Prefer targeted tests/builds for touched areas.
 
-## GIT
+## Git
 
-- DO NOT COMMIT or PUSH code. Just change and let me handle git. You can use other git commands to help you understand the codebase.
+- Do not commit or push; make working-tree changes only.
+- Git commands for inspection are fine.
 
 ## Studio Image Debugging (GHCR dev tags)
 
-- We can use the `scripts/push-studio.sh` (push-image) helper to push a `dev-*` studio image to GHCR for quick debugging without cutting a full release tag.
-  - Example: `./scripts/push-studio.sh dev-0.3.34` (or run with no args to push `dev-<gitsha>`).
-- In **Super Admin → Machines**, select the `dev-*` tag in the **Studio image** dropdown and run **Reconcile now** to roll studio machines to that image.
-- Select **Latest (auto)** to clear the pin and go back to the latest semver image.
-- If `FLY_STUDIO_IMAGE` is set in the backend environment, the selector is locked (env wins).
-- you can ask the user to help you with testing this
+- Push a temporary Studio image: `./scripts/push-studio.sh [dev-tag]`
+  - Example: `./scripts/push-studio.sh dev-0.3.34`
+  - No arg: pushes `dev-<gitsha>`
+- In Super Admin → Machines:
+  - Select a `dev-*` tag in **Studio image** and run **Reconcile now** to roll machines.
+  - Select **Latest (auto)** to clear pinning.
+- If `FLY_STUDIO_IMAGE` is set in backend env, the selector is locked (env override wins).
+- Ask the user to help with runtime verification if needed.

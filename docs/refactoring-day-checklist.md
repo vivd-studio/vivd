@@ -30,15 +30,15 @@ Purpose: improve developer efficiency, readability, and maintainability with low
 
 ## 4) Deduplicate Backend/Studio Shared Runtime Logic
 
-- [ ] Extract duplicated patching logic (`HtmlPatchService`, `i18nInlinePatches`) into a shared runtime package/module.
+- [x] Remove backend-side duplicate patching runtime (`HtmlPatchService`, `AstroPatchService`, `I18nJsonPatchService`, `i18nInlinePatches`) so studio runtime is the single patching owner.
 - [ ] Extract duplicated OpenCode stream/event logic into shared runtime package/module.
 - [ ] Keep environment-specific wiring in backend/studio, but share pure logic and types.
 
 ## 5) Align Scripts and Docs With Migration Rules
 
-- [ ] Remove/rename root and backend `db:push` scripts to prevent accidental use.
-- [ ] Keep Drizzle migration workflow explicit (`db:generate` + `db:migrate` only).
-- [ ] Fix README commands that do not exist (for example missing root `dev` script).
+- [x] Remove/rename root and backend `db:push` scripts to prevent accidental use.
+- [x] Keep Drizzle migration workflow explicit (`db:generate` + `db:migrate` only).
+- [x] Fix README commands that do not exist (for example missing root `dev` script).
 
 ## 6) Standardize Quality Gates Across Packages
 
