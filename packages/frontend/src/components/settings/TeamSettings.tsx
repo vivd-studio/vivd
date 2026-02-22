@@ -269,7 +269,7 @@ export function TeamSettings() {
                   password: existingUser ? undefined : values.password,
                 }),
               )}
-              className="space-y-4 rounded-lg border p-4"
+              className="space-y-4 rounded-lg border bg-card p-4"
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField

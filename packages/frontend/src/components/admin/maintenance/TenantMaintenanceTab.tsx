@@ -87,7 +87,7 @@ export function TenantMaintenanceTab() {
             These operations run only for your currently active organization.
           </p>
 
-          <div className="rounded-lg border p-4 space-y-3">
+          <div className="rounded-lg border bg-card p-4 space-y-3">
             <div>
               <div className="font-medium">Fix Gitignore in All Project Versions</div>
               <p className="text-sm text-muted-foreground">
@@ -106,7 +106,7 @@ export function TenantMaintenanceTab() {
             </Button>
           </div>
 
-          <div className="rounded-lg border p-4 space-y-3">
+          <div className="rounded-lg border bg-card p-4 space-y-3">
             <div>
               <div className="font-medium">Thumbnails</div>
               <p className="text-sm text-muted-foreground">

@@ -31,7 +31,7 @@ export function UserTable({
   };
 
   return (
-    <div className="relative w-full overflow-auto">
+    <div className="relative w-full overflow-auto rounded-lg border bg-card">
       <table className="w-full caption-bottom text-sm text-left">
         <thead className="[&_tr]:border-b">
           <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">

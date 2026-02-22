@@ -87,7 +87,7 @@ export function OrganizationsSelectorCard({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="rounded-lg border p-4 mt-2 space-y-3">
+          <div className="rounded-lg border bg-card p-4 mt-2 space-y-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="space-y-1.5 flex-1">
                 <Label htmlFor="org-slug">Slug</Label>

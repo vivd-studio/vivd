@@ -71,7 +71,7 @@ export function AddUserForm({ onSuccess, onCancel }: AddUserFormProps) {
   };
 
   return (
-    <div className="rounded-lg border p-4 animate-in slide-in-from-top-4 duration-300">
+    <div className="rounded-lg border bg-card p-4 animate-in slide-in-from-top-4 duration-300">
       <h3 className="font-semibold mb-4">Add New User</h3>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

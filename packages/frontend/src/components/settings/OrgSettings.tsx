@@ -36,7 +36,7 @@ export function OrgSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border p-4 space-y-3">
+      <div className="rounded-lg border bg-card p-4 space-y-3">
         <div>
           <div className="text-sm font-medium">Organization name</div>
           <p className="text-xs text-muted-foreground mt-0.5">

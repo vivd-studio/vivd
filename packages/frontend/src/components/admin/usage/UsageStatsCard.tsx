@@ -95,7 +95,7 @@ export function UsageStatsCard() {
         {/* Current Usage Summary */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Daily Credits */}
-          <div className="rounded-lg border p-4 space-y-2">
+          <div className="rounded-lg border bg-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
                 Daily Credits
@@ -136,7 +136,7 @@ export function UsageStatsCard() {
           </div>
 
           {/* Weekly Credits */}
-          <div className="rounded-lg border p-4 space-y-2">
+          <div className="rounded-lg border bg-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
                 Weekly Credits
@@ -177,7 +177,7 @@ export function UsageStatsCard() {
           </div>
 
           {/* Monthly Credits */}
-          <div className="rounded-lg border p-4 space-y-2">
+          <div className="rounded-lg border bg-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
                 Monthly Credits
@@ -218,7 +218,7 @@ export function UsageStatsCard() {
           </div>
 
           {/* Image Generations */}
-          <div className="rounded-lg border p-4 space-y-2">
+          <div className="rounded-lg border bg-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">
                 Image Generations

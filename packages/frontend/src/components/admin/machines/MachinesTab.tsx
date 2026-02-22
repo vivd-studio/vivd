@@ -448,7 +448,7 @@ export function MachinesTab() {
               No studio machines found (or provider is not Fly).
             </div>
           ) : (
-            <div className="rounded-lg border overflow-auto">
+            <div className="rounded-lg border bg-card overflow-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr className="text-left">

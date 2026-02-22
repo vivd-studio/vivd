@@ -45,7 +45,7 @@ export function SettingsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border p-4 space-y-3">
+      <div className="rounded-lg border bg-card p-4 space-y-3">
         <div>
           <div className="text-sm font-medium">Organization name</div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -73,7 +73,7 @@ export function SettingsPanel({
         </div>
       </div>
 
-      <div className="rounded-lg border p-4 space-y-3">
+      <div className="rounded-lg border bg-card p-4 space-y-3">
         <div>
           <div className="text-sm font-medium">GitHub repository prefix</div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -97,7 +97,7 @@ export function SettingsPanel({
         </div>
       </div>
 
-      <div className="rounded-lg border border-destructive/50 p-4 space-y-3">
+      <div className="rounded-lg border border-destructive/50 bg-card p-4 space-y-3">
         <div>
           <div className="text-sm font-medium text-destructive">Danger zone</div>
           <p className="text-xs text-muted-foreground mt-0.5">

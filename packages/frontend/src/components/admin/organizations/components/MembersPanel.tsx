@@ -132,7 +132,7 @@ export function MembersPanel({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="rounded-lg border p-4 mt-2 space-y-3">
+          <div className="rounded-lg border bg-card p-4 mt-2 space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Email</Label>
@@ -244,7 +244,7 @@ export function MembersPanel({
       ) : membersError ? (
         <div className="text-red-500">Failed to load members: {String(membersError)}</div>
       ) : (
-        <div className="rounded-lg border divide-y">
+        <div className="rounded-lg border bg-card divide-y">
           {members.map((member) => {
             const edit =
               memberEdits[member.userId] ??
