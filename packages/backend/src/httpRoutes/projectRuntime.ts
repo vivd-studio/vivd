@@ -35,10 +35,7 @@ type CreateContextResult = {
 
 type ProjectRuntimeRouterDeps = {
   upload: Pick<Multer, "array">;
-  createContext: (opts: {
-    req: express.Request;
-    res: express.Response;
-  }) => Promise<CreateContextResult>;
+  createContext: (opts: any) => Promise<CreateContextResult>;
   enforceProjectAccess: (
     req: express.Request,
     res: express.Response,
