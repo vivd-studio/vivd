@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
+import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,6 +117,7 @@ function SnippetCard({
 export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const utils = trpc.useUtils();
+  const { isSuperAdmin } = usePermissions();
 
   const slug = projectSlug || "";
   const catalogQuery = trpc.plugins.catalog.useQuery(
@@ -361,23 +363,30 @@ export default function ProjectPlugins() {
           ) : null}
 
           {!pluginEnabled ? (
-            <Button
-              onClick={() => ensureContactMutation.mutate({ slug })}
-              disabled={
-                ensureContactMutation.isPending ||
-                catalogQuery.isLoading ||
-                contactInfoQuery.isLoading
-              }
-            >
-              {ensureContactMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Enabling...
-                </>
-              ) : (
-                "Enable Contact Form"
-              )}
-            </Button>
+            isSuperAdmin ? (
+              <Button
+                onClick={() => ensureContactMutation.mutate({ slug })}
+                disabled={
+                  ensureContactMutation.isPending ||
+                  catalogQuery.isLoading ||
+                  contactInfoQuery.isLoading
+                }
+              >
+                {ensureContactMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enabling...
+                  </>
+                ) : (
+                  "Enable Contact Form"
+                )}
+              </Button>
+            ) : (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                Only super-admin users can enable plugins. Ask a super-admin to
+                enable Contact Form for this project.
+              </div>
+            )
           ) : null}
 
           {contactInfo?.usage ? (

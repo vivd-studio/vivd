@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { projectPluginService } from "../../services/plugins/ProjectPluginService";
@@ -15,6 +16,13 @@ const contactConfigInput = z.object({
 export const contactEnsurePluginProcedure = projectMemberProcedure
   .input(projectSlugInput)
   .mutation(async ({ ctx, input }) => {
+    if (ctx.session.user.role !== "super_admin") {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Only super-admin users can enable plugins",
+      });
+    }
+
     return projectPluginService.ensureContactFormPlugin({
       organizationId: ctx.organizationId!,
       projectSlug: input.slug,

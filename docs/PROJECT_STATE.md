@@ -13,6 +13,10 @@
 
 ## Progress Log
 
+- 2026-02-22: added two additional neutral tag colors (`gray`, `stone`) to round the picker to another full 6-column row while preserving the warm→cool→neutral ordering.
+- 2026-02-22: expanded the project tag color picker again with a few additional colors (including rose, lavender, magenta, and charcoal) and reordered the full picker palette by color progression (warm → cool → neutrals) for easier scanning.
+- 2026-02-22: expanded the project tag color picker palette with additional selectable colors while keeping legacy hash-based default tag color assignment stable for unassigned tags.
+- 2026-02-22: restricted plugin enablement to super-admin users only: backend `plugins.contactEnsure` now hard-blocks non-super-admin callers, and the Project Plugins page shows a super-admin-required notice instead of an enable button for other roles.
 - 2026-02-22: completed second-pass admin/theme readability normalization: tuned shared form controls (`Input`, `Textarea`, `SelectTrigger`) in frontend + studio to use a subtle themed fill (`bg-muted/30`) with focused fallback to `bg-background` for clearer affordance across dark/light color themes, and normalized Super Admin + org settings section shells/tables to consistent bordered `bg-card` containers (Organizations/Members/Domains/Usage/Settings, Users add-form/table, Machines table, Tenant maintenance cards, and Organization settings/team add-member form).
 - 2026-02-22: aligned Super Admin Organizations UI shell with the rest of the admin/settings surfaces by wrapping `OrganizationsTab` in a standard `Card` container with title/description and keeping org management tabs within that card, improving visual consistency with Users/Maintenance/Machines panels.
 - 2026-02-22: improved Plugins page navigation clarity by updating the shared layout breadcrumb for `/projects/:projectSlug/plugins` to `Projects > {projectSlug} > Plugins`, with links back to the project list and project page.
