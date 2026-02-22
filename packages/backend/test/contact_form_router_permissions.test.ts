@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { ensureContactFormPluginMock } = vi.hoisted(() => ({
+const { ensureContactFormPluginMock, updateContactFormConfigMock } = vi.hoisted(() => ({
   ensureContactFormPluginMock: vi.fn(),
+  updateContactFormConfigMock: vi.fn(),
 }));
 const { resolveEffectiveEntitlementMock } = vi.hoisted(() => ({
   resolveEffectiveEntitlementMock: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("../src/db", () => ({
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     ensureContactFormPlugin: ensureContactFormPluginMock,
+    updateContactFormConfig: updateContactFormConfigMock,
   },
 }));
 
@@ -45,7 +47,14 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
 }));
 
 import { router } from "../src/trpc";
-import { contactEnsurePluginProcedure } from "../src/trpcRouters/plugins/contactForm";
+import {
+  contactEnsurePluginProcedure,
+  contactUpdateConfigPluginProcedure,
+} from "../src/trpcRouters/plugins/contactForm";
+import {
+  ContactFormRecipientRequiredError,
+  ContactFormRecipientVerificationError,
+} from "../src/services/plugins/contactForm/service";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -88,10 +97,12 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 describe("plugins.contactEnsure permissions", () => {
   const pluginsRouter = router({
     contactEnsure: contactEnsurePluginProcedure,
+    contactUpdateConfig: contactUpdateConfigPluginProcedure,
   });
 
   beforeEach(() => {
     ensureContactFormPluginMock.mockReset();
+    updateContactFormConfigMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
     organizationFindFirstMock.mockReset();
     selectMock.mockClear();
@@ -235,6 +246,69 @@ describe("plugins.contactEnsure permissions", () => {
     expect(ensureContactFormPluginMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+    });
+  });
+
+  it("maps unverified-recipient config errors to BAD_REQUEST", async () => {
+    updateContactFormConfigMock.mockRejectedValueOnce(
+      new ContactFormRecipientVerificationError(["unverified@example.com"]),
+    );
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.contactUpdateConfig({
+        slug: "site-1",
+        config: {
+          recipientEmails: ["unverified@example.com"],
+          sourceHosts: [],
+          redirectHostAllowlist: [],
+          formFields: [
+            {
+              key: "name",
+              label: "Name",
+              type: "text",
+              required: true,
+              placeholder: "",
+            },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Recipient email is not verified in this organization: unverified@example.com",
+    });
+  });
+
+  it("maps empty-recipient config errors to BAD_REQUEST", async () => {
+    updateContactFormConfigMock.mockRejectedValueOnce(
+      new ContactFormRecipientRequiredError(),
+    );
+
+    const caller = pluginsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.contactUpdateConfig({
+        slug: "site-1",
+        config: {
+          recipientEmails: [],
+          sourceHosts: [],
+          redirectHostAllowlist: [],
+          formFields: [
+            {
+              key: "name",
+              label: "Name",
+              type: "text",
+              required: true,
+              placeholder: "",
+            },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "At least one verified recipient email is required",
     });
   });
 });

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   findFirstMock,
+  organizationMemberFindManyMock,
   insertMock,
   insertValuesMock,
   insertReturningMock,
@@ -11,6 +12,7 @@ const {
   updateReturningMock,
 } = vi.hoisted(() => {
   const findFirstMock = vi.fn();
+  const organizationMemberFindManyMock = vi.fn();
 
   const insertReturningMock = vi.fn();
   const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
@@ -23,6 +25,7 @@ const {
 
   return {
     findFirstMock,
+    organizationMemberFindManyMock,
     insertMock,
     insertValuesMock,
     insertReturningMock,
@@ -39,6 +42,9 @@ vi.mock("../src/db", () => ({
       projectPluginInstance: {
         findFirst: findFirstMock,
         findMany: vi.fn().mockResolvedValue([]),
+      },
+      organizationMember: {
+        findMany: organizationMemberFindManyMock,
       },
     },
     insert: insertMock,
@@ -66,6 +72,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 describe("ProjectPluginService.ensureContactFormPlugin", () => {
   beforeEach(() => {
     findFirstMock.mockReset();
+    organizationMemberFindManyMock.mockReset();
     insertMock.mockClear();
     insertValuesMock.mockClear();
     insertReturningMock.mockReset();
@@ -73,6 +80,14 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
     updateSetMock.mockClear();
     updateWhereMock.mockClear();
     updateReturningMock.mockReset();
+    organizationMemberFindManyMock.mockResolvedValue([
+      {
+        user: {
+          email: "verified@example.com",
+          emailVerified: true,
+        },
+      },
+    ]);
   });
 
   it("returns existing enabled instances idempotently", async () => {
@@ -131,5 +146,101 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
     expect(result.created).toBe(false);
     expect(result.instanceId).toBe("ppi-concurrent");
     expect(result.publicToken).toBe("ppi-concurrent.token");
+  });
+
+  it("persists config when recipient emails are verified", async () => {
+    const existing = makeRow({ status: "enabled" });
+    const updated = makeRow({
+      configJson: {
+        recipientEmails: ["verified@example.com"],
+      },
+    });
+
+    findFirstMock.mockResolvedValueOnce(existing);
+    updateReturningMock.mockResolvedValueOnce([updated]);
+
+    const result = await projectPluginService.updateContactFormConfig({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      config: {
+        recipientEmails: ["verified@example.com"],
+        sourceHosts: [],
+        redirectHostAllowlist: [],
+        formFields: [
+          {
+            key: "name",
+            label: "Name",
+            type: "text",
+            required: true,
+            placeholder: "",
+          },
+        ],
+      },
+    });
+
+    expect(result.config.recipientEmails).toEqual(["verified@example.com"]);
+    expect(updateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects recipient emails that are not verified in the organization", async () => {
+    await expect(
+      projectPluginService.updateContactFormConfig({
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        config: {
+          recipientEmails: ["unverified@example.com", "VERIFIED@example.com"],
+          sourceHosts: [],
+          redirectHostAllowlist: [],
+          formFields: [
+            {
+              key: "name",
+              label: "Name",
+              type: "text",
+              required: true,
+              placeholder: "",
+            },
+          ],
+        },
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ContactFormRecipientVerificationError",
+        recipientEmails: ["unverified@example.com"],
+      }),
+    );
+
+    expect(findFirstMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects saves when recipient email list is empty", async () => {
+    await expect(
+      projectPluginService.updateContactFormConfig({
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        config: {
+          recipientEmails: [],
+          sourceHosts: [],
+          redirectHostAllowlist: [],
+          formFields: [
+            {
+              key: "name",
+              label: "Name",
+              type: "text",
+              required: true,
+              placeholder: "",
+            },
+          ],
+        },
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ContactFormRecipientRequiredError",
+        message: "At least one verified recipient email is required",
+      }),
+    );
+
+    expect(findFirstMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

@@ -37,7 +37,7 @@ import {
   Image,
   Loader2,
   MoreHorizontal,
-  Settings2,
+  Plug,
   Trash2,
   X,
 } from "lucide-react";
@@ -625,7 +625,7 @@ export default function ProjectFullscreen() {
               <DropdownMenuItem
                 onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
               >
-                <Settings2 className="h-4 w-4 mr-2" />
+                <Plug className="h-4 w-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
               <DropdownMenuSeparator />

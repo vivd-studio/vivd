@@ -27,9 +27,9 @@ import {
   MessageSquare,
   Monitor,
   Moon,
+  Plug,
   Rocket,
   RefreshCw,
-  Settings2,
   Smartphone,
   Sun,
   Trash2,
@@ -385,7 +385,7 @@ export function MobileActionsMenu({
               )}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenPlugins}>
-              <Settings2 className="w-4 h-4 mr-2" />
+              <Plug className="w-4 h-4 mr-2" />
               Plugins
             </DropdownMenuItem>
             {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}

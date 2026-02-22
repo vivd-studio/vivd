@@ -4,6 +4,10 @@ import { projectMemberProcedure } from "../../trpc";
 import { projectPluginService } from "../../services/plugins/ProjectPluginService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { contactFormPluginConfigSchema } from "../../services/plugins/contactForm/config";
+import {
+  ContactFormRecipientRequiredError,
+  ContactFormRecipientVerificationError,
+} from "../../services/plugins/contactForm/service";
 
 const projectSlugInput = z.object({
   slug: z.string().min(1),
@@ -55,9 +59,22 @@ export const contactInfoPluginProcedure = projectMemberProcedure
 export const contactUpdateConfigPluginProcedure = projectMemberProcedure
   .input(contactConfigInput)
   .mutation(async ({ ctx, input }) => {
-    return projectPluginService.updateContactFormConfig({
-      organizationId: ctx.organizationId!,
-      projectSlug: input.slug,
-      config: input.config,
-    });
+    try {
+      return await projectPluginService.updateContactFormConfig({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        config: input.config,
+      });
+    } catch (error) {
+      if (
+        error instanceof ContactFormRecipientVerificationError ||
+        error instanceof ContactFormRecipientRequiredError
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error.message,
+        });
+      }
+      throw error;
+    }
   });

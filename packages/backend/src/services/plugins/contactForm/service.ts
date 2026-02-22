@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../../db";
-import { projectPluginInstance } from "../../../db/schema";
+import { organizationMember, projectPluginInstance } from "../../../db/schema";
 import { pluginEntitlementService } from "../PluginEntitlementService";
 import {
   projectPluginInstanceService,
@@ -79,7 +79,78 @@ function buildUsage(input: {
   };
 }
 
+export class ContactFormRecipientVerificationError extends Error {
+  readonly recipientEmails: string[];
+
+  constructor(recipientEmails: string[]) {
+    const joinedRecipients = recipientEmails.join(", ");
+    const noun = recipientEmails.length === 1 ? "email is" : "emails are";
+    super(
+      `Recipient ${noun} not verified in this organization: ${joinedRecipients}`,
+    );
+    this.name = "ContactFormRecipientVerificationError";
+    this.recipientEmails = recipientEmails;
+  }
+}
+
+export class ContactFormRecipientRequiredError extends Error {
+  constructor() {
+    super("At least one verified recipient email is required");
+    this.name = "ContactFormRecipientRequiredError";
+  }
+}
+
+function normalizeEmailAddress(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function uniqueValues(values: string[]): string[] {
+  const output: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    output.push(value);
+  }
+  return output;
+}
+
 class ContactFormPluginService {
+  private async assertRecipientEmailsAreVerified(options: {
+    organizationId: string;
+    recipientEmails: string[];
+  }): Promise<void> {
+    if (options.recipientEmails.length === 0) {
+      throw new ContactFormRecipientRequiredError();
+    }
+
+    const members = await db.query.organizationMember.findMany({
+      where: eq(organizationMember.organizationId, options.organizationId),
+      with: {
+        user: {
+          columns: {
+            email: true,
+            emailVerified: true,
+          },
+        },
+      },
+    });
+
+    const verifiedEmailSet = new Set<string>();
+    for (const member of members) {
+      if (!member.user.emailVerified) continue;
+      verifiedEmailSet.add(normalizeEmailAddress(member.user.email));
+    }
+
+    const normalizedRecipients = options.recipientEmails.map(normalizeEmailAddress);
+    const rejectedRecipients = uniqueValues(
+      normalizedRecipients.filter((email) => !verifiedEmailSet.has(email)),
+    );
+    if (rejectedRecipients.length > 0) {
+      throw new ContactFormRecipientVerificationError(rejectedRecipients);
+    }
+  }
+
   async ensureContactFormPlugin(options: {
     organizationId: string;
     projectSlug: string;
@@ -117,6 +188,11 @@ class ContactFormPluginService {
     config: ContactFormPluginConfig;
   }): Promise<ContactFormPluginPayload> {
     const parsedConfig = contactFormPluginConfigSchema.parse(options.config);
+    await this.assertRecipientEmailsAreVerified({
+      organizationId: options.organizationId,
+      recipientEmails: parsedConfig.recipientEmails,
+    });
+
     const { row } = await projectPluginInstanceService.ensurePluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,

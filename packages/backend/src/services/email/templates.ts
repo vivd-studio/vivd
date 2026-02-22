@@ -151,7 +151,6 @@ function renderHtmlLayout(input: HtmlLayoutInput): string {
       VIVD_LOGO_ALT,
     )}" width="220" style="display:block;width:220px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />`,
     `</a>`,
-    `<p style="margin:10px 0 0;font-size:12px;line-height:1.6;color:${BRAND_COLORS.muted};">Websites in 48 hours. Designed and optimized for growth.</p>`,
     `</div>`,
     `<div style="padding:28px 24px 30px;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${BRAND_COLORS.text};">`,
     `<h2 style="margin:0 0 12px;font-size:30px;line-height:1.16;font-weight:700;letter-spacing:-0.02em;color:${BRAND_COLORS.text};">${escapeHtml(

@@ -438,7 +438,7 @@ export default function ProjectPlugins() {
                 <TabsContent value="configuration" className="mt-6 max-w-4xl space-y-4">
                   <SectionCard
                     title="Recipient emails"
-                    description="Required. One email per line (comma-separated also supported)."
+                    description="Required. Recipients must be verified user emails in this organization. One email per line (comma-separated also supported)."
                   >
                     <div className="max-w-2xl space-y-2">
                       <Label htmlFor="contact-recipient-emails">

@@ -29,6 +29,7 @@ import {
   Download,
   ExternalLink,
   Settings2,
+  Plug,
   Eye,
   EyeOff,
   Image,
@@ -641,7 +642,7 @@ export function ProjectCard({
               <DropdownMenuItem
                 onClick={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
               >
-                <Settings2 className="w-4 h-4 mr-2" />
+                <Plug className="w-4 h-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
               <DropdownMenuSeparator />

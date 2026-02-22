@@ -13,10 +13,14 @@
 
 ## Progress Log
 
+- 2026-02-22: promoted Plugins to a first-class Studio toolbar quick action with a dedicated icon button (desktop quick actions), while keeping dropdown/mobile access paths, and standardized plugin entry-point icons to `Plug` (power-plug) across Studio/embedded/fullscreen/project-card menus for consistent plugin affordances.
+- 2026-02-22: enforced Contact Form recipient safety by requiring at least one recipient and verifying every configured recipient email against verified organization-member emails; config saves now fail fast with `BAD_REQUEST` for empty/unverified recipient lists, and the Project → Plugins UI now states the verified-email requirement directly in recipient configuration help text.
+- 2026-02-22: drafted analytics-plugin implementation plan in `docs/analytics-plugin-plan.md`, defining an MVP-first rollout that mirrors Contact Form integration patterns: superadmin entitlement controls (Analytics tab), OpenCode install-guidance tooling (`vivd_plugins_analytics_info`), public track/script runtime endpoints, and project-level traffic dashboards (pageviews/visitors/sessions/top pages/referrers) before advanced goals/conversions.
 - 2026-02-22: refreshed shared transactional email presentation to better match vivd.studio website branding: updated `packages/backend/src/services/email/templates.ts` with the live black/white/green visual language (cleaner card surface, pill-style black CTA, subtle green-tinted background accents) and switched the header branding to the website logo asset (`https://vivd.studio/images/vivd_logo_transparent.png`) across contact, verification, and password-reset emails; updated `packages/backend/test/email_templates.test.ts` assertions to lock logo presence.
+- 2026-02-22: removed the “Websites in 48 hours…” slogan line from transactional email headers so branded emails keep a logo-only header treatment.
 - 2026-02-22: improved Studio publish-checklist UX with live per-testpoint progress while checks run: checklist state now refetches at 1s intervals during a run in `usePrePublishChecklist`, and `PrePublishChecklist` renders each checklist item with a real-time `Checking` state (including pending rows and live completed count) so operators can watch item-by-item updates as the agent/tool writes checklist results.
 - 2026-02-22: hardened pre-publish checklist execution by adding incremental checklist mutation support and OpenCode tooling: new backend atomic mutation `project.updatePublishChecklistItem` (item-level updates + server-side summary recomputation + structured missing/unknown-item errors), new studio OpenCode tool `vivd_publish_checklist` (`describe` + `update_item` actions), and connected-mode checklist-run orchestration in `packages/studio/server/trpcRouters/agent.ts` that seeds pending checklist state, instructs tool-driven incremental updates, waits for session completion, and keeps JSON parsing only as compatibility fallback.
-- 2026-02-22: improved email-verification visibility in account settings by keeping an always-visible `Verification status` badge (`Verified/Unverified`) next to profile fields, so users still see current state after using resend-verification actions.
+- 2026-02-22: improved email-verification visibility in account settings by keeping an always-visible `Verified/Unverified` badge next to profile fields, so users still see current state after using resend-verification actions.
 - 2026-02-22: added email-verification status visibility in admin UIs: Super Admin → System Users and Organization → Members now show `Verified/Unverified` badges; also added a post-login unverified-email prompt with resend action behind frontend feature flag `VITE_EMAIL_VERIFICATION_PROMPT_ENABLED` (default off until production SES is available).
 - 2026-02-22: implemented transactional auth email flows on top of the shared provider/template stack: added centralized professional email templates in `packages/backend/src/services/email/templates.ts` (with legal footer links/details from vivd.studio Impressum/Datenschutz/AGB), refactored contact-form delivery to use the shared templates, wired Better Auth `emailVerification` + `sendResetPassword` callbacks through `EmailDeliveryService`, exposed env toggles for auth mail behavior in `.env.example`, and added control-plane UI/routes for forgot-password, reset-password, and resend-verification actions.
 - 2026-02-22: fixed Studio Agent Chat composer surface mismatch after theme-token changes by unifying the input container onto a single `bg-card` surface and making the textarea/action-row backgrounds transparent so both sections keep the same color across states (focus/usage-blocked/drag-over).
@@ -57,6 +61,7 @@
 - [ ] Add Phase 4 E2E smoke coverage (lean PR suite + nightly/pre-release full suite) now that the current Phase 2/3 checklist targets are covered.
 - [ ] Fix known failing Fly integration: `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts` (expected red currently; revert-after-rehydrate path still broken).
 - [ ] Complete remaining plugin-system Phase 1 follow-through: inbox/read path UX + operator workflow hardening around entitlements (self-serve/request flow still pending).
+- [ ] Implement Analytics plugin MVP per `docs/analytics-plugin-plan.md` (superadmin entitlement panel, OpenCode setup tooling, and project traffic dashboard with pageview-first metrics).
 - [ ] Validate lifecycle sync hardening in real Fly runs (stop/destroy/warm-reconcile + trigger-driven sync under larger workspace/opencode payloads).
 - [ ] Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
 - [ ] Complete remaining auth onboarding hardening (invite-only signup flow + operator alerting/monitoring for transactional auth email delivery).
@@ -173,6 +178,7 @@
 
 ## Related Documents
 
+- `docs/analytics-plugin-plan.md`
 - `docs/superadmin-project-transfer-plan.md`
 - `docs/refactoring-day-checklist.md`
 - `docs/old/publishing-bucket-first-plan.md`

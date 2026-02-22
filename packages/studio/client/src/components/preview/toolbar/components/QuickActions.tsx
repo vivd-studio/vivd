@@ -22,10 +22,10 @@ import {
   Image,
   Loader2,
   MoreHorizontal,
+  Plug,
   RefreshCw,
   Rocket,
   RotateCcw,
-  Settings2,
   Trash2,
 } from "lucide-react";
 import {
@@ -236,6 +236,23 @@ export function QuickActions({
         </Tooltip>
       )}
 
+      {/* Plugins button */}
+      {projectSlug && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenPlugins}
+              className="hidden sm:flex h-8 w-8 p-0"
+            >
+              <Plug className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Plugins</TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Refresh button */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -294,7 +311,7 @@ export function QuickActions({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={handleOpenPlugins}>
-                <Settings2 className="w-4 h-4 mr-2" />
+                <Plug className="w-4 h-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
             </>

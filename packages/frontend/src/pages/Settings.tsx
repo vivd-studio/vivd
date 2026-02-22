@@ -228,10 +228,7 @@ export default function Settings() {
                       </FormItem>
                     )}
                   />
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">
-                      Verification status:
-                    </span>
+                  <div className="flex items-center text-sm">
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                         isEmailVerified
