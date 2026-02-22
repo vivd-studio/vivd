@@ -39,6 +39,7 @@ import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDial
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import {
+  BarChart3,
   Copy,
   Download,
   ExternalLink,
@@ -80,6 +81,11 @@ export default function EmbeddedStudio() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
   const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
+  const analyticsAvailable = (project?.enabledPlugins ?? []).includes("analytics");
+  const analyticsPath = projectSlug
+    ? ROUTES.PROJECT_ANALYTICS?.(projectSlug) ??
+      `/vivd-studio/projects/${projectSlug}/analytics`
+    : null;
 
   const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const resumeStudio = urlParams.get("view") === "studio";
@@ -603,6 +609,16 @@ export default function EmbeddedStudio() {
           >
             Publish
           </Button>
+          {analyticsAvailable ? (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => analyticsPath && navigate(analyticsPath)}
+              title="Analytics"
+            >
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          ) : null}
           <Separator orientation="vertical" className="h-4 mx-0.5" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -688,6 +704,14 @@ export default function EmbeddedStudio() {
                 <Plug className="h-4 w-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
+              {analyticsAvailable ? (
+                <DropdownMenuItem
+                  onClick={() => analyticsPath && navigate(analyticsPath)}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analytics
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setShowDeleteConfirm(true)}

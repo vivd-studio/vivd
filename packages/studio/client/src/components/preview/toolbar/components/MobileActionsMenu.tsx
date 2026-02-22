@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  BarChart3,
   Check,
   Copy,
   Download,
@@ -86,6 +87,7 @@ interface MobileActionsMenuProps {
     domain?: string | null;
     lastTag?: string | null;
   };
+  analyticsAvailable?: boolean;
 
   // Theme
   theme: string;
@@ -142,6 +144,7 @@ export function MobileActionsMenu({
   hasGitChanges,
   isPublished,
   publishStatus,
+  analyticsAvailable = false,
   theme,
   setTheme,
   previewMode,
@@ -213,6 +216,21 @@ export function MobileActionsMenu({
     }
     const origin = getHostAppOrigin();
     const url = new URL(pluginsPath, origin).toString();
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleOpenAnalytics = () => {
+    if (!projectSlug) return;
+    const analyticsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/analytics`;
+    if (embedded) {
+      window.parent?.postMessage(
+        { type: "vivd:studio:navigate", path: analyticsPath },
+        "*",
+      );
+      return;
+    }
+    const origin = getHostAppOrigin();
+    const url = new URL(analyticsPath, origin).toString();
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -388,6 +406,12 @@ export function MobileActionsMenu({
               <Plug className="w-4 h-4 mr-2" />
               Plugins
             </DropdownMenuItem>
+            {analyticsAvailable ? (
+              <DropdownMenuItem onClick={handleOpenAnalytics}>
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
+              </DropdownMenuItem>
+            ) : null}
             {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}
             {isConnectedMode && (
               <>

@@ -11,6 +11,7 @@ const {
   upsertEntitlementMock,
   getProjectEntitlementRowMock,
   ensureContactFormPluginMock,
+  ensureAnalyticsPluginMock,
   getTurnstileAutomationIssueMock,
   prepareTurnstileWidgetMock,
   deleteTurnstileWidgetMock,
@@ -38,6 +39,7 @@ const {
     upsertEntitlementMock: vi.fn(),
     getProjectEntitlementRowMock: vi.fn(),
     ensureContactFormPluginMock: vi.fn(),
+    ensureAnalyticsPluginMock: vi.fn(),
     getTurnstileAutomationIssueMock: vi.fn(),
     prepareTurnstileWidgetMock: vi.fn(),
     deleteTurnstileWidgetMock: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     ensureContactFormPlugin: ensureContactFormPluginMock,
+    ensureAnalyticsPlugin: ensureAnalyticsPluginMock,
   },
 }));
 
@@ -209,6 +212,7 @@ describe("superadmin router", () => {
     upsertEntitlementMock.mockReset();
     getProjectEntitlementRowMock.mockReset();
     ensureContactFormPluginMock.mockReset();
+    ensureAnalyticsPluginMock.mockReset();
     getTurnstileAutomationIssueMock.mockReset();
     prepareTurnstileWidgetMock.mockReset();
     deleteTurnstileWidgetMock.mockReset();
@@ -235,6 +239,9 @@ describe("superadmin router", () => {
     getProjectEntitlementRowMock.mockResolvedValue(null);
     ensureContactFormPluginMock.mockResolvedValue({
       instanceId: "ppi-1",
+    });
+    ensureAnalyticsPluginMock.mockResolvedValue({
+      instanceId: "ppi-analytics-1",
     });
     getTurnstileAutomationIssueMock.mockReturnValue(null);
     prepareTurnstileWidgetMock.mockResolvedValue({
@@ -361,6 +368,30 @@ describe("superadmin router", () => {
 
     expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
     expect(result.ensuredPluginInstanceId).toBeNull();
+  });
+
+  it("ensures an analytics plugin instance when enabling analytics for a project", async () => {
+    upsertEntitlementMock.mockResolvedValueOnce(
+      makeEntitlement({
+        pluginId: "analytics",
+      }),
+    );
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.pluginsUpsertEntitlement({
+      pluginId: "analytics",
+      organizationId: "org-1",
+      scope: "project",
+      projectSlug: "site-1",
+      state: "enabled",
+    });
+
+    expect(ensureAnalyticsPluginMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+    });
+    expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
+    expect(result.ensuredPluginInstanceId).toBe("ppi-analytics-1");
   });
 
   it("prepares turnstile widget credentials when enabling turnstile", async () => {

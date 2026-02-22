@@ -30,7 +30,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Purpose: expose custom Vivd capabilities to the agent (namespace `vivd_*`).
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
 - Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
-- Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`, `vivd_publish_checklist`.
+- Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`, `vivd_plugins_analytics_info`, `vivd_publish_checklist`, `vivd_image_ai`.
 - The agent can use "_info" tools to get general info on how to use the plugin on the website, even including (public) tokens (e.g. for contact forms), and other relevant information.
 - Backend surface for plugin tools: `packages/backend/src/trpcRouters/plugins/index.ts` + `packages/backend/src/services/plugins/ProjectPluginService.ts`.
 - Backend surface for publish-checklist tool: `packages/backend/src/trpcRouters/project/publish.ts` (`project.publishChecklist`, `project.updatePublishChecklistItem`).

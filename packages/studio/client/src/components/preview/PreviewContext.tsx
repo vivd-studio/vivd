@@ -89,6 +89,8 @@ interface PreviewContextValue {
   versions: VersionInfo[];
   totalVersions: number;
   hasMultipleVersions: boolean;
+  enabledPlugins: string[];
+  analyticsAvailable: boolean;
 
   // Handlers
   handleVersionSelect: (version: number) => void;
@@ -438,6 +440,8 @@ export function PreviewProvider({
   const versions = project?.versions || [];
   const totalVersions = project?.totalVersions || 1;
   const hasMultipleVersions = totalVersions > 1;
+  const enabledPlugins = project?.enabledPlugins ?? [];
+  const analyticsAvailable = enabledPlugins.includes("analytics");
 
   // Query for git changes (unsaved work)
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
@@ -1270,6 +1274,8 @@ export function PreviewProvider({
     versions,
     totalVersions,
     hasMultipleVersions,
+    enabledPlugins,
+    analyticsAvailable,
 
     // Handlers
     handleVersionSelect,

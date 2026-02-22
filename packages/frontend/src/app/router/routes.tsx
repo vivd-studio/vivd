@@ -13,6 +13,7 @@ import StudioFullscreen from "@/pages/StudioFullscreen";
 import ScratchWizard from "@/pages/ScratchWizard";
 import NoProjectAssigned from "@/pages/NoProjectAssigned";
 import ProjectPlugins from "@/pages/ProjectPlugins";
+import ProjectAnalytics from "@/pages/ProjectAnalytics";
 import { Layout } from "@/components/shell";
 import { SingleProjectModeHandler } from "@/components/projects";
 import { authClient } from "@/lib/auth-client";
@@ -64,6 +65,14 @@ function ProjectPluginsRoute() {
   return (
     <RequireAssignedProject>
       <ProjectPlugins />
+    </RequireAssignedProject>
+  );
+}
+
+function ProjectAnalyticsRoute() {
+  return (
+    <RequireAssignedProject>
+      <ProjectAnalytics />
     </RequireAssignedProject>
   );
 }
@@ -237,6 +246,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         {/* Embedded studio view inside Layout */}
         <Route path="projects/:projectSlug" element={<EmbeddedStudioRoute />} />
         <Route path="projects/:projectSlug/plugins" element={<ProjectPluginsRoute />} />
+        <Route path="projects/:projectSlug/analytics" element={<ProjectAnalyticsRoute />} />
       </Route>
 
       {/* Fullscreen project view (no layout chrome) */}

@@ -22,9 +22,22 @@ interface PageInfo {
   isProjectPage: boolean;
   projectSlug?: string;
   isProjectPluginsPage?: boolean;
+  isProjectAnalyticsPage?: boolean;
 }
 
 function getPageInfo(pathname: string): PageInfo {
+  const projectAnalyticsMatch = pathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)\/analytics$/,
+  );
+  if (projectAnalyticsMatch) {
+    return {
+      title: "Analytics",
+      isProjectPage: false,
+      projectSlug: projectAnalyticsMatch[1],
+      isProjectAnalyticsPage: true,
+    };
+  }
+
   const projectPluginsMatch = pathname.match(
     /^\/vivd-studio\/projects\/([^/]+)\/plugins$/,
   );
@@ -59,7 +72,12 @@ function getPageInfo(pathname: string): PageInfo {
   if (pathname.startsWith("/vivd-studio/no-project")) {
     return { title: "No Project", isProjectPage: false };
   }
-  return { title: "Projects", isProjectPage: false, isProjectPluginsPage: false };
+  return {
+    title: "Projects",
+    isProjectPage: false,
+    isProjectPluginsPage: false,
+    isProjectAnalyticsPage: false,
+  };
 }
 
 export function Layout() {
@@ -131,6 +149,26 @@ export function Layout() {
                     <BreadcrumbSeparator />
                     <BreadcrumbItem>
                       <BreadcrumbPage>Plugins</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </>
+                ) : pageInfo.isProjectAnalyticsPage && pageInfo.projectSlug ? (
+                  <>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link to={ROUTES.DASHBOARD}>Projects</Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link to={ROUTES.PROJECT(pageInfo.projectSlug)}>
+                          {pageInfo.projectSlug}
+                        </Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>Analytics</BreadcrumbPage>
                     </BreadcrumbItem>
                   </>
                 ) : (

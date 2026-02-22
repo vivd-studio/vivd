@@ -7,8 +7,12 @@ export default defineConfig({
       "server/opencode/toolModules/vivdPluginsCatalog.ts",
     "opencode/toolModules/vivdPluginsContactInfo":
       "server/opencode/toolModules/vivdPluginsContactInfo.ts",
+    "opencode/toolModules/vivdPluginsAnalyticsInfo":
+      "server/opencode/toolModules/vivdPluginsAnalyticsInfo.ts",
     "opencode/toolModules/vivdPublishChecklist":
       "server/opencode/toolModules/vivdPublishChecklist.ts",
+    "opencode/toolModules/vivdImageAi":
+      "server/opencode/toolModules/vivdImageAi.ts",
   },
   format: ["esm"],
   target: "es2022",

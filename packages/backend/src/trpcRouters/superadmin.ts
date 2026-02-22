@@ -472,16 +472,23 @@ export const superAdminRouter = router({
 
       let ensuredPluginInstanceId: string | null = null;
       if (
-        input.pluginId === "contact_form" &&
         input.scope === "project" &&
         input.state === "enabled" &&
         input.ensurePluginWhenEnabled !== false
       ) {
-        const ensured = await projectPluginService.ensureContactFormPlugin({
-          organizationId: input.organizationId,
-          projectSlug: input.projectSlug!,
-        });
-        ensuredPluginInstanceId = ensured.instanceId;
+        if (input.pluginId === "contact_form") {
+          const ensured = await projectPluginService.ensureContactFormPlugin({
+            organizationId: input.organizationId,
+            projectSlug: input.projectSlug!,
+          });
+          ensuredPluginInstanceId = ensured.instanceId;
+        } else if (input.pluginId === "analytics") {
+          const ensured = await projectPluginService.ensureAnalyticsPlugin({
+            organizationId: input.organizationId,
+            projectSlug: input.projectSlug!,
+          });
+          ensuredPluginInstanceId = ensured.instanceId;
+        }
       }
 
       const isTurnstileDisabledAfterUpsert =

@@ -2,18 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   getClientAndDirectoryMock,
+  sessionCreateMock,
   sessionListMock,
   sessionStatusMock,
   sessionAbortMock,
+  sessionPromptAsyncMock,
   getSessionStatusesMock,
   setSessionStatusMock,
   emitSessionEventMock,
   createAgentEventMock,
 } = vi.hoisted(() => ({
   getClientAndDirectoryMock: vi.fn(),
+  sessionCreateMock: vi.fn(),
   sessionListMock: vi.fn(),
   sessionStatusMock: vi.fn(),
   sessionAbortMock: vi.fn(),
+  sessionPromptAsyncMock: vi.fn(),
   getSessionStatusesMock: vi.fn(),
   setSessionStatusMock: vi.fn(),
   emitSessionEventMock: vi.fn(),
@@ -58,14 +62,16 @@ vi.mock("../services/sync/AgentTaskSyncService.js", () => ({
   requestBucketSyncAfterAgentTask: vi.fn(),
 }));
 
-import { abortSession, getSessionsStatus, listSessions } from "./index.js";
+import { abortSession, getSessionsStatus, listSessions, runTask } from "./index.js";
 
 describe("opencode index session behavior", () => {
   beforeEach(() => {
     getClientAndDirectoryMock.mockReset();
+    sessionCreateMock.mockReset();
     sessionListMock.mockReset();
     sessionStatusMock.mockReset();
     sessionAbortMock.mockReset();
+    sessionPromptAsyncMock.mockReset();
     getSessionStatusesMock.mockReset();
     setSessionStatusMock.mockReset();
     emitSessionEventMock.mockReset();
@@ -74,15 +80,19 @@ describe("opencode index session behavior", () => {
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
     sessionStatusMock.mockResolvedValue({ data: {}, error: undefined });
     sessionAbortMock.mockResolvedValue({ data: {}, error: undefined });
+    sessionCreateMock.mockResolvedValue({ data: { id: "sess-new" }, error: undefined });
+    sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: undefined });
     getSessionStatusesMock.mockReturnValue({});
 
     getClientAndDirectoryMock.mockResolvedValue({
       directory: "/workspace/project/",
       client: {
         session: {
+          create: sessionCreateMock,
           list: sessionListMock,
           status: sessionStatusMock,
           abort: sessionAbortMock,
+          promptAsync: sessionPromptAsyncMock,
         },
       },
     });
@@ -144,6 +154,24 @@ describe("opencode index session behavior", () => {
     expect(emitSessionEventMock).toHaveBeenCalledWith(
       "sess-9",
       expect.objectContaining({ kind: "session.completed" }),
+    );
+  });
+
+  it("passes per-run tool enablement to promptAsync", async () => {
+    await runTask(
+      "run checklist",
+      "/workspace/project",
+      undefined,
+      undefined,
+      { tools: { vivd_publish_checklist: true } },
+    );
+
+    expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          tools: { vivd_publish_checklist: true },
+        }),
+      }),
     );
   });
 });

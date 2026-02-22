@@ -127,6 +127,13 @@
       "when": 1771869600000,
       "tag": "0017_contact_form_turnstile",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1771880400000,
+      "tag": "0018_analytics_plugin_mvp",
+      "breakpoints": true
     }
   ]
 }

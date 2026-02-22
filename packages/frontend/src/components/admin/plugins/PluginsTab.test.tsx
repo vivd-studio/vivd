@@ -1,11 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   useUtilsMock,
   listAccessUseQueryMock,
   upsertEntitlementUseMutationMock,
-  upsertEntitlementMutateMock,
+  upsertEntitlementMutateAsyncMock,
   listAccessInvalidateMock,
   toastSuccessMock,
   toastErrorMock,
@@ -13,7 +13,7 @@ const {
   useUtilsMock: vi.fn(),
   listAccessUseQueryMock: vi.fn(),
   upsertEntitlementUseMutationMock: vi.fn(),
-  upsertEntitlementMutateMock: vi.fn(),
+  upsertEntitlementMutateAsyncMock: vi.fn(),
   listAccessInvalidateMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
@@ -47,12 +47,13 @@ describe("PluginsTab", () => {
     useUtilsMock.mockReset();
     listAccessUseQueryMock.mockReset();
     upsertEntitlementUseMutationMock.mockReset();
-    upsertEntitlementMutateMock.mockReset();
+    upsertEntitlementMutateAsyncMock.mockReset();
     listAccessInvalidateMock.mockReset();
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
 
     listAccessInvalidateMock.mockResolvedValue(undefined);
+    upsertEntitlementMutateAsyncMock.mockResolvedValue({});
 
     useUtilsMock.mockReturnValue({
       superadmin: {
@@ -74,27 +75,92 @@ describe("PluginsTab", () => {
 
     upsertEntitlementUseMutationMock.mockReturnValue({
       isPending: false,
-      mutate: upsertEntitlementMutateMock,
+      mutateAsync: upsertEntitlementMutateAsyncMock,
     });
   });
 
-  it("renders a plugin tab bar that makes Contact Form scope explicit", () => {
+  it("renders one row per project with grouped plugin controls", () => {
+    listAccessUseQueryMock.mockImplementation((input: { pluginId: string }) => {
+      if (input.pluginId === "contact_form") {
+        return {
+          data: {
+            rows: [
+              {
+                organizationId: "org-1",
+                organizationSlug: "org-1",
+                organizationName: "Org One",
+                projectSlug: "site-1",
+                projectTitle: "Site 1",
+                isDeployed: true,
+                deployedDomain: "site-1.example.com",
+                effectiveScope: "project",
+                state: "enabled",
+                managedBy: "manual_superadmin",
+                monthlyEventLimit: 100,
+                hardStop: true,
+                turnstileEnabled: true,
+                turnstileReady: true,
+                usageThisMonth: 10,
+                projectPluginStatus: "enabled",
+                updatedAt: "2026-02-22T10:00:00.000Z",
+              },
+            ],
+          },
+          error: null,
+          isLoading: false,
+          isFetching: false,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        data: {
+          rows: [
+            {
+              organizationId: "org-1",
+              organizationSlug: "org-1",
+              organizationName: "Org One",
+              projectSlug: "site-1",
+              projectTitle: "Site 1",
+              isDeployed: true,
+              deployedDomain: "site-1.example.com",
+              effectiveScope: "project",
+              state: "disabled",
+              managedBy: "manual_superadmin",
+              monthlyEventLimit: null,
+              hardStop: true,
+              turnstileEnabled: false,
+              turnstileReady: false,
+              usageThisMonth: 0,
+              projectPluginStatus: "disabled",
+              updatedAt: "2026-02-22T11:00:00.000Z",
+            },
+          ],
+        },
+        error: null,
+        isLoading: false,
+        isFetching: false,
+        refetch: vi.fn(),
+      };
+    });
+
     render(<PluginsTab />);
 
-    expect(screen.getByRole("tab", { name: "Contact Form" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Choose a plugin tab to manage entitlements. This list currently shows Contact Form access.",
+        "One row per project. Manage all plugin entitlements for that project in one place, including row-level actions to set all plugins at once.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Selected plugin controls the project access list below. This tab manages Contact Form enablement, limits, and Turnstile behavior.",
-      ),
+      screen.getByRole("columnheader", { name: "Set all plugins" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Contact Form")).toBeInTheDocument();
+    expect(screen.getByText("Analytics")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable all plugins" })).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 
-  it("queries plugin access with the active Contact Form plugin id", () => {
+  it("queries plugin access for both Contact Form and Analytics", () => {
     render(<PluginsTab />);
 
     expect(listAccessUseQueryMock).toHaveBeenCalledWith({
@@ -104,5 +170,70 @@ describe("PluginsTab", () => {
       limit: 500,
       offset: 0,
     });
+    expect(listAccessUseQueryMock).toHaveBeenCalledWith({
+      pluginId: "analytics",
+      search: undefined,
+      state: undefined,
+      limit: 500,
+      offset: 0,
+    });
+  });
+
+  it("can set all plugins on a project row", async () => {
+    listAccessUseQueryMock.mockImplementation((input: { pluginId: string }) => {
+      return {
+        data: {
+          rows: [
+            {
+              organizationId: "org-1",
+              organizationSlug: "org-1",
+              organizationName: "Org One",
+              projectSlug: "site-1",
+              projectTitle: "Site 1",
+              isDeployed: true,
+              deployedDomain: "site-1.example.com",
+              effectiveScope: "project",
+              state: input.pluginId === "contact_form" ? "enabled" : "disabled",
+              managedBy: "manual_superadmin",
+              monthlyEventLimit: null,
+              hardStop: true,
+              turnstileEnabled: false,
+              turnstileReady: false,
+              usageThisMonth: 0,
+              projectPluginStatus: "enabled",
+              updatedAt: "2026-02-22T10:00:00.000Z",
+            },
+          ],
+        },
+        error: null,
+        isLoading: false,
+        isFetching: false,
+        refetch: vi.fn(),
+      };
+    });
+
+    render(<PluginsTab />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Enable all plugins" }));
+
+    await waitFor(() => {
+      expect(upsertEntitlementMutateAsyncMock).toHaveBeenCalledTimes(2);
+    });
+    expect(upsertEntitlementMutateAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginId: "contact_form",
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        state: "enabled",
+      }),
+    );
+    expect(upsertEntitlementMutateAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginId: "analytics",
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        state: "enabled",
+      }),
+    );
   });
 });

@@ -23,7 +23,9 @@ export interface StudioOpencodeToolPolicy {
 const DEFAULT_FEATURE_FLAGS: Record<string, boolean> = {
   plugins: true,
   contact_forms: true,
+  analytics: true,
   publish_checklist: true,
+  image_ai: true,
 };
 
 const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
@@ -44,6 +46,18 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     definitionExportName: "vivdPluginsContactInfoToolDefinition",
     defaultEnabled: true,
     featureFlag: "contact_forms",
+    requiredPlugins: ["contact_form"],
+  },
+  {
+    name: "vivd_plugins_analytics_info",
+    sourceFile: "vivd_plugins_analytics_info.ts",
+    moduleDistRelativePath: "opencode/toolModules/vivdPluginsAnalyticsInfo.js",
+    moduleSourceRelativePath:
+      "server/opencode/toolModules/vivdPluginsAnalyticsInfo.ts",
+    definitionExportName: "vivdPluginsAnalyticsInfoToolDefinition",
+    defaultEnabled: true,
+    featureFlag: "analytics",
+    requiredPlugins: ["analytics"],
   },
   {
     name: "vivd_publish_checklist",
@@ -51,8 +65,17 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     moduleDistRelativePath: "opencode/toolModules/vivdPublishChecklist.js",
     moduleSourceRelativePath: "server/opencode/toolModules/vivdPublishChecklist.ts",
     definitionExportName: "vivdPublishChecklistToolDefinition",
-    defaultEnabled: true,
+    defaultEnabled: false,
     featureFlag: "publish_checklist",
+  },
+  {
+    name: "vivd_image_ai",
+    sourceFile: "vivd_image_ai.ts",
+    moduleDistRelativePath: "opencode/toolModules/vivdImageAi.js",
+    moduleSourceRelativePath: "server/opencode/toolModules/vivdImageAi.ts",
+    definitionExportName: "vivdImageAiToolDefinition",
+    defaultEnabled: true,
+    featureFlag: "image_ai",
   },
 ];
 

@@ -29,6 +29,7 @@ import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDial
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import {
+  BarChart3,
   Copy,
   Download,
   ExternalLink,
@@ -73,6 +74,11 @@ export default function ProjectFullscreen() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const currentVersion = project?.currentVersion || 1;
   const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
+  const analyticsAvailable = (project?.enabledPlugins ?? []).includes("analytics");
+  const analyticsPath = projectSlug
+    ? ROUTES.PROJECT_ANALYTICS?.(projectSlug) ??
+      `/vivd-studio/projects/${projectSlug}/analytics`
+    : null;
 
   const urlParams = useMemo(
     () => new URLSearchParams(location.search),
@@ -544,6 +550,16 @@ export default function ProjectFullscreen() {
           <Button variant="outline" onClick={() => setPublishDialogOpen(true)}>
             Publish
           </Button>
+          {analyticsAvailable ? (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => analyticsPath && navigate(analyticsPath)}
+              title="Analytics"
+            >
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -628,6 +644,14 @@ export default function ProjectFullscreen() {
                 <Plug className="h-4 w-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
+              {analyticsAvailable ? (
+                <DropdownMenuItem
+                  onClick={() => analyticsPath && navigate(analyticsPath)}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analytics
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setShowDeleteConfirm(true)}

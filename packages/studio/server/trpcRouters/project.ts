@@ -31,6 +31,7 @@ import {
   getGitHubSyncProjectInfo,
   sanitizeGitAuthFromMessage,
   syncPushToGitHub,
+  type GitHubSyncResult,
 } from "../services/integrations/GitHubSyncService.js";
 import { withBucketSyncPaused } from "../services/sync/SyncPauseService.js";
 import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
@@ -72,6 +73,18 @@ function getConnectedBackendConfig():
   const organizationId = getConnectedOrganizationId();
   if (!backendUrl || !sessionToken || !studioId) return null;
   return { backendUrl, sessionToken, studioId, organizationId };
+}
+
+function readEnabledPluginsFromEnv(): string[] {
+  const raw = (process.env.VIVD_ENABLED_PLUGINS || "").trim();
+  if (!raw) return [];
+  const unique = new Set<string>();
+  for (const entry of raw.split(",")) {
+    const normalized = entry.trim();
+    if (!normalized) continue;
+    unique.add(normalized);
+  }
+  return Array.from(unique);
 }
 
 async function callConnectedBackendQuery<T>(
@@ -160,6 +173,7 @@ export const projectRouter = router({
     if (!ctx.workspace.isInitialized()) {
       return { projects: [] };
     }
+    const enabledPlugins = readEnabledPluginsFromEnv();
 
     return {
       projects: [
@@ -177,6 +191,7 @@ export const projectRouter = router({
           publishedDomain: null,
           publishedVersion: null,
           thumbnailUrl: null,
+          enabledPlugins,
         },
       ],
     };
@@ -544,7 +559,11 @@ export const projectRouter = router({
       }
 
       const hash = await ctx.workspace.commit(input.message);
-      if (!hash) {
+      const projectDir = ctx.workspace.getProjectPath();
+      const headCommit = await ctx.workspace.getHeadCommit();
+      const effectiveCommitHash = hash || headCommit?.hash || "";
+
+      if (!effectiveCommitHash) {
         return {
           success: true,
           hash: "",
@@ -554,18 +573,21 @@ export const projectRouter = router({
         };
       }
 
-      projectTouchReporter.touch(input.slug);
-      // Report state ASAP so publish dialogs reflect the new snapshot without waiting for polling.
-      void workspaceStateReporter.reportSoon();
+      let github: GitHubSyncResult = { attempted: false, success: true };
 
-      const projectDir = ctx.workspace.getProjectPath();
-      const github = await ctx.workspace.runExclusive("githubPush", async ({ cwd }) => {
-        return await syncPushToGitHub({
-          cwd,
-          slug: input.slug,
-          version: input.version,
+      if (hash) {
+        projectTouchReporter.touch(input.slug);
+        // Report state ASAP so publish dialogs reflect the new snapshot without waiting for polling.
+        void workspaceStateReporter.reportSoon();
+
+        github = await ctx.workspace.runExclusive("githubPush", async ({ cwd }) => {
+          return await syncPushToGitHub({
+            cwd,
+            slug: input.slug,
+            version: input.version,
+          });
         });
-      });
+      }
 
       const config = detectProjectType(projectDir);
       // Keep bucket-backed preview up to date (best-effort, async).
@@ -574,7 +596,7 @@ export const projectRouter = router({
           projectDir,
           slug: input.slug,
           version: input.version,
-          commitHash: hash,
+          commitHash: effectiveCommitHash,
         }).catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[Artifacts] Source sync failed: ${msg}`);
@@ -584,7 +606,7 @@ export const projectRouter = router({
           projectDir,
           slug: input.slug,
           version: input.version,
-          commitHash: hash,
+          commitHash: effectiveCommitHash,
         })
           .then(() => {
             thumbnailGenerationReporter.request(input.slug, input.version);
@@ -598,7 +620,7 @@ export const projectRouter = router({
           projectDir,
           slug: input.slug,
           version: input.version,
-          commitHash: hash,
+          commitHash: effectiveCommitHash,
         })
           .then(() => {
             thumbnailGenerationReporter.request(input.slug, input.version);
@@ -611,10 +633,12 @@ export const projectRouter = router({
 
       return {
         success: true,
-        hash,
-        noChanges: false,
+        hash: hash || "",
+        noChanges: !hash,
         github,
-        message: `Saved version with commit ${hash.substring(0, 7)}`,
+        message: hash
+          ? `Saved version with commit ${hash.substring(0, 7)}`
+          : `No changes to save. Preparing artifacts for ${effectiveCommitHash.substring(0, 7)}`,
       };
     }),
 

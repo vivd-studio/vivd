@@ -388,7 +388,7 @@ export const pluginEntitlement = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     scope: text("scope").notNull().default("project"), // 'organization' | 'project'
     projectSlug: text("project_slug").notNull().default(""), // empty for organization-scope
-    pluginId: text("plugin_id").notNull(), // currently: 'contact_form'
+    pluginId: text("plugin_id").notNull(), // currently: 'contact_form' | 'analytics'
     state: text("state").notNull().default("disabled"), // 'disabled' | 'enabled' | 'suspended'
     managedBy: text("managed_by").notNull().default("manual_superadmin"), // 'manual_superadmin' | 'plan' | 'self_serve'
     monthlyEventLimit: integer("monthly_event_limit"),
@@ -456,11 +456,61 @@ export const contactFormSubmission = pgTable(
   ],
 );
 
+export const analyticsEvent = pgTable(
+  "analytics_event",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(), // 'pageview' | 'custom'
+    path: text("path").notNull(),
+    referrerHost: text("referrer_host"),
+    sourceHost: text("source_host"),
+    visitorIdHash: text("visitor_id_hash"),
+    sessionId: text("session_id"),
+    deviceType: text("device_type"),
+    countryCode: text("country_code"),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    index("analytics_event_org_project_created_idx").on(
+      table.organizationId,
+      table.projectSlug,
+      table.createdAt,
+    ),
+    index("analytics_event_plugin_created_idx").on(
+      table.pluginInstanceId,
+      table.createdAt,
+    ),
+    index("analytics_event_plugin_type_created_idx").on(
+      table.pluginInstanceId,
+      table.eventType,
+      table.createdAt,
+    ),
+    index("analytics_event_plugin_path_created_idx").on(
+      table.pluginInstanceId,
+      table.path,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   versions: many(projectVersion),
   publishChecklists: many(projectPublishChecklist),
   pluginInstances: many(projectPluginInstance),
   contactFormSubmissions: many(contactFormSubmission),
+  analyticsEvents: many(analyticsEvent),
 }));
 
 export const projectVersionRelations = relations(
@@ -507,6 +557,7 @@ export const projectPluginInstanceRelations = relations(
       references: [projectMeta.organizationId, projectMeta.slug],
     }),
     contactFormSubmissions: many(contactFormSubmission),
+    analyticsEvents: many(analyticsEvent),
   }),
 );
 
@@ -519,6 +570,20 @@ export const contactFormSubmissionRelations = relations(
     }),
     pluginInstance: one(projectPluginInstance, {
       fields: [contactFormSubmission.pluginInstanceId],
+      references: [projectPluginInstance.id],
+    }),
+  }),
+);
+
+export const analyticsEventRelations = relations(
+  analyticsEvent,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [analyticsEvent.organizationId, analyticsEvent.projectSlug],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [analyticsEvent.pluginInstanceId],
       references: [projectPluginInstance.id],
     }),
   }),

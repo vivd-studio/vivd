@@ -78,6 +78,12 @@ export function PrePublishChecklist({
     }
 
     if (!checklist || !checklistProgress) return null;
+    if (checklistProgress.completed < checklistProgress.total) {
+      return {
+        variant: "secondary" as const,
+        text: `Incomplete ${checklistProgress.completed}/${checklistProgress.total}`,
+      };
+    }
     const { passed, failed, warnings } = checklist.summary;
     const total = checklistProgress.total;
     if (failed > 0) {
@@ -160,13 +166,23 @@ export function PrePublishChecklist({
             <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-muted/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
               {checklist.items.map((item) => {
                 const isPending = item.note === CHECKLIST_PENDING_NOTE_MARKER;
-                const config = isPending
+                const isActivelyChecking = isPending && isRunning;
+                const config = isActivelyChecking
                   ? {
                       color: "text-sky-600 dark:text-sky-400",
                       bgColor: "bg-sky-50 dark:bg-sky-900/20",
                     }
+                  : isPending
+                    ? {
+                        color: "text-amber-600 dark:text-amber-400",
+                        bgColor: "bg-amber-50 dark:bg-amber-900/20",
+                      }
                   : CHECKLIST_STATUS_CONFIG[item.status];
-                const Icon = isPending ? Loader2 : CHECKLIST_STATUS_CONFIG[item.status].icon;
+                const Icon = isActivelyChecking
+                  ? Loader2
+                  : isPending
+                    ? AlertTriangle
+                    : CHECKLIST_STATUS_CONFIG[item.status].icon;
                 return (
                   <div
                     key={item.id}
@@ -174,15 +190,20 @@ export function PrePublishChecklist({
                   >
                     <Icon
                       className={`w-4 h-4 mt-0.5 shrink-0 ${config.color} ${
-                        isPending ? "animate-spin" : ""
+                        isActivelyChecking ? "animate-spin" : ""
                       }`}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-xs flex items-center gap-1.5">
                         {item.label}
-                        {isPending && (
+                        {isActivelyChecking && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">
                             Checking
+                          </span>
+                        )}
+                        {isPending && !isActivelyChecking && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                            Pending
                           </span>
                         )}
                         {item.status === "fixed" && (
@@ -193,12 +214,12 @@ export function PrePublishChecklist({
                       </p>
                       {isPending ? (
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {isRunning
+                          {isActivelyChecking
                             ? "Agent is currently checking this test point..."
-                            : "Pending update from the last run."}
+                            : "Not completed in the last run. Re-run checks to continue."}
                         </p>
                       ) : item.note ? (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                        <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                           {item.note}
                         </p>
                       ) : null}

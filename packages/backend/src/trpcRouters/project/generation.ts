@@ -23,8 +23,8 @@ import path from "path";
 import { publishService } from "../../services/publish/PublishService";
 import { gitService } from "../../services/integrations/GitService";
 import { db } from "../../db";
-import { projectMember } from "../../db/schema";
-import { and, eq } from "drizzle-orm";
+import { projectMember, projectPluginInstance } from "../../db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { limitsService } from "../../services/usage/LimitsService";
 import { detectProjectType } from "../../devserver/projectType";
 import { buildService } from "../../services/project/BuildService";
@@ -734,6 +734,26 @@ export const projectGenerationProcedures = {
       const filteredSlugs = isClientEditor
         ? projectSlugs.filter((slug) => slug === assignedProjectSlug)
         : projectSlugs;
+      const enabledPluginRows =
+        filteredSlugs.length > 0
+          ? await db.query.projectPluginInstance.findMany({
+              where: and(
+                eq(projectPluginInstance.organizationId, organizationId),
+                inArray(projectPluginInstance.projectSlug, filteredSlugs),
+                eq(projectPluginInstance.status, "enabled"),
+              ),
+              columns: {
+                projectSlug: true,
+                pluginId: true,
+              },
+            })
+          : [];
+      const enabledPluginsBySlug = new Map<string, string[]>();
+      for (const row of enabledPluginRows) {
+        const current = enabledPluginsBySlug.get(row.projectSlug) ?? [];
+        current.push(row.pluginId);
+        enabledPluginsBySlug.set(row.projectSlug, current);
+      }
 
       const projects = await Promise.all(
         filteredSlugs.map(async (slug) => {
@@ -777,6 +797,7 @@ export const projectGenerationProcedures = {
             publishedDomain: publishInfo?.domain ?? null,
             publishedVersion: publishInfo?.projectVersion ?? null,
             thumbnailUrl,
+            enabledPlugins: enabledPluginsBySlug.get(slug) ?? [],
           };
         }),
       );

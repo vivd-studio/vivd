@@ -5,13 +5,27 @@ const {
   listSessionsMock,
   deleteSessionMock,
   getAvailableModelsMock,
+  getSessionContentMock,
+  getSessionsStatusMock,
   validateModelSelectionMock,
+  isConnectedModeMock,
+  getBackendUrlMock,
+  getSessionTokenMock,
+  getStudioIdMock,
+  getConnectedOrganizationIdMock,
 } = vi.hoisted(() => ({
   runTaskMock: vi.fn(),
   listSessionsMock: vi.fn(),
   deleteSessionMock: vi.fn(),
   getAvailableModelsMock: vi.fn(),
+  getSessionContentMock: vi.fn(),
+  getSessionsStatusMock: vi.fn(),
   validateModelSelectionMock: vi.fn(),
+  isConnectedModeMock: vi.fn(),
+  getBackendUrlMock: vi.fn(),
+  getSessionTokenMock: vi.fn(),
+  getStudioIdMock: vi.fn(),
+  getConnectedOrganizationIdMock: vi.fn(),
 }));
 
 vi.mock("../opencode/index.js", () => ({
@@ -21,8 +35,8 @@ vi.mock("../opencode/index.js", () => ({
   },
   deleteSession: deleteSessionMock,
   getAvailableModels: getAvailableModelsMock,
-  getSessionContent: vi.fn(),
-  getSessionsStatus: vi.fn(),
+  getSessionContent: getSessionContentMock,
+  getSessionsStatus: getSessionsStatusMock,
   listProjects: vi.fn(),
   listSessions: listSessionsMock,
   revertToUserMessage: vi.fn(),
@@ -32,6 +46,14 @@ vi.mock("../opencode/index.js", () => ({
 
 vi.mock("../opencode/modelConfig.js", () => ({
   validateModelSelection: validateModelSelectionMock,
+}));
+
+vi.mock("@vivd/shared", () => ({
+  getBackendUrl: getBackendUrlMock,
+  getConnectedOrganizationId: getConnectedOrganizationIdMock,
+  getSessionToken: getSessionTokenMock,
+  getStudioId: getStudioIdMock,
+  isConnectedMode: isConnectedModeMock,
 }));
 
 import { agentRouter } from "./agent.js";
@@ -52,7 +74,15 @@ describe("agent router", () => {
     listSessionsMock.mockReset();
     deleteSessionMock.mockReset();
     getAvailableModelsMock.mockReset();
+    getSessionContentMock.mockReset();
+    getSessionsStatusMock.mockReset();
     validateModelSelectionMock.mockReset();
+    isConnectedModeMock.mockReset();
+    getBackendUrlMock.mockReset();
+    getSessionTokenMock.mockReset();
+    getStudioIdMock.mockReset();
+    getConnectedOrganizationIdMock.mockReset();
+    vi.unstubAllGlobals();
 
     runTaskMock.mockResolvedValue({ sessionId: "sess-1" });
     listSessionsMock.mockResolvedValue([]);
@@ -60,7 +90,14 @@ describe("agent router", () => {
     getAvailableModelsMock.mockReturnValue([
       { provider: "openai", modelId: "gpt-4.1-mini" },
     ]);
+    getSessionContentMock.mockResolvedValue([]);
+    getSessionsStatusMock.mockResolvedValue({});
     validateModelSelectionMock.mockImplementation((model) => model);
+    isConnectedModeMock.mockReturnValue(false);
+    getBackendUrlMock.mockReturnValue("");
+    getSessionTokenMock.mockReturnValue("");
+    getStudioIdMock.mockReturnValue("");
+    getConnectedOrganizationIdMock.mockReturnValue(undefined);
   });
 
   it("returns available models from the opencode layer", async () => {
@@ -163,5 +200,79 @@ describe("agent router", () => {
 
     expect(deleteSessionMock).toHaveBeenCalledWith("sess-2", "/tmp/workspace");
     expect(result).toEqual({ success: true });
+  });
+
+  it("enables checklist tool only for connected checklist runs", async () => {
+    isConnectedModeMock.mockReturnValue(true);
+    getBackendUrlMock.mockReturnValue("http://backend.test");
+    getSessionTokenMock.mockReturnValue("session-token");
+    getStudioIdMock.mockReturnValue("studio-1");
+    getConnectedOrganizationIdMock.mockReturnValue("org-1");
+    runTaskMock.mockResolvedValueOnce({ sessionId: "sess-checklist" });
+    getSessionContentMock.mockResolvedValueOnce([
+      {
+        info: { role: "assistant" },
+        parts: [
+          {
+            type: "text",
+            text: `\`\`\`json
+{"items":[{"id":"dns_record","label":"DNS record","status":"pass","note":"configured"}]}
+\`\`\``,
+          },
+        ],
+      },
+    ]);
+    getSessionsStatusMock.mockResolvedValueOnce({
+      "sess-checklist": { type: "idle" },
+    });
+
+    const fetchMock = vi
+      .fn()
+      // Seed pending checklist in backend.
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "",
+        json: async () => ({}),
+      })
+      // Read backend checklist (returns stale/missing to force JSON fallback).
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "",
+        json: async () => ({ result: { data: { json: { checklist: null } } } }),
+      })
+      // Persist fallback checklist payload.
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "",
+        json: async () => ({}),
+      });
+    vi.stubGlobal("fetch", fetchMock as typeof fetch);
+
+    const caller = agentRouter.createCaller(
+      makeContext({
+        workspace: {
+          isInitialized: vi.fn(() => true),
+          getProjectPath: vi.fn(() => "/tmp"),
+          commit: vi.fn(async () => "commit-123"),
+          hasChanges: vi.fn(async () => false),
+        },
+      }),
+    );
+
+    const result = await caller.runPrePublishChecklist({
+      projectSlug: "site-1",
+      version: 2,
+    });
+
+    expect(runTaskMock).toHaveBeenCalledWith(
+      expect.any(String),
+      "/tmp",
+      undefined,
+      undefined,
+      { tools: { vivd_publish_checklist: true } },
+    );
+    expect(result.success).toBe(true);
+    expect(result.sessionId).toBe("sess-checklist");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

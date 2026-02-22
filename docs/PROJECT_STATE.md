@@ -13,9 +13,26 @@
 
 ## Progress Log
 
+- 2026-02-22: evolved Super Admin → Plugins into a project-first table in `packages/frontend/src/components/admin/plugins/PluginsTab.tsx`: each project now renders once with grouped per-plugin controls in-row plus bulk row actions (`Enable all plugins`, `Disable all plugins`, `Suspend all plugins`) to update all plugin entitlements for that project in one click.
+- 2026-02-22: moved analytics into a dedicated business-facing project page at `Project → Analytics` (`/vivd-studio/projects/:slug/analytics`), extended `plugins.analyticsSummary` with Contact Form usage metrics (submissions, daily trend, top source hosts, submission-rate vs pageviews), and surfaced dedicated Analytics entry icons wherever project actions live when analytics is enabled (Studio toolbar quick actions, preview headers/menus, and dashboard project cards).
+- 2026-02-22: added a new Studio OpenCode tool `vivd_image_ai` for prompt-only image generation and prompt+image edit/reference workflows (up to 5 input images), reusing existing OpenRouter image-model env knobs (`HERO_GENERATION_MODEL`, `IMAGE_EDITING_MODEL`) and saving generated outputs back into project files as `.webp`; wired registry enablement (`image_ai` feature flag) and updated OpenCode tool registry/module tests.
+- 2026-02-22: completed Analytics plugin Slice 2 dashboard MVP: added backend `plugins.analyticsSummary` aggregation (7d/30d totals, daily trend, top pages, top referrers, device split) and rendered a project-level analytics dashboard in `packages/frontend/src/pages/ProjectPlugins.tsx`; also hardened analytics config updates so they no longer auto-enable the plugin (project members can view stats when superadmin-enabled but cannot self-enable via config writes).
+- 2026-02-22: fixed Contact Form browser-submit post-success UX regression where forms without `_redirect` could leave users on the API host (`/plugins/contact/v1/submit` showing raw `ok`); the submit runtime now falls back to a safe same-host redirect derived from `Referer`/`Origin` and appends `_vivd_contact=success` when allowed by redirect/source host policy.
+- 2026-02-22: made `vivd_publish_checklist` available only during checklist runs by default-disabling it in Studio tool policy and passing a per-run tool allowlist (`tools: { vivd_publish_checklist: true }`) through OpenCode `session.promptAsync` during `runPrePublishChecklist`; added regression coverage in `packages/studio/server/trpcRouters/agent.router.test.ts` and `packages/studio/server/opencode/index.sessions.test.ts`.
+- 2026-02-22: consolidated Super Admin → Plugins project access into a single cross-plugin table in `packages/frontend/src/components/admin/plugins/PluginsTab.tsx`; Contact Form and Analytics rows now render together with a plugin column while preserving per-plugin controls (including Turnstile only for Contact Form), reducing duplicate list navigation.
+- 2026-02-22: fixed connected publish dead-end when `publishState` is `ready` but `publishableCommitHash` is missing: `project.gitSave` now performs artifact prep even when there are no file diffs (using current HEAD hash), Publish dialog now offers an explicit `Prepare for publish` action in that state, and a targeted regression test was added in `packages/studio/server/trpcRouters/project.gitSave.test.ts`.
+- 2026-02-22: improved publish-checklist item readability by removing note truncation in `packages/studio/client/src/components/publish/PrePublishChecklist.tsx`; checklist item notes now render full multi-line text (`whitespace-pre-wrap` + `break-words`) so operators can inspect complete agent findings without clipped content.
+- 2026-02-22: fixed checklist-flow reliability issues that could look like an infinite `Checking` state in Studio local dev: long-running checklist mutations now use extended tRPC request timeouts in `packages/studio/client/src/main.tsx` (instead of the global 15s abort), checklist rows in `PrePublishChecklist` now render unfinished items as `Pending` (non-spinning) unless a run is actively in progress, and `vivd_publish_checklist` now defaults to the runtime project version (plus explicit per-run version instruction) to avoid writing checklist updates to `v1` when the active project is on another version.
+- 2026-02-22: documented SSE migration triage and rollout plan in `docs/sse-polling-plan.md`, including a keep-vs-replace polling matrix, cross-instance robustness requirements, and phased delivery for generation, publish/checklist, and project-list freshness updates.
+- 2026-02-22: enhanced Super Admin -> Plugins project list rows with deployment context by surfacing per-project publish status and deployed domain from `published_site` in `pluginsListAccess`, and rendering this as read-only "Deployment" info in the plugin access table.
+- 2026-02-22: fixed a crash/restart checklist recovery bug where publish checks could remain visually stuck in `Checking`: pending-marker checklist rows now force `hasChangesSinceCheck=true` in `agent.getPrePublishChecklist` (connected and standalone), and the client auto-clears stale live-run state on dialog close, checklist completion, or timeout so users can always rerun after interrupted agent sessions.
+- 2026-02-22: made OpenCode plugin-info tools context-conditional by wiring `requiredPlugins` in Studio tool policy (`vivd_plugins_contact_info` -> `contact_form`, `vivd_plugins_analytics_info` -> `analytics`), so these tools are exposed only for projects where the corresponding plugin is enabled; added policy test coverage in `packages/studio/server/opencode/toolRegistry.test.ts`.
+- 2026-02-22: implemented Analytics plugin Slice 1 foundation across backend/frontend/studio: added analytics plugin registry + config/service plumbing (`packages/backend/src/services/plugins/analytics/*`, `ProjectPluginService`, `plugins.analyticsInfo`/`plugins.analyticsUpdateConfig`), public runtime endpoints for script + ingest (`/plugins/analytics/v1/script.js`, `/plugins/analytics/v1/track`) with entitlement/quota/rate-limit enforcement, analytics event storage migration (`packages/backend/drizzle/0018_analytics_plugin_mvp.sql`, `analytics_event` schema), superadmin Analytics entitlement panel in Plugins tab, and new OpenCode tool `vivd_plugins_analytics_info` registered in Studio tool policy/build outputs.
+- 2026-02-22: refined Studio toolbar quick-action ordering for better action flow and discoverability: desktop quick actions now render as `Refresh → Plugins → Snapshots/History → Publish → More`.
 - 2026-02-22: promoted Plugins to a first-class Studio toolbar quick action with a dedicated icon button (desktop quick actions), while keeping dropdown/mobile access paths, and standardized plugin entry-point icons to `Plug` (power-plug) across Studio/embedded/fullscreen/project-card menus for consistent plugin affordances.
 - 2026-02-22: enforced Contact Form recipient safety by requiring at least one recipient and verifying every configured recipient email against verified organization-member emails; config saves now fail fast with `BAD_REQUEST` for empty/unverified recipient lists, and the Project → Plugins UI now states the verified-email requirement directly in recipient configuration help text.
 - 2026-02-22: drafted analytics-plugin implementation plan in `docs/analytics-plugin-plan.md`, defining an MVP-first rollout that mirrors Contact Form integration patterns: superadmin entitlement controls (Analytics tab), OpenCode install-guidance tooling (`vivd_plugins_analytics_info`), public track/script runtime endpoints, and project-level traffic dashboards (pageviews/visitors/sessions/top pages/referrers) before advanced goals/conversions.
+- 2026-02-22: drafted control-plane app-login landing + tenant redirect plan in `docs/app-login-landing-plan.md`, covering `vivd.studio` login entry to `app.vivd.studio`, post-login tenant-host handoff (`/vivd-studio`), host-aware root routing constraints, safe deep-link `next` handling, and rollout/testing slices.
 - 2026-02-22: refreshed shared transactional email presentation to better match vivd.studio website branding: updated `packages/backend/src/services/email/templates.ts` with the live black/white/green visual language (cleaner card surface, pill-style black CTA, subtle green-tinted background accents) and switched the header branding to the website logo asset (`https://vivd.studio/images/vivd_logo_transparent.png`) across contact, verification, and password-reset emails; updated `packages/backend/test/email_templates.test.ts` assertions to lock logo presence.
 - 2026-02-22: removed the “Websites in 48 hours…” slogan line from transactional email headers so branded emails keep a logo-only header treatment.
 - 2026-02-22: improved Studio publish-checklist UX with live per-testpoint progress while checks run: checklist state now refetches at 1s intervals during a run in `usePrePublishChecklist`, and `PrePublishChecklist` renders each checklist item with a real-time `Checking` state (including pending rows and live completed count) so operators can watch item-by-item updates as the agent/tool writes checklist results.
@@ -57,11 +74,13 @@
 
 ## Current Priorities
 
+- [ ] Execute SSE migration Phase 1 from `docs/sse-polling-plan.md` (generation status and project-list invalidation) while preserving polling fallbacks behind flags.
 - [ ] Implement superadmin project-transfer flow (existing target org + create-new-org path) with DB cutover and bucket-prefix migration, per `docs/superadmin-project-transfer-plan.md`.
+- [ ] Implement control-plane app login landing + automatic post-login tenant redirect per `docs/app-login-landing-plan.md`.
 - [ ] Add Phase 4 E2E smoke coverage (lean PR suite + nightly/pre-release full suite) now that the current Phase 2/3 checklist targets are covered.
 - [ ] Fix known failing Fly integration: `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts` (expected red currently; revert-after-rehydrate path still broken).
 - [ ] Complete remaining plugin-system Phase 1 follow-through: inbox/read path UX + operator workflow hardening around entitlements (self-serve/request flow still pending).
-- [ ] Implement Analytics plugin MVP per `docs/analytics-plugin-plan.md` (superadmin entitlement panel, OpenCode setup tooling, and project traffic dashboard with pageview-first metrics).
+- [ ] Start Analytics plugin Slice 3 MVP+ conversions per `docs/analytics-plugin-plan.md` (custom events/goals after dashboard baseline).
 - [ ] Validate lifecycle sync hardening in real Fly runs (stop/destroy/warm-reconcile + trigger-driven sync under larger workspace/opencode payloads).
 - [ ] Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
 - [ ] Complete remaining auth onboarding hardening (invite-only signup flow + operator alerting/monitoring for transactional auth email delivery).
@@ -166,6 +185,7 @@
 | Build execution location (backend vs studio vs dedicated builder) | TBD |
 | Preview artifact exposure (public vs signed URLs) | TBD |
 | Studio URL pattern (iframe route vs redirect vs subdomain) | TBD |
+| Cross-subdomain auth handoff for control-plane -> tenant redirect (shared cookie only vs one-time token fallback) | TBD |
 | Project-transfer semantics: require unpublished in v1 and move usage-history rows by default? | TBD |
 
 ## Operational Notes
@@ -178,7 +198,9 @@
 
 ## Related Documents
 
+- `docs/sse-polling-plan.md`
 - `docs/analytics-plugin-plan.md`
+- `docs/app-login-landing-plan.md`
 - `docs/superadmin-project-transfer-plan.md`
 - `docs/refactoring-day-checklist.md`
 - `docs/old/publishing-bucket-first-plan.md`

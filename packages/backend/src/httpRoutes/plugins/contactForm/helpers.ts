@@ -1,4 +1,5 @@
 export {
+  resolveDefaultSuccessRedirectTarget,
   extractSourceHostFromHeaders,
   isHostAllowed,
   normalizeHostCandidate,

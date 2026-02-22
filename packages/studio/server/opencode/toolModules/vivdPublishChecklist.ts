@@ -66,7 +66,9 @@ export const vivdPublishChecklistToolDefinition: OpencodeToolDefinition = {
       .int()
       .positive()
       .optional()
-      .describe("Project version. Defaults to 1."),
+      .describe(
+        "Project version. Defaults to the current studio project version from runtime context.",
+      ),
     itemId: z
       .string()
       .min(1)
@@ -86,7 +88,7 @@ export const vivdPublishChecklistToolDefinition: OpencodeToolDefinition = {
     const validationError = validateConnectedRuntime(config, "vivd_publish_checklist");
     if (validationError) return validationError;
 
-    const version = args.version ?? 1;
+    const version = args.version ?? config.projectVersion ?? 1;
 
     try {
       if (args.action === "describe") {

@@ -36,6 +36,8 @@ export const ROUTES = {
   PROJECT: (slug: string) => `/vivd-studio/projects/${slug}` as const,
   PROJECT_PLUGINS: (slug: string) =>
     `/vivd-studio/projects/${slug}/plugins` as const,
+  PROJECT_ANALYTICS: (slug: string) =>
+    `/vivd-studio/projects/${slug}/analytics` as const,
   PROJECT_FULLSCREEN: (slug: string) =>
     `/vivd-studio/projects/${slug}/fullscreen` as const,
   PROJECT_STUDIO_FULLSCREEN: (slug: string) =>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import type { ChecklistItem, PrePublishChecklist } from "./types";
+import { CHECKLIST_PENDING_NOTE_MARKER } from "./constants";
 
 interface UsePrePublishChecklistArgs {
   dialogOpen: boolean;
@@ -16,8 +17,7 @@ export function usePrePublishChecklist({
 }: UsePrePublishChecklistArgs) {
   const [isLiveChecklistRun, setIsLiveChecklistRun] = useState(false);
 
-  const { mutate: runChecklist, isPending: isRunningChecklist } =
-    trpc.agent.runPrePublishChecklist.useMutation({
+  const { mutate: runChecklist } = trpc.agent.runPrePublishChecklist.useMutation({
       onSuccess: (data) => {
         setIsLiveChecklistRun(false);
         toast.success(
@@ -45,15 +45,35 @@ export function usePrePublishChecklist({
   );
 
   const checklist: PrePublishChecklist | null = checklistData?.checklist ?? null;
-  const hasChangesSinceCheck = checklistData?.hasChangesSinceCheck ?? true;
+  const hasPendingChecklistItems =
+    checklist?.items.some(
+      (item) => item.note === CHECKLIST_PENDING_NOTE_MARKER
+    ) ?? false;
+  const hasChangesSinceCheck =
+    (checklistData?.hasChangesSinceCheck ?? true) || hasPendingChecklistItems;
 
   const [fixingItemId, setFixingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!dialogOpen) {
       setFixingItemId(null);
+      setIsLiveChecklistRun(false);
     }
   }, [dialogOpen]);
+
+  useEffect(() => {
+    if (isLiveChecklistRun && checklist && !hasPendingChecklistItems) {
+      setIsLiveChecklistRun(false);
+    }
+  }, [checklist, hasPendingChecklistItems, isLiveChecklistRun]);
+
+  useEffect(() => {
+    if (!isLiveChecklistRun) return;
+    const timeout = window.setTimeout(() => {
+      setIsLiveChecklistRun(false);
+    }, 180_000);
+    return () => window.clearTimeout(timeout);
+  }, [isLiveChecklistRun]);
 
   const { mutate: mutateFixChecklistItem } =
     trpc.agent.fixChecklistItem.useMutation({
@@ -96,7 +116,7 @@ export function usePrePublishChecklist({
     hasChangesSinceCheck,
     isLoadingChecklist,
     runChecklist: handleRunChecklist,
-    isRunningChecklist: isRunningChecklist || isLiveChecklistRun,
+    isRunningChecklist: isLiveChecklistRun,
     fixChecklistItem: handleFixItem,
     fixingItemId,
   };

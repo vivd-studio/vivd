@@ -3,6 +3,7 @@ import {
   extractSourceHostFromHeaders,
   isHostAllowed,
   normalizeHostCandidate,
+  resolveDefaultSuccessRedirectTarget,
   resolveEffectiveRedirectHosts,
   resolveEffectiveSourceHosts,
   resolveRedirectTarget,
@@ -78,5 +79,46 @@ describe("public plugins host helpers", () => {
         ["preview.localhost"],
       ),
     ).toEqual(["www.site.localhost", "site.localhost"]);
+  });
+
+  it("derives fallback success redirects from referer or origin", () => {
+    const refererFallback = resolveDefaultSuccessRedirectTarget({
+      rawReferer: "https://site.localhost/contact?utm=1#form",
+      rawOrigin: "https://ignored.localhost",
+      allowlist: ["site.localhost", "preview.localhost"],
+    });
+    expect(refererFallback).not.toBeNull();
+
+    const parsedRefererFallback = new URL(refererFallback!);
+    expect(parsedRefererFallback.host).toBe("site.localhost");
+    expect(parsedRefererFallback.pathname).toBe("/contact");
+    expect(parsedRefererFallback.searchParams.get("utm")).toBe("1");
+    expect(parsedRefererFallback.searchParams.get("_vivd_contact")).toBe("success");
+    expect(parsedRefererFallback.hash).toBe("#form");
+
+    const originFallback = resolveDefaultSuccessRedirectTarget({
+      rawReferer: null,
+      rawOrigin: "https://preview.localhost",
+      allowlist: ["preview.localhost"],
+    });
+    expect(originFallback).toBe("https://preview.localhost/?_vivd_contact=success");
+  });
+
+  it("returns null fallback redirect when no allowed source URL exists", () => {
+    expect(
+      resolveDefaultSuccessRedirectTarget({
+        rawReferer: "https://evil.localhost/contact",
+        rawOrigin: "https://also-evil.localhost",
+        allowlist: ["site.localhost"],
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveDefaultSuccessRedirectTarget({
+        rawReferer: "https://site.localhost/contact",
+        rawOrigin: "https://site.localhost",
+        allowlist: [],
+      }),
+    ).toBeNull();
   });
 });

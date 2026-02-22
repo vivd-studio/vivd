@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
+  analyticsEvent,
   contactFormSubmission,
   organization,
   pluginEntitlement,
+  publishedSite,
   projectMeta,
   projectPluginInstance,
 } from "../../db/schema";
@@ -52,6 +54,8 @@ export interface PluginAccessListRow {
   organizationName: string;
   projectSlug: string;
   projectTitle: string;
+  isDeployed: boolean;
+  deployedDomain: string | null;
   effectiveScope: PluginEntitlementScope;
   state: PluginEntitlementState;
   managedBy: PluginEntitlementManagedBy;
@@ -249,13 +253,57 @@ class PluginEntitlementService {
               contactFormSubmission.organizationId,
               contactFormSubmission.projectSlug,
             )
-        : [];
+        : options.pluginId === "analytics"
+          ? await db
+              .select({
+                organizationId: analyticsEvent.organizationId,
+                projectSlug: analyticsEvent.projectSlug,
+                count: sql<number>`count(*)`,
+              })
+              .from(analyticsEvent)
+              .where(
+                and(
+                  gte(analyticsEvent.createdAt, monthStart),
+                  options.organizationId
+                    ? eq(analyticsEvent.organizationId, options.organizationId)
+                    : undefined,
+                ),
+              )
+              .groupBy(analyticsEvent.organizationId, analyticsEvent.projectSlug)
+          : [];
     const usageByProject = new Map<string, number>(
       usageRows.map((row) => [
         `${row.organizationId}:${row.projectSlug}`,
         Number(row.count) || 0,
       ]),
     );
+    const publishedRows = await db
+      .select({
+        organizationId: publishedSite.organizationId,
+        projectSlug: publishedSite.projectSlug,
+        domain: publishedSite.domain,
+        publishedAt: publishedSite.publishedAt,
+      })
+      .from(publishedSite)
+      .where(
+        options.organizationId
+          ? eq(publishedSite.organizationId, options.organizationId)
+          : undefined,
+      );
+    const deployedByProject = new Map<
+      string,
+      { domain: string; publishedAt: Date }
+    >();
+    for (const row of publishedRows) {
+      const key = `${row.organizationId}:${row.projectSlug}`;
+      const existing = deployedByProject.get(key);
+      if (!existing || row.publishedAt > existing.publishedAt) {
+        deployedByProject.set(key, {
+          domain: row.domain,
+          publishedAt: row.publishedAt,
+        });
+      }
+    }
 
     const collected: PluginAccessListRow[] = [];
 
@@ -276,16 +324,24 @@ class PluginEntitlementService {
       if (options.state && resolved.state !== options.state) continue;
 
       if (search) {
+        const deployment = deployedByProject.get(
+          `${row.organizationId}:${row.projectSlug}`,
+        );
         const haystack = [
           row.organizationSlug,
           row.organizationName,
           row.projectSlug,
           row.projectTitle || "",
+          deployment?.domain ?? "",
         ]
           .join(" ")
           .toLowerCase();
         if (!haystack.includes(search)) continue;
       }
+
+      const deployment = deployedByProject.get(
+        `${row.organizationId}:${row.projectSlug}`,
+      );
 
       collected.push({
         organizationId: row.organizationId,
@@ -293,6 +349,8 @@ class PluginEntitlementService {
         organizationName: row.organizationName,
         projectSlug: row.projectSlug,
         projectTitle: row.projectTitle || "",
+        isDeployed: !!deployment,
+        deployedDomain: deployment?.domain ?? null,
         effectiveScope: resolved.scope,
         state: resolved.state,
         managedBy: resolved.managedBy,

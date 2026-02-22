@@ -3,12 +3,18 @@ import {
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
 } from "./contactForm/config";
+import {
+  analyticsPluginConfigSchema,
+  type AnalyticsPluginConfig,
+} from "./analytics/config";
 
-export const PLUGIN_IDS = ["contact_form"] as const;
+export const PLUGIN_IDS = ["contact_form", "analytics"] as const;
 export type PluginId = (typeof PLUGIN_IDS)[number];
 
 export { contactFormPluginConfigSchema };
 export type { ContactFormPluginConfig };
+export { analyticsPluginConfigSchema };
+export type { AnalyticsPluginConfig };
 
 type PluginCategory = "forms" | "marketing" | "commerce" | "utility";
 
@@ -31,6 +37,15 @@ const pluginRegistry: Record<PluginId, PluginManifest> = {
     version: 1,
     configSchema: contactFormPluginConfigSchema,
     defaultConfig: contactFormPluginConfigSchema.parse({}),
+  },
+  analytics: {
+    pluginId: "analytics",
+    name: "Analytics",
+    description: "Track page traffic and visitor behavior for your project.",
+    category: "marketing",
+    version: 1,
+    configSchema: analyticsPluginConfigSchema,
+    defaultConfig: analyticsPluginConfigSchema.parse({}),
   },
 };
 

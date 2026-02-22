@@ -45,6 +45,7 @@ export function StudioToolbar() {
     previewMode,
     versions,
     hasMultipleVersions,
+    analyticsAvailable,
     handleVersionSelect,
     mobileView,
     setMobileView,
@@ -244,6 +245,7 @@ export function StudioToolbar() {
             hasGitChanges={hasGitChanges}
             isPublished={isPublished}
             publishStatus={publishStatus}
+            analyticsAvailable={analyticsAvailable}
             embedded={embedded}
             onHardRestart={handleHardRestart}
             isConnectedMode={isConnectedMode}
@@ -289,6 +291,7 @@ export function StudioToolbar() {
             hasGitChanges={hasGitChanges}
             isPublished={isPublished}
             publishStatus={publishStatus}
+            analyticsAvailable={analyticsAvailable}
             theme={theme}
             setTheme={setTheme}
             canUseAgent={canUseAgent}

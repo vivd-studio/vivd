@@ -14,6 +14,7 @@ import {
 import {
   Check,
   Copy,
+  BarChart3,
   Download,
   ExternalLink,
   Eye,
@@ -64,6 +65,7 @@ interface QuickActionsProps {
     domain?: string | null;
     lastTag?: string | null;
   };
+  analyticsAvailable?: boolean;
   gradientId?: string;
   embedded?: boolean;
   onHardRestart?: () => void;
@@ -97,6 +99,7 @@ export function QuickActions({
   hasGitChanges,
   isPublished,
   publishStatus,
+  analyticsAvailable = false,
   gradientId = "favicon-gradient",
   embedded,
   onHardRestart,
@@ -142,6 +145,15 @@ export function QuickActions({
     return window.location.origin;
   };
 
+  const openHostPath = (path: string) => {
+    const origin = getHostAppOrigin();
+    const url = new URL(path, origin).toString();
+    const nextWindow = window.open(url, "_blank", "noopener,noreferrer");
+    if (!nextWindow) {
+      window.location.assign(url);
+    }
+  };
+
   const handleDownloadZip = () => {
     if (!projectSlug) return;
     const origin = getHostAppOrigin();
@@ -159,13 +171,97 @@ export function QuickActions({
       );
       return;
     }
-    const origin = getHostAppOrigin();
-    const url = new URL(pluginsPath, origin).toString();
-    window.open(url, "_blank", "noopener,noreferrer");
+    openHostPath(pluginsPath);
+  };
+
+  const handleOpenAnalytics = () => {
+    if (!projectSlug) return;
+    const analyticsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/analytics`;
+    if (embedded) {
+      window.parent?.postMessage(
+        { type: "vivd:studio:navigate", path: analyticsPath },
+        "*",
+      );
+      return;
+    }
+    openHostPath(analyticsPath);
   };
 
   return (
     <>
+      {/* Refresh button */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            className="hidden sm:flex h-8 w-8 p-0"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Refresh Preview</TooltipContent>
+      </Tooltip>
+
+      {/* Plugins button */}
+      {projectSlug && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenPlugins}
+              className="hidden sm:flex h-8 w-8 p-0"
+            >
+              <Plug className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Plugins</TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Analytics button */}
+      {projectSlug && analyticsAvailable && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenAnalytics}
+              className="hidden sm:flex h-8 w-8 p-0"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Analytics</TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* History/Snapshots button */}
+      {projectSlug && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={historyPanelOpen ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setHistoryPanelOpen(true)}
+              className="hidden sm:flex h-8 w-8 p-0 relative"
+            >
+              <History className="w-4 h-4" />
+              {hasGitChanges && (
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-amber-500 rounded-full" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {hasGitChanges
+              ? "Snapshots (pending changes)"
+              : "Snapshots & History"}
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Publish Button */}
       {projectSlug && (
         <Tooltip>
@@ -197,76 +293,20 @@ export function QuickActions({
                 </defs>
               </svg>
             </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {isPublished
-            ? publishStatus?.domain
-              ? `Published: ${publishStatus.domain}`
-              : publishStatus?.lastTag
-                ? `Published: ${publishStatus.lastTag}`
-                : "Published"
-            : publishStatus?.mode === "connected"
-              ? "Publish site"
-              : "Create a git tag"}
-        </TooltipContent>
-      </Tooltip>
-      )}
-
-      {/* History/Snapshots button */}
-      {projectSlug && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={historyPanelOpen ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setHistoryPanelOpen(true)}
-              className="hidden sm:flex h-8 w-8 p-0 relative"
-            >
-              <History className="w-4 h-4" />
-              {hasGitChanges && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-amber-500 rounded-full" />
-              )}
-            </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {hasGitChanges
-              ? "Snapshots (pending changes)"
-              : "Snapshots & History"}
+            {isPublished
+              ? publishStatus?.domain
+                ? `Published: ${publishStatus.domain}`
+                : publishStatus?.lastTag
+                  ? `Published: ${publishStatus.lastTag}`
+                  : "Published"
+              : publishStatus?.mode === "connected"
+                ? "Publish site"
+                : "Create a git tag"}
           </TooltipContent>
         </Tooltip>
       )}
-
-      {/* Plugins button */}
-      {projectSlug && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenPlugins}
-              className="hidden sm:flex h-8 w-8 p-0"
-            >
-              <Plug className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Plugins</TooltipContent>
-        </Tooltip>
-      )}
-
-      {/* Refresh button */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            className="hidden sm:flex h-8 w-8 p-0"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Refresh Preview</TooltipContent>
-      </Tooltip>
 
       {/* More Actions Dropdown */}
       <DropdownMenu>
@@ -314,6 +354,12 @@ export function QuickActions({
                 <Plug className="w-4 h-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
+              {analyticsAvailable ? (
+                <DropdownMenuItem onClick={handleOpenAnalytics}>
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Analytics
+                </DropdownMenuItem>
+              ) : null}
             </>
           )}
           {previewMode === "devserver" && projectSlug && handleRestartDevServer && (

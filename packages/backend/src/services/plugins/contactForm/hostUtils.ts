@@ -106,6 +106,58 @@ export function resolveRedirectTarget(
   }
 }
 
+function parseAbsoluteUrl(raw: string | null | undefined): URL | null {
+  if (!raw) return null;
+  const candidate = raw.trim();
+  if (!candidate) return null;
+
+  try {
+    return new URL(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function resolveAllowedAbsoluteUrl(
+  rawUrl: string | null | undefined,
+  allowlist: string[],
+): URL | null {
+  const parsed = parseAbsoluteUrl(rawUrl);
+  if (!parsed) return null;
+
+  const host = normalizeHostCandidate(parsed.host);
+  if (!host) return null;
+  if (!isHostAllowed(host, allowlist)) return null;
+
+  return parsed;
+}
+
+export function resolveDefaultSuccessRedirectTarget(options: {
+  rawReferer?: string | null;
+  rawOrigin?: string | null;
+  allowlist: string[];
+  successParam?: string;
+  successValue?: string;
+}): string | null {
+  if (options.allowlist.length === 0) return null;
+
+  const successParam = options.successParam?.trim() || "_vivd_contact";
+  const successValue = options.successValue?.trim() || "success";
+
+  const refererUrl = resolveAllowedAbsoluteUrl(options.rawReferer, options.allowlist);
+  if (refererUrl) {
+    refererUrl.searchParams.set(successParam, successValue);
+    return refererUrl.toString();
+  }
+
+  const originUrl = resolveAllowedAbsoluteUrl(options.rawOrigin, options.allowlist);
+  if (!originUrl) return null;
+
+  originUrl.pathname = originUrl.pathname || "/";
+  originUrl.searchParams.set(successParam, successValue);
+  return originUrl.toString();
+}
+
 export function toTurnstileDomains(
   allowlist: string[],
   maxDomains: number,

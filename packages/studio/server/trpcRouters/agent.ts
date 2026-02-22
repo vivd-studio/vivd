@@ -243,6 +243,10 @@ function isChecklistFullyUpdated(checklist: PrePublishChecklist | null): boolean
   return true;
 }
 
+function hasPendingChecklistItems(checklist: PrePublishChecklist): boolean {
+  return checklist.items.some((item) => item.note === CHECKLIST_PENDING_NOTE);
+}
+
 export const agentRouter = router({
   getAvailableModels: publicProcedure.query(async () => {
     return getAvailableModels();
@@ -470,60 +474,79 @@ export const agentRouter = router({
         }
 
         const checklistPrompt = connectedMode
-          ? `${CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS}\n\n${CHECKLIST_PROMPT}`
+          ? `${CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS}
+- Use "version": ${version} in every vivd_publish_checklist tool call.
+
+${CHECKLIST_PROMPT}`
           : CHECKLIST_PROMPT;
 
-        // Run the agent with the checklist prompt - always create a new session
-        const { sessionId } = await runTask(checklistPrompt, workspacePath);
+        const runChecklistSession = async () => {
+          // Run the agent with the checklist prompt - always create a new session
+          const { sessionId } = await runTask(
+            checklistPrompt,
+            workspacePath,
+            undefined,
+            undefined,
+            connectedMode
+              ? {
+                  tools: { vivd_publish_checklist: true },
+                }
+              : undefined,
+          );
 
-        // Wait for completion; connected mode prefers tool-updated backend checklist,
-        // with JSON parse kept as fallback for compatibility.
-        let attempts = 0;
-        const maxAttempts = connectedMode ? 120 : 60;
-        let checklistData: { items: ChecklistItem[] } | null = null;
-        let sessionCompleted = false;
+          // Wait for completion; connected mode prefers tool-updated backend checklist,
+          // with JSON parse kept as fallback for compatibility.
+          let attempts = 0;
+          const maxAttempts = connectedMode ? 120 : 60;
+          let checklistData: { items: ChecklistItem[] } | null = null;
+          let sessionCompleted = false;
 
-        while (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          attempts++;
+          while (attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            attempts++;
 
-          const messages = await getSessionContent(sessionId, workspacePath);
-          if (!checklistData) {
-            checklistData = tryParseChecklistFromMessages(messages);
-            if (checklistData?.items) {
-              console.log(
-                `[PrePublishChecklist] Successfully parsed ${checklistData.items.length} items`
-              );
-            } else if (!connectedMode) {
-              console.log(
-                "[PrePublishChecklist] Waiting for valid JSON response..."
-              );
+            const messages = await getSessionContent(sessionId, workspacePath);
+            if (!checklistData) {
+              checklistData = tryParseChecklistFromMessages(messages);
+              if (checklistData?.items) {
+                console.log(
+                  `[PrePublishChecklist] Successfully parsed ${checklistData.items.length} items`
+                );
+              } else if (!connectedMode) {
+                console.log(
+                  "[PrePublishChecklist] Waiting for valid JSON response..."
+                );
+              }
             }
-          }
 
-          if (!connectedMode) {
-            if (checklistData?.items) {
+            if (!connectedMode) {
+              if (checklistData?.items) {
+                sessionCompleted = true;
+                break;
+              }
+              continue;
+            }
+
+            const statuses = await getSessionsStatus(workspacePath);
+            const sessionStatus = statuses[sessionId];
+            if (!sessionStatus || sessionStatus.type === "idle") {
               sessionCompleted = true;
               break;
             }
-            continue;
           }
 
-          const statuses = await getSessionsStatus(workspacePath);
-          const sessionStatus = statuses[sessionId];
-          if (!sessionStatus || sessionStatus.type === "idle") {
-            sessionCompleted = true;
-            break;
+          if (!sessionCompleted) {
+            throw new Error(
+              connectedMode
+                ? "Checklist task timed out before session completion."
+                : "Agent did not return a valid checklist. Please try again."
+            );
           }
-        }
 
-        if (!sessionCompleted) {
-          throw new Error(
-            connectedMode
-              ? "Checklist task timed out before session completion."
-              : "Agent did not return a valid checklist. Please try again."
-          );
-        }
+          return { sessionId, checklistData };
+        };
+
+        const { sessionId, checklistData } = await runChecklistSession();
 
         let checklist: PrePublishChecklist | null = null;
         if (connectedMode) {
@@ -615,6 +638,10 @@ export const agentRouter = router({
             }
           }
 
+          if (hasPendingChecklistItems(checklist)) {
+            hasChangesSinceCheck = true;
+          }
+
           return { checklist, hasChangesSinceCheck };
         } catch (error) {
           console.warn("[PrePublishChecklist] Backend checklist read failed:", error);
@@ -652,6 +679,10 @@ export const agentRouter = router({
             // If we can't check, assume there are changes to be safe
             hasChangesSinceCheck = true;
           }
+        }
+
+        if (hasPendingChecklistItems(checklist)) {
+          hasChangesSinceCheck = true;
         }
 
         return { checklist, hasChangesSinceCheck };

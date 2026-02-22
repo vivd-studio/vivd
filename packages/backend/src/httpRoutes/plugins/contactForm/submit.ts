@@ -14,6 +14,7 @@ import { buildContactSubmissionEmail } from "../../../services/email/templates";
 import {
   extractSourceHostFromHeaders,
   isHostAllowed,
+  resolveDefaultSuccessRedirectTarget,
   resolveEffectiveRedirectHosts,
   resolveEffectiveSourceHosts,
   resolveRedirectTarget,
@@ -363,6 +364,13 @@ export function createContactFormPublicRouter(
         effectiveSourceHosts,
       );
       const redirectTarget = resolveRedirectTarget(fields._redirect, redirectAllowlist);
+      const successRedirectTarget =
+        redirectTarget ??
+        resolveDefaultSuccessRedirectTarget({
+          rawReferer: req.get("referer"),
+          rawOrigin: req.get("origin"),
+          allowlist: redirectAllowlist,
+        });
 
       if (!isHostAllowed(sourceHost, effectiveSourceHosts)) {
         return sendSubmitError(req, res, 403, "forbidden_source", "source host not allowed");
@@ -370,7 +378,7 @@ export function createContactFormPublicRouter(
 
       const honeypotField = "_honeypot";
       if ((fields[honeypotField] || "").length > 0) {
-        return sendSubmitSuccess(req, res, null);
+        return sendSubmitSuccess(req, res, successRedirectTarget);
       }
 
       const submittedFields = collectSubmittedFormFields(fields, config.formFields);
@@ -671,7 +679,7 @@ export function createContactFormPublicRouter(
 
           if (duplicateFound) {
             // Treat short-window duplicate submits as successful no-ops to avoid accidental double-posts.
-            return sendSubmitSuccess(req, res, redirectTarget);
+            return sendSubmitSuccess(req, res, successRedirectTarget);
           }
         }
       }
@@ -767,7 +775,7 @@ export function createContactFormPublicRouter(
         return sendSubmitError(req, res, 502, "delivery_failed", "message delivery failed");
       }
 
-      return sendSubmitSuccess(req, res, redirectTarget);
+      return sendSubmitSuccess(req, res, successRedirectTarget);
     },
   );
 

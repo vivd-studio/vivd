@@ -293,7 +293,11 @@ export function PublishDialog({
   const saveMutation = trpc.project.gitSave.useMutation({
     onSuccess: (data) => {
       if (data.noChanges) {
-        toast.info("No changes to save");
+        toast.info(
+          connectedMode
+            ? "No content changes. Preparing artifacts for publishing..."
+            : "No changes to save",
+        );
       } else {
         toast.success("Changes saved successfully");
       }
@@ -418,6 +422,13 @@ export function PublishDialog({
         publishState?.publishableCommitHash &&
         publishState.publishableCommitHash !== publishState.studioHeadCommitHash,
     );
+    const missingPublishableSnapshot = Boolean(
+      publishState?.readiness === "ready" &&
+        !publishState?.publishableCommitHash &&
+        !studioStateUnknownWarning &&
+        !olderSnapshotInStudio &&
+        !unsavedChangesInStudio,
+    );
 
     const canPublishNow =
       publishState?.storageEnabled &&
@@ -461,8 +472,8 @@ export function PublishDialog({
       if (unsavedChangesInStudio) {
         return "Save your changes before publishing.";
       }
-      if (!publishState.publishableCommitHash) {
-        return "Save your site once to enable publishing.";
+      if (missingPublishableSnapshot) {
+        return "Prepare your current snapshot once to enable publishing.";
       }
       if (!publishableCommitMatchesTarget) {
         return "We're preparing your latest changes for publishing. This can take a little while, and we'll update automatically.";
@@ -475,6 +486,22 @@ export function PublishDialog({
 
       return null;
     })();
+
+    const handlePreparePublishArtifacts = async () => {
+      setPublishError(null);
+      try {
+        await saveMutation.mutateAsync({
+          slug: projectSlug,
+          version,
+          message: "Prepare publish artifacts",
+        });
+        await publishStateQuery.refetch();
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to prepare publish artifacts";
+        toast.error(message);
+      }
+    };
 
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -783,6 +810,34 @@ export function PublishDialog({
               !studioStateUnknownWarning ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                   Your latest changes are being prepared for publishing. This can take a little while.
+                </div>
+              ) : null}
+
+              {missingPublishableSnapshot ? (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+                  <div>
+                    Publishing needs one artifact preparation run for the current snapshot.
+                    This does not create a new commit.
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-amber-700 hover:bg-amber-800 text-white"
+                    onClick={() => void handlePreparePublishArtifacts()}
+                    disabled={
+                      publishMutation.isPending ||
+                      saveMutation.isPending ||
+                      loadVersionMutation.isPending
+                    }
+                  >
+                    {saveMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                        Preparing...
+                      </>
+                    ) : (
+                      "Prepare for publish"
+                    )}
+                  </Button>
                 </div>
               ) : null}
 

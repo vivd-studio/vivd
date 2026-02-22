@@ -5,6 +5,13 @@ import {
 } from "./contactForm/service";
 import type { ContactFormPluginConfig } from "./contactForm/config";
 import {
+  analyticsPluginService,
+  type AnalyticsPluginInfoPayload,
+  type AnalyticsPluginPayload,
+  type AnalyticsSummaryPayload,
+} from "./analytics/service";
+import type { AnalyticsPluginConfig } from "./analytics/config";
+import {
   projectPluginInstanceService,
   type ProjectPluginInstanceSummary,
 } from "./core/instanceService";
@@ -46,12 +53,27 @@ class ProjectPluginService {
     return contactFormPluginService.ensureContactFormPlugin(options);
   }
 
+  async ensureAnalyticsPlugin(options: {
+    organizationId: string;
+    projectSlug: string;
+  }): Promise<AnalyticsPluginPayload> {
+    return analyticsPluginService.ensureAnalyticsPlugin(options);
+  }
+
   async getContactFormPlugin(options: {
     organizationId: string;
     projectSlug: string;
     ensure?: boolean;
   }): Promise<ContactFormPluginPayload | null> {
     return contactFormPluginService.getContactFormPlugin(options);
+  }
+
+  async getAnalyticsPlugin(options: {
+    organizationId: string;
+    projectSlug: string;
+    ensure?: boolean;
+  }): Promise<AnalyticsPluginPayload | null> {
+    return analyticsPluginService.getAnalyticsPlugin(options);
   }
 
   async updateContactFormConfig(options: {
@@ -62,11 +84,34 @@ class ProjectPluginService {
     return contactFormPluginService.updateContactFormConfig(options);
   }
 
+  async updateAnalyticsConfig(options: {
+    organizationId: string;
+    projectSlug: string;
+    config: AnalyticsPluginConfig;
+  }): Promise<AnalyticsPluginPayload> {
+    return analyticsPluginService.updateAnalyticsConfig(options);
+  }
+
   async getContactFormInfo(options: {
     organizationId: string;
     projectSlug: string;
   }): Promise<ContactFormPluginInfoPayload> {
     return contactFormPluginService.getContactFormInfo(options);
+  }
+
+  async getAnalyticsInfo(options: {
+    organizationId: string;
+    projectSlug: string;
+  }): Promise<AnalyticsPluginInfoPayload> {
+    return analyticsPluginService.getAnalyticsInfo(options);
+  }
+
+  async getAnalyticsSummary(options: {
+    organizationId: string;
+    projectSlug: string;
+    rangeDays: 7 | 30;
+  }): Promise<AnalyticsSummaryPayload> {
+    return analyticsPluginService.getAnalyticsSummary(options);
   }
 }
 
@@ -74,5 +119,8 @@ export const projectPluginService = new ProjectPluginService();
 export type {
   ContactFormPluginInfoPayload,
   ContactFormPluginPayload,
+  AnalyticsPluginInfoPayload,
+  AnalyticsPluginPayload,
+  AnalyticsSummaryPayload,
   ProjectPluginInstanceSummary,
 };

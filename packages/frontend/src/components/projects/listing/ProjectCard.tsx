@@ -22,6 +22,7 @@ import {
   Check,
   Plus,
   Loader2,
+  BarChart3,
   RotateCcw,
   Globe,
   Trash2,
@@ -78,6 +79,7 @@ export interface Project {
   publishedVersion?: number | null;
   thumbnailUrl?: string | null;
   publicPreviewEnabled?: boolean;
+  enabledPlugins?: string[];
 }
 
 interface ProjectCardProps {
@@ -181,6 +183,10 @@ export function ProjectCard({
   });
   const [copied, setCopied] = useState(false);
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
+  const analyticsAvailable = (project.enabledPlugins ?? []).includes("analytics");
+  const analyticsPath =
+    ROUTES.PROJECT_ANALYTICS?.(project.slug) ??
+    `/vivd-studio/projects/${project.slug}/analytics`;
   const canManagePreview = membership?.organizationRole !== "client_editor";
 
   const getPreviewUrl = () => {
@@ -645,6 +651,14 @@ export function ProjectCard({
                 <Plug className="w-4 h-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
+              {analyticsAvailable ? (
+                <DropdownMenuItem
+                  onClick={() => navigate(analyticsPath)}
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Analytics
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setShowVersionManagement(true)}
@@ -668,6 +682,20 @@ export function ProjectCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {analyticsAvailable ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(analyticsPath);
+              }}
+              title="Analytics"
+            >
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          ) : null}
           {isUrlProject && project.url && (
             <Button
               variant="outline"

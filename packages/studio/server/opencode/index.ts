@@ -75,6 +75,9 @@ export async function runTask(
   cwd: string,
   sessionId?: string,
   model?: ModelSelection,
+  options?: {
+    tools?: Record<string, boolean>;
+  },
 ): Promise<{ sessionId: string }> {
   console.log(
     `[OpenCode] Starting task in ${cwd}: "${task}" (Session: ${
@@ -220,7 +223,14 @@ export async function runTask(
   }
 
   try {
-    await sendPromptAsync(client, currentSessionId, directory, task, model);
+    await sendPromptAsync(
+      client,
+      currentSessionId,
+      directory,
+      task,
+      model,
+      options?.tools,
+    );
   } catch (error) {
     console.error(`[OpenCode] Task Error:`, error);
     agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
@@ -293,6 +303,7 @@ async function sendPromptAsync(
   directory: string,
   task: string,
   modelSelection?: ModelSelection,
+  toolEnablement?: Record<string, boolean>,
 ): Promise<void> {
   const resolvedModel = modelSelection || getDefaultModel();
   if (!resolvedModel) {
@@ -307,6 +318,7 @@ async function sendPromptAsync(
     query: { directory },
     body: {
       model: { providerID, modelID },
+      ...(toolEnablement ? { tools: toolEnablement } : {}),
       parts: [{ type: "text", text: task }],
     },
   });

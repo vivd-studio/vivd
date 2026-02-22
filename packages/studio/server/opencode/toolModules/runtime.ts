@@ -3,6 +3,7 @@ export interface ToolRuntimeConfig {
   sessionToken: string;
   projectSlug: string;
   organizationId: string;
+  projectVersion: number | null;
 }
 
 export function getRuntimeConfig(): ToolRuntimeConfig {
@@ -10,7 +11,10 @@ export function getRuntimeConfig(): ToolRuntimeConfig {
   const sessionToken = (process.env.SESSION_TOKEN || "").trim();
   const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
   const organizationId = (process.env.VIVD_TENANT_ID || "").trim();
-  return { backendUrl, sessionToken, projectSlug, organizationId };
+  const parsedVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
+  const projectVersion =
+    Number.isFinite(parsedVersion) && parsedVersion > 0 ? parsedVersion : null;
+  return { backendUrl, sessionToken, projectSlug, organizationId, projectVersion };
 }
 
 export function validateConnectedRuntime(
