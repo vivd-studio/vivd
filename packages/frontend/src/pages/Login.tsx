@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { ROUTES } from "@/app/router/paths"
 
 const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -18,6 +19,9 @@ type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function Login() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
+    const wasReset = searchParams.get("reset") === "success"
+    const wasVerified = searchParams.get("verified") === "1"
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: {
@@ -75,6 +79,24 @@ export default function Login() {
                                     </FormItem>
                                 )}
                             />
+                            <Link
+                                to={ROUTES.FORGOT_PASSWORD}
+                                className="text-sm text-muted-foreground hover:underline"
+                            >
+                                Forgot password?
+                            </Link>
+
+                            {wasReset && (
+                                <p className="text-sm font-medium text-emerald-600">
+                                    Password updated. You can now sign in.
+                                </p>
+                            )}
+
+                            {wasVerified && (
+                                <p className="text-sm font-medium text-emerald-600">
+                                    Email verified successfully.
+                                </p>
+                            )}
 
                             {form.formState.errors.root && (
                                 <p className="text-sm font-medium text-destructive">

@@ -6,11 +6,15 @@ const {
   getRecentMock,
   publishMock,
   PublishConflictErrorMock,
+  getPublishChecklistMock,
+  upsertPublishChecklistMock,
 } = vi.hoisted(() => ({
   ensurePublishDomainEnabledMock: vi.fn(),
   isRunningMock: vi.fn(),
   getRecentMock: vi.fn(),
   publishMock: vi.fn(),
+  getPublishChecklistMock: vi.fn(),
+  upsertPublishChecklistMock: vi.fn(),
   PublishConflictErrorMock: class PublishConflictError extends Error {
     reason: "build_in_progress" | "artifact_not_ready" | "artifact_changed";
 
@@ -54,6 +58,14 @@ vi.mock("../src/services/publish/PublishService", () => ({
     isDomainAvailable: vi.fn(),
   },
   PublishConflictError: PublishConflictErrorMock,
+}));
+
+vi.mock("../src/services/project/ProjectMetaService", () => ({
+  projectMetaService: {
+    getPublishChecklist: getPublishChecklistMock,
+    upsertPublishChecklist: upsertPublishChecklistMock,
+    getProjectVersion: vi.fn(),
+  },
 }));
 
 import { router } from "../src/trpc";
@@ -100,6 +112,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 describe("project publish router", () => {
   const publishRouter = router({
     publish: projectPublishProcedures.publish,
+    updatePublishChecklistItem: projectPublishProcedures.updatePublishChecklistItem,
   });
 
   beforeEach(() => {
@@ -107,6 +120,8 @@ describe("project publish router", () => {
     isRunningMock.mockReset();
     getRecentMock.mockReset();
     publishMock.mockReset();
+    getPublishChecklistMock.mockReset();
+    upsertPublishChecklistMock.mockReset();
 
     ensurePublishDomainEnabledMock.mockResolvedValue({ enabled: true });
     isRunningMock.mockResolvedValue(false);
@@ -118,6 +133,27 @@ describe("project publish router", () => {
       url: "https://example.com",
       message: "Published",
     });
+    getPublishChecklistMock.mockResolvedValue({
+      projectSlug: "site-1",
+      version: 1,
+      runAt: "2026-01-01T00:00:00.000Z",
+      snapshotCommitHash: "commit-1",
+      items: [
+        { id: "imprint", label: "Imprint", status: "pass", note: "ok" },
+        { id: "privacy", label: "Privacy", status: "fail", note: "missing page" },
+        { id: "seo_meta", label: "SEO", status: "warning", note: "OG missing" },
+        { id: "sitemap", label: "Sitemap", status: "skip", note: "single page" },
+        { id: "other_issues", label: "Other", status: "fixed", note: "resolved" },
+      ],
+      summary: {
+        passed: 1,
+        failed: 1,
+        warnings: 1,
+        skipped: 1,
+        fixed: 1,
+      },
+    });
+    upsertPublishChecklistMock.mockResolvedValue(undefined);
   });
 
   it("returns BAD_REQUEST when the domain is not allowlisted", async () => {
@@ -207,5 +243,97 @@ describe("project publish router", () => {
       code: "CONFLICT",
       cause: { reason: "artifact_changed" },
     });
+  });
+
+  it("returns NOT_FOUND when checklist does not exist for item updates", async () => {
+    getPublishChecklistMock.mockResolvedValueOnce(null);
+    const caller = publishRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updatePublishChecklistItem({
+        slug: "site-1",
+        version: 1,
+        itemId: "privacy",
+        status: "pass",
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      cause: { reason: "checklist_missing" },
+    });
+    expect(upsertPublishChecklistMock).not.toHaveBeenCalled();
+  });
+
+  it("returns BAD_REQUEST when item id is unknown", async () => {
+    const caller = publishRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updatePublishChecklistItem({
+        slug: "site-1",
+        version: 1,
+        itemId: "unknown-item",
+        status: "pass",
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      cause: {
+        reason: "unknown_item_id",
+        validItemIds: ["imprint", "privacy", "seo_meta", "sitemap", "other_issues"],
+      },
+    });
+    expect(upsertPublishChecklistMock).not.toHaveBeenCalled();
+  });
+
+  it("updates one checklist item and recomputes summary server-side", async () => {
+    const caller = publishRouter.createCaller(makeContext());
+
+    const result = await caller.updatePublishChecklistItem({
+      slug: "site-1",
+      version: 1,
+      itemId: "privacy",
+      status: "pass",
+      note: "privacy page now exists",
+    });
+
+    expect(result.item).toEqual({
+      id: "privacy",
+      label: "Privacy",
+      status: "pass",
+      note: "privacy page now exists",
+    });
+    expect(result.checklist.summary).toEqual({
+      passed: 2,
+      failed: 0,
+      warnings: 1,
+      skipped: 1,
+      fixed: 1,
+    });
+    expect(upsertPublishChecklistMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      checklist: expect.objectContaining({
+        projectSlug: "site-1",
+        version: 1,
+        summary: {
+          passed: 2,
+          failed: 0,
+          warnings: 1,
+          skipped: 1,
+          fixed: 1,
+        },
+      }),
+    });
+  });
+
+  it("normalizes blank note to undefined", async () => {
+    const caller = publishRouter.createCaller(makeContext());
+
+    const result = await caller.updatePublishChecklistItem({
+      slug: "site-1",
+      version: 1,
+      itemId: "seo_meta",
+      status: "warning",
+      note: "   ",
+    });
+
+    expect(result.item.note).toBeUndefined();
   });
 });

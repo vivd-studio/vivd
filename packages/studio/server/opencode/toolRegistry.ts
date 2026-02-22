@@ -23,6 +23,7 @@ export interface StudioOpencodeToolPolicy {
 const DEFAULT_FEATURE_FLAGS: Record<string, boolean> = {
   plugins: true,
   contact_forms: true,
+  publish_checklist: true,
 };
 
 const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
@@ -43,6 +44,15 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     definitionExportName: "vivdPluginsContactInfoToolDefinition",
     defaultEnabled: true,
     featureFlag: "contact_forms",
+  },
+  {
+    name: "vivd_publish_checklist",
+    sourceFile: "vivd_publish_checklist.ts",
+    moduleDistRelativePath: "opencode/toolModules/vivdPublishChecklist.js",
+    moduleSourceRelativePath: "server/opencode/toolModules/vivdPublishChecklist.ts",
+    definitionExportName: "vivdPublishChecklistToolDefinition",
+    defaultEnabled: true,
+    featureFlag: "publish_checklist",
   },
 ];
 

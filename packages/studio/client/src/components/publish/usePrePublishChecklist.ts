@@ -14,13 +14,34 @@ export function usePrePublishChecklist({
   projectSlug,
   version,
 }: UsePrePublishChecklistArgs) {
+  const [isLiveChecklistRun, setIsLiveChecklistRun] = useState(false);
+
+  const { mutate: runChecklist, isPending: isRunningChecklist } =
+    trpc.agent.runPrePublishChecklist.useMutation({
+      onSuccess: (data) => {
+        setIsLiveChecklistRun(false);
+        toast.success(
+          `Checklist complete: ${data.checklist.summary.passed}/${data.checklist.items.length} passed`
+        );
+        void refetchChecklist();
+      },
+      onError: (error) => {
+        setIsLiveChecklistRun(false);
+        toast.error(`Failed to run checklist: ${error.message}`);
+      },
+    });
+
   const {
     data: checklistData,
     isLoading: isLoadingChecklist,
     refetch: refetchChecklist,
   } = trpc.agent.getPrePublishChecklist.useQuery(
     { projectSlug, version },
-    { enabled: dialogOpen && !!projectSlug }
+    {
+      enabled: dialogOpen && !!projectSlug,
+      refetchInterval: isLiveChecklistRun ? 1000 : false,
+      refetchIntervalInBackground: true,
+    }
   );
 
   const checklist: PrePublishChecklist | null = checklistData?.checklist ?? null;
@@ -33,19 +54,6 @@ export function usePrePublishChecklist({
       setFixingItemId(null);
     }
   }, [dialogOpen]);
-
-  const { mutate: runChecklist, isPending: isRunningChecklist } =
-    trpc.agent.runPrePublishChecklist.useMutation({
-      onSuccess: (data) => {
-        toast.success(
-          `Checklist complete: ${data.checklist.summary.passed}/${data.checklist.items.length} passed`
-        );
-        void refetchChecklist();
-      },
-      onError: (error) => {
-        toast.error(`Failed to run checklist: ${error.message}`);
-      },
-    });
 
   const { mutate: mutateFixChecklistItem } =
     trpc.agent.fixChecklistItem.useMutation({
@@ -62,8 +70,10 @@ export function usePrePublishChecklist({
 
   const handleRunChecklist = useCallback(() => {
     if (!projectSlug) return;
+    setIsLiveChecklistRun(true);
+    void refetchChecklist();
     runChecklist({ projectSlug, version });
-  }, [projectSlug, runChecklist, version]);
+  }, [projectSlug, refetchChecklist, runChecklist, version]);
 
   const handleFixItem = useCallback(
     (item: ChecklistItem) => {
@@ -86,7 +96,7 @@ export function usePrePublishChecklist({
     hasChangesSinceCheck,
     isLoadingChecklist,
     runChecklist: handleRunChecklist,
-    isRunningChecklist,
+    isRunningChecklist: isRunningChecklist || isLiveChecklistRun,
     fixChecklistItem: handleFixItem,
     fixingItemId,
   };

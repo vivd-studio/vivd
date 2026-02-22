@@ -10,6 +10,7 @@ import { pluginEntitlementService } from "../../../services/plugins/PluginEntitl
 import { inferContactFormAutoSourceHosts } from "../../../services/plugins/contactForm/sourceHosts";
 import { contactFormTurnstileService } from "../../../services/plugins/contactForm/turnstile";
 import { getEmailDeliveryService } from "../../../services/integrations/EmailDeliveryService";
+import { buildContactSubmissionEmail } from "../../../services/email/templates";
 import {
   extractSourceHostFromHeaders,
   isHostAllowed,
@@ -167,15 +168,6 @@ function countLinksInText(value: string): number {
   return matches?.length ?? 0;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function sanitizeSubject(rawSubject: string, projectSlug: string): string {
   const fallback = `New message from ${projectSlug}`;
   const candidate = rawSubject
@@ -196,16 +188,6 @@ function formatSubmittedAtForEmail(submittedAt: Date): string {
     timeZoneName: "short",
   }).format(submittedAt);
 }
-
-const VIVD_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 100 100" role="img" aria-label="Vivd logo">
-  <defs>
-    <linearGradient id="vivdMailGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#10B981" />
-      <stop offset="100%" stop-color="#F59E0B" />
-    </linearGradient>
-  </defs>
-  <path d="M25 30 L50 75 L75 30" stroke="url(#vivdMailGradient)" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
 
 type SubmittedContactField = {
   key: string;
@@ -269,109 +251,6 @@ function collectUnknownFields(
       return value.trim().length > 0;
     }),
   );
-}
-
-function formatFieldRowsText(fields: SubmittedContactField[]): string {
-  return fields
-    .map((field) => `${field.label}: ${field.value}`)
-    .join("\n");
-}
-
-function formatUnknownFieldsText(fields: Record<string, string>): string {
-  const entries = Object.entries(fields);
-  if (entries.length === 0) return "";
-  return entries.map(([key, value]) => `${key}: ${value}`).join("\n");
-}
-
-function formatFieldRowsHtml(fields: SubmittedContactField[]): string {
-  return fields
-    .map(
-      (field) =>
-        `<tr><td style="padding:10px 0;vertical-align:top;font-weight:600;color:#111827;width:180px;">${escapeHtml(
-          field.label,
-        )}</td><td style="padding:10px 0;vertical-align:top;color:#374151;">${escapeHtml(
-          field.value,
-        )
-          .replace(/\n/g, "<br/>")
-          .trim()}</td></tr>`,
-    )
-    .join("");
-}
-
-function formatUnknownFieldsHtml(fields: Record<string, string>): string {
-  const entries = Object.entries(fields);
-  if (entries.length === 0) return "";
-  return entries
-    .map(
-      ([key, value]) =>
-        `<tr><td style="padding:8px 0;vertical-align:top;font-weight:600;color:#374151;width:180px;">${escapeHtml(
-          key,
-        )}</td><td style="padding:8px 0;vertical-align:top;color:#4B5563;">${escapeHtml(
-          value,
-        )
-          .replace(/\n/g, "<br/>")
-          .trim()}</td></tr>`,
-    )
-    .join("");
-}
-
-function buildSubmissionTextEmail(input: {
-  projectSlug: string;
-  submittedAtLabel: string;
-  replyToEmail: string | null;
-  submittedFields: SubmittedContactField[];
-  unknownFields: Record<string, string>;
-}): string {
-  const unknownFieldsText = formatUnknownFieldsText(input.unknownFields);
-  return [
-    "You received a new message from your website contact form.",
-    "",
-    `Project: ${input.projectSlug}`,
-    `Received: ${input.submittedAtLabel}`,
-    `Reply email from form: ${input.replyToEmail || "(not provided)"}`,
-    "",
-    "Submitted details:",
-    formatFieldRowsText(input.submittedFields) || "(No fields submitted)",
-    unknownFieldsText ? `\nAdditional details:\n${unknownFieldsText}` : "",
-  ]
-    .join("\n")
-    .trim();
-}
-
-function buildSubmissionHtmlEmail(input: {
-  projectSlug: string;
-  submittedAtLabel: string;
-  replyToEmail: string | null;
-  submittedFields: SubmittedContactField[];
-  unknownFields: Record<string, string>;
-}): string {
-  const unknownFieldsHtml = formatUnknownFieldsHtml(input.unknownFields);
-  return [
-    `<div style="margin:0;background:#F3F4F6;padding:24px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827;">`,
-    `<div style="max-width:680px;margin:0 auto;background:#FFFFFF;border:1px solid #E5E7EB;border-radius:14px;overflow:hidden;">`,
-    `<div style="padding:20px 24px;border-bottom:1px solid #E5E7EB;background:#F9FAFB;">`,
-    `<div style="display:flex;align-items:center;gap:10px;">${VIVD_LOGO_SVG}<span style="font-size:22px;font-weight:700;letter-spacing:0.01em;color:#0F172A;">vivd</span></div>`,
-    `</div>`,
-    `<div style="padding:24px;">`,
-    `<h2 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#111827;">New message from your website</h2>`,
-    `<p style="margin:0 0 18px;color:#4B5563;font-size:14px;line-height:1.6;">You received a new contact form submission.</p>`,
-    `<div style="margin-bottom:20px;padding:14px 16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;color:#374151;line-height:1.6;">`,
-    `<div><strong style="color:#111827;">Project:</strong> ${escapeHtml(input.projectSlug)}</div>`,
-    `<div><strong style="color:#111827;">Received:</strong> ${escapeHtml(input.submittedAtLabel)}</div>`,
-    `<div><strong style="color:#111827;">Reply email from form:</strong> ${escapeHtml(input.replyToEmail || "Not provided")}</div>`,
-    `</div>`,
-    `<h3 style="margin:0 0 8px;font-size:16px;color:#111827;">Submitted details</h3>`,
-    `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">${formatFieldRowsHtml(
-      input.submittedFields,
-    )}</table>`,
-    unknownFieldsHtml
-      ? `<h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Additional details</h3><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">${unknownFieldsHtml}</table>`
-      : "",
-    `<p style="margin:24px 0 0;color:#6B7280;font-size:13px;line-height:1.6;">Use the reply email from the form details above when responding.</p>`,
-    `</div>`,
-    `</div>`,
-    `</div>`,
-  ].join("");
 }
 
 function requestWantsJson(req: express.Request): boolean {
@@ -852,25 +731,23 @@ export function createContactFormPublicRouter(
       );
       const replyToEmail = replyToField?.value?.trim() || null;
       const submittedAtLabel = formatSubmittedAtForEmail(submittedAt);
+      const submissionEmail = buildContactSubmissionEmail({
+        projectSlug: pluginInstance.projectSlug,
+        submittedAtLabel,
+        replyToEmail,
+        submittedFields: nonEmptySubmittedFields.map((field) => ({
+          label: field.label,
+          value: field.value,
+        })),
+        unknownFields,
+      });
 
       const emailService = getEmailDeliveryService();
       const emailResult = await emailService.send({
         to: recipientEmails,
         subject: sanitizeSubject(fields._subject || "", pluginInstance.projectSlug),
-        text: buildSubmissionTextEmail({
-          projectSlug: pluginInstance.projectSlug,
-          submittedAtLabel,
-          replyToEmail,
-          submittedFields: nonEmptySubmittedFields,
-          unknownFields,
-        }),
-        html: buildSubmissionHtmlEmail({
-          projectSlug: pluginInstance.projectSlug,
-          submittedAtLabel,
-          replyToEmail,
-          submittedFields: nonEmptySubmittedFields,
-          unknownFields,
-        }),
+        text: submissionEmail.text,
+        html: submissionEmail.html,
         replyTo: replyToEmail || undefined,
         metadata: {
           plugin: "contact_form",

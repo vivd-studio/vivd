@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { trpc } from "@/lib/trpc"
+import { ROUTES } from "@/app/router/paths"
 
 const signupSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -35,6 +36,7 @@ export default function Signup() {
             email: data.email,
             password: data.password,
             name: data.name,
+            callbackURL: `${window.location.origin}${ROUTES.LOGIN}?verified=1`,
         }, {
             onSuccess: async () => {
                 await utils.user.hasUsers.invalidate()

@@ -7,8 +7,9 @@ import {
 describe("OpenCode tool registry", () => {
   it("loads managed tool definitions from source files", () => {
     const tools = getStudioOpencodeToolDefinitions();
-    expect(tools.length).toBeGreaterThanOrEqual(2);
+    expect(tools.length).toBeGreaterThanOrEqual(3);
     expect(tools.some((tool) => tool.name === "vivd_plugins_catalog")).toBe(true);
+    expect(tools.some((tool) => tool.name === "vivd_publish_checklist")).toBe(true);
     expect(
       tools.every(
         (tool) =>

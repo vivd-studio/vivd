@@ -5,6 +5,11 @@ import { db } from "./db";
 import { domain, organizationMember } from "./db/schema";
 import { APIError } from "better-call";
 import { eq } from "drizzle-orm";
+import { getEmailDeliveryService } from "./services/integrations/EmailDeliveryService";
+import {
+  buildPasswordResetEmail,
+  buildVerificationEmail,
+} from "./services/email/templates";
 
 const adminStatements = {
   user: [
@@ -27,6 +32,79 @@ const superAdminAccess = adminAccessControl.newRole({
   session: [...adminStatements.session],
 });
 const noAdminAccess = adminAccessControl.newRole({ user: [], session: [] });
+const DEFAULT_AUTH_TOKEN_EXPIRES_IN_SECONDS = 3_600;
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+const authEmailVerificationExpiresInSeconds = readPositiveIntEnv(
+  "VIVD_AUTH_EMAIL_VERIFICATION_EXPIRES_IN_SECONDS",
+  DEFAULT_AUTH_TOKEN_EXPIRES_IN_SECONDS,
+);
+const authResetPasswordExpiresInSeconds = readPositiveIntEnv(
+  "VIVD_AUTH_RESET_PASSWORD_EXPIRES_IN_SECONDS",
+  DEFAULT_AUTH_TOKEN_EXPIRES_IN_SECONDS,
+);
+const authRequireEmailVerification = readBooleanEnv(
+  "VIVD_AUTH_REQUIRE_EMAIL_VERIFICATION",
+  false,
+);
+const authSendVerificationOnSignup = readBooleanEnv(
+  "VIVD_AUTH_EMAIL_VERIFICATION_SEND_ON_SIGNUP",
+  true,
+);
+const authSendVerificationOnSignIn = readBooleanEnv(
+  "VIVD_AUTH_EMAIL_VERIFICATION_SEND_ON_SIGNIN",
+  false,
+);
+const authAutoSignInAfterVerification = readBooleanEnv(
+  "VIVD_AUTH_EMAIL_VERIFICATION_AUTO_SIGNIN",
+  false,
+);
+const authRevokeSessionsOnPasswordReset = readBooleanEnv(
+  "VIVD_AUTH_REVOKE_SESSIONS_ON_PASSWORD_RESET",
+  true,
+);
+
+async function sendTransactionalAuthEmail(input: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  metadata: Record<string, string>;
+}) {
+  const emailService = getEmailDeliveryService();
+  const result = await emailService.send({
+    to: [input.to],
+    subject: input.subject,
+    text: input.text,
+    html: input.html,
+    metadata: input.metadata,
+  });
+
+  if (!result.accepted) {
+    console.error("[Auth] Transactional email delivery failed", {
+      provider: result.provider,
+      error: result.error,
+      to: input.to,
+      metadata: input.metadata,
+    });
+  }
+}
 
 /**
  * Build list of trusted origins dynamically.
@@ -127,6 +205,49 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: authRequireEmailVerification,
+    resetPasswordTokenExpiresIn: authResetPasswordExpiresInSeconds,
+    revokeSessionsOnPasswordReset: authRevokeSessionsOnPasswordReset,
+    sendResetPassword: async ({ user, url }) => {
+      const template = buildPasswordResetEmail({
+        recipientName: user.name,
+        resetUrl: url,
+        expiresInSeconds: authResetPasswordExpiresInSeconds,
+      });
+      await sendTransactionalAuthEmail({
+        to: user.email,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+        metadata: {
+          category: "auth_password_reset",
+          userId: user.id,
+        },
+      });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: authSendVerificationOnSignup,
+    sendOnSignIn: authSendVerificationOnSignIn,
+    autoSignInAfterVerification: authAutoSignInAfterVerification,
+    expiresIn: authEmailVerificationExpiresInSeconds,
+    sendVerificationEmail: async ({ user, url }) => {
+      const template = buildVerificationEmail({
+        recipientName: user.name,
+        verificationUrl: url,
+        expiresInSeconds: authEmailVerificationExpiresInSeconds,
+      });
+      await sendTransactionalAuthEmail({
+        to: user.email,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+        metadata: {
+          category: "auth_email_verification",
+          userId: user.id,
+        },
+      });
+    },
   },
   // Dynamic trusted origins - supports multiple domains for published sites
   trustedOrigins: getTrustedOrigins,

@@ -23,7 +23,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { toast } from "sonner";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ROUTES } from "@/app/router/paths";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -48,6 +49,9 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 export default function Settings() {
   const { data: session } = authClient.useSession();
+  const [isSendingVerificationEmail, setIsSendingVerificationEmail] =
+    useState(false);
+  const isEmailVerified = Boolean(session?.user?.emailVerified);
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -145,6 +149,36 @@ export default function Settings() {
     );
   };
 
+  const handleSendVerificationEmail = async () => {
+    if (!session?.user.email) {
+      toast.error("Error", {
+        description: "Session not available. Please try again.",
+      });
+      return;
+    }
+
+    setIsSendingVerificationEmail(true);
+    try {
+      const result = await authClient.sendVerificationEmail({
+        email: session.user.email,
+        callbackURL: `${window.location.origin}${ROUTES.LOGIN}?verified=1`,
+      });
+
+      if (result.error) {
+        toast.error("Error", {
+          description: result.error.message,
+        });
+        return;
+      }
+
+      toast.success("Verification email sent", {
+        description: "Check your inbox for the verification link.",
+      });
+    } finally {
+      setIsSendingVerificationEmail(false);
+    }
+  };
+
   return (
     <SettingsPageShell
       title="Settings"
@@ -194,6 +228,42 @@ export default function Settings() {
                       </FormItem>
                     )}
                   />
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">
+                      Verification status:
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        isEmailVerified
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                          : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                      }`}
+                    >
+                      {isEmailVerified ? "Verified" : "Unverified"}
+                    </span>
+                  </div>
+                  {!isEmailVerified && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
+                      <p className="font-medium text-amber-900">
+                        Your email address is not verified yet.
+                      </p>
+                      <p className="mt-1 text-amber-800">
+                        Verify your email to improve account security and account
+                        recovery.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-3"
+                        onClick={handleSendVerificationEmail}
+                        disabled={isSendingVerificationEmail}
+                      >
+                        {isSendingVerificationEmail
+                          ? "Sending..."
+                          : "Send verification email"}
+                      </Button>
+                    </div>
+                  )}
                   <Button
                     type="submit"
                     disabled={profileForm.formState.isSubmitting}

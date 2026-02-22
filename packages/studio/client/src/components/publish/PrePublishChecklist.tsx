@@ -22,7 +22,11 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { ChecklistItem, PrePublishChecklist } from "./types";
-import { CHECKLIST_STATUS_CONFIG, PREVIEW_CHECKLIST_ITEMS } from "./constants";
+import {
+  CHECKLIST_PENDING_NOTE_MARKER,
+  CHECKLIST_STATUS_CONFIG,
+  PREVIEW_CHECKLIST_ITEMS,
+} from "./constants";
 
 interface PrePublishChecklistProps {
   dialogOpen: boolean;
@@ -53,10 +57,29 @@ export function PrePublishChecklist({
     }
   }, [dialogOpen]);
 
-  const checklistBadge = useMemo(() => {
+  const checklistProgress = useMemo(() => {
     if (!checklist) return null;
-    const { passed, failed, warnings } = checklist.summary;
     const total = checklist.items.length;
+    const completed = checklist.items.filter(
+      (item) => item.note !== CHECKLIST_PENDING_NOTE_MARKER
+    ).length;
+    return { completed, total };
+  }, [checklist]);
+
+  const checklistBadge = useMemo(() => {
+    if (isRunning) {
+      if (checklistProgress) {
+        return {
+          variant: "secondary" as const,
+          text: `Checking ${checklistProgress.completed}/${checklistProgress.total}`,
+        };
+      }
+      return { variant: "secondary" as const, text: "Running..." };
+    }
+
+    if (!checklist || !checklistProgress) return null;
+    const { passed, failed, warnings } = checklist.summary;
+    const total = checklistProgress.total;
     if (failed > 0) {
       return { variant: "destructive" as const, text: `${failed} issues` };
     }
@@ -64,7 +87,7 @@ export function PrePublishChecklist({
       return { variant: "secondary" as const, text: `${warnings} warnings` };
     }
     return { variant: "default" as const, text: `${passed}/${total} passed` };
-  }, [checklist]);
+  }, [checklist, checklistProgress, isRunning]);
 
   const handleRun = () => {
     setChecklistOpen(true);
@@ -115,49 +138,73 @@ export function PrePublishChecklist({
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-2 space-y-2">
-        {isRunning ? (
+        {isRunning && (
           <div className="flex flex-col items-center justify-center py-6 gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <div className="text-center">
               <p className="text-sm font-medium">Running production checks...</p>
               <p className="text-xs text-muted-foreground mt-1">
-                This may take up to a minute
+                {checklistProgress
+                  ? `${checklistProgress.completed}/${checklistProgress.total} checks updated live`
+                  : "Preparing live checklist updates..."}
               </p>
             </div>
           </div>
-        ) : checklist ? (
+        )}
+
+        {checklist ? (
           <>
             <p className="text-xs text-muted-foreground px-1">
               Last run {formatDistanceToNow(new Date(checklist.runAt))} ago
             </p>
             <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-muted/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
               {checklist.items.map((item) => {
-                const config = CHECKLIST_STATUS_CONFIG[item.status];
-                const Icon = config.icon;
+                const isPending = item.note === CHECKLIST_PENDING_NOTE_MARKER;
+                const config = isPending
+                  ? {
+                      color: "text-sky-600 dark:text-sky-400",
+                      bgColor: "bg-sky-50 dark:bg-sky-900/20",
+                    }
+                  : CHECKLIST_STATUS_CONFIG[item.status];
+                const Icon = isPending ? Loader2 : CHECKLIST_STATUS_CONFIG[item.status].icon;
                 return (
                   <div
                     key={item.id}
                     className={`flex items-start gap-2 p-2 rounded-md border text-sm ${config.bgColor}`}
                   >
                     <Icon
-                      className={`w-4 h-4 mt-0.5 shrink-0 ${config.color}`}
+                      className={`w-4 h-4 mt-0.5 shrink-0 ${config.color} ${
+                        isPending ? "animate-spin" : ""
+                      }`}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-xs flex items-center gap-1.5">
                         {item.label}
+                        {isPending && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">
+                            Checking
+                          </span>
+                        )}
                         {item.status === "fixed" && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
                             Fixed
                           </span>
                         )}
                       </p>
-                      {item.note && (
+                      {isPending ? (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {isRunning
+                            ? "Agent is currently checking this test point..."
+                            : "Pending update from the last run."}
+                        </p>
+                      ) : item.note ? (
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                           {item.note}
                         </p>
-                      )}
+                      ) : null}
                     </div>
-                    {(item.status === "fail" || item.status === "warning") && (
+                    {!isRunning &&
+                      (item.status === "fail" || item.status === "warning") && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -172,7 +219,7 @@ export function PrePublishChecklist({
                         )}
                         {fixingItemId === item.id ? "Fixing..." : "Fix"}
                       </Button>
-                    )}
+                      )}
                   </div>
                 );
               })}
@@ -212,6 +259,23 @@ export function PrePublishChecklist({
               </Tooltip>
             </div>
           </>
+        ) : isRunning ? (
+          <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-muted/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/50">
+            {PREVIEW_CHECKLIST_ITEMS.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-2 p-2 rounded-md border text-sm bg-sky-50 dark:bg-sky-900/20"
+              >
+                <Loader2 className="w-4 h-4 mt-0.5 shrink-0 text-sky-600 dark:text-sky-400 animate-spin" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-xs">{item.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Waiting for first update...
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3 space-y-3">
             <div className="flex items-start gap-2">

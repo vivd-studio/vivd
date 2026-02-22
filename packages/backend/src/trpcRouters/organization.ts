@@ -241,6 +241,7 @@ export const organizationRouter = router({
         user: {
           id: m.user.id,
           email: m.user.email,
+          emailVerified: m.user.emailVerified,
           name: m.user.name,
           role: m.user.role,
           createdAt: m.user.createdAt,

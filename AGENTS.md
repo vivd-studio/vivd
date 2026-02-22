@@ -27,12 +27,13 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 
 ## OpenCode Studio Tools
 
-- Purpose: expose custom Vivd capabilities to the agent (namespace `vivd_plugins_*`).
+- Purpose: expose custom Vivd capabilities to the agent (namespace `vivd_*`).
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
 - Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
-- Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`.
+- Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`, `vivd_publish_checklist`.
 - The agent can use "_info" tools to get general info on how to use the plugin on the website, even including (public) tokens (e.g. for contact forms), and other relevant information.
 - Backend surface for plugin tools: `packages/backend/src/trpcRouters/plugins/index.ts` + `packages/backend/src/services/plugins/ProjectPluginService.ts`.
+- Backend surface for publish-checklist tool: `packages/backend/src/trpcRouters/project/publish.ts` (`project.publishChecklist`, `project.updatePublishChecklistItem`).
 - Tool gating is centralized in `packages/studio/server/opencode/configPolicy.ts` via `VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS`, plus role/plugin context envs.
 - Adding a tool: add typed module, register in tool registry, keep `execute` minimal and safe, and verify in connected mode.
 

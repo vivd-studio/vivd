@@ -418,6 +418,9 @@ export function TeamSettings() {
                     Email
                   </th>
                   <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
+                    Verified
+                  </th>
+                  <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
                     Role
                   </th>
                   <th className="h-10 px-4 align-middle font-medium text-muted-foreground">
@@ -464,6 +467,17 @@ export function TeamSettings() {
                         {member.user.name}
                       </td>
                       <td className="p-4 align-middle">{member.user.email}</td>
+                      <td className="p-4 align-middle">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            member.user.emailVerified
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                          }`}
+                        >
+                          {member.user.emailVerified ? "Verified" : "Unverified"}
+                        </span>
+                      </td>
                       <td className="p-4 align-middle">
                         {isOwner || !currentEdit ? (
                           formatRole(member.role)

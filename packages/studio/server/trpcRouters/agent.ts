@@ -17,6 +17,7 @@ import {
 import { validateModelSelection } from "../opencode/modelConfig.js";
 import {
   CHECKLIST_PROMPT,
+  CHECKLIST_ITEMS,
   type PrePublishChecklist,
   type ChecklistItem,
 } from "../opencode/checklistTypes.js";
@@ -30,6 +31,16 @@ import {
   getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
+
+const CHECKLIST_PENDING_NOTE = "[[PENDING_AGENT_REVIEW]]";
+const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
+- You MUST use the \`vivd_publish_checklist\` tool to write checklist results incrementally.
+- First call the tool with: { "action": "describe" }.
+- Then call \`update_item\` once for each checklist item id returned by describe.
+- For every \`update_item\` call, provide \`itemId\`, \`status\`, and a concise \`note\`.
+- If a tool call returns an error, fix the arguments and retry immediately.
+- Ignore any later instruction to return one final JSON checklist blob.
+- After all items are updated, reply with a short completion sentence only.`;
 
 function getWorkspaceDir(ctx: { workspace: { isInitialized(): boolean; getProjectPath(): string } }): string {
   if (!ctx.workspace.isInitialized()) {
@@ -129,6 +140,107 @@ async function getChecklistFromBackend(options: {
   const body = (await response.json().catch(() => null)) as any;
   const data = body?.result?.data?.json ?? body?.result?.data ?? body;
   return (data?.checklist as PrePublishChecklist | null | undefined) ?? null;
+}
+
+function calculateChecklistSummary(items: ChecklistItem[]): PrePublishChecklist["summary"] {
+  let passed = 0;
+  let failed = 0;
+  let warnings = 0;
+  let skipped = 0;
+  let fixed = 0;
+
+  for (const item of items) {
+    switch (item.status) {
+      case "pass":
+        passed += 1;
+        break;
+      case "fail":
+        failed += 1;
+        break;
+      case "warning":
+        warnings += 1;
+        break;
+      case "skip":
+        skipped += 1;
+        break;
+      case "fixed":
+        fixed += 1;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (fixed > 0) {
+    return { passed, failed, warnings, skipped, fixed };
+  }
+
+  return { passed, failed, warnings, skipped };
+}
+
+function createPendingChecklist(options: {
+  projectSlug: string;
+  version: number;
+  snapshotCommitHash?: string;
+}): PrePublishChecklist {
+  const items: ChecklistItem[] = CHECKLIST_ITEMS.map((item) => ({
+    id: item.id,
+    label: item.label,
+    status: "skip",
+    note: CHECKLIST_PENDING_NOTE,
+  }));
+
+  return {
+    projectSlug: options.projectSlug,
+    version: options.version,
+    runAt: new Date().toISOString(),
+    snapshotCommitHash: options.snapshotCommitHash,
+    items,
+    summary: calculateChecklistSummary(items),
+  };
+}
+
+function tryParseChecklistFromMessages(messages: any[]): { items: ChecklistItem[] } | null {
+  const assistantMessages = messages?.filter(
+    (m: { info: { role: string } }) => m.info.role === "assistant"
+  );
+  if (!assistantMessages || assistantMessages.length === 0) return null;
+
+  const lastMessage = assistantMessages[assistantMessages.length - 1];
+  let textContent = "";
+  if (lastMessage.parts) {
+    for (const part of lastMessage.parts) {
+      if (part.type === "text" && part.text) {
+        textContent += part.text;
+      }
+    }
+  }
+  if (!textContent) return null;
+
+  try {
+    const jsonMatch = textContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = jsonMatch ? jsonMatch[1].trim() : textContent.trim();
+    const parsed = JSON.parse(jsonStr) as { items?: ChecklistItem[] };
+    if (parsed?.items && Array.isArray(parsed.items)) {
+      return { items: parsed.items };
+    }
+  } catch {
+    // Ignore parse errors; caller handles retry loop.
+  }
+  return null;
+}
+
+function isChecklistFullyUpdated(checklist: PrePublishChecklist | null): boolean {
+  if (!checklist) return false;
+
+  const expectedIds = new Set(CHECKLIST_ITEMS.map((item) => item.id));
+  for (const expectedId of expectedIds) {
+    const item = checklist.items.find((entry) => entry.id === expectedId);
+    if (!item) return false;
+    if (item.note === CHECKLIST_PENDING_NOTE) return false;
+  }
+
+  return true;
 }
 
 export const agentRouter = router({
@@ -299,8 +411,9 @@ export const agentRouter = router({
 
   /**
    * Run pre-publish checklist analysis via the agent.
-   * The agent analyzes the project and returns a JSON checklist.
-   * Connected mode persists checklist to backend DB; standalone mode keeps local file storage.
+   * Connected mode seeds checklist state in backend and prefers incremental
+   * tool-driven item updates; standalone mode keeps local file storage.
+   * Legacy JSON parsing remains as fallback for compatibility.
    */
   runPrePublishChecklist: publicProcedure
     .input(
@@ -340,110 +453,121 @@ export const agentRouter = router({
           snapshotCommitHash = log.latest?.hash;
         }
 
-        // Run the agent with the checklist prompt - always create a new session
-        const { sessionId } = await runTask(CHECKLIST_PROMPT, workspacePath);
+        const version = input.version ?? 1;
+        const connectedMode = isConnectedMode();
 
-        // Wait for the agent to complete and get the session content
+        if (connectedMode) {
+          const pendingChecklist = createPendingChecklist({
+            projectSlug: input.projectSlug,
+            version,
+            snapshotCommitHash,
+          });
+          await upsertChecklistToBackend({
+            slug: input.projectSlug,
+            version,
+            checklist: pendingChecklist,
+          });
+        }
+
+        const checklistPrompt = connectedMode
+          ? `${CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS}\n\n${CHECKLIST_PROMPT}`
+          : CHECKLIST_PROMPT;
+
+        // Run the agent with the checklist prompt - always create a new session
+        const { sessionId } = await runTask(checklistPrompt, workspacePath);
+
+        // Wait for completion; connected mode prefers tool-updated backend checklist,
+        // with JSON parse kept as fallback for compatibility.
         let attempts = 0;
-        const maxAttempts = 60; // 60 seconds max wait
+        const maxAttempts = connectedMode ? 120 : 60;
         let checklistData: { items: ChecklistItem[] } | null = null;
+        let sessionCompleted = false;
 
         while (attempts < maxAttempts) {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           attempts++;
 
           const messages = await getSessionContent(sessionId, workspacePath);
-
-          // Look for the agent's response (assistant message with JSON)
-          const assistantMessages = messages?.filter(
-            (m: { info: { role: string } }) => m.info.role === "assistant"
-          );
-
-          if (assistantMessages && assistantMessages.length > 0) {
-            const lastMessage = assistantMessages[assistantMessages.length - 1];
-
-            // Extract text content from the message
-            let textContent = "";
-            if (lastMessage.parts) {
-              for (const part of lastMessage.parts) {
-                if (part.type === "text" && part.text) {
-                  textContent += part.text;
-                }
-              }
+          if (!checklistData) {
+            checklistData = tryParseChecklistFromMessages(messages);
+            if (checklistData?.items) {
+              console.log(
+                `[PrePublishChecklist] Successfully parsed ${checklistData.items.length} items`
+              );
+            } else if (!connectedMode) {
+              console.log(
+                "[PrePublishChecklist] Waiting for valid JSON response..."
+              );
             }
+          }
 
-            // Try to parse JSON from the response
-            if (textContent) {
-              try {
-                // Remove markdown code blocks if present
-                const jsonMatch = textContent.match(
-                  /```(?:json)?\s*([\s\S]*?)```/
-                );
-                const jsonStr = jsonMatch
-                  ? jsonMatch[1].trim()
-                  : textContent.trim();
-
-                checklistData = JSON.parse(jsonStr);
-                if (
-                  checklistData?.items &&
-                  Array.isArray(checklistData.items)
-                ) {
-                  console.log(
-                    `[PrePublishChecklist] Successfully parsed ${checklistData.items.length} items`
-                  );
-                  break;
-                }
-              } catch {
-                // JSON not ready yet or invalid, continue waiting
-                console.log(
-                  "[PrePublishChecklist] Waiting for valid JSON response..."
-                );
-              }
+          if (!connectedMode) {
+            if (checklistData?.items) {
+              sessionCompleted = true;
+              break;
             }
+            continue;
+          }
+
+          const statuses = await getSessionsStatus(workspacePath);
+          const sessionStatus = statuses[sessionId];
+          if (!sessionStatus || sessionStatus.type === "idle") {
+            sessionCompleted = true;
+            break;
           }
         }
 
-        if (!checklistData || !checklistData.items) {
+        if (!sessionCompleted) {
           throw new Error(
-            "Agent did not return a valid checklist. Please try again."
+            connectedMode
+              ? "Checklist task timed out before session completion."
+              : "Agent did not return a valid checklist. Please try again."
           );
         }
 
-        // Calculate summary
-        const summary = {
-          passed: checklistData.items.filter((i) => i.status === "pass").length,
-          failed: checklistData.items.filter((i) => i.status === "fail").length,
-          warnings: checklistData.items.filter((i) => i.status === "warning")
-            .length,
-          skipped: checklistData.items.filter((i) => i.status === "skip")
-            .length,
-        };
-
-        // Build the full checklist object
-        const checklist: PrePublishChecklist = {
-          projectSlug: input.projectSlug,
-          version: input.version ?? 1,
-          runAt: new Date().toISOString(),
-          snapshotCommitHash,
-          items: checklistData.items,
-          summary,
-        };
-
-        // In connected mode, DB is the source of truth.
-        if (isConnectedMode()) {
-          await upsertChecklistToBackend({
+        let checklist: PrePublishChecklist | null = null;
+        if (connectedMode) {
+          checklist = await getChecklistFromBackend({
             slug: input.projectSlug,
-            version: input.version ?? 1,
-            checklist,
+            version,
           });
+
+          if (!isChecklistFullyUpdated(checklist)) {
+            console.warn(
+              "[PrePublishChecklist] Connected checklist was not fully updated by tool calls; trying JSON fallback."
+            );
+            checklist = null;
+          }
         }
 
-        // Standalone mode keeps checklist on disk.
-        if (!isConnectedMode()) {
-          const vivdDir = path.join(workspacePath, ".vivd");
-          if (!fs.existsSync(vivdDir)) fs.mkdirSync(vivdDir, { recursive: true });
-          const checklistPath = path.join(vivdDir, "publish-checklist.json");
-          fs.writeFileSync(checklistPath, JSON.stringify(checklist, null, 2));
+        if (!checklist && checklistData?.items) {
+          checklist = {
+            projectSlug: input.projectSlug,
+            version,
+            runAt: new Date().toISOString(),
+            snapshotCommitHash,
+            items: checklistData.items,
+            summary: calculateChecklistSummary(checklistData.items),
+          };
+
+          if (connectedMode) {
+            await upsertChecklistToBackend({
+              slug: input.projectSlug,
+              version,
+              checklist,
+            });
+          } else {
+            const vivdDir = path.join(workspacePath, ".vivd");
+            if (!fs.existsSync(vivdDir)) fs.mkdirSync(vivdDir, { recursive: true });
+            const checklistPath = path.join(vivdDir, "publish-checklist.json");
+            fs.writeFileSync(checklistPath, JSON.stringify(checklist, null, 2));
+          }
+        }
+
+        if (!checklist) {
+          throw new Error(
+            "Checklist run did not produce a valid result. Retry the checklist run."
+          );
         }
 
         return { success: true, checklist, sessionId };

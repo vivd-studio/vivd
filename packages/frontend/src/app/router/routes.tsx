@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Signup from "@/pages/Signup";
 import Organization from "@/pages/Organization";
@@ -141,6 +143,17 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           !session ? <Login /> : <Navigate to={ROUTES.DASHBOARD} replace />
         }
       />
+      <Route
+        path={ROUTES.FORGOT_PASSWORD}
+        element={
+          !session ? (
+            <ForgotPassword />
+          ) : (
+            <Navigate to={ROUTES.DASHBOARD} replace />
+          )
+        }
+      />
+      <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
 
       {/* Single project mode route - outside Layout to avoid project overview */}
       <Route

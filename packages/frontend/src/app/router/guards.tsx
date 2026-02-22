@@ -7,6 +7,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { ROUTES } from "./paths";
 import { CenteredLoading as Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
+import { EmailVerificationPrompt } from "@/components/auth/EmailVerificationPrompt";
 
 function inferSchemeForHost(host: string): "http" | "https" {
   if (
@@ -70,7 +71,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <EmailVerificationPrompt />
+      {children}
+    </>
+  );
 }
 
 /**

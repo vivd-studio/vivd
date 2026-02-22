@@ -8,6 +8,8 @@ import type { ChecklistStatus, PreviewChecklistItem } from "./types";
 
 type ChecklistIcon = typeof CheckCircle2;
 
+export const CHECKLIST_PENDING_NOTE_MARKER = "[[PENDING_AGENT_REVIEW]]";
+
 export const CHECKLIST_STATUS_CONFIG: Record<
   ChecklistStatus,
   { icon: ChecklistIcon; color: string; bgColor: string }
