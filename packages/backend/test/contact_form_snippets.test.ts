@@ -42,4 +42,16 @@ describe("contact form snippets", () => {
     expect(snippets.html).toContain('name="details"');
     expect(snippets.html).toContain('rows="6"');
   });
+
+  it("renders turnstile markup when a site key is provided", () => {
+    const token = "ppi_test.token123";
+    const submitEndpoint = "https://api.vivd.studio/plugins/contact/v1/submit";
+    const snippets = getContactFormSnippets(token, submitEndpoint, {
+      turnstileSiteKey: "0x4AAAAAAATESTKEY123",
+    });
+
+    expect(snippets.html).toContain("challenges.cloudflare.com/turnstile/v0/api.js");
+    expect(snippets.html).toContain('class="cf-turnstile"');
+    expect(snippets.html).toContain('data-sitekey="0x4AAAAAAATESTKEY123"');
+  });
 });

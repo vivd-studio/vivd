@@ -393,6 +393,10 @@ export const pluginEntitlement = pgTable(
     managedBy: text("managed_by").notNull().default("manual_superadmin"), // 'manual_superadmin' | 'plan' | 'self_serve'
     monthlyEventLimit: integer("monthly_event_limit"),
     hardStop: boolean("hard_stop").notNull().default(true),
+    turnstileEnabled: boolean("turnstile_enabled").notNull().default(false),
+    turnstileWidgetId: text("turnstile_widget_id"),
+    turnstileSiteKey: text("turnstile_site_key"),
+    turnstileSecretKey: text("turnstile_secret_key"),
     notes: text("notes").notNull().default(""),
     changedByUserId: text("changed_by_user_id").references(() => user.id, {
       onDelete: "set null",

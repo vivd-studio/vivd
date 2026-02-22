@@ -9,7 +9,11 @@ const {
   listStudioImagesFromGhcrMock,
   normalizeGhcrRepositoryMock,
   upsertEntitlementMock,
+  getProjectEntitlementRowMock,
   ensureContactFormPluginMock,
+  getTurnstileAutomationIssueMock,
+  prepareTurnstileWidgetMock,
+  deleteTurnstileWidgetMock,
 } = vi.hoisted(() => {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
@@ -32,7 +36,11 @@ const {
     listStudioImagesFromGhcrMock: vi.fn(),
     normalizeGhcrRepositoryMock: vi.fn(),
     upsertEntitlementMock: vi.fn(),
+    getProjectEntitlementRowMock: vi.fn(),
     ensureContactFormPluginMock: vi.fn(),
+    getTurnstileAutomationIssueMock: vi.fn(),
+    prepareTurnstileWidgetMock: vi.fn(),
+    deleteTurnstileWidgetMock: vi.fn(),
   };
 });
 
@@ -57,12 +65,21 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   pluginEntitlementService: {
     upsertEntitlement: upsertEntitlementMock,
     listProjectAccess: vi.fn(),
+    getProjectEntitlementRow: getProjectEntitlementRowMock,
   },
 }));
 
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     ensureContactFormPlugin: ensureContactFormPluginMock,
+  },
+}));
+
+vi.mock("../src/services/plugins/contactForm/turnstile", () => ({
+  contactFormTurnstileService: {
+    getAutomationConfigurationIssue: getTurnstileAutomationIssueMock,
+    prepareProjectWidgetCredentials: prepareTurnstileWidgetMock,
+    deleteWidget: deleteTurnstileWidgetMock,
   },
 }));
 
@@ -168,6 +185,10 @@ function makeEntitlement(overrides: Record<string, unknown> = {}) {
     managedBy: "manual_superadmin",
     monthlyEventLimit: null,
     hardStop: true,
+    turnstileEnabled: false,
+    turnstileWidgetId: null,
+    turnstileSiteKey: null,
+    turnstileSecretKey: null,
     notes: "",
     changedByUserId: "user-1",
     updatedAt: new Date(),
@@ -186,7 +207,11 @@ describe("superadmin router", () => {
     listStudioImagesFromGhcrMock.mockReset();
     normalizeGhcrRepositoryMock.mockReset();
     upsertEntitlementMock.mockReset();
+    getProjectEntitlementRowMock.mockReset();
     ensureContactFormPluginMock.mockReset();
+    getTurnstileAutomationIssueMock.mockReset();
+    prepareTurnstileWidgetMock.mockReset();
+    deleteTurnstileWidgetMock.mockReset();
 
     (studioMachineProviderMock as any).kind = "fly";
     listStudioMachinesMock.mockResolvedValue([]);
@@ -207,8 +232,16 @@ describe("superadmin router", () => {
       imageBase: "ghcr.io/vivd-studio/vivd-studio",
     });
     upsertEntitlementMock.mockResolvedValue(makeEntitlement());
+    getProjectEntitlementRowMock.mockResolvedValue(null);
     ensureContactFormPluginMock.mockResolvedValue({
       instanceId: "ppi-1",
+    });
+    getTurnstileAutomationIssueMock.mockReturnValue(null);
+    prepareTurnstileWidgetMock.mockResolvedValue({
+      widgetId: "sitekey-1",
+      siteKey: "sitekey-1",
+      secretKey: "secret-1",
+      domains: ["example.com"],
     });
 
     delete process.env.FLY_STUDIO_IMAGE;
@@ -328,5 +361,46 @@ describe("superadmin router", () => {
 
     expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
     expect(result.ensuredPluginInstanceId).toBeNull();
+  });
+
+  it("prepares turnstile widget credentials when enabling turnstile", async () => {
+    upsertEntitlementMock.mockResolvedValueOnce(
+      makeEntitlement({
+        turnstileEnabled: true,
+        turnstileWidgetId: "sitekey-1",
+        turnstileSiteKey: "sitekey-1",
+        turnstileSecretKey: "secret-1",
+      }),
+    );
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.pluginsUpsertEntitlement({
+      pluginId: "contact_form",
+      organizationId: "org-1",
+      scope: "project",
+      projectSlug: "site-1",
+      state: "enabled",
+      turnstileEnabled: true,
+      ensurePluginWhenEnabled: false,
+    });
+
+    expect(getTurnstileAutomationIssueMock).toHaveBeenCalled();
+    expect(prepareTurnstileWidgetMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      existingWidgetId: null,
+      existingSiteKey: null,
+      existingSecretKey: null,
+    });
+    expect(upsertEntitlementMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turnstileEnabled: true,
+        turnstileWidgetId: "sitekey-1",
+        turnstileSiteKey: "sitekey-1",
+        turnstileSecretKey: "secret-1",
+      }),
+    );
+    expect(result.entitlement.turnstileEnabled).toBe(true);
+    expect(result.entitlement.turnstileReady).toBe(true);
   });
 });

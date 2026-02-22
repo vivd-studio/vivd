@@ -170,6 +170,7 @@ export function ProjectCard({
   const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
+  const [tagsPopoverSessionKey, setTagsPopoverSessionKey] = useState(0);
   const [tagsPopoverAnchor, setTagsPopoverAnchor] = useState<"tags" | "actions">("tags");
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const suppressActionsCloseAutoFocusRef = useRef(false);
@@ -238,6 +239,12 @@ export function ProjectCard({
   const handleVersionSelect = (version: number) => {
     setSelectedVersion(version);
     setCurrentVersionMutation.mutate({ slug: project.slug, version });
+  };
+
+  const openTagsPopover = (anchor: "tags" | "actions") => {
+    setTagsPopoverAnchor(anchor);
+    setTagsPopoverSessionKey((current) => current + 1);
+    setTagsPopoverOpen(true);
   };
 
   // Get status for selected version
@@ -362,6 +369,7 @@ export function ProjectCard({
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <ProjectTagsPopover
+                key={`${project.slug}:${tagsPopoverSessionKey}`}
                 open={tagsPopoverOpen}
                 onOpenChange={setTagsPopoverOpen}
                 anchorVirtualRef={activeTagsPopoverAnchorRef}
@@ -372,19 +380,16 @@ export function ProjectCard({
                 projectTags={projectTags}
                 availableTags={availableTags}
                 isSaving={updateTagsMutation.isPending}
-                onToggleTag={(tag, add) => {
-                  const next = add
-                    ? [...projectTags, tag]
-                    : projectTags.filter((t) => t !== tag);
-                  updateTagsMutation.mutate({ slug: project.slug, tags: next });
-                }}
-                onCreateTag={(tag) => {
-                  if (!projectTags.includes(tag)) {
-                    updateTagsMutation.mutate({
-                      slug: project.slug,
-                      tags: [...projectTags, tag],
-                    });
-                  }
+                onCommitTags={(tags) => {
+                  const isUnchanged =
+                    tags.length === projectTags.length &&
+                    tags.every((tag, index) => projectTags[index] === tag);
+                  if (isUnchanged) return;
+
+                  updateTagsMutation.mutate({
+                    slug: project.slug,
+                    tags,
+                  });
                 }}
               >
                 <div
@@ -393,8 +398,7 @@ export function ProjectCard({
                   title="Click to edit labels"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setTagsPopoverAnchor("tags");
-                    setTagsPopoverOpen(true);
+                    openTagsPopover("tags");
                   }}
                 >
                   {projectTags.length === 0 ? (
@@ -627,9 +631,8 @@ export function ProjectCard({
                     getBoundingClientRect: () => frozenRect,
                   };
                   suppressActionsCloseAutoFocusRef.current = true;
-                  setTagsPopoverAnchor("actions");
                   setActionsMenuOpen(false);
-                  requestAnimationFrame(() => setTagsPopoverOpen(true));
+                  requestAnimationFrame(() => openTagsPopover("actions"));
                 }}
               >
                 <Tags className="w-4 h-4 mr-2" />

@@ -26,6 +26,10 @@ export interface ResolvedPluginEntitlement {
   managedBy: PluginEntitlementManagedBy;
   monthlyEventLimit: number | null;
   hardStop: boolean;
+  turnstileEnabled: boolean;
+  turnstileWidgetId: string | null;
+  turnstileSiteKey: string | null;
+  turnstileSecretKey: string | null;
   notes: string;
   changedByUserId: string | null;
   updatedAt: Date | null;
@@ -53,6 +57,8 @@ export interface PluginAccessListRow {
   managedBy: PluginEntitlementManagedBy;
   monthlyEventLimit: number | null;
   hardStop: boolean;
+  turnstileEnabled: boolean;
+  turnstileReady: boolean;
   usageThisMonth: number;
   projectPluginStatus: "enabled" | "disabled" | null;
   updatedAt: Date | null;
@@ -91,6 +97,10 @@ function toResolvedEntitlement(
       managedBy: "manual_superadmin",
       monthlyEventLimit: null,
       hardStop: true,
+      turnstileEnabled: false,
+      turnstileWidgetId: null,
+      turnstileSiteKey: null,
+      turnstileSecretKey: null,
       notes: "",
       changedByUserId: null,
       updatedAt: null,
@@ -107,6 +117,10 @@ function toResolvedEntitlement(
     monthlyEventLimit:
       typeof row.monthlyEventLimit === "number" ? row.monthlyEventLimit : null,
     hardStop: row.hardStop ?? true,
+    turnstileEnabled: row.turnstileEnabled ?? false,
+    turnstileWidgetId: row.turnstileWidgetId ?? null,
+    turnstileSiteKey: row.turnstileSiteKey ?? null,
+    turnstileSecretKey: row.turnstileSecretKey ?? null,
     notes: row.notes || "",
     changedByUserId: row.changedByUserId ?? null,
     updatedAt: row.updatedAt ?? null,
@@ -131,6 +145,22 @@ function buildEntitlementMaps(rows: PluginEntitlementRow[]) {
 }
 
 class PluginEntitlementService {
+  async getProjectEntitlementRow(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: PluginId;
+  }): Promise<PluginEntitlementRow | null> {
+    const row = await db.query.pluginEntitlement.findFirst({
+      where: and(
+        eq(pluginEntitlement.organizationId, options.organizationId),
+        eq(pluginEntitlement.scope, "project"),
+        eq(pluginEntitlement.projectSlug, options.projectSlug),
+        eq(pluginEntitlement.pluginId, options.pluginId),
+      ),
+    });
+    return row ?? null;
+  }
+
   async resolveEffectiveEntitlement(options: {
     organizationId: string;
     projectSlug: string;
@@ -268,6 +298,8 @@ class PluginEntitlementService {
         managedBy: resolved.managedBy,
         monthlyEventLimit: resolved.monthlyEventLimit,
         hardStop: resolved.hardStop,
+        turnstileEnabled: resolved.turnstileEnabled,
+        turnstileReady: !!resolved.turnstileSiteKey && !!resolved.turnstileSecretKey,
         usageThisMonth:
           usageByProject.get(`${row.organizationId}:${row.projectSlug}`) ?? 0,
         projectPluginStatus:
@@ -299,6 +331,10 @@ class PluginEntitlementService {
     managedBy?: PluginEntitlementManagedBy;
     monthlyEventLimit?: number | null;
     hardStop?: boolean;
+    turnstileEnabled?: boolean;
+    turnstileWidgetId?: string | null;
+    turnstileSiteKey?: string | null;
+    turnstileSecretKey?: string | null;
     notes?: string;
     changedByUserId?: string | null;
   }): Promise<PluginEntitlementRow> {
@@ -312,6 +348,10 @@ class PluginEntitlementService {
       typeof input.monthlyEventLimit === "number" && Number.isFinite(input.monthlyEventLimit)
         ? Math.max(0, Math.floor(input.monthlyEventLimit))
         : null;
+    const turnstileEnabled = input.turnstileEnabled ?? false;
+    const turnstileWidgetId = (input.turnstileWidgetId || "").trim() || null;
+    const turnstileSiteKey = (input.turnstileSiteKey || "").trim() || null;
+    const turnstileSecretKey = (input.turnstileSecretKey || "").trim() || null;
 
     const now = new Date();
     const [row] = await db
@@ -326,6 +366,10 @@ class PluginEntitlementService {
         managedBy: input.managedBy || "manual_superadmin",
         monthlyEventLimit,
         hardStop: input.hardStop ?? true,
+        turnstileEnabled,
+        turnstileWidgetId,
+        turnstileSiteKey,
+        turnstileSecretKey,
         notes: (input.notes || "").trim(),
         changedByUserId: input.changedByUserId ?? null,
         createdAt: now,
@@ -343,6 +387,10 @@ class PluginEntitlementService {
           managedBy: input.managedBy || "manual_superadmin",
           monthlyEventLimit,
           hardStop: input.hardStop ?? true,
+          turnstileEnabled,
+          turnstileWidgetId,
+          turnstileSiteKey,
+          turnstileSecretKey,
           notes: (input.notes || "").trim(),
           changedByUserId: input.changedByUserId ?? null,
           updatedAt: now,

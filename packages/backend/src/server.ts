@@ -16,6 +16,7 @@ import { domainService } from "./services/publish/DomainService";
 import { startStudioMachineReconciler } from "./services/studioMachines";
 import { createPublicPluginsRouter } from "./httpRoutes/plugins";
 import { startContactSubmissionRetentionJob } from "./services/plugins/contactForm/retention";
+import { startContactFormTurnstileSyncJob } from "./services/plugins/contactForm/turnstile";
 import { createProjectRuntimeRouter } from "./httpRoutes/projectRuntime";
 
 const app = express();
@@ -172,12 +173,14 @@ app.listen(PORT, async () => {
 
   startStudioMachineReconciler();
   const stopContactSubmissionRetention = startContactSubmissionRetentionJob();
+  const stopContactFormTurnstileSync = startContactFormTurnstileSyncJob();
   let hasShutdown = false;
 
   const cleanup = () => {
     if (hasShutdown) return;
     hasShutdown = true;
     stopContactSubmissionRetention();
+    stopContactFormTurnstileSync();
     console.log("[Server] Shutting down...");
   };
 

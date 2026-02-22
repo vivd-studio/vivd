@@ -17,6 +17,7 @@ import { domainService, validateOrganizationSlug } from "../services/publish/Dom
 import { studioMachineProvider } from "../services/studioMachines";
 import { pluginEntitlementService } from "../services/plugins/PluginEntitlementService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
+import { contactFormTurnstileService } from "../services/plugins/contactForm/turnstile";
 import { PLUGIN_IDS } from "../services/plugins/registry";
 import {
   getSystemSettingValue,
@@ -396,6 +397,7 @@ export const superAdminRouter = router({
           state: pluginEntitlementStateSchema,
           monthlyEventLimit: z.number().int().min(0).nullable().optional(),
           hardStop: z.boolean().optional(),
+          turnstileEnabled: z.boolean().optional(),
           notes: z.string().max(1000).optional(),
           ensurePluginWhenEnabled: z.boolean().optional(),
         })
@@ -405,6 +407,49 @@ export const superAdminRouter = router({
         }),
     )
     .mutation(async ({ ctx, input }) => {
+      const existingProjectEntitlement =
+        input.scope === "project"
+          ? await pluginEntitlementService.getProjectEntitlementRow({
+              organizationId: input.organizationId,
+              projectSlug: input.projectSlug!,
+              pluginId: input.pluginId,
+            })
+          : null;
+
+      let turnstileCredentials:
+        | {
+            widgetId: string;
+            siteKey: string;
+            secretKey: string;
+          }
+        | null = null;
+
+      if (
+        input.pluginId === "contact_form" &&
+        input.scope === "project" &&
+        input.state === "enabled" &&
+        input.turnstileEnabled === true
+      ) {
+        const automationIssue =
+          contactFormTurnstileService.getAutomationConfigurationIssue();
+        if (automationIssue) {
+          throw new Error(automationIssue);
+        }
+
+        const prepared = await contactFormTurnstileService.prepareProjectWidgetCredentials({
+          organizationId: input.organizationId,
+          projectSlug: input.projectSlug!,
+          existingWidgetId: existingProjectEntitlement?.turnstileWidgetId ?? null,
+          existingSiteKey: existingProjectEntitlement?.turnstileSiteKey ?? null,
+          existingSecretKey: existingProjectEntitlement?.turnstileSecretKey ?? null,
+        });
+        turnstileCredentials = {
+          widgetId: prepared.widgetId,
+          siteKey: prepared.siteKey,
+          secretKey: prepared.secretKey,
+        };
+      }
+
       const entitlement = await pluginEntitlementService.upsertEntitlement({
         organizationId: input.organizationId,
         scope: input.scope,
@@ -414,6 +459,13 @@ export const superAdminRouter = router({
         managedBy: "manual_superadmin",
         monthlyEventLimit: input.monthlyEventLimit,
         hardStop: input.hardStop,
+        turnstileEnabled: input.turnstileEnabled ?? false,
+        turnstileWidgetId:
+          input.turnstileEnabled === true ? turnstileCredentials?.widgetId ?? null : null,
+        turnstileSiteKey:
+          input.turnstileEnabled === true ? turnstileCredentials?.siteKey ?? null : null,
+        turnstileSecretKey:
+          input.turnstileEnabled === true ? turnstileCredentials?.secretKey ?? null : null,
         notes: input.notes,
         changedByUserId: ctx.session.user.id,
       });
@@ -432,6 +484,19 @@ export const superAdminRouter = router({
         ensuredPluginInstanceId = ensured.instanceId;
       }
 
+      const isTurnstileDisabledAfterUpsert =
+        input.pluginId === "contact_form" &&
+        input.scope === "project" &&
+        (input.state !== "enabled" || input.turnstileEnabled !== true);
+      if (
+        isTurnstileDisabledAfterUpsert &&
+        existingProjectEntitlement?.turnstileWidgetId
+      ) {
+        await contactFormTurnstileService.deleteWidget(
+          existingProjectEntitlement.turnstileWidgetId,
+        );
+      }
+
       return {
         success: true,
         entitlement: {
@@ -444,6 +509,9 @@ export const superAdminRouter = router({
           managedBy: entitlement.managedBy,
           monthlyEventLimit: entitlement.monthlyEventLimit,
           hardStop: entitlement.hardStop,
+          turnstileEnabled: entitlement.turnstileEnabled,
+          turnstileReady:
+            !!entitlement.turnstileSiteKey && !!entitlement.turnstileSecretKey,
           notes: entitlement.notes,
           changedByUserId: entitlement.changedByUserId,
           updatedAt: entitlement.updatedAt,
@@ -460,6 +528,7 @@ export const superAdminRouter = router({
         state: pluginEntitlementStateSchema,
         monthlyEventLimit: z.number().int().min(0).nullable().optional(),
         hardStop: z.boolean().optional(),
+        turnstileEnabled: z.boolean().optional(),
         notes: z.string().max(1000).optional(),
       }),
     )
@@ -472,6 +541,10 @@ export const superAdminRouter = router({
         managedBy: "manual_superadmin",
         monthlyEventLimit: input.monthlyEventLimit,
         hardStop: input.hardStop,
+        turnstileEnabled: input.turnstileEnabled ?? false,
+        turnstileWidgetId: null,
+        turnstileSiteKey: null,
+        turnstileSecretKey: null,
         notes: input.notes,
         changedByUserId: ctx.session.user.id,
       });
@@ -488,6 +561,9 @@ export const superAdminRouter = router({
           managedBy: entitlement.managedBy,
           monthlyEventLimit: entitlement.monthlyEventLimit,
           hardStop: entitlement.hardStop,
+          turnstileEnabled: entitlement.turnstileEnabled,
+          turnstileReady:
+            !!entitlement.turnstileSiteKey && !!entitlement.turnstileSecretKey,
           notes: entitlement.notes,
           changedByUserId: entitlement.changedByUserId,
           updatedAt: entitlement.updatedAt,

@@ -23,6 +23,15 @@ function normalizeTag(raw: string): string {
     .toLowerCase();
 }
 
+function dedupeTags(tags: string[]): string[] {
+  return Array.from(new Set(tags));
+}
+
+function areTagListsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((tag, index) => tag === b[index]);
+}
+
 // ─── Tag chip (coloured rectangle, like Trello) ──────────────────────────────
 
 interface TagChipProps {
@@ -92,8 +101,7 @@ interface ProjectTagsPopoverProps {
   projectTags: string[];
   availableTags: string[];
   isSaving: boolean;
-  onToggleTag: (tag: string, add: boolean) => void;
-  onCreateTag: (tag: string) => void;
+  onCommitTags: (tags: string[]) => void;
 }
 
 type View = { type: "list" } | { type: "edit"; tag: string };
@@ -108,27 +116,19 @@ export function ProjectTagsPopover({
   projectTags,
   availableTags,
   isSaving,
-  onToggleTag,
-  onCreateTag,
+  onCommitTags,
 }: ProjectTagsPopoverProps) {
   const [view, setView] = useState<View>({ type: "list" });
   const [search, setSearch] = useState("");
   const [draftTag, setDraftTag] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [draftProjectTags, setDraftProjectTags] = useState<string[]>(() =>
+    dedupeTags(projectTags),
+  );
   const createInputRef = useRef<HTMLInputElement>(null);
   const suppressOutsideRef = useRef(false);
 
   const { colorMap, setTagColor, getColor } = useTagColors();
-
-  // Reset inner state when popover closes
-  useEffect(() => {
-    if (!open) {
-      setView({ type: "list" });
-      setSearch("");
-      setDraftTag("");
-      setShowCreate(false);
-    }
-  }, [open]);
 
   useEffect(() => {
     if (showCreate) setTimeout(() => createInputRef.current?.focus(), 50);
@@ -143,7 +143,7 @@ export function ProjectTagsPopover({
     return () => window.cancelAnimationFrame(frame);
   }, [open, suppressInitialOutsideInteraction]);
 
-  const allTags = Array.from(new Set([...availableTags, ...projectTags])).sort(
+  const allTags = Array.from(new Set([...availableTags, ...draftProjectTags])).sort(
     (a, b) => a.localeCompare(b),
   );
   const filteredTags = allTags.filter((t) =>
@@ -153,14 +153,47 @@ export function ProjectTagsPopover({
   const handleCreate = () => {
     const normalized = normalizeTag(draftTag);
     if (!normalized || normalized.length > MAX_TAG_LENGTH) return;
-    if (projectTags.length >= MAX_PROJECT_TAGS) return;
-    onCreateTag(normalized);
+    if (draftProjectTags.length >= MAX_PROJECT_TAGS) return;
+    setDraftProjectTags((current) => (
+      current.includes(normalized) ? current : [...current, normalized]
+    ));
     setDraftTag("");
     setShowCreate(false);
   };
 
+  const resetPopoverState = () => {
+    setView({ type: "list" });
+    setSearch("");
+    setDraftTag("");
+    setShowCreate(false);
+  };
+
+  const closePopoverWithoutSaving = () => {
+    resetPopoverState();
+    onOpenChange(false);
+  };
+
+  const confirmPopoverChanges = () => {
+    const normalizedDraftTags = dedupeTags(draftProjectTags);
+    const normalizedProjectTags = dedupeTags(projectTags);
+    if (!areTagListsEqual(normalizedDraftTags, normalizedProjectTags)) {
+      onCommitTags(normalizedDraftTags);
+    }
+    resetPopoverState();
+    onOpenChange(false);
+  };
+
+  const handlePopoverOpenChange = (nextOpen: boolean) => {
+    if (nextOpen === open) return;
+    if (!nextOpen) {
+      closePopoverWithoutSaving();
+      return;
+    }
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={handlePopoverOpenChange}>
       {anchorVirtualRef ? (
         <>
           <PopoverAnchor virtualRef={anchorVirtualRef} />
@@ -199,7 +232,8 @@ export function ProjectTagsPopover({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0"
-                onClick={() => onOpenChange(false)}
+                onClick={closePopoverWithoutSaving}
+                aria-label="Close labels popover"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -238,7 +272,8 @@ export function ProjectTagsPopover({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0"
-                onClick={() => onOpenChange(false)}
+                onClick={closePopoverWithoutSaving}
+                aria-label="Close labels popover"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -264,7 +299,7 @@ export function ProjectTagsPopover({
               ) : (
                 <div className="space-y-0.5">
                   {filteredTags.map((tag) => {
-                    const active = projectTags.includes(tag);
+                    const active = draftProjectTags.includes(tag);
                     const color = getColor(tag);
                     return (
                       <div key={tag} className="group flex items-center gap-1 rounded py-0.5">
@@ -272,7 +307,15 @@ export function ProjectTagsPopover({
                           type="button"
                           className="flex flex-1 items-center gap-2 rounded px-2 py-1.5 text-left transition-opacity hover:opacity-90 active:scale-[0.98]"
                           style={{ backgroundColor: color.bg }}
-                          onClick={() => onToggleTag(tag, !active)}
+                          onClick={() => {
+                            setDraftProjectTags((current) =>
+                              active
+                                ? current.filter((value) => value !== tag)
+                                : current.length >= MAX_PROJECT_TAGS
+                                  ? current
+                                  : [...current, tag],
+                            );
+                          }}
                           disabled={isSaving}
                           title={active ? `Remove "${tag}"` : `Add "${tag}"`}
                         >
@@ -347,13 +390,13 @@ export function ProjectTagsPopover({
                     placeholder="Label name…"
                     className="h-8 text-xs"
                     maxLength={MAX_TAG_LENGTH + 2}
-                    disabled={projectTags.length >= MAX_PROJECT_TAGS}
+                    disabled={draftProjectTags.length >= MAX_PROJECT_TAGS}
                   />
                   <Button
                     size="sm"
                     className="h-8 px-2.5 text-xs"
                     onClick={handleCreate}
-                    disabled={!draftTag.trim() || projectTags.length >= MAX_PROJECT_TAGS}
+                    disabled={!draftTag.trim() || draftProjectTags.length >= MAX_PROJECT_TAGS}
                   >
                     Add
                   </Button>
@@ -371,12 +414,23 @@ export function ProjectTagsPopover({
                   type="button"
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   onClick={() => setShowCreate(true)}
-                  disabled={projectTags.length >= MAX_PROJECT_TAGS}
+                  disabled={draftProjectTags.length >= MAX_PROJECT_TAGS}
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Create a new label
                 </button>
               )}
+            </div>
+
+            <div className="border-t px-3 py-2.5">
+              <Button
+                size="sm"
+                className="h-8 w-full text-xs"
+                onClick={confirmPopoverChanges}
+                disabled={isSaving}
+              >
+                OK
+              </Button>
             </div>
           </>
         )}

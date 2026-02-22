@@ -8,6 +8,7 @@ import { contactFormSubmission, projectPluginInstance } from "../../../db/schema
 import { contactFormPluginConfigSchema } from "../../../services/plugins/contactForm/config";
 import { pluginEntitlementService } from "../../../services/plugins/PluginEntitlementService";
 import { inferContactFormAutoSourceHosts } from "../../../services/plugins/contactForm/sourceHosts";
+import { contactFormTurnstileService } from "../../../services/plugins/contactForm/turnstile";
 import { getEmailDeliveryService } from "../../../services/integrations/EmailDeliveryService";
 import {
   extractSourceHostFromHeaders,
@@ -516,6 +517,58 @@ export function createContactFormPublicRouter(
         );
       }
 
+      if (entitlement.turnstileEnabled) {
+        const turnstileToken = fields["cf-turnstile-response"] || "";
+        if (!turnstileToken.trim()) {
+          return sendSubmitError(
+            req,
+            res,
+            400,
+            "invalid_payload",
+            "Turnstile challenge token is missing",
+          );
+        }
+
+        const turnstileSecretKey = entitlement.turnstileSecretKey || "";
+        if (!turnstileSecretKey) {
+          return sendSubmitError(
+            req,
+            res,
+            503,
+            "plugin_not_configured",
+            "Turnstile is enabled but not fully configured yet",
+          );
+        }
+
+        const turnstileResult = await contactFormTurnstileService.verifyToken({
+          secretKey: turnstileSecretKey,
+          token: turnstileToken,
+          remoteIp: extractClientIp(req),
+        });
+        if (!turnstileResult.success) {
+          return sendSubmitError(
+            req,
+            res,
+            403,
+            "turnstile_verification_failed",
+            "Please retry the security check and submit again.",
+          );
+        }
+
+        if (
+          turnstileResult.hostname &&
+          !isHostAllowed(turnstileResult.hostname, effectiveSourceHosts)
+        ) {
+          return sendSubmitError(
+            req,
+            res,
+            403,
+            "turnstile_verification_failed",
+            "Security check hostname mismatch.",
+          );
+        }
+      }
+
       const recipientEmails = config.recipientEmails;
       if (recipientEmails.length === 0) {
         return sendSubmitError(
@@ -530,6 +583,7 @@ export function createContactFormPublicRouter(
       const ignoredPayloadKeys = new Set([
         "token",
         honeypotField,
+        "cf-turnstile-response",
         "_redirect",
         "_subject",
       ]);

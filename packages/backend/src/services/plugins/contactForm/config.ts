@@ -5,6 +5,7 @@ const CONTACT_FORM_RESERVED_FIELD_KEYS = new Set([
   "_honeypot",
   "_redirect",
   "_subject",
+  "cf-turnstile-response",
 ]);
 
 export const contactFormFieldTypeSchema = z.enum(["text", "email", "textarea"]);

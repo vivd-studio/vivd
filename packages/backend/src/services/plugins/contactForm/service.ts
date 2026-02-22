@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../../db";
 import { projectPluginInstance } from "../../../db/schema";
+import { pluginEntitlementService } from "../PluginEntitlementService";
 import {
   projectPluginInstanceService,
   type ProjectPluginInstanceRow,
@@ -43,6 +44,8 @@ export interface ContactFormPluginInfoPayload {
     expectedFields: string[];
     optionalFields: string[];
     inferredAutoSourceHosts: string[];
+    turnstileEnabled: boolean;
+    turnstileConfigured: boolean;
   };
   instructions: string[];
 }
@@ -57,13 +60,22 @@ function buildUsage(input: {
   submitEndpoint: string;
   config: ContactFormPluginConfig | null;
   inferredAutoSourceHosts: string[];
+  turnstileEnabled: boolean;
+  turnstileConfigured: boolean;
 }) {
   const configuredFields = input.config?.formFields ?? DEFAULT_CONTACT_FORM_FIELDS;
+  const optionalFields = ["_redirect", "_subject", "_honeypot"];
+  if (input.turnstileEnabled) {
+    optionalFields.push("cf-turnstile-response");
+  }
+
   return {
     submitEndpoint: input.submitEndpoint,
     expectedFields: ["token", ...configuredFields.map((field) => field.key)],
-    optionalFields: ["_redirect", "_subject", "_honeypot"],
+    optionalFields,
     inferredAutoSourceHosts: input.inferredAutoSourceHosts,
+    turnstileEnabled: input.turnstileEnabled,
+    turnstileConfigured: input.turnstileConfigured,
   };
 }
 
@@ -142,6 +154,18 @@ class ContactFormPluginService {
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
     });
+    const entitlement = await pluginEntitlementService.resolveEffectiveEntitlement({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      pluginId: "contact_form",
+    });
+    const turnstileConfigured =
+      entitlement.turnstileEnabled &&
+      !!entitlement.turnstileSiteKey &&
+      !!entitlement.turnstileSecretKey;
+    const snippetTurnstileSiteKey = turnstileConfigured
+      ? entitlement.turnstileSiteKey
+      : null;
 
     const existing = await projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
@@ -162,6 +186,8 @@ class ContactFormPluginService {
           submitEndpoint,
           config: null,
           inferredAutoSourceHosts,
+          turnstileEnabled: entitlement.turnstileEnabled,
+          turnstileConfigured,
         }),
         instructions: [
           "Contact Form plugin is not enabled for this project yet.",
@@ -182,11 +208,14 @@ class ContactFormPluginService {
         config: normalizedConfig,
         snippets: getContactFormSnippets(existing.publicToken, submitEndpoint, {
           formFields: normalizedConfig.formFields,
+          turnstileSiteKey: snippetTurnstileSiteKey,
         }),
         usage: buildUsage({
           submitEndpoint,
           config: normalizedConfig,
           inferredAutoSourceHosts,
+          turnstileEnabled: entitlement.turnstileEnabled,
+          turnstileConfigured,
         }),
         instructions: [
           "Contact Form plugin instance exists but is currently disabled.",
@@ -206,11 +235,14 @@ class ContactFormPluginService {
       config: normalizedConfig,
       snippets: getContactFormSnippets(existing.publicToken, submitEndpoint, {
         formFields: normalizedConfig.formFields,
+        turnstileSiteKey: snippetTurnstileSiteKey,
       }),
       usage: buildUsage({
         submitEndpoint,
         config: normalizedConfig,
         inferredAutoSourceHosts,
+        turnstileEnabled: entitlement.turnstileEnabled,
+        turnstileConfigured,
       }),
       instructions:
         normalizedConfig.recipientEmails.length > 0
@@ -219,6 +251,11 @@ class ContactFormPluginService {
               "Keep the hidden token input unchanged; it maps submissions to this project plugin instance.",
               `Use form action ${submitEndpoint} with method POST.`,
               "Customize form fields in Project → Plugins (defaults: name, email, message) and keep _honeypot hidden and empty.",
+              entitlement.turnstileEnabled
+                ? turnstileConfigured
+                  ? "Turnstile protection is enabled by super-admin; keep the widget block and script from the snippet."
+                  : "Turnstile is enabled by super-admin but still syncing configuration. Snippets include it once ready."
+                : "Turnstile protection is currently disabled for this project (can be enabled by super-admin).",
               "If source hosts are empty, Vivd auto-uses project first-party hosts (published + tenant hosts) when available.",
               "Optionally pass _redirect for success redirect; it must match redirect allowlist (or effective source hosts when redirect allowlist is empty).",
               "Verify by submitting once from preview/published domain and checking recipient inbox.",

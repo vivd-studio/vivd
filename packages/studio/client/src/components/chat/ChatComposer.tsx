@@ -246,9 +246,9 @@ export function ChatComposer({ className }: ChatComposerProps) {
         </div>
       )}
 
-      {/* Main input container - unified with colored border */}
+      {/* Main input container - single shared surface for textarea + action row */}
       <div
-        className={`rounded-xl border-2 bg-background overflow-hidden transition-all shadow-sm ${
+        className={`rounded-xl border-2 bg-card overflow-hidden transition-all shadow-sm ${
           isDragOver
             ? "border-primary border-dashed"
             : isUsageBlocked
@@ -259,7 +259,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         {/* Textarea - inside container with proper padding */}
         <textarea
           ref={textareaRef}
-          className="flex min-h-[56px] max-h-[200px] w-full bg-transparent px-4 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+          className="flex min-h-[56px] max-h-[200px] w-full !bg-transparent px-4 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none"
           placeholder={
             isUsageBlocked
               ? "Usage limit reached. Please wait for the limit to reset."
@@ -278,7 +278,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         />
 
         {/* Action bar at the bottom - no separator */}
-        <div className="flex items-center justify-between gap-2 px-3 pb-2 bg-card">
+        <div className="flex items-center justify-between gap-2 px-3 pb-2 bg-transparent">
           {/* Left side: Plus circle button + Element selector */}
           <div className="flex items-center gap-1">
             {/* Plus button - circle with dropdown */}
