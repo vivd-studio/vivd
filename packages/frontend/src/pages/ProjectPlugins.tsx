@@ -3,7 +3,6 @@ import { Link, useParams } from "react-router-dom";
 import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
-import { usePermissions } from "@/hooks/usePermissions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -145,7 +144,6 @@ function SnippetCard({
 export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const utils = trpc.useUtils();
-  const { isSuperAdmin } = usePermissions();
 
   const slug = projectSlug || "";
   const catalogQuery = trpc.plugins.catalog.useQuery(
@@ -156,21 +154,6 @@ export default function ProjectPlugins() {
     { slug },
     { enabled: !!projectSlug },
   );
-
-  const ensureContactMutation = trpc.plugins.contactEnsure.useMutation({
-    onSuccess: async () => {
-      toast.success("Contact Form plugin enabled");
-      await Promise.all([
-        utils.plugins.catalog.invalidate({ slug }),
-        utils.plugins.contactInfo.invalidate({ slug }),
-      ]);
-    },
-    onError: (error) => {
-      toast.error("Failed to enable Contact Form plugin", {
-        description: error.message,
-      });
-    },
-  });
 
   const updateContactConfigMutation = trpc.plugins.contactUpdateConfig.useMutation({
     onSuccess: async () => {
@@ -370,25 +353,6 @@ export default function ProjectPlugins() {
               <Badge variant={pluginEnabled ? "default" : "secondary"}>
                 {pluginEnabled ? "Enabled" : "Disabled"}
               </Badge>
-              {!pluginEnabled && isSuperAdmin ? (
-                <Button
-                  onClick={() => ensureContactMutation.mutate({ slug })}
-                  disabled={
-                    ensureContactMutation.isPending ||
-                    catalogQuery.isLoading ||
-                    contactInfoQuery.isLoading
-                  }
-                >
-                  {ensureContactMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Enabling...
-                    </>
-                  ) : (
-                    "Enable Contact Form"
-                  )}
-                </Button>
-              ) : null}
             </div>
           </div>
         </CardHeader>
@@ -405,10 +369,11 @@ export default function ProjectPlugins() {
             </div>
           ) : null}
 
-          {!pluginEnabled && !isSuperAdmin ? (
+          {!pluginEnabled ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              Only super-admin users can enable plugins. Ask a super-admin to
-              enable Contact Form for this project.
+              Contact Form access is managed in Super Admin → Plugins. Request
+              flow is not available yet, so ask a super-admin to enable access
+              for this project there, or write to support@vivd.studio.
             </div>
           ) : null}
 

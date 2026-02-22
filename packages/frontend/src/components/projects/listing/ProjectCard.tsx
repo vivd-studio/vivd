@@ -360,11 +360,67 @@ export function ProjectCard({
                   />
                 ))}
             </div>
-            {!isCompleted && (
-              <Badge variant={statusColor} className="shrink-0">
-                {statusLabel}
-              </Badge>
-            )}
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <ProjectTagsPopover
+                open={tagsPopoverOpen}
+                onOpenChange={setTagsPopoverOpen}
+                anchorVirtualRef={activeTagsPopoverAnchorRef}
+                sideOffset={tagsPopoverAnchor === "actions" ? -6 : 6}
+                suppressInitialOutsideInteraction={
+                  tagsPopoverOpen && tagsPopoverAnchor === "actions"
+                }
+                projectTags={projectTags}
+                availableTags={availableTags}
+                isSaving={updateTagsMutation.isPending}
+                onToggleTag={(tag, add) => {
+                  const next = add
+                    ? [...projectTags, tag]
+                    : projectTags.filter((t) => t !== tag);
+                  updateTagsMutation.mutate({ slug: project.slug, tags: next });
+                }}
+                onCreateTag={(tag) => {
+                  if (!projectTags.includes(tag)) {
+                    updateTagsMutation.mutate({
+                      slug: project.slug,
+                      tags: [...projectTags, tag],
+                    });
+                  }
+                }}
+              >
+                <div
+                  ref={tagsAreaAnchorRef}
+                  className="flex min-h-[22px] max-w-[200px] cursor-pointer flex-wrap justify-end gap-1 text-right"
+                  title="Click to edit labels"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTagsPopoverAnchor("tags");
+                    setTagsPopoverOpen(true);
+                  }}
+                >
+                  {projectTags.length === 0 ? (
+                    <span className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors select-none">
+                      + Add labels
+                    </span>
+                  ) : (
+                    <>
+                      {projectTags.slice(0, 4).map((tag) => (
+                        <TagChip key={tag} tag={tag} color={getColor(tag)} className="text-[10px] py-0.5" />
+                      ))}
+                      {projectTags.length > 4 && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+                          +{projectTags.length - 4}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              </ProjectTagsPopover>
+              {!isCompleted && (
+                <Badge variant={statusColor} className="shrink-0">
+                  {statusLabel}
+                </Badge>
+              )}
+            </div>
           </div>
           <div
             className="text-xs text-muted-foreground truncate"
@@ -372,60 +428,6 @@ export function ProjectCard({
           >
             {subtitle}
           </div>
-          <ProjectTagsPopover
-            open={tagsPopoverOpen}
-            onOpenChange={setTagsPopoverOpen}
-            anchorVirtualRef={activeTagsPopoverAnchorRef}
-            sideOffset={tagsPopoverAnchor === "actions" ? -6 : 6}
-            suppressInitialOutsideInteraction={
-              tagsPopoverOpen && tagsPopoverAnchor === "actions"
-            }
-            projectTags={projectTags}
-            availableTags={availableTags}
-            isSaving={updateTagsMutation.isPending}
-            onToggleTag={(tag, add) => {
-              const next = add
-                ? [...projectTags, tag]
-                : projectTags.filter((t) => t !== tag);
-              updateTagsMutation.mutate({ slug: project.slug, tags: next });
-            }}
-            onCreateTag={(tag) => {
-              if (!projectTags.includes(tag)) {
-                updateTagsMutation.mutate({
-                  slug: project.slug,
-                  tags: [...projectTags, tag],
-                });
-              }
-            }}
-          >
-            <div
-              ref={tagsAreaAnchorRef}
-              className="mt-2 flex flex-wrap gap-1 cursor-pointer min-h-[22px]"
-              title="Click to edit labels"
-              onClick={(e) => {
-                e.stopPropagation();
-                setTagsPopoverAnchor("tags");
-                setTagsPopoverOpen(true);
-              }}
-            >
-              {projectTags.length === 0 ? (
-                <span className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors select-none">
-                  + Add labels
-                </span>
-              ) : (
-                <>
-                  {projectTags.slice(0, 4).map((tag) => (
-                    <TagChip key={tag} tag={tag} color={getColor(tag)} className="text-[10px] py-0.5" />
-                  ))}
-                  {projectTags.length > 4 && (
-                    <span className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
-                      +{projectTags.length - 4}
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-          </ProjectTagsPopover>
           {project.publishedDomain && (
             <div className="mt-1.5 flex items-center gap-1.5">
               <Globe className="w-3 h-3 text-green-600 shrink-0" />

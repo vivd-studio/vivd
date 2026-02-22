@@ -13,6 +13,9 @@
 
 ## Progress Log
 
+- 2026-02-22: removed the in-project `Enable Contact Form` action from `ProjectPlugins` to avoid dead-end enable attempts under entitlement gating; plugin activation is now directed exclusively to Super Admin → Plugins, and disabled-state copy now explicitly states that a self-serve/request flow is not available yet.
+- 2026-02-22: updated Contact Form disabled-state copy in `ProjectPlugins` to include support escalation guidance (`support@vivd.studio`) alongside the Super Admin → Plugins direction while the request flow is still unavailable.
+- 2026-02-22: moved project-card labels UI (`+ Add labels` trigger and tag chips) to the header top-right area so labels are editable and visible from the card’s right-side primary scan path.
 - 2026-02-22: implemented Phase 1 superadmin-managed plugin entitlements for Contact Form: added DB entitlement table (`plugin_entitlement`, migration `packages/backend/drizzle/0016_plugin_entitlements.sql`), added backend entitlement resolution/upsert/list service, enforced entitlement checks in `plugins.contactEnsure` and public contact submit runtime (including optional monthly hard-stop limit), added new superadmin plugin access APIs (`pluginsListAccess`, `pluginsUpsertEntitlement`, `pluginsBulkSetForOrganization`), and added a centralized Super Admin `Plugins` tab for cross-customer project-level enable/disable/suspend and limit management.
 - 2026-02-22: polished Plugins configuration alignment by constraining the “Auto-detected hosts (read-only fallback)” block to the same inline width as adjacent host inputs, removing the remaining visual width mismatch in the Configuration tab.
 - 2026-02-22: refined Plugins tab alignment so the tab bar now spans the full panel width (matching other settings surfaces) while tab contents remain readability-capped (`max-w-4xl`) to avoid overly long form rows.
