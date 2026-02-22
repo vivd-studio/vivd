@@ -54,7 +54,7 @@ Then generate migration: `npx drizzle-kit generate` and apply: `npx drizzle-kit 
 - 5-minute in-memory cache for DB lookups
 - `invalidateCache()` for cache busting on updates
 
-**New file**: `backend/src/routers/models.ts`
+**New file**: `backend/src/trpcRouters/models.ts`
 
 - `MODEL_CATEGORIES` constant with descriptions and required capabilities per model slot
 - `getModelConfig` - Returns current config merged with defaults + category metadata
@@ -63,7 +63,7 @@ Then generate migration: `npx drizzle-kit generate` and apply: `npx drizzle-kit 
 - `resetToDefaults` - Admin-only, deletes custom config
 - `getRecommendedModels` - Returns curated list for quick selection
 
-**Update**: `backend/src/routers/appRouter.ts`
+**Update**: `backend/src/trpcRouters/appRouter.ts`
 
 - Add `models: modelsRouter`
 
@@ -77,7 +77,7 @@ Update these files to use async model resolution instead of static imports:
 | `backend/src/generator/hero_creator.ts` | `ANALYSIS_MODEL`, `HERO_GENERATION_MODEL` → service calls |
 | `backend/src/generator/image_analyzer/describe.ts` | `VISION_MODEL` → `await getVisionModel()` |
 | `backend/src/generator/image_analyzer/prioritize.ts` | `PRIORITIZATION_MODEL` → `await getPrioritizationModel()` |
-| `backend/src/routers/assets/aiImages.ts` | `IMAGE_EDITING_MODEL`, `BACKGROUND_REMOVAL_MODEL`, `HERO_GENERATION_MODEL` → service calls |
+| `backend/src/trpcRouters/assets/aiImages.ts` | `IMAGE_EDITING_MODEL`, `BACKGROUND_REMOVAL_MODEL`, `HERO_GENERATION_MODEL` → service calls |
 
 ### Phase 4: Frontend Components
 
@@ -108,13 +108,13 @@ Update these files to use async model resolution instead of static imports:
 
 - `backend/src/db/schema.ts` - Add globalSettings table
 - `backend/src/services/ModelConfigService.ts` - New service
-- `backend/src/routers/models.ts` - New router
-- `backend/src/routers/appRouter.ts` - Wire up router
+- `backend/src/trpcRouters/models.ts` - New router
+- `backend/src/trpcRouters/appRouter.ts` - Wire up router
 - `backend/src/generator/agent.ts` - Use service
 - `backend/src/generator/hero_creator.ts` - Use service
 - `backend/src/generator/image_analyzer/describe.ts` - Use service
 - `backend/src/generator/image_analyzer/prioritize.ts` - Use service
-- `backend/src/routers/assets/aiImages.ts` - Use service
+- `backend/src/trpcRouters/assets/aiImages.ts` - Use service
 
 ### Frontend (to create/modify)
 

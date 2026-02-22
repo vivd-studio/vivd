@@ -77,7 +77,7 @@ vi.mock("../src/auth", () => ({
   },
 }));
 
-import { organizationRouter } from "../src/routers/organization";
+import { organizationRouter } from "../src/trpcRouters/organization";
 
 type UserRole = "super_admin" | "admin" | "user" | "client_editor";
 

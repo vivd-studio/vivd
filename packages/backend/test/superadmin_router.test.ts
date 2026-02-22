@@ -117,7 +117,7 @@ vi.mock("../src/services/publish/DomainService", () => ({
   },
 }));
 
-import { superAdminRouter } from "../src/routers/superadmin";
+import { superAdminRouter } from "../src/trpcRouters/superadmin";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {

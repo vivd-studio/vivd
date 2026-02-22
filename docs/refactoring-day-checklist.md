@@ -18,7 +18,7 @@ Purpose: improve developer efficiency, readability, and maintainability with low
 
 ## 2) Thin Routers, Move Business Logic to Services
 
-- [ ] Extract organization/member/user mutation logic from `packages/backend/src/routers/superadmin.ts` into `packages/backend/src/services/superadmin/*`.
+- [ ] Extract organization/member/user mutation logic from `packages/backend/src/trpcRouters/superadmin.ts` into `packages/backend/src/services/superadmin/*`.
 - [ ] Keep router layer limited to input validation + auth + service call + response mapping.
 - [x] Remove legacy/unused procedure `setOrganizationMemberRole` if no client references remain.
 

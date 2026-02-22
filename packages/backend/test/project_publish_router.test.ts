@@ -57,7 +57,7 @@ vi.mock("../src/services/publish/PublishService", () => ({
 }));
 
 import { router } from "../src/trpc";
-import { projectPublishProcedures } from "../src/routers/project/publish";
+import { projectPublishProcedures } from "../src/trpcRouters/project/publish";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {

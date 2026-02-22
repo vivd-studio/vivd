@@ -59,7 +59,7 @@ vi.mock("../src/services/project/StudioWorkspaceStateService", () => ({
   },
 }));
 
-import { studioApiRouter } from "../src/routers/studioApi";
+import { studioApiRouter } from "../src/trpcRouters/studioApi";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {

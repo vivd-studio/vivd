@@ -47,7 +47,7 @@ UI: `packages/frontend/src/components/projects/publish/PublishSiteDialog.tsx`
 
 ### Control plane (backend)
 
-Router: `packages/backend/src/routers/project/publish.ts`
+Router: `packages/backend/src/trpcRouters/project/publish.ts`
 
 1. Validates allowlist via `domainService.ensurePublishDomainEnabled`.
 2. Applies Studio-safety checks (based on live in-memory studio workspace-state reporting):
@@ -84,7 +84,7 @@ Studio UI: `packages/studio/client/src/components/publish/PublishDialog.tsx`
 - **Connected mode:** duplicates most of the control-plane’s domain publishing gating + disabled-reason logic, and calls backend publish through a proxy.
 - **Standalone mode:** “publish” is a local git tag + best-effort artifact uploads; domain publishing is not available.
 
-Studio server proxy: `packages/studio/server/routers/project.ts`
+Studio server proxy: `packages/studio/server/trpcRouters/project.ts`
 - `callConnectedBackendQuery/Mutation` forward Studio requests to backend tRPC via HTTP, using `Authorization: Bearer <session token>`.
 
 ---

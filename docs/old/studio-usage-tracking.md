@@ -18,13 +18,13 @@
   - Retry logic with exponential backoff
   - Graceful shutdown with final flush
 
-- **Usage router**: `packages/studio/server/routers/usage.ts`
+- **Usage router**: `packages/studio/server/trpcRouters/usage.ts`
   - In connected mode: proxies to backend via `usageReporter.fetchStatus()`
   - In standalone mode: returns unlimited stub
 
 ### Backend Side (`packages/backend`)
 
-- **Studio API router**: `packages/backend/src/routers/studioApi.ts`
+- **Studio API router**: `packages/backend/src/trpcRouters/studioApi.ts`
   - `reportUsage` - receives usage reports from studio instances
   - `getStatus` - returns current usage limits
   - Uses existing `UsageService` and `LimitsService`

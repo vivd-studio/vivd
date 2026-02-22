@@ -85,7 +85,7 @@ vi.mock("extract-zip", () => ({
   default: extractZipMock,
 }));
 
-import { createImportRouter } from "../src/routes/import";
+import { createImportRouter } from "../src/httpRoutes/import";
 
 type TestResponse = {
   statusCode: number;

@@ -45,7 +45,7 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
 }));
 
 import { router } from "../src/trpc";
-import { contactEnsurePluginProcedure } from "../src/routers/plugins/contactForm";
+import { contactEnsurePluginProcedure } from "../src/trpcRouters/plugins/contactForm";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {

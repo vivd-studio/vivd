@@ -50,9 +50,9 @@ OpenRouter provides cost via `GET /api/v1/generation?id=$GENERATION_ID`:
 | File                                     | Function                | Purpose               |
 | ---------------------------------------- | ----------------------- | --------------------- |
 | `backend/src/generator/hero_creator.ts`  | `generateImage()`       | Hero image generation |
-| `backend/src/routers/assets/aiImages.ts` | `editImageWithAI`       | AI image editing      |
-| `backend/src/routers/assets/aiImages.ts` | `createImageWithAI`     | AI image creation     |
-| `backend/src/routers/assets/aiImages.ts` | `removeImageBackground` | Background removal    |
+| `backend/src/trpcRouters/assets/aiImages.ts` | `editImageWithAI`       | AI image editing      |
+| `backend/src/trpcRouters/assets/aiImages.ts` | `createImageWithAI`     | AI image creation     |
+| `backend/src/trpcRouters/assets/aiImages.ts` | `removeImageBackground` | Background removal    |
 
 **Total: 10 OpenRouter calls across 6 files**
 

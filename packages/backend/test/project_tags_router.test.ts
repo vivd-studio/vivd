@@ -16,7 +16,7 @@ vi.mock("../src/services/project/ProjectMetaService", () => ({
 }));
 
 import { router } from "../src/trpc";
-import { projectTagProcedures } from "../src/routers/project/tags";
+import { projectTagProcedures } from "../src/trpcRouters/project/tags";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {

@@ -270,9 +270,9 @@ Add smoke checks to local runbook:
   - `packages/backend/drizzle/*` (new migration)
   - `packages/backend/src/trpc.ts`
   - `packages/backend/src/services/PublishService.ts`
-  - `packages/backend/src/routers/project/publish.ts`
-  - `packages/backend/src/routers/superadmin.ts`
-  - `packages/backend/src/routers/config.ts`
+  - `packages/backend/src/trpcRouters/project/publish.ts`
+  - `packages/backend/src/trpcRouters/superadmin.ts`
+  - `packages/backend/src/trpcRouters/config.ts`
   - `packages/backend/src/server.ts`
 - Frontend:
   - `packages/frontend/src/components/shell/AppSidebar.tsx`

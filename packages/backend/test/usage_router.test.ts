@@ -29,7 +29,7 @@ vi.mock("../src/services/usage/UsageService", () => ({
   },
 }));
 
-import { usageRouter } from "../src/routers/usage";
+import { usageRouter } from "../src/trpcRouters/usage";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {

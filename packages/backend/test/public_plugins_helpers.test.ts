@@ -6,7 +6,7 @@ import {
   resolveEffectiveRedirectHosts,
   resolveEffectiveSourceHosts,
   resolveRedirectTarget,
-} from "../src/routes/plugins/contactForm/helpers";
+} from "../src/httpRoutes/plugins/contactForm/helpers";
 
 describe("public plugins host helpers", () => {
   it("normalizes host candidates", () => {

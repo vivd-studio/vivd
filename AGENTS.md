@@ -31,7 +31,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
 - Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
 - Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`.
-- Backend surface for plugin tools: `packages/backend/src/routers/plugins.ts` + `packages/backend/src/services/plugins/ProjectPluginService.ts`.
+- Backend surface for plugin tools: `packages/backend/src/trpcRouters/plugins/index.ts` + `packages/backend/src/services/plugins/ProjectPluginService.ts`.
 - Tool gating is centralized in `packages/studio/server/opencode/configPolicy.ts` via `VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS`, plus role/plugin context envs.
 - Adding a tool: add typed module, register in tool registry, keep `execute` minimal and safe, and verify in connected mode.
 

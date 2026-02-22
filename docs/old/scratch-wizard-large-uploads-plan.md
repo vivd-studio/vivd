@@ -40,7 +40,7 @@ Observed backend error:
   - `frontend/src/pages/scratch-wizard/ScratchForm.tsx`
   - `frontend/src/pages/scratch-wizard/types.ts` (`fileToBase64`)
 - Backend scratch generation:
-  - `backend/src/routers/project/generation.ts` (`generateFromScratch` expects `{ assets: [{filename, base64}] }`)
+  - `backend/src/trpcRouters/project/generation.ts` (`generateFromScratch` expects `{ assets: [{filename, base64}] }`)
   - `backend/src/generator/flows/scratchFlow.ts` (decodes base64 → writes files)
 - Backend uploads (multipart):
   - `backend/src/server.ts` (`/vivd-studio/api/upload/:slug/:version`, max 20 files/request, memory storage)
@@ -110,7 +110,7 @@ Add a new tRPC procedure:
 
 Backend code changes needed:
 
-- `backend/src/routers/project/generation.ts`
+- `backend/src/trpcRouters/project/generation.ts`
   - add the two new procedures, or refactor `generateFromScratch` to support “existing ctx” (slug/version) safely.
 - `backend/src/generator/flows/scratchFlow.ts`
   - remove the need for base64 assets (or keep it optional for backward compatibility):

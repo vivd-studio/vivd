@@ -1,9 +1,9 @@
 import express from "express";
-import { fullScrapeRouter } from "./routes/fullScrape.js";
-import { screenshotRouter } from "./routes/screenshot.js";
-import { scrapePageRouter } from "./routes/scrapePage.js";
-import { findLinksRouter } from "./routes/findLinks.js";
-import { thumbnailRouter } from "./routes/thumbnail.js";
+import { fullScrapeRouter } from "./httpRoutes/fullScrape.js";
+import { screenshotRouter } from "./httpRoutes/screenshot.js";
+import { scrapePageRouter } from "./httpRoutes/scrapePage.js";
+import { findLinksRouter } from "./httpRoutes/findLinks.js";
+import { thumbnailRouter } from "./httpRoutes/thumbnail.js";
 import { authMiddleware } from "./middleware/auth.js";
 import {
   concurrencyLimiter,

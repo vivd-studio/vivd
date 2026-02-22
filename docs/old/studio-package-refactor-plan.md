@@ -102,13 +102,13 @@ packages/studio/
 - `/packages/backend/src/devserver/*` → `DevServerService.ts`
 - `/packages/backend/src/opencode/*` → `OpencodeService.ts` (if needed)
 
-**TRPC Routers** (adapt to `packages/studio/server/routers/`):
-- `/packages/backend/src/routers/project/maintenance.ts` → `edit.ts`
+**TRPC Routers** (adapt to `packages/studio/server/trpcRouters/`):
+- `/packages/backend/src/trpcRouters/project/maintenance.ts` → `edit.ts`
   - Keep: `applyHtmlPatches`
   - Remove: admin-only utilities
-- `/packages/backend/src/routers/project/preview.ts` → `preview.ts`
+- `/packages/backend/src/trpcRouters/project/preview.ts` → `preview.ts`
   - Keep: `getPreviewInfo`, `keepAliveDevServer`, `stopDevServer`
-- Extract git operations from `/packages/backend/src/routers/project/git.ts` → `git.ts`
+- Extract git operations from `/packages/backend/src/trpcRouters/project/git.ts` → `git.ts`
   - Keep: `gitSave`, `gitHasChanges`, `gitHistory`, `gitDiscardChanges`
   - Remove: `gitLoadVersion` (version history not needed in studio)
 
@@ -328,7 +328,7 @@ export class StudioService {
 
 ### Main App TRPC Procedure
 
-**Add to `/packages/backend/src/routers/project.ts`**:
+**Add to `/packages/backend/src/trpcRouters/project.ts`**:
 ```typescript
 getStudioUrl: projectMemberProcedure
   .input(z.object({ slug: z.string(), version: z.number() }))
@@ -501,7 +501,7 @@ After extracting studio:
 
 5. Create AssetService.ts for basic file operations
 
-6. Create TRPC routers in `packages/studio/server/routers/`
+6. Create TRPC routers in `packages/studio/server/trpcRouters/`
    - edit.ts (applyPatches)
    - preview.ts (dev server)
    - git.ts (commit, push, status)
