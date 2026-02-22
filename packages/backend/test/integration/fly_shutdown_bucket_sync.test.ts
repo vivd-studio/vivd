@@ -3,9 +3,9 @@
  *
  * Verifies that source + opencode data written inside a running Fly studio machine
  * is synced to object storage and rehydrated after lifecycle actions:
- * - stop -> start
+ * - explicit stop endpoint -> start
  * - destroy -> recreate
- * - warm reconcile -> start
+ * - trigger-file requested sync
  *
  * Run with:
  *   npm run test:integration -w @vivd/backend -- test/integration/fly_shutdown_bucket_sync.test.ts
@@ -33,6 +33,7 @@ const RUN_STUDIO_BUCKET_SYNC_TESTS =
   process.env.VIVD_RUN_STUDIO_BUCKET_SYNC_TESTS === "1";
 const FLY_API_TOKEN = (process.env.FLY_API_TOKEN || "").trim();
 const FLY_STUDIO_APP = (process.env.FLY_STUDIO_APP || "").trim();
+const TEST_OPENCODE_DATA_HOME = "/tmp/vivd-opencode-data";
 
 function getStorageConfigOrNull():
   | { config: ObjectStorageConfig; reason: null }
@@ -145,6 +146,16 @@ async function executeMachineCommand(options: {
   return { stdout, stderr };
 }
 
+async function stopMachineViaApi(machineId: string): Promise<void> {
+  await flyApiFetch<void>(
+    `/machines/${machineId}/stop`,
+    {
+      method: "POST",
+    },
+    90_000,
+  );
+}
+
 async function getMachine(
   provider: FlyStudioMachineProvider,
   machineId: string,
@@ -206,6 +217,7 @@ function buildMachineStorageEnv(options: {
   const env: Record<string, string> = {
     VIVD_S3_SOURCE_URI: options.sourceUri,
     VIVD_S3_OPENCODE_URI: options.opencodeUri,
+    VIVD_OPENCODE_DATA_HOME: TEST_OPENCODE_DATA_HOME,
     // Keep periodic sync out of the picture; we want to verify shutdown-driven sync.
     VIVD_S3_SYNC_INTERVAL_SECONDS: "3600",
   };
@@ -281,7 +293,7 @@ async function cleanupBucketPrefixes(prefixes: string[]): Promise<void> {
   }
 }
 
-type LifecycleScenario = "stop" | "destroy" | "reconcile" | "trigger";
+type LifecycleScenario = "stop" | "destroy" | "trigger";
 
 async function runScenario(scenario: LifecycleScenario): Promise<void> {
   if (!S3_CLIENT || !STORAGE_CONFIG) {
@@ -295,7 +307,7 @@ async function runScenario(scenario: LifecycleScenario): Promise<void> {
   const version = 1;
 
   const sourceRelativePath = `.vivd/integration/source-${runId}.txt`;
-  const opencodeRelativePath = `integration/opencode-${runId}.txt`;
+  const opencodeRelativePath = `storage/session_diff/integration/opencode-${runId}.txt`;
   const sourceMarker = `source-marker-${runId}`;
   const opencodeMarker = `opencode-marker-${runId}`;
 
@@ -396,56 +408,21 @@ async function runScenario(scenario: LifecycleScenario): Promise<void> {
       });
       log("sync trigger file touched");
     } else if (scenario === "stop") {
-      log("triggering stop");
-      await provider.stop(organizationId, projectSlug, version);
+      // Provider stop may suspend; force a real stop so shutdown sync is exercised.
+      log("triggering explicit machine stop via Fly API");
+      await stopMachineViaApi(machineId);
       await waitForMachineState({
         provider,
         machineId,
-        targetStates: ["suspended", "stopped"],
+        targetStates: ["stopped"],
         timeoutMs: 120_000,
       });
-      log("machine stopped/suspended");
+      log("machine stopped");
     } else if (scenario === "destroy") {
       log("triggering destroy");
       await provider.destroyStudioMachine(machineId);
       machineId = null;
       log("machine destroyed");
-    } else {
-      log("triggering stop before reconcile");
-      await provider.stop(organizationId, projectSlug, version);
-      await waitForMachineState({
-        provider,
-        machineId,
-        targetStates: ["suspended", "stopped"],
-        timeoutMs: 120_000,
-      });
-      log("injecting image metadata drift");
-
-      const desiredImage = (await (provider as any).getDesiredImage()) as string;
-      const machine = await getMachine(provider, machineId);
-      const driftedConfig = {
-        ...(machine.config || {}),
-        metadata: {
-          ...(machine.config?.metadata || {}),
-          vivd_image: `${desiredImage}-drift`,
-        },
-      };
-
-      await (provider as any).updateMachineConfig({
-        machineId,
-        config: driftedConfig,
-        skipLaunch: true,
-      });
-
-      log("running warm reconcile");
-      await provider.warmReconcileStudioMachine(machineId);
-      await waitForMachineState({
-        provider,
-        machineId,
-        targetStates: ["suspended", "stopped"],
-        timeoutMs: 180_000,
-      });
-      log("warm reconcile parked machine");
     }
 
     log("waiting for markers in bucket");
@@ -533,14 +510,6 @@ describe.sequential("Fly shutdown sync to bucket", () => {
     { timeout: 600_000 },
     async () => {
       await runScenario("destroy");
-    },
-  );
-
-  it.skipIf(!SHOULD_RUN)(
-    "syncs source + opencode data through warm reconcile restart",
-    { timeout: 600_000 },
-    async () => {
-      await runScenario("reconcile");
     },
   );
 

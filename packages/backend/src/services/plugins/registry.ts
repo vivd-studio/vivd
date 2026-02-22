@@ -1,16 +1,14 @@
 import { z } from "zod";
+import {
+  contactFormPluginConfigSchema,
+  type ContactFormPluginConfig,
+} from "./contactForm/config";
 
 export const PLUGIN_IDS = ["contact_form"] as const;
 export type PluginId = (typeof PLUGIN_IDS)[number];
 
-export const contactFormPluginConfigSchema = z.object({
-  recipientEmails: z.array(z.string().email()).default([]),
-  sourceHosts: z.array(z.string().min(1)).default([]),
-  redirectHostAllowlist: z.array(z.string().min(1)).default([]),
-  honeypotField: z.string().min(1).max(64).default("_honeypot"),
-});
-
-export type ContactFormPluginConfig = z.infer<typeof contactFormPluginConfigSchema>;
+export { contactFormPluginConfigSchema };
+export type { ContactFormPluginConfig };
 
 type PluginCategory = "forms" | "marketing" | "commerce" | "utility";
 

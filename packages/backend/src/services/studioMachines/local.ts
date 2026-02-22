@@ -14,11 +14,10 @@ import type {
 import { getVersionDir } from "../../generator/versionUtils";
 import {
   createS3Client,
-  deleteBucketPrefix,
-  downloadBucketPrefixToDirectory,
+  downloadBucketPrefixToDirectoryIncremental,
   getObjectStorageConfigFromEnv,
   parseS3Uri,
-  uploadDirectoryToBucket,
+  syncDirectoryToBucketExact,
 } from "../storage/ObjectStorageService";
 import type { S3Client } from "@aws-sdk/client-s3";
 
@@ -42,7 +41,6 @@ interface StorageSyncTarget {
   localDir: string;
   excludeDirNames: string[];
   exclude?: string[];
-  exact?: boolean;
 }
 
 interface LocalObjectStorageSync {
@@ -221,6 +219,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   kind = "local" as const;
 
   private studios = new Map<string, StudioProcess>();
+  private inflightStarts = new Map<string, Promise<StudioMachineStartResult>>();
   private nextPort = STUDIO_PORT_START;
   private cleanupInterval: NodeJS.Timeout | null = null;
   private studioBuildPromise: Promise<void> | null = null;
@@ -248,6 +247,24 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       };
     }
 
+    const inflight = this.inflightStarts.get(key);
+    if (inflight) {
+      return await inflight;
+    }
+
+    const startPromise = this.ensureRunningInner(args, key).finally(() => {
+      if (this.inflightStarts.get(key) === startPromise) {
+        this.inflightStarts.delete(key);
+      }
+    });
+    this.inflightStarts.set(key, startPromise);
+    return await startPromise;
+  }
+
+  private async ensureRunningInner(
+    args: StudioMachineStartArgs,
+    key: string
+  ): Promise<StudioMachineStartResult> {
     if (this.studios.size >= MAX_STUDIOS) {
       console.log(`[StudioMachine] At max limit (${MAX_STUDIOS}), evicting...`);
       this.stopOldestStudio();
@@ -384,6 +401,15 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   async restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
     // Local studios run as child processes; restarting guarantees a fresh
     // object-storage hydration on the next boot when bucket sync is enabled.
+    const key = this.key(args.organizationId, args.projectSlug, args.version);
+    const inflight = this.inflightStarts.get(key);
+    if (inflight) {
+      try {
+        await inflight;
+      } catch {
+        // Ignore startup errors; restart will attempt a clean boot below.
+      }
+    }
     await this.stop(args.organizationId, args.projectSlug, args.version);
     return this.ensureRunning(args);
   }
@@ -435,6 +461,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       }
     }
     this.studios.clear();
+    this.inflightStarts.clear();
   }
 
   private getPublicUrl(port: number): string {
@@ -545,8 +572,6 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         excludeDirNames: ["node_modules", "opencode-data", "dist", ".astro"],
         // Artifact build metadata is uploaded separately; don't overwrite it with stale workspace copies.
         exclude: [".vivd/build.json", ".git/index.lock"],
-        // Keep source bucket in exact sync so deleted files don't reappear on hydrate.
-        exact: true,
       },
       {
         name: "opencode",
@@ -554,8 +579,6 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         keyPrefix: opencodeStorageKeyPrefix,
         localDir: opencodeStorageDir,
         excludeDirNames: [],
-        // Keep OpenCode storage prefix exact so stale state is removed.
-        exact: true,
       },
     ];
 
@@ -582,7 +605,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         `[StudioMachine] Hydrating ${target.name} for ${projectSlug}/v${version} from s3://${target.bucket}/${trimSlashes(target.keyPrefix)}`
       );
 
-      const result = await downloadBucketPrefixToDirectory({
+      const result = await downloadBucketPrefixToDirectoryIncremental({
         client: sync.client,
         bucket: target.bucket,
         keyPrefix: target.keyPrefix,
@@ -602,7 +625,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         }
       } else {
         console.log(
-          `[StudioMachine] ${target.name} hydration completed (${result.filesDownloaded} files, ${result.bytesDownloaded} bytes) for ${projectSlug}/v${version}`
+          `[StudioMachine] ${target.name} hydration completed (${result.filesDownloaded} downloaded, ${result.filesSkipped} skipped, ${result.filesDeleted} deleted, ${result.bytesDownloaded} bytes downloaded) for ${projectSlug}/v${version}`
         );
       }
     }
@@ -647,15 +670,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     const run = (async () => {
       for (const target of sync.targets) {
-        if (target.exact) {
-          await deleteBucketPrefix({
-            client: sync.client,
-            bucket: target.bucket,
-            keyPrefix: target.keyPrefix,
-          });
-        }
-
-        const result = await uploadDirectoryToBucket({
+        const result = await syncDirectoryToBucketExact({
           client: sync.client,
           bucket: target.bucket,
           localDir: target.localDir,
@@ -676,7 +691,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
           }
         } else if (reason === "final") {
           console.log(
-            `[StudioMachine] Final ${target.name} sync completed (${result.filesUploaded} files, ${result.bytesUploaded} bytes) for ${projectSlug}/v${version}`
+            `[StudioMachine] Final ${target.name} sync completed (${result.filesUploaded} uploaded, ${result.filesDeleted} deleted, ${result.filesUnchanged} unchanged, ${result.bytesUploaded} bytes uploaded) for ${projectSlug}/v${version}`
           );
         }
       }

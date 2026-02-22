@@ -22,6 +22,17 @@ interface PageInfo {
 }
 
 function getPageInfo(pathname: string): PageInfo {
+  const projectPluginsMatch = pathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)\/plugins$/,
+  );
+  if (projectPluginsMatch) {
+    return {
+      title: "Plugins",
+      isProjectPage: false,
+      projectSlug: projectPluginsMatch[1],
+    };
+  }
+
   // Check for project page: /vivd-studio/projects/:slug
   const projectMatch = pathname.match(/^\/vivd-studio\/projects\/([^/]+)$/);
   if (projectMatch) {

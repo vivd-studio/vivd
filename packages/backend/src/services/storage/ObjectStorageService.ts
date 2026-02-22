@@ -7,6 +7,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -28,6 +29,21 @@ let signedUrlStorageCache:
   | { client: S3Client; bucket: string }
   | null
   | undefined;
+
+const SYNC_MANIFEST_FILENAME = ".vivd-sync-manifest.json";
+const SYNC_MANIFEST_VERSION = 1;
+
+type SyncManifestEntry = {
+  relPath: string;
+  size: number;
+  sha256: string;
+};
+
+type SyncManifest = {
+  version: number;
+  generatedAt: string;
+  files: SyncManifestEntry[];
+};
 
 function getPublicObjectBaseUrl(env: EnvMap = process.env): string | null {
   if (publicBaseUrlCache !== undefined) return publicBaseUrlCache;
@@ -249,6 +265,83 @@ async function mapLimit<T>(
   await Promise.all(runners);
 }
 
+async function sha256File(filePath: string): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+async function listBucketObjects(options: {
+  client: S3Client;
+  bucket: string;
+  keyPrefix: string;
+}): Promise<Array<{ key: string; size: number }>> {
+  const results: Array<{ key: string; size: number }> = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const page = await options.client.send(
+      new ListObjectsV2Command({
+        Bucket: options.bucket,
+        Prefix: options.keyPrefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    for (const object of page.Contents ?? []) {
+      const key = object.Key;
+      if (!key || key.endsWith("/")) continue;
+      results.push({ key, size: object.Size ?? 0 });
+    }
+
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return results;
+}
+
+function getSyncManifestKey(keyPrefix: string): string {
+  return `${normalizeKeyPrefix(keyPrefix)}${SYNC_MANIFEST_FILENAME}`;
+}
+
+function parseSyncManifest(raw: Buffer): SyncManifest | null {
+  try {
+    const parsed = JSON.parse(raw.toString("utf-8")) as Partial<SyncManifest>;
+    if (parsed.version !== SYNC_MANIFEST_VERSION) return null;
+    if (!Array.isArray(parsed.files)) return null;
+
+    const files = parsed.files
+      .filter((entry): entry is SyncManifestEntry => {
+        if (!entry || typeof entry !== "object") return false;
+        if (typeof entry.relPath !== "string") return false;
+        if (!entry.relPath.trim()) return false;
+        if (!Number.isFinite(entry.size) || entry.size < 0) return false;
+        if (typeof entry.sha256 !== "string" || !entry.sha256.trim()) return false;
+        return true;
+      })
+      .map((entry) => ({
+        relPath: entry.relPath.replace(/^\/+/, ""),
+        size: entry.size,
+        sha256: entry.sha256.toLowerCase(),
+      }));
+
+    return {
+      version: SYNC_MANIFEST_VERSION,
+      generatedAt:
+        typeof parsed.generatedAt === "string" && parsed.generatedAt.trim()
+          ? parsed.generatedAt
+          : new Date(0).toISOString(),
+      files,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadDirectoryToBucket(options: {
   client: S3Client;
   bucket: string;
@@ -301,6 +394,209 @@ export async function uploadDirectoryToBucket(options: {
   });
 
   return { filesUploaded, bytesUploaded, errors };
+}
+
+export async function syncDirectoryToBucketExact(options: {
+  client: S3Client;
+  bucket: string;
+  localDir: string;
+  keyPrefix: string;
+  excludeDirNames?: string[];
+  exclude?: string[];
+  concurrency?: number;
+}): Promise<{
+  filesUploaded: number;
+  filesDeleted: number;
+  filesUnchanged: number;
+  bytesUploaded: number;
+  errors: Array<{ file: string; key: string; error: string }>;
+}> {
+  const excludeDirNames = new Set(options.excludeDirNames ?? []);
+  const excludedPrefixes = normalizeExcludedPrefixes(options.exclude);
+  const keyPrefix = normalizeKeyPrefix(options.keyPrefix);
+  const bucket = options.bucket.trim();
+  const manifestKey = getSyncManifestKey(keyPrefix);
+
+  const files = await listFilesRecursively({
+    rootDir: options.localDir,
+    excludeDirNames,
+  });
+  const localFilesByKey = new Map<
+    string,
+    { absPath: string; relPath: string; size: number; posixRelPath: string }
+  >();
+
+  for (const file of files) {
+    const posixRelPath = toPosixPath(file.relPath);
+    if (isExcludedByPrefix(posixRelPath, excludedPrefixes)) continue;
+    const key = `${keyPrefix}${posixRelPath}`;
+    localFilesByKey.set(key, {
+      absPath: file.absPath,
+      relPath: file.relPath,
+      size: file.size,
+      posixRelPath,
+    });
+  }
+
+  const remoteObjectsAll = await listBucketObjects({
+    client: options.client,
+    bucket,
+    keyPrefix,
+  });
+  const remoteObjects = remoteObjectsAll.filter((obj) => obj.key !== manifestKey);
+  const remoteByKey = new Map(remoteObjects.map((obj) => [obj.key, obj]));
+  const keysToDelete = remoteObjects
+    .map((obj) => obj.key)
+    .filter((key) => !localFilesByKey.has(key));
+
+  let filesDeleted = 0;
+  const errors: Array<{ file: string; key: string; error: string }> = [];
+  const manifestEntries: SyncManifestEntry[] = [];
+
+  for (let i = 0; i < keysToDelete.length; i += 1000) {
+    const batch = keysToDelete.slice(i, i + 1000);
+    if (batch.length === 0) continue;
+
+    try {
+      const response = await options.client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Objects: batch.map((Key) => ({ Key })),
+            Quiet: false,
+          },
+        }),
+      );
+
+      filesDeleted += response.Deleted?.length ?? batch.length;
+      for (const entry of response.Errors ?? []) {
+        const key = entry.Key || "";
+        errors.push({
+          file: key,
+          key,
+          error: entry.Message || "Failed to delete object",
+        });
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      for (const key of batch) {
+        errors.push({ file: key, key, error });
+      }
+    }
+  }
+
+  let filesUploaded = 0;
+  let filesUnchanged = 0;
+  let bytesUploaded = 0;
+  const localDigestCache = new Map<string, Promise<string>>();
+  const getLocalDigest = async (absPath: string): Promise<string> => {
+    let digestPromise = localDigestCache.get(absPath);
+    if (!digestPromise) {
+      digestPromise = sha256File(absPath);
+      localDigestCache.set(absPath, digestPromise);
+    }
+    return await digestPromise;
+  };
+
+  await mapLimit(
+    Array.from(localFilesByKey.entries()),
+    options.concurrency ?? 6,
+    async ([key, file]) => {
+      const remote = remoteByKey.get(key);
+      let shouldUpload = true;
+      let localDigest: string | null = null;
+
+      if (remote && remote.size === file.size) {
+        try {
+          const head = await options.client.send(
+            new HeadObjectCommand({
+              Bucket: bucket,
+              Key: key,
+            }),
+          );
+          const metadata = head.Metadata ?? {};
+          const remoteDigest = metadata["vivd-sha256"] || metadata["vivd_sha256"];
+          if (remoteDigest) {
+            localDigest = await getLocalDigest(file.absPath);
+            if (localDigest === remoteDigest.toLowerCase()) {
+              shouldUpload = false;
+            }
+          }
+        } catch {
+          // Fall back to upload.
+        }
+      }
+
+      if (!shouldUpload) {
+        filesUnchanged++;
+        manifestEntries.push({
+          relPath: file.posixRelPath,
+          size: file.size,
+          sha256: localDigest ?? (await getLocalDigest(file.absPath)),
+        });
+        return;
+      }
+
+      try {
+        const digest = localDigest ?? (await getLocalDigest(file.absPath));
+        await options.client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: fs.createReadStream(file.absPath),
+            ContentLength: file.size,
+            Metadata: {
+              "vivd-sha256": digest,
+            },
+          }),
+        );
+        manifestEntries.push({
+          relPath: file.posixRelPath,
+          size: file.size,
+          sha256: digest,
+        });
+        filesUploaded++;
+        bytesUploaded += file.size;
+      } catch (err) {
+        errors.push({
+          file: file.relPath,
+          key,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  );
+
+  try {
+    const manifest: SyncManifest = {
+      version: SYNC_MANIFEST_VERSION,
+      generatedAt: new Date().toISOString(),
+      files: manifestEntries.sort((a, b) => a.relPath.localeCompare(b.relPath)),
+    };
+    await options.client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: manifestKey,
+        Body: Buffer.from(`${JSON.stringify(manifest)}\n`, "utf-8"),
+        ContentType: "application/json",
+      }),
+    );
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    errors.push({
+      file: SYNC_MANIFEST_FILENAME,
+      key: manifestKey,
+      error,
+    });
+  }
+
+  return {
+    filesUploaded,
+    filesDeleted,
+    filesUnchanged,
+    bytesUploaded,
+    errors,
+  };
 }
 
 function isPathInside(baseDir: string, target: string): boolean {
@@ -466,6 +762,171 @@ export async function downloadBucketPrefixToDirectory(options: {
   });
 
   return { filesDownloaded, bytesDownloaded, errors };
+}
+
+export async function downloadBucketPrefixToDirectoryIncremental(options: {
+  client: S3Client;
+  bucket: string;
+  keyPrefix: string;
+  localDir: string;
+  excludeDirNames?: string[];
+  concurrency?: number;
+}): Promise<{
+  filesDownloaded: number;
+  filesSkipped: number;
+  filesDeleted: number;
+  bytesDownloaded: number;
+  errors: Array<{ key: string; file: string; error: string }>;
+}> {
+  const bucket = options.bucket.trim();
+  const keyPrefix = normalizeKeyPrefix(options.keyPrefix);
+  const rootDir = path.resolve(options.localDir);
+  const excludedDirNames = new Set(options.excludeDirNames ?? []);
+  const manifestKey = getSyncManifestKey(keyPrefix);
+
+  await fs.promises.mkdir(rootDir, { recursive: true });
+
+  const remoteObjectsAll = await listBucketObjects({
+    client: options.client,
+    bucket,
+    keyPrefix,
+  });
+  const hasManifest = remoteObjectsAll.some((object) => object.key === manifestKey);
+  const remoteObjects = remoteObjectsAll.filter((object) => object.key !== manifestKey);
+
+  const manifestByRelPath = new Map<string, SyncManifestEntry>();
+  const errors: Array<{ key: string; file: string; error: string }> = [];
+
+  if (hasManifest) {
+    try {
+      const manifestObject = await getObjectBuffer({
+        client: options.client,
+        bucket,
+        key: manifestKey,
+      });
+      const manifest = parseSyncManifest(manifestObject.buffer);
+      if (!manifest) {
+        errors.push({
+          key: manifestKey,
+          file: SYNC_MANIFEST_FILENAME,
+          error: "Invalid sync manifest format",
+        });
+      } else {
+        for (const entry of manifest.files) {
+          manifestByRelPath.set(entry.relPath, entry);
+        }
+      }
+    } catch (err) {
+      errors.push({
+        key: manifestKey,
+        file: SYNC_MANIFEST_FILENAME,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const remoteFiles: Array<{ key: string; relPath: string; size: number }> = [];
+  const expectedRelPaths = new Set<string>();
+
+  for (const object of remoteObjects) {
+    const relPathRaw = object.key.startsWith(keyPrefix)
+      ? object.key.slice(keyPrefix.length)
+      : object.key;
+    const relPath = relPathRaw.replace(/^\/+/, "");
+    if (!relPath) continue;
+    if (isExcludedPath(relPath, excludedDirNames)) continue;
+
+    const destPath = path.resolve(rootDir, relPath);
+    if (!isPathInside(rootDir, destPath)) {
+      errors.push({
+        key: object.key,
+        file: relPath,
+        error: "Path traversal detected; skipped download",
+      });
+      continue;
+    }
+
+    expectedRelPaths.add(toPosixPath(relPath));
+    remoteFiles.push({
+      key: object.key,
+      relPath,
+      size: object.size,
+    });
+  }
+
+  let filesDeleted = 0;
+  const localFiles = await listFilesRecursively({
+    rootDir,
+    excludeDirNames: excludedDirNames,
+  });
+
+  for (const localFile of localFiles) {
+    const relPath = toPosixPath(localFile.relPath);
+    if (expectedRelPaths.has(relPath)) continue;
+    try {
+      await fs.promises.rm(localFile.absPath, { force: true });
+      filesDeleted++;
+    } catch (err) {
+      errors.push({
+        key: `${keyPrefix}${relPath}`,
+        file: relPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  let filesDownloaded = 0;
+  let filesSkipped = 0;
+  let bytesDownloaded = 0;
+
+  await mapLimit(remoteFiles, options.concurrency ?? 6, async (remoteFile) => {
+    const relPathPosix = toPosixPath(remoteFile.relPath);
+    const destPath = path.resolve(rootDir, remoteFile.relPath);
+    if (!isPathInside(rootDir, destPath)) {
+      errors.push({
+        key: remoteFile.key,
+        file: relPathPosix,
+        error: "Path traversal detected; skipped download",
+      });
+      return;
+    }
+
+    const manifestEntry = manifestByRelPath.get(relPathPosix);
+    if (manifestEntry && manifestEntry.size === remoteFile.size) {
+      try {
+        const stat = await fs.promises.stat(destPath);
+        if (stat.isFile() && stat.size === remoteFile.size) {
+          const localDigest = await sha256File(destPath);
+          if (localDigest === manifestEntry.sha256.toLowerCase()) {
+            filesSkipped++;
+            return;
+          }
+        }
+      } catch {
+        // Missing/unreadable local file; fall back to download.
+      }
+    }
+
+    try {
+      const response = await options.client.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: remoteFile.key,
+        }),
+      );
+      await writeObjectBodyToFile(response.Body, destPath);
+      filesDownloaded++;
+      bytesDownloaded += response.ContentLength ?? remoteFile.size;
+    } catch (err) {
+      errors.push({
+        key: remoteFile.key,
+        file: relPathPosix,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  return { filesDownloaded, filesSkipped, filesDeleted, bytesDownloaded, errors };
 }
 
 export async function doesObjectExist(options: {

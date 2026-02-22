@@ -103,6 +103,32 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
+## Local CI Run
+
+You can run a CI-like local check from repo root:
+
+```bash
+npm run ci:local
+```
+
+Optional tiers:
+
+```bash
+# Skip lint and run tests only
+npm run ci:local:tests
+
+# Include DB + bucket integration tests
+npm run ci:local:integration
+
+# Include builds + DB + bucket integration tests
+npm run ci:local:full
+
+# Include Fly integration tests as well
+npm run ci:local:fly
+```
+
+All variants load `.env` / `.env.local` before running. Integration tiers require the relevant env vars (DB, object storage, Fly/OpenCode) to be configured.
+
 ## Self-Hosting
 
 vivd can be self-hosted using Docker Compose:

@@ -11,6 +11,7 @@ export const PROJECT_ACTIONS = [
   "originalWebsite",
   "downloadZip",
   "regenerateThumbnail",
+  "plugins",
   "manageVersions",
   "publish",
   "deleteProject",

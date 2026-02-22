@@ -27,23 +27,13 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 
 ## OpenCode Studio Tools
 
-- Use OpenCode custom tools to provide agent capabilities that are not available via built-in tools (plugin operations, Vivd workflows, external integrations, structured project automation).
-- Target tool namespace: `vivd_plugins_*` for custom Vivd capabilities exposed to the agent; bootstrap `vivd_test` has been retired.
-- Implementation location: `packages/studio/server/opencode/serverManager.ts` provisions tool files into Studio runtime global tools at `~/.config/opencode/tools/` before `opencode serve` starts.
-- Tool registry/module location: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
-- Initial plugin tools:
-  - `vivd_plugins_catalog` → list plugin catalog + enabled instances for current project.
-  - `vivd_plugins_contact_info` → return contact-form plugin status, token/snippets (if enabled), and implementation instructions.
-- Backend capability surface for these tools lives in `packages/backend/src/routers/plugins.ts` and `packages/backend/src/services/plugins/ProjectPluginService.ts`.
-- Public website-facing plugin runtime endpoints should use `https://api.vivd.studio/plugins/...` (or `VIVD_PUBLIC_PLUGIN_API_BASE_URL` override) via `packages/backend/src/services/plugins/publicApi.ts`; internal authenticated management stays on backend tRPC (`/vivd-studio/api/trpc/...`).
-- Conditional tool enable/disable is policy-driven at Studio startup:
-  - env overrides: `VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS` (JSON booleans),
-  - context envs passed from backend: `VIVD_ORGANIZATION_ROLE`, `VIVD_ENABLED_PLUGINS`,
-  - merged into OpenCode config tool toggles via `packages/studio/server/opencode/configPolicy.ts`.
-- When adding a tool:
-  1. Add a typed tool module under `packages/studio/server/opencode/toolModules/` and register it in `packages/studio/server/opencode/toolRegistry.ts` with a stable name (prefer `vivd_plugins_<action>` for plugin tools).
-  2. In tool `execute`, implement only the minimum required capability path (backend API, local workspace logic, or external API), and use connected-mode auth/scope envs when calling Vivd backend (`MAIN_BACKEND_URL`, `SESSION_TOKEN`, `VIVD_TENANT_ID`, `VIVD_PROJECT_SLUG`).
-  3. Keep outputs safe (no secrets), return concise structured text, then verify the tool is callable by the agent in connected mode.
+- Purpose: expose custom Vivd capabilities to the agent (namespace `vivd_plugins_*`).
+- Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
+- Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
+- Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`.
+- Backend surface for plugin tools: `packages/backend/src/routers/plugins.ts` + `packages/backend/src/services/plugins/ProjectPluginService.ts`.
+- Tool gating is centralized in `packages/studio/server/opencode/configPolicy.ts` via `VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS`, plus role/plugin context envs.
+- Adding a tool: add typed module, register in tool registry, keep `execute` minimal and safe, and verify in connected mode.
 
 ## Generated Sites
 
@@ -59,10 +49,18 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - `docker-compose.yml`: base stack.
 - `docker-compose.override.yml`: local dev overrides.
-- `docker-compose.self-hosted.yml`: self-hosted production compose (`SAAS_MODE=false`, GHCR images).
+- `docker-compose.prod.yml`: production compose variant.
 - Local URLs via Caddy:
   - Studio/control-plane route: `http://localhost/vivd-studio`
   - Published-site host: `http://localhost/`
+  - Public plugin API host (dev): `http://api.localhost` (`/plugins/*` → backend)
+- For local public-plugin URL generation, set `VIVD_PUBLIC_PLUGIN_API_BASE_URL=http://api.localhost` (default is `https://api.vivd.studio`).
+- For staged/prod public plugin host routing in Caddy, set `VIVD_PUBLIC_PLUGIN_API_HOST` (default `api.vivd.studio`).
+
+## Studio Machines (Prod)
+
+- In production, Studio runtimes run on Fly Machines.
+- Machines are started/reused per project (scoped by organization + project slug) via backend orchestration.
 
 ## DB / Migrations
 

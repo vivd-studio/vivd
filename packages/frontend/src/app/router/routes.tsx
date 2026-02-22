@@ -10,6 +10,7 @@ import EmbeddedStudio from "@/pages/EmbeddedStudio";
 import StudioFullscreen from "@/pages/StudioFullscreen";
 import ScratchWizard from "@/pages/ScratchWizard";
 import NoProjectAssigned from "@/pages/NoProjectAssigned";
+import ProjectPlugins from "@/pages/ProjectPlugins";
 import { Layout } from "@/components/shell";
 import { SingleProjectModeHandler } from "@/components/projects";
 import { authClient } from "@/lib/auth-client";
@@ -53,6 +54,14 @@ function EmbeddedStudioRoute() {
   return (
     <RequireAssignedProject>
       <EmbeddedStudio />
+    </RequireAssignedProject>
+  );
+}
+
+function ProjectPluginsRoute() {
+  return (
+    <RequireAssignedProject>
+      <ProjectPlugins />
     </RequireAssignedProject>
   );
 }
@@ -214,6 +223,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         />
         {/* Embedded studio view inside Layout */}
         <Route path="projects/:projectSlug" element={<EmbeddedStudioRoute />} />
+        <Route path="projects/:projectSlug/plugins" element={<ProjectPluginsRoute />} />
       </Route>
 
       {/* Fullscreen project view (no layout chrome) */}

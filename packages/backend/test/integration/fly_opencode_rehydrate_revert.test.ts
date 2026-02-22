@@ -386,6 +386,23 @@ describe.sequential("Fly OpenCode rehydrate + revert", () => {
           accessToken: start.accessToken,
         });
 
+        await executeMachineCommand({
+          machineId,
+          timeoutSeconds: 60,
+          command: [
+            "/bin/sh",
+            "-lc",
+            [
+              "set -eu",
+              "workspace_file=\"$VIVD_WORKSPACE_DIR/index.html\"",
+              "mkdir -p \"$VIVD_WORKSPACE_DIR\"",
+              "if [ ! -f \"$workspace_file\" ]; then",
+              "  printf '%s' '<!doctype html><html><body><h1>Vivd</h1></body></html>' > \"$workspace_file\"",
+              "fi",
+            ].join("\n"),
+          ],
+        });
+
         const initialRead = await executeMachineCommand({
           machineId,
           timeoutSeconds: 60,

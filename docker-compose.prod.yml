@@ -9,6 +9,8 @@ services:
       - caddy_sites:/etc/caddy/sites.d
       - caddy_caddyfile:/etc/caddy_shared
       - published_sites:/srv/published:ro
+    environment:
+      - VIVD_PUBLIC_PLUGIN_API_HOST=${VIVD_PUBLIC_PLUGIN_API_HOST:-api.vivd.studio}
     depends_on:
       - backend
     networks:
@@ -38,6 +40,7 @@ services:
       - CONTROL_PLANE_HOST=${CONTROL_PLANE_HOST:-}
       - SUPERADMIN_HOSTS=${SUPERADMIN_HOSTS:-}
       - BACKEND_URL=${BACKEND_URL:-}
+      - VIVD_PUBLIC_PLUGIN_API_BASE_URL=${VIVD_PUBLIC_PLUGIN_API_BASE_URL:-}
       - PUBLISHED_DIR=/srv/published
       - CADDY_SITES_DIR=/etc/caddy/sites.d
       - CADDY_ADMIN_URL=http://caddy:2019

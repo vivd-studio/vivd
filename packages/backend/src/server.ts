@@ -36,6 +36,8 @@ import { projectMetaService } from "./services/project/ProjectMetaService";
 import { getInternalPreviewAccessToken } from "./config/preview";
 import { domainService } from "./services/publish/DomainService";
 import { startStudioMachineReconciler } from "./services/studioMachines";
+import { createPublicPluginsRouter } from "./routes/plugins";
+import { startContactSubmissionRetentionJob } from "./services/plugins/contactForm/retention";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1113,6 +1115,9 @@ app.get("/vivd-studio/api/download/:slug/:version", async (req, res) => {
 // Import Projects endpoint(s)
 app.use("/vivd-studio/api", createImportRouter({ auth, upload: zipImportUpload }));
 
+// Public plugin runtime endpoints
+app.use(createPublicPluginsRouter({ upload }));
+
 // tRPC
 app.use(
   "/vivd-studio/api/trpc",
@@ -1138,8 +1143,13 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
 
   startStudioMachineReconciler();
+  const stopContactSubmissionRetention = startContactSubmissionRetentionJob();
+  let hasShutdown = false;
 
   const cleanup = () => {
+    if (hasShutdown) return;
+    hasShutdown = true;
+    stopContactSubmissionRetention();
     console.log("[Server] Shutting down...");
   };
 

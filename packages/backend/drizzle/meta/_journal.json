@@ -99,6 +99,13 @@
       "when": 1771687908012,
       "tag": "0013_abnormal_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1771700000000,
+      "tag": "0014_public_token_hash_compat",
+      "breakpoints": true
     }
   ]
 }

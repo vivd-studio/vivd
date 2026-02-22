@@ -14,6 +14,21 @@
 # Import all dynamically-generated site configs
 import /etc/caddy/sites.d/*.caddy
 
+# Public plugin API host
+api.localhost {
+    handle /plugins/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /health {
+        respond "OK" 200
+    }
+
+    handle {
+        respond "Not found" 404
+    }
+}
+
 # Default server - handles studio routes and fallback
 :80 {
     # Vivd Studio API routes - proxy to backend

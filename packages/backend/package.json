@@ -28,6 +28,7 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.983.0",
+    "@aws-sdk/client-sesv2": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.985.0",
     "@openrouter/sdk": "^0.2.9",
     "@trpc/server": "^11.7.2",

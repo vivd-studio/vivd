@@ -36,6 +36,7 @@ import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import { ROUTES } from "@/app/router";
 import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
@@ -511,6 +512,12 @@ export function ProjectCard({
                 {regenerateThumbnailMutation.isPending
                   ? "Regenerating thumbnail..."
                   : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}
+              >
+                <Settings2 className="w-4 h-4 mr-2" />
+                Plugins
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

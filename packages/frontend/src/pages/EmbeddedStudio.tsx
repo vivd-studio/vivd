@@ -195,6 +195,7 @@ export default function EmbeddedStudio() {
 
   const handleEdit = () => {
     if (!projectSlug || !project) return;
+    if (editRequested || startStudio.isPending || hardRestartStudio.isPending) return;
     setEditRequested(true);
     setStudioUrlOverride(null);
     setStudioAccessTokenOverride(null);
@@ -323,6 +324,12 @@ export default function EmbeddedStudio() {
       }
       if (event.data?.type === "vivd:studio:fullscreen") {
         navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${studioVersion}`);
+      }
+      if (event.data?.type === "vivd:studio:navigate") {
+        const path = event.data?.path;
+        if (typeof path === "string" && path.startsWith("/")) {
+          navigate(path);
+        }
       }
       if (event.data?.type === "vivd:studio:theme") {
         setStudioReady(true);
@@ -581,7 +588,14 @@ export default function EmbeddedStudio() {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="flex-1" />
-          {!editRequested ? <Button onClick={handleEdit}>Edit</Button> : null}
+          {!editRequested ? (
+            <Button
+              onClick={handleEdit}
+              disabled={startStudio.isPending || hardRestartStudio.isPending}
+            >
+              Edit
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             onClick={() => setPublishDialogOpen(true)}
@@ -666,6 +680,11 @@ export default function EmbeddedStudio() {
                 {regenerateThumbnailMutation.isPending
                   ? "Regenerating thumbnail..."
                   : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
+              >
+                Plugins
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

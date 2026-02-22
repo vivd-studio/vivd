@@ -323,6 +323,13 @@ export default function ProjectFullscreen() {
         navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${version}`);
         return;
       }
+      if (type === "vivd:studio:navigate") {
+        const path = event.data?.path;
+        if (typeof path === "string" && path.startsWith("/")) {
+          navigate(path);
+          return;
+        }
+      }
       if (type === "vivd:studio:theme") {
         setStudioReady(true);
         const nextTheme = event.data?.theme;
@@ -613,6 +620,11 @@ export default function ProjectFullscreen() {
                 {regenerateThumbnailMutation.isPending
                   ? "Regenerating thumbnail..."
                   : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
+              >
+                Plugins
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

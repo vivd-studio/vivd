@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Rocket,
   RotateCcw,
+  Settings2,
   Trash2,
 } from "lucide-react";
 import {
@@ -145,6 +146,21 @@ export function QuickActions({
     if (!projectSlug) return;
     const origin = getHostAppOrigin();
     const url = `${origin}/vivd-studio/api/download/${encodeURIComponent(projectSlug)}/${selectedVersion}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleOpenPlugins = () => {
+    if (!projectSlug) return;
+    const pluginsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/plugins`;
+    if (embedded) {
+      window.parent?.postMessage(
+        { type: "vivd:studio:navigate", path: pluginsPath },
+        "*",
+      );
+      return;
+    }
+    const origin = getHostAppOrigin();
+    const url = new URL(pluginsPath, origin).toString();
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -277,6 +293,10 @@ export function QuickActions({
                   View Original Website
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={handleOpenPlugins}>
+                <Settings2 className="w-4 h-4 mr-2" />
+                Plugins
+              </DropdownMenuItem>
             </>
           )}
           {previewMode === "devserver" && projectSlug && handleRestartDevServer && (

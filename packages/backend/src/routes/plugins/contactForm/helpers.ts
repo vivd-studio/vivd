@@ -1,0 +1,80 @@
+interface SourceHeaders {
+  origin?: string | null;
+  referer?: string | null;
+}
+
+function normalizeHostInput(input: string): string {
+  return input.trim().toLowerCase();
+}
+
+function stripDefaultPorts(host: string): string {
+  if (host.endsWith(":80")) return host.slice(0, -3);
+  if (host.endsWith(":443")) return host.slice(0, -4);
+  return host;
+}
+
+export function normalizeHostCandidate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const normalized = normalizeHostInput(raw);
+  if (!normalized) return null;
+
+  const candidate = normalized.includes("://") ? normalized : `https://${normalized}`;
+  try {
+    const host = new URL(candidate).host;
+    if (!host) return null;
+    return stripDefaultPorts(host);
+  } catch {
+    return null;
+  }
+}
+
+export function extractSourceHostFromHeaders(headers: SourceHeaders): string | null {
+  const originHost = normalizeHostCandidate(headers.origin);
+  if (originHost) return originHost;
+
+  const refererHost = normalizeHostCandidate(headers.referer);
+  if (refererHost) return refererHost;
+
+  return null;
+}
+
+export function isHostAllowed(
+  sourceHost: string | null,
+  allowlist: string[],
+): boolean {
+  if (allowlist.length === 0) return true;
+  if (!sourceHost) return false;
+
+  const normalizedSourceHost = normalizeHostCandidate(sourceHost);
+  if (!normalizedSourceHost) return false;
+  const sourceHostname = normalizedSourceHost.split(":")[0];
+
+  for (const allowedHost of allowlist) {
+    const normalizedAllowed = normalizeHostCandidate(allowedHost);
+    if (!normalizedAllowed) continue;
+    if (normalizedAllowed === normalizedSourceHost) return true;
+    if (normalizedAllowed.split(":")[0] === sourceHostname) return true;
+  }
+
+  return false;
+}
+
+export function resolveRedirectTarget(
+  rawRedirect: string | null | undefined,
+  allowlist: string[],
+): string | null {
+  if (!rawRedirect) return null;
+  if (allowlist.length === 0) return null;
+
+  const candidate = rawRedirect.trim();
+  if (!candidate) return null;
+
+  try {
+    const parsed = new URL(candidate);
+    const host = normalizeHostCandidate(parsed.host);
+    if (!isHostAllowed(host, allowlist)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}

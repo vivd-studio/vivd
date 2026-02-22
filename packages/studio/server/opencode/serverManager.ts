@@ -92,7 +92,6 @@ async function ensureVivdOpencodeToolsInstalled(): Promise<void> {
     }
 
     const legacyManagedFiles = new Set([
-      "vivd_test.ts",
       "vivd_plugins_contact_ensure.ts",
       "vivd_plugins_contact_snippet.ts",
     ]);

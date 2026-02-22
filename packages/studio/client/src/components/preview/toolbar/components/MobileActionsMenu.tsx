@@ -29,6 +29,7 @@ import {
   Moon,
   Rocket,
   RefreshCw,
+  Settings2,
   Smartphone,
   Sun,
   Trash2,
@@ -200,6 +201,21 @@ export function MobileActionsMenu({
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const handleOpenPlugins = () => {
+    if (!projectSlug) return;
+    const pluginsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/plugins`;
+    if (embedded) {
+      window.parent?.postMessage(
+        { type: "vivd:studio:navigate", path: pluginsPath },
+        "*",
+      );
+      return;
+    }
+    const origin = getHostAppOrigin();
+    const url = new URL(pluginsPath, origin).toString();
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <>
     <DropdownMenu>
@@ -367,6 +383,10 @@ export function MobileActionsMenu({
               {hasGitChanges && (
                 <span className="ml-auto h-2 w-2 bg-amber-500 rounded-full" />
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleOpenPlugins}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Plugins
             </DropdownMenuItem>
             {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}
             {isConnectedMode && (
