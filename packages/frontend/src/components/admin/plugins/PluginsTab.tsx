@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type ChangeEvent, useMemo, useState } from "react";
 import { Loader2, Plug, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
@@ -56,6 +56,8 @@ type ProjectAccessRow = {
   pluginRows: ConsolidatedPluginRow[];
   updatedAt: Date | string | null;
 };
+
+const PROJECT_PAGE_SIZE = 100;
 
 const SUPERADMIN_PLUGIN_LIST: ReadonlyArray<PluginListConfig> = [
   {
@@ -180,6 +182,7 @@ function ProjectsPluginAccessPanel() {
   const utils = trpc.useUtils();
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<AccessStateFilter>("all");
+  const [page, setPage] = useState(1);
 
   const queryInput = useMemo(
     () => ({
@@ -316,9 +319,25 @@ function ProjectsPluginAccessPanel() {
 
   const isLoading = contactFormListQuery.isLoading || analyticsListQuery.isLoading;
   const isFetching = contactFormListQuery.isFetching || analyticsListQuery.isFetching;
+  const totalProjects = projectRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalProjects / PROJECT_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStartIndex = (currentPage - 1) * PROJECT_PAGE_SIZE;
+  const pageEndIndex = pageStartIndex + PROJECT_PAGE_SIZE;
+  const pagedProjectRows = projectRows.slice(pageStartIndex, pageEndIndex);
 
   const refreshAll = async () => {
     await Promise.all([contactFormListQuery.refetch(), analyticsListQuery.refetch()]);
+  };
+
+  const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.target.value);
+    setPage(1);
+  };
+
+  const handleStateFilterChange = (value: string) => {
+    setStateFilter(value as AccessStateFilter);
+    setPage(1);
   };
 
   const runSingleUpdate = async (
@@ -473,13 +492,13 @@ function ProjectsPluginAccessPanel() {
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
         <Input
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={handleSearchChange}
           placeholder="Search org or project..."
           className="md:max-w-sm"
         />
         <Select
           value={stateFilter}
-          onValueChange={(value) => setStateFilter(value as AccessStateFilter)}
+          onValueChange={handleStateFilterChange}
         >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by state" />
@@ -522,7 +541,7 @@ function ProjectsPluginAccessPanel() {
             </tr>
           </thead>
           <tbody>
-            {projectRows.map((project) => (
+            {pagedProjectRows.map((project) => (
               <tr
                 key={`${project.organizationId}:${project.projectSlug}`}
                 className="border-t align-top"
@@ -692,7 +711,7 @@ function ProjectsPluginAccessPanel() {
                 <td className="px-3 py-2">{formatDate(project.updatedAt)}</td>
               </tr>
             ))}
-            {projectRows.length === 0 ? (
+            {pagedProjectRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                   {isLoading ? (
@@ -708,6 +727,36 @@ function ProjectsPluginAccessPanel() {
             ) : null}
           </tbody>
         </table>
+      </div>
+      <div className="flex flex-col gap-2 border rounded-md px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-muted-foreground">
+          {totalProjects === 0
+            ? "Showing 0 projects"
+            : `Showing ${pageStartIndex + 1}-${Math.min(pageEndIndex, totalProjects)} of ${totalProjects} projects`}
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={currentPage <= 1 || isFetching}
+            onClick={() => setPage((existing) => Math.max(1, existing - 1))}
+          >
+            Previous
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={currentPage >= totalPages || isFetching}
+            onClick={() =>
+              setPage((existing) => Math.min(totalPages, existing + 1))
+            }
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -236,4 +236,55 @@ describe("PluginsTab", () => {
       }),
     );
   });
+
+  it("paginates projects with a page size of 100", async () => {
+    listAccessUseQueryMock.mockImplementation((input: { pluginId: string }) => {
+      const rows = Array.from({ length: 101 }, (_unused, index) => {
+        const projectNumber = String(index + 1).padStart(3, "0");
+        return {
+          organizationId: "org-1",
+          organizationSlug: "org-1",
+          organizationName: "Org One",
+          projectSlug: `site-${projectNumber}`,
+          projectTitle: `Site ${projectNumber}`,
+          isDeployed: false,
+          deployedDomain: null,
+          effectiveScope: "project",
+          state: input.pluginId === "contact_form" ? "enabled" : "disabled",
+          managedBy: "manual_superadmin",
+          monthlyEventLimit: null,
+          hardStop: true,
+          turnstileEnabled: false,
+          turnstileReady: false,
+          usageThisMonth: 0,
+          projectPluginStatus: "enabled",
+          updatedAt: "2026-02-22T10:00:00.000Z",
+        };
+      });
+
+      return {
+        data: { rows },
+        error: null,
+        isLoading: false,
+        isFetching: false,
+        refetch: vi.fn(),
+      };
+    });
+
+    render(<PluginsTab />);
+
+    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1-100 of 101 projects")).toBeInTheDocument();
+    expect(screen.getByText("site-001")).toBeInTheDocument();
+    expect(screen.queryByText("site-101")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Showing 101-101 of 101 projects")).toBeInTheDocument();
+    expect(screen.getByText("site-101")).toBeInTheDocument();
+    expect(screen.queryByText("site-001")).not.toBeInTheDocument();
+  });
 });
