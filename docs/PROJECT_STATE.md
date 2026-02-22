@@ -13,161 +13,23 @@
 
 ## Progress Log
 
-- 2026-02-22: removed the in-project `Enable Contact Form` action from `ProjectPlugins` to avoid dead-end enable attempts under entitlement gating; plugin activation is now directed exclusively to Super Admin → Plugins, and disabled-state copy now explicitly states that a self-serve/request flow is not available yet.
-- 2026-02-22: updated Contact Form disabled-state copy in `ProjectPlugins` to include support escalation guidance (`support@vivd.studio`) alongside the Super Admin → Plugins direction while the request flow is still unavailable.
-- 2026-02-22: moved project-card labels UI (`+ Add labels` trigger and tag chips) to the header top-right area so labels are editable and visible from the card’s right-side primary scan path.
-- 2026-02-22: implemented Phase 1 superadmin-managed plugin entitlements for Contact Form: added DB entitlement table (`plugin_entitlement`, migration `packages/backend/drizzle/0016_plugin_entitlements.sql`), added backend entitlement resolution/upsert/list service, enforced entitlement checks in `plugins.contactEnsure` and public contact submit runtime (including optional monthly hard-stop limit), added new superadmin plugin access APIs (`pluginsListAccess`, `pluginsUpsertEntitlement`, `pluginsBulkSetForOrganization`), and added a centralized Super Admin `Plugins` tab for cross-customer project-level enable/disable/suspend and limit management.
-- 2026-02-22: polished Plugins configuration alignment by constraining the “Auto-detected hosts (read-only fallback)” block to the same inline width as adjacent host inputs, removing the remaining visual width mismatch in the Configuration tab.
-- 2026-02-22: refined Plugins tab alignment so the tab bar now spans the full panel width (matching other settings surfaces) while tab contents remain readability-capped (`max-w-4xl`) to avoid overly long form rows.
-- 2026-02-22: adjusted settings-surface layout to better match organization “General” UX: restored `SettingsPageShell` to fullscreen width, constrained settings/plugin form content to narrower inline max widths for readability (instead of long full-width inputs), and moved Contact Form `Save configuration` to a bottom action row so plugin status badges/actions remain visually distinct.
-- 2026-02-22: added a concrete MVP design for superadmin-managed plugin entitlements in `docs/plugin-entitlements-mvp.md`, including exact schema proposal (`plugin_entitlement` + optional `plugin_enable_request`), entitlement resolution rules, superadmin tRPC contract, runtime gating behavior, and rollout/backfill strategy to move toward future plan-based self-serve.
-- 2026-02-22: restructured plugin/settings page UX for consistency: `ProjectPlugins` now uses the shared settings-page shell, a single Contact Form management card, and clear tabs (`Overview`, `Configuration`, `Fields`, `Snippets`) with sectioned sub-panels; `/Settings` now matches the broader settings pattern via the same shell and tabbed `Profile`/`Password` sections.
-- 2026-02-22: added two additional neutral tag colors (`gray`, `stone`) to round the picker to another full 6-column row while preserving the warm→cool→neutral ordering.
-- 2026-02-22: expanded the project tag color picker again with a few additional colors (including rose, lavender, magenta, and charcoal) and reordered the full picker palette by color progression (warm → cool → neutrals) for easier scanning.
-- 2026-02-22: expanded the project tag color picker palette with additional selectable colors while keeping legacy hash-based default tag color assignment stable for unassigned tags.
-- 2026-02-22: restricted plugin enablement to super-admin users only: backend `plugins.contactEnsure` now hard-blocks non-super-admin callers, and the Project Plugins page shows a super-admin-required notice instead of an enable button for other roles.
-- 2026-02-22: completed second-pass admin/theme readability normalization: tuned shared form controls (`Input`, `Textarea`, `SelectTrigger`) in frontend + studio to use a subtle themed fill (`bg-muted/30`) with focused fallback to `bg-background` for clearer affordance across dark/light color themes, and normalized Super Admin + org settings section shells/tables to consistent bordered `bg-card` containers (Organizations/Members/Domains/Usage/Settings, Users add-form/table, Machines table, Tenant maintenance cards, and Organization settings/team add-member form).
-- 2026-02-22: aligned Super Admin Organizations UI shell with the rest of the admin/settings surfaces by wrapping `OrganizationsTab` in a standard `Card` container with title/description and keeping org management tabs within that card, improving visual consistency with Users/Maintenance/Machines panels.
-- 2026-02-22: improved Plugins page navigation clarity by updating the shared layout breadcrumb for `/projects/:projectSlug/plugins` to `Projects > {projectSlug} > Plugins`, with links back to the project list and project page.
-- 2026-02-22: improved Contact Form notification email readability for end users: replaced raw ISO receive timestamps with a human-friendly UTC date/time format, and clarified reply guidance to use the email submitted in the form (instead of implying the no-reply sender address is the reply target).
-- 2026-02-22: fixed project-card tags popover interaction bugs while keeping the current popover UX: selecting **Edit tags** from the overflow menu now closes the dropdown first, suppresses close auto-focus handoff, then opens the popover on the next frame; when triggered from overflow, popover anchoring now uses the clicked menu item rect as a frozen virtual anchor with zero-height bounds plus a negative side offset (`sideOffset=-6`) so placement stays close to the click and higher vertically; popover content now stops pointer/click propagation to prevent click-through actions on underlying card controls; immediate re-close on open is guarded by suppressing the first outside interaction frame for overflow-triggered opens; and tag color edits now propagate immediately across all card/popover instances in-tab via a local `vivd-tag-colors:updated` event (not only via cross-tab `storage` events).
-- 2026-02-22: fixed cross-theme form surface contrast regression in shared UI/theme primitives: removed `@vivd/theme` global `!important` override that forced all text inputs/textarea/selects to `--card`, switched autofill background fill to `--background`, and updated shared `Input`/`Textarea`/`SelectTrigger` components in both frontend and studio to use explicit `bg-background` so controls remain visually distinct from card/panel surfaces across themes.
-- 2026-02-22: enhanced local CI Fly tier orchestration in `scripts/ci-local.sh`: added warm-reconcile integration run (`test/integration/fly_reconcile_flow.test.ts`) and an opt-in known-failure mode for the currently broken rehydrate/revert flow (`--allow-known-fly-rehydrate-failure`, npm alias `ci:local:fly:known`) so full local CI remains actionable while still surfacing the failing integration.
-- 2026-02-22: implemented project tags in the projects overview end-to-end: added DB-backed `project_meta.tags` (migration `packages/backend/drizzle/0015_dapper_mentor.sql`), added backend `project.updateTags` mutation with normalization/validation, exposed tags in `project.list`, added dashboard tag rendering and an edit-tags dialog in project cards, added multi-tag filtering controls in `ProjectsList`, and added targeted backend/frontend tests for normalization, auth gating, mutation behavior, and filter UX.
-- 2026-02-22: aligned Fly integration tests with current runtime behavior: `packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts` now verifies source + OpenCode (`storage/session_diff`) sync with deterministic OpenCode home (`VIVD_OPENCODE_DATA_HOME` pinned in machine env), and `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts` now seeds `index.html` when absent so failures reflect revert/rehydrate behavior (not fresh-workspace bootstrap assumptions).
-- 2026-02-22: added a concrete implementation plan for project tagging in the dashboard overview (assign/edit tags per project + filter list by selected tags), including DB/tRPC/frontend/test rollout details in the new "Feature Plan: Project Tags in Projects Overview" section below.
-- 2026-02-22: added transparent Contact Form auto-host visibility in Plugins UI: backend `plugins.contactInfo` now returns inferred auto source hosts (published domains + active tenant hosts + local dev hosts in non-prod), and the Project Plugins page now displays these inferred hosts as read-only fallback info when source-host allowlist is left empty.
-- 2026-02-22: fixed missing Plugins action icon in fullscreen/embedded preview option menus by adding the `Settings2` icon to the Plugins dropdown item in `packages/frontend/src/pages/EmbeddedStudio.tsx` and `packages/frontend/src/pages/ProjectFullscreen.tsx`.
-- 2026-02-22: fixed local Contact Form submit ergonomics in dev: Caddy dev config now serves `api.localhost` on HTTP without forced HTTPS redirect (`Caddyfile.dev`), and contact-form auto source-host inference now includes local preview hosts (`localhost`, `127.0.0.1`, `::1`) in non-production so preview/studio submits are not blocked when `sourceHosts` is left empty.
-- 2026-02-22: updated Contact Form host-allowlist behavior to support clean first-party defaults without blocking studio/preview: when `sourceHosts` is empty, submit runtime now auto-derives effective allowed hosts from the project’s published domain(s) plus active tenant host(s); redirects now fall back to this same effective source-host set when `redirectHostAllowlist` is empty. Plugins UI copy was updated to explain auto-mode and redirect semantics.
-- 2026-02-22: simplified Contact Form plugin configuration UX by removing honeypot-field customization from project settings (runtime now uses fixed `_honeypot` to match generated snippets), and clarified redirect/source-host behavior in the Plugins UI; submit redirect handling now falls back to `sourceHosts` when `redirectHostAllowlist` is empty (while still disabling redirects when both lists are empty).
-- 2026-02-22: split plugin service internals into scoped modules: moved generic plugin-instance persistence/idempotency logic into `packages/backend/src/services/plugins/core/instanceService.ts` and moved contact-form-specific orchestration into `packages/backend/src/services/plugins/contactForm/service.ts`, while keeping `packages/backend/src/services/plugins/ProjectPluginService.ts` as the stable facade for existing router/tool callers.
-- 2026-02-22: split backend tRPC plugin management router into plugin-scoped modules under `packages/backend/src/routers/plugins/` (`catalog.ts`, `contactForm.ts`, `index.ts`) so adding future plugins does not bloat a single `plugins.ts` router file.
-- 2026-02-22: split public plugin routing into plugin-scoped route modules: moved contact-form submit endpoint and host validation helpers into `packages/backend/src/routes/plugins/contactForm/` and added aggregator router at `packages/backend/src/routes/plugins/index.ts`, keeping the external endpoint path unchanged (`/plugins/contact/v1/submit`).
-- 2026-02-22: refactored plugin module layout to add a dedicated contact-form plugin folder under backend plugins (`packages/backend/src/services/plugins/contactForm/`) and moved contact-specific config, snippets, public-api helpers, and retention cleanup there to keep plugin boundaries clearer as more plugins are added.
-- 2026-02-22: completed Contact Form MVP runtime wiring: added `plugins.contactUpdateConfig` backend mutation and project Plugins UI config fields (recipient emails, source hosts, redirect allowlist), wired public submit flow to send email notifications through provider-abstracted delivery (SES adapter + noop fallback/auto-detection), and added automatic contact submission retention cleanup with a 30-day default (`VIVD_CONTACT_FORM_RETENTION_DAYS`).
-- 2026-02-22: refreshed Fly shutdown bucket-sync integration coverage in `packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts` to match current runtime contracts: the test now pins `VIVD_OPENCODE_DATA_HOME` in machine env for deterministic OpenCode pathing, validates source + OpenCode marker sync under `storage/session_diff`, and keeps stop/destroy/trigger lifecycle coverage while using the explicit Fly Machines stop endpoint (provider-level `stop` may suspend). Removed warm-reconcile assertions from this bucket-sync suite because warm reconcile behavior is covered by the dedicated `packages/backend/test/integration/fly_reconcile_flow.test.ts`.
-- 2026-02-21: improved local studio startup/sync behavior and start dedupe: local provider now deduplicates concurrent start requests per studio key (prevents duplicate cold boots during repeated Edit/start), local periodic object-storage sync now uses exact incremental reconciliation (delete stale keys + upload only changed files, with unchanged detection via per-object `vivd-sha256` metadata) instead of full prefix delete/reupload, local hydration now skips unchanged downloads and removes stale local files using a per-prefix sync manifest (`.vivd-sync-manifest.json`), and Embedded Studio now guards/disables rapid repeated Edit clicks while a start is already pending. Added targeted coverage in `packages/backend/test/local_provider_orchestration.test.ts`, `packages/backend/test/object_storage_sync_exact.test.ts`, and `packages/backend/test/object_storage_download_incremental.test.ts`.
-- 2026-02-21: added compatibility migration `packages/backend/drizzle/0014_public_token_hash_compat.sql` to heal legacy plugin schema drift (`public_token_hash` previously `NOT NULL`) by dropping that requirement and enforcing `public_token` population/non-null, so plugin ensure flows pass on older dev databases without full DB reset.
-- 2026-02-21: added a minimal project-level Plugins UI at `/vivd-studio/projects/:projectSlug/plugins` (`packages/frontend/src/pages/ProjectPlugins.tsx`) wired to `plugins.catalog`, `plugins.contactInfo`, and `plugins.contactEnsure`, enabling Contact Form activation and token/snippet retrieval for end-to-end public submit testing.
-- 2026-02-21: completed Plugins navigation exposure across remaining entry points: studio toolbar overflow menus now include `Plugins` and route back to host app via `vivd:studio:navigate`, and dashboard project cards now include a `Plugins` action in the card overflow menu.
-- 2026-02-21: added a local CI runner (`scripts/ci-local.sh`) with npm aliases (`ci:local`, `ci:local:integration`, `ci:local:full`, `ci:local:fly`) to run lint + workspace tests and optional DB/object-storage/Fly integration tiers using `.env` / `.env.local`.
-- 2026-02-21: made public plugin API host routing environment-driven in Caddy (`{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}`) and added compose env wiring for Caddy/backend (`VIVD_PUBLIC_PLUGIN_API_HOST`, `VIVD_PUBLIC_PLUGIN_API_BASE_URL`) so staging/prod can use different API hosts without editing the Caddyfile.
-- 2026-02-21: added env-gated real-infrastructure hardening tests: backend DB integration coverage for plugin/usage idempotency (`packages/backend/test/integration/db_usage_plugin_services.test.ts`, flag `VIVD_RUN_DB_INTEGRATION_TESTS=1`) and studio object-storage integration coverage for source sync include/exclude/delete + build-meta updates (`packages/studio/server/services/sync/ArtifactSyncService.integration.test.ts`, flag `VIVD_RUN_ARTIFACT_SYNC_BUCKET_TESTS=1`).
-- 2026-02-21: completed the First Wave backlog test additions across backend/studio/frontend/scraper with targeted coverage for `createContext` + `orgProcedure`, publish router/service conflict handling, import safety checks (pinned-org mismatch + symlink ZIP rejection), usage/limits threshold behavior, plugin ensure idempotency + unique-conflict recovery, Studio workspace save/discard transitions, Studio artifact-sync guardrails, frontend publish dialog state gating, and scraper full-pipeline success/error paths.
-- 2026-02-21: implemented initial public plugin runtime routing split: added backend public endpoint `POST /plugins/contact/v1/submit` (`packages/backend/src/routes/plugins/contactForm/submit.ts`) and wired Caddy host-based routing for `api.localhost` (dev) plus `api.vivd.studio` (default Caddy config) so public plugin traffic is separated from internal `/vivd-studio/api/*`.
-- 2026-02-21: extended the concrete test hardening roadmap with a Phase 4 critical E2E smoke layer for cross-service flows, using a small PR smoke subset and a fuller nightly/pre-release suite.
-- 2026-02-21: added a concrete cross-repo test hardening plan focused on production-risk paths (auth/context resolution, publish/import safety, studio workspace/sync, and scraper pipeline behavior), with phased delivery and explicit first-wave targets.
-- 2026-02-21: retired the bootstrap sanity tool after validating the real Studio custom tool path (`vivd_plugins_catalog`, `vivd_plugins_contact_info`); startup now also cleans stale legacy tool files.
-- 2026-02-21: locked public plugin runtime endpoint base to dedicated external host `https://api.vivd.studio` (env override: `VIVD_PUBLIC_PLUGIN_API_BASE_URL`) so website-facing plugin traffic is separated from internal `/vivd-studio/api/*` management APIs.
-- 2026-02-21: refactored Studio OpenCode tool provisioning for scale: moved tool logic into typed modules under `packages/studio/server/opencode/toolModules/`, added centralized registry/policy in `packages/studio/server/opencode/toolRegistry.ts`, replaced tool-level contact ensure/snippet actions with a single `vivd_plugins_contact_info` tool, wired per-start tool enable/disable into OpenCode config via `packages/studio/server/opencode/configPolicy.ts` (`VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS`), and now pass role/plugin context from backend studio start/restart (`VIVD_ORGANIZATION_ROLE`, `VIVD_ENABLED_PLUGINS`).
-- 2026-02-21: hardened plugin Phase-0 migration `packages/backend/drizzle/0013_abnormal_miracleman.sql` to be idempotent (`CREATE TABLE IF NOT EXISTS`, guarded FK creation, `CREATE INDEX IF NOT EXISTS`) so partially applied dev databases do not crash backend startup on `db:migrate`.
-- 2026-02-21: started plugin-system Phase 0 implementation: added plugin persistence schema (`project_plugin_instance`, `contact_form_submission`) + migration `packages/backend/drizzle/0013_abnormal_miracleman.sql`, added backend plugin catalog/ensure/info service surface (`packages/backend/src/routers/plugins/index.ts`, `packages/backend/src/services/plugins/ProjectPluginService.ts`), added provider-agnostic email service contract scaffold (`packages/backend/src/services/integrations/EmailDeliveryService.ts`), and provisioned Studio OpenCode tools (`vivd_plugins_catalog`, `vivd_plugins_contact_info`) in `packages/studio/server/opencode/serverManager.ts` (with targeted backend/studio builds and backend plugin/email tests passing).
-- 2026-02-21: refactored Studio OpenCode config enforcement into a dedicated policy module (`packages/studio/server/opencode/configPolicy.ts`) with unit coverage (`packages/studio/server/opencode/configPolicy.test.ts`) so future config overrides can be added declaratively.
-- 2026-02-21: disabled the OpenCode built-in `question` tool for Studio agent sessions by enforcing `tools.question=false` in spawned server config (`packages/studio/server/opencode/serverManager.ts`), matching current frontend support.
-- 2026-02-21: grouped service modules into domain subfolders to reduce root-level service sprawl: backend now uses `services/{project,publish,usage,integrations,storage,system}` (with existing `services/studioMachines/fly/*` modular split preserved), and studio server now uses `services/{sync,patching,project,integrations,reporting}`; imports were rewired and targeted backend/studio builds pass.
-- 2026-02-21: restored missing backend domain-service unit coverage at `packages/backend/test/domain_service.test.ts` (reserved organization slug validation).
-- 2026-02-21: maintainability cleanup pass completed for onboarding + boundaries: rewrote root/agent docs for current package layout (`README.md`, `AGENTS.md`, `packages/frontend/README.md`), removed unsafe/invalid migration/client-gen scripts (`db:push`, stale `gen:client`), moved frontend tRPC type import off ad-hoc `@backend/*` alias to a curated backend type export (`packages/backend/src/trpcTypes.ts`), and removed backend runtime patching duplicates/tests so patching ownership is studio-only.
-- 2026-02-21: started Fly provider modularization by extracting drift/metadata/reconcile-config helpers into `packages/backend/src/services/studioMachines/fly/machineModel.ts`; `provider.ts` now delegates to the new module, and reconcile drift coverage now targets the extracted helper directly (`packages/backend/test/fly_provider_reconcile.test.ts`).
-- 2026-02-21: continued Fly provider modularization by extracting startup/restart/create workflows to `packages/backend/src/services/studioMachines/fly/runtimeWorkflow.ts` and warm/batch reconcile workflows to `packages/backend/src/services/studioMachines/fly/reconcileWorkflow.ts`; added characterization coverage in `packages/backend/test/fly_provider_orchestration.test.ts` (dedupe, hard-restart inflight gating, create payload, warm-reconcile guardrails).
-- 2026-02-21: further split Fly provider internals into focused modules: Fly Machines API transport/cache (`packages/backend/src/services/studioMachines/fly/apiClient.ts`), lifecycle polling/transition helpers (`packages/backend/src/services/studioMachines/fly/lifecycle.ts`), machine identity/lookup helpers (`packages/backend/src/services/studioMachines/fly/machineInventory.ts`), studio-image resolution/cache (`packages/backend/src/services/studioMachines/fly/imageResolver.ts`), and machine management workflows (`packages/backend/src/services/studioMachines/fly/managementWorkflow.ts`). `provider.ts` now delegates these concerns and remains behavior-compatible under characterization tests.
-- 2026-02-21: extracted Fly environment/naming/instance-shape config into `packages/backend/src/services/studioMachines/fly/providerConfig.ts`, moved service normalization into `packages/backend/src/services/studioMachines/fly/machineModel.ts`, and rewired `provider.ts` to explicit workflow dependency wiring (dropping provider size to 643 LOC from 819 while keeping behavior checks green in `packages/backend/test/fly_provider_orchestration.test.ts` and `packages/backend/test/fly_provider_reconcile.test.ts`).
-- 2026-02-21: extended plugin-system planning with a required provider-agnostic email delivery abstraction for contact form notifications so email providers can be swapped via adapters/config without plugin API or schema rewrites.
-- 2026-02-21: made plugin-system plan execution-ready for kickoff: locked MVP scope decisions (project-level scoping, store+inbox baseline, custom-tools-first integration), added phased delivery breakdown, and documented “custom tools now, optional central `vivd-mcp` later” strategy (`docs/plugin-system-design.md`).
-- 2026-02-20: refined website plugin system plan with clearer UI/agent exposure and studio↔bucket sync constraints (`docs/plugin-system-design.md`).
-- 2026-02-19: GHCR studio image selection now filters tags by manifest readiness (not tag presence alone), so superadmin image options and latest-semver resolution exclude in-progress/unpullable workflow tags.
-- 2026-02-19: updated studio-machine defaults: Fly idle suspend timeout increased to 10 minutes (`FLY_STUDIO_IDLE_TIMEOUT_MS=600000` default), and OpenCode idle server cleanup disabled on studio machines by default (`OPENCODE_IDLE_TIMEOUT_MS=0` in Fly/local machine env).
-- 2026-02-19: removed `kill_timeout` from Fly machine drift detection/reconcile triggers to avoid unnecessary warm-reconcile updates; machine create/restart still sets `kill_timeout`.
-- 2026-02-18: added root-level integration test runner shortcut (`npm run test:integration`) delegating to backend integration suite for easier full integration runs from repo root.
-- 2026-02-18: backend test setup now auto-loads `.env*` files for integration runs (`packages/backend/test/setup.ts`) with backend-local-first + repo-root fallback (`.env.test.local`, `.env.test`, `.env.local`, `.env`).
-- 2026-02-18: added opt-in Fly integration coverage for OpenCode rehydrate/revert flow (`packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts`) validating edit persistence across destroy/recreate and post-hydrate revert behavior.
-- 2026-02-18: added bucket-sync trigger requests for non-agent studio edits (text saves, asset create/move/delete, uploads/dropped files, AI image edits/creates, and project patch/discard flows) so source/opencode sync runs after manual edits too.
-- 2026-02-18: switched Fly studio bucket sync loop to trigger-only (no periodic interval); current test mode syncs/hydrates OpenCode `opencode.db*` plus `storage/session_diff` after agent-task triggers and on shutdown/final exit.
-- 2026-02-18: OpenCode object-storage sync narrowed to `opencode/storage` only (Fly entrypoint + local provider), with legacy read compatibility for `opencode/opencode/storage` and cleanup of stale non-storage OpenCode objects.
-- 2026-02-18: hardened studio bucket sync lifecycle: Fly machines now reconcile `kill_timeout` (configurable via `FLY_STUDIO_KILL_TIMEOUT_SECONDS`, default `180s`), studio entrypoint sync loop now supports immediate trigger-driven sync (`/tmp/vivd-sync.trigger`) and parallelized shutdown/final sync with budget warnings (`VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS`), and agent completion now requests an immediate bucket sync. Added coverage in `packages/backend/test/fly_provider_reconcile.test.ts`, `packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts` (new trigger scenario), and `packages/studio/server/opencode/runTask.bucketSync.test.ts`.
-- 2026-02-18: added `scripts/delete-ghcr-dev-images.sh` helper to list/delete GHCR container versions with `dev-` tags (dry-run default, `--apply` to execute).
-- 2026-02-18: fixed Fly revert/session-diff tracking by aligning studio OpenCode storage path with OpenCode default storage and removing forced `XDG_DATA_HOME` overrides.
-- 2026-02-18: superadmin machine image selector shipped (semver + `dev-*` tags from GHCR with persisted override).
-- 2026-02-17: OpenCode Vertex support re-enabled (project/location credentials wiring for studio entrypoint + machine env handling).
-- 2026-02-17: added Fly+bucket shutdown/restart integration coverage for source/opencode sync (`packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts`).
+- 2026-02-22: shipped Phase 1 superadmin-managed Contact Form plugin entitlements end-to-end: DB table/migration (`plugin_entitlement`, `packages/backend/drizzle/0016_plugin_entitlements.sql`), entitlement service + APIs (`pluginsListAccess`, `pluginsUpsertEntitlement`, `pluginsBulkSetForOrganization`), and runtime gating in `plugins.contactEnsure` + public submit path.
+- 2026-02-22: finalized plugin activation ownership model: project-level `Enable Contact Form` was removed, activation is now superadmin-only via Super Admin → Plugins, and project-level UI is guidance/config-only.
+- 2026-02-22: consolidated settings/plugin surfaces onto shared shell conventions (tabs + bounded form widths) to reduce layout drift and simplify future settings work.
+- 2026-02-22: completed project tag UX polish (project-card label placement + expanded color palette); tagging data model and API remain unchanged from the shipped tags feature.
 - Full historical log moved to `docs/PROJECT_STATE_ARCHIVE.md`.
 
 ## Current Priorities
 
-- [ ] Execute phased test hardening plan across backend/studio/frontend/scraper, starting with auth + publish + import + workspace/sync critical paths.
-- [ ] Add Phase 4 critical E2E smoke coverage for cross-service flows (lean PR suite + nightly/pre-release full suite).
+- [ ] Continue phased test hardening (Phase 2/3) across backend/studio/frontend/scraper and add Phase 4 E2E smoke coverage (lean PR suite + nightly/pre-release full suite).
 - [ ] Fix known failing Fly integration: `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts` (expected red currently; revert-after-rehydrate path still broken).
-- [ ] Move plugin-system into Phase 1: implement contact submit runtime endpoint + initial inbox read path on top of Phase 0 scaffolding.
+- [ ] Complete remaining plugin-system Phase 1 follow-through: inbox/read path UX + operator workflow hardening around entitlements (self-serve/request flow still pending).
 - [ ] Validate lifecycle sync hardening in real Fly runs (stop/destroy/warm-reconcile + trigger-driven sync under larger workspace/opencode payloads).
 - [ ] Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
 - [ ] Complete email-based auth flows (invite-only signup, self-service password reset, SES integration).
 - [ ] Add missing control-plane hardening (audit log, monitoring, rate limiting, abuse controls).
 - [ ] Implement billing primitives (Stripe products/prices/webhooks + subscription UX).
 - [ ] Finalize build strategy and preview artifact contract (build location, signed vs public artifact access).
-
-## Feature Plan: Project Tags in Projects Overview (2026-02-22)
-
-Status: implemented (2026-02-22).
-
-### Goal
-
-- Let users assign tags to projects in the dashboard and filter the projects overview by those tags without changing existing search/sort behavior.
-
-### Scope (MVP)
-
-- Add per-project tag assignment/editing from the overview.
-- Render tags on project cards.
-- Add multi-tag filtering in `packages/frontend/src/components/projects/listing/ProjectsList.tsx`.
-- Keep client-editor access restrictions unchanged (can view assigned project only; cannot change tags).
-
-### Backend Plan
-
-- Add Drizzle migration `packages/backend/drizzle/0015_dapper_mentor.sql`:
-  - Add `project_meta.tags` as non-null JSONB array defaulting to `[]`.
-- Extend schema/types:
-  - `packages/backend/src/db/schema.ts`: include `tags` on `projectMeta`.
-  - `packages/backend/src/generator/versionUtils.ts`: include tags in `ProjectManifest`.
-- Add project tag mutation:
-  - `packages/backend/src/routers/project/tags.ts`: add `project.updateTags` (`adminProcedure`) with input `{ slug, tags: string[] }`.
-  - Normalize and validate tags (trim, lowercase, dedupe, cap count/length, reject empty values).
-  - Persist tags via `projectMetaService` and update `updatedAt`.
-- Extend `project.list` response to include `tags` so no extra list query is needed for filter options.
-
-### Frontend Plan
-
-- `packages/frontend/src/components/projects/listing/ProjectsList.tsx`:
-  - Add selected-tags state.
-  - Derive available tags from listed projects.
-  - Filter list by selected tags plus existing search query; keep existing sort pipeline.
-  - Add clear/reset affordance for tag filters.
-- `packages/frontend/src/components/projects/listing/ProjectCard.tsx`:
-  - Show project tags as badges.
-  - Add a small edit-tags dialog and call `trpc.project.updateTags`.
-  - Invalidate `project.list` on successful update.
-- Keep `PROJECT_ACTIONS` parity intact by treating tag edit as overview-specific UI (not part of shared quick-action menus in embedded/fullscreen studio views).
-
-### Tests and Verification
-
-- Backend tests:
-  - Add router/service tests for tag normalization, persistence, and auth gating.
-  - Verify `project.list` includes tags and client-editor behavior remains unchanged.
-- Frontend tests:
-  - Add `ProjectsList` tests for single/multi-tag filtering combined with text search.
-  - Add `ProjectCard` tag-edit mutation success/error behavior tests.
-- Manual verification:
-  - No-project state, no-tags state, and mixed-tag projects.
-  - Tag update reflects immediately in list, card badges, and active filters.
-
-### Rollout Notes
-
-- Run `npm run db:generate -w @vivd/backend` then `npm run db:migrate -w @vivd/backend`.
-- No data backfill required: existing projects default to empty tag arrays.
-- Optional follow-up after MVP: server-side filtering input on `project.list` if project counts grow significantly.
-
-### Open Decisions
-
-- Multi-tag semantics: `match all selected tags` (recommended) vs `match any selected tag`.
-- Allowed tag format: free-form labels (with normalization) vs slug-only labels.
 
 ## Concrete Test Hardening Plan
 
@@ -240,23 +102,18 @@ Status: implemented (2026-02-22).
   - PR: run 2-3 fast E2E smoke tests
   - nightly/pre-release: run the full E2E smoke matrix
 
-### First Wave Backlog (Concrete)
+### First Wave Status (Complete)
 
-- [x] Added backend tests for `createContext` and `orgProcedure` behavior matrix in `packages/backend/src/trpc.ts`.
-- [x] Added router-level tests for publish conflict branches in `packages/backend/src/routers/project/publish.ts`.
-- [x] Added service-level tests for publish lock + artifact readiness branches in `packages/backend/src/services/publish/PublishService.ts`.
-- [x] Added import route tests for unsafe zip/org mismatch in `packages/backend/src/routes/import.ts`.
-- [x] Added limits/usage tests for blocked state and threshold behavior in `packages/backend/src/services/usage/LimitsService.ts` and `packages/backend/src/services/usage/UsageService.ts`.
-- [x] Added plugin service tests for idempotent ensure + unique-conflict recovery in `packages/backend/src/services/plugins/ProjectPluginService.ts`.
-- [x] Added studio workspace save/discard tests in `packages/studio/server/workspace/WorkspaceManager.ts`.
-- [x] Added studio artifact sync/hydration tests in `packages/studio/server/services/sync/ArtifactSyncService.ts`.
-- [x] Added frontend publish dialog behavior tests in `packages/frontend/src/components/projects/publish/PublishSiteDialog.tsx`.
-- [x] Added scraper full pipeline error/success tests in `packages/scraper/src/routes/fullScrape.ts`.
+- The initial hardening wave is complete across backend/studio/frontend/scraper for auth/context, publish/import safety, usage/plugins, workspace/sync, and scraper success/error behavior.
+- Detailed per-test checklist history is preserved in `docs/PROJECT_STATE_ARCHIVE.md`.
 
 ## Consolidated Completed Milestones
 
 - Studio runtime: standalone package extraction, connected/standalone operation, bucket hydration/sync, bucket-backed preview.
 - Fly machines: machine reuse, warm reconciliation, stale cleanup, image drift handling, performance and cold-start resilience.
+- Plugins: Contact Form runtime + public submit path, superadmin-managed entitlements (`plugin_entitlement`), and superadmin-only activation flow.
+- Projects dashboard: project tags shipped end-to-end (`project_meta.tags`, `project.updateTags`, card display/edit, list filtering).
+- Test hardening: Phase 1 first-wave critical-path coverage delivered; follow-on depth/smoke layers remain active priorities.
 - Agent/editor reliability: OpenCode `1.2.6` upgrade, revert/unrevert integration testing, selector-mode and streaming UX fixes.
 - OpenCode storage cleanup: bucket sync narrowed to `opencode/storage`, legacy `opencode/opencode/storage` compatibility migration, stale non-storage key cleanup.
 - Control plane: tenant scoping, project/usage limits, bucket isolation, publish-domain governance rollout.
