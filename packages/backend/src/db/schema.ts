@@ -379,6 +379,45 @@ export const projectPluginInstance = pgTable(
   ],
 );
 
+export const pluginEntitlement = pgTable(
+  "plugin_entitlement",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull().default("project"), // 'organization' | 'project'
+    projectSlug: text("project_slug").notNull().default(""), // empty for organization-scope
+    pluginId: text("plugin_id").notNull(), // currently: 'contact_form'
+    state: text("state").notNull().default("disabled"), // 'disabled' | 'enabled' | 'suspended'
+    managedBy: text("managed_by").notNull().default("manual_superadmin"), // 'manual_superadmin' | 'plan' | 'self_serve'
+    monthlyEventLimit: integer("monthly_event_limit"),
+    hardStop: boolean("hard_stop").notNull().default(true),
+    notes: text("notes").notNull().default(""),
+    changedByUserId: text("changed_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("plugin_entitlement_org_scope_project_plugin_unique").on(
+      table.organizationId,
+      table.scope,
+      table.projectSlug,
+      table.pluginId,
+    ),
+    index("plugin_entitlement_org_plugin_idx").on(
+      table.organizationId,
+      table.pluginId,
+    ),
+    index("plugin_entitlement_plugin_state_idx").on(table.pluginId, table.state),
+  ],
+);
+
 export const contactFormSubmission = pgTable(
   "contact_form_submission",
   {

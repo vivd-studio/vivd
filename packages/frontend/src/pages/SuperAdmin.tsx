@@ -1,13 +1,19 @@
 import { useSearchParams } from "react-router-dom";
-import { Building2, Server, Shield, Wrench } from "lucide-react";
+import { Building2, Plug, Server, Shield, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MachinesTab, MaintenanceTab, OrganizationsTab, UsersTab } from "@/components/admin";
+import {
+  MachinesTab,
+  MaintenanceTab,
+  OrganizationsTab,
+  PluginsTab,
+  UsersTab,
+} from "@/components/admin";
 
 export default function SuperAdmin() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab");
   const currentTab =
-    tab === "users" || tab === "maintenance" || tab === "machines"
+    tab === "users" || tab === "maintenance" || tab === "machines" || tab === "plugins"
       ? tab
       : "orgs";
 
@@ -42,6 +48,10 @@ export default function SuperAdmin() {
             <Server className="h-4 w-4" />
             Machines
           </TabsTrigger>
+          <TabsTrigger value="plugins" className="gap-2">
+            <Plug className="h-4 w-4" />
+            Plugins
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="orgs" className="mt-6">
@@ -58,6 +68,10 @@ export default function SuperAdmin() {
 
         <TabsContent value="machines" className="mt-6">
           <MachinesTab />
+        </TabsContent>
+
+        <TabsContent value="plugins" className="mt-6">
+          <PluginsTab />
         </TabsContent>
       </Tabs>
     </div>

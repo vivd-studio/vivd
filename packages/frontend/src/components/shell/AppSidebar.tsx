@@ -10,6 +10,7 @@ import {
   FolderKanban,
   LayoutGrid,
   LogOut,
+  Plug,
   Server,
   Settings,
   Shield,
@@ -419,7 +420,9 @@ function OrganizationNavSection({
 
 type SuperAdminNavSectionProps = {
   showSuperAdmin: boolean;
-  isSuperAdminTabActive: (tab: "orgs" | "users" | "maintenance" | "machines") => boolean;
+  isSuperAdminTabActive: (
+    tab: "orgs" | "users" | "maintenance" | "machines" | "plugins",
+  ) => boolean;
 };
 
 function SuperAdminNavSection({
@@ -481,6 +484,18 @@ function SuperAdminNavSection({
               <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=machines`}>
                 <Server />
                 <span>Machines</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Plugins"
+              isActive={isSuperAdminTabActive("plugins")}
+            >
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=plugins`}>
+                <Plug />
+                <span>Plugins</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -612,7 +627,9 @@ export function AppSidebar() {
     return (searchParams.get("tab") ?? "members") === tab;
   };
 
-  const isSuperAdminTabActive = (tab: "orgs" | "users" | "maintenance" | "machines") => {
+  const isSuperAdminTabActive = (
+    tab: "orgs" | "users" | "maintenance" | "machines" | "plugins",
+  ) => {
     if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
     return (searchParams.get("tab") ?? "orgs") === tab;
   };

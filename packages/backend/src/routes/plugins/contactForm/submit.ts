@@ -1,11 +1,12 @@
 import express from "express";
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import type { Multer } from "multer";
 import { z } from "zod";
 import { db } from "../../../db";
 import { contactFormSubmission, projectPluginInstance } from "../../../db/schema";
 import { contactFormPluginConfigSchema } from "../../../services/plugins/contactForm/config";
+import { pluginEntitlementService } from "../../../services/plugins/PluginEntitlementService";
 import { inferContactFormAutoSourceHosts } from "../../../services/plugins/contactForm/sourceHosts";
 import { getEmailDeliveryService } from "../../../services/integrations/EmailDeliveryService";
 import {
@@ -329,6 +330,21 @@ export function createContactFormPublicRouter(
         return sendSubmitError(req, res, 404, "invalid_token", "plugin token not found");
       }
 
+      const entitlement = await pluginEntitlementService.resolveEffectiveEntitlement({
+        organizationId: pluginInstance.organizationId,
+        projectSlug: pluginInstance.projectSlug,
+        pluginId: "contact_form",
+      });
+      if (entitlement.state !== "enabled") {
+        return sendSubmitError(
+          req,
+          res,
+          403,
+          "plugin_not_entitled",
+          "contact form is not enabled for this project",
+        );
+      }
+
       const configResult = contactFormPluginConfigSchema.safeParse(
         pluginInstance.configJson ?? {},
       );
@@ -410,6 +426,41 @@ export function createContactFormPublicRouter(
         fields,
         new Set([...ignoredPayloadKeys, ...config.formFields.map((field) => field.key)]),
       );
+
+      if (
+        entitlement.hardStop &&
+        typeof entitlement.monthlyEventLimit === "number" &&
+        entitlement.monthlyEventLimit >= 0
+      ) {
+        const monthStart = new Date();
+        monthStart.setUTCDate(1);
+        monthStart.setUTCHours(0, 0, 0, 0);
+
+        const currentMonthRows = await db
+          .select({
+            count: sql<number>`count(*)`,
+          })
+          .from(contactFormSubmission)
+          .where(
+            and(
+              eq(contactFormSubmission.organizationId, pluginInstance.organizationId),
+              entitlement.scope === "organization"
+                ? undefined
+                : eq(contactFormSubmission.projectSlug, pluginInstance.projectSlug),
+              gte(contactFormSubmission.createdAt, monthStart),
+            ),
+          );
+        const currentMonthCount = Number(currentMonthRows[0]?.count ?? 0);
+        if (currentMonthCount >= entitlement.monthlyEventLimit) {
+          return sendSubmitError(
+            req,
+            res,
+            429,
+            "plugin_quota_exceeded",
+            "monthly contact form submission limit reached",
+          );
+        }
+      }
 
       const submittedAt = new Date();
 

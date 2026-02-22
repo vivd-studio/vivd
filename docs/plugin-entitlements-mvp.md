@@ -1,6 +1,6 @@
 # Plugin Entitlements MVP (Superadmin-Managed, Cost-Controlled)
 
-Status: proposed (2026-02-22)
+Status: implemented (Phase 1 core, 2026-02-22). Optional request-queue flow remains pending.
 
 ## Goal
 
@@ -31,8 +31,10 @@ Columns:
 
 - `id text primary key`
 - `organization_id text not null references organization(id) on delete cascade`
-- `project_slug text null`  
-  `NULL` means org-scope entitlement; non-NULL means project override.
+- `scope text not null default 'project'`  
+  Values: `organization | project`.
+- `project_slug text not null default ''`  
+  Empty string means org-scope entitlement; non-empty value is project scope.
 - `plugin_id text not null`  
   Current allowed value: `contact_form`.
 - `state text not null default 'disabled'`  
@@ -51,10 +53,12 @@ Indexes and constraints:
 
 - `index(plugin_entitlement_org_plugin_idx) on (organization_id, plugin_id)`
 - `index(plugin_entitlement_state_idx) on (plugin_id, state)`
-- unique partial index for org scope:  
-  `unique (organization_id, plugin_id) where project_slug is null`
-- unique partial index for project scope:  
-  `unique (organization_id, project_slug, plugin_id) where project_slug is not null`
+- unique index:  
+  `unique (organization_id, scope, project_slug, plugin_id)`
+- check constraints enforce:
+  - valid `scope` / `state` / `managed_by` values
+  - org-scope rows must use `project_slug=''`
+  - project-scope rows must use non-empty `project_slug`
 - check constraint: `plugin_id in ('contact_form')` (or skip and validate in service for forward compatibility).
 
 ### 2) `plugin_enable_request` (optional but recommended)
@@ -88,7 +92,7 @@ Indexes:
 For `(organization_id, project_slug, plugin_id)`:
 
 1. If project-scope row exists in `plugin_entitlement`, use it.
-2. Else if org-scope row exists (`project_slug is null`), use it.
+2. Else if org-scope row exists (`scope='organization'`, `project_slug=''`), use it.
 3. Else treat as `disabled`.
 
 Effective state gates runtime behavior.
@@ -241,4 +245,3 @@ No schema rewrite needed:
 - billing system writes org-scope `plugin_entitlement` rows (`managed_by=plan`),
 - project page can expose self-serve enable only when entitlement permits it,
 - same runtime gate remains authoritative.
-

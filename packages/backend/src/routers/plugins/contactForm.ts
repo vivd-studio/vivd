@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { projectPluginService } from "../../services/plugins/ProjectPluginService";
+import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { contactFormPluginConfigSchema } from "../../services/plugins/contactForm/config";
 
 const projectSlugInput = z.object({
@@ -20,6 +21,19 @@ export const contactEnsurePluginProcedure = projectMemberProcedure
       throw new TRPCError({
         code: "UNAUTHORIZED",
         message: "Only super-admin users can enable plugins",
+      });
+    }
+
+    const entitlement = await pluginEntitlementService.resolveEffectiveEntitlement({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: "contact_form",
+    });
+
+    if (entitlement.state !== "enabled") {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Contact Form is not entitled for this project",
       });
     }
 

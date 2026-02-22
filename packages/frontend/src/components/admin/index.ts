@@ -12,5 +12,8 @@ export { TenantMaintenanceTab } from "./maintenance";
 // Machines module (super-admin)
 export { MachinesTab } from "./machines";
 
+// Plugins module (super-admin)
+export { PluginsTab } from "./plugins";
+
 // Usage module
 export { UsageStatsCard } from "./usage";

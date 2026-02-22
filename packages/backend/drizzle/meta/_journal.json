@@ -113,6 +113,13 @@
       "when": 1771761260226,
       "tag": "0015_dapper_mentor",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1771820000000,
+      "tag": "0016_plugin_entitlements",
+      "breakpoints": true
     }
   ]
 }

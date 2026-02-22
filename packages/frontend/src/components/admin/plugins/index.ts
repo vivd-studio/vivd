@@ -1,0 +1,2 @@
+export { PluginsTab } from "./PluginsTab";
+

@@ -13,6 +13,7 @@
 
 ## Progress Log
 
+- 2026-02-22: implemented Phase 1 superadmin-managed plugin entitlements for Contact Form: added DB entitlement table (`plugin_entitlement`, migration `packages/backend/drizzle/0016_plugin_entitlements.sql`), added backend entitlement resolution/upsert/list service, enforced entitlement checks in `plugins.contactEnsure` and public contact submit runtime (including optional monthly hard-stop limit), added new superadmin plugin access APIs (`pluginsListAccess`, `pluginsUpsertEntitlement`, `pluginsBulkSetForOrganization`), and added a centralized Super Admin `Plugins` tab for cross-customer project-level enable/disable/suspend and limit management.
 - 2026-02-22: polished Plugins configuration alignment by constraining the “Auto-detected hosts (read-only fallback)” block to the same inline width as adjacent host inputs, removing the remaining visual width mismatch in the Configuration tab.
 - 2026-02-22: refined Plugins tab alignment so the tab bar now spans the full panel width (matching other settings surfaces) while tab contents remain readability-capped (`max-w-4xl`) to avoid overly long form rows.
 - 2026-02-22: adjusted settings-surface layout to better match organization “General” UX: restored `SettingsPageShell` to fullscreen width, constrained settings/plugin form content to narrower inline max widths for readability (instead of long full-width inputs), and moved Contact Form `Save configuration` to a bottom action row so plugin status badges/actions remain visually distinct.

@@ -15,6 +15,9 @@ import { limitsService } from "../services/usage/LimitsService";
 import { usageService } from "../services/usage/UsageService";
 import { domainService, validateOrganizationSlug } from "../services/publish/DomainService";
 import { studioMachineProvider } from "../services/studioMachines";
+import { pluginEntitlementService } from "../services/plugins/PluginEntitlementService";
+import { projectPluginService } from "../services/plugins/ProjectPluginService";
+import { PLUGIN_IDS } from "../services/plugins/registry";
 import {
   getSystemSettingValue,
   setSystemSettingValue,
@@ -57,6 +60,13 @@ const domainTypeSchema = z.enum(["managed_subdomain", "custom_domain"]);
 const domainStatusSchema = z.enum(["active", "disabled", "pending_verification"]);
 
 const orgMemberRoleSchema = z.enum(["owner", "admin", "member", "client_editor"]);
+const pluginIdSchema = z.enum(PLUGIN_IDS);
+const pluginEntitlementScopeSchema = z.enum(["organization", "project"]);
+const pluginEntitlementStateSchema = z.enum([
+  "disabled",
+  "enabled",
+  "suspended",
+]);
 
 function getGlobalUserRoleForOrganizationRole(
   _role: z.infer<typeof organizationRoleSchema>,
@@ -348,6 +358,142 @@ export const superAdminRouter = router({
       })),
     };
   }),
+
+  pluginsListAccess: superAdminProcedure
+    .input(
+      z
+        .object({
+          pluginId: pluginIdSchema.optional(),
+          search: z.string().trim().max(160).optional(),
+          state: pluginEntitlementStateSchema.optional(),
+          organizationId: organizationIdSchema.optional(),
+          limit: z.number().int().min(1).max(500).optional(),
+          offset: z.number().int().min(0).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ input }) => {
+      const payload = input ?? {};
+      const result = await pluginEntitlementService.listProjectAccess({
+        pluginId: payload.pluginId ?? "contact_form",
+        search: payload.search,
+        state: payload.state,
+        organizationId: payload.organizationId,
+        limit: payload.limit,
+        offset: payload.offset,
+      });
+      return result;
+    }),
+
+  pluginsUpsertEntitlement: superAdminProcedure
+    .input(
+      z
+        .object({
+          pluginId: pluginIdSchema,
+          organizationId: organizationIdSchema,
+          scope: pluginEntitlementScopeSchema,
+          projectSlug: z.string().trim().min(1).optional(),
+          state: pluginEntitlementStateSchema,
+          monthlyEventLimit: z.number().int().min(0).nullable().optional(),
+          hardStop: z.boolean().optional(),
+          notes: z.string().max(1000).optional(),
+          ensurePluginWhenEnabled: z.boolean().optional(),
+        })
+        .refine((data) => (data.scope === "project" ? !!data.projectSlug : true), {
+          message: "projectSlug is required for project scope",
+          path: ["projectSlug"],
+        }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entitlement = await pluginEntitlementService.upsertEntitlement({
+        organizationId: input.organizationId,
+        scope: input.scope,
+        projectSlug: input.projectSlug,
+        pluginId: input.pluginId,
+        state: input.state,
+        managedBy: "manual_superadmin",
+        monthlyEventLimit: input.monthlyEventLimit,
+        hardStop: input.hardStop,
+        notes: input.notes,
+        changedByUserId: ctx.session.user.id,
+      });
+
+      let ensuredPluginInstanceId: string | null = null;
+      if (
+        input.pluginId === "contact_form" &&
+        input.scope === "project" &&
+        input.state === "enabled" &&
+        input.ensurePluginWhenEnabled !== false
+      ) {
+        const ensured = await projectPluginService.ensureContactFormPlugin({
+          organizationId: input.organizationId,
+          projectSlug: input.projectSlug!,
+        });
+        ensuredPluginInstanceId = ensured.instanceId;
+      }
+
+      return {
+        success: true,
+        entitlement: {
+          id: entitlement.id,
+          organizationId: entitlement.organizationId,
+          scope: entitlement.scope,
+          projectSlug: entitlement.projectSlug,
+          pluginId: entitlement.pluginId,
+          state: entitlement.state,
+          managedBy: entitlement.managedBy,
+          monthlyEventLimit: entitlement.monthlyEventLimit,
+          hardStop: entitlement.hardStop,
+          notes: entitlement.notes,
+          changedByUserId: entitlement.changedByUserId,
+          updatedAt: entitlement.updatedAt,
+        },
+        ensuredPluginInstanceId,
+      };
+    }),
+
+  pluginsBulkSetForOrganization: superAdminProcedure
+    .input(
+      z.object({
+        pluginId: pluginIdSchema,
+        organizationId: organizationIdSchema,
+        state: pluginEntitlementStateSchema,
+        monthlyEventLimit: z.number().int().min(0).nullable().optional(),
+        hardStop: z.boolean().optional(),
+        notes: z.string().max(1000).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const entitlement = await pluginEntitlementService.upsertEntitlement({
+        organizationId: input.organizationId,
+        scope: "organization",
+        pluginId: input.pluginId,
+        state: input.state,
+        managedBy: "manual_superadmin",
+        monthlyEventLimit: input.monthlyEventLimit,
+        hardStop: input.hardStop,
+        notes: input.notes,
+        changedByUserId: ctx.session.user.id,
+      });
+
+      return {
+        success: true,
+        entitlement: {
+          id: entitlement.id,
+          organizationId: entitlement.organizationId,
+          scope: entitlement.scope,
+          projectSlug: entitlement.projectSlug,
+          pluginId: entitlement.pluginId,
+          state: entitlement.state,
+          managedBy: entitlement.managedBy,
+          monthlyEventLimit: entitlement.monthlyEventLimit,
+          hardStop: entitlement.hardStop,
+          notes: entitlement.notes,
+          changedByUserId: entitlement.changedByUserId,
+          updatedAt: entitlement.updatedAt,
+        },
+      };
+    }),
 
   getOrganizationUsage: superAdminProcedure
     .input(
