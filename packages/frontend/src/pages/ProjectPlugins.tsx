@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Copy, Loader2, RefreshCw } from "lucide-react";
+import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { toast } from "sonner";
@@ -16,8 +16,59 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type SnippetKind = "html" | "astro";
+type ContactFormFieldType = "text" | "email" | "textarea";
+
+type EditableContactFormField = {
+  key: string;
+  label: string;
+  type: ContactFormFieldType;
+  required: boolean;
+  placeholder: string;
+  rows?: number;
+};
+
+const DEFAULT_CONTACT_FORM_FIELDS: EditableContactFormField[] = [
+  {
+    key: "name",
+    label: "Name",
+    type: "text",
+    required: true,
+    placeholder: "",
+  },
+  {
+    key: "email",
+    label: "Email",
+    type: "email",
+    required: true,
+    placeholder: "",
+  },
+  {
+    key: "message",
+    label: "Message",
+    type: "textarea",
+    required: true,
+    placeholder: "",
+    rows: 5,
+  },
+];
+
+const CONTACT_FORM_RESERVED_FIELD_KEYS = new Set([
+  "token",
+  "_honeypot",
+  "_redirect",
+  "_subject",
+]);
 
 function parseListInput(value: string): string[] {
   const parts = value
@@ -100,9 +151,13 @@ export default function ProjectPlugins() {
   const contactInfo = contactInfoQuery.data;
   const pluginEnabled = !!contactInfo?.enabled;
   const snippets = contactInfo?.snippets;
+  const inferredAutoSourceHosts = contactInfo?.usage?.inferredAutoSourceHosts || [];
   const [recipientEmailsInput, setRecipientEmailsInput] = useState("");
   const [sourceHostsInput, setSourceHostsInput] = useState("");
   const [redirectHostsInput, setRedirectHostsInput] = useState("");
+  const [formFieldsInput, setFormFieldsInput] = useState<EditableContactFormField[]>(
+    DEFAULT_CONTACT_FORM_FIELDS,
+  );
 
   const handleCopy = async (value: string, kind: SnippetKind) => {
     try {
@@ -134,12 +189,54 @@ export default function ProjectPlugins() {
     setRecipientEmailsInput(formatListInput(contactInfo.config.recipientEmails));
     setSourceHostsInput(formatListInput(contactInfo.config.sourceHosts));
     setRedirectHostsInput(formatListInput(contactInfo.config.redirectHostAllowlist));
+    setFormFieldsInput(
+      (contactInfo.config.formFields || DEFAULT_CONTACT_FORM_FIELDS).map((field) => ({
+        key: field.key || "",
+        label: field.label || "",
+        type: field.type || "text",
+        required: field.required ?? true,
+        placeholder: field.placeholder || "",
+        rows: field.type === "textarea" ? (field.rows ?? 5) : undefined,
+      })),
+    );
   }, [
     contactInfo?.instanceId,
     contactInfo?.config?.recipientEmails,
     contactInfo?.config?.sourceHosts,
     contactInfo?.config?.redirectHostAllowlist,
+    contactInfo?.config?.formFields,
   ]);
+
+  const updateFormField = (
+    index: number,
+    patch: Partial<EditableContactFormField>,
+  ) => {
+    setFormFieldsInput((previous) =>
+      previous.map((field, currentIndex) =>
+        currentIndex === index ? { ...field, ...patch } : field,
+      ),
+    );
+  };
+
+  const addFormField = () => {
+    setFormFieldsInput((previous) => [
+      ...previous,
+      {
+        key: `field_${previous.length + 1}`,
+        label: "New Field",
+        type: "text",
+        required: false,
+        placeholder: "",
+      },
+    ]);
+  };
+
+  const removeFormField = (index: number) => {
+    setFormFieldsInput((previous) => {
+      if (previous.length <= 1) return previous;
+      return previous.filter((_, currentIndex) => currentIndex !== index);
+    });
+  };
 
   const handleSaveConfig = () => {
     const recipientEmails = parseListInput(recipientEmailsInput);
@@ -148,12 +245,58 @@ export default function ProjectPlugins() {
       return;
     }
 
+    if (formFieldsInput.length === 0) {
+      toast.error("Add at least one form field");
+      return;
+    }
+
+    const normalizedFormFields = formFieldsInput.map((field) => ({
+      key: field.key.trim(),
+      label: field.label.trim(),
+      type: field.type,
+      required: field.required,
+      placeholder: field.placeholder.trim(),
+      rows:
+        field.type === "textarea"
+          ? Math.max(2, Math.min(12, Number(field.rows || 5)))
+          : undefined,
+    }));
+
+    const keyPattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+    const seenKeys = new Set<string>();
+    for (const field of normalizedFormFields) {
+      if (!field.key || !field.label) {
+        toast.error("Each form field needs a key and label");
+        return;
+      }
+
+      if (!keyPattern.test(field.key)) {
+        toast.error(
+          `Field key "${field.key}" is invalid (use letters, numbers, "_" or "-", starting with a letter)`,
+        );
+        return;
+      }
+
+      const normalizedKey = field.key.toLowerCase();
+      if (CONTACT_FORM_RESERVED_FIELD_KEYS.has(normalizedKey)) {
+        toast.error(`Field key "${field.key}" is reserved and cannot be used`);
+        return;
+      }
+
+      if (seenKeys.has(normalizedKey)) {
+        toast.error(`Duplicate field key "${field.key}"`);
+        return;
+      }
+      seenKeys.add(normalizedKey);
+    }
+
     updateContactConfigMutation.mutate({
       slug,
       config: {
         recipientEmails,
         sourceHosts: parseListInput(sourceHostsInput),
         redirectHostAllowlist: parseListInput(redirectHostsInput),
+        formFields: normalizedFormFields,
       },
     });
   };
@@ -287,9 +430,24 @@ export default function ProjectPlugins() {
                     rows={3}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Empty means submissions are accepted from any host. Recommended:
-                    list only your project domains.
+                    Empty enables auto mode: Vivd allows first-party project hosts
+                    (published + tenant hosts) when available. If none are inferred
+                    yet, submissions from any host are accepted.
                   </p>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2">
+                    <p className="text-xs font-medium mb-1">
+                      Auto-detected hosts (read-only fallback)
+                    </p>
+                    {inferredAutoSourceHosts.length > 0 ? (
+                      <code className="text-xs whitespace-pre-wrap break-words">
+                        {inferredAutoSourceHosts.join("\n")}
+                      </code>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No inferred hosts yet (usually before first publish).
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="contact-redirect-hosts">
@@ -304,9 +462,136 @@ export default function ProjectPlugins() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Redirects users after successful submit via <code>_redirect</code>.
-                    If empty, source hosts are used as fallback. If both lists are
-                    empty, redirects are disabled.
+                    If empty, effective source hosts are used as fallback.
+                    If no effective hosts are available, redirects are disabled.
                   </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Form fields</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={addFormField}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add field
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Default fields are Name, Email, and Message. You can customize
+                    labels, required status, and field types.
+                  </p>
+                  <div className="space-y-2">
+                    {formFieldsInput.map((field, index) => (
+                      <div key={`form-field-${index}`} className="rounded-md border p-3 space-y-3">
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label htmlFor={`contact-field-key-${index}`}>Field key</Label>
+                            <Input
+                              id={`contact-field-key-${index}`}
+                              value={field.key}
+                              onChange={(event) =>
+                                updateFormField(index, { key: event.target.value })
+                              }
+                              placeholder="name"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`contact-field-label-${index}`}>Label</Label>
+                            <Input
+                              id={`contact-field-label-${index}`}
+                              value={field.label}
+                              onChange={(event) =>
+                                updateFormField(index, { label: event.target.value })
+                              }
+                              placeholder="Name"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                          <div className="space-y-1">
+                            <Label>Type</Label>
+                            <Select
+                              value={field.type}
+                              onValueChange={(value) =>
+                                updateFormField(index, {
+                                  type: value as ContactFormFieldType,
+                                  rows:
+                                    value === "textarea"
+                                      ? field.rows ?? 5
+                                      : undefined,
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="email">Email</SelectItem>
+                                <SelectItem value="textarea">Textarea</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`contact-field-placeholder-${index}`}>
+                              Placeholder (optional)
+                            </Label>
+                            <Input
+                              id={`contact-field-placeholder-${index}`}
+                              value={field.placeholder}
+                              onChange={(event) =>
+                                updateFormField(index, { placeholder: event.target.value })
+                              }
+                              placeholder="Optional placeholder"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`contact-field-rows-${index}`}>
+                              Rows (textarea)
+                            </Label>
+                            <Input
+                              id={`contact-field-rows-${index}`}
+                              type="number"
+                              min={2}
+                              max={12}
+                              disabled={field.type !== "textarea"}
+                              value={field.type === "textarea" ? String(field.rows ?? 5) : ""}
+                              onChange={(event) =>
+                                updateFormField(index, {
+                                  rows:
+                                    field.type === "textarea"
+                                      ? Number(event.target.value || "5")
+                                      : undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="inline-flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={field.required}
+                              onCheckedChange={(checked) =>
+                                updateFormField(index, { required: checked === true })
+                              }
+                            />
+                            Required
+                          </label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFormField(index)}
+                            disabled={formFieldsInput.length <= 1}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <Button
                   onClick={handleSaveConfig}

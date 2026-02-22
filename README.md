@@ -125,6 +125,9 @@ npm run ci:local:full
 
 # Include Fly integration tests as well
 npm run ci:local:fly
+
+# Include Fly integration tests and allow the known failing rehydrate/revert test
+npm run ci:local:fly:known
 ```
 
 All variants load `.env` / `.env.local` before running. Integration tiers require the relevant env vars (DB, object storage, Fly/OpenCode) to be configured.

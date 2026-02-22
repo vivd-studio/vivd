@@ -494,16 +494,16 @@
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
   input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px hsl(var(--card)) inset !important;
+    -webkit-box-shadow: 0 0 0 30px hsl(var(--background)) inset !important;
     -webkit-text-fill-color: hsl(var(--foreground)) !important;
     caret-color: hsl(var(--foreground)) !important;
   }
 
-  /* Give inputs a visible background */
+  /* Keep native controls theme-aware without overriding component classes. */
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
   select {
-    background-color: hsl(var(--card)) !important;
+    background-color: hsl(var(--background));
   }
 }
 

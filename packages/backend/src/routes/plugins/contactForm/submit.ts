@@ -6,10 +6,13 @@ import { z } from "zod";
 import { db } from "../../../db";
 import { contactFormSubmission, projectPluginInstance } from "../../../db/schema";
 import { contactFormPluginConfigSchema } from "../../../services/plugins/contactForm/config";
+import { inferContactFormAutoSourceHosts } from "../../../services/plugins/contactForm/sourceHosts";
 import { getEmailDeliveryService } from "../../../services/integrations/EmailDeliveryService";
 import {
   extractSourceHostFromHeaders,
   isHostAllowed,
+  resolveEffectiveRedirectHosts,
+  resolveEffectiveSourceHosts,
   resolveRedirectTarget,
 } from "./helpers";
 
@@ -59,7 +62,7 @@ function escapeHtml(value: string): string {
 }
 
 function sanitizeSubject(rawSubject: string, projectSlug: string): string {
-  const fallback = `New contact form submission — ${projectSlug}`;
+  const fallback = `New message from ${projectSlug}`;
   const candidate = rawSubject
     .trim()
     .replace(/[\r\n\t]+/g, " ")
@@ -67,7 +70,81 @@ function sanitizeSubject(rawSubject: string, projectSlug: string): string {
   return candidate || fallback;
 }
 
-function buildAdditionalFields(
+function formatSubmittedAtForEmail(submittedAt: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  }).format(submittedAt);
+}
+
+const VIVD_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 100 100" role="img" aria-label="Vivd logo">
+  <defs>
+    <linearGradient id="vivdMailGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+  </defs>
+  <path d="M25 30 L50 75 L75 30" stroke="url(#vivdMailGradient)" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+type SubmittedContactField = {
+  key: string;
+  label: string;
+  type: "text" | "email" | "textarea";
+  required: boolean;
+  value: string;
+};
+
+function collectSubmittedFormFields(
+  fields: Record<string, string>,
+  configuredFields: {
+    key: string;
+    label: string;
+    type: "text" | "email" | "textarea";
+    required: boolean;
+  }[],
+): SubmittedContactField[] {
+  return configuredFields.map((field) => ({
+    key: field.key,
+    label: field.label,
+    type: field.type,
+    required: field.required,
+    value: fields[field.key] || "",
+  }));
+}
+
+function collectNonEmptyFields(
+  fields: SubmittedContactField[],
+): SubmittedContactField[] {
+  return fields.filter((field) => field.value.trim().length > 0);
+}
+
+function collectMissingRequiredFieldLabels(
+  fields: SubmittedContactField[],
+): string[] {
+  return fields
+    .filter((field) => field.required && field.value.trim().length === 0)
+    .map((field) => field.label);
+}
+
+function collectInvalidEmailFieldLabels(
+  fields: SubmittedContactField[],
+): string[] {
+  return fields
+    .filter((field) => {
+      if (field.type !== "email") return false;
+      if (field.value.trim().length === 0) return false;
+      return !emailFieldSchema.safeParse(field.value).success;
+    })
+    .map((field) => field.label);
+}
+
+function collectUnknownFields(
   fields: Record<string, string>,
   ignoredKeys: Set<string>,
 ): Record<string, string> {
@@ -79,50 +156,68 @@ function buildAdditionalFields(
   );
 }
 
-function formatAdditionalTextLines(
-  additionalFields: Record<string, string>,
-): string {
-  const entries = Object.entries(additionalFields);
-  if (entries.length === 0) return "";
-
-  const lines = entries.map(([key, value]) => `${key}: ${value}`);
-  return `\nAdditional fields:\n${lines.join("\n")}`;
+function formatFieldRowsText(fields: SubmittedContactField[]): string {
+  return fields
+    .map((field) => `${field.label}: ${field.value}`)
+    .join("\n");
 }
 
-function formatAdditionalHtml(
-  additionalFields: Record<string, string>,
-): string {
-  const entries = Object.entries(additionalFields);
+function formatUnknownFieldsText(fields: Record<string, string>): string {
+  const entries = Object.entries(fields);
   if (entries.length === 0) return "";
+  return entries.map(([key, value]) => `${key}: ${value}`).join("\n");
+}
 
-  return `<p><strong>Additional fields</strong></p><ul>${entries
+function formatFieldRowsHtml(fields: SubmittedContactField[]): string {
+  return fields
+    .map(
+      (field) =>
+        `<tr><td style="padding:10px 0;vertical-align:top;font-weight:600;color:#111827;width:180px;">${escapeHtml(
+          field.label,
+        )}</td><td style="padding:10px 0;vertical-align:top;color:#374151;">${escapeHtml(
+          field.value,
+        )
+          .replace(/\n/g, "<br/>")
+          .trim()}</td></tr>`,
+    )
+    .join("");
+}
+
+function formatUnknownFieldsHtml(fields: Record<string, string>): string {
+  const entries = Object.entries(fields);
+  if (entries.length === 0) return "";
+  return entries
     .map(
       ([key, value]) =>
-        `<li><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</li>`,
+        `<tr><td style="padding:8px 0;vertical-align:top;font-weight:600;color:#374151;width:180px;">${escapeHtml(
+          key,
+        )}</td><td style="padding:8px 0;vertical-align:top;color:#4B5563;">${escapeHtml(
+          value,
+        )
+          .replace(/\n/g, "<br/>")
+          .trim()}</td></tr>`,
     )
-    .join("")}</ul>`;
+    .join("");
 }
 
 function buildSubmissionTextEmail(input: {
   projectSlug: string;
-  sourceHost: string | null;
-  name: string;
-  email: string;
-  message: string;
-  additionalFields: Record<string, string>;
+  submittedAtLabel: string;
+  replyToEmail: string | null;
+  submittedFields: SubmittedContactField[];
+  unknownFields: Record<string, string>;
 }): string {
+  const unknownFieldsText = formatUnknownFieldsText(input.unknownFields);
   return [
-    "New contact form submission",
+    "You received a new message from your website contact form.",
+    "",
     `Project: ${input.projectSlug}`,
-    `Source host: ${input.sourceHost || "unknown"}`,
-    `Submitted at: ${new Date().toISOString()}`,
+    `Received: ${input.submittedAtLabel}`,
+    `Reply email from form: ${input.replyToEmail || "(not provided)"}`,
     "",
-    `Name: ${input.name}`,
-    `Email: ${input.email}`,
-    "",
-    "Message:",
-    input.message,
-    formatAdditionalTextLines(input.additionalFields),
+    "Submitted details:",
+    formatFieldRowsText(input.submittedFields) || "(No fields submitted)",
+    unknownFieldsText ? `\nAdditional details:\n${unknownFieldsText}` : "",
   ]
     .join("\n")
     .trim();
@@ -130,23 +225,37 @@ function buildSubmissionTextEmail(input: {
 
 function buildSubmissionHtmlEmail(input: {
   projectSlug: string;
-  sourceHost: string | null;
-  name: string;
-  email: string;
-  message: string;
-  additionalFields: Record<string, string>;
+  submittedAtLabel: string;
+  replyToEmail: string | null;
+  submittedFields: SubmittedContactField[];
+  unknownFields: Record<string, string>;
 }): string {
+  const unknownFieldsHtml = formatUnknownFieldsHtml(input.unknownFields);
   return [
-    "<h2>New contact form submission</h2>",
-    `<p><strong>Project:</strong> ${escapeHtml(input.projectSlug)}</p>`,
-    `<p><strong>Source host:</strong> ${escapeHtml(input.sourceHost || "unknown")}</p>`,
-    `<p><strong>Submitted at:</strong> ${escapeHtml(new Date().toISOString())}</p>`,
-    "<hr />",
-    `<p><strong>Name:</strong> ${escapeHtml(input.name)}</p>`,
-    `<p><strong>Email:</strong> ${escapeHtml(input.email)}</p>`,
-    "<p><strong>Message:</strong></p>",
-    `<pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(input.message)}</pre>`,
-    formatAdditionalHtml(input.additionalFields),
+    `<div style="margin:0;background:#F3F4F6;padding:24px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827;">`,
+    `<div style="max-width:680px;margin:0 auto;background:#FFFFFF;border:1px solid #E5E7EB;border-radius:14px;overflow:hidden;">`,
+    `<div style="padding:20px 24px;border-bottom:1px solid #E5E7EB;background:#F9FAFB;">`,
+    `<div style="display:flex;align-items:center;gap:10px;">${VIVD_LOGO_SVG}<span style="font-size:22px;font-weight:700;letter-spacing:0.01em;color:#0F172A;">vivd</span></div>`,
+    `</div>`,
+    `<div style="padding:24px;">`,
+    `<h2 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#111827;">New message from your website</h2>`,
+    `<p style="margin:0 0 18px;color:#4B5563;font-size:14px;line-height:1.6;">You received a new contact form submission.</p>`,
+    `<div style="margin-bottom:20px;padding:14px 16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;font-size:14px;color:#374151;line-height:1.6;">`,
+    `<div><strong style="color:#111827;">Project:</strong> ${escapeHtml(input.projectSlug)}</div>`,
+    `<div><strong style="color:#111827;">Received:</strong> ${escapeHtml(input.submittedAtLabel)}</div>`,
+    `<div><strong style="color:#111827;">Reply email from form:</strong> ${escapeHtml(input.replyToEmail || "Not provided")}</div>`,
+    `</div>`,
+    `<h3 style="margin:0 0 8px;font-size:16px;color:#111827;">Submitted details</h3>`,
+    `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">${formatFieldRowsHtml(
+      input.submittedFields,
+    )}</table>`,
+    unknownFieldsHtml
+      ? `<h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Additional details</h3><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">${unknownFieldsHtml}</table>`
+      : "",
+    `<p style="margin:24px 0 0;color:#6B7280;font-size:13px;line-height:1.6;">Use the reply email from the form details above when responding.</p>`,
+    `</div>`,
+    `</div>`,
+    `</div>`,
   ].join("");
 }
 
@@ -232,7 +341,16 @@ export function createContactFormPublicRouter(
         referer: req.get("referer"),
       });
 
-      if (!isHostAllowed(sourceHost, config.sourceHosts)) {
+      const inferredSourceHosts = await inferContactFormAutoSourceHosts({
+        organizationId: pluginInstance.organizationId,
+        projectSlug: pluginInstance.projectSlug,
+      });
+      const effectiveSourceHosts = resolveEffectiveSourceHosts(
+        config.sourceHosts,
+        inferredSourceHosts,
+      );
+
+      if (!isHostAllowed(sourceHost, effectiveSourceHosts)) {
         return sendSubmitError(req, res, 403, "forbidden_source", "source host not allowed");
       }
 
@@ -241,21 +359,27 @@ export function createContactFormPublicRouter(
         return sendSubmitSuccess(req, res, null);
       }
 
-      const name = fields.name || "";
-      const email = fields.email || "";
-      const message = fields.message || "";
-      if (!name || !email || !message) {
+      const submittedFields = collectSubmittedFormFields(fields, config.formFields);
+      const missingRequiredFieldLabels = collectMissingRequiredFieldLabels(submittedFields);
+      if (missingRequiredFieldLabels.length > 0) {
         return sendSubmitError(
           req,
           res,
           400,
           "invalid_payload",
-          "name, email, and message are required",
+          `Missing required fields: ${missingRequiredFieldLabels.join(", ")}`,
         );
       }
 
-      if (!emailFieldSchema.safeParse(email).success) {
-        return sendSubmitError(req, res, 400, "invalid_payload", "email is invalid");
+      const invalidEmailFieldLabels = collectInvalidEmailFieldLabels(submittedFields);
+      if (invalidEmailFieldLabels.length > 0) {
+        return sendSubmitError(
+          req,
+          res,
+          400,
+          "invalid_payload",
+          `Invalid email fields: ${invalidEmailFieldLabels.join(", ")}`,
+        );
       }
 
       const recipientEmails = config.recipientEmails;
@@ -269,7 +393,12 @@ export function createContactFormPublicRouter(
         );
       }
 
-      const ignoredPayloadKeys = new Set(["token", honeypotField]);
+      const ignoredPayloadKeys = new Set([
+        "token",
+        honeypotField,
+        "_redirect",
+        "_subject",
+      ]);
 
       const payload = Object.fromEntries(
         Object.entries(fields).filter(
@@ -277,18 +406,12 @@ export function createContactFormPublicRouter(
         ),
       );
 
-      const additionalFields = buildAdditionalFields(
+      const unknownFields = collectUnknownFields(
         fields,
-        new Set([
-          "token",
-          honeypotField,
-          "name",
-          "email",
-          "message",
-          "_redirect",
-          "_subject",
-        ]),
+        new Set([...ignoredPayloadKeys, ...config.formFields.map((field) => field.key)]),
       );
+
+      const submittedAt = new Date();
 
       await db.insert(contactFormSubmission).values({
         id: randomUUID(),
@@ -299,8 +422,15 @@ export function createContactFormPublicRouter(
         ipHash: hashClientIp(req),
         userAgent: (req.get("user-agent") || "").slice(0, 1024) || null,
         payload,
-        createdAt: new Date(),
+        createdAt: submittedAt,
       });
+
+      const nonEmptySubmittedFields = collectNonEmptyFields(submittedFields);
+      const replyToField = nonEmptySubmittedFields.find(
+        (field) => field.type === "email" && field.value.length > 0,
+      );
+      const replyToEmail = replyToField?.value?.trim() || null;
+      const submittedAtLabel = formatSubmittedAtForEmail(submittedAt);
 
       const emailService = getEmailDeliveryService();
       const emailResult = await emailService.send({
@@ -308,21 +438,19 @@ export function createContactFormPublicRouter(
         subject: sanitizeSubject(fields._subject || "", pluginInstance.projectSlug),
         text: buildSubmissionTextEmail({
           projectSlug: pluginInstance.projectSlug,
-          sourceHost,
-          name,
-          email,
-          message,
-          additionalFields,
+          submittedAtLabel,
+          replyToEmail,
+          submittedFields: nonEmptySubmittedFields,
+          unknownFields,
         }),
         html: buildSubmissionHtmlEmail({
           projectSlug: pluginInstance.projectSlug,
-          sourceHost,
-          name,
-          email,
-          message,
-          additionalFields,
+          submittedAtLabel,
+          replyToEmail,
+          submittedFields: nonEmptySubmittedFields,
+          unknownFields,
         }),
-        replyTo: email,
+        replyTo: replyToEmail || undefined,
         metadata: {
           plugin: "contact_form",
           project: pluginInstance.projectSlug,
@@ -341,11 +469,10 @@ export function createContactFormPublicRouter(
         return sendSubmitError(req, res, 502, "delivery_failed", "message delivery failed");
       }
 
-      const redirectAllowlist =
-        config.redirectHostAllowlist.length > 0
-          ? config.redirectHostAllowlist
-          : config.sourceHosts;
-
+      const redirectAllowlist = resolveEffectiveRedirectHosts(
+        config.redirectHostAllowlist,
+        effectiveSourceHosts,
+      );
       const redirectTarget = resolveRedirectTarget(fields._redirect, redirectAllowlist);
       return sendSubmitSuccess(req, res, redirectTarget);
     },

@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
+import type { Measurable } from "@radix-ui/rect";
 import {
   Card,
   CardContent,
@@ -31,6 +32,7 @@ import {
   Eye,
   EyeOff,
   Image,
+  Tags,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -40,6 +42,8 @@ import { ROUTES } from "@/app/router";
 import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
+import { ProjectTagsPopover, TagChip } from "./ProjectTagsPopover";
+import { useTagColors } from "@/lib/tagColors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,6 +67,7 @@ export interface Project {
   url: string;
   source?: "url" | "scratch";
   title?: string;
+  tags?: string[];
   status: string;
   createdAt: string;
   currentVersion?: number;
@@ -76,6 +81,7 @@ export interface Project {
 
 interface ProjectCardProps {
   project: Project;
+  availableTags: string[];
   onRegenerate: (slug: string, version?: number) => void;
   onDelete: (slug: string) => void;
   isRegenerating: boolean;
@@ -92,6 +98,7 @@ function isDevDomain(domain: string): boolean {
 
 export function ProjectCard({
   project,
+  availableTags,
   onRegenerate,
   onDelete,
   isRegenerating,
@@ -143,6 +150,18 @@ export function ProjectCard({
       });
     },
   });
+  const updateTagsMutation = trpc.project.updateTags.useMutation({
+    onSuccess: () => {
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to update tags", {
+        description: error.message,
+      });
+    },
+  });
+
+  const { getColor } = useTagColors();
 
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1,
@@ -150,6 +169,14 @@ export function ProjectCard({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
+  const [tagsPopoverAnchor, setTagsPopoverAnchor] = useState<"tags" | "actions">("tags");
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const suppressActionsCloseAutoFocusRef = useRef(false);
+  const tagsAreaAnchorRef = useRef<HTMLDivElement>(null);
+  const actionsMenuItemAnchorRef = useRef<Measurable>({
+    getBoundingClientRect: () => new DOMRect(),
+  });
   const [copied, setCopied] = useState(false);
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
   const canManagePreview = membership?.organizationRole !== "client_editor";
@@ -227,6 +254,7 @@ export function ProjectCard({
   const isProcessing =
     !isCompleted && !isFailed && selectedVersionInfo?.status !== "unknown";
   const totalVersions = project.totalVersions || 1;
+  const projectTags = project.tags ?? [];
   const isUrlProject = (project.source || "url") === "url";
   const subtitle = isUrlProject
     ? project.url
@@ -236,6 +264,11 @@ export function ProjectCard({
   const publishedUrl = project.publishedDomain
     ? `${isDevDomain(project.publishedDomain) ? "http" : "https"}://${project.publishedDomain}`
     : null;
+  const activeTagsPopoverAnchorRef: RefObject<Measurable> = (
+    tagsPopoverAnchor === "actions"
+      ? actionsMenuItemAnchorRef
+      : tagsAreaAnchorRef
+  ) as unknown as RefObject<Measurable>;
 
   // Calculate progress and label
   let statusLabel = "Pending";
@@ -339,6 +372,60 @@ export function ProjectCard({
           >
             {subtitle}
           </div>
+          <ProjectTagsPopover
+            open={tagsPopoverOpen}
+            onOpenChange={setTagsPopoverOpen}
+            anchorVirtualRef={activeTagsPopoverAnchorRef}
+            sideOffset={tagsPopoverAnchor === "actions" ? -6 : 6}
+            suppressInitialOutsideInteraction={
+              tagsPopoverOpen && tagsPopoverAnchor === "actions"
+            }
+            projectTags={projectTags}
+            availableTags={availableTags}
+            isSaving={updateTagsMutation.isPending}
+            onToggleTag={(tag, add) => {
+              const next = add
+                ? [...projectTags, tag]
+                : projectTags.filter((t) => t !== tag);
+              updateTagsMutation.mutate({ slug: project.slug, tags: next });
+            }}
+            onCreateTag={(tag) => {
+              if (!projectTags.includes(tag)) {
+                updateTagsMutation.mutate({
+                  slug: project.slug,
+                  tags: [...projectTags, tag],
+                });
+              }
+            }}
+          >
+            <div
+              ref={tagsAreaAnchorRef}
+              className="mt-2 flex flex-wrap gap-1 cursor-pointer min-h-[22px]"
+              title="Click to edit labels"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTagsPopoverAnchor("tags");
+                setTagsPopoverOpen(true);
+              }}
+            >
+              {projectTags.length === 0 ? (
+                <span className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors select-none">
+                  + Add labels
+                </span>
+              ) : (
+                <>
+                  {projectTags.slice(0, 4).map((tag) => (
+                    <TagChip key={tag} tag={tag} color={getColor(tag)} className="text-[10px] py-0.5" />
+                  ))}
+                  {projectTags.length > 4 && (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+                      +{projectTags.length - 4}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          </ProjectTagsPopover>
           {project.publishedDomain && (
             <div className="mt-1.5 flex items-center gap-1.5">
               <Globe className="w-3 h-3 text-green-600 shrink-0" />
@@ -418,7 +505,10 @@ export function ProjectCard({
           )}
         </CardContent>
         <CardFooter className="pt-2.5 pb-3 px-4 flex items-center justify-end gap-2 border-t border-border/30 mt-auto">
-          <DropdownMenu>
+          <DropdownMenu
+            open={actionsMenuOpen}
+            onOpenChange={setActionsMenuOpen}
+          >
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
@@ -432,6 +522,12 @@ export function ProjectCard({
             <DropdownMenuContent
               align="end"
               onClick={(e) => e.stopPropagation()}
+              onCloseAutoFocus={(event) => {
+                if (suppressActionsCloseAutoFocusRef.current) {
+                  event.preventDefault();
+                  suppressActionsCloseAutoFocusRef.current = false;
+                }
+              }}
             >
               {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
               <DropdownMenuItem
@@ -512,6 +608,30 @@ export function ProjectCard({
                 {regenerateThumbnailMutation.isPending
                   ? "Regenerating thumbnail..."
                   : "Regenerate thumbnail"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  const target = event.currentTarget as HTMLElement | null;
+                  if (!target) return;
+                  const rect = target.getBoundingClientRect();
+                  const frozenRect = new DOMRect(
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    0,
+                  );
+                  actionsMenuItemAnchorRef.current = {
+                    getBoundingClientRect: () => frozenRect,
+                  };
+                  suppressActionsCloseAutoFocusRef.current = true;
+                  setTagsPopoverAnchor("actions");
+                  setActionsMenuOpen(false);
+                  requestAnimationFrame(() => setTagsPopoverOpen(true));
+                }}
+              >
+                <Tags className="w-4 h-4 mr-2" />
+                Edit tags
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => navigate(ROUTES.PROJECT_PLUGINS(project.slug))}

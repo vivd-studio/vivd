@@ -2,6 +2,9 @@
 # Serves published sites and proxies to backend for studio routes
 
 {
+    # Keep local development plain HTTP to avoid mixed-content and local cert issues.
+    auto_https off
+
     # Enable admin API for dynamic config reloads
     # Binds to all interfaces within container, but port 2019 is NOT exposed
     # externally (only ports 80/443 are in docker-compose), so this is safe.
@@ -14,8 +17,8 @@
 # Import all dynamically-generated site configs
 import /etc/caddy/sites.d/*.caddy
 
-# Public plugin API host
-api.localhost {
+# Public plugin API host (HTTP in local dev)
+http://api.localhost {
     handle /plugins/* {
         reverse_proxy backend:3000
     }

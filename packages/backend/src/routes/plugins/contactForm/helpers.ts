@@ -59,6 +59,36 @@ export function isHostAllowed(
   return false;
 }
 
+function normalizeHostAllowlist(allowlist: string[]): string[] {
+  const normalized = new Set<string>();
+
+  for (const host of allowlist) {
+    const candidate = normalizeHostCandidate(host);
+    if (!candidate) continue;
+    normalized.add(candidate);
+  }
+
+  return [...normalized];
+}
+
+export function resolveEffectiveSourceHosts(
+  configuredSourceHosts: string[],
+  inferredSourceHosts: string[],
+): string[] {
+  const normalizedConfigured = normalizeHostAllowlist(configuredSourceHosts);
+  if (normalizedConfigured.length > 0) return normalizedConfigured;
+  return normalizeHostAllowlist(inferredSourceHosts);
+}
+
+export function resolveEffectiveRedirectHosts(
+  configuredRedirectHosts: string[],
+  effectiveSourceHosts: string[],
+): string[] {
+  const normalizedRedirect = normalizeHostAllowlist(configuredRedirectHosts);
+  if (normalizedRedirect.length > 0) return normalizedRedirect;
+  return normalizeHostAllowlist(effectiveSourceHosts);
+}
+
 export function resolveRedirectTarget(
   rawRedirect: string | null | undefined,
   allowlist: string[],

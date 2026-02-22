@@ -273,6 +273,27 @@ class ProjectMetaService {
       .where(and(eq(projectMeta.organizationId, organizationId), eq(projectMeta.slug, slug)));
   }
 
+  async setTags(options: {
+    organizationId: string;
+    slug: string;
+    tags: string[];
+  }): Promise<void> {
+    const rows = await db
+      .update(projectMeta)
+      .set({ tags: options.tags, updatedAt: new Date() })
+      .where(
+        and(
+          eq(projectMeta.organizationId, options.organizationId),
+          eq(projectMeta.slug, options.slug),
+        ),
+      )
+      .returning({ slug: projectMeta.slug });
+
+    if (rows.length === 0) {
+      throw new Error("Project not found");
+    }
+  }
+
   async touchUpdatedAt(organizationId: string, slug: string): Promise<void> {
     await db
       .update(projectMeta)

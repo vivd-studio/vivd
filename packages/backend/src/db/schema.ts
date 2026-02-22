@@ -238,6 +238,7 @@ export const projectMeta = pgTable(
     url: text("url").notNull().default(""),
     title: text("title").notNull().default(""),
     description: text("description").notNull().default(""),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
     currentVersion: integer("current_version").notNull().default(1),
     publicPreviewEnabled: boolean("public_preview_enabled")
       .notNull()

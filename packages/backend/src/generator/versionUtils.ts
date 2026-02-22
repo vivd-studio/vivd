@@ -52,6 +52,7 @@ export interface ProjectManifest {
   source?: "url" | "scratch";
   title?: string;
   description?: string;
+  tags: string[];
   createdAt: string;
   updatedAt?: string; // Last time any file in the project was modified
   currentVersion: number;
@@ -157,11 +158,15 @@ export async function getManifest(
   if (!project) return null;
 
   const versions = await projectMetaService.listProjectVersions(organizationId, slug);
+  const tags = Array.isArray(project.tags)
+    ? project.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
   return {
     url: project.url,
     source: (project.source as "url" | "scratch") ?? undefined,
     title: project.title || undefined,
     description: project.description || undefined,
+    tags,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt?.toISOString(),
     currentVersion: project.currentVersion,

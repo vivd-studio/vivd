@@ -13,6 +13,18 @@
 
 ## Progress Log
 
+- 2026-02-22: improved Plugins page navigation clarity by updating the shared layout breadcrumb for `/projects/:projectSlug/plugins` to `Projects > {projectSlug} > Plugins`, with links back to the project list and project page.
+- 2026-02-22: improved Contact Form notification email readability for end users: replaced raw ISO receive timestamps with a human-friendly UTC date/time format, and clarified reply guidance to use the email submitted in the form (instead of implying the no-reply sender address is the reply target).
+- 2026-02-22: fixed project-card tags popover interaction bugs while keeping the current popover UX: selecting **Edit tags** from the overflow menu now closes the dropdown first, suppresses close auto-focus handoff, then opens the popover on the next frame; when triggered from overflow, popover anchoring now uses the clicked menu item rect as a frozen virtual anchor with zero-height bounds plus a negative side offset (`sideOffset=-6`) so placement stays close to the click and higher vertically; popover content now stops pointer/click propagation to prevent click-through actions on underlying card controls; immediate re-close on open is guarded by suppressing the first outside interaction frame for overflow-triggered opens; and tag color edits now propagate immediately across all card/popover instances in-tab via a local `vivd-tag-colors:updated` event (not only via cross-tab `storage` events).
+- 2026-02-22: fixed cross-theme form surface contrast regression in shared UI/theme primitives: removed `@vivd/theme` global `!important` override that forced all text inputs/textarea/selects to `--card`, switched autofill background fill to `--background`, and updated shared `Input`/`Textarea`/`SelectTrigger` components in both frontend and studio to use explicit `bg-background` so controls remain visually distinct from card/panel surfaces across themes.
+- 2026-02-22: enhanced local CI Fly tier orchestration in `scripts/ci-local.sh`: added warm-reconcile integration run (`test/integration/fly_reconcile_flow.test.ts`) and an opt-in known-failure mode for the currently broken rehydrate/revert flow (`--allow-known-fly-rehydrate-failure`, npm alias `ci:local:fly:known`) so full local CI remains actionable while still surfacing the failing integration.
+- 2026-02-22: implemented project tags in the projects overview end-to-end: added DB-backed `project_meta.tags` (migration `packages/backend/drizzle/0015_dapper_mentor.sql`), added backend `project.updateTags` mutation with normalization/validation, exposed tags in `project.list`, added dashboard tag rendering and an edit-tags dialog in project cards, added multi-tag filtering controls in `ProjectsList`, and added targeted backend/frontend tests for normalization, auth gating, mutation behavior, and filter UX.
+- 2026-02-22: aligned Fly integration tests with current runtime behavior: `packages/backend/test/integration/fly_shutdown_bucket_sync.test.ts` now verifies source + OpenCode (`storage/session_diff`) sync with deterministic OpenCode home (`VIVD_OPENCODE_DATA_HOME` pinned in machine env), and `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts` now seeds `index.html` when absent so failures reflect revert/rehydrate behavior (not fresh-workspace bootstrap assumptions).
+- 2026-02-22: added a concrete implementation plan for project tagging in the dashboard overview (assign/edit tags per project + filter list by selected tags), including DB/tRPC/frontend/test rollout details in the new "Feature Plan: Project Tags in Projects Overview" section below.
+- 2026-02-22: added transparent Contact Form auto-host visibility in Plugins UI: backend `plugins.contactInfo` now returns inferred auto source hosts (published domains + active tenant hosts + local dev hosts in non-prod), and the Project Plugins page now displays these inferred hosts as read-only fallback info when source-host allowlist is left empty.
+- 2026-02-22: fixed missing Plugins action icon in fullscreen/embedded preview option menus by adding the `Settings2` icon to the Plugins dropdown item in `packages/frontend/src/pages/EmbeddedStudio.tsx` and `packages/frontend/src/pages/ProjectFullscreen.tsx`.
+- 2026-02-22: fixed local Contact Form submit ergonomics in dev: Caddy dev config now serves `api.localhost` on HTTP without forced HTTPS redirect (`Caddyfile.dev`), and contact-form auto source-host inference now includes local preview hosts (`localhost`, `127.0.0.1`, `::1`) in non-production so preview/studio submits are not blocked when `sourceHosts` is left empty.
+- 2026-02-22: updated Contact Form host-allowlist behavior to support clean first-party defaults without blocking studio/preview: when `sourceHosts` is empty, submit runtime now auto-derives effective allowed hosts from the project’s published domain(s) plus active tenant host(s); redirects now fall back to this same effective source-host set when `redirectHostAllowlist` is empty. Plugins UI copy was updated to explain auto-mode and redirect semantics.
 - 2026-02-22: simplified Contact Form plugin configuration UX by removing honeypot-field customization from project settings (runtime now uses fixed `_honeypot` to match generated snippets), and clarified redirect/source-host behavior in the Plugins UI; submit redirect handling now falls back to `sourceHosts` when `redirectHostAllowlist` is empty (while still disabling redirects when both lists are empty).
 - 2026-02-22: split plugin service internals into scoped modules: moved generic plugin-instance persistence/idempotency logic into `packages/backend/src/services/plugins/core/instanceService.ts` and moved contact-form-specific orchestration into `packages/backend/src/services/plugins/contactForm/service.ts`, while keeping `packages/backend/src/services/plugins/ProjectPluginService.ts` as the stable facade for existing router/tool callers.
 - 2026-02-22: split backend tRPC plugin management router into plugin-scoped modules under `packages/backend/src/routers/plugins/` (`catalog.ts`, `contactForm.ts`, `index.ts`) so adding future plugins does not bloat a single `plugins.ts` router file.
@@ -69,6 +81,7 @@
 
 - [ ] Execute phased test hardening plan across backend/studio/frontend/scraper, starting with auth + publish + import + workspace/sync critical paths.
 - [ ] Add Phase 4 critical E2E smoke coverage for cross-service flows (lean PR suite + nightly/pre-release full suite).
+- [ ] Fix known failing Fly integration: `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts` (expected red currently; revert-after-rehydrate path still broken).
 - [ ] Move plugin-system into Phase 1: implement contact submit runtime endpoint + initial inbox read path on top of Phase 0 scaffolding.
 - [ ] Validate lifecycle sync hardening in real Fly runs (stop/destroy/warm-reconcile + trigger-driven sync under larger workspace/opencode payloads).
 - [ ] Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
@@ -76,6 +89,70 @@
 - [ ] Add missing control-plane hardening (audit log, monitoring, rate limiting, abuse controls).
 - [ ] Implement billing primitives (Stripe products/prices/webhooks + subscription UX).
 - [ ] Finalize build strategy and preview artifact contract (build location, signed vs public artifact access).
+
+## Feature Plan: Project Tags in Projects Overview (2026-02-22)
+
+Status: implemented (2026-02-22).
+
+### Goal
+
+- Let users assign tags to projects in the dashboard and filter the projects overview by those tags without changing existing search/sort behavior.
+
+### Scope (MVP)
+
+- Add per-project tag assignment/editing from the overview.
+- Render tags on project cards.
+- Add multi-tag filtering in `packages/frontend/src/components/projects/listing/ProjectsList.tsx`.
+- Keep client-editor access restrictions unchanged (can view assigned project only; cannot change tags).
+
+### Backend Plan
+
+- Add Drizzle migration `packages/backend/drizzle/0015_dapper_mentor.sql`:
+  - Add `project_meta.tags` as non-null JSONB array defaulting to `[]`.
+- Extend schema/types:
+  - `packages/backend/src/db/schema.ts`: include `tags` on `projectMeta`.
+  - `packages/backend/src/generator/versionUtils.ts`: include tags in `ProjectManifest`.
+- Add project tag mutation:
+  - `packages/backend/src/routers/project/tags.ts`: add `project.updateTags` (`adminProcedure`) with input `{ slug, tags: string[] }`.
+  - Normalize and validate tags (trim, lowercase, dedupe, cap count/length, reject empty values).
+  - Persist tags via `projectMetaService` and update `updatedAt`.
+- Extend `project.list` response to include `tags` so no extra list query is needed for filter options.
+
+### Frontend Plan
+
+- `packages/frontend/src/components/projects/listing/ProjectsList.tsx`:
+  - Add selected-tags state.
+  - Derive available tags from listed projects.
+  - Filter list by selected tags plus existing search query; keep existing sort pipeline.
+  - Add clear/reset affordance for tag filters.
+- `packages/frontend/src/components/projects/listing/ProjectCard.tsx`:
+  - Show project tags as badges.
+  - Add a small edit-tags dialog and call `trpc.project.updateTags`.
+  - Invalidate `project.list` on successful update.
+- Keep `PROJECT_ACTIONS` parity intact by treating tag edit as overview-specific UI (not part of shared quick-action menus in embedded/fullscreen studio views).
+
+### Tests and Verification
+
+- Backend tests:
+  - Add router/service tests for tag normalization, persistence, and auth gating.
+  - Verify `project.list` includes tags and client-editor behavior remains unchanged.
+- Frontend tests:
+  - Add `ProjectsList` tests for single/multi-tag filtering combined with text search.
+  - Add `ProjectCard` tag-edit mutation success/error behavior tests.
+- Manual verification:
+  - No-project state, no-tags state, and mixed-tag projects.
+  - Tag update reflects immediately in list, card badges, and active filters.
+
+### Rollout Notes
+
+- Run `npm run db:generate -w @vivd/backend` then `npm run db:migrate -w @vivd/backend`.
+- No data backfill required: existing projects default to empty tag arrays.
+- Optional follow-up after MVP: server-side filtering input on `project.list` if project counts grow significantly.
+
+### Open Decisions
+
+- Multi-tag semantics: `match all selected tags` (recommended) vs `match any selected tag`.
+- Allowed tag format: free-form labels (with normalization) vs slug-only labels.
 
 ## Concrete Test Hardening Plan
 

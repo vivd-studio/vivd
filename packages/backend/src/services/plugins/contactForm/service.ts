@@ -6,10 +6,12 @@ import {
   type ProjectPluginInstanceRow,
 } from "../core/instanceService";
 import {
+  DEFAULT_CONTACT_FORM_FIELDS,
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
 } from "./config";
 import { getContactFormSubmitEndpoint } from "./publicApi";
+import { inferContactFormAutoSourceHosts } from "./sourceHosts";
 import { getContactFormSnippets } from "./snippets";
 
 export interface ContactFormPluginPayload {
@@ -40,6 +42,7 @@ export interface ContactFormPluginInfoPayload {
     submitEndpoint: string;
     expectedFields: string[];
     optionalFields: string[];
+    inferredAutoSourceHosts: string[];
   };
   instructions: string[];
 }
@@ -48,6 +51,20 @@ function normalizeContactFormConfig(configJson: unknown): ContactFormPluginConfi
   const parsed = contactFormPluginConfigSchema.safeParse(configJson ?? {});
   if (parsed.success) return parsed.data;
   return contactFormPluginConfigSchema.parse({});
+}
+
+function buildUsage(input: {
+  submitEndpoint: string;
+  config: ContactFormPluginConfig | null;
+  inferredAutoSourceHosts: string[];
+}) {
+  const configuredFields = input.config?.formFields ?? DEFAULT_CONTACT_FORM_FIELDS;
+  return {
+    submitEndpoint: input.submitEndpoint,
+    expectedFields: ["token", ...configuredFields.map((field) => field.key)],
+    optionalFields: ["_redirect", "_subject", "_honeypot"],
+    inferredAutoSourceHosts: input.inferredAutoSourceHosts,
+  };
 }
 
 class ContactFormPluginService {
@@ -121,6 +138,11 @@ class ContactFormPluginService {
     projectSlug: string;
   }): Promise<ContactFormPluginInfoPayload> {
     const submitEndpoint = getContactFormSubmitEndpoint();
+    const inferredAutoSourceHosts = await inferContactFormAutoSourceHosts({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+    });
+
     const existing = await projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
@@ -136,11 +158,11 @@ class ContactFormPluginService {
         publicToken: null,
         config: null,
         snippets: null,
-        usage: {
+        usage: buildUsage({
           submitEndpoint,
-          expectedFields: ["token", "name", "email", "message"],
-          optionalFields: ["_redirect", "_subject", "_honeypot"],
-        },
+          config: null,
+          inferredAutoSourceHosts,
+        }),
         instructions: [
           "Contact Form plugin is not enabled for this project yet.",
           "Enable it in Studio/Control-Plane Plugins UI first (Project → Plugins → Contact Form).",
@@ -150,19 +172,22 @@ class ContactFormPluginService {
     }
 
     if (existing.status !== "enabled") {
+      const normalizedConfig = normalizeContactFormConfig(existing.configJson);
       return {
         pluginId: "contact_form",
         enabled: false,
         instanceId: existing.id,
         status: existing.status,
         publicToken: existing.publicToken,
-        config: normalizeContactFormConfig(existing.configJson),
-        snippets: getContactFormSnippets(existing.publicToken, submitEndpoint),
-        usage: {
+        config: normalizedConfig,
+        snippets: getContactFormSnippets(existing.publicToken, submitEndpoint, {
+          formFields: normalizedConfig.formFields,
+        }),
+        usage: buildUsage({
           submitEndpoint,
-          expectedFields: ["token", "name", "email", "message"],
-          optionalFields: ["_redirect", "_subject", "_honeypot"],
-        },
+          config: normalizedConfig,
+          inferredAutoSourceHosts,
+        }),
         instructions: [
           "Contact Form plugin instance exists but is currently disabled.",
           "Re-enable it in Studio/Control-Plane Plugins UI first.",
@@ -171,27 +196,31 @@ class ContactFormPluginService {
       };
     }
 
+    const normalizedConfig = normalizeContactFormConfig(existing.configJson);
     return {
       pluginId: "contact_form",
       enabled: true,
       instanceId: existing.id,
       status: existing.status,
       publicToken: existing.publicToken,
-      config: normalizeContactFormConfig(existing.configJson),
-      snippets: getContactFormSnippets(existing.publicToken, submitEndpoint),
-      usage: {
+      config: normalizedConfig,
+      snippets: getContactFormSnippets(existing.publicToken, submitEndpoint, {
+        formFields: normalizedConfig.formFields,
+      }),
+      usage: buildUsage({
         submitEndpoint,
-        expectedFields: ["token", "name", "email", "message"],
-        optionalFields: ["_redirect", "_subject", "_honeypot"],
-      },
+        config: normalizedConfig,
+        inferredAutoSourceHosts,
+      }),
       instructions:
-        normalizeContactFormConfig(existing.configJson).recipientEmails.length > 0
+        normalizedConfig.recipientEmails.length > 0
           ? [
               "Insert one of the provided snippets into the website contact section (HTML or Astro).",
               "Keep the hidden token input unchanged; it maps submissions to this project plugin instance.",
               `Use form action ${submitEndpoint} with method POST.`,
-              "Include name, email, and message fields; keep _honeypot hidden and empty.",
-              "Optionally pass _redirect for success redirect; it must match allowed hosts in plugin config.",
+              "Customize form fields in Project → Plugins (defaults: name, email, message) and keep _honeypot hidden and empty.",
+              "If source hosts are empty, Vivd auto-uses project first-party hosts (published + tenant hosts) when available.",
+              "Optionally pass _redirect for success redirect; it must match redirect allowlist (or effective source hosts when redirect allowlist is empty).",
               "Verify by submitting once from preview/published domain and checking recipient inbox.",
             ]
           : [
@@ -207,14 +236,17 @@ class ContactFormPluginService {
     created: boolean,
   ): ContactFormPluginPayload {
     const submitEndpoint = getContactFormSubmitEndpoint();
+    const normalizedConfig = normalizeContactFormConfig(row.configJson);
     return {
       pluginId: "contact_form",
       instanceId: row.id,
       status: row.status,
       created,
       publicToken: row.publicToken,
-      config: normalizeContactFormConfig(row.configJson),
-      snippets: getContactFormSnippets(row.publicToken, submitEndpoint),
+      config: normalizedConfig,
+      snippets: getContactFormSnippets(row.publicToken, submitEndpoint, {
+        formFields: normalizedConfig.formFields,
+      }),
     };
   }
 }

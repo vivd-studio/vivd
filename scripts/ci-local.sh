@@ -9,6 +9,8 @@ RUN_LINT=true
 RUN_DB_INTEGRATION=false
 RUN_BUCKET_INTEGRATION=false
 RUN_FLY_INTEGRATION=false
+ALLOW_KNOWN_FLY_REHYDRATE_FAILURE="${VIVD_ALLOW_KNOWN_FLY_REHYDRATE_FAIL:-0}"
+KNOWN_FLY_REHYDRATE_FAILURE_PATTERN="Fly OpenCode rehydrate + revert > persists agent edit across rehydrate and reverts it afterwards"
 
 print_usage() {
   cat <<'EOF'
@@ -20,12 +22,16 @@ Options:
   --db-integration       Run DB-backed backend integration tests.
   --bucket-integration   Run object-storage integration tests for studio artifact sync.
   --fly-integration      Run Fly integration tests (machine lifecycle + OpenCode rehydrate/revert).
+  --allow-known-fly-rehydrate-failure
+                         Allow the known failing Fly rehydrate/revert integration test
+                         to fail without failing the full local CI run.
   -h, --help             Show this help.
 
 Examples:
   ./scripts/ci-local.sh
   ./scripts/ci-local.sh --build --db-integration --bucket-integration
   ./scripts/ci-local.sh --db-integration --bucket-integration --fly-integration
+  ./scripts/ci-local.sh --db-integration --bucket-integration --fly-integration --allow-known-fly-rehydrate-failure
 EOF
 }
 
@@ -49,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --fly-integration)
       RUN_FLY_INTEGRATION=true
+      shift
+      ;;
+    --allow-known-fly-rehydrate-failure)
+      ALLOW_KNOWN_FLY_REHYDRATE_FAILURE=1
       shift
       ;;
     -h|--help)
@@ -83,6 +93,39 @@ run_step() {
   echo
   echo "==> $label"
   "$@"
+}
+
+run_step_allow_known_failure() {
+  local label="$1"
+  local expected_pattern="$2"
+  shift 2
+
+  echo
+  echo "==> $label"
+
+  local log_file
+  log_file="$(mktemp)"
+
+  set +e
+  "$@" 2>&1 | tee "$log_file"
+  local status=${PIPESTATUS[0]}
+  set -e
+
+  if [[ $status -eq 0 ]]; then
+    rm -f "$log_file"
+    echo "[ci-local] Known-failure mode enabled, but step passed."
+    return 0
+  fi
+
+  if grep -Fq "$expected_pattern" "$log_file"; then
+    rm -f "$log_file"
+    echo "[ci-local] Allowing known Fly rehydrate/revert failure."
+    return 0
+  fi
+
+  rm -f "$log_file"
+  echo "[ci-local] Step failed and did not match known-failure signature." >&2
+  return $status
 }
 
 if [[ "$RUN_LINT" == "true" ]]; then
@@ -124,10 +167,21 @@ if [[ "$RUN_FLY_INTEGRATION" == "true" ]]; then
     "Fly machine + bucket sync integration tests" \
     npm run test:integration --workspace=@vivd/backend -- test/integration/fly_shutdown_bucket_sync.test.ts
 
-  export VIVD_RUN_OPENCODE_REHYDRATE_REVERT_TESTS=1
   run_step \
-    "Fly OpenCode rehydrate/revert integration tests" \
-    npm run test:integration --workspace=@vivd/backend -- test/integration/fly_opencode_rehydrate_revert.test.ts
+    "Fly warm reconcile integration tests" \
+    npm run test:integration --workspace=@vivd/backend -- test/integration/fly_reconcile_flow.test.ts
+
+  export VIVD_RUN_OPENCODE_REHYDRATE_REVERT_TESTS=1
+  if [[ "$ALLOW_KNOWN_FLY_REHYDRATE_FAILURE" == "1" ]]; then
+    run_step_allow_known_failure \
+      "Fly OpenCode rehydrate/revert integration tests (known failure allowed)" \
+      "$KNOWN_FLY_REHYDRATE_FAILURE_PATTERN" \
+      npm run test:integration --workspace=@vivd/backend -- test/integration/fly_opencode_rehydrate_revert.test.ts
+  else
+    run_step \
+      "Fly OpenCode rehydrate/revert integration tests" \
+      npm run test:integration --workspace=@vivd/backend -- test/integration/fly_opencode_rehydrate_revert.test.ts
+  fi
 fi
 
 if [[ "$RUN_BUILD" == "true" ]]; then

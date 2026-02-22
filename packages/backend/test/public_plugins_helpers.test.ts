@@ -3,6 +3,8 @@ import {
   extractSourceHostFromHeaders,
   isHostAllowed,
   normalizeHostCandidate,
+  resolveEffectiveRedirectHosts,
+  resolveEffectiveSourceHosts,
   resolveRedirectTarget,
 } from "../src/routes/plugins/contactForm/helpers";
 
@@ -52,5 +54,29 @@ describe("public plugins host helpers", () => {
     expect(resolveRedirectTarget("https://evil.localhost/thanks", ["site.localhost"])).toBeNull();
     expect(resolveRedirectTarget("/thanks", ["site.localhost"])).toBeNull();
     expect(resolveRedirectTarget("https://site.localhost/thanks", [])).toBeNull();
+  });
+
+  it("derives effective source and redirect allowlists", () => {
+    expect(
+      resolveEffectiveSourceHosts(
+        ["WWW.Site.localhost", "site.localhost:443"],
+        ["preview.localhost"],
+      ),
+    ).toEqual(["www.site.localhost", "site.localhost"]);
+
+    expect(
+      resolveEffectiveSourceHosts([], ["preview.localhost", "preview.localhost:443"]),
+    ).toEqual(["preview.localhost"]);
+
+    expect(
+      resolveEffectiveRedirectHosts([], ["preview.localhost", "site.localhost"]),
+    ).toEqual(["preview.localhost", "site.localhost"]);
+
+    expect(
+      resolveEffectiveRedirectHosts(
+        ["www.site.localhost", "site.localhost:443"],
+        ["preview.localhost"],
+      ),
+    ).toEqual(["www.site.localhost", "site.localhost"]);
   });
 });

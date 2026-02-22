@@ -6,6 +6,7 @@ import { VersionDialog } from "../versioning/VersionDialog";
 import { DeleteProjectDialog } from "../dialogs/DeleteProjectDialog";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -13,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
+import { useTagColors } from "@/lib/tagColors";
 
 type SortOption = "updated-desc" | "created-desc" | "name-asc" | "name-desc";
 
@@ -34,6 +36,7 @@ interface VersionDialogData {
 }
 
 export function ProjectsList() {
+  const { getColor } = useTagColors();
   const {
     data: projectsData,
     isLoading,
@@ -68,6 +71,7 @@ export function ProjectsList() {
     useState<VersionDialogData | null>(null);
   const [deleteDialogSlug, setDeleteDialogSlug] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<SortOption>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -84,10 +88,33 @@ export function ProjectsList() {
   }, [sortOption]);
 
   // Filter and sort projects
+  const availableTags = useMemo(() => {
+    if (!projectsData?.projects) return [];
+    return Array.from(
+      new Set(
+        projectsData.projects.flatMap((project) => project.tags ?? []),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+  }, [projectsData?.projects]);
+
+  useEffect(() => {
+    setSelectedTags((current) =>
+      current.filter((tag) => availableTags.includes(tag)),
+    );
+  }, [availableTags]);
+
   const filteredAndSortedProjects = useMemo(() => {
     if (!projectsData?.projects) return [];
 
     let projects = [...projectsData.projects];
+
+    // Filter by selected tags (match all selected tags)
+    if (selectedTags.length > 0) {
+      projects = projects.filter((project) => {
+        const tags = project.tags ?? [];
+        return selectedTags.every((selected) => tags.includes(selected));
+      });
+    }
 
     // Filter by search query
     if (searchQuery.trim()) {
@@ -126,7 +153,7 @@ export function ProjectsList() {
     });
 
     return projects;
-  }, [projectsData?.projects, searchQuery, sortOption]);
+  }, [projectsData?.projects, searchQuery, selectedTags, sortOption]);
 
   const handleCreateNewClick = (slug: string, version?: number) => {
     // Find the project to get its URL and version info
@@ -216,31 +243,77 @@ export function ProjectsList() {
   return (
     <div>
       {hasProjects && (
-        <div className="flex items-center gap-3 mb-5">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+        <div className="mb-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select
+              value={sortOption}
+              onValueChange={(v) => setSortOption(v as SortOption)}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={sortOption}
-            onValueChange={(v) => setSortOption(v as SortOption)}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+          {availableTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground mr-0.5">Filter:</span>
+              {availableTags.map((tag) => {
+                const active = selectedTags.includes(tag);
+                const color = getColor(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() =>
+                      setSelectedTags((current) =>
+                        active
+                          ? current.filter((v) => v !== tag)
+                          : [...current, tag],
+                      )
+                    }
+                    aria-label={`Filter by tag ${tag}`}
+                    aria-pressed={active}
+                    className="flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 active:scale-[0.97]"
+                    style={{
+                      backgroundColor: color.bg,
+                      color: color.text,
+                      opacity: active ? 1 : 0.5,
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+              {selectedTags.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setSelectedTags([])}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -253,7 +326,7 @@ export function ProjectsList() {
       ) : filteredAndSortedProjects.length === 0 ? (
         <div className="text-center py-16 border border-dashed rounded-lg bg-muted/30">
           <p className="text-muted-foreground">
-            No projects match your search.
+            No projects match your current filters.
           </p>
         </div>
       ) : (
@@ -262,6 +335,7 @@ export function ProjectsList() {
             <ProjectCard
               key={project.slug}
               project={project}
+              availableTags={availableTags}
               onRegenerate={handleCreateNewClick}
               onDelete={handleDeleteClick}
               isRegenerating={regeneratingSlug === project.slug}

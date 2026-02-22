@@ -767,6 +767,7 @@ export const projectGenerationProcedures = {
             url: versionData?.url || manifest.url,
             source,
             title,
+            tags: manifest.tags,
             createdAt: manifest.createdAt,
             updatedAt: manifest.updatedAt,
             currentVersion,

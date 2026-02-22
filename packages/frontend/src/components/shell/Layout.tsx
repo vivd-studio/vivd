@@ -1,6 +1,7 @@
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useRef, useState, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
+import { ROUTES } from "@/app/router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { ModeToggle } from "@/components/theme";
@@ -8,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Breadcrumb,
   BreadcrumbItem,
+  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -19,6 +21,7 @@ interface PageInfo {
   title: string;
   isProjectPage: boolean;
   projectSlug?: string;
+  isProjectPluginsPage?: boolean;
 }
 
 function getPageInfo(pathname: string): PageInfo {
@@ -30,6 +33,7 @@ function getPageInfo(pathname: string): PageInfo {
       title: "Plugins",
       isProjectPage: false,
       projectSlug: projectPluginsMatch[1],
+      isProjectPluginsPage: true,
     };
   }
 
@@ -55,7 +59,7 @@ function getPageInfo(pathname: string): PageInfo {
   if (pathname.startsWith("/vivd-studio/no-project")) {
     return { title: "No Project", isProjectPage: false };
   }
-  return { title: "Projects", isProjectPage: false };
+  return { title: "Projects", isProjectPage: false, isProjectPluginsPage: false };
 }
 
 export function Layout() {
@@ -109,9 +113,31 @@ export function Layout() {
             <Separator orientation="vertical" className="h-4" />
             <Breadcrumb>
               <BreadcrumbList>
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{pageInfo.title}</BreadcrumbPage>
-                </BreadcrumbItem>
+                {pageInfo.isProjectPluginsPage && pageInfo.projectSlug ? (
+                  <>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link to={ROUTES.DASHBOARD}>Projects</Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link to={ROUTES.PROJECT(pageInfo.projectSlug)}>
+                          {pageInfo.projectSlug}
+                        </Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>Plugins</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </>
+                ) : (
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{pageInfo.title}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                )}
                 {showNewProjectButton && (
                   <>
                     <BreadcrumbSeparator />

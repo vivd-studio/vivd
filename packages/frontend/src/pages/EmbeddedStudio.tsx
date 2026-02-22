@@ -47,6 +47,7 @@ import {
   Image,
   Loader2,
   MoreHorizontal,
+  Settings2,
   Trash2,
 } from "lucide-react";
 
@@ -684,6 +685,7 @@ export default function EmbeddedStudio() {
               <DropdownMenuItem
                 onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
               >
+                <Settings2 className="h-4 w-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
               <DropdownMenuSeparator />

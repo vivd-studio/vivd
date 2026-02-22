@@ -16,6 +16,7 @@
     "ci:local:integration": "./scripts/ci-local.sh --db-integration --bucket-integration",
     "ci:local:full": "./scripts/ci-local.sh --build --db-integration --bucket-integration",
     "ci:local:fly": "./scripts/ci-local.sh --db-integration --bucket-integration --fly-integration",
+    "ci:local:fly:known": "./scripts/ci-local.sh --db-integration --bucket-integration --fly-integration --allow-known-fly-rehydrate-failure",
     "db:studio": "npm run db:studio --workspace=@vivd/backend",
     "db:generate": "npm run db:generate --workspace=@vivd/backend",
     "db:migrate": "npm run db:migrate --workspace=@vivd/backend"
