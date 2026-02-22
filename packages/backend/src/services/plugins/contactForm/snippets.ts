@@ -42,6 +42,48 @@ function renderFormField(field: ContactFormFieldConfig): string {
   </label>`;
 }
 
+function buildSubmitScript(isAstro: boolean): string {
+  const scriptTag = isAstro ? "<script is:inline>" : "<script>";
+  // Compact inline script – submits via fetch, shows inline feedback.
+  return `${scriptTag}
+(function(){
+  var w=document.currentScript.previousElementSibling;
+  var f=w.querySelector("form");
+  var s=w.querySelector("[data-vivd-status]");
+  var b=f.querySelector('[type="submit"]');
+  var bl=b.textContent;
+  f.addEventListener("submit",function(e){
+    e.preventDefault();
+    b.disabled=true;b.textContent="Sending\\u2026";
+    s.style.display="none";
+    var fd=new FormData(f),body={};
+    fd.forEach(function(v,k){body[k]=v});
+    fetch(f.action,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify(body)
+    })
+    .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,data:j}})})
+    .then(function(r){
+      if(r.ok&&r.data.ok){
+        f.style.display="none";
+        s.textContent="Thank you! Your message has been sent.";
+        s.style.display="";
+      }else{
+        throw new Error(r.data.error&&r.data.error.message||"");
+      }
+    })
+    .catch(function(err){
+      s.textContent=err.message||"Something went wrong. Please try again.";
+      s.style.display="";
+      b.disabled=false;b.textContent=bl;
+      if(typeof turnstile!=="undefined")try{turnstile.reset(w.querySelector(".cf-turnstile"))}catch(e){}
+    });
+  });
+})();
+</script>`;
+}
+
 function formatSnippet(
   token: string,
   submitEndpoint: string,
@@ -65,15 +107,21 @@ function formatSnippet(
       )}\"></div>\n`
     : "\n";
 
+  const submitScript = buildSubmitScript(format === "astro");
+
   return `${comment}
-${turnstileScript}<form method="POST" action="${submitEndpoint}">
+${turnstileScript}<div data-vivd-contact-form>
+<form method="POST" action="${submitEndpoint}">
   <input type="hidden" name="token" value="${token}" />
   <input type="text" name="_honeypot" style="display:none" tabindex="-1" autocomplete="off" />
 
 ${renderedFields}
 ${turnstileWidget}
   <button type="submit">Send</button>
-</form>`;
+</form>
+<div data-vivd-status style="display:none"></div>
+</div>
+${submitScript}`;
 }
 
 export function getContactFormSnippets(

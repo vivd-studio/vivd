@@ -106,6 +106,10 @@ const zipImportUpload = multer({
   },
 });
 
+// Public plugin runtime endpoints – mounted before global CORS so they get
+// permissive Access-Control-Allow-Origin (customer sites call these cross-origin).
+app.use(createPublicPluginsRouter({ upload }));
+
 app.use(
   cors({
     origin: process.env.DOMAIN
@@ -143,9 +147,6 @@ app.use(
 
 // Import Projects endpoint(s)
 app.use("/vivd-studio/api", createImportRouter({ auth, upload: zipImportUpload }));
-
-// Public plugin runtime endpoints
-app.use(createPublicPluginsRouter({ upload }));
 
 // tRPC
 app.use(
