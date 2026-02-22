@@ -90,6 +90,19 @@ describe("UsageService", () => {
     expect(whereMock).toHaveBeenCalledTimes(1);
   });
 
+  it("swallows session-title update errors to avoid breaking callers", async () => {
+    whereMock.mockRejectedValueOnce(new Error("db unavailable"));
+
+    await expect(
+      usageService.updateSessionTitle(
+        "org-1",
+        "session-1",
+        "Landing page copy",
+        "project-a",
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("skips aggregate writes on duplicate AI cost idempotency keys", async () => {
     txReturningMock.mockResolvedValueOnce([]);
 
@@ -105,5 +118,44 @@ describe("UsageService", () => {
 
     expect(transactionMock).toHaveBeenCalledTimes(1);
     expect(txInsertMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("stores OpenRouter events with flow type and generation idempotency key", async () => {
+    txReturningMock.mockResolvedValueOnce([]);
+
+    await usageService.recordOpenRouterCost(
+      "org-1",
+      0.42,
+      "gen-123",
+      "flow_scrape",
+      "project-a",
+    );
+
+    expect(txValuesMock).toHaveBeenCalledTimes(1);
+    expect(txValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        eventType: "flow_scrape",
+        cost: "0.42",
+        projectSlug: "project-a",
+        idempotencyKey: "openrouter:gen-123",
+      }),
+    );
+  });
+
+  it("records image generation events with timestamped idempotency key", async () => {
+    txReturningMock.mockResolvedValueOnce([]);
+
+    await usageService.recordImageGeneration("org-1", "project-a");
+
+    expect(txValuesMock).toHaveBeenCalledTimes(1);
+    const payload = txValuesMock.mock.calls[0]?.[0];
+    expect(payload).toMatchObject({
+      organizationId: "org-1",
+      eventType: "image_gen",
+      cost: "0",
+      projectSlug: "project-a",
+    });
+    expect(String(payload?.idempotencyKey)).toMatch(/^image_gen:project-a:\d+$/);
   });
 });

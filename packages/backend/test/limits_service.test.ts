@@ -103,4 +103,67 @@ describe("LimitsService", () => {
       "Image generation limit reached: 10/10 images this month",
     );
   });
+
+  it("applies organization-specific limit overrides", async () => {
+    organizationFindFirstMock.mockResolvedValueOnce({
+      limits: {
+        dailyCreditLimit: 50,
+        weeklyCreditLimit: 120,
+        monthlyCreditLimit: 999,
+        imageGenPerMonth: 7,
+        warningThreshold: 0.15,
+      },
+    });
+    getCurrentUsageMock.mockResolvedValue({
+      daily: { cost: 0.5, imageCount: 0, periodStart: new Date() }, // 50 credits
+      weekly: { cost: 1.0, imageCount: 0, periodStart: new Date() }, // 100 credits
+      monthly: { cost: 1.2, imageCount: 6, periodStart: new Date() }, // 120 credits
+    });
+
+    const result = await limitsService.checkLimits("org-1");
+
+    expect(result.blocked).toBe(true);
+    expect(result.imageGenBlocked).toBe(false);
+    expect(result.usage.daily.limit).toBe(50);
+    expect(result.usage.weekly.limit).toBe(120);
+    expect(result.usage.monthly.limit).toBe(999);
+    expect(result.usage.imageGen.limit).toBe(7);
+  });
+
+  it("treats zero limits as unlimited", async () => {
+    process.env.LICENSE_DAILY_CREDIT_LIMIT = "0";
+    process.env.LICENSE_WEEKLY_CREDIT_LIMIT = "0";
+    process.env.LICENSE_MONTHLY_CREDIT_LIMIT = "0";
+    process.env.LICENSE_IMAGE_GEN_PER_MONTH = "0";
+    getCurrentUsageMock.mockResolvedValue({
+      daily: { cost: 999, imageCount: 0, periodStart: new Date() },
+      weekly: { cost: 999, imageCount: 0, periodStart: new Date() },
+      monthly: { cost: 999, imageCount: 999, periodStart: new Date() },
+    });
+
+    const result = await limitsService.checkLimits("org-1");
+
+    expect(result.blocked).toBe(false);
+    expect(result.imageGenBlocked).toBe(false);
+    expect(result.warnings).toEqual([]);
+    expect(result.usage.daily.percentage).toBe(0);
+    expect(result.usage.weekly.percentage).toBe(0);
+    expect(result.usage.monthly.percentage).toBe(0);
+    expect(result.usage.imageGen.percentage).toBe(0);
+  });
+
+  it("falls back to env config when organization limit lookup fails", async () => {
+    process.env.LICENSE_DAILY_CREDIT_LIMIT = "20";
+    organizationFindFirstMock.mockRejectedValueOnce(new Error("db unavailable"));
+    getCurrentUsageMock.mockResolvedValue({
+      daily: { cost: 0.2, imageCount: 0, periodStart: new Date() }, // 20 credits
+      weekly: { cost: 0.1, imageCount: 0, periodStart: new Date() },
+      monthly: { cost: 0.1, imageCount: 0, periodStart: new Date() },
+    });
+
+    const result = await limitsService.checkLimits("org-1");
+
+    expect(result.blocked).toBe(true);
+    expect(result.usage.daily.limit).toBe(20);
+  });
 });

@@ -216,4 +216,34 @@ describe("fullScrapeRouter", () => {
     expect(res.body.images.length).toBeGreaterThan(0);
     expect(releaseMock).toHaveBeenCalledWith(browser);
   });
+
+  it("skips navigation vision/subpage scraping when OpenRouter key is missing", async () => {
+    delete process.env.OPENROUTER_API_KEY;
+    const page = { close: vi.fn().mockResolvedValue(undefined) };
+    const browser = { id: "browser-3" };
+    acquireMock.mockResolvedValue(browser);
+    createPageMock.mockResolvedValue(page);
+    takeMainPageScreenshotMock.mockResolvedValue("main-shot");
+    takeHeaderScreenshotMock.mockResolvedValue("header-shot");
+    scrapePageMock.mockResolvedValue({
+      text: "Main page only",
+      images: [],
+      error: null,
+    });
+
+    const handler = getPostHandler();
+    const req = { body: { url: "https://example.com" } } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.websiteText).toContain("## Page: Home");
+    expect(res.body.websiteText).toContain("Main page only");
+    expect(extractNavigationTextsMock).not.toHaveBeenCalled();
+    expect(findLinksMatchingTextsMock).not.toHaveBeenCalled();
+    expect(prioritizeNavigationLinksMock).not.toHaveBeenCalled();
+    expect(scrapePageMock).toHaveBeenCalledTimes(1);
+    expect(releaseMock).toHaveBeenCalledWith(browser);
+  });
 });

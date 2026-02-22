@@ -72,6 +72,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - Avoid running full suites frequently (some flows are long-running and/or paid-API dependent).
 - Prefer targeted tests/builds for touched areas.
+- Create MEANINGFUL tests, we are not interested in coverage, we want to add tests that actually add value to the codebase.
 
 ## Git
 
@@ -80,6 +81,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 ## Studio Image Debugging (GHCR dev tags)
 
+- This is important when testing fly-specific behavior, because the state of the codebase is not necessarily the same as the state of the studio code running on the machine.
 - Push a temporary Studio image: `./scripts/push-studio.sh [dev-tag]`
   - Example: `./scripts/push-studio.sh dev-0.3.34`
   - No arg: pushes `dev-<gitsha>`
@@ -88,3 +90,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
   - Select **Latest (auto)** to clear pinning.
 - If `FLY_STUDIO_IMAGE` is set in backend env, the selector is locked (env override wins).
 - Ask the user to help with runtime verification if needed.
+
+## Config
+
+- add (optional) config knobs to .env.example
