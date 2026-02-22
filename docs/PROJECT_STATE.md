@@ -13,6 +13,11 @@
 
 ## Progress Log
 
+- 2026-02-22: polished Plugins configuration alignment by constraining the “Auto-detected hosts (read-only fallback)” block to the same inline width as adjacent host inputs, removing the remaining visual width mismatch in the Configuration tab.
+- 2026-02-22: refined Plugins tab alignment so the tab bar now spans the full panel width (matching other settings surfaces) while tab contents remain readability-capped (`max-w-4xl`) to avoid overly long form rows.
+- 2026-02-22: adjusted settings-surface layout to better match organization “General” UX: restored `SettingsPageShell` to fullscreen width, constrained settings/plugin form content to narrower inline max widths for readability (instead of long full-width inputs), and moved Contact Form `Save configuration` to a bottom action row so plugin status badges/actions remain visually distinct.
+- 2026-02-22: added a concrete MVP design for superadmin-managed plugin entitlements in `docs/plugin-entitlements-mvp.md`, including exact schema proposal (`plugin_entitlement` + optional `plugin_enable_request`), entitlement resolution rules, superadmin tRPC contract, runtime gating behavior, and rollout/backfill strategy to move toward future plan-based self-serve.
+- 2026-02-22: restructured plugin/settings page UX for consistency: `ProjectPlugins` now uses the shared settings-page shell, a single Contact Form management card, and clear tabs (`Overview`, `Configuration`, `Fields`, `Snippets`) with sectioned sub-panels; `/Settings` now matches the broader settings pattern via the same shell and tabbed `Profile`/`Password` sections.
 - 2026-02-22: added two additional neutral tag colors (`gray`, `stone`) to round the picker to another full 6-column row while preserving the warm→cool→neutral ordering.
 - 2026-02-22: expanded the project tag color picker again with a few additional colors (including rose, lavender, magenta, and charcoal) and reordered the full picker palette by color progression (warm → cool → neutrals) for easier scanning.
 - 2026-02-22: expanded the project tag color picker palette with additional selectable colors while keeping legacy hash-based default tag color assignment stable for unassigned tags.
