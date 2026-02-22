@@ -17,8 +17,9 @@
 # Import all dynamically-generated site configs
 import /etc/caddy/sites.d/*.caddy
 
-# Public plugin API host (override with VIVD_PUBLIC_PLUGIN_API_HOST)
-{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}, api.localhost {
+# Public plugin API host – use http:// because TLS is terminated by Traefik,
+# so Caddy receives these requests on port 80.
+http://{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}, http://api.localhost {
     handle /plugins/* {
         reverse_proxy backend:3000
     }
