@@ -38,5 +38,18 @@ export async function inferContactFormAutoSourceHosts(options: {
     hosts.add("[::1]");
   }
 
+  // Add the studio machine's public host so Turnstile works during in-studio dev previews.
+  // Studio machines serve the user's dev preview at this host (e.g. vivd-studios.fly.dev),
+  // which must be an allowed Turnstile domain or the widget fails with error 110200.
+  const studioPublicHost = (
+    process.env.FLY_STUDIO_PUBLIC_HOST ||
+    ((process.env.FLY_STUDIO_APP || "").trim()
+      ? `${process.env.FLY_STUDIO_APP!.trim()}.fly.dev`
+      : "")
+  ).trim();
+  if (studioPublicHost) {
+    hosts.add(studioPublicHost);
+  }
+
   return [...hosts].sort();
 }
