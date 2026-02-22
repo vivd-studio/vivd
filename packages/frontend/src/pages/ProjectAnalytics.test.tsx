@@ -130,6 +130,73 @@ function makeSummary() {
         },
       ],
     },
+    comparison: {
+      previousRangeStart: "2026-01-02",
+      previousRangeEnd: "2026-01-31",
+      totals: {
+        pageviews: { current: 666, previous: 333, delta: 333, deltaPct: 100 },
+        uniqueVisitors: { current: 444, previous: 222, delta: 222, deltaPct: 100 },
+        uniqueSessions: { current: 555, previous: 278, delta: 277, deltaPct: 99.6 },
+        submissions: { current: 10, previous: 5, delta: 5, deltaPct: 100 },
+        conversionRatePct: { current: 1, previous: 0.8, delta: 0.2, deltaPct: 25 },
+      },
+    },
+    funnel: {
+      pageviews: 666,
+      formViews: 120,
+      formStarts: 55,
+      submissions: 10,
+      steps: [
+        {
+          key: "pageviews",
+          label: "Pageviews",
+          count: 666,
+          conversionFromPreviousPct: 100,
+          conversionFromFirstPct: 100,
+        },
+        {
+          key: "formViews",
+          label: "Form views",
+          count: 120,
+          conversionFromPreviousPct: 18,
+          conversionFromFirstPct: 18,
+        },
+        {
+          key: "formStarts",
+          label: "Form starts",
+          count: 55,
+          conversionFromPreviousPct: 45.8,
+          conversionFromFirstPct: 8.2,
+        },
+        {
+          key: "submissions",
+          label: "Submissions",
+          count: 10,
+          conversionFromPreviousPct: 18.2,
+          conversionFromFirstPct: 1.5,
+        },
+      ],
+    },
+    attribution: {
+      campaigns: [
+        {
+          utmSource: "google",
+          utmMedium: "cpc",
+          utmCampaign: "spring_launch",
+          pageviews: 80,
+          submissions: 4,
+          submissionRatePct: 5,
+        },
+      ],
+      sources: [
+        {
+          utmSource: "google",
+          pageviews: 80,
+          submissions: 4,
+          submissionRatePct: 5,
+        },
+      ],
+    },
   };
 }
 
@@ -179,6 +246,9 @@ describe("ProjectAnalytics", () => {
     );
 
     expect(screen.getByText("Overview")).toBeInTheDocument();
+    expect(screen.getByText("Period comparison")).toBeInTheDocument();
+    expect(screen.getByText("Conversion funnel")).toBeInTheDocument();
+    expect(screen.getByText("UTM campaign attribution")).toBeInTheDocument();
     expect(screen.getByText("Daily performance")).toBeInTheDocument();
     expect(screen.getByText("Top pages")).toBeInTheDocument();
     expect(screen.getByText("Lead sources")).toBeInTheDocument();

@@ -63,103 +63,35 @@ class MissingProjectError extends Error {
   }
 }
 
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value || "", 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-
-function firstDefined(values: Array<string | undefined>): string {
-  for (const value of values) {
-    const trimmed = (value || "").trim();
-    if (trimmed) return trimmed;
-  }
-  return "";
-}
-
-function parseBoolean(value: string | undefined, fallback: boolean): boolean {
-  if (typeof value !== "string") return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "1" || normalized === "true" || normalized === "yes") {
-    return true;
-  }
-  if (normalized === "0" || normalized === "false" || normalized === "no") {
-    return false;
-  }
-  return fallback;
-}
-
-function parseWidgetMode(value: string | undefined): TurnstileWidgetMode {
-  if (value === "non-interactive" || value === "invisible") return value;
-  return "managed";
-}
-
-function isAutomationEnabledByEnv(): boolean {
-  return parseBoolean(process.env.VIVD_TURNSTILE_AUTOMATION_ENABLED, true);
-}
-
-function getTurnstileSyncIntervalMsFromEnv(): number {
-  return parsePositiveInt(
-    process.env.VIVD_TURNSTILE_SYNC_INTERVAL_MS,
-    DEFAULT_SYNC_INTERVAL_MS,
-  );
+function readEnv(name: string): string {
+  return (process.env[name] || "").trim();
 }
 
 function getAutomationConfig(): TurnstileAutomationConfig | null {
-  if (!isAutomationEnabledByEnv()) return null;
-
-  const accountId = firstDefined([
-    process.env.VIVD_TURNSTILE_CLOUDFLARE_ACCOUNT_ID,
-    process.env.VIVD_CLOUDFLARE_ACCOUNT_ID,
-    process.env.CLOUDFLARE_ACCOUNT_ID,
-  ]);
-  const apiToken = firstDefined([
-    process.env.VIVD_TURNSTILE_CLOUDFLARE_API_TOKEN,
-    process.env.VIVD_CLOUDFLARE_API_TOKEN,
-    process.env.CLOUDFLARE_API_TOKEN,
-  ]);
+  const accountId = readEnv("CLOUDFLARE_ACCOUNT_ID");
+  const apiToken = readEnv("CLOUDFLARE_API_TOKEN");
 
   if (!accountId || !apiToken) return null;
 
   return {
     accountId,
     apiToken,
-    widgetNamePrefix:
-      (process.env.VIVD_TURNSTILE_WIDGET_NAME_PREFIX || "").trim() ||
-      DEFAULT_WIDGET_NAME_PREFIX,
-    widgetMode: parseWidgetMode(process.env.VIVD_TURNSTILE_WIDGET_MODE),
-    maxDomainsPerWidget: Math.min(
-      DEFAULT_MAX_DOMAINS_PER_WIDGET,
-      parsePositiveInt(
-        process.env.VIVD_TURNSTILE_MAX_DOMAINS_PER_WIDGET,
-        DEFAULT_MAX_DOMAINS_PER_WIDGET,
-      ),
-    ),
-    syncIntervalMs: getTurnstileSyncIntervalMsFromEnv(),
+    widgetNamePrefix: DEFAULT_WIDGET_NAME_PREFIX,
+    widgetMode: "managed",
+    maxDomainsPerWidget: DEFAULT_MAX_DOMAINS_PER_WIDGET,
+    syncIntervalMs: DEFAULT_SYNC_INTERVAL_MS,
   };
 }
 
 function buildAutomationConfigIssue(): string | null {
-  if (!isAutomationEnabledByEnv()) {
-    return "Turnstile automation is disabled by VIVD_TURNSTILE_AUTOMATION_ENABLED=false";
-  }
-
-  const accountId = firstDefined([
-    process.env.VIVD_TURNSTILE_CLOUDFLARE_ACCOUNT_ID,
-    process.env.VIVD_CLOUDFLARE_ACCOUNT_ID,
-    process.env.CLOUDFLARE_ACCOUNT_ID,
-  ]);
+  const accountId = readEnv("CLOUDFLARE_ACCOUNT_ID");
   if (!accountId) {
-    return "Missing Cloudflare account ID (set VIVD_TURNSTILE_CLOUDFLARE_ACCOUNT_ID)";
+    return "Missing Cloudflare account ID (set CLOUDFLARE_ACCOUNT_ID)";
   }
 
-  const apiToken = firstDefined([
-    process.env.VIVD_TURNSTILE_CLOUDFLARE_API_TOKEN,
-    process.env.VIVD_CLOUDFLARE_API_TOKEN,
-    process.env.CLOUDFLARE_API_TOKEN,
-  ]);
+  const apiToken = readEnv("CLOUDFLARE_API_TOKEN");
   if (!apiToken) {
-    return "Missing Cloudflare API token (set VIVD_TURNSTILE_CLOUDFLARE_API_TOKEN)";
+    return "Missing Cloudflare API token (set CLOUDFLARE_API_TOKEN)";
   }
 
   return null;
@@ -250,7 +182,7 @@ class ContactFormTurnstileService {
 
   getSyncIntervalMs(): number {
     const config = getAutomationConfig();
-    return config?.syncIntervalMs ?? getTurnstileSyncIntervalMsFromEnv();
+    return config?.syncIntervalMs ?? DEFAULT_SYNC_INTERVAL_MS;
   }
 
   async verifyToken(options: {
@@ -270,10 +202,7 @@ class ContactFormTurnstileService {
       };
     }
 
-    const verifyTimeoutMs = parsePositiveInt(
-      process.env.VIVD_TURNSTILE_VERIFY_TIMEOUT_MS,
-      DEFAULT_VERIFY_TIMEOUT_MS,
-    );
+    const verifyTimeoutMs = DEFAULT_VERIFY_TIMEOUT_MS;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), verifyTimeoutMs);
 

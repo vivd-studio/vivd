@@ -13,6 +13,9 @@
 
 ## Progress Log
 
+- 2026-02-22: simplified Contact Form Turnstile automation env configuration to Cloudflare-native credentials only by removing `VIVD_TURNSTILE_*`/`VIVD_CLOUDFLARE_*` references from `packages/backend/src/services/plugins/contactForm/turnstile.ts` and `.env.example`; automation now reads only `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` with fixed safe defaults for widget mode, domain cap, verification timeout, and sync interval, and production/self-hosted compose backend env passthrough now includes those two Cloudflare vars (`docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.self-hosted.yml`).
+- 2026-02-22: drafted project archive feature plan in `docs/project-archive-plan.md`, defining a reversible `active|archived` project lifecycle with archive/unarchive APIs, active-vs-archived list filtering, UI/Studio action updates, lifecycle safety rules (published/assignment guards), and phased rollout/testing.
+- 2026-02-22: delivered Analytics MVP step 1 (business conversions) across backend/frontend/runtime: `plugins.analyticsSummary` now includes previous-period KPI deltas, a contact-form conversion funnel (`pageviews -> form views -> form starts -> submissions`), and UTM attribution tables (campaign/source with submission-rate); analytics ingest now persists normalized custom `eventName` and UTM fields (`utm_source|medium|campaign|term|content`) in `analytics_event.payload`, and the dedicated analytics dashboard renders new `Period comparison`, `Conversion funnel`, and `UTM campaign attribution` sections.
 - 2026-02-22: improved readability of the dedicated Project → Analytics page in `packages/frontend/src/pages/ProjectAnalytics.tsx` by reorganizing content into clearer sections (`Overview`, `Daily performance`, `Top pages`, `Top referrers`, `Device mix`, `Lead sources`), adding an at-a-glance summary panel, and replacing the long per-day card list with a compact scrollable table sorted latest-first; added regression coverage in `packages/frontend/src/pages/ProjectAnalytics.test.tsx`.
 - 2026-02-22: added pagination to the project-first Super Admin → Plugins table in `packages/frontend/src/components/admin/plugins/PluginsTab.tsx` with a high page size of 100 projects and `Previous/Next` controls; search/state filter changes now reset to page 1 to keep navigation predictable.
 - 2026-02-22: evolved Super Admin → Plugins into a project-first table in `packages/frontend/src/components/admin/plugins/PluginsTab.tsx`: each project now renders once with grouped per-plugin controls in-row plus bulk row actions (`Enable all plugins`, `Disable all plugins`, `Suspend all plugins`) to update all plugin entitlements for that project in one click.
@@ -76,6 +79,7 @@
 
 ## Current Priorities
 
+- [ ] Implement reversible project archiving (active/archived lifecycle, archive/unarchive actions, list filtering, and lifecycle guards) per `docs/project-archive-plan.md`.
 - [ ] Execute SSE migration Phase 1 from `docs/sse-polling-plan.md` (generation status and project-list invalidation) while preserving polling fallbacks behind flags.
 - [ ] Implement superadmin project-transfer flow (existing target org + create-new-org path) with DB cutover and bucket-prefix migration, per `docs/superadmin-project-transfer-plan.md`.
 - [ ] Implement control-plane app login landing + automatic post-login tenant redirect per `docs/app-login-landing-plan.md`.
@@ -189,6 +193,7 @@
 | Studio URL pattern (iframe route vs redirect vs subdomain) | TBD |
 | Cross-subdomain auth handoff for control-plane -> tenant redirect (shared cookie only vs one-time token fallback) | TBD |
 | Project-transfer semantics: require unpublished in v1 and move usage-history rows by default? | TBD |
+| Archive semantics: should archived projects count toward project limits and should API hard-delete require archived-first? | TBD (v1 proposal in `docs/project-archive-plan.md`) |
 
 ## Operational Notes
 
@@ -203,6 +208,7 @@
 - `docs/sse-polling-plan.md`
 - `docs/analytics-plugin-plan.md`
 - `docs/app-login-landing-plan.md`
+- `docs/project-archive-plan.md`
 - `docs/superadmin-project-transfer-plan.md`
 - `docs/refactoring-day-checklist.md`
 - `docs/old/publishing-bucket-first-plan.md`

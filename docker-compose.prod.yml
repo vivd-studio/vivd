@@ -46,11 +46,18 @@ services:
       - CADDY_ADMIN_URL=http://caddy:2019
       - SCRAPER_URL=${SCRAPER_URL:-http://scraper:3001}
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       # S3/R2 object storage (studio machine project sync)
       - R2_ENDPOINT=${R2_ENDPOINT:-}
       - R2_BUCKET=${R2_BUCKET:-}
       - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
       - R2_SECRET_KEY=${R2_SECRET_KEY:-}
+      # SES email delivery
+      - VIVD_SES_ACCESS_KEY_ID=${VIVD_SES_ACCESS_KEY_ID:-}
+      - VIVD_SES_SECRET_ACCESS_KEY=${VIVD_SES_SECRET_ACCESS_KEY:-}
+      - VIVD_SES_FROM_EMAIL=${VIVD_SES_FROM_EMAIL:-noreply@mail.vivd.studio}
+      - VIVD_SES_REGION=${VIVD_SES_REGION:-eu-central-1}
       # Studio machines
       - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-local}
       - SINGLE_PROJECT_MODE=${SINGLE_PROJECT_MODE:-false}

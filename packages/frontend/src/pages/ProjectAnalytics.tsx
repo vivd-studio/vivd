@@ -11,6 +11,7 @@ import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 
 type AnalyticsRange = 7 | 30;
 type AnalyticsSummary = RouterOutputs["plugins"]["analyticsSummary"];
+type ComparisonMetric = AnalyticsSummary["comparison"]["totals"]["pageviews"];
 type DailyRow = {
   date: string;
   pageviews: number;
@@ -32,6 +33,25 @@ function formatPercent(value: number): string {
 function formatRatio(value: number): string {
   if (!Number.isFinite(value)) return "0";
   return value.toFixed(2);
+}
+
+function formatSignedInteger(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return "0";
+  const prefix = value > 0 ? "+" : "-";
+  return `${prefix}${new Intl.NumberFormat().format(Math.abs(Math.round(value)))}`;
+}
+
+function formatSignedPercent(value: number | null): string {
+  if (value === null) return "new";
+  if (!Number.isFinite(value) || value === 0) return "0%";
+  const prefix = value > 0 ? "+" : "-";
+  return `${prefix}${Math.abs(value).toFixed(1)}%`;
+}
+
+function formatDeltaSummary(metric: ComparisonMetric): string {
+  const delta = formatSignedInteger(metric.delta);
+  const deltaPct = formatSignedPercent(metric.deltaPct);
+  return `${delta} (${deltaPct})`;
 }
 
 function formatDateLabel(value: string): string {
@@ -353,6 +373,252 @@ export default function ProjectAnalytics() {
                       </section>
                     </div>
                   </SectionCard>
+
+                  <SectionCard
+                    title="Period comparison"
+                    description={`Compared with the previous ${analyticsSummary.rangeDays}-day window (${analyticsSummary.comparison.previousRangeStart} to ${analyticsSummary.comparison.previousRangeEnd}).`}
+                  >
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30">
+                          <tr className="text-left">
+                            <th className="px-3 py-2 font-medium">Metric</th>
+                            <th className="px-3 py-2 font-medium">Current</th>
+                            <th className="px-3 py-2 font-medium">Previous</th>
+                            <th className="px-3 py-2 font-medium">Change</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t">
+                            <td className="px-3 py-2">Pageviews</td>
+                            <td className="px-3 py-2">
+                              {formatInteger(analyticsSummary.comparison.totals.pageviews.current)}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatInteger(analyticsSummary.comparison.totals.pageviews.previous)}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatDeltaSummary(analyticsSummary.comparison.totals.pageviews)}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2">Unique visitors</td>
+                            <td className="px-3 py-2">
+                              {formatInteger(
+                                analyticsSummary.comparison.totals.uniqueVisitors.current,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatInteger(
+                                analyticsSummary.comparison.totals.uniqueVisitors.previous,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatDeltaSummary(
+                                analyticsSummary.comparison.totals.uniqueVisitors,
+                              )}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2">Sessions</td>
+                            <td className="px-3 py-2">
+                              {formatInteger(
+                                analyticsSummary.comparison.totals.uniqueSessions.current,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatInteger(
+                                analyticsSummary.comparison.totals.uniqueSessions.previous,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatDeltaSummary(
+                                analyticsSummary.comparison.totals.uniqueSessions,
+                              )}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2">Contact submissions</td>
+                            <td className="px-3 py-2">
+                              {formatInteger(
+                                analyticsSummary.comparison.totals.submissions.current,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatInteger(
+                                analyticsSummary.comparison.totals.submissions.previous,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatDeltaSummary(
+                                analyticsSummary.comparison.totals.submissions,
+                              )}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td className="px-3 py-2">Submit rate</td>
+                            <td className="px-3 py-2">
+                              {formatPercent(
+                                analyticsSummary.comparison.totals.conversionRatePct.current,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatPercent(
+                                analyticsSummary.comparison.totals.conversionRatePct.previous,
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {formatDeltaSummary(
+                                analyticsSummary.comparison.totals.conversionRatePct,
+                              )}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard
+                    title="Conversion funnel"
+                    description="Progression from pageview to contact submission."
+                  >
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30">
+                          <tr className="text-left">
+                            <th className="px-3 py-2 font-medium">Step</th>
+                            <th className="px-3 py-2 font-medium">Count</th>
+                            <th className="px-3 py-2 font-medium">From previous</th>
+                            <th className="px-3 py-2 font-medium">From pageviews</th>
+                            <th className="px-3 py-2 font-medium">Progress</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analyticsSummary.funnel.steps.map((step) => (
+                            <tr key={step.key} className="border-t">
+                              <td className="px-3 py-2">{step.label}</td>
+                              <td className="px-3 py-2">
+                                {formatInteger(step.count)}
+                              </td>
+                              <td className="px-3 py-2">
+                                {formatPercent(step.conversionFromPreviousPct)}
+                              </td>
+                              <td className="px-3 py-2">
+                                {formatPercent(step.conversionFromFirstPct)}
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="min-w-[140px]">
+                                  <Progress
+                                    value={Math.min(
+                                      100,
+                                      Math.max(0, step.conversionFromFirstPct),
+                                    )}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Form views and starts come from custom analytics events
+                      (`contact_form_view` and `contact_form_start`).
+                    </p>
+                  </SectionCard>
+
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    <SectionCard
+                      title="UTM campaign attribution"
+                      description="Traffic and submissions grouped by source/medium/campaign."
+                    >
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/30">
+                            <tr className="text-left">
+                              <th className="px-3 py-2 font-medium">Source</th>
+                              <th className="px-3 py-2 font-medium">Medium</th>
+                              <th className="px-3 py-2 font-medium">Campaign</th>
+                              <th className="px-3 py-2 font-medium">Pageviews</th>
+                              <th className="px-3 py-2 font-medium">Submissions</th>
+                              <th className="px-3 py-2 font-medium">Submit rate</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analyticsSummary.attribution.campaigns.length > 0 ? (
+                              analyticsSummary.attribution.campaigns.map((row) => (
+                                <tr
+                                  key={`${row.utmSource}-${row.utmMedium}-${row.utmCampaign}`}
+                                  className="border-t"
+                                >
+                                  <td className="px-3 py-2 text-xs">{row.utmSource}</td>
+                                  <td className="px-3 py-2 text-xs">{row.utmMedium}</td>
+                                  <td className="px-3 py-2 text-xs">{row.utmCampaign}</td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.pageviews)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.submissions)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatPercent(row.submissionRatePct)}
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr className="border-t">
+                                <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                  No UTM campaign data in this range.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard
+                      title="Top UTM sources"
+                      description="Performance rolled up at source level."
+                    >
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/30">
+                            <tr className="text-left">
+                              <th className="px-3 py-2 font-medium">Source</th>
+                              <th className="px-3 py-2 font-medium">Pageviews</th>
+                              <th className="px-3 py-2 font-medium">Submissions</th>
+                              <th className="px-3 py-2 font-medium">Submit rate</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analyticsSummary.attribution.sources.length > 0 ? (
+                              analyticsSummary.attribution.sources.map((row) => (
+                                <tr key={row.utmSource} className="border-t">
+                                  <td className="px-3 py-2 text-xs">{row.utmSource}</td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.pageviews)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.submissions)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatPercent(row.submissionRatePct)}
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr className="border-t">
+                                <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  No attributed source data in this range.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </SectionCard>
+                  </div>
 
                   <SectionCard
                     title="Daily performance"

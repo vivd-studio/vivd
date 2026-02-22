@@ -24,6 +24,14 @@ const DEFAULT_RATE_LIMIT_PER_TOKEN_PER_MINUTE = 240;
 const eventTypeSchema = z.enum(["pageview", "custom"]);
 const deviceTypeSchema = z.enum(["desktop", "mobile", "tablet", "bot", "unknown"]);
 
+type UtmPayload = {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmTerm: string | null;
+  utmContent: string | null;
+};
+
 function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -141,6 +149,81 @@ function inferDeviceType(raw: string, userAgent: string): "desktop" | "mobile" |
   return "desktop";
 }
 
+function normalizeUtmValue(value: string): string | null {
+  const normalized = value.trim().toLowerCase().slice(0, 128);
+  return normalized || null;
+}
+
+function firstNonEmpty(...candidates: string[]): string {
+  for (const candidate of candidates) {
+    if (candidate.trim()) return candidate;
+  }
+  return "";
+}
+
+function readUtmFromFields(fields: Record<string, string>): UtmPayload {
+  return {
+    utmSource: normalizeUtmValue(
+      firstNonEmpty(fields.utmSource || "", fields.utm_source || ""),
+    ),
+    utmMedium: normalizeUtmValue(
+      firstNonEmpty(fields.utmMedium || "", fields.utm_medium || ""),
+    ),
+    utmCampaign: normalizeUtmValue(
+      firstNonEmpty(fields.utmCampaign || "", fields.utm_campaign || ""),
+    ),
+    utmTerm: normalizeUtmValue(
+      firstNonEmpty(fields.utmTerm || "", fields.utm_term || ""),
+    ),
+    utmContent: normalizeUtmValue(
+      firstNonEmpty(fields.utmContent || "", fields.utm_content || ""),
+    ),
+  };
+}
+
+function readUtmFromPath(rawPath: string): UtmPayload {
+  try {
+    const url = new URL(rawPath || "/", "https://analytics.invalid");
+    const readParam = (name: string) =>
+      normalizeUtmValue(url.searchParams.get(name) || "");
+    return {
+      utmSource: readParam("utm_source"),
+      utmMedium: readParam("utm_medium"),
+      utmCampaign: readParam("utm_campaign"),
+      utmTerm: readParam("utm_term"),
+      utmContent: readParam("utm_content"),
+    };
+  } catch {
+    return {
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      utmTerm: null,
+      utmContent: null,
+    };
+  }
+}
+
+function mergeUtmPayload(primary: UtmPayload, fallback: UtmPayload): UtmPayload {
+  return {
+    utmSource: primary.utmSource || fallback.utmSource,
+    utmMedium: primary.utmMedium || fallback.utmMedium,
+    utmCampaign: primary.utmCampaign || fallback.utmCampaign,
+    utmTerm: primary.utmTerm || fallback.utmTerm,
+    utmContent: primary.utmContent || fallback.utmContent,
+  };
+}
+
+function normalizeEventName(raw: string): string | null {
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 96);
+  return normalized || null;
+}
+
 function buildAnalyticsScript(options: {
   token: string;
   trackEndpoint: string;
@@ -212,6 +295,28 @@ function buildAnalyticsScript(options: {
     return "unknown";
   };
 
+  const readUtmParams = () => {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      const read = (name) => String(params.get(name) || "").trim().toLowerCase().slice(0, 128);
+      return {
+        utmSource: read("utm_source"),
+        utmMedium: read("utm_medium"),
+        utmCampaign: read("utm_campaign"),
+        utmTerm: read("utm_term"),
+        utmContent: read("utm_content"),
+      };
+    } catch {
+      return {
+        utmSource: "",
+        utmMedium: "",
+        utmCampaign: "",
+        utmTerm: "",
+        utmContent: "",
+      };
+    }
+  };
+
   const normalizePath = (rawPath) => {
     try {
       const parsed = new URL(rawPath || window.location.href, window.location.origin);
@@ -276,6 +381,7 @@ function buildAnalyticsScript(options: {
       visitorId: getVisitorId(),
       sessionId: getSessionId(),
       deviceType: detectDeviceType(),
+      ...readUtmParams(),
     };
   };
 
@@ -522,6 +628,17 @@ export function createAnalyticsPublicRouter(
       const sessionId = (fields.sessionId || "").slice(0, 128) || null;
       const userAgent = (req.get("user-agent") || "").slice(0, 512);
       const deviceType = inferDeviceType(fields.deviceType, userAgent);
+      const eventName = normalizeEventName(
+        firstNonEmpty(
+          fields.eventName || "",
+          fields.event || "",
+          fields.name || "",
+        ),
+      );
+      const utmPayload = mergeUtmPayload(
+        readUtmFromFields(fields),
+        readUtmFromPath(rawPath),
+      );
       const countryCode = (fields.countryCode || "").trim().toUpperCase();
       const normalizedCountryCode = /^[A-Z]{2}$/.test(countryCode)
         ? countryCode
@@ -533,6 +650,24 @@ export function createAnalyticsPublicRouter(
       }
       if (userAgent) {
         payload.userAgent = userAgent;
+      }
+      if (eventName) {
+        payload.eventName = eventName;
+      }
+      if (utmPayload.utmSource) {
+        payload.utmSource = utmPayload.utmSource;
+      }
+      if (utmPayload.utmMedium) {
+        payload.utmMedium = utmPayload.utmMedium;
+      }
+      if (utmPayload.utmCampaign) {
+        payload.utmCampaign = utmPayload.utmCampaign;
+      }
+      if (utmPayload.utmTerm) {
+        payload.utmTerm = utmPayload.utmTerm;
+      }
+      if (utmPayload.utmContent) {
+        payload.utmContent = utmPayload.utmContent;
       }
 
       await db.insert(analyticsEvent).values({

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "../../../db";
 import {
   analyticsEvent,
@@ -105,6 +105,53 @@ export interface AnalyticsSummaryPayload {
       submissions: number;
     }>;
   };
+  comparison: {
+    previousRangeStart: string;
+    previousRangeEnd: string;
+    totals: {
+      pageviews: AnalyticsComparisonMetric;
+      uniqueVisitors: AnalyticsComparisonMetric;
+      uniqueSessions: AnalyticsComparisonMetric;
+      submissions: AnalyticsComparisonMetric;
+      conversionRatePct: AnalyticsComparisonMetric;
+    };
+  };
+  funnel: {
+    pageviews: number;
+    formViews: number;
+    formStarts: number;
+    submissions: number;
+    steps: Array<{
+      key: "pageviews" | "formViews" | "formStarts" | "submissions";
+      label: string;
+      count: number;
+      conversionFromPreviousPct: number;
+      conversionFromFirstPct: number;
+    }>;
+  };
+  attribution: {
+    campaigns: Array<{
+      utmSource: string;
+      utmMedium: string;
+      utmCampaign: string;
+      pageviews: number;
+      submissions: number;
+      submissionRatePct: number;
+    }>;
+    sources: Array<{
+      utmSource: string;
+      pageviews: number;
+      submissions: number;
+      submissionRatePct: number;
+    }>;
+  };
+}
+
+interface AnalyticsComparisonMetric {
+  current: number;
+  previous: number;
+  delta: number;
+  deltaPct: number | null;
 }
 
 function toCount(value: unknown): number {
@@ -124,9 +171,41 @@ function buildRangeStart(rangeDays: number, now: Date): Date {
   return start;
 }
 
+function buildPreviousRangeStart(rangeStart: Date, rangeDays: number): Date {
+  const previousStart = new Date(rangeStart);
+  previousStart.setUTCDate(previousStart.getUTCDate() - rangeDays);
+  return previousStart;
+}
+
+function buildPreviousRangeEnd(rangeStart: Date): Date {
+  const previousEnd = new Date(rangeStart);
+  previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
+  return previousEnd;
+}
+
 function roundToTwoDecimals(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * 100) / 100;
+}
+
+function buildComparisonMetric(
+  current: number,
+  previous: number,
+): AnalyticsComparisonMetric {
+  const delta = current - previous;
+  const deltaPct =
+    previous > 0 ? roundToTwoDecimals((delta / previous) * 100) : null;
+  return {
+    current,
+    previous,
+    delta,
+    deltaPct,
+  };
+}
+
+function normalizeAttributionLabel(value: string | null, fallback: string): string {
+  const normalized = (value || "").trim();
+  return normalized || fallback;
 }
 
 function normalizeAnalyticsConfig(configJson: unknown): AnalyticsPluginConfig {
@@ -144,7 +223,7 @@ function buildUsage(input: {
   return {
     scriptEndpoint: input.scriptEndpoint,
     trackEndpoint: input.trackEndpoint,
-    eventTypes: ["pageview"],
+    eventTypes: ["pageview", "custom"],
     respectDoNotTrack: config.respectDoNotTrack,
     captureQueryString: config.captureQueryString,
     enableClientTracking: config.enableClientTracking,
@@ -237,6 +316,13 @@ class AnalyticsPluginService {
     const rangeStartDate = buildRangeStart(options.rangeDays, now);
     const rangeStart = toIsoDay(rangeStartDate);
     const rangeEnd = toIsoDay(now);
+    const previousRangeStartDate = buildPreviousRangeStart(
+      rangeStartDate,
+      options.rangeDays,
+    );
+    const previousRangeEndDate = buildPreviousRangeEnd(rangeStartDate);
+    const previousRangeStart = toIsoDay(previousRangeStartDate);
+    const previousRangeEnd = toIsoDay(previousRangeEndDate);
 
     const [entitlement, existing] = await Promise.all([
       pluginEntitlementService.resolveEffectiveEntitlement({
@@ -276,6 +362,53 @@ class AnalyticsPluginService {
       date: row.date,
       submissions: 0,
     }));
+    const emptyComparison = {
+      previousRangeStart,
+      previousRangeEnd,
+      totals: {
+        pageviews: buildComparisonMetric(0, 0),
+        uniqueVisitors: buildComparisonMetric(0, 0),
+        uniqueSessions: buildComparisonMetric(0, 0),
+        submissions: buildComparisonMetric(0, 0),
+        conversionRatePct: buildComparisonMetric(0, 0),
+      },
+    };
+    const emptyFunnel = {
+      pageviews: 0,
+      formViews: 0,
+      formStarts: 0,
+      submissions: 0,
+      steps: [
+        {
+          key: "pageviews" as const,
+          label: "Pageviews",
+          count: 0,
+          conversionFromPreviousPct: 0,
+          conversionFromFirstPct: 0,
+        },
+        {
+          key: "formViews" as const,
+          label: "Form views",
+          count: 0,
+          conversionFromPreviousPct: 0,
+          conversionFromFirstPct: 0,
+        },
+        {
+          key: "formStarts" as const,
+          label: "Form starts",
+          count: 0,
+          conversionFromPreviousPct: 0,
+          conversionFromFirstPct: 0,
+        },
+        {
+          key: "submissions" as const,
+          label: "Submissions",
+          count: 0,
+          conversionFromPreviousPct: 0,
+          conversionFromFirstPct: 0,
+        },
+      ],
+    };
 
     if (!enabled || !existing) {
       return {
@@ -303,6 +436,12 @@ class AnalyticsPluginService {
           daily: emptyContactDaily,
           topSourceHosts: [],
         },
+        comparison: emptyComparison,
+        funnel: emptyFunnel,
+        attribution: {
+          campaigns: [],
+          sources: [],
+        },
       };
     }
 
@@ -311,6 +450,13 @@ class AnalyticsPluginService {
       eq(analyticsEvent.projectSlug, options.projectSlug),
       eq(analyticsEvent.pluginInstanceId, existing.id),
       gte(analyticsEvent.createdAt, rangeStartDate),
+    );
+    const previousRangeWhere = and(
+      eq(analyticsEvent.organizationId, options.organizationId),
+      eq(analyticsEvent.projectSlug, options.projectSlug),
+      eq(analyticsEvent.pluginInstanceId, existing.id),
+      gte(analyticsEvent.createdAt, previousRangeStartDate),
+      lt(analyticsEvent.createdAt, rangeStartDate),
     );
 
     const dayBucket = sql`date_trunc('day', ${analyticsEvent.createdAt} at time zone 'UTC')`;
@@ -322,6 +468,21 @@ class AnalyticsPluginService {
       eq(contactFormSubmission.projectSlug, options.projectSlug),
       gte(contactFormSubmission.createdAt, rangeStartDate),
     );
+    const previousContactRangeWhere = and(
+      eq(contactFormSubmission.organizationId, options.organizationId),
+      eq(contactFormSubmission.projectSlug, options.projectSlug),
+      gte(contactFormSubmission.createdAt, previousRangeStartDate),
+      lt(contactFormSubmission.createdAt, rangeStartDate),
+    );
+    const customEventNameExpr = sql<string | null>`nullif(lower(coalesce(${analyticsEvent.payload}->>'eventName', ${analyticsEvent.payload}->>'event', ${analyticsEvent.payload}->>'name', '')), '')`;
+    const analyticsUtmSourceExpr = sql<string | null>`nullif(lower(coalesce(${analyticsEvent.payload}->>'utmSource', ${analyticsEvent.payload}->>'utm_source', '')), '')`;
+    const analyticsUtmMediumExpr = sql<string | null>`nullif(lower(coalesce(${analyticsEvent.payload}->>'utmMedium', ${analyticsEvent.payload}->>'utm_medium', '')), '')`;
+    const analyticsUtmCampaignExpr = sql<string | null>`nullif(lower(coalesce(${analyticsEvent.payload}->>'utmCampaign', ${analyticsEvent.payload}->>'utm_campaign', '')), '')`;
+    const contactUtmSourceExpr = sql<string | null>`nullif(lower(coalesce(${contactFormSubmission.payload}->>'utmSource', ${contactFormSubmission.payload}->>'utm_source', '')), '')`;
+    const contactUtmMediumExpr = sql<string | null>`nullif(lower(coalesce(${contactFormSubmission.payload}->>'utmMedium', ${contactFormSubmission.payload}->>'utm_medium', '')), '')`;
+    const contactUtmCampaignExpr = sql<string | null>`nullif(lower(coalesce(${contactFormSubmission.payload}->>'utmCampaign', ${contactFormSubmission.payload}->>'utm_campaign', '')), '')`;
+    const analyticsHasAttributionExpr = sql`${analyticsUtmSourceExpr} is not null or ${analyticsUtmMediumExpr} is not null or ${analyticsUtmCampaignExpr} is not null`;
+    const contactHasAttributionExpr = sql`${contactUtmSourceExpr} is not null or ${contactUtmMediumExpr} is not null or ${contactUtmCampaignExpr} is not null`;
 
     const [
       totalsRows,
@@ -332,6 +493,11 @@ class AnalyticsPluginService {
       contactTotalsRows,
       contactDailyRows,
       contactTopSourceRows,
+      previousTotalsRows,
+      previousContactTotalsRows,
+      funnelRows,
+      analyticsCampaignRows,
+      contactCampaignRows,
     ] =
       await Promise.all([
         db
@@ -423,6 +589,66 @@ class AnalyticsPluginService {
           .groupBy(contactFormSubmission.sourceHost)
           .orderBy(desc(sql<number>`count(*)`), contactFormSubmission.sourceHost)
           .limit(8),
+        db
+          .select({
+            events: sql<number>`count(*)`,
+            pageviews: sql<number>`count(*) filter (where ${analyticsEvent.eventType} = 'pageview')`,
+            uniqueVisitors: sql<number>`count(distinct ${analyticsEvent.visitorIdHash})`,
+            uniqueSessions: sql<number>`count(distinct ${analyticsEvent.sessionId})`,
+          })
+          .from(analyticsEvent)
+          .where(previousRangeWhere),
+        db
+          .select({
+            submissions: sql<number>`count(*)`,
+          })
+          .from(contactFormSubmission)
+          .where(previousContactRangeWhere),
+        db
+          .select({
+            formViews: sql<number>`count(*) filter (where ${analyticsEvent.eventType} = 'custom' and ${customEventNameExpr} in ('contact_form_view', 'form_view', 'contact_form_seen'))`,
+            formStarts: sql<number>`count(*) filter (where ${analyticsEvent.eventType} = 'custom' and ${customEventNameExpr} in ('contact_form_start', 'form_start', 'contact_form_begin'))`,
+          })
+          .from(analyticsEvent)
+          .where(rangeWhere),
+        db
+          .select({
+            utmSource: analyticsUtmSourceExpr,
+            utmMedium: analyticsUtmMediumExpr,
+            utmCampaign: analyticsUtmCampaignExpr,
+            pageviews: sql<number>`count(*)`,
+          })
+          .from(analyticsEvent)
+          .where(
+            and(
+              rangeWhere,
+              eq(analyticsEvent.eventType, "pageview"),
+              analyticsHasAttributionExpr,
+            ),
+          )
+          .groupBy(
+            analyticsUtmSourceExpr,
+            analyticsUtmMediumExpr,
+            analyticsUtmCampaignExpr,
+          )
+          .orderBy(desc(sql<number>`count(*)`))
+          .limit(50),
+        db
+          .select({
+            utmSource: contactUtmSourceExpr,
+            utmMedium: contactUtmMediumExpr,
+            utmCampaign: contactUtmCampaignExpr,
+            submissions: sql<number>`count(*)`,
+          })
+          .from(contactFormSubmission)
+          .where(and(contactRangeWhere, contactHasAttributionExpr))
+          .groupBy(
+            contactUtmSourceExpr,
+            contactUtmMediumExpr,
+            contactUtmCampaignExpr,
+          )
+          .orderBy(desc(sql<number>`count(*)`))
+          .limit(50),
       ]);
 
     const totalsRow = totalsRows[0] ?? {
@@ -440,6 +666,25 @@ class AnalyticsPluginService {
         toCount(totalsRow.uniqueSessions) > 0
           ? roundToTwoDecimals(
               toCount(totalsRow.pageviews) / toCount(totalsRow.uniqueSessions),
+            )
+          : 0,
+    };
+    const previousTotalsRow = previousTotalsRows[0] ?? {
+      events: 0,
+      pageviews: 0,
+      uniqueVisitors: 0,
+      uniqueSessions: 0,
+    };
+    const previousTotals = {
+      events: toCount(previousTotalsRow.events),
+      pageviews: toCount(previousTotalsRow.pageviews),
+      uniqueVisitors: toCount(previousTotalsRow.uniqueVisitors),
+      uniqueSessions: toCount(previousTotalsRow.uniqueSessions),
+      avgPagesPerSession:
+        toCount(previousTotalsRow.uniqueSessions) > 0
+          ? roundToTwoDecimals(
+              toCount(previousTotalsRow.pageviews) /
+                toCount(previousTotalsRow.uniqueSessions),
             )
           : 0,
     };
@@ -499,6 +744,16 @@ class AnalyticsPluginService {
       totals.pageviews > 0
         ? roundToTwoDecimals((contactSubmissions / totals.pageviews) * 100)
         : 0;
+    const previousContactTotalsRow = previousContactTotalsRows[0] ?? {
+      submissions: 0,
+    };
+    const previousContactSubmissions = toCount(previousContactTotalsRow.submissions);
+    const previousSubmissionRatePct =
+      previousTotals.pageviews > 0
+        ? roundToTwoDecimals(
+            (previousContactSubmissions / previousTotals.pageviews) * 100,
+          )
+        : 0;
 
     const contactDailyRowByDate = new Map(
       contactDailyRows.map((row) => [row.date, toCount(row.submissions)]),
@@ -511,6 +766,181 @@ class AnalyticsPluginService {
       sourceHost: row.sourceHost || "unknown",
       submissions: toCount(row.submissions),
     }));
+    const comparison = {
+      previousRangeStart,
+      previousRangeEnd,
+      totals: {
+        pageviews: buildComparisonMetric(totals.pageviews, previousTotals.pageviews),
+        uniqueVisitors: buildComparisonMetric(
+          totals.uniqueVisitors,
+          previousTotals.uniqueVisitors,
+        ),
+        uniqueSessions: buildComparisonMetric(
+          totals.uniqueSessions,
+          previousTotals.uniqueSessions,
+        ),
+        submissions: buildComparisonMetric(
+          contactSubmissions,
+          previousContactSubmissions,
+        ),
+        conversionRatePct: buildComparisonMetric(
+          submissionRatePct,
+          previousSubmissionRatePct,
+        ),
+      },
+    };
+    const funnelRow = funnelRows[0] ?? {
+      formViews: 0,
+      formStarts: 0,
+    };
+    const funnelBase = [
+      { key: "pageviews" as const, label: "Pageviews", count: totals.pageviews },
+      {
+        key: "formViews" as const,
+        label: "Form views",
+        count: toCount(funnelRow.formViews),
+      },
+      {
+        key: "formStarts" as const,
+        label: "Form starts",
+        count: toCount(funnelRow.formStarts),
+      },
+      { key: "submissions" as const, label: "Submissions", count: contactSubmissions },
+    ];
+    const firstFunnelCount = funnelBase[0]?.count ?? 0;
+    const funnel = {
+      pageviews: totals.pageviews,
+      formViews: funnelBase[1]?.count ?? 0,
+      formStarts: funnelBase[2]?.count ?? 0,
+      submissions: contactSubmissions,
+      steps: funnelBase.map((step, index) => {
+        const previousCount =
+          index === 0 ? firstFunnelCount : (funnelBase[index - 1]?.count ?? 0);
+        return {
+          ...step,
+          conversionFromPreviousPct:
+            index === 0
+              ? firstFunnelCount > 0
+                ? 100
+                : 0
+              : previousCount > 0
+                ? roundToTwoDecimals((step.count / previousCount) * 100)
+                : 0,
+          conversionFromFirstPct:
+            firstFunnelCount > 0
+              ? roundToTwoDecimals((step.count / firstFunnelCount) * 100)
+              : 0,
+        };
+      }),
+    };
+    type CampaignAggregate = {
+      utmSource: string | null;
+      utmMedium: string | null;
+      utmCampaign: string | null;
+      pageviews: number;
+      submissions: number;
+    };
+    const campaignMap = new Map<string, CampaignAggregate>();
+    const makeCampaignKey = (
+      utmSource: string | null,
+      utmMedium: string | null,
+      utmCampaign: string | null,
+    ) => `${utmSource ?? ""}\u001f${utmMedium ?? ""}\u001f${utmCampaign ?? ""}`;
+
+    for (const row of analyticsCampaignRows) {
+      const key = makeCampaignKey(row.utmSource, row.utmMedium, row.utmCampaign);
+      const existingRow = campaignMap.get(key);
+      if (existingRow) {
+        existingRow.pageviews += toCount(row.pageviews);
+      } else {
+        campaignMap.set(key, {
+          utmSource: row.utmSource,
+          utmMedium: row.utmMedium,
+          utmCampaign: row.utmCampaign,
+          pageviews: toCount(row.pageviews),
+          submissions: 0,
+        });
+      }
+    }
+    for (const row of contactCampaignRows) {
+      const key = makeCampaignKey(row.utmSource, row.utmMedium, row.utmCampaign);
+      const existingRow = campaignMap.get(key);
+      if (existingRow) {
+        existingRow.submissions += toCount(row.submissions);
+      } else {
+        campaignMap.set(key, {
+          utmSource: row.utmSource,
+          utmMedium: row.utmMedium,
+          utmCampaign: row.utmCampaign,
+          pageviews: 0,
+          submissions: toCount(row.submissions),
+        });
+      }
+    }
+
+    const campaigns = Array.from(campaignMap.values())
+      .sort((left, right) => {
+        if (right.pageviews !== left.pageviews) return right.pageviews - left.pageviews;
+        if (right.submissions !== left.submissions) {
+          return right.submissions - left.submissions;
+        }
+        return (
+          normalizeAttributionLabel(left.utmCampaign, "").localeCompare(
+            normalizeAttributionLabel(right.utmCampaign, ""),
+          ) * -1
+        );
+      })
+      .slice(0, 8)
+      .map((row) => ({
+        utmSource: normalizeAttributionLabel(row.utmSource, "(direct)"),
+        utmMedium: normalizeAttributionLabel(row.utmMedium, "(none)"),
+        utmCampaign: normalizeAttributionLabel(row.utmCampaign, "(none)"),
+        pageviews: row.pageviews,
+        submissions: row.submissions,
+        submissionRatePct:
+          row.pageviews > 0
+            ? roundToTwoDecimals((row.submissions / row.pageviews) * 100)
+            : 0,
+      }));
+
+    const sourceMap = new Map<
+      string,
+      { utmSource: string; pageviews: number; submissions: number }
+    >();
+    for (const row of campaignMap.values()) {
+      const source = normalizeAttributionLabel(row.utmSource, "(direct)");
+      const existingSource = sourceMap.get(source);
+      if (existingSource) {
+        existingSource.pageviews += row.pageviews;
+        existingSource.submissions += row.submissions;
+      } else {
+        sourceMap.set(source, {
+          utmSource: source,
+          pageviews: row.pageviews,
+          submissions: row.submissions,
+        });
+      }
+    }
+
+    const sources = Array.from(sourceMap.values())
+      .sort((left, right) => {
+        if (right.pageviews !== left.pageviews) return right.pageviews - left.pageviews;
+        return right.submissions - left.submissions;
+      })
+      .slice(0, 8)
+      .map((row) => ({
+        utmSource: row.utmSource,
+        pageviews: row.pageviews,
+        submissions: row.submissions,
+        submissionRatePct:
+          row.pageviews > 0
+            ? roundToTwoDecimals((row.submissions / row.pageviews) * 100)
+            : 0,
+      }));
+    const attribution = {
+      campaigns,
+      sources,
+    };
 
     return {
       pluginId: "analytics",
@@ -531,6 +961,9 @@ class AnalyticsPluginService {
         daily: contactDaily,
         topSourceHosts: contactTopSourceHosts,
       },
+      comparison,
+      funnel,
+      attribution,
     };
   }
 
@@ -660,6 +1093,10 @@ class AnalyticsPluginService {
         normalizedConfig.enableClientTracking
           ? "Client tracking is enabled; pageview events are sent automatically."
           : "Client tracking is disabled; use manual calls to the track endpoint for controlled event capture.",
+        "For funnel tracking, fire custom events when the contact form is viewed and when the user starts typing.",
+        "Example: window.vivdAnalytics.track('custom', { eventName: 'contact_form_view', path: window.location.href })",
+        "Example: window.vivdAnalytics.track('custom', { eventName: 'contact_form_start', path: window.location.href })",
+        "UTM fields are captured from URL query params; include hidden form fields named utm_source/utm_medium/utm_campaign for submission attribution.",
         "Verify installation by loading a page once and checking network requests to /plugins/analytics/v1/track.",
       ],
     };
