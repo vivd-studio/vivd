@@ -80,6 +80,18 @@ const authRevokeSessionsOnPasswordReset = readBooleanEnv(
   true,
 );
 
+function buildAuthBaseUrl(): string | undefined {
+  if (process.env.VIVD_APP_URL) {
+    return process.env.VIVD_APP_URL;
+  }
+  if (process.env.CONTROL_PLANE_HOST) {
+    const host = process.env.CONTROL_PLANE_HOST;
+    const scheme = host.startsWith("localhost") || host.includes(".localhost") ? "http" : "https";
+    return `${scheme}://${host}`;
+  }
+  return undefined;
+}
+
 async function sendTransactionalAuthEmail(input: {
   to: string;
   subject: string;
@@ -152,6 +164,7 @@ async function getTrustedOrigins(): Promise<string[]> {
 }
 
 export const auth = betterAuth({
+  baseURL: buildAuthBaseUrl(),
   basePath: "/vivd-studio/api/auth",
   database: drizzleAdapter(db, {
     provider: "pg",

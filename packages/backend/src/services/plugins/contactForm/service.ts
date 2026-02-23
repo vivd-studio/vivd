@@ -1,5 +1,19 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../../db";
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
+const requireVerifiedRecipients = readBooleanEnv(
+  "VIVD_CONTACT_FORM_REQUIRE_VERIFIED_RECIPIENTS",
+  true,
+);
 import { organizationMember, projectPluginInstance } from "../../../db/schema";
 import { pluginEntitlementService } from "../PluginEntitlementService";
 import {
@@ -188,10 +202,14 @@ class ContactFormPluginService {
     config: ContactFormPluginConfig;
   }): Promise<ContactFormPluginPayload> {
     const parsedConfig = contactFormPluginConfigSchema.parse(options.config);
-    await this.assertRecipientEmailsAreVerified({
-      organizationId: options.organizationId,
-      recipientEmails: parsedConfig.recipientEmails,
-    });
+    if (requireVerifiedRecipients) {
+      await this.assertRecipientEmailsAreVerified({
+        organizationId: options.organizationId,
+        recipientEmails: parsedConfig.recipientEmails,
+      });
+    } else if (parsedConfig.recipientEmails.length === 0) {
+      throw new ContactFormRecipientRequiredError();
+    }
 
     const { row } = await projectPluginInstanceService.ensurePluginInstance({
       organizationId: options.organizationId,
