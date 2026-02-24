@@ -129,8 +129,12 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     });
   }
 
-  async getDesiredImage(): Promise<string> {
-    return this.imageResolver.getDesiredImage();
+  invalidateDesiredImageCache(): void {
+    this.imageResolver.invalidateDesiredImageCache();
+  }
+
+  async getDesiredImage(options?: { forceRefresh?: boolean }): Promise<string> {
+    return this.imageResolver.getDesiredImage(options);
   }
 
   private async refreshMachines(): Promise<void> {
@@ -516,20 +520,30 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     );
   }
 
-  async reconcileStudioMachines(): Promise<FlyStudioMachineReconcileResult> {
+  async reconcileStudioMachines(options?: {
+    forceRefreshDesiredImage?: boolean;
+  }): Promise<FlyStudioMachineReconcileResult> {
     const existing = this.reconcileInFlight;
     if (existing) return existing;
 
-    const promise = this.reconcileStudioMachinesInner().finally(() => {
+    const promise = this.reconcileStudioMachinesInner({
+      forceRefreshDesiredImage: options?.forceRefreshDesiredImage === true,
+    }).finally(() => {
       if (this.reconcileInFlight === promise) this.reconcileInFlight = null;
     });
     this.reconcileInFlight = promise;
     return promise;
   }
 
-  private async reconcileStudioMachinesInner(): Promise<FlyStudioMachineReconcileResult> {
+  private async reconcileStudioMachinesInner(options: {
+    forceRefreshDesiredImage: boolean;
+  }): Promise<FlyStudioMachineReconcileResult> {
+    const desiredImage = await this.getDesiredImage({
+      forceRefresh: options.forceRefreshDesiredImage,
+    });
+
     return reconcileStudioMachinesInnerWorkflow({
-      getDesiredImage: () => this.getDesiredImage(),
+      getDesiredImage: async () => desiredImage,
       listMachines: () => this.apiClient.listMachines(),
       maxMachineAgeMs: this.config.maxMachineAgeMs,
       reconcilerDryRun: this.config.reconcilerDryRun,

@@ -65,7 +65,7 @@ COPY packages/backend ./packages/backend
 RUN npm run build -w @vivd/shared
 RUN npm run build -w @vivd/backend
 
-# Template files are needed at runtime for AGENTS.md generation
+# Template files are needed at runtime for project scaffolding (.gitignore)
 RUN mkdir -p /app/packages/backend/dist/templates \
     && cp -R /app/packages/backend/src/generator/templates/* /app/packages/backend/dist/templates/
 

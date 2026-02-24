@@ -13,6 +13,8 @@ import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils"
 import { thumbnailService } from "../services/project/ThumbnailService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
+import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
+import { projectPluginService } from "../services/plugins/ProjectPluginService";
 
 /**
  * Schema for token data in usage reports
@@ -61,6 +63,24 @@ const prePublishChecklistSchema = z.object({
     fixed: z.number().optional(),
   }),
 });
+
+function normalizeGenerationSource(source: string | null | undefined): "url" | "scratch" {
+  return source === "url" ? "url" : "scratch";
+}
+
+async function getEnabledProjectPluginIds(
+  organizationId: string,
+  slug: string,
+): Promise<string[]> {
+  const catalog = await projectPluginService.listCatalogForProject(
+    organizationId,
+    slug,
+  );
+  return catalog.instances
+    .filter((instance) => instance.status === "enabled")
+    .map((instance) => instance.pluginId)
+    .sort();
+}
 
 export const studioApiRouter = router({
   /**
@@ -154,6 +174,63 @@ export const studioApiRouter = router({
       );
 
       return status;
+    }),
+
+  /**
+   * Return rendered agent instructions for the active project/version.
+   * Studio consumes this at session start and injects it as OpenCode `system`.
+   */
+  getAgentInstructions: projectMemberProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const project = await projectMetaService.getProject(organizationId, input.slug);
+      if (!project) {
+        throw new Error(`Project not found: ${input.slug}`);
+      }
+
+      const resolvedVersion = input.version ?? Math.max(1, project.currentVersion || 1);
+      const versionMeta = await projectMetaService.getProjectVersion(
+        organizationId,
+        input.slug,
+        resolvedVersion,
+      );
+
+      if (!versionMeta && input.version) {
+        throw new Error(
+          `Project version not found: ${input.slug}/v${resolvedVersion}`,
+        );
+      }
+
+      const projectName =
+        versionMeta?.title?.trim() || project.title?.trim() || input.slug;
+      const source = normalizeGenerationSource(versionMeta?.source ?? project.source);
+      const enabledPluginIds = await getEnabledProjectPluginIds(
+        organizationId,
+        input.slug,
+      );
+      const rendered = await agentInstructionsService.render({
+        projectName,
+        source,
+        enabledPlugins: enabledPluginIds,
+      });
+
+      return {
+        slug: input.slug,
+        version: resolvedVersion,
+        source,
+        projectName,
+        enabledPluginIds,
+        instructions: rendered.instructions,
+        instructionsHash: rendered.instructionsHash,
+        templateSource: rendered.templateSource,
+      };
     }),
 
   /**

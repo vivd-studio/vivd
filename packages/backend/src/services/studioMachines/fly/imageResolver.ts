@@ -7,6 +7,7 @@ import {
 const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 type ImageCache = { image: string; fetchedAt: number };
+type GetDesiredImageOptions = { forceRefresh?: boolean };
 
 export class FlyStudioImageResolver {
   private resolvedImageCache: ImageCache | null = null;
@@ -37,7 +38,12 @@ export class FlyStudioImageResolver {
     });
   }
 
-  async getDesiredImage(): Promise<string> {
+  invalidateDesiredImageCache(): void {
+    this.resolvedImageCache = null;
+  }
+
+  async getDesiredImage(options: GetDesiredImageOptions = {}): Promise<string> {
+    const forceRefresh = options.forceRefresh === true;
     const configured = process.env.FLY_STUDIO_IMAGE?.trim();
     if (configured) return configured;
 
@@ -69,7 +75,11 @@ export class FlyStudioImageResolver {
 
     const now = Date.now();
     const refreshMs = 300_000; // 5 minutes
-    if (this.resolvedImageCache && now - this.resolvedImageCache.fetchedAt < refreshMs) {
+    if (
+      !forceRefresh &&
+      this.resolvedImageCache &&
+      now - this.resolvedImageCache.fetchedAt < refreshMs
+    ) {
       return this.resolvedImageCache.image;
     }
 

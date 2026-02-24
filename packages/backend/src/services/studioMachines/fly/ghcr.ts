@@ -114,11 +114,19 @@ async function fetchGhcrTags(options: {
   return data.tags.filter((tag): tag is string => typeof tag === "string");
 }
 
-function buildSemverCandidates(tags: string[]): Array<{
+type SemverCandidate = {
+  normalized: string;
+  version: Semver;
+  tags: string[];
+};
+
+type ReadySemverCandidate = {
   normalized: string;
   version: Semver;
   tag: string;
-}> {
+};
+
+function buildSemverCandidates(tags: string[]): SemverCandidate[] {
   const byVersion = new Map<
     string,
     { version: Semver; tagWithV?: string; tagNoV?: string }
@@ -137,9 +145,11 @@ function buildSemverCandidates(tags: string[]): Array<{
   }
 
   const candidates = Array.from(byVersion.entries()).flatMap(([normalized, entry]) => {
-    const tag = entry.tagNoV || entry.tagWithV;
-    if (!tag) return [];
-    return [{ normalized, version: entry.version, tag }];
+    const tagsForVersion = [entry.tagNoV, entry.tagWithV].filter(
+      (tag): tag is string => typeof tag === "string" && tag.length > 0,
+    );
+    if (tagsForVersion.length === 0) return [];
+    return [{ normalized, version: entry.version, tags: tagsForVersion }];
   });
 
   candidates.sort((a, b) => compareSemver(b.version, a.version));
@@ -301,6 +311,39 @@ async function pickReadyCandidates<T extends { tag: string }>(options: {
   return ready;
 }
 
+async function pickReadySemverCandidates(options: {
+  candidates: SemverCandidate[];
+  limit: number | null;
+  isReady: (tag: string) => Promise<boolean>;
+}): Promise<ReadySemverCandidate[]> {
+  const target = options.limit === null ? Number.POSITIVE_INFINITY : options.limit;
+  if (target <= 0) return [];
+
+  const ready: ReadySemverCandidate[] = [];
+  for (const candidate of options.candidates) {
+    let selectedTag: string | null = null;
+    for (const tag of candidate.tags) {
+      try {
+        if (await options.isReady(tag)) {
+          selectedTag = tag;
+          break;
+        }
+      } catch {
+        // Ignore and try alternate aliases.
+      }
+    }
+    if (!selectedTag) continue;
+    ready.push({
+      normalized: candidate.normalized,
+      version: candidate.version,
+      tag: selectedTag,
+    });
+    if (ready.length >= target) break;
+  }
+
+  return ready;
+}
+
 export async function resolveLatestSemverImageFromGhcr(options: {
   repository: string;
   timeoutMs: number;
@@ -329,7 +372,7 @@ export async function resolveLatestSemverImageFromGhcr(options: {
     timeoutMs: options.timeoutMs,
   });
 
-  const [latestReadySemver] = await pickReadyCandidates({
+  const [latestReadySemver] = await pickReadySemverCandidates({
     candidates: semverCandidates,
     limit: 1,
     isReady: isTagReady,
@@ -380,7 +423,7 @@ export async function listStudioImagesFromGhcr(options: {
     timeoutMs: options.timeoutMs,
   });
 
-  const readySemverCandidates = await pickReadyCandidates({
+  const readySemverCandidates = await pickReadySemverCandidates({
     candidates: semverCandidates,
     limit: semverLimit,
     isReady: isTagReady,

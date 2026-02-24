@@ -4,6 +4,8 @@ const {
   studioMachineProviderMock,
   listStudioMachinesMock,
   getDesiredImageMock,
+  invalidateDesiredImageCacheMock,
+  reconcileStudioMachinesMock,
   getSystemSettingValueMock,
   setSystemSettingValueMock,
   listStudioImagesFromGhcrMock,
@@ -15,15 +17,18 @@ const {
   getTurnstileAutomationIssueMock,
   prepareTurnstileWidgetMock,
   deleteTurnstileWidgetMock,
+  getDefaultTemplateMock,
 } = vi.hoisted(() => {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
   const reconcileStudioMachinesMock = vi.fn();
   const destroyStudioMachineMock = vi.fn();
+  const invalidateDesiredImageCacheMock = vi.fn();
   const studioMachineProviderMock: Record<string, unknown> = {
     kind: "fly",
     listStudioMachines: listStudioMachinesMock,
     getDesiredImage: getDesiredImageMock,
+    invalidateDesiredImageCache: invalidateDesiredImageCacheMock,
     reconcileStudioMachines: reconcileStudioMachinesMock,
     destroyStudioMachine: destroyStudioMachineMock,
   };
@@ -32,6 +37,8 @@ const {
     studioMachineProviderMock,
     listStudioMachinesMock,
     getDesiredImageMock,
+    invalidateDesiredImageCacheMock,
+    reconcileStudioMachinesMock,
     getSystemSettingValueMock: vi.fn(),
     setSystemSettingValueMock: vi.fn(),
     listStudioImagesFromGhcrMock: vi.fn(),
@@ -43,6 +50,7 @@ const {
     getTurnstileAutomationIssueMock: vi.fn(),
     prepareTurnstileWidgetMock: vi.fn(),
     deleteTurnstileWidgetMock: vi.fn(),
+    getDefaultTemplateMock: vi.fn(),
   };
 });
 
@@ -53,9 +61,16 @@ vi.mock("../src/services/studioMachines", () => ({
 vi.mock("../src/services/system/SystemSettingsService", () => ({
   SYSTEM_SETTING_KEYS: {
     studioMachineImageTagOverride: "studio_machine_image_tag_override",
+    studioAgentInstructionsTemplate: "studio_agent_instructions_template",
   },
   getSystemSettingValue: getSystemSettingValueMock,
   setSystemSettingValue: setSystemSettingValueMock,
+}));
+
+vi.mock("../src/services/agent/AgentInstructionsService", () => ({
+  agentInstructionsService: {
+    getDefaultTemplate: getDefaultTemplateMock,
+  },
 }));
 
 vi.mock("../src/services/studioMachines/fly/ghcr", () => ({
@@ -205,6 +220,8 @@ describe("superadmin router", () => {
   beforeEach(() => {
     listStudioMachinesMock.mockReset();
     getDesiredImageMock.mockReset();
+    invalidateDesiredImageCacheMock.mockReset();
+    reconcileStudioMachinesMock.mockReset();
     getSystemSettingValueMock.mockReset();
     setSystemSettingValueMock.mockReset();
     listStudioImagesFromGhcrMock.mockReset();
@@ -216,10 +233,20 @@ describe("superadmin router", () => {
     getTurnstileAutomationIssueMock.mockReset();
     prepareTurnstileWidgetMock.mockReset();
     deleteTurnstileWidgetMock.mockReset();
+    getDefaultTemplateMock.mockReset();
 
     (studioMachineProviderMock as any).kind = "fly";
     listStudioMachinesMock.mockResolvedValue([]);
     getDesiredImageMock.mockResolvedValue("ghcr.io/vivd-studio/vivd-studio:latest");
+    reconcileStudioMachinesMock.mockResolvedValue({
+      desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
+      scanned: 0,
+      warmedOutdatedImages: 0,
+      destroyedOldMachines: 0,
+      skippedRunningMachines: 0,
+      dryRun: false,
+      errors: [],
+    });
     getSystemSettingValueMock.mockResolvedValue(null);
     listStudioImagesFromGhcrMock.mockResolvedValue({
       imageBase: "ghcr.io/vivd-studio/vivd-studio",
@@ -250,6 +277,7 @@ describe("superadmin router", () => {
       secretKey: "secret-1",
       domains: ["example.com"],
     });
+    getDefaultTemplateMock.mockReturnValue("default template");
 
     delete process.env.FLY_STUDIO_IMAGE;
   });
@@ -311,6 +339,33 @@ describe("superadmin router", () => {
     expect(getDesiredImageMock).not.toHaveBeenCalled();
   });
 
+  it("uses provider desired image for effective desiredImage", async () => {
+    getDesiredImageMock.mockResolvedValueOnce("ghcr.io/vivd-studio/vivd-studio:0.5.4");
+    listStudioImagesFromGhcrMock.mockResolvedValueOnce({
+      imageBase: "ghcr.io/vivd-studio/vivd-studio",
+      images: [
+        {
+          tag: "0.6.0",
+          kind: "semver",
+          version: "0.6.0",
+          image: "ghcr.io/vivd-studio/vivd-studio:0.6.0",
+        },
+      ],
+    });
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.getStudioMachineImageOptions();
+
+    expect(result).toMatchObject({
+      provider: "fly",
+      supported: true,
+      selectionMode: "latest",
+      desiredImage: "ghcr.io/vivd-studio/vivd-studio:0.5.4",
+      desiredImageSource: "fallback",
+      latestImage: "ghcr.io/vivd-studio/vivd-studio:0.6.0",
+    });
+  });
+
   it("refuses override-tag updates while FLY_STUDIO_IMAGE is set", async () => {
     process.env.FLY_STUDIO_IMAGE = "ghcr.io/vivd-studio/vivd-studio:manual";
     const caller = superAdminRouter.createCaller(makeContext());
@@ -323,6 +378,70 @@ describe("superadmin router", () => {
     });
     expect(String(result.error)).toContain("FLY_STUDIO_IMAGE is set");
     expect(setSystemSettingValueMock).not.toHaveBeenCalled();
+  });
+
+  it("returns default agent instructions template when no override is set", async () => {
+    getSystemSettingValueMock.mockResolvedValueOnce(null);
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.getStudioAgentInstructionsTemplate();
+
+    expect(getSystemSettingValueMock).toHaveBeenCalledWith(
+      "studio_agent_instructions_template",
+    );
+    expect(result).toEqual({
+      source: "default",
+      template: null,
+      effectiveTemplate: "default template",
+    });
+  });
+
+  it("stores trimmed custom agent instructions template", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.setStudioAgentInstructionsTemplate({
+      template: "  custom template  ",
+    });
+
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "studio_agent_instructions_template",
+      "custom template",
+    );
+    expect(result).toEqual({ success: true, source: "system_setting" });
+  });
+
+  it("refreshes desired image cache when clearing override tag", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.setStudioMachineImageOverrideTag({ tag: null });
+
+    expect(result).toMatchObject({
+      provider: "fly",
+      updated: true,
+    });
+    expect(setSystemSettingValueMock).toHaveBeenCalledWith(
+      "studio_machine_image_tag_override",
+      null,
+    );
+    expect(invalidateDesiredImageCacheMock).toHaveBeenCalledTimes(1);
+    expect(getDesiredImageMock).toHaveBeenCalledWith({ forceRefresh: true });
+  });
+
+  it("forces desired image refresh before reconcile", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.reconcileStudioMachines();
+
+    expect(reconcileStudioMachinesMock).toHaveBeenCalledWith({
+      forceRefreshDesiredImage: true,
+    });
+    expect(result).toMatchObject({
+      provider: "fly",
+      reconciled: true,
+      result: {
+        desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
+      },
+    });
   });
 
   it("ensures a contact-form plugin instance when enabling a project entitlement", async () => {

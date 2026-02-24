@@ -26,6 +26,7 @@ import {
   setSystemSettingValue,
   SYSTEM_SETTING_KEYS,
 } from "../services/system/SystemSettingsService";
+import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
 import type { FlyStudioMachineProvider } from "../services/studioMachines/fly";
 import {
   listStudioImagesFromGhcr,
@@ -162,6 +163,7 @@ export const superAdminRouter = router({
       };
     }
 
+    const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
     const repository = normalizeStudioImageRepoConfigured();
     const envOverrideImageRaw = process.env.FLY_STUDIO_IMAGE?.trim();
     const envOverrideImage =
@@ -203,19 +205,18 @@ export const superAdminRouter = router({
       ghcrError = err instanceof Error ? err.message : String(err);
     }
 
-    const desiredImageSource = envOverrideImage
-      ? ("env" as const)
-      : overrideTag
-        ? ("override" as const)
-        : latestImage
-          ? ("ghcr" as const)
-          : ("fallback" as const);
-
     const desiredImage =
       envOverrideImage ||
       (overrideTag
         ? `${imageBase ?? fallbackImageBase}:${overrideTag}`
-        : latestImage || (await (studioMachineProvider as FlyStudioMachineProvider).getDesiredImage()));
+        : await flyProvider.getDesiredImage());
+    const desiredImageSource = envOverrideImage
+      ? ("env" as const)
+      : overrideTag
+        ? ("override" as const)
+        : latestImage && desiredImage === latestImage
+          ? ("ghcr" as const)
+          : ("fallback" as const);
 
     const selectionMode = envOverrideImage
       ? ("env" as const)
@@ -277,11 +278,51 @@ export const superAdminRouter = router({
         SYSTEM_SETTING_KEYS.studioMachineImageTagOverride,
         tag,
       );
+      const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
+      flyProvider.invalidateDesiredImageCache();
+      if (!tag) {
+        try {
+          await flyProvider.getDesiredImage({ forceRefresh: true });
+        } catch (err) {
+          console.warn(
+            `[SuperAdmin] Failed to refresh desired studio image after resetting override: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      }
 
       return {
         provider: studioMachineProvider.kind,
         updated: true,
       };
+    }),
+
+  getStudioAgentInstructionsTemplate: superAdminProcedure.query(async () => {
+    const stored = await getSystemSettingValue(
+      SYSTEM_SETTING_KEYS.studioAgentInstructionsTemplate,
+    );
+    const template = stored?.trim() || null;
+    return {
+      source: template ? ("system_setting" as const) : ("default" as const),
+      template,
+      effectiveTemplate: template || agentInstructionsService.getDefaultTemplate(),
+    };
+  }),
+
+  setStudioAgentInstructionsTemplate: superAdminProcedure
+    .input(
+      z.object({
+        template: z.string().max(50_000).nullable(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const normalized = input.template?.trim() || null;
+      await setSystemSettingValue(
+        SYSTEM_SETTING_KEYS.studioAgentInstructionsTemplate,
+        normalized,
+      );
+      return { success: true, source: normalized ? "system_setting" : "default" };
     }),
 
   reconcileStudioMachines: superAdminProcedure.mutation(async () => {
@@ -294,7 +335,9 @@ export const superAdminRouter = router({
     }
 
     const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
-    const result = await flyProvider.reconcileStudioMachines();
+    const result = await flyProvider.reconcileStudioMachines({
+      forceRefreshDesiredImage: true,
+    });
     return {
       provider: studioMachineProvider.kind,
       reconciled: true,

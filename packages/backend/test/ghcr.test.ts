@@ -94,6 +94,20 @@ describe("GHCR studio image readiness", () => {
     expect(image).toBe("ghcr.io/vivd-studio/vivd-studio:0.4.9");
   });
 
+  it("keeps highest semver when only one alias variant is manifest-ready", async () => {
+    installGhcrMock({
+      tags: ["0.6.0", "v0.6.0", "0.5.4"],
+      readyTags: ["v0.6.0", "0.5.4"],
+    });
+
+    const image = await resolveLatestSemverImageFromGhcr({
+      repository: "ghcr.io/vivd-studio/vivd-studio",
+      timeoutMs: 5_000,
+    });
+
+    expect(image).toBe("ghcr.io/vivd-studio/vivd-studio:v0.6.0");
+  });
+
   it("throws when semver tags exist but none are manifest-ready", async () => {
     installGhcrMock({
       tags: ["0.5.0", "0.4.9"],

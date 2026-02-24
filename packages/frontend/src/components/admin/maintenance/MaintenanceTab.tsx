@@ -152,7 +152,7 @@ export function MaintenanceTab() {
         return {
           title: "Add missing template files?",
           description:
-            "This will add missing AGENTS.md and .gitignore files in object storage for all project versions across all tenants.",
+            "This will add missing .gitignore files in object storage for all project versions across all tenants.",
           confirmLabel: "Add Missing Files",
           isPending: templateFilesMutation.isPending,
           onConfirm: () => templateFilesMutation.mutate({ overwrite: false }),
@@ -161,7 +161,7 @@ export function MaintenanceTab() {
         return {
           title: "Overwrite template files?",
           description:
-            "This will overwrite AGENTS.md and .gitignore in object storage for all project versions across all tenants.",
+            "This will overwrite .gitignore in object storage for all project versions across all tenants.",
           confirmLabel: "Overwrite Files",
           isPending: templateFilesMutation.isPending,
           onConfirm: () => templateFilesMutation.mutate({ overwrite: true }),
@@ -374,10 +374,10 @@ export function MaintenanceTab() {
 
           <div className="border-t pt-3 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Ensure project template files (<code>AGENTS.md</code> and{" "}
-              <code>.gitignore</code>) exist in every project version's bucket source
-              artifact across all tenants. Use overwrite to update all existing
-              template files after changing templates.
+              Ensure project template files (<code>.gitignore</code>) exist in
+              every project version&apos;s bucket source artifact across all tenants.
+              Use overwrite to update all existing template files after changing
+              templates.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -401,8 +401,6 @@ export function MaintenanceTab() {
               </Button>
               {templateFilesMutation.data ? (
                 <span className="text-sm text-muted-foreground">
-                  Wrote {templateFilesMutation.data.written["AGENTS.md"]}{" "}
-                  <code>AGENTS.md</code> and{" "}
                   {templateFilesMutation.data.written[".gitignore"]}{" "}
                   <code>.gitignore</code> files across{" "}
                   {templateFilesMutation.data.versionsTouched}/

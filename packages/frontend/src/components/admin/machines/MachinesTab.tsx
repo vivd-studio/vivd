@@ -185,10 +185,12 @@ export function MachinesTab() {
 
   const machines = useMemo(() => machinesQuery.data?.machines ?? [], [machinesQuery.data?.machines]);
   const provider = machinesQuery.data?.provider ?? "unknown";
+  const effectiveDesiredImage = machines[0]?.desiredImage || null;
   const desiredImage =
-    imageOptionsQuery.data && imageOptionsQuery.data.supported
+    effectiveDesiredImage ||
+    (imageOptionsQuery.data && imageOptionsQuery.data.supported
       ? imageOptionsQuery.data.desiredImage
-      : machines[0]?.desiredImage || null;
+      : null);
   const listError =
     machinesQuery.data && "error" in machinesQuery.data
       ? machinesQuery.data.error
@@ -256,6 +258,11 @@ export function MachinesTab() {
   };
 
   const imageOptions = imageOptionsQuery.data;
+  const latestCandidateDiffers =
+    !!imageOptions?.supported &&
+    !!imageOptions.latestImage &&
+    !!desiredImage &&
+    imageOptions.latestImage !== desiredImage;
   const imageSelectorDisabled =
     !imageOptions?.supported ||
     imageOptions.selectionMode === "unsupported" ||
@@ -351,7 +358,7 @@ export function MachinesTab() {
               {desiredImage ? (
                 <>
                   <span className="mx-2">•</span>
-                  Desired image: <code className="break-all">{desiredImage}</code>
+                  Effective desired image: <code className="break-all">{desiredImage}</code>
                 </>
               ) : null}
             </div>
@@ -402,6 +409,13 @@ export function MachinesTab() {
                 <div className="text-xs text-muted-foreground">
                   Latest resolves to the highest semver tag in{" "}
                   <code className="break-all">{imageOptions.repository}</code> (dev-* tags are also listed).
+                  {latestCandidateDiffers && imageOptions.latestImage ? (
+                    <span>
+                      {" "}
+                      Latest candidate from GHCR:{" "}
+                      <code className="break-all">{imageOptions.latestImage}</code>.
+                    </span>
+                  ) : null}
                   {imageOptions.error ? (
                     <span className="text-red-500">
                       {" "}

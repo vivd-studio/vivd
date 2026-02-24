@@ -4,6 +4,7 @@ import { systemSetting } from "../../db/schema";
 
 export const SYSTEM_SETTING_KEYS = {
   studioMachineImageTagOverride: "studio_machine_image_tag_override",
+  studioAgentInstructionsTemplate: "studio_agent_instructions_template",
 } as const;
 
 export async function getSystemSettingValue(key: string): Promise<string | null> {
@@ -35,4 +36,3 @@ export async function setSystemSettingValue(
       },
     });
 }
-

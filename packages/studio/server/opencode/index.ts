@@ -17,6 +17,7 @@ import {
 import { serverManager } from "./serverManager.js";
 import { usageReporter } from "../services/reporting/UsageReporter.js";
 import { requestBucketSyncAfterAgentTask } from "../services/sync/AgentTaskSyncService.js";
+import { agentInstructionsService } from "../services/agent/AgentInstructionsService.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel } from "./modelConfig.js";
@@ -88,6 +89,7 @@ export async function runTask(
   const { client, directory } = await serverManager.getClientAndDirectory(cwd);
 
   const currentSessionId = await getOrCreateSession(client, directory, sessionId);
+  const isNewSession = !sessionId;
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
   let completionHandled = false;
 
@@ -223,6 +225,15 @@ export async function runTask(
   }
 
   try {
+    const systemPrompt = isNewSession
+      ? await agentInstructionsService.getSystemPromptForSessionStart({
+          projectSlug: (process.env.VIVD_PROJECT_SLUG || "").trim() || undefined,
+          projectVersion: Number.parseInt(
+            process.env.VIVD_PROJECT_VERSION || "",
+            10,
+          ),
+        })
+      : undefined;
     await sendPromptAsync(
       client,
       currentSessionId,
@@ -230,6 +241,7 @@ export async function runTask(
       task,
       model,
       options?.tools,
+      systemPrompt,
     );
   } catch (error) {
     console.error(`[OpenCode] Task Error:`, error);
@@ -304,6 +316,7 @@ async function sendPromptAsync(
   task: string,
   modelSelection?: ModelSelection,
   toolEnablement?: Record<string, boolean>,
+  systemPrompt?: string,
 ): Promise<void> {
   const resolvedModel = modelSelection || getDefaultModel();
   if (!resolvedModel) {
@@ -318,6 +331,7 @@ async function sendPromptAsync(
     query: { directory },
     body: {
       model: { providerID, modelID },
+      ...(systemPrompt ? { system: systemPrompt } : {}),
       ...(toolEnablement ? { tools: toolEnablement } : {}),
       parts: [{ type: "text", text: task }],
     },

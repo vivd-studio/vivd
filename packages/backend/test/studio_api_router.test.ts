@@ -10,6 +10,10 @@ const {
   upsertPublishChecklistMock,
   getPublishChecklistMock,
   workspaceReportMock,
+  getProjectMock,
+  getProjectVersionMock,
+  listCatalogForProjectMock,
+  renderAgentInstructionsMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
   updateSessionTitleMock: vi.fn(),
@@ -20,6 +24,10 @@ const {
   upsertPublishChecklistMock: vi.fn(),
   getPublishChecklistMock: vi.fn(),
   workspaceReportMock: vi.fn(),
+  getProjectMock: vi.fn(),
+  getProjectVersionMock: vi.fn(),
+  listCatalogForProjectMock: vi.fn(),
+  renderAgentInstructionsMock: vi.fn(),
 }));
 
 vi.mock("../src/services/usage/UsageService", () => ({
@@ -50,12 +58,26 @@ vi.mock("../src/services/project/ProjectMetaService", () => ({
   projectMetaService: {
     upsertPublishChecklist: upsertPublishChecklistMock,
     getPublishChecklist: getPublishChecklistMock,
+    getProject: getProjectMock,
+    getProjectVersion: getProjectVersionMock,
   },
 }));
 
 vi.mock("../src/services/project/StudioWorkspaceStateService", () => ({
   studioWorkspaceStateService: {
     report: workspaceReportMock,
+  },
+}));
+
+vi.mock("../src/services/plugins/ProjectPluginService", () => ({
+  projectPluginService: {
+    listCatalogForProject: listCatalogForProjectMock,
+  },
+}));
+
+vi.mock("../src/services/agent/AgentInstructionsService", () => ({
+  agentInstructionsService: {
+    render: renderAgentInstructionsMock,
   },
 }));
 
@@ -110,6 +132,10 @@ describe("studioApi router", () => {
     upsertPublishChecklistMock.mockReset();
     getPublishChecklistMock.mockReset();
     workspaceReportMock.mockReset();
+    getProjectMock.mockReset();
+    getProjectVersionMock.mockReset();
+    listCatalogForProjectMock.mockReset();
+    renderAgentInstructionsMock.mockReset();
 
     recordAiCostMock.mockResolvedValue(undefined);
     updateSessionTitleMock.mockResolvedValue(undefined);
@@ -119,6 +145,33 @@ describe("studioApi router", () => {
     generateThumbnailMock.mockResolvedValue(undefined);
     upsertPublishChecklistMock.mockResolvedValue(undefined);
     getPublishChecklistMock.mockResolvedValue(null);
+    getProjectMock.mockResolvedValue({
+      organizationId: "org-1",
+      slug: "site-1",
+      source: "url",
+      title: "Site 1",
+      currentVersion: 3,
+    });
+    getProjectVersionMock.mockResolvedValue({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 3,
+      source: "url",
+      title: "Site 1 v3",
+    });
+    listCatalogForProjectMock.mockResolvedValue({
+      project: { organizationId: "org-1", slug: "site-1" },
+      available: [],
+      instances: [
+        { pluginId: "contact_form", status: "enabled" },
+        { pluginId: "analytics", status: "disabled" },
+      ],
+    });
+    renderAgentInstructionsMock.mockResolvedValue({
+      instructions: "Use this prompt",
+      instructionsHash: "hash-1",
+      templateSource: "default",
+    });
   });
 
   it("records each usage report with session/project linkage", async () => {
@@ -203,6 +256,36 @@ describe("studioApi router", () => {
 
     expect(checkLimitsMock).toHaveBeenCalledWith("org-1");
     expect(result).toEqual({ blocked: false });
+  });
+
+  it("returns rendered agent instructions for the requested project", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.getAgentInstructions({
+      studioId: "studio-1",
+      slug: "site-1",
+    });
+
+    expect(getProjectMock).toHaveBeenCalledWith("org-1", "site-1");
+    expect(getProjectVersionMock).toHaveBeenCalledWith("org-1", "site-1", 3);
+    expect(listCatalogForProjectMock).toHaveBeenCalledWith("org-1", "site-1");
+    expect(renderAgentInstructionsMock).toHaveBeenCalledWith({
+      projectName: "Site 1 v3",
+      source: "url",
+      enabledPlugins: ["contact_form"],
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        slug: "site-1",
+        version: 3,
+        source: "url",
+        projectName: "Site 1 v3",
+        enabledPluginIds: ["contact_form"],
+        instructions: "Use this prompt",
+        instructionsHash: "hash-1",
+        templateSource: "default",
+      }),
+    );
   });
 
   it("keeps generateThumbnail resilient when async side-effects fail", async () => {

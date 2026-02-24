@@ -239,7 +239,6 @@ const BLOCKED_PATHS = [
   "package.json",
   "package-lock.json",
   "pnpm-lock.yaml",
-  "AGENTS.md",
   "tsconfig.json",
   "astro.config",
   "vite.config",

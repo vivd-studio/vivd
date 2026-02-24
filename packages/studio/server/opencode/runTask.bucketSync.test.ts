@@ -10,6 +10,7 @@ const {
   requestBucketSyncAfterAgentTaskMock,
   usageReportMock,
   updateSessionTitleMock,
+  getSystemPromptForSessionStartMock,
 } = vi.hoisted(() => ({
   setSessionStatusMock: vi.fn(),
   emitSessionEventMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   requestBucketSyncAfterAgentTaskMock: vi.fn(),
   usageReportMock: vi.fn(),
   updateSessionTitleMock: vi.fn(),
+  getSystemPromptForSessionStartMock: vi.fn(),
 }));
 
 let onIdleHandler: (() => void) | undefined;
@@ -68,6 +70,12 @@ vi.mock("./modelConfig.js", () => ({
   getAvailableModels: vi.fn(() => []),
 }));
 
+vi.mock("../services/agent/AgentInstructionsService.js", () => ({
+  agentInstructionsService: {
+    getSystemPromptForSessionStart: getSystemPromptForSessionStartMock,
+  },
+}));
+
 import { runTask } from "./index.js";
 
 function flushPromises(): Promise<void> {
@@ -86,11 +94,13 @@ describe("runTask completion sync", () => {
     requestBucketSyncAfterAgentTaskMock.mockReset();
     usageReportMock.mockReset();
     updateSessionTitleMock.mockReset();
+    getSystemPromptForSessionStartMock.mockReset();
 
     startMock.mockResolvedValue(undefined);
     stopMock.mockReturnValue(undefined);
     usageReportMock.mockResolvedValue(undefined);
     updateSessionTitleMock.mockResolvedValue(undefined);
+    getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
 
     getClientAndDirectoryMock.mockResolvedValue({
       directory: "/workspace/project",

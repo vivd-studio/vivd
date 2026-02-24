@@ -11,6 +11,7 @@ const {
   setSessionStatusMock,
   emitSessionEventMock,
   createAgentEventMock,
+  getSystemPromptForSessionStartMock,
 } = vi.hoisted(() => ({
   getClientAndDirectoryMock: vi.fn(),
   sessionCreateMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   setSessionStatusMock: vi.fn(),
   emitSessionEventMock: vi.fn(),
   createAgentEventMock: vi.fn((_sessionId, _type, payload) => payload),
+  getSystemPromptForSessionStartMock: vi.fn(),
 }));
 
 vi.mock("./serverManager.js", () => ({
@@ -62,6 +64,12 @@ vi.mock("../services/sync/AgentTaskSyncService.js", () => ({
   requestBucketSyncAfterAgentTask: vi.fn(),
 }));
 
+vi.mock("../services/agent/AgentInstructionsService.js", () => ({
+  agentInstructionsService: {
+    getSystemPromptForSessionStart: getSystemPromptForSessionStartMock,
+  },
+}));
+
 import { abortSession, getSessionsStatus, listSessions, runTask } from "./index.js";
 
 describe("opencode index session behavior", () => {
@@ -76,6 +84,7 @@ describe("opencode index session behavior", () => {
     setSessionStatusMock.mockReset();
     emitSessionEventMock.mockReset();
     createAgentEventMock.mockClear();
+    getSystemPromptForSessionStartMock.mockReset();
 
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
     sessionStatusMock.mockResolvedValue({ data: {}, error: undefined });
@@ -83,6 +92,7 @@ describe("opencode index session behavior", () => {
     sessionCreateMock.mockResolvedValue({ data: { id: "sess-new" }, error: undefined });
     sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: undefined });
     getSessionStatusesMock.mockReturnValue({});
+    getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
 
     getClientAndDirectoryMock.mockResolvedValue({
       directory: "/workspace/project/",
@@ -169,7 +179,21 @@ describe("opencode index session behavior", () => {
     expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({
+          system: "system prompt",
           tools: { vivd_publish_checklist: true },
+        }),
+      }),
+    );
+  });
+
+  it("does not inject a new system prompt when continuing an existing session", async () => {
+    await runTask("continue task", "/workspace/project", "sess-existing");
+
+    expect(getSystemPromptForSessionStartMock).not.toHaveBeenCalled();
+    expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.not.objectContaining({
+          system: expect.any(String),
         }),
       }),
     );

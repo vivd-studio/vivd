@@ -589,7 +589,7 @@ export const projectMaintenanceProcedures = {
   }),
 
   /**
-   * Admin maintenance: ensure project template files (like AGENTS.md, .gitignore) exist in all versions.
+   * Admin maintenance: ensure project template files (currently .gitignore) exist in all versions.
    * Can be re-run with overwrite=true to update templates across all projects.
    */
   migrateProjectTemplateFiles: ownerProcedure
@@ -621,7 +621,6 @@ export const projectMaintenanceProcedures = {
       });
 
       const written: Record<string, number> = {
-        "AGENTS.md": 0,
         ".gitignore": 0,
       };
 
