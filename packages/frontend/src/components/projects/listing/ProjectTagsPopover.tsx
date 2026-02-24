@@ -123,7 +123,6 @@ export function ProjectTagsPopover({
   const [view, setView] = useState<View>({ type: "list" });
   const [search, setSearch] = useState("");
   const [draftTag, setDraftTag] = useState("");
-  const [draftEditTag, setDraftEditTag] = useState("");
   const [renamedTags, setRenamedTags] = useState<Record<string, string>>({});
   const [deletedTags, setDeletedTags] = useState<string[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -175,7 +174,6 @@ export function ProjectTagsPopover({
   };
 
   const openEditView = (tag: string) => {
-    setDraftEditTag(tag);
     draftEditTagRef.current = tag;
     setView({ type: "edit", tag });
   };
@@ -183,7 +181,9 @@ export function ProjectTagsPopover({
   const applyEditTagChanges = () => {
     if (view.type !== "edit") return;
 
-    const nextTag = normalizeTag(draftEditTagRef.current);
+    const nextTag = normalizeTag(
+      editTagTextRef.current?.textContent ?? draftEditTagRef.current,
+    );
     if (nextTag && nextTag.length <= MAX_TAG_LENGTH && nextTag !== view.tag) {
       setDraftProjectTags((current) =>
         dedupeTags(current.map((value) => (value === view.tag ? nextTag : value))),
@@ -206,7 +206,6 @@ export function ProjectTagsPopover({
       }
     }
 
-    setDraftEditTag("");
     draftEditTagRef.current = "";
     setView({ type: "list" });
   };
@@ -236,7 +235,6 @@ export function ProjectTagsPopover({
       return Array.from(next);
     });
 
-    setDraftEditTag("");
     draftEditTagRef.current = "";
     setView({ type: "list" });
   };
@@ -245,7 +243,6 @@ export function ProjectTagsPopover({
     setView({ type: "list" });
     setSearch("");
     setDraftTag("");
-    setDraftEditTag("");
     setRenamedTags({});
     setDeletedTags([]);
     draftEditTagRef.current = "";
@@ -345,7 +342,6 @@ export function ProjectTagsPopover({
                   onInput={(event) => {
                     const nextValue = event.currentTarget.textContent ?? "";
                     draftEditTagRef.current = nextValue;
-                    setDraftEditTag(nextValue);
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -354,7 +350,7 @@ export function ProjectTagsPopover({
                     }
                   }}
                 >
-                  {draftEditTag}
+                  {view.tag}
                 </span>
               </div>
               <div className="space-y-1.5">
