@@ -635,6 +635,7 @@ export const superAdminRouter = router({
       ...overview,
       webhookEndpoints: {
         ses: getEmailFeedbackEndpoint("ses"),
+        resend: getEmailFeedbackEndpoint("resend"),
       },
     };
   }),
@@ -647,6 +648,7 @@ export const superAdminRouter = router({
         ...overview,
         webhookEndpoints: {
           ses: getEmailFeedbackEndpoint("ses"),
+          resend: getEmailFeedbackEndpoint("resend"),
         },
       };
     }),
@@ -665,6 +667,7 @@ export const superAdminRouter = router({
         ...overview,
         webhookEndpoints: {
           ses: getEmailFeedbackEndpoint("ses"),
+          resend: getEmailFeedbackEndpoint("resend"),
         },
       };
     }),

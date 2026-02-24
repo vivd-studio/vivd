@@ -130,12 +130,17 @@ function hasSesConfigurationHints(): boolean {
   );
 }
 
+function hasResendConfigurationHints(): boolean {
+  return Boolean((process.env.RESEND_API_KEY || "").trim());
+}
+
 export function resolveConfiguredEmailProviderName(): string {
   const explicit =
     (process.env.VIVD_EMAIL_PROVIDER || process.env.EMAIL_PROVIDER || "")
       .trim()
       .toLowerCase();
   if (explicit) return explicit;
+  if (hasResendConfigurationHints()) return "resend";
   if (hasSesConfigurationHints()) return "ses";
   return "noop";
 }
@@ -146,6 +151,17 @@ export function isSesFeedbackAutoConfirmEnabled(): boolean {
 
 export function isSesFeedbackWebhookSecretConfigured(): boolean {
   return (process.env.VIVD_SES_FEEDBACK_WEBHOOK_SECRET || "").trim().length > 0;
+}
+
+export function isResendFeedbackWebhookSecretConfigured(): boolean {
+  return (process.env.RESEND_WEBHOOK_SECRET || "").trim().length > 0;
+}
+
+function isWebhookSecretConfiguredForProvider(providerName: string): boolean {
+  if (providerName === "resend") {
+    return isResendFeedbackWebhookSecretConfigured();
+  }
+  return isSesFeedbackWebhookSecretConfigured();
 }
 
 function resolveDefaultPolicy(): DeliverabilityPolicy {
@@ -306,12 +322,13 @@ class EmailDeliverabilityService {
 
   async getOverview(): Promise<EmailDeliverabilityOverview> {
     const [state, policy] = await Promise.all([this.readState(), this.readPolicy()]);
+    const providerName = resolveConfiguredEmailProviderName();
 
     return {
       ...toSummary(state, policy),
       provider: {
-        name: resolveConfiguredEmailProviderName(),
-        webhookSecretConfigured: isSesFeedbackWebhookSecretConfigured(),
+        name: providerName,
+        webhookSecretConfigured: isWebhookSecretConfiguredForProvider(providerName),
         autoConfirmSubscriptionsEnabled: isSesFeedbackAutoConfirmEnabled(),
       },
     };
@@ -456,7 +473,9 @@ class EmailDeliverabilityService {
         ...toSummary(state, policy),
         provider: {
           name: resolveConfiguredEmailProviderName(),
-          webhookSecretConfigured: isSesFeedbackWebhookSecretConfigured(),
+          webhookSecretConfigured: isWebhookSecretConfiguredForProvider(
+            resolveConfiguredEmailProviderName(),
+          ),
           autoConfirmSubscriptionsEnabled: isSesFeedbackAutoConfirmEnabled(),
         },
       },
@@ -481,7 +500,9 @@ class EmailDeliverabilityService {
       ...toSummary(state, policy),
       provider: {
         name: resolveConfiguredEmailProviderName(),
-        webhookSecretConfigured: isSesFeedbackWebhookSecretConfigured(),
+        webhookSecretConfigured: isWebhookSecretConfiguredForProvider(
+          resolveConfiguredEmailProviderName(),
+        ),
         autoConfirmSubscriptionsEnabled: isSesFeedbackAutoConfirmEnabled(),
       },
     };

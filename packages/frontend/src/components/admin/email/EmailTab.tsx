@@ -166,18 +166,33 @@ export function EmailTab() {
           </div>
 
           <section className="rounded-lg border bg-card p-4 space-y-3">
-            <h3 className="text-sm font-medium">SES feedback webhook</h3>
-            <code className="text-xs break-all">
-              {overview?.webhookEndpoints.ses || "Unavailable"}
-            </code>
-            <p className="text-xs text-muted-foreground">
-              Configure SES/SNS Bounce + Complaint notifications to this URL. Optional:
-              append <code>?secret=...</code> when using
-              <code> VIVD_SES_FEEDBACK_WEBHOOK_SECRET</code>.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Auto-confirm subscriptions: {overview?.provider.autoConfirmSubscriptionsEnabled ? "enabled" : "disabled"}
-            </p>
+            <h3 className="text-sm font-medium">Feedback webhooks</h3>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Resend endpoint</p>
+              <code className="text-xs break-all">
+                {overview?.webhookEndpoints.resend || "Unavailable"}
+              </code>
+              <p className="text-xs text-muted-foreground">
+                Use this URL for Resend webhook events. Set{" "}
+                <code>RESEND_WEBHOOK_SECRET</code> from the Resend signing secret.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">SES endpoint</p>
+              <code className="text-xs break-all">
+                {overview?.webhookEndpoints.ses || "Unavailable"}
+              </code>
+              <p className="text-xs text-muted-foreground">
+                Configure SES/SNS Bounce + Complaint notifications here. Optional:
+                append <code>?secret=...</code> when using{" "}
+                <code>VIVD_SES_FEEDBACK_WEBHOOK_SECRET</code>.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Auto-confirm subscriptions: {overview?.provider.autoConfirmSubscriptionsEnabled ? "enabled" : "disabled"}
+              </p>
+            </div>
           </section>
 
           <section className="rounded-lg border bg-card p-4 space-y-3">
