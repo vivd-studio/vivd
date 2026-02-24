@@ -463,18 +463,29 @@ export async function getSessionsStatus(directory: string) {
 
   const statusMap: Record<string, SessionStatus> = {};
   for (const session of sessions) {
-    statusMap[session.id] = { type: "idle" };
-  }
+    const normalized = normalizedStatuses[session.id];
+    const emitter = emitterStatuses[session.id];
 
-  for (const [sessionId, status] of Object.entries(normalizedStatuses)) {
-    if (sessionId in statusMap) {
-      statusMap[sessionId] = status;
+    if (normalized) {
+      // Prefer OpenCode's current status over emitter snapshots so stale
+      // in-memory "busy" states don't pin the UI in Waiting after refresh.
+      if (
+        normalized.type === "idle" &&
+        emitter &&
+        (emitter as any).type === "retry"
+      ) {
+        // Keep retry visible when OpenCode briefly reports idle during retries.
+        statusMap[session.id] = emitter;
+      } else {
+        statusMap[session.id] = normalized;
+      }
+      continue;
     }
-  }
 
-  for (const [sessionId, status] of Object.entries(emitterStatuses)) {
-    if (sessionId in statusMap) {
-      statusMap[sessionId] = status;
+    if (emitter) {
+      statusMap[session.id] = emitter;
+    } else {
+      statusMap[session.id] = { type: "idle" };
     }
   }
 

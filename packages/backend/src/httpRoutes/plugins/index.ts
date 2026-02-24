@@ -3,6 +3,7 @@ import {
   createContactFormPublicRouter,
   type ContactFormPublicRouterDeps,
 } from "./contactForm/submit";
+import { createContactRecipientVerificationRouter } from "./contactForm/recipientVerification";
 import { createEmailFeedbackRouter } from "./contactForm/feedback";
 import { createAnalyticsPublicRouter } from "./analytics/runtime";
 
@@ -20,7 +21,7 @@ export function createPublicPluginsRouter(
   // Permissive CORS for all public plugin endpoints
   router.use("/plugins", (req, res, next) => {
     res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.set("Access-Control-Allow-Headers", "Content-Type, Accept");
     if (req.method === "OPTIONS") {
       return res.status(204).end();
@@ -30,6 +31,7 @@ export function createPublicPluginsRouter(
 
   router.use(createEmailFeedbackRouter());
   router.use("/plugins", createAnalyticsPublicRouter(deps));
+  router.use("/plugins", createContactRecipientVerificationRouter());
   router.use("/plugins", createContactFormPublicRouter(deps));
   return router;
 }

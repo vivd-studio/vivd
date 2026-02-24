@@ -315,6 +315,47 @@ export function buildVerificationEmail(input: {
   };
 }
 
+export function buildContactRecipientVerificationEmail(input: {
+  projectSlug: string;
+  verificationUrl: string;
+  expiresInSeconds: number;
+}): EmailTemplate {
+  const projectSlug = sanitizeTextLine(input.projectSlug) || "your project";
+  const expiresLabel = formatDurationLabel(input.expiresInSeconds);
+  const subject = `Verify contact recipient for ${projectSlug}`;
+  const text = joinNonEmptyTextBlocks([
+    "Please verify this email address to receive contact form notifications.",
+    `Project: ${projectSlug}`,
+    `Verify recipient email: ${input.verificationUrl}`,
+    `For your security, this link expires in ${expiresLabel}.`,
+    "If you did not request this, you can ignore this email.",
+    buildLegalTextFooter(),
+  ]);
+  const html = renderHtmlLayout({
+    preheader: `Verify contact recipient for ${projectSlug}`,
+    title: "Verify recipient email",
+    intro: "Please confirm this email address for contact form notifications.",
+    bodyHtml: joinNonEmptyTextBlocks([
+      `<p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};"><strong style="color:${BRAND_COLORS.text};">Project:</strong> ${escapeHtml(
+        projectSlug,
+      )}</p>`,
+      `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">For your security, this link expires in <strong style="color:${BRAND_COLORS.text};">${escapeHtml(
+        expiresLabel,
+      )}</strong>.</p>`,
+    ]),
+    actionLabel: "Verify recipient email",
+    actionUrl: input.verificationUrl,
+    outroHtml:
+      `<p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:${BRAND_COLORS.muted};">If you did not request this, you can ignore this email.</p>`,
+  });
+
+  return {
+    subject,
+    text,
+    html,
+  };
+}
+
 export function buildPasswordResetEmail(input: {
   recipientName?: string | null;
   resetUrl: string;

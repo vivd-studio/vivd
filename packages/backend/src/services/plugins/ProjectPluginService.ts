@@ -4,6 +4,7 @@ import {
   type ContactFormPluginPayload,
 } from "./contactForm/service";
 import type { ContactFormPluginConfig } from "./contactForm/config";
+import type { ContactRecipientVerificationRequestResult } from "./contactForm/recipientVerification";
 import {
   analyticsPluginService,
   type AnalyticsPluginInfoPayload,
@@ -97,6 +98,15 @@ class ProjectPluginService {
     projectSlug: string;
   }): Promise<ContactFormPluginInfoPayload> {
     return contactFormPluginService.getContactFormInfo(options);
+  }
+
+  async requestContactRecipientVerification(options: {
+    organizationId: string;
+    projectSlug: string;
+    email: string;
+    requestedByUserId?: string | null;
+  }): Promise<ContactRecipientVerificationRequestResult> {
+    return contactFormPluginService.requestRecipientVerification(options);
   }
 
   async getAnalyticsInfo(options: {

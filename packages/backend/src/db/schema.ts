@@ -509,6 +509,52 @@ export const contactFormSubmission = pgTable(
   ],
 );
 
+export const contactFormRecipientVerification = pgTable(
+  "contact_form_recipient_verification",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectSlug: text("project_slug").notNull(),
+    pluginInstanceId: text("plugin_instance_id")
+      .notNull()
+      .references(() => projectPluginInstance.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    status: text("status").notNull().default("pending"), // 'pending' | 'verified'
+    verificationTokenHash: text("verification_token_hash"),
+    verificationTokenExpiresAt: timestamp("verification_token_expires_at"),
+    lastSentAt: timestamp("last_sent_at"),
+    verifiedAt: timestamp("verified_at"),
+    createdByUserId: text("created_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug],
+      foreignColumns: [projectMeta.organizationId, projectMeta.slug],
+    }).onDelete("cascade"),
+    uniqueIndex("contact_form_recipient_verification_org_project_email_unique").on(
+      table.organizationId,
+      table.projectSlug,
+      table.email,
+    ),
+    index("contact_form_recipient_verification_plugin_status_idx").on(
+      table.pluginInstanceId,
+      table.status,
+    ),
+    index("contact_form_recipient_verification_token_hash_idx").on(
+      table.verificationTokenHash,
+    ),
+  ],
+);
+
 export const analyticsEvent = pgTable(
   "analytics_event",
   {
@@ -563,6 +609,7 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   publishChecklists: many(projectPublishChecklist),
   pluginInstances: many(projectPluginInstance),
   contactFormSubmissions: many(contactFormSubmission),
+  contactFormRecipientVerifications: many(contactFormRecipientVerification),
   analyticsEvents: many(analyticsEvent),
 }));
 
@@ -636,6 +683,7 @@ export const projectPluginInstanceRelations = relations(
       references: [projectMeta.organizationId, projectMeta.slug],
     }),
     contactFormSubmissions: many(contactFormSubmission),
+    contactFormRecipientVerifications: many(contactFormRecipientVerification),
     analyticsEvents: many(analyticsEvent),
   }),
 );
@@ -650,6 +698,27 @@ export const contactFormSubmissionRelations = relations(
     pluginInstance: one(projectPluginInstance, {
       fields: [contactFormSubmission.pluginInstanceId],
       references: [projectPluginInstance.id],
+    }),
+  }),
+);
+
+export const contactFormRecipientVerificationRelations = relations(
+  contactFormRecipientVerification,
+  ({ one }) => ({
+    project: one(projectMeta, {
+      fields: [
+        contactFormRecipientVerification.organizationId,
+        contactFormRecipientVerification.projectSlug,
+      ],
+      references: [projectMeta.organizationId, projectMeta.slug],
+    }),
+    pluginInstance: one(projectPluginInstance, {
+      fields: [contactFormRecipientVerification.pluginInstanceId],
+      references: [projectPluginInstance.id],
+    }),
+    createdByUser: one(user, {
+      fields: [contactFormRecipientVerification.createdByUserId],
+      references: [user.id],
     }),
   }),
 );

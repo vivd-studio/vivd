@@ -30,6 +30,11 @@ import {
 } from "./publicApi";
 import { inferContactFormAutoSourceHosts } from "./sourceHosts";
 import { getContactFormSnippets } from "./snippets";
+import {
+  contactFormRecipientVerificationService,
+  type ContactRecipientDirectory,
+  type ContactRecipientVerificationRequestResult,
+} from "./recipientVerification";
 
 export interface ContactFormPluginPayload {
   pluginId: "contact_form";
@@ -63,6 +68,7 @@ export interface ContactFormPluginInfoPayload {
     turnstileEnabled: boolean;
     turnstileConfigured: boolean;
   };
+  recipients: ContactRecipientDirectory;
   instructions: string[];
 }
 
@@ -102,7 +108,7 @@ export class ContactFormRecipientVerificationError extends Error {
     const joinedRecipients = recipientEmails.join(", ");
     const noun = recipientEmails.length === 1 ? "email is" : "emails are";
     super(
-      `Recipient ${noun} not verified in this organization: ${joinedRecipients}`,
+      `Recipient ${noun} not verified for this project: ${joinedRecipients}`,
     );
     this.name = "ContactFormRecipientVerificationError";
     this.recipientEmails = recipientEmails;
@@ -113,6 +119,13 @@ export class ContactFormRecipientRequiredError extends Error {
   constructor() {
     super("At least one verified recipient email is required");
     this.name = "ContactFormRecipientRequiredError";
+  }
+}
+
+export class ContactFormPluginNotEnabledError extends Error {
+  constructor() {
+    super("Contact Form plugin is not enabled for this project");
+    this.name = "ContactFormPluginNotEnabledError";
   }
 }
 
@@ -134,6 +147,7 @@ function uniqueValues(values: string[]): string[] {
 class ContactFormPluginService {
   private async assertRecipientEmailsAreVerified(options: {
     organizationId: string;
+    projectSlug: string;
     recipientEmails: string[];
   }): Promise<void> {
     if (options.recipientEmails.length === 0) {
@@ -158,9 +172,19 @@ class ContactFormPluginService {
       verifiedEmailSet.add(normalizeEmailAddress(member.user.email));
     }
 
+    const verifiedExternalEmailSet =
+      await contactFormRecipientVerificationService.listVerifiedExternalRecipientEmailSet({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        recipientEmails: options.recipientEmails,
+      });
+
     const normalizedRecipients = options.recipientEmails.map(normalizeEmailAddress);
     const rejectedRecipients = uniqueValues(
-      normalizedRecipients.filter((email) => !verifiedEmailSet.has(email)),
+      normalizedRecipients.filter(
+        (email) =>
+          !verifiedEmailSet.has(email) && !verifiedExternalEmailSet.has(email),
+      ),
     );
     if (rejectedRecipients.length > 0) {
       throw new ContactFormRecipientVerificationError(rejectedRecipients);
@@ -207,6 +231,7 @@ class ContactFormPluginService {
     if (requireVerifiedRecipients) {
       await this.assertRecipientEmailsAreVerified({
         organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
         recipientEmails: parsedConfig.recipientEmails,
       });
     } else if (parsedConfig.recipientEmails.length === 0) {
@@ -241,6 +266,30 @@ class ContactFormPluginService {
     );
   }
 
+  async requestRecipientVerification(options: {
+    organizationId: string;
+    projectSlug: string;
+    email: string;
+    requestedByUserId?: string | null;
+  }): Promise<ContactRecipientVerificationRequestResult> {
+    const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      pluginId: "contact_form",
+    });
+    if (!pluginInstance || pluginInstance.status !== "enabled") {
+      throw new ContactFormPluginNotEnabledError();
+    }
+
+    return contactFormRecipientVerificationService.requestRecipientVerification({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      pluginInstanceId: pluginInstance.id,
+      email: options.email,
+      requestedByUserId: options.requestedByUserId,
+    });
+  }
+
   async getContactFormInfo(options: {
     organizationId: string;
     projectSlug: string;
@@ -268,6 +317,15 @@ class ContactFormPluginService {
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
     });
+    const normalizedExistingConfig = existing
+      ? normalizeContactFormConfig(existing.configJson)
+      : null;
+    const recipients =
+      await contactFormRecipientVerificationService.listRecipientDirectory({
+        organizationId: options.organizationId,
+        projectSlug: options.projectSlug,
+        verifiedRecipientEmails: normalizedExistingConfig?.recipientEmails ?? [],
+      });
 
     if (!existing) {
       return {
@@ -285,6 +343,7 @@ class ContactFormPluginService {
           turnstileEnabled: entitlement.turnstileEnabled,
           turnstileConfigured,
         }),
+        recipients,
         instructions: [
           "Contact Form plugin is not enabled for this project yet.",
           "Enable it in Studio/Control-Plane Plugins UI first (Project → Plugins → Contact Form).",
@@ -294,7 +353,8 @@ class ContactFormPluginService {
     }
 
     if (existing.status !== "enabled") {
-      const normalizedConfig = normalizeContactFormConfig(existing.configJson);
+      const normalizedConfig =
+        normalizedExistingConfig ?? normalizeContactFormConfig(existing.configJson);
       return {
         pluginId: "contact_form",
         enabled: false,
@@ -313,6 +373,7 @@ class ContactFormPluginService {
           turnstileEnabled: entitlement.turnstileEnabled,
           turnstileConfigured,
         }),
+        recipients,
         instructions: [
           "Contact Form plugin instance exists but is currently disabled.",
           "Re-enable it in Studio/Control-Plane Plugins UI first.",
@@ -321,7 +382,8 @@ class ContactFormPluginService {
       };
     }
 
-    const normalizedConfig = normalizeContactFormConfig(existing.configJson);
+    const normalizedConfig =
+      normalizedExistingConfig ?? normalizeContactFormConfig(existing.configJson);
     return {
       pluginId: "contact_form",
       enabled: true,
@@ -340,6 +402,7 @@ class ContactFormPluginService {
         turnstileEnabled: entitlement.turnstileEnabled,
         turnstileConfigured,
       }),
+      recipients,
       instructions:
         normalizedConfig.recipientEmails.length > 0
           ? [
@@ -358,7 +421,7 @@ class ContactFormPluginService {
             ]
           : [
               "Contact Form plugin is enabled, but no recipient email is configured yet.",
-              "Add at least one recipient email in Project → Plugins before expecting email delivery.",
+              "Add a recipient in Project → Plugins and verify the email before expecting delivery.",
               "Then insert one of the provided snippets and verify with a test submit.",
             ],
     };

@@ -5,9 +5,15 @@ import { projectPluginService } from "../../services/plugins/ProjectPluginServic
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { contactFormPluginConfigSchema } from "../../services/plugins/contactForm/config";
 import {
+  ContactFormPluginNotEnabledError,
   ContactFormRecipientRequiredError,
   ContactFormRecipientVerificationError,
 } from "../../services/plugins/contactForm/service";
+import {
+  ContactRecipientEmailFormatError,
+  ContactRecipientVerificationPendingLimitError,
+  ContactRecipientVerificationSendError,
+} from "../../services/plugins/contactForm/recipientVerification";
 
 const projectSlugInput = z.object({
   slug: z.string().min(1),
@@ -16,6 +22,11 @@ const projectSlugInput = z.object({
 const contactConfigInput = z.object({
   slug: z.string().min(1),
   config: contactFormPluginConfigSchema,
+});
+
+const contactRecipientInput = z.object({
+  slug: z.string().min(1),
+  email: z.string().trim().min(1),
 });
 
 export const contactEnsurePluginProcedure = projectMemberProcedure
@@ -72,6 +83,37 @@ export const contactUpdateConfigPluginProcedure = projectMemberProcedure
       ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+  });
+
+export const contactRequestRecipientVerificationPluginProcedure = projectMemberProcedure
+  .input(contactRecipientInput)
+  .mutation(async ({ ctx, input }) => {
+    try {
+      return await projectPluginService.requestContactRecipientVerification({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        email: input.email,
+        requestedByUserId: ctx.session.user.id,
+      });
+    } catch (error) {
+      if (
+        error instanceof ContactFormPluginNotEnabledError ||
+        error instanceof ContactRecipientEmailFormatError ||
+        error instanceof ContactRecipientVerificationPendingLimitError
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error.message,
+        });
+      }
+      if (error instanceof ContactRecipientVerificationSendError) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
           message: error.message,
         });
       }

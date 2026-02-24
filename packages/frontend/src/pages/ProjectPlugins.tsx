@@ -90,6 +90,10 @@ function formatListInput(values: string[]): string {
   return values.join("\n");
 }
 
+function normalizeEmailAddress(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 function formatInteger(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
@@ -226,6 +230,35 @@ export default function ProjectPlugins() {
       });
     },
   });
+  const requestRecipientVerificationMutation =
+    trpc.plugins.contactRequestRecipientVerification.useMutation({
+      onSuccess: async (result) => {
+        if (result.status === "added_verified" || result.status === "already_verified") {
+          toast.success("Recipient verified");
+        } else if (result.status === "verification_sent") {
+          toast.success("Verification email sent");
+        } else {
+          toast.success("Recipient already pending verification", {
+            description:
+              result.cooldownRemainingSeconds > 0
+                ? `Try resend in about ${result.cooldownRemainingSeconds}s.`
+                : undefined,
+          });
+        }
+
+        setSelectedRecipientOption("");
+        setCustomRecipientEmail("");
+        await Promise.all([
+          utils.plugins.catalog.invalidate({ slug }),
+          utils.plugins.contactInfo.invalidate({ slug }),
+        ]);
+      },
+      onError: (error) => {
+        toast.error("Failed to add recipient", {
+          description: error.message,
+        });
+      },
+    });
 
   const contactCatalogEntry = useMemo(
     () =>
@@ -249,7 +282,12 @@ export default function ProjectPlugins() {
   const pluginEnabled = !!contactInfo?.enabled;
   const snippets = contactInfo?.snippets;
   const inferredAutoSourceHosts = contactInfo?.usage?.inferredAutoSourceHosts || [];
-  const [recipientEmailsInput, setRecipientEmailsInput] = useState("");
+  const recipientDirectory = contactInfo?.recipients;
+  const recipientOptions = recipientDirectory?.options ?? [];
+  const pendingRecipients = recipientDirectory?.pending ?? [];
+  const [recipientEmails, setRecipientEmails] = useState<string[]>([]);
+  const [selectedRecipientOption, setSelectedRecipientOption] = useState("");
+  const [customRecipientEmail, setCustomRecipientEmail] = useState("");
   const [sourceHostsInput, setSourceHostsInput] = useState("");
   const [redirectHostsInput, setRedirectHostsInput] = useState("");
   const [formFieldsInput, setFormFieldsInput] = useState<EditableContactFormField[]>(
@@ -258,7 +296,7 @@ export default function ProjectPlugins() {
 
   useEffect(() => {
     if (!contactInfo?.config) return;
-    setRecipientEmailsInput(formatListInput(contactInfo.config.recipientEmails));
+    setRecipientEmails(contactInfo.config.recipientEmails.map(normalizeEmailAddress));
     setSourceHostsInput(formatListInput(contactInfo.config.sourceHosts));
     setRedirectHostsInput(formatListInput(contactInfo.config.redirectHostAllowlist));
     setFormFieldsInput(
@@ -320,7 +358,6 @@ export default function ProjectPlugins() {
   const handleSaveConfig = () => {
     if (!pluginEnabled) return;
 
-    const recipientEmails = parseListInput(recipientEmailsInput);
     if (recipientEmails.length === 0) {
       toast.error("Add at least one recipient email");
       return;
@@ -380,6 +417,45 @@ export default function ProjectPlugins() {
         formFields: normalizedFormFields,
       },
     });
+  };
+
+  const handleRequestRecipientVerification = (email: string) => {
+    if (!pluginEnabled) return;
+    const normalizedEmail = normalizeEmailAddress(email);
+    if (!normalizedEmail) {
+      toast.error("Select an email first");
+      return;
+    }
+
+    requestRecipientVerificationMutation.mutate({
+      slug,
+      email: normalizedEmail,
+    });
+  };
+
+  const handleAddSelectedRecipient = () => {
+    const candidate = normalizeEmailAddress(selectedRecipientOption);
+    if (!candidate) {
+      toast.error("Select an email first");
+      return;
+    }
+    handleRequestRecipientVerification(candidate);
+  };
+
+  const handleAddCustomRecipient = () => {
+    const candidate = normalizeEmailAddress(customRecipientEmail);
+    if (!candidate) {
+      toast.error("Enter a custom email first");
+      return;
+    }
+    handleRequestRecipientVerification(candidate);
+  };
+
+  const handleRemoveRecipient = (email: string) => {
+    const normalizedEmail = normalizeEmailAddress(email);
+    setRecipientEmails((previous) =>
+      previous.filter((entry) => normalizeEmailAddress(entry) !== normalizedEmail),
+    );
   };
 
   const handleRefresh = () => {
@@ -468,7 +544,7 @@ export default function ProjectPlugins() {
             </div>
           ) : null}
 
-          {pluginEnabled && (contactInfo?.config?.recipientEmails?.length || 0) === 0 ? (
+          {pluginEnabled && contactInfo && recipientEmails.length === 0 ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
               Contact Form is enabled, but no recipient email is configured yet.
             </div>
@@ -528,19 +604,148 @@ export default function ProjectPlugins() {
                 <TabsContent value="configuration" className="mt-6 max-w-4xl space-y-4">
                   <SectionCard
                     title="Recipient emails"
-                    description="Required. Recipients must be verified user emails in this organization. One email per line (comma-separated also supported)."
+                    description="Only verified recipients receive contact form emails. Add from org emails or enter a custom address."
                   >
-                    <div className="max-w-2xl space-y-2">
-                      <Label htmlFor="contact-recipient-emails">
-                        Recipient emails (required)
-                      </Label>
-                      <Textarea
-                        id="contact-recipient-emails"
-                        value={recipientEmailsInput}
-                        onChange={(event) => setRecipientEmailsInput(event.target.value)}
-                        placeholder="team@example.com"
-                        rows={4}
-                      />
+                    <div className="max-w-2xl space-y-4">
+                      <div className="space-y-2">
+                        <Label>Verified recipients (required)</Label>
+                        {recipientEmails.length > 0 ? (
+                          <div className="space-y-2">
+                            {recipientEmails.map((email) => (
+                              <div
+                                key={email}
+                                className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2"
+                              >
+                                <div className="flex items-center gap-2 text-sm">
+                                  <code className="text-xs">{email}</code>
+                                  <Badge variant="default">Verified</Badge>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemoveRecipient(email)}
+                                >
+                                  <Trash2 className="mr-1 h-4 w-4" />
+                                  Remove
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No verified recipients yet.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                        <Label>Add recipient</Label>
+                        <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                          <Select
+                            value={selectedRecipientOption || undefined}
+                            onValueChange={setSelectedRecipientOption}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select organization email" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {recipientOptions.length > 0 ? (
+                                recipientOptions.map((option) => (
+                                  <SelectItem
+                                    key={option.email}
+                                    value={option.email}
+                                    disabled={option.isVerified || option.isPending}
+                                  >
+                                    {option.email}
+                                    {option.isVerified
+                                      ? " (Verified)"
+                                      : option.isPending
+                                        ? " (Pending)"
+                                        : ""}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="__none" disabled>
+                                  No organization emails available
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            onClick={handleAddSelectedRecipient}
+                            disabled={requestRecipientVerificationMutation.isPending}
+                          >
+                            {requestRecipientVerificationMutation.isPending ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Adding...
+                              </>
+                            ) : (
+                              "Add"
+                            )}
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="contact-custom-recipient-email">
+                            Or add custom email
+                          </Label>
+                          <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                            <Input
+                              id="contact-custom-recipient-email"
+                              value={customRecipientEmail}
+                              onChange={(event) =>
+                                setCustomRecipientEmail(event.target.value)
+                              }
+                              placeholder="team@example.com"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleAddCustomRecipient}
+                              disabled={requestRecipientVerificationMutation.isPending}
+                            >
+                              {requestRecipientVerificationMutation.isPending ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Adding...
+                                </>
+                              ) : (
+                                "Add custom"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {pendingRecipients.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label>Pending verifications</Label>
+                          <div className="space-y-2">
+                            {pendingRecipients.map((entry) => (
+                              <div
+                                key={entry.email}
+                                className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2"
+                              >
+                                <div className="flex items-center gap-2 text-sm">
+                                  <code className="text-xs">{entry.email}</code>
+                                  <Badge variant="secondary">Pending</Badge>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRequestRecipientVerification(entry.email)}
+                                  disabled={requestRecipientVerificationMutation.isPending}
+                                >
+                                  Resend
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </SectionCard>
 

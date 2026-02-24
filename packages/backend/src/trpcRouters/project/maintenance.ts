@@ -29,6 +29,7 @@ import { publishService } from "../../services/publish/PublishService";
 import { db } from "../../db";
 import {
   analyticsEvent,
+  contactFormRecipientVerification,
   contactFormSubmission,
   organization,
   pluginEntitlement,
@@ -335,6 +336,18 @@ export const projectMaintenanceProcedures = {
             )
             .returning({ id: contactFormSubmission.id });
           dbRowsMoved += updatedContactSubmissions.length;
+
+          const updatedRecipientVerifications = await tx
+            .update(contactFormRecipientVerification)
+            .set({ projectSlug: newSlug, updatedAt: new Date() })
+            .where(
+              and(
+                eq(contactFormRecipientVerification.organizationId, organizationId),
+                eq(contactFormRecipientVerification.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: contactFormRecipientVerification.id });
+          dbRowsMoved += updatedRecipientVerifications.length;
 
           const updatedAnalytics = await tx
             .update(analyticsEvent)

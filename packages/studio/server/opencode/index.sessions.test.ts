@@ -138,11 +138,12 @@ describe("opencode index session behavior", () => {
     ]);
   });
 
-  it("merges backend statuses with emitter overrides for known sessions only", async () => {
+  it("prefers backend statuses while allowing retry override when backend reports idle", async () => {
     sessionListMock.mockResolvedValueOnce({
       data: [
         { id: "sess-1", directory: "/workspace/project/" },
         { id: "sess-2", directory: "/workspace/project/" },
+        { id: "sess-3", directory: "/workspace/project/" },
       ],
       error: undefined,
     });
@@ -150,12 +151,14 @@ describe("opencode index session behavior", () => {
       data: {
         "sess-1": { type: "busy" },
         "sess-2": { type: "idle" },
+        "sess-3": { type: "idle" },
         "sess-ghost": { type: "busy" },
       },
       error: undefined,
     });
     getSessionStatusesMock.mockReturnValueOnce({
       "sess-2": { type: "busy" },
+      "sess-3": { type: "retry", message: "retrying", attempt: 2 },
       "sess-ghost": { type: "idle" },
     });
 
@@ -163,7 +166,8 @@ describe("opencode index session behavior", () => {
 
     expect(result).toEqual({
       "sess-1": { type: "busy" },
-      "sess-2": { type: "busy" },
+      "sess-2": { type: "idle" },
+      "sess-3": { type: "retry", message: "retrying", attempt: 2 },
     });
   });
 

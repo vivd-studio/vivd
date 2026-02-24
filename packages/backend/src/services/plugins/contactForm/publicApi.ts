@@ -19,6 +19,10 @@ export function getContactFormSubmitEndpoint(): string {
   return `${getPublicPluginApiBaseUrl()}/plugins/contact/v1/submit`;
 }
 
+export function getContactRecipientVerificationEndpoint(): string {
+  return `${getPublicPluginApiBaseUrl()}/plugins/contact/v1/recipient-verify`;
+}
+
 export function getEmailFeedbackEndpoint(provider: string = "ses"): string {
   const normalizedProvider = provider.trim().toLowerCase() || "ses";
   return `${getPublicPluginApiBaseUrl()}/email/v1/feedback/${normalizedProvider}`;

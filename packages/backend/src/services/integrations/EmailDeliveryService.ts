@@ -66,8 +66,8 @@ class SesEmailDeliveryService implements EmailDeliveryService {
       return {
         accepted: false,
         provider: this.providerName,
-        error:
-          "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_SES_FROM_EMAIL)",
+          error:
+            "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_FROM_EMAIL or VIVD_SES_FROM_EMAIL)",
       };
     }
 
@@ -167,8 +167,8 @@ class ResendEmailDeliveryService implements EmailDeliveryService {
       return {
         accepted: false,
         provider: this.providerName,
-        error:
-          "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_SES_FROM_EMAIL)",
+          error:
+            "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_FROM_EMAIL or VIVD_SES_FROM_EMAIL)",
       };
     }
 
@@ -298,6 +298,7 @@ function hasResendConfigurationHints(): boolean {
 function hasSesConfigurationHints(): boolean {
   return Boolean(
     (process.env.VIVD_SES_FROM_EMAIL || "").trim() ||
+      (process.env.VIVD_FROM_EMAIL || "").trim() ||
       ((process.env.VIVD_SES_ACCESS_KEY_ID || "").trim() &&
         (process.env.VIVD_SES_SECRET_ACCESS_KEY || "").trim()),
   );
@@ -317,6 +318,7 @@ function resolveEmailProvider(): string {
 function resolveDefaultFromEmail(): string | null {
   return (
     (process.env.VIVD_EMAIL_FROM || "").trim() ||
+    (process.env.VIVD_FROM_EMAIL || "").trim() ||
     (process.env.VIVD_SES_FROM_EMAIL || "").trim() ||
     null
   );
@@ -344,6 +346,7 @@ function buildEmailServiceCacheKey(): string {
     process.env.EMAIL_PROVIDER || "",
     process.env.RESEND_API_KEY || "",
     process.env.VIVD_EMAIL_FROM || "",
+    process.env.VIVD_FROM_EMAIL || "",
     process.env.VIVD_SES_REGION || "",
     process.env.AWS_REGION || "",
     process.env.AWS_DEFAULT_REGION || "",

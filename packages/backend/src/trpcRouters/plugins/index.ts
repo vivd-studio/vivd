@@ -8,6 +8,7 @@ import {
 import {
   contactEnsurePluginProcedure,
   contactInfoPluginProcedure,
+  contactRequestRecipientVerificationPluginProcedure,
   contactUpdateConfigPluginProcedure,
 } from "./contactForm";
 
@@ -16,6 +17,8 @@ export const pluginsRouter = router({
   contactEnsure: contactEnsurePluginProcedure,
   contactInfo: contactInfoPluginProcedure,
   contactUpdateConfig: contactUpdateConfigPluginProcedure,
+  contactRequestRecipientVerification:
+    contactRequestRecipientVerificationPluginProcedure,
   analyticsInfo: analyticsInfoPluginProcedure,
   analyticsUpdateConfig: analyticsUpdateConfigPluginProcedure,
   analyticsSummary: analyticsSummaryPluginProcedure,
