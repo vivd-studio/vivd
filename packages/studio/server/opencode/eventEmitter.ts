@@ -212,7 +212,11 @@ class AgentEventEmitter extends EventEmitter {
         startIndex = lastIndex + 1;
       }
     }
-    for (const event of bufferedEvents.slice(startIndex)) {
+    const replayEvents = bufferedEvents.slice(startIndex);
+    const maxReplaySequence =
+      replayEvents.length > 0 ? replayEvents[replayEvents.length - 1].sequence : 0;
+
+    for (const event of replayEvents) {
       yield event;
     }
 
@@ -229,7 +233,13 @@ class AgentEventEmitter extends EventEmitter {
     try {
       while (!isAborted) {
         if (queue.length > 0) {
-          yield queue.shift()!;
+          const nextEvent = queue.shift()!;
+          // Avoid duplicates when an event was emitted between subscribe() and
+          // buffered replay initialization; those events can exist in both sources.
+          if (nextEvent.sequence <= maxReplaySequence) {
+            continue;
+          }
+          yield nextEvent;
         } else {
           await new Promise<void>((r) => {
             resolve = r;
@@ -238,7 +248,11 @@ class AgentEventEmitter extends EventEmitter {
       }
 
       while (queue.length > 0) {
-        yield queue.shift()!;
+        const nextEvent = queue.shift()!;
+        if (nextEvent.sequence <= maxReplaySequence) {
+          continue;
+        }
+        yield nextEvent;
       }
     } finally {
       unsubscribe();
@@ -303,4 +317,3 @@ export function createAgentEvent(
     data,
   };
 }
-

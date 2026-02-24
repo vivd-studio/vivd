@@ -5,12 +5,14 @@ import {
   organization,
   projectMeta,
   projectPublishChecklist,
+  projectTag,
   projectVersion,
 } from "../../db/schema";
 import type { PrePublishChecklist } from "../../types/checklistTypes";
 
 export type ProjectMetaRow = typeof projectMeta.$inferSelect;
 export type ProjectVersionRow = typeof projectVersion.$inferSelect;
+export type ProjectTagRow = typeof projectTag.$inferSelect;
 
 export type CreateProjectVersionInput = {
   organizationId: string;
@@ -292,6 +294,192 @@ class ProjectMetaService {
     if (rows.length === 0) {
       throw new Error("Project not found");
     }
+
+    await this.ensureProjectTags({
+      organizationId: options.organizationId,
+      tags: options.tags,
+    });
+  }
+
+  async ensureProjectTags(options: {
+    organizationId: string;
+    tags: string[];
+  }): Promise<void> {
+    const tags = Array.from(new Set(options.tags));
+    if (tags.length === 0) return;
+
+    const now = new Date();
+    await db
+      .insert(projectTag)
+      .values(
+        tags.map((tag) => ({
+          organizationId: options.organizationId,
+          tag,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  async listOrganizationTags(options: {
+    organizationId: string;
+  }): Promise<Array<{ tag: string; colorId: string | null }>> {
+    const projects = await db.query.projectMeta.findMany({
+      where: eq(projectMeta.organizationId, options.organizationId),
+      columns: {
+        tags: true,
+      },
+    });
+
+    const tags = Array.from(
+      new Set(projects.flatMap((project) => project.tags)),
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (tags.length === 0) return [];
+
+    const stored = await db.query.projectTag.findMany({
+      where: eq(projectTag.organizationId, options.organizationId),
+      columns: {
+        tag: true,
+        colorId: true,
+      },
+    });
+
+    const colorByTag = new Map(stored.map((row) => [row.tag, row.colorId ?? null]));
+
+    return tags.map((tag) => ({
+      tag,
+      colorId: colorByTag.get(tag) ?? null,
+    }));
+  }
+
+  async setTagColor(options: {
+    organizationId: string;
+    tag: string;
+    colorId: string;
+  }): Promise<void> {
+    await db
+      .insert(projectTag)
+      .values({
+        organizationId: options.organizationId,
+        tag: options.tag,
+        colorId: options.colorId,
+      })
+      .onConflictDoUpdate({
+        target: [projectTag.organizationId, projectTag.tag],
+        set: {
+          colorId: options.colorId,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async renameTagInOrganization(options: {
+    organizationId: string;
+    fromTag: string;
+    toTag: string;
+  }): Promise<{ updatedSlugs: string[] }> {
+    if (options.fromTag === options.toTag) {
+      return { updatedSlugs: [] };
+    }
+
+    const projects = await db.query.projectMeta.findMany({
+      where: eq(projectMeta.organizationId, options.organizationId),
+      columns: {
+        slug: true,
+        tags: true,
+      },
+    });
+
+    const updates = projects.flatMap((project) => {
+      const nextTags = Array.from(
+        new Set(
+          project.tags.map((tag) =>
+            tag === options.fromTag ? options.toTag : tag,
+          ),
+        ),
+      );
+      const unchanged =
+        nextTags.length === project.tags.length &&
+        nextTags.every((tag, index) => tag === project.tags[index]);
+      if (unchanged) return [];
+      return [{ slug: project.slug, tags: nextTags }];
+    });
+
+    const sourceTag = await db.query.projectTag.findFirst({
+      where: and(
+        eq(projectTag.organizationId, options.organizationId),
+        eq(projectTag.tag, options.fromTag),
+      ),
+      columns: {
+        colorId: true,
+      },
+    });
+    const targetTag = await db.query.projectTag.findFirst({
+      where: and(
+        eq(projectTag.organizationId, options.organizationId),
+        eq(projectTag.tag, options.toTag),
+      ),
+      columns: {
+        colorId: true,
+      },
+    });
+
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      for (const update of updates) {
+        await tx
+          .update(projectMeta)
+          .set({ tags: update.tags, updatedAt: now })
+          .where(
+            and(
+              eq(projectMeta.organizationId, options.organizationId),
+              eq(projectMeta.slug, update.slug),
+            ),
+          );
+      }
+
+      const shouldCreateTarget = !targetTag && (sourceTag || updates.length > 0);
+      if (shouldCreateTarget) {
+        await tx
+          .insert(projectTag)
+          .values({
+            organizationId: options.organizationId,
+            tag: options.toTag,
+            colorId: sourceTag?.colorId ?? null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing();
+      }
+
+      if (targetTag && !targetTag.colorId && sourceTag?.colorId) {
+        await tx
+          .update(projectTag)
+          .set({
+            colorId: sourceTag.colorId,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(projectTag.organizationId, options.organizationId),
+              eq(projectTag.tag, options.toTag),
+            ),
+          );
+      }
+
+      await tx
+        .delete(projectTag)
+        .where(
+          and(
+            eq(projectTag.organizationId, options.organizationId),
+            eq(projectTag.tag, options.fromTag),
+          ),
+        );
+    });
+
+    return { updatedSlugs: updates.map((update) => update.slug) };
   }
 
   async removeTagFromOrganization(options: {
@@ -312,10 +500,6 @@ class ProjectMetaService {
       return [{ slug: project.slug, tags: nextTags }];
     });
 
-    if (updates.length === 0) {
-      return { updatedSlugs: [] };
-    }
-
     const now = new Date();
     await db.transaction(async (tx) => {
       for (const update of updates) {
@@ -326,9 +510,18 @@ class ProjectMetaService {
             and(
               eq(projectMeta.organizationId, options.organizationId),
               eq(projectMeta.slug, update.slug),
-            ),
+              ),
           );
       }
+
+      await tx
+        .delete(projectTag)
+        .where(
+          and(
+            eq(projectTag.organizationId, options.organizationId),
+            eq(projectTag.tag, options.tag),
+          ),
+        );
     });
 
     return { updatedSlugs: updates.map((update) => update.slug) };

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminProcedure } from "../../trpc";
+import { adminProcedure, projectMemberProcedure } from "../../trpc";
 import { getManifest } from "../../generator/versionUtils";
 import { projectMetaService } from "../../services/project/ProjectMetaService";
 import {
@@ -10,6 +10,13 @@ import {
 } from "../../services/project/projectTags";
 
 export const projectTagProcedures = {
+  listTags: projectMemberProcedure.query(async ({ ctx }) => {
+    const organizationId = ctx.organizationId!;
+    const tags = await projectMetaService.listOrganizationTags({
+      organizationId,
+    });
+    return { tags };
+  }),
   updateTags: adminProcedure
     .input(
       z.object({
@@ -54,6 +61,51 @@ export const projectTagProcedures = {
         tags: normalizedTags,
       };
     }),
+  renameTag: adminProcedure
+    .input(
+      z.object({
+        fromTag: z.string().min(1),
+        toTag: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+
+      let fromTag: string;
+      let toTag: string;
+      try {
+        fromTag = normalizeProjectTags([input.fromTag])[0] ?? "";
+        toTag = normalizeProjectTags([input.toTag])[0] ?? "";
+      } catch (error) {
+        if (error instanceof ProjectTagsValidationError) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+
+      if (!fromTag || !toTag) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Tags cannot be empty.",
+        });
+      }
+
+      const result = await projectMetaService.renameTagInOrganization({
+        organizationId,
+        fromTag,
+        toTag,
+      });
+
+      return {
+        success: true,
+        fromTag,
+        toTag,
+        updatedProjects: result.updatedSlugs.length,
+      };
+    }),
   deleteTag: adminProcedure
     .input(
       z.object({
@@ -92,6 +144,48 @@ export const projectTagProcedures = {
         success: true,
         tag: normalizedTag,
         updatedProjects: result.updatedSlugs.length,
+      };
+    }),
+  setTagColor: adminProcedure
+    .input(
+      z.object({
+        tag: z.string().min(1),
+        colorId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+
+      let normalizedTag: string;
+      try {
+        normalizedTag = normalizeProjectTags([input.tag])[0] ?? "";
+      } catch (error) {
+        if (error instanceof ProjectTagsValidationError) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+
+      if (!normalizedTag) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Tag cannot be empty.",
+        });
+      }
+
+      await projectMetaService.setTagColor({
+        organizationId,
+        tag: normalizedTag,
+        colorId: input.colorId,
+      });
+
+      return {
+        success: true,
+        tag: normalizedTag,
+        colorId: input.colorId,
       };
     }),
 };

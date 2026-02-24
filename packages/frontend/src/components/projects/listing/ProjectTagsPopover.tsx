@@ -9,7 +9,7 @@ import type { Measurable } from "@radix-ui/rect";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { TAG_COLORS, type TagColor, useTagColors } from "@/lib/tagColors";
+import { TAG_COLORS, type TagColor, getTagColor } from "@/lib/tagColors";
 
 const MAX_PROJECT_TAGS = 12;
 const MAX_TAG_LENGTH = 32;
@@ -100,9 +100,12 @@ interface ProjectTagsPopoverProps {
   children: React.ReactNode;
   projectTags: string[];
   availableTags: string[];
+  colorMap: Record<string, string>;
   isSaving: boolean;
   onCommitTags: (tags: string[]) => void;
+  onRenameTags?: (renames: Array<{ fromTag: string; toTag: string }>) => void;
   onDeleteTags?: (tags: string[]) => void;
+  onSetTagColor?: (tag: string, colorId: string) => void;
 }
 
 type View = { type: "list" } | { type: "edit"; tag: string };
@@ -116,15 +119,19 @@ export function ProjectTagsPopover({
   children,
   projectTags,
   availableTags,
+  colorMap,
   isSaving,
   onCommitTags,
+  onRenameTags,
   onDeleteTags,
+  onSetTagColor,
 }: ProjectTagsPopoverProps) {
   const [view, setView] = useState<View>({ type: "list" });
   const [search, setSearch] = useState("");
   const [draftTag, setDraftTag] = useState("");
   const [renamedTags, setRenamedTags] = useState<Record<string, string>>({});
   const [deletedTags, setDeletedTags] = useState<string[]>([]);
+  const [draftColorMap, setDraftColorMap] = useState<Record<string, string>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [draftProjectTags, setDraftProjectTags] = useState<string[]>(() =>
     dedupeTags(projectTags),
@@ -134,7 +141,11 @@ export function ProjectTagsPopover({
   const draftEditTagRef = useRef("");
   const suppressOutsideRef = useRef(false);
 
-  const { colorMap, setTagColor, getColor } = useTagColors();
+  const effectiveColorMap = {
+    ...colorMap,
+    ...draftColorMap,
+  };
+  const getColor = (tag: string) => getTagColor(tag, effectiveColorMap);
 
   useEffect(() => {
     if (showCreate) setTimeout(() => createInputRef.current?.focus(), 50);
@@ -189,21 +200,48 @@ export function ProjectTagsPopover({
         dedupeTags(current.map((value) => (value === view.tag ? nextTag : value))),
       );
       setRenamedTags((current) => {
-        const next = { ...current };
-        for (const [key, value] of Object.entries(next)) {
-          if (value === view.tag) {
-            next[key] = nextTag;
+        const sourceTags = new Set<string>();
+        for (const [sourceTag, mappedTag] of Object.entries(current)) {
+          if (mappedTag === view.tag) {
+            sourceTags.add(sourceTag);
           }
         }
-        next[view.tag] = nextTag;
+        if (
+          sourceTags.size === 0 &&
+          !Object.prototype.hasOwnProperty.call(current, view.tag)
+        ) {
+          sourceTags.add(view.tag);
+        }
+
+        const next: Record<string, string> = {};
+        for (const [sourceTag, mappedTag] of Object.entries(current)) {
+          if (!sourceTags.has(sourceTag)) {
+            next[sourceTag] = mappedTag;
+          }
+        }
+        for (const sourceTag of sourceTags) {
+          if (sourceTag !== nextTag) {
+            next[sourceTag] = nextTag;
+          }
+        }
         return next;
       });
       setDeletedTags((current) => current.filter((tag) => tag !== nextTag));
 
       const currentColorId = getColor(view.tag).id;
-      if (!colorMap[nextTag]) {
-        setTagColor(nextTag, currentColorId);
+      if (!effectiveColorMap[nextTag]) {
+        setDraftColorMap((current) => {
+          const next = { ...current };
+          next[nextTag] = currentColorId;
+          return next;
+        });
       }
+
+      setDraftColorMap((current) => {
+        const next = { ...current };
+        delete next[view.tag];
+        return next;
+      });
     }
 
     draftEditTagRef.current = "";
@@ -234,6 +272,11 @@ export function ProjectTagsPopover({
       }
       return Array.from(next);
     });
+    setDraftColorMap((current) => {
+      const next = { ...current };
+      delete next[deleteTag];
+      return next;
+    });
 
     draftEditTagRef.current = "";
     setView({ type: "list" });
@@ -245,6 +288,7 @@ export function ProjectTagsPopover({
     setDraftTag("");
     setRenamedTags({});
     setDeletedTags([]);
+    setDraftColorMap({});
     draftEditTagRef.current = "";
     setShowCreate(false);
   };
@@ -260,6 +304,16 @@ export function ProjectTagsPopover({
     const deletedDraftTags = dedupeTags(deletedTags).filter(
       (tag) => !normalizedDraftTags.includes(tag),
     );
+    const renameDraftTags = Object.entries(renamedTags)
+      .filter(([fromTag, toTag]) =>
+        fromTag !== toTag &&
+        !deletedDraftTags.includes(fromTag) &&
+        !deletedDraftTags.includes(toTag),
+      )
+      .map(([fromTag, toTag]) => ({ fromTag, toTag }));
+    if (renameDraftTags.length > 0) {
+      onRenameTags?.(renameDraftTags);
+    }
     if (deletedDraftTags.length > 0) {
       onDeleteTags?.(deletedDraftTags);
     }
@@ -356,8 +410,14 @@ export function ProjectTagsPopover({
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground">Select a color</p>
                 <ColorSwatches
-                  selectedId={colorMap[view.tag]}
-                  onSelect={(colorId) => setTagColor(view.tag, colorId)}
+                  selectedId={effectiveColorMap[view.tag]}
+                  onSelect={(colorId) => {
+                    setDraftColorMap((current) => ({
+                      ...current,
+                      [view.tag]: colorId,
+                    }));
+                    onSetTagColor?.(view.tag, colorId);
+                  }}
                 />
               </div>
               <Button

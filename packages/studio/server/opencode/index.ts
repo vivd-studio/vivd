@@ -146,6 +146,7 @@ export async function runTask(
             kind: "tool.error",
             toolId: toolCall.id,
             tool: toolCall.tool,
+            error: toolCall.error,
           } as ToolErrorData),
         );
       } else {
@@ -222,6 +223,18 @@ export async function runTask(
     await start();
   } catch (error) {
     console.error("[OpenCode] Failed to start event stream:", error);
+    const message = toErrorMessage(error, "Failed to start event stream");
+    agentEventEmitter.emitSessionEvent(
+      currentSessionId,
+      createAgentEvent(currentSessionId, "session.error", {
+        kind: "session.error",
+        errorType: "stream",
+        message,
+      } as SessionErrorData),
+    );
+    agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
+    stop();
+    throw new Error(message);
   }
 
   try {
@@ -245,8 +258,18 @@ export async function runTask(
     );
   } catch (error) {
     console.error(`[OpenCode] Task Error:`, error);
+    const message = toErrorMessage(error, "Failed to send task to OpenCode");
+    agentEventEmitter.emitSessionEvent(
+      currentSessionId,
+      createAgentEvent(currentSessionId, "session.error", {
+        kind: "session.error",
+        errorType: "task",
+        message,
+      } as SessionErrorData),
+    );
     agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
     stop();
+    throw new Error(message);
   }
 
   return { sessionId: currentSessionId };
@@ -474,6 +497,25 @@ function normalizeSessionStatuses(
   }
 
   return {};
+}
+
+function toErrorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error) {
+    return value.message || fallback;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+  if (value && typeof value === "object") {
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Ignore serialization failures.
+    }
+  }
+  return fallback;
 }
 
 export async function revertToUserMessage(

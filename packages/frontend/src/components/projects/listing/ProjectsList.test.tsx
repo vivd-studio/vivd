@@ -5,12 +5,14 @@ import { ProjectsList } from "./ProjectsList";
 const {
   useUtilsMock,
   listUseQueryMock,
+  listTagsUseQueryMock,
   regenerateUseMutationMock,
   generateUseMutationMock,
   deleteUseMutationMock,
 } = vi.hoisted(() => ({
   useUtilsMock: vi.fn(),
   listUseQueryMock: vi.fn(),
+  listTagsUseQueryMock: vi.fn(),
   regenerateUseMutationMock: vi.fn(),
   generateUseMutationMock: vi.fn(),
   deleteUseMutationMock: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock("@/lib/trpc", () => ({
     useUtils: useUtilsMock,
     project: {
       list: { useQuery: listUseQueryMock },
+      listTags: { useQuery: listTagsUseQueryMock },
       regenerate: { useMutation: regenerateUseMutationMock },
       generate: { useMutation: generateUseMutationMock },
       delete: { useMutation: deleteUseMutationMock },
@@ -67,12 +70,20 @@ function setTrpcProjects(
   regenerateUseMutationMock.mockReturnValue({ mutateAsync: vi.fn() });
   generateUseMutationMock.mockReturnValue({ mutateAsync: vi.fn() });
   deleteUseMutationMock.mockReturnValue({ mutate: vi.fn(), isPending: false });
+  listTagsUseQueryMock.mockReturnValue({
+    data: {
+      tags: Array.from(new Set(projects.flatMap((project) => project.tags ?? []))).map(
+        (tag) => ({ tag, colorId: null }),
+      ),
+    },
+  });
 }
 
 describe("ProjectsList tags filter", () => {
   beforeEach(() => {
     useUtilsMock.mockReset();
     listUseQueryMock.mockReset();
+    listTagsUseQueryMock.mockReset();
     regenerateUseMutationMock.mockReset();
     generateUseMutationMock.mockReset();
     deleteUseMutationMock.mockReset();

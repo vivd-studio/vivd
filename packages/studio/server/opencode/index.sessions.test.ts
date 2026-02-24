@@ -198,4 +198,26 @@ describe("opencode index session behavior", () => {
       }),
     );
   });
+
+  it("emits session.error and rejects when promptAsync fails", async () => {
+    sessionPromptAsyncMock.mockResolvedValueOnce({
+      data: undefined,
+      error: { message: "unsupported image format: .avif" },
+    });
+
+    await expect(
+      runTask("process image", "/workspace/project", "sess-existing"),
+    ).rejects.toThrow("unsupported image format: .avif");
+
+    expect(emitSessionEventMock).toHaveBeenCalledWith(
+      "sess-existing",
+      expect.objectContaining({
+        kind: "session.error",
+        errorType: "task",
+      }),
+    );
+    expect(setSessionStatusMock).toHaveBeenCalledWith("sess-existing", {
+      type: "idle",
+    });
+  });
 });

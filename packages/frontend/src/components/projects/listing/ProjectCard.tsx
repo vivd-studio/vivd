@@ -46,7 +46,7 @@ import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
 import { ProjectTagsPopover, TagChip } from "./ProjectTagsPopover";
-import { useTagColors } from "@/lib/tagColors";
+import { getTagColor } from "@/lib/tagColors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +87,7 @@ export interface Project {
 interface ProjectCardProps {
   project: Project;
   availableTags: string[];
+  tagColorMap: Record<string, string>;
   onRegenerate: (slug: string, version?: number) => void;
   onDelete: (slug: string) => void;
   isRegenerating: boolean;
@@ -104,6 +105,7 @@ function isDevDomain(domain: string): boolean {
 export function ProjectCard({
   project,
   availableTags,
+  tagColorMap,
   onRegenerate,
   onDelete,
   isRegenerating,
@@ -158,6 +160,7 @@ export function ProjectCard({
   const updateTagsMutation = trpc.project.updateTags.useMutation({
     onSuccess: () => {
       utils.project.list.invalidate();
+      utils.project.listTags.invalidate();
     },
     onError: (error) => {
       toast.error("Failed to update tags", {
@@ -168,9 +171,31 @@ export function ProjectCard({
   const deleteTagMutation = trpc.project.deleteTag.useMutation({
     onSuccess: () => {
       utils.project.list.invalidate();
+      utils.project.listTags.invalidate();
     },
     onError: (error) => {
       toast.error("Failed to delete label", {
+        description: error.message,
+      });
+    },
+  });
+  const renameTagMutation = trpc.project.renameTag.useMutation({
+    onSuccess: () => {
+      utils.project.list.invalidate();
+      utils.project.listTags.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to rename label", {
+        description: error.message,
+      });
+    },
+  });
+  const setTagColorMutation = trpc.project.setTagColor.useMutation({
+    onSuccess: () => {
+      utils.project.listTags.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to update label color", {
         description: error.message,
       });
     },
@@ -190,7 +215,7 @@ export function ProjectCard({
     },
   });
 
-  const { getColor } = useTagColors();
+  const getColor = (tag: string) => getTagColor(tag, tagColorMap);
 
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1,
@@ -420,7 +445,13 @@ export function ProjectCard({
                 }
                 projectTags={projectTags}
                 availableTags={availableTags}
-                isSaving={updateTagsMutation.isPending || deleteTagMutation.isPending}
+                colorMap={tagColorMap}
+                isSaving={
+                  updateTagsMutation.isPending ||
+                  deleteTagMutation.isPending ||
+                  renameTagMutation.isPending ||
+                  setTagColorMutation.isPending
+                }
                 onCommitTags={(tags) => {
                   const isUnchanged =
                     tags.length === projectTags.length &&
@@ -436,6 +467,14 @@ export function ProjectCard({
                   for (const tag of Array.from(new Set(tags))) {
                     deleteTagMutation.mutate({ tag });
                   }
+                }}
+                onRenameTags={(renames) => {
+                  for (const rename of renames) {
+                    renameTagMutation.mutate(rename);
+                  }
+                }}
+                onSetTagColor={(tag, colorId) => {
+                  setTagColorMutation.mutate({ tag, colorId });
                 }}
               >
                 <div

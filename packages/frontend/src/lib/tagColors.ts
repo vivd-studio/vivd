@@ -1,5 +1,3 @@
-import { useState, useEffect, useCallback } from "react";
-
 export interface TagColor {
   id: string;
   label: string;
@@ -69,66 +67,4 @@ export function getDefaultColorForTag(tag: string): TagColor {
 export function getTagColor(tag: string, colorMap: Record<string, string>): TagColor {
   const id = colorMap[tag];
   return TAG_COLORS.find((c) => c.id === id) ?? getDefaultColorForTag(tag);
-}
-
-const STORAGE_KEY = "vivd-tag-colors";
-const UPDATE_EVENT = "vivd-tag-colors:updated";
-
-function readStoredColors(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-function writeStoredColors(map: Record<string, string>): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-    window.dispatchEvent(new Event(UPDATE_EVENT));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-/** React hook that manages tag colors from localStorage. */
-export function useTagColors() {
-  const [colorMap, setColorMap] = useState<Record<string, string>>(() =>
-    readStoredColors(),
-  );
-
-  // Sync if another tab changes storage
-  useEffect(() => {
-    function handleStorage(e: StorageEvent) {
-      if (e.key === STORAGE_KEY) {
-        setColorMap(readStoredColors());
-      }
-    }
-    function handleColorUpdate() {
-      setColorMap(readStoredColors());
-    }
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener(UPDATE_EVENT, handleColorUpdate);
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener(UPDATE_EVENT, handleColorUpdate);
-    };
-  }, []);
-
-  const setTagColor = useCallback((tag: string, colorId: string) => {
-    setColorMap((prev) => {
-      const next = { ...prev, [tag]: colorId };
-      writeStoredColors(next);
-      return next;
-    });
-  }, []);
-
-  const getColor = useCallback(
-    (tag: string): TagColor => getTagColor(tag, colorMap),
-    [colorMap],
-  );
-
-  return { colorMap, setTagColor, getColor };
 }

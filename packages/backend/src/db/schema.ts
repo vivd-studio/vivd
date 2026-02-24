@@ -259,6 +259,26 @@ export const projectMeta = pgTable(
   ]
 );
 
+export const projectTag = pgTable(
+  "project_tag",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    colorId: text("color_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.tag] }),
+    index("project_tag_org_idx").on(table.organizationId),
+  ],
+);
+
 export const projectVersion = pgTable(
   "project_version",
   {
@@ -513,6 +533,13 @@ export const projectMetaRelations = relations(projectMeta, ({ many }) => ({
   analyticsEvents: many(analyticsEvent),
 }));
 
+export const projectTagRelations = relations(projectTag, ({ one }) => ({
+  organization: one(organization, {
+    fields: [projectTag.organizationId],
+    references: [organization.id],
+  }),
+}));
+
 export const projectVersionRelations = relations(
   projectVersion,
   ({ one, many }) => ({
@@ -733,6 +760,7 @@ export const organizationRelations = relations(organization, ({ many }) => ({
   publishedSites: many(publishedSite),
   domains: many(domain),
   projectMetas: many(projectMeta),
+  projectTags: many(projectTag),
 }));
 
 export const organizationMemberRelations = relations(

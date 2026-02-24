@@ -1,9 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getManifestMock, setTagsMock, removeTagFromOrganizationMock } = vi.hoisted(() => ({
+const {
+  getManifestMock,
+  setTagsMock,
+  removeTagFromOrganizationMock,
+  listOrganizationTagsMock,
+  renameTagInOrganizationMock,
+  setTagColorMock,
+} = vi.hoisted(() => ({
   getManifestMock: vi.fn(),
   setTagsMock: vi.fn(),
   removeTagFromOrganizationMock: vi.fn(),
+  listOrganizationTagsMock: vi.fn(),
+  renameTagInOrganizationMock: vi.fn(),
+  setTagColorMock: vi.fn(),
 }));
 
 vi.mock("../src/generator/versionUtils", () => ({
@@ -14,6 +24,9 @@ vi.mock("../src/services/project/ProjectMetaService", () => ({
   projectMetaService: {
     setTags: setTagsMock,
     removeTagFromOrganization: removeTagFromOrganizationMock,
+    listOrganizationTags: listOrganizationTagsMock,
+    renameTagInOrganization: renameTagInOrganizationMock,
+    setTagColor: setTagColorMock,
   },
 }));
 
@@ -60,14 +73,20 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 
 describe("project.updateTags", () => {
   const tagsRouter = router({
+    listTags: projectTagProcedures.listTags,
     updateTags: projectTagProcedures.updateTags,
+    renameTag: projectTagProcedures.renameTag,
     deleteTag: projectTagProcedures.deleteTag,
+    setTagColor: projectTagProcedures.setTagColor,
   });
 
   beforeEach(() => {
     getManifestMock.mockReset();
     setTagsMock.mockReset();
     removeTagFromOrganizationMock.mockReset();
+    listOrganizationTagsMock.mockReset();
+    renameTagInOrganizationMock.mockReset();
+    setTagColorMock.mockReset();
     getManifestMock.mockResolvedValue({
       url: "https://example.com",
       tags: [],
@@ -79,6 +98,29 @@ describe("project.updateTags", () => {
     setTagsMock.mockResolvedValue(undefined);
     removeTagFromOrganizationMock.mockResolvedValue({
       updatedSlugs: ["site-1"],
+    });
+    listOrganizationTagsMock.mockResolvedValue([
+      { tag: "marketing", colorId: null },
+      { tag: "seo", colorId: "blue" },
+    ]);
+    renameTagInOrganizationMock.mockResolvedValue({
+      updatedSlugs: ["site-1"],
+    });
+    setTagColorMock.mockResolvedValue(undefined);
+  });
+
+  it("lists organization tags from the shared tag entity", async () => {
+    const caller = tagsRouter.createCaller(makeContext());
+
+    await expect(caller.listTags()).resolves.toEqual({
+      tags: [
+        { tag: "marketing", colorId: null },
+        { tag: "seo", colorId: "blue" },
+      ],
+    });
+
+    expect(listOrganizationTagsMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
     });
   });
 
@@ -181,6 +223,58 @@ describe("project.updateTags", () => {
     expect(removeTagFromOrganizationMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       tag: "marketing",
+    });
+  });
+
+  it("renames a label across all projects in the organization", async () => {
+    renameTagInOrganizationMock.mockResolvedValueOnce({
+      updatedSlugs: ["site-1", "site-2"],
+    });
+    const caller = tagsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.renameTag({ fromTag: " #Marketing ", toTag: "Branding" }),
+    ).resolves.toEqual({
+      success: true,
+      fromTag: "marketing",
+      toTag: "branding",
+      updatedProjects: 2,
+    });
+
+    expect(renameTagInOrganizationMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      fromTag: "marketing",
+      toTag: "branding",
+    });
+  });
+
+  it("returns BAD_REQUEST when renaming with an empty tag", async () => {
+    const caller = tagsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.renameTag({ fromTag: "marketing", toTag: "   " }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Tags cannot be empty.",
+    });
+    expect(renameTagInOrganizationMock).not.toHaveBeenCalled();
+  });
+
+  it("stores shared tag colors", async () => {
+    const caller = tagsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.setTagColor({ tag: " #SEO ", colorId: "emerald" }),
+    ).resolves.toEqual({
+      success: true,
+      tag: "seo",
+      colorId: "emerald",
+    });
+
+    expect(setTagColorMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      tag: "seo",
+      colorId: "emerald",
     });
   });
 

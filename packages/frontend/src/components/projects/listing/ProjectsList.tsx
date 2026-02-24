@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, X } from "lucide-react";
-import { useTagColors } from "@/lib/tagColors";
+import { getTagColor } from "@/lib/tagColors";
 
 type SortOption = "updated-desc" | "created-desc" | "name-asc" | "name-desc";
 
@@ -36,7 +36,6 @@ interface VersionDialogData {
 }
 
 export function ProjectsList() {
-  const { getColor } = useTagColors();
   const {
     data: projectsData,
     isLoading,
@@ -49,6 +48,7 @@ export function ProjectsList() {
       return projects.some((p) => p.status !== "completed") ? 2000 : false;
     },
   });
+  const { data: tagCatalogData } = trpc.project.listTags.useQuery();
   const { mutateAsync: regenerateProject } =
     trpc.project.regenerate.useMutation();
   const { mutateAsync: generateProject } = trpc.project.generate.useMutation();
@@ -96,6 +96,16 @@ export function ProjectsList() {
       ),
     ).sort((a, b) => a.localeCompare(b));
   }, [projectsData?.projects]);
+
+  const tagColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const entry of tagCatalogData?.tags ?? []) {
+      if (entry.colorId) {
+        map[entry.tag] = entry.colorId;
+      }
+    }
+    return map;
+  }, [tagCatalogData?.tags]);
 
   useEffect(() => {
     setSelectedTags((current) =>
@@ -276,7 +286,7 @@ export function ProjectsList() {
               <span className="text-xs text-muted-foreground mr-0.5">Filter:</span>
               {availableTags.map((tag) => {
                 const active = selectedTags.includes(tag);
-                const color = getColor(tag);
+                const color = getTagColor(tag, tagColorMap);
                 return (
                   <button
                     key={tag}
@@ -336,6 +346,7 @@ export function ProjectsList() {
               key={project.slug}
               project={project}
               availableTags={availableTags}
+              tagColorMap={tagColorMap}
               onRegenerate={handleCreateNewClick}
               onDelete={handleDeleteClick}
               isRegenerating={regeneratingSlug === project.slug}

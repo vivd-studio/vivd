@@ -134,6 +134,13 @@
       "when": 1771880400000,
       "tag": "0018_analytics_plugin_mvp",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1771935000000,
+      "tag": "0019_project_tag_catalog",
+      "breakpoints": true
     }
   ]
 }

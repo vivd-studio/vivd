@@ -132,6 +132,60 @@ export interface ModelTier {
   label: string;
 }
 
+function normalizeToolStatus(part: any): "running" | "completed" | "error" | undefined {
+  const status = part?.status ?? part?.state?.status;
+  if (status === "running" || status === "completed" || status === "error") {
+    return status;
+  }
+  return undefined;
+}
+
+function normalizeErrorMessage(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Error) return value.message || "Unknown error";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const nestedCandidates = [
+      record.message,
+      record.error,
+      record.reason,
+      record.detail,
+    ];
+    for (const candidate of nestedCandidates) {
+      const nested = normalizeErrorMessage(candidate);
+      if (nested) return nested;
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Ignore serialization errors.
+    }
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return undefined;
+}
+
+function normalizeMessagePart(part: any): any {
+  if (!part || typeof part !== "object") return part;
+  if (part.type !== "tool") return part;
+
+  return {
+    ...part,
+    status: normalizeToolStatus(part) ?? "completed",
+    input: part.input ?? part.state?.input,
+    error: normalizeErrorMessage(
+      part.error ?? part.state?.error ?? part.output?.error ?? part.state?.output?.error,
+    ),
+  };
+}
+
 interface ChatContextValue {
   // Project info
   projectSlug: string;
@@ -322,6 +376,10 @@ export function ChatProvider({
   // Track last processed event ID per session for resumable SSE streams
   // This prevents replay of old events (like session.completed) on reconnect
   const lastEventIdBySession = useRef<Map<string, string>>(new Map());
+  const processedEventIdsBySession = useRef<
+    Map<string, { ids: Set<string>; queue: string[] }>
+  >(new Map());
+  const EVENT_ID_DEDUPE_WINDOW = 500;
 
   // Session error state (for quota limits, API errors, etc.)
   const [sessionError, setSessionError] = useState<SessionError | null>(null);
@@ -758,8 +816,27 @@ export function ChatProvider({
         setSseConnected(true);
       },
       onData: (trackedEvent) => {
-        // Track the event ID for resumable streams
+        // Track and dedupe event IDs to avoid duplicate UI rendering on replay.
         if (selectedSessionId && trackedEvent.id) {
+          const entry =
+            processedEventIdsBySession.current.get(selectedSessionId) ?? {
+              ids: new Set<string>(),
+              queue: [],
+            };
+          if (entry.ids.has(trackedEvent.id)) {
+            return;
+          }
+          entry.ids.add(trackedEvent.id);
+          entry.queue.push(trackedEvent.id);
+          if (entry.queue.length > EVENT_ID_DEDUPE_WINDOW) {
+            const evicted = entry.queue.shift();
+            if (evicted) {
+              entry.ids.delete(evicted);
+            }
+          }
+          processedEventIdsBySession.current.set(selectedSessionId, entry);
+
+          // Keep pointer for resumable streams.
           lastEventIdBySession.current.set(selectedSessionId, trackedEvent.id);
         }
 
@@ -845,16 +922,31 @@ export function ChatProvider({
               const title =
                 "title" in innerData ? (innerData.title as string) : undefined;
 
-              setStreamingParts((prev) => [
-                ...prev,
-                {
-                  id: toolId,
-                  type: "tool",
-                  tool,
-                  title,
-                  status: "running",
-                },
-              ]);
+              setStreamingParts((prev) => {
+                const existingIndex = prev.findIndex((p) => p.id === toolId);
+                if (existingIndex >= 0) {
+                  const next = [...prev];
+                  next[existingIndex] = {
+                    ...next[existingIndex],
+                    type: "tool",
+                    tool,
+                    title,
+                    status: "running",
+                  };
+                  return next;
+                }
+
+                return [
+                  ...prev,
+                  {
+                    id: toolId,
+                    type: "tool",
+                    tool,
+                    title,
+                    status: "running",
+                  },
+                ];
+              });
             }
             break;
 
@@ -872,9 +964,14 @@ export function ChatProvider({
           case "tool.error":
             if ("toolId" in innerData) {
               const toolId = innerData.toolId as string;
+              const errorMessage = normalizeErrorMessage(
+                "error" in innerData ? innerData.error : undefined,
+              );
               setStreamingParts((prev) =>
                 prev.map((p) =>
-                  p.id === toolId ? { ...p, status: "error" } : p,
+                  p.id === toolId
+                    ? { ...p, status: "error", error: errorMessage }
+                    : p,
                 ),
               );
             }
@@ -904,6 +1001,8 @@ export function ChatProvider({
               // Clear waiting states - we're in an error state now
               setIsWaiting(false);
               setIsStreaming(false);
+              setStreamingParts([]);
+              isWaitingForAgent.current = false;
             }
             break;
 
@@ -954,6 +1053,11 @@ export function ChatProvider({
         setSseConnected(false);
         setIsStreaming(false);
         setIsWaiting(false);
+        isWaitingForAgent.current = false;
+        setSessionError({
+          type: "stream",
+          message: err?.message || "Live updates disconnected",
+        });
         // Refetch messages on SSE error to ensure state is synchronized
         refetchMessages();
         refetchSessions();
@@ -966,8 +1070,9 @@ export function ChatProvider({
       setIsSessionHydrating(false);
       const mappedMessages: Message[] = sessionMessages.map((msg: any) => {
         const role = msg.info?.role === "assistant" ? "agent" : "user";
+        const normalizedParts = (msg.parts ?? []).map(normalizeMessagePart);
         const textContent =
-          msg.parts
+          normalizedParts
             ?.filter((p: any) => p.type === "text")
             .map((p: any) => p.text)
             .join("\n") || "";
@@ -976,7 +1081,7 @@ export function ChatProvider({
           id: msg.info?.id,
           role,
           content: textContent,
-          parts: msg.parts,
+          parts: normalizedParts,
         };
       });
       setMessages(mappedMessages);
@@ -1069,8 +1174,14 @@ export function ChatProvider({
         ...prev,
         { role: "agent", content: `Error: ${error.message}` },
       ]);
+      setSessionError({
+        type: "task",
+        message: error.message,
+      });
       isWaitingForAgent.current = false;
+      setIsStreaming(false);
       setIsWaiting(false);
+      setStreamingParts([]);
     },
   });
 
@@ -1276,6 +1387,7 @@ export function ChatProvider({
     isWaitingForAgent.current = true;
     setIsStreaming(false);
     setIsWaiting(true);
+    setSessionError(null);
 
     setStreamingParts([]);
 

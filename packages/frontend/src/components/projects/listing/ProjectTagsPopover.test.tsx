@@ -12,8 +12,11 @@ vi.mock("@/components/ui/popover", () => ({
 function renderPopover(options?: {
   projectTags?: string[];
   availableTags?: string[];
+  colorMap?: Record<string, string>;
   isSaving?: boolean;
   onDeleteTags?: (tags: string[]) => void;
+  onRenameTags?: (renames: Array<{ fromTag: string; toTag: string }>) => void;
+  onSetTagColor?: (tag: string, colorId: string) => void;
 }) {
   const onOpenChange = vi.fn();
   const onCommitTags = vi.fn();
@@ -24,9 +27,12 @@ function renderPopover(options?: {
       onOpenChange={onOpenChange}
       projectTags={options?.projectTags ?? ["alpha"]}
       availableTags={options?.availableTags ?? ["alpha", "beta"]}
+      colorMap={options?.colorMap ?? {}}
       isSaving={options?.isSaving ?? false}
       onCommitTags={onCommitTags}
+      onRenameTags={options?.onRenameTags}
       onDeleteTags={options?.onDeleteTags}
+      onSetTagColor={options?.onSetTagColor}
     >
       <button type="button">anchor</button>
     </ProjectTagsPopover>,
@@ -96,9 +102,11 @@ describe("ProjectTagsPopover", () => {
   });
 
   it("renames an existing label when Enter is pressed in edit view", () => {
+    const onRenameTags = vi.fn();
     const { onCommitTags } = renderPopover({
       projectTags: ["alpha"],
       availableTags: ["alpha"],
+      onRenameTags,
     });
 
     fireEvent.click(screen.getByTitle("Edit label"));
@@ -111,6 +119,10 @@ describe("ProjectTagsPopover", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
 
+    expect(onRenameTags).toHaveBeenCalledTimes(1);
+    expect(onRenameTags).toHaveBeenCalledWith([
+      { fromTag: "alpha", toTag: "seo" },
+    ]);
     expect(onCommitTags).toHaveBeenCalledTimes(1);
     expect(onCommitTags).toHaveBeenCalledWith(["seo"]);
   });

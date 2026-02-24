@@ -459,12 +459,20 @@ function MessagePartBubble({
     );
   }
   if (part.type === "tool") {
+    const toolStatus = part.status ?? part.state?.status;
+    const toolError =
+      part.error ??
+      part.state?.error?.message ??
+      part.state?.error ??
+      part.output?.error ??
+      part.state?.output?.error;
+
     return (
       <div className="rounded-lg px-3 py-2 text-xs font-mono w-full max-w-md">
         <div className="flex items-center gap-2">
-          {part.status === "running" ? (
+          {toolStatus === "running" ? (
             <Loader2 className="w-3 h-3 animate-spin opacity-70" />
-          ) : part.status === "error" ? (
+          ) : toolStatus === "error" ? (
             <span>❌</span>
           ) : (
             <span>✅</span>
@@ -475,6 +483,11 @@ function MessagePartBubble({
         {part.title && (
           <div className="text-muted-foreground mt-1 truncate">
             {part.title}
+          </div>
+        )}
+        {toolStatus === "error" && toolError && (
+          <div className="text-destructive mt-1 whitespace-pre-wrap break-words">
+            {String(toolError)}
           </div>
         )}
       </div>
