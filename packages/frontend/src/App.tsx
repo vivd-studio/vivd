@@ -6,6 +6,7 @@ import { formatDocumentTitle } from "@/lib/brand";
 import { Toaster } from "@/components/ui/sonner";
 import { CenteredLoading } from "@/components/common";
 import { AppRoutes } from "@/app/router";
+import { RouteTransitionLoading } from "@/app/router/RouteTransitionLoading";
 
 export default function App() {
   const { isPending: isSessionPending } = authClient.useSession();
@@ -38,6 +39,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <RouteTransitionLoading />
       <AppRoutes hasUsers={hasUsers} />
       <Toaster />
     </BrowserRouter>

@@ -43,6 +43,8 @@ interface CenteredLoadingProps {
   message?: string;
   /** Whether to fill the full screen height */
   fullScreen?: boolean;
+  /** Additional class names for the wrapper */
+  className?: string;
 }
 
 /**
@@ -51,12 +53,14 @@ interface CenteredLoadingProps {
 export function CenteredLoading({
   message = "Loading...",
   fullScreen = false,
+  className,
 }: CenteredLoadingProps) {
   return (
     <div
       className={cn(
         "flex items-center justify-center",
         fullScreen ? "h-screen" : "h-full min-h-[200px]",
+        className,
       )}
     >
       <LoadingSpinner message={message} size="lg" />

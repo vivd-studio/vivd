@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { BarChart3, RefreshCw } from "lucide-react";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
+import { LoadingSpinner } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -290,8 +291,8 @@ export default function ProjectAnalytics() {
               ) : null}
 
               {analyticsSummaryQuery.isLoading ? (
-                <div className="rounded-md border bg-muted/20 px-3 py-8 text-sm text-muted-foreground">
-                  Loading dashboard...
+                <div className="rounded-md border bg-muted/20 px-3 py-8">
+                  <LoadingSpinner message="Loading dashboard..." />
                 </div>
               ) : analyticsSummary ? (
                 <div className="space-y-6">

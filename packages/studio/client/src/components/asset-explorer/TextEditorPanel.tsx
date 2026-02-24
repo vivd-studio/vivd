@@ -6,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LoadingSpinner } from "@/components/common";
 import { Loader2, Save, X, FileCode, WrapText, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
@@ -277,12 +278,7 @@ export function TextEditorPanel({
       <div className="flex-1 overflow-hidden">
         {isLoading ? (
           <div className="h-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                Loading file...
-              </span>
-            </div>
+            <LoadingSpinner message="Loading file..." size="lg" />
           </div>
         ) : error ? (
           <div className="h-full flex items-center justify-center">

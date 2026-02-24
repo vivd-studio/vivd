@@ -1,4 +1,5 @@
 import { Navigate } from "react-router-dom";
+import { CenteredLoading } from "@/components/common";
 import { trpc } from "@/lib/trpc";
 import { SingleProjectCreateView } from "./SingleProjectCreateView";
 
@@ -11,11 +12,7 @@ export function SingleProjectModeHandler() {
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        Loading...
-      </div>
-    );
+    return <CenteredLoading fullScreen />;
   }
 
   if (error) {

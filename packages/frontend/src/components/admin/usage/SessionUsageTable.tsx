@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
 
 interface SessionUsageTableProps {
@@ -30,7 +30,7 @@ export function SessionUsageTable({ days }: SessionUsageTableProps) {
   if (isLoading) {
     return (
       <div className="rounded-lg border p-8 flex justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <LoadingSpinner message="Loading sessions..." />
       </div>
     );
   }

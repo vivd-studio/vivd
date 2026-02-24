@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +65,7 @@ export function UsageLimitsPanel({
   return (
     <div className="space-y-6">
       {usageLoading ? (
-        <div className="text-muted-foreground">Loading usage...</div>
+        <LoadingSpinner message="Loading usage..." className="justify-start" />
       ) : usageError ? (
         <div className="text-red-500">Failed to load usage: {String(usageError)}</div>
       ) : usage ? (

@@ -1,20 +1,21 @@
-import { useMemo, useCallback, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useMemo,
+  useCallback,
+  useState,
+  type ReactNode,
+} from "react";
 import { trpc } from "@/lib/trpc";
-import { ChatPanelContent } from "../chat/ChatPanel";
 import { ChatProvider } from "../chat/ChatContext";
-import { AssetExplorer } from "../asset-explorer";
 import { ResizeHandle } from "@/components/common/ResizeHandle";
 import { usePreview } from "./PreviewContext";
 import { StudioToolbar } from "./toolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
-import { TextEditorPanel } from "../asset-explorer/TextEditorPanel";
-import { ImageViewerPanel } from "../asset-explorer/ImageViewerPanel";
-import { PdfViewerPanel } from "../asset-explorer/PdfViewerPanel";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2, AlertCircle } from "lucide-react";
-import { AIEditDialog } from "../asset-explorer/AIEditDialog";
 import { isTextFile } from "../asset-explorer/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,52 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
+
+const ChatPanelContent = lazy(() =>
+  import("../chat/ChatPanel").then((module) => ({
+    default: module.ChatPanelContent,
+  })),
+);
+const AssetExplorer = lazy(() =>
+  import("../asset-explorer").then((module) => ({
+    default: module.AssetExplorer,
+  })),
+);
+const TextEditorPanel = lazy(() =>
+  import("../asset-explorer/TextEditorPanel").then((module) => ({
+    default: module.TextEditorPanel,
+  })),
+);
+const ImageViewerPanel = lazy(() =>
+  import("../asset-explorer/ImageViewerPanel").then((module) => ({
+    default: module.ImageViewerPanel,
+  })),
+);
+const PdfViewerPanel = lazy(() =>
+  import("../asset-explorer/PdfViewerPanel").then((module) => ({
+    default: module.PdfViewerPanel,
+  })),
+);
+const AIEditDialog = lazy(() =>
+  import("../asset-explorer/AIEditDialog").then((module) => ({
+    default: module.AIEditDialog,
+  })),
+);
+
+function DeferredPanel({
+  children,
+  fallback,
+}: {
+  children: ReactNode;
+  fallback?: ReactNode;
+}) {
+  const defaultFallback = (
+    <div className="flex h-full w-full items-center justify-center bg-background/80">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+  return <Suspense fallback={fallback ?? defaultFallback}>{children}</Suspense>;
+}
 
 export function PreviewContent() {
   const {
@@ -309,11 +356,13 @@ export function PreviewContent() {
           className="absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:border-r md:min-w-0"
           style={{ width: assetPanel.width }}
         >
-          <AssetExplorer
-            projectSlug={projectSlug}
-            version={selectedVersion}
-            onClose={() => setAssetsOpen(false)}
-          />
+          <DeferredPanel>
+            <AssetExplorer
+              projectSlug={projectSlug}
+              version={selectedVersion}
+              onClose={() => setAssetsOpen(false)}
+            />
+          </DeferredPanel>
           <div className="hidden md:block">
             <ResizeHandle side="left" onMouseDown={assetPanel.handleMouseDown} />
           </div>
@@ -410,73 +459,81 @@ export function PreviewContent() {
 
         {/* Text Editor - overlay on top of iframe to preserve iframe state */}
         {projectSlug && editingTextFile && (
-          <TextEditorPanel
-            projectSlug={projectSlug}
-            version={selectedVersion}
-            filePath={editingTextFile}
-            onClose={() => setEditingTextFile(null)}
-          />
+          <DeferredPanel>
+            <TextEditorPanel
+              projectSlug={projectSlug}
+              version={selectedVersion}
+              filePath={editingTextFile}
+              onClose={() => setEditingTextFile(null)}
+            />
+          </DeferredPanel>
         )}
 
         {/* Image Viewer - overlay on top of iframe similar to text editor */}
         {projectSlug && viewingImagePath && (
-          <ImageViewerPanel
-            projectSlug={projectSlug}
-            version={selectedVersion}
-            filePath={viewingImagePath}
-            onClose={() => setViewingImagePath(null)}
-            onNavigatePrevious={handleNavigatePrevious}
-            onNavigateNext={handleNavigateNext}
-            canNavigatePrevious={canNavigatePrevious}
-            canNavigateNext={canNavigateNext}
-            onAiEdit={
-              canUseAiImages && currentAsset
-                ? () => setEditingAsset(currentAsset)
-                : undefined
-            }
-            onDelete={
-              currentAsset
-                ? () => setPendingDeleteAsset(currentAsset)
-                : undefined
-            }
-          />
+          <DeferredPanel>
+            <ImageViewerPanel
+              projectSlug={projectSlug}
+              version={selectedVersion}
+              filePath={viewingImagePath}
+              onClose={() => setViewingImagePath(null)}
+              onNavigatePrevious={handleNavigatePrevious}
+              onNavigateNext={handleNavigateNext}
+              canNavigatePrevious={canNavigatePrevious}
+              canNavigateNext={canNavigateNext}
+              onAiEdit={
+                canUseAiImages && currentAsset
+                  ? () => setEditingAsset(currentAsset)
+                  : undefined
+              }
+              onDelete={
+                currentAsset
+                  ? () => setPendingDeleteAsset(currentAsset)
+                  : undefined
+              }
+            />
+          </DeferredPanel>
         )}
 
         {/* PDF Viewer - overlay on top of iframe similar to text editor */}
         {projectSlug && viewingPdfPath && (
-          <PdfViewerPanel
-            projectSlug={projectSlug}
-            version={selectedVersion}
-            filePath={viewingPdfPath}
-            onClose={() => setViewingPdfPath(null)}
-            onDelete={() =>
-              setPendingDeleteAsset({
-                type: "file",
-                name: viewingPdfPath.split("/").pop() || viewingPdfPath,
-                path: viewingPdfPath,
-              })
-            }
-          />
+          <DeferredPanel>
+            <PdfViewerPanel
+              projectSlug={projectSlug}
+              version={selectedVersion}
+              filePath={viewingPdfPath}
+              onClose={() => setViewingPdfPath(null)}
+              onDelete={() =>
+                setPendingDeleteAsset({
+                  type: "file",
+                  name: viewingPdfPath.split("/").pop() || viewingPdfPath,
+                  path: viewingPdfPath,
+                })
+              }
+            />
+          </DeferredPanel>
         )}
       </div>
 
       {/* Shared Dialogs */}
       {projectSlug && (
         <>
-          <AIEditDialog
-            open={!!editingAsset}
-            editingImage={editingAsset as AssetItem | null}
-            prompt={localEditPrompt}
-            onPromptChange={setLocalEditPrompt}
-            onClose={() => {
-              setEditingAsset(null);
-              setLocalEditPrompt("");
-            }}
-            onSubmit={handleSubmitAiEdit}
-            isPending={editImageMutation.isPending}
-            projectSlug={projectSlug}
-            version={selectedVersion}
-          />
+          <DeferredPanel fallback={null}>
+            <AIEditDialog
+              open={!!editingAsset}
+              editingImage={editingAsset as AssetItem | null}
+              prompt={localEditPrompt}
+              onPromptChange={setLocalEditPrompt}
+              onClose={() => {
+                setEditingAsset(null);
+                setLocalEditPrompt("");
+              }}
+              onSubmit={handleSubmitAiEdit}
+              isPending={editImageMutation.isPending}
+              projectSlug={projectSlug}
+              version={selectedVersion}
+            />
+          </DeferredPanel>
 
           <AlertDialog
             open={!!pendingDeleteAsset}
@@ -529,7 +586,9 @@ export function PreviewContent() {
           <div className="hidden md:block">
             <ResizeHandle side="right" onMouseDown={chatPanel.handleMouseDown} />
           </div>
-          <ChatPanelContent onClose={() => setChatOpen(false)} />
+          <DeferredPanel>
+            <ChatPanelContent onClose={() => setChatOpen(false)} />
+          </DeferredPanel>
         </div>
       )}
     </div>

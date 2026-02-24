@@ -1,14 +1,43 @@
+import { lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Building2, Mail, Plug, Server, Shield, Wrench } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  EmailTab,
-  MachinesTab,
-  MaintenanceTab,
-  OrganizationsTab,
-  PluginsTab,
-  UsersTab,
-} from "@/components/admin";
+
+const OrganizationsTab = lazy(() =>
+  import("@/components/admin/organizations/OrganizationsTab").then((module) => ({
+    default: module.OrganizationsTab,
+  })),
+);
+const UsersTab = lazy(() =>
+  import("@/components/admin/users/UsersTab").then((module) => ({
+    default: module.UsersTab,
+  })),
+);
+const MaintenanceTab = lazy(() =>
+  import("@/components/admin/maintenance/MaintenanceTab").then((module) => ({
+    default: module.MaintenanceTab,
+  })),
+);
+const MachinesTab = lazy(() =>
+  import("@/components/admin/machines/MachinesTab").then((module) => ({
+    default: module.MachinesTab,
+  })),
+);
+const PluginsTab = lazy(() =>
+  import("@/components/admin/plugins/PluginsTab").then((module) => ({
+    default: module.PluginsTab,
+  })),
+);
+const EmailTab = lazy(() =>
+  import("@/components/admin/email/EmailTab").then((module) => ({
+    default: module.EmailTab,
+  })),
+);
+
+function TabLoadingState() {
+  return <LoadingSpinner message="Loading..." />;
+}
 
 export default function SuperAdmin() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -64,27 +93,39 @@ export default function SuperAdmin() {
         </TabsList>
 
         <TabsContent value="orgs" className="mt-6">
-          <OrganizationsTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <OrganizationsTab />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="users" className="mt-6">
-          <UsersTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <UsersTab />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="maintenance" className="mt-6">
-          <MaintenanceTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <MaintenanceTab />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="machines" className="mt-6">
-          <MachinesTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <MachinesTab />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="plugins" className="mt-6">
-          <PluginsTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <PluginsTab />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="email" className="mt-6">
-          <EmailTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <EmailTab />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </div>

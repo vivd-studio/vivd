@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LoadingSpinner } from "@/components/common";
 import {
   Card,
   CardContent,
@@ -18,7 +19,7 @@ export function OrganizationsTab() {
   const admin = useOrganizationsAdmin();
 
   if (admin.isLoading) {
-    return <div className="text-muted-foreground">Loading organizations...</div>;
+    return <LoadingSpinner message="Loading organizations..." />;
   }
 
   if (admin.error) {

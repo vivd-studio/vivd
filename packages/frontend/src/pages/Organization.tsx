@@ -1,12 +1,38 @@
+import { lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Users, Activity, Wrench, SlidersHorizontal } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UsageStatsCard, TenantMaintenanceTab } from "@/components/admin";
-import { TeamSettings } from "@/components/settings/TeamSettings";
-import { OrgSettings } from "@/components/settings/OrgSettings";
 import { trpc } from "@/lib/trpc";
 import { usePermissions } from "@/hooks/usePermissions";
+
+const TeamSettings = lazy(() =>
+  import("@/components/settings/TeamSettings").then((module) => ({
+    default: module.TeamSettings,
+  })),
+);
+const UsageStatsCard = lazy(() =>
+  import("@/components/admin/usage/UsageStatsCard").then((module) => ({
+    default: module.UsageStatsCard,
+  })),
+);
+const TenantMaintenanceTab = lazy(() =>
+  import("@/components/admin/maintenance/TenantMaintenanceTab").then(
+    (module) => ({
+      default: module.TenantMaintenanceTab,
+    }),
+  ),
+);
+const OrgSettings = lazy(() =>
+  import("@/components/settings/OrgSettings").then((module) => ({
+    default: module.OrgSettings,
+  })),
+);
+
+function TabLoadingState() {
+  return <LoadingSpinner message="Loading..." />;
+}
 
 export default function Organization() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,7 +53,7 @@ export default function Organization() {
   };
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading organization…</div>;
+    return <LoadingSpinner message="Loading organization..." />;
   }
 
   return (
@@ -71,20 +97,28 @@ export default function Organization() {
         </TabsList>
 
         <TabsContent value="members" className="mt-6">
-          <TeamSettings />
+          <Suspense fallback={<TabLoadingState />}>
+            <TeamSettings />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="usage" className="mt-6">
-          <UsageStatsCard />
+          <Suspense fallback={<TabLoadingState />}>
+            <UsageStatsCard />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="maintenance" className="mt-6">
-          <TenantMaintenanceTab />
+          <Suspense fallback={<TabLoadingState />}>
+            <TenantMaintenanceTab />
+          </Suspense>
         </TabsContent>
 
         {canEditSettings && (
           <TabsContent value="settings" className="mt-6">
-            <OrgSettings />
+            <Suspense fallback={<TabLoadingState />}>
+              <OrgSettings />
+            </Suspense>
           </TabsContent>
         )}
       </Tabs>

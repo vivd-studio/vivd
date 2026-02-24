@@ -4,6 +4,7 @@ import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { toast } from "sonner";
+import { LoadingSpinner } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -865,8 +866,8 @@ export default function ProjectPlugins() {
               </div>
 
               {analyticsSummaryQuery.isLoading ? (
-                <div className="rounded-md border bg-muted/20 px-3 py-8 text-sm text-muted-foreground">
-                  Loading analytics dashboard...
+                <div className="rounded-md border bg-muted/20 px-3 py-8">
+                  <LoadingSpinner message="Loading analytics dashboard..." />
                 </div>
               ) : analyticsSummary ? (
                 <div className="space-y-6">

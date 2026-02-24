@@ -90,6 +90,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
         const usageState = new Map<string, number>();
         const assistantMessageIds = new Set<string>();
         let hasObservedSessionActivity = false;
+        let hasTerminalSessionError = false;
 
         for await (const event of events.stream) {
           if (!isActive) break;
@@ -204,6 +205,9 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 }
               }
             } else if (event.type === "session.idle") {
+              if (hasTerminalSessionError) {
+                continue;
+              }
               if (!hasObservedSessionActivity) {
                 continue;
               }
@@ -212,13 +216,20 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
               const status = (event as any).properties?.status;
               if (status?.type === "busy") {
                 hasObservedSessionActivity = true;
+                hasTerminalSessionError = false;
               } else if (status?.type === "idle") {
+                if (hasTerminalSessionError) {
+                  continue;
+                }
                 if (!hasObservedSessionActivity) {
                   continue;
                 }
                 callbacks.onIdle?.();
               } else if (status?.type === "retry" || status?.type === "error") {
                 hasObservedSessionActivity = true;
+                if (status?.type === "error") {
+                  hasTerminalSessionError = true;
+                }
                 callbacks.onSessionError?.({
                   type: status.type,
                   message: status.message || `Session ${status.type}`,

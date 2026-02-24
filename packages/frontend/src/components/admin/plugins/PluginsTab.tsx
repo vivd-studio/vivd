@@ -1,6 +1,7 @@
 import { type ChangeEvent, useMemo, useState } from "react";
-import { Loader2, Plug, RefreshCcw } from "lucide-react";
+import { Plug, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
+import { LoadingSpinner } from "@/components/common";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -715,10 +716,7 @@ function ProjectsPluginAccessPanel() {
               <tr>
                 <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                   {isLoading ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading plugin access...
-                    </span>
+                    <LoadingSpinner message="Loading plugin access..." />
                   ) : (
                     "No projects match the current filters."
                   )}

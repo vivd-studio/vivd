@@ -15,6 +15,7 @@ const {
   regenerateThumbnailUseMutationMock,
   setPublicPreviewEnabledUseMutationMock,
   deleteProjectUseMutationMock,
+  renameSlugUseMutationMock,
   getMyMembershipUseQueryMock,
   useSessionMock,
   useThemeMock,
@@ -33,6 +34,7 @@ const {
   regenerateThumbnailUseMutationMock: vi.fn(),
   setPublicPreviewEnabledUseMutationMock: vi.fn(),
   deleteProjectUseMutationMock: vi.fn(),
+  renameSlugUseMutationMock: vi.fn(),
   getMyMembershipUseQueryMock: vi.fn(),
   useSessionMock: vi.fn(),
   useThemeMock: vi.fn(),
@@ -64,6 +66,7 @@ vi.mock("@/lib/trpc", () => ({
       regenerateThumbnail: { useMutation: regenerateThumbnailUseMutationMock },
       setPublicPreviewEnabled: { useMutation: setPublicPreviewEnabledUseMutationMock },
       delete: { useMutation: deleteProjectUseMutationMock },
+      renameSlug: { useMutation: renameSlugUseMutationMock },
     },
     organization: {
       getMyMembership: { useQuery: getMyMembershipUseQueryMock },
@@ -131,6 +134,7 @@ describe("EmbeddedStudio", () => {
     regenerateThumbnailUseMutationMock.mockReset();
     setPublicPreviewEnabledUseMutationMock.mockReset();
     deleteProjectUseMutationMock.mockReset();
+    renameSlugUseMutationMock.mockReset();
     getMyMembershipUseQueryMock.mockReset();
     useSessionMock.mockReset();
     useThemeMock.mockReset();
@@ -180,6 +184,10 @@ describe("EmbeddedStudio", () => {
       isPending: false,
     });
     deleteProjectUseMutationMock.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+    renameSlugUseMutationMock.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
     });

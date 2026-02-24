@@ -3,8 +3,8 @@ import {
   TrendingUp,
   Coins,
   Image as ImageIcon,
-  Loader2,
 } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { SessionUsageTable } from "./SessionUsageTable";
@@ -29,7 +29,7 @@ export function UsageStatsCard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <LoadingSpinner message="Loading usage..." />
         </CardContent>
       </Card>
     );

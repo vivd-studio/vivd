@@ -24,6 +24,7 @@ import {
 import { ModeToggle, useTheme } from "@/components/theme";
 import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
+import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
@@ -463,9 +464,11 @@ export default function ProjectFullscreen() {
 
   if (isLoading) {
     return (
-      <div className="flex h-dvh w-screen items-center justify-center bg-background">
-        <div className="text-muted-foreground">Loading project…</div>
-      </div>
+      <CenteredLoading
+        message="Loading project..."
+        fullScreen
+        className="w-screen bg-background"
+      />
     );
   }
 

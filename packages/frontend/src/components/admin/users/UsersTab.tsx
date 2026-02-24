@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Shield, UserPlus, Loader2, AlertCircle } from "lucide-react";
+import { Shield, UserPlus, AlertCircle } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
@@ -43,7 +44,7 @@ export function UsersTab() {
   if (isLoading) {
     return (
       <div className="flex justify-center p-10">
-        <Loader2 className="animate-spin h-8 w-8 text-blue-600" />
+        <LoadingSpinner message="Loading users..." size="lg" />
       </div>
     );
   }

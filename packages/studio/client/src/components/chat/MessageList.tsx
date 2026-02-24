@@ -1,5 +1,6 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { LoadingSpinner } from "@/components/common";
 import {
   Loader2,
   ChevronRight,
@@ -107,8 +108,7 @@ export function MessageList() {
         {messages.length === 0 &&
           (isSessionHydrating ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin mb-3" />
-              <div className="text-sm">Loading session…</div>
+              <LoadingSpinner message="Loading session..." />
             </div>
           ) : (
             <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
@@ -381,7 +381,9 @@ export function MessageList() {
               <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm text-destructive">
-                  {sessionError.type === "retry"
+                  {sessionError.type === "retry" ||
+                  sessionError.type === "provider_limit" ||
+                  sessionError.type === "stream"
                     ? "Temporary Issue"
                     : "Session Error"}
                 </div>

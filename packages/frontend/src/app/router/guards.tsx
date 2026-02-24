@@ -180,10 +180,11 @@ export function SingleProjectModeLayoutGuard({
 }) {
   const { config, isLoading } = useAppConfig();
   const location = useLocation();
+  const shouldLoadProjects = config.singleProjectMode;
   const { data: projectsData, isLoading: isProjectsLoading } =
-    trpc.project.list.useQuery();
+    trpc.project.list.useQuery(undefined, { enabled: shouldLoadProjects });
 
-  if (isLoading || isProjectsLoading) {
+  if (isLoading || (shouldLoadProjects && isProjectsLoading)) {
     return <Loading />;
   }
 

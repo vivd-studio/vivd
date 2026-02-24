@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { LoadingSpinner } from "@/components/common";
 
 import type { FileTreeNode } from "./types";
 import { FileTreeItem } from "./FileTreeItem";
@@ -269,7 +269,7 @@ export function FileTreeView({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <LoadingSpinner message="Loading files..." />
       </div>
     );
   }

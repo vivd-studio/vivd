@@ -6,6 +6,7 @@ import {
   updateToolPartStatus,
 } from "./chatStreamUtils";
 import type { SessionError, UsageData } from "./chatTypes";
+import { sanitizeSessionError } from "./chatErrorPolicy";
 
 type SessionEventKind = {
   kind: string;
@@ -108,12 +109,14 @@ export function handleSessionEvent({
 
     case "session.error":
       if ("errorType" in eventData && "message" in eventData) {
-        setSessionError({
-          type: eventData.errorType as string,
-          message: eventData.message as string,
-          attempt: (eventData as any).attempt,
-          nextRetryAt: (eventData as any).nextRetryAt,
-        });
+        setSessionError(
+          sanitizeSessionError({
+            type: eventData.errorType as string,
+            message: eventData.message,
+            attempt: (eventData as any).attempt,
+            nextRetryAt: (eventData as any).nextRetryAt,
+          }),
+        );
         setIsWaiting(false);
         setIsStreaming(false);
         setStreamingParts([]);
@@ -181,12 +184,12 @@ export function handleSessionStreamError({
   setIsStreaming(false);
   setIsWaiting(false);
   isWaitingForAgent.current = false;
-  setSessionError({
-    type: "stream",
-    message:
-      normalizeErrorMessage((error as any)?.message ?? error) ||
-      "Live updates disconnected",
-  });
+  setSessionError(
+    sanitizeSessionError({
+      type: "stream",
+      message: normalizeErrorMessage((error as any)?.message ?? error),
+    }),
+  );
   refetchMessages();
   refetchSessions();
 }

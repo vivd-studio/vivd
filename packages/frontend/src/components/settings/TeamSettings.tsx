@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Loader2, UserPlus, Trash2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
+import { LoadingSpinner } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -402,10 +403,7 @@ export function TeamSettings() {
         )}
 
         {isMembersLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading team…
-          </div>
+          <LoadingSpinner message="Loading team..." className="justify-start" />
         ) : (
           <div className="relative w-full overflow-auto">
             <table className="w-full caption-bottom text-sm text-left">

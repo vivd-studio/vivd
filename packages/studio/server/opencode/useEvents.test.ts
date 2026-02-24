@@ -141,4 +141,53 @@ describe("useEvents", () => {
       }),
     );
   });
+
+  it("does not emit idle completion after a terminal session.status error", async () => {
+    const onSessionError = vi.fn();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-3",
+          status: { type: "busy" },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-3",
+          status: {
+            type: "error",
+            message:
+              "This request requires more credits, or fewer max tokens.",
+          },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-3",
+          status: { type: "idle" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-3",
+      onSessionError,
+      onIdle,
+    });
+    await start();
+    await flushEventLoop();
+    stop();
+
+    expect(onSessionError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "error",
+      }),
+    );
+    expect(onIdle).not.toHaveBeenCalled();
+  });
 });

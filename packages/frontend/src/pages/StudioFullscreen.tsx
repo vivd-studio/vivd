@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
+import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
@@ -272,11 +273,7 @@ export default function StudioFullscreen() {
   }, [studioIframeSrc, studioReloadNonce]);
 
   if (isLoading) {
-    return (
-      <div className="flex h-dvh w-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading…</div>
-      </div>
-    );
+    return <CenteredLoading fullScreen className="w-screen" />;
   }
 
   if (error) {

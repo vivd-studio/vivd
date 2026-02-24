@@ -34,6 +34,7 @@ import {
 import { ModeToggle, useTheme } from "@/components/theme";
 import { HeaderProfileMenu } from "@/components/shell";
 import { ROUTES } from "@/app/router";
+import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
@@ -484,11 +485,7 @@ export default function EmbeddedStudio() {
     (studioVersion === project?.currentVersion && project?.status === "completed");
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-muted-foreground">Loading project...</div>
-      </div>
-    );
+    return <CenteredLoading message="Loading project..." />;
   }
 
   if (error) {

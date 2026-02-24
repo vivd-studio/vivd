@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -260,7 +261,10 @@ export function EmailTab() {
           <section className="rounded-lg border bg-card p-4 space-y-3">
             <h3 className="text-sm font-medium">Suppressed recipients</h3>
             {overviewQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading deliverability state...</p>
+              <LoadingSpinner
+                message="Loading deliverability state..."
+                className="justify-start"
+              />
             ) : overview && overview.suppressedRecipients.length > 0 ? (
               <div className="overflow-x-auto rounded-md border">
                 <table className="w-full text-sm">

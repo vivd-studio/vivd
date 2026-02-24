@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import * as z from "zod";
 import { ChevronRight } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -240,7 +241,7 @@ export function MembersPanel({
       </Collapsible>
 
       {membersLoading ? (
-        <div className="text-muted-foreground">Loading members...</div>
+        <LoadingSpinner message="Loading members..." className="justify-start" />
       ) : membersError ? (
         <div className="text-red-500">Failed to load members: {String(membersError)}</div>
       ) : (

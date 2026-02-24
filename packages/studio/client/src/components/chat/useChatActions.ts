@@ -10,6 +10,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import type { Message, SessionError } from "./chatTypes";
+import { sanitizeSessionError } from "./chatErrorPolicy";
 
 type ConfirmDialogState = {
   open: boolean;
@@ -97,12 +98,18 @@ export function useChatActions({
     onError: (error) => {
       setMessages((prev) => [
         ...prev,
-        { role: "agent", content: `Error: ${error.message}` },
+        {
+          role: "agent",
+          content:
+            "I ran into an issue and couldn't complete that request. Please try again.",
+        },
       ]);
-      setSessionError({
-        type: "task",
-        message: error.message,
-      });
+      setSessionError(
+        sanitizeSessionError({
+          type: "task",
+          message: error.message,
+        }),
+      );
       isWaitingForAgent.current = false;
       setIsStreaming(false);
       setIsWaiting(false);

@@ -32,6 +32,7 @@ import {
 import { useChatAttachments } from "./useChatAttachments";
 import { useChatSessions } from "./useChatSessions";
 import { useChatActions } from "./useChatActions";
+import { sanitizeSessionError } from "./chatErrorPolicy";
 import {
   handleSessionEvent,
   handleSessionStreamError,
@@ -373,11 +374,13 @@ export function ChatProvider({
     if (!sessionMessagesIsError) return;
 
     setIsSessionHydrating(false);
-    setSessionError({
-      type: "load",
-      message:
-        (sessionMessagesError as any)?.message || "Failed to load session",
-    });
+    setSessionError(
+      sanitizeSessionError({
+        type: "load",
+        message:
+          (sessionMessagesError as any)?.message || "Failed to load session",
+      }),
+    );
   }, [selectedSessionId, sessionMessagesIsError, sessionMessagesError]);
 
   // Sync local streaming state with the polled session status (source of truth)
@@ -417,12 +420,27 @@ export function ChatProvider({
     } else if (currentSessionStatus.type === "retry") {
       // Session is in retry state (quota error, etc.)
       debugLog("[ChatContext] Session status is retry:", currentSessionStatus);
-      setSessionError({
-        type: "retry",
-        message: currentSessionStatus.message || "Session retrying",
-        attempt: currentSessionStatus.attempt,
-        nextRetryAt: currentSessionStatus.next,
-      });
+      setSessionError(
+        sanitizeSessionError({
+          type: "retry",
+          message: currentSessionStatus.message || "Session retrying",
+          attempt: currentSessionStatus.attempt,
+          nextRetryAt: currentSessionStatus.next,
+        }),
+      );
+      setIsStreaming(false);
+      setIsWaiting(false);
+      isWaitingForAgent.current = false;
+    } else if ((currentSessionStatus as any).type === "error") {
+      debugLog("[ChatContext] Session status is error:", currentSessionStatus);
+      setSessionError(
+        sanitizeSessionError({
+          type: "task",
+          message: (currentSessionStatus as any).message || "Session failed",
+          attempt: (currentSessionStatus as any).attempt,
+          nextRetryAt: (currentSessionStatus as any).next,
+        }),
+      );
       setIsStreaming(false);
       setIsWaiting(false);
       isWaitingForAgent.current = false;

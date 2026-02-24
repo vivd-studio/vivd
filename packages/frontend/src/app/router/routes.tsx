@@ -1,21 +1,6 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
-import Login from "@/pages/Login";
-import ForgotPassword from "@/pages/ForgotPassword";
-import ResetPassword from "@/pages/ResetPassword";
-import Dashboard from "@/pages/Dashboard";
-import Signup from "@/pages/Signup";
-import Organization from "@/pages/Organization";
-import SuperAdmin from "@/pages/SuperAdmin";
-import Settings from "@/pages/Settings";
-import ProjectFullscreen from "@/pages/ProjectFullscreen";
-import EmbeddedStudio from "@/pages/EmbeddedStudio";
-import StudioFullscreen from "@/pages/StudioFullscreen";
-import ScratchWizard from "@/pages/ScratchWizard";
-import NoProjectAssigned from "@/pages/NoProjectAssigned";
-import ProjectPlugins from "@/pages/ProjectPlugins";
-import ProjectAnalytics from "@/pages/ProjectAnalytics";
-import { Layout } from "@/components/shell";
-import { SingleProjectModeHandler } from "@/components/projects";
+import { RouteLoadingIndicator } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "./paths";
 import {
@@ -28,13 +13,47 @@ import {
   ScratchWizardClientEditorGuard,
 } from "./guards";
 
+const Login = lazy(() => import("@/pages/Login"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Signup = lazy(() => import("@/pages/Signup"));
+const Organization = lazy(() => import("@/pages/Organization"));
+const SuperAdmin = lazy(() => import("@/pages/SuperAdmin"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const ProjectFullscreen = lazy(() => import("@/pages/ProjectFullscreen"));
+const EmbeddedStudio = lazy(() => import("@/pages/EmbeddedStudio"));
+const StudioFullscreen = lazy(() => import("@/pages/StudioFullscreen"));
+const ScratchWizard = lazy(() => import("@/pages/ScratchWizard"));
+const NoProjectAssigned = lazy(() => import("@/pages/NoProjectAssigned"));
+const ProjectPlugins = lazy(() => import("@/pages/ProjectPlugins"));
+const ProjectAnalytics = lazy(() => import("@/pages/ProjectAnalytics"));
+const Layout = lazy(() =>
+  import("@/components/shell/Layout").then((module) => ({
+    default: module.Layout,
+  })),
+);
+const SingleProjectModeHandler = lazy(() =>
+  import("@/components/projects/create/SingleProjectModeHandler").then(
+    (module) => ({
+      default: module.SingleProjectModeHandler,
+    }),
+  ),
+);
+
+function RouteSuspense({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteLoadingIndicator />}>{children}</Suspense>;
+}
+
 /**
  * Layout wrapper with single project mode guard.
  */
 function LayoutWithGuard() {
   return (
     <SingleProjectModeLayoutGuard>
-      <Layout />
+      <RouteSuspense>
+        <Layout />
+      </RouteSuspense>
     </SingleProjectModeLayoutGuard>
   );
 }
@@ -45,7 +64,9 @@ function LayoutWithGuard() {
 function DashboardRoute() {
   return (
     <DashboardClientEditorGuard>
-      <Dashboard />
+      <RouteSuspense>
+        <Dashboard />
+      </RouteSuspense>
     </DashboardClientEditorGuard>
   );
 }
@@ -56,7 +77,9 @@ function DashboardRoute() {
 function EmbeddedStudioRoute() {
   return (
     <RequireAssignedProject>
-      <EmbeddedStudio />
+      <RouteSuspense>
+        <EmbeddedStudio />
+      </RouteSuspense>
     </RequireAssignedProject>
   );
 }
@@ -64,7 +87,9 @@ function EmbeddedStudioRoute() {
 function ProjectPluginsRoute() {
   return (
     <RequireAssignedProject>
-      <ProjectPlugins />
+      <RouteSuspense>
+        <ProjectPlugins />
+      </RouteSuspense>
     </RequireAssignedProject>
   );
 }
@@ -72,7 +97,9 @@ function ProjectPluginsRoute() {
 function ProjectAnalyticsRoute() {
   return (
     <RequireAssignedProject>
-      <ProjectAnalytics />
+      <RouteSuspense>
+        <ProjectAnalytics />
+      </RouteSuspense>
     </RequireAssignedProject>
   );
 }
@@ -83,7 +110,9 @@ function ProjectAnalyticsRoute() {
 function FullscreenProjectRoute() {
   return (
     <RequireAssignedProject>
-      <ProjectFullscreen />
+      <RouteSuspense>
+        <ProjectFullscreen />
+      </RouteSuspense>
     </RequireAssignedProject>
   );
 }
@@ -94,7 +123,9 @@ function FullscreenProjectRoute() {
 function FullscreenStudioRoute() {
   return (
     <RequireAssignedProject>
-      <StudioFullscreen />
+      <RouteSuspense>
+        <StudioFullscreen />
+      </RouteSuspense>
     </RequireAssignedProject>
   );
 }
@@ -105,7 +136,9 @@ function FullscreenStudioRoute() {
 function ScratchWizardRoute() {
   return (
     <ScratchWizardClientEditorGuard>
-      <ScratchWizard />
+      <RouteSuspense>
+        <ScratchWizard />
+      </RouteSuspense>
     </ScratchWizardClientEditorGuard>
   );
 }
@@ -138,7 +171,14 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
   if (!hasUsers) {
     return (
       <Routes>
-        <Route path="*" element={<Signup />} />
+        <Route
+          path="*"
+          element={
+            <RouteSuspense>
+              <Signup />
+            </RouteSuspense>
+          }
+        />
       </Routes>
     );
   }
@@ -149,27 +189,44 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
       <Route
         path={ROUTES.LOGIN}
         element={
-          !session ? <Login /> : <Navigate to={ROUTES.DASHBOARD} replace />
+          !session ? (
+            <RouteSuspense>
+              <Login />
+            </RouteSuspense>
+          ) : (
+            <Navigate to={ROUTES.DASHBOARD} replace />
+          )
         }
       />
       <Route
         path={ROUTES.FORGOT_PASSWORD}
         element={
           !session ? (
-            <ForgotPassword />
+            <RouteSuspense>
+              <ForgotPassword />
+            </RouteSuspense>
           ) : (
             <Navigate to={ROUTES.DASHBOARD} replace />
           )
         }
       />
-      <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
+      <Route
+        path={ROUTES.RESET_PASSWORD}
+        element={
+          <RouteSuspense>
+            <ResetPassword />
+          </RouteSuspense>
+        }
+      />
 
       {/* Single project mode route - outside Layout to avoid project overview */}
       <Route
         path={ROUTES.SINGLE_PROJECT}
         element={
           <RequireAuth>
-            <SingleProjectModeHandler />
+            <RouteSuspense>
+              <SingleProjectModeHandler />
+            </RouteSuspense>
           </RequireAuth>
         }
       />
@@ -184,22 +241,40 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         }
       >
         <Route index element={<DashboardRoute />} />
-        <Route path="settings" element={<Settings />} />
+        <Route
+          path="settings"
+          element={
+            <RouteSuspense>
+              <Settings />
+            </RouteSuspense>
+          }
+        />
         <Route
           path="org"
           element={
             <RequireOrgAdmin>
-              <Organization />
+              <RouteSuspense>
+                <Organization />
+              </RouteSuspense>
             </RequireOrgAdmin>
           }
         />
-        <Route path="no-project" element={<NoProjectAssigned />} />
+        <Route
+          path="no-project"
+          element={
+            <RouteSuspense>
+              <NoProjectAssigned />
+            </RouteSuspense>
+          }
+        />
         <Route path="admin" element={<AdminRedirect />} />
         <Route
           path="superadmin"
           element={
             <RequireSuperAdmin>
-              <SuperAdmin />
+              <RouteSuspense>
+                <SuperAdmin />
+              </RouteSuspense>
             </RequireSuperAdmin>
           }
         />

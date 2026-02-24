@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CenteredLoading } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -18,11 +19,7 @@ export default function NoProjectAssigned() {
     });
 
   if (isPending) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        Loading...
-      </div>
-    );
+    return <CenteredLoading fullScreen />;
   }
 
   if (!session) {
@@ -34,11 +31,7 @@ export default function NoProjectAssigned() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        Loading...
-      </div>
-    );
+    return <CenteredLoading fullScreen />;
   }
 
   if (assignedProject?.projectSlug) {

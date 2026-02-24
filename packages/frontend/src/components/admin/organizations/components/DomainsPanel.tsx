@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -122,7 +123,9 @@ export function DomainsPanel({
         </Button>
       </div>
 
-      {domainsLoading && <div className="text-sm text-muted-foreground">Loading domains...</div>}
+      {domainsLoading && (
+        <LoadingSpinner message="Loading domains..." className="justify-start" />
+      )}
       {Boolean(domainsError) && (
         <div className="text-sm text-red-500">Failed to load domains: {String(domainsError)}</div>
       )}

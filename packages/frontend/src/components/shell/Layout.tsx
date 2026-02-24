@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { ProjectWizard } from "@/components/projects";
 import { HeaderProfileMenu } from "./HeaderProfileMenu";
+import { CenteredLoading } from "@/components/common";
 
 interface PageInfo {
   title: string;
@@ -111,11 +112,7 @@ export function Layout() {
   }, [location.pathname]);
 
   if (isPending)
-    return (
-      <div className="flex h-screen items-center justify-center">
-        Loading...
-      </div>
-    );
+    return <CenteredLoading fullScreen />;
 
   return (
     <SidebarProvider>
