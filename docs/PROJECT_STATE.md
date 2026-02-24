@@ -18,7 +18,7 @@
 
 ## Latest Progress (Top 3)
 
-- 2026-02-24: fixed shared-tag rename color drift by preserving source-label color when renaming tag text (`ProjectMetaService` now applies source-color fallback and deterministic defaults for ensured tags).
+- 2026-02-24: extracted chat mutations/actions + confirm dialog management into `useChatActions.ts` and unified pending-preview message dispatch with normal send flow via shared `sendTask()` (removed ad-hoc `setTimeout` send path).
 - 2026-02-24: refactored Studio chat context by extracting shared contracts and focused helpers (`chatTypes.ts`, `useChatAttachments.ts`, `chatEventHandlers.ts`, `chatMessageUtils.ts`), reducing coupling and duplicate logic.
 - 2026-02-24: extracted chat session lifecycle orchestration into `useChatSessions.ts` (session/status/message polling, auto-select, hydration, and subscription gating).
 

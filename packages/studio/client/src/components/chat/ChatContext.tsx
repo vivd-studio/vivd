@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   useCallback,
-  type MouseEvent,
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
@@ -32,6 +31,7 @@ import {
 } from "./chatMessageUtils";
 import { useChatAttachments } from "./useChatAttachments";
 import { useChatSessions } from "./useChatSessions";
+import { useChatActions } from "./useChatActions";
 import {
   handleSessionEvent,
   handleSessionStreamError,
@@ -46,7 +46,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
@@ -251,37 +250,35 @@ export function ChatProvider({
     setSelectedModelState(availableModels[0]);
   }, [availableModels, selectedModel]);
 
-  const confirmResolverRef = useRef<((result: boolean) => void) | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    title: string;
-    description?: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-    destructive?: boolean;
-  }>({ open: false, title: "" });
-
-  const requestConfirm = useCallback(
-    (options: {
-      title: string;
-      description?: string;
-      confirmLabel?: string;
-      cancelLabel?: string;
-      destructive?: boolean;
-    }) => {
-      return new Promise<boolean>((resolve) => {
-        confirmResolverRef.current = resolve;
-        setConfirmDialog({ open: true, ...options });
-      });
+  const {
+    runTaskMutation,
+    sendTask,
+    confirmDialog,
+    resolveConfirm,
+    cancelConfirmIfPending,
+    handleDeleteSession,
+    handleRevert,
+    handleUnrevert,
+    handleStopGeneration,
+  } = useChatActions({
+    projectSlug,
+    version,
+    onTaskComplete,
+    selectedSessionId,
+    setSelectedSessionId: selectSession,
+    setPendingSessionId: (sessionId) => {
+      pendingSessionIdRef.current = sessionId;
     },
-    [],
-  );
-
-  const resolveConfirm = useCallback((result: boolean) => {
-    confirmResolverRef.current?.(result);
-    confirmResolverRef.current = null;
-    setConfirmDialog((prev) => ({ ...prev, open: false }));
-  }, []);
+    refetchMessages,
+    refetchSessions,
+    isWaitingForAgent,
+    buildRunTaskPayload,
+    setMessages,
+    setIsStreaming,
+    setIsWaiting,
+    setStreamingParts,
+    setSessionError,
+  });
 
   useEffect(() => {
     setSelectedSessionId(null);
@@ -346,9 +343,7 @@ export function ChatProvider({
       clearPending();
 
       const { message: pendingMessage, startNewSession } = pending;
-
-      // Set the input
-      setInput(pendingMessage);
+      const targetSessionId = startNewSession ? null : selectedSessionId;
 
       // If startNewSession is requested, clear the current session first
       if (startNewSession) {
@@ -362,30 +357,15 @@ export function ChatProvider({
         setSessionError(null);
       }
 
-      // Trigger send after a short delay to ensure state is updated
-      setTimeout(() => {
-        // We need to call the mutation directly since handleSend reads from state
-        isWaitingForAgent.current = true;
-        setIsStreaming(false);
-        setIsWaiting(true);
-        setStreamingParts([]);
-        setMessages((prev) => [
-          ...prev,
-          { role: "user", content: pendingMessage },
-        ]);
-        setInput("");
-
-        const targetSessionId = startNewSession ? null : selectedSessionId;
-        runTaskMutation.mutate(
-          buildRunTaskPayload(pendingMessage, targetSessionId),
-        );
-      }, 100);
+      setInput("");
+      debugLog("[Vivd] Sending pending prompt:", pendingMessage);
+      sendTask(pendingMessage, targetSessionId);
     }
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
     selectedSessionId,
-    buildRunTaskPayload,
+    sendTask,
   ]);
 
   useEffect(() => {
@@ -552,149 +532,6 @@ export function ChatProvider({
   // Derive thinking state from streaming status or message heuristic
   const isThinking = isStreaming || isWaiting;
 
-  const runTaskMutation = trpc.agent.runTask.useMutation({
-    onSuccess: (data) => {
-      if (data.sessionId) {
-        if (data.sessionId !== selectedSessionId) {
-          pendingSessionIdRef.current = data.sessionId;
-          setSelectedSessionId(data.sessionId);
-        }
-        refetchSessions();
-        isWaitingForAgent.current = true;
-      }
-    },
-    onError: (error) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error: ${error.message}` },
-      ]);
-      setSessionError({
-        type: "task",
-        message: error.message,
-      });
-      isWaitingForAgent.current = false;
-      setIsStreaming(false);
-      setIsWaiting(false);
-      setStreamingParts([]);
-    },
-  });
-
-  const deleteSessionMutation = trpc.agent.deleteSession.useMutation({
-    onSuccess: () => {
-      refetchSessions();
-      if (sessions.length > 0) {
-        if (selectedSessionId) {
-          setSelectedSessionId(null);
-          setMessages([]);
-        }
-      }
-    },
-  });
-
-  const handleDeleteSession = async (
-    e: MouseEvent,
-    sessionId: string,
-  ) => {
-    e.stopPropagation();
-    const ok = await requestConfirm({
-      title: "Delete this session?",
-      description: "This will permanently delete the session and its messages.",
-      confirmLabel: "Delete",
-      cancelLabel: "Cancel",
-      destructive: true,
-    });
-    if (!ok) return;
-    await deleteSessionMutation.mutateAsync({
-      sessionId,
-      projectSlug,
-      version,
-    });
-    if (selectedSessionId === sessionId) {
-      setSelectedSessionId(null);
-      setMessages([]);
-    }
-  };
-
-  const revertMutation = trpc.agent.revertToMessage.useMutation({
-    onSuccess: (data) => {
-      refetchSessions();
-      onTaskComplete?.();
-      if (Array.isArray(data.trackedFiles) && data.trackedFiles.length === 0) {
-        toast.info("Nothing to revert", {
-          description:
-            "We couldn’t find any reversible changes for that message. This can happen when changes were made outside tracked edits (for example via terminal commands).",
-        });
-      }
-    },
-    onError: (error) => {
-      toast.error("Revert failed", { description: error.message });
-    },
-  });
-
-  const unrevertMutation = trpc.agent.unrevertSession.useMutation({
-    onSuccess: () => {
-      refetchSessions();
-      onTaskComplete?.();
-    },
-    onError: (error) => {
-      toast.error("Restore failed", { description: error.message });
-    },
-  });
-
-  const handleRevert = async (messageId: string) => {
-    if (!selectedSessionId) return;
-    const ok = await requestConfirm({
-      title: "Revert changes from this task?",
-      description: "This will undo file changes made by the agent.",
-      confirmLabel: "Revert",
-      cancelLabel: "Cancel",
-      destructive: true,
-    });
-    if (!ok) return;
-    try {
-      await revertMutation.mutateAsync({
-        sessionId: selectedSessionId,
-        messageId,
-        projectSlug,
-        version,
-      });
-    } catch {
-      // Handled by mutation onError.
-    }
-  };
-
-  const handleUnrevert = async () => {
-    if (!selectedSessionId) return;
-    try {
-      await unrevertMutation.mutateAsync({
-        sessionId: selectedSessionId,
-        projectSlug,
-        version,
-      });
-    } catch {
-      // Handled by mutation onError.
-    }
-  };
-
-  const abortSessionMutation = trpc.agent.abortSession.useMutation({
-    onSuccess: () => {
-      setIsStreaming(false);
-      setIsWaiting(false);
-      setStreamingParts([]);
-      isWaitingForAgent.current = false;
-      refetchMessages();
-    },
-  });
-
-  const handleStopGeneration = () => {
-    if (!selectedSessionId) return;
-    abortSessionMutation.mutate({
-      sessionId: selectedSessionId,
-      projectSlug,
-      version,
-    });
-  };
-
   const handleSend = async () => {
     if (
       (!input.trim() &&
@@ -714,17 +551,8 @@ export function ChatProvider({
     setInput("");
     setAttachedElement(null);
 
-    isWaitingForAgent.current = true;
-    setIsStreaming(false);
-    setIsWaiting(true);
-    setSessionError(null);
-
-    setStreamingParts([]);
-
     debugLog("[Vivd] Sending prompt:", task);
-
-    setMessages((prev) => [...prev, { role: "user", content: task }]);
-    runTaskMutation.mutate(buildRunTaskPayload(task, selectedSessionId), {
+    sendTask(task, selectedSessionId, {
       onSettled: () => setIsSending(false),
     });
   };
@@ -812,8 +640,8 @@ export function ChatProvider({
       <AlertDialog
         open={confirmDialog.open}
         onOpenChange={(open) => {
-          if (!open && confirmResolverRef.current) {
-            resolveConfirm(false);
+          if (!open) {
+            cancelConfirmIfPending();
           }
         }}
       >
