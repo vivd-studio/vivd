@@ -102,6 +102,7 @@ interface ProjectTagsPopoverProps {
   availableTags: string[];
   isSaving: boolean;
   onCommitTags: (tags: string[]) => void;
+  onDeleteTags?: (tags: string[]) => void;
 }
 
 type View = { type: "list" } | { type: "edit"; tag: string };
@@ -117,15 +118,21 @@ export function ProjectTagsPopover({
   availableTags,
   isSaving,
   onCommitTags,
+  onDeleteTags,
 }: ProjectTagsPopoverProps) {
   const [view, setView] = useState<View>({ type: "list" });
   const [search, setSearch] = useState("");
   const [draftTag, setDraftTag] = useState("");
+  const [draftEditTag, setDraftEditTag] = useState("");
+  const [renamedTags, setRenamedTags] = useState<Record<string, string>>({});
+  const [deletedTags, setDeletedTags] = useState<string[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [draftProjectTags, setDraftProjectTags] = useState<string[]>(() =>
     dedupeTags(projectTags),
   );
   const createInputRef = useRef<HTMLInputElement>(null);
+  const editTagTextRef = useRef<HTMLSpanElement>(null);
+  const draftEditTagRef = useRef("");
   const suppressOutsideRef = useRef(false);
 
   const { colorMap, setTagColor, getColor } = useTagColors();
@@ -143,9 +150,14 @@ export function ProjectTagsPopover({
     return () => window.cancelAnimationFrame(frame);
   }, [open, suppressInitialOutsideInteraction]);
 
-  const allTags = Array.from(new Set([...availableTags, ...draftProjectTags])).sort(
-    (a, b) => a.localeCompare(b),
-  );
+  const allTags = Array.from(
+    new Set([
+      ...availableTags.map((tag) => renamedTags[tag] ?? tag),
+      ...draftProjectTags,
+    ]),
+  )
+    .filter((tag) => !deletedTags.includes(tag))
+    .sort((a, b) => a.localeCompare(b));
   const filteredTags = allTags.filter((t) =>
     t.includes(search.toLowerCase().trim()),
   );
@@ -157,14 +169,86 @@ export function ProjectTagsPopover({
     setDraftProjectTags((current) => (
       current.includes(normalized) ? current : [...current, normalized]
     ));
+    setDeletedTags((current) => current.filter((tag) => tag !== normalized));
     setDraftTag("");
     setShowCreate(false);
+  };
+
+  const openEditView = (tag: string) => {
+    setDraftEditTag(tag);
+    draftEditTagRef.current = tag;
+    setView({ type: "edit", tag });
+  };
+
+  const applyEditTagChanges = () => {
+    if (view.type !== "edit") return;
+
+    const nextTag = normalizeTag(draftEditTagRef.current);
+    if (nextTag && nextTag.length <= MAX_TAG_LENGTH && nextTag !== view.tag) {
+      setDraftProjectTags((current) =>
+        dedupeTags(current.map((value) => (value === view.tag ? nextTag : value))),
+      );
+      setRenamedTags((current) => {
+        const next = { ...current };
+        for (const [key, value] of Object.entries(next)) {
+          if (value === view.tag) {
+            next[key] = nextTag;
+          }
+        }
+        next[view.tag] = nextTag;
+        return next;
+      });
+      setDeletedTags((current) => current.filter((tag) => tag !== nextTag));
+
+      const currentColorId = getColor(view.tag).id;
+      if (!colorMap[nextTag]) {
+        setTagColor(nextTag, currentColorId);
+      }
+    }
+
+    setDraftEditTag("");
+    draftEditTagRef.current = "";
+    setView({ type: "list" });
+  };
+
+  const deleteEditTag = () => {
+    if (view.type !== "edit") return;
+
+    const deleteTag = view.tag;
+    setDraftProjectTags((current) => current.filter((tag) => tag !== deleteTag));
+    setRenamedTags((current) => {
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(current)) {
+        if (key !== deleteTag && value !== deleteTag) {
+          next[key] = value;
+        }
+      }
+      return next;
+    });
+    setDeletedTags((current) => {
+      const next = new Set(current);
+      next.add(deleteTag);
+      for (const [sourceTag, mappedTag] of Object.entries(renamedTags)) {
+        if (mappedTag === deleteTag) {
+          next.add(sourceTag);
+        }
+      }
+      return Array.from(next);
+    });
+
+    setDraftEditTag("");
+    draftEditTagRef.current = "";
+    setView({ type: "list" });
   };
 
   const resetPopoverState = () => {
     setView({ type: "list" });
     setSearch("");
     setDraftTag("");
+    setDraftEditTag("");
+    setRenamedTags({});
+    setDeletedTags([]);
+    draftEditTagRef.current = "";
     setShowCreate(false);
   };
 
@@ -176,6 +260,12 @@ export function ProjectTagsPopover({
   const confirmPopoverChanges = () => {
     const normalizedDraftTags = dedupeTags(draftProjectTags);
     const normalizedProjectTags = dedupeTags(projectTags);
+    const deletedDraftTags = dedupeTags(deletedTags).filter(
+      (tag) => !normalizedDraftTags.includes(tag),
+    );
+    if (deletedDraftTags.length > 0) {
+      onDeleteTags?.(deletedDraftTags);
+    }
     if (!areTagListsEqual(normalizedDraftTags, normalizedProjectTags)) {
       onCommitTags(normalizedDraftTags);
     }
@@ -240,11 +330,32 @@ export function ProjectTagsPopover({
             </div>
             <div className="p-3 space-y-3">
               <div className="flex justify-center">
-                <TagChip
-                  tag={view.tag}
-                  color={getColor(view.tag)}
-                  className="pointer-events-none px-6 py-1.5 text-sm"
-                />
+                <span
+                  ref={editTagTextRef}
+                  key={view.tag}
+                  contentEditable
+                  suppressContentEditableWarning
+                  spellCheck={false}
+                  role="textbox"
+                  aria-label="Edit label text"
+                  tabIndex={0}
+                  className="inline-flex min-h-8 min-w-[4rem] items-center rounded px-6 py-1.5 text-sm font-medium cursor-text outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-foreground/50"
+                  style={{ backgroundColor: getColor(view.tag).bg, color: getColor(view.tag).text }}
+                  onClick={() => editTagTextRef.current?.focus()}
+                  onInput={(event) => {
+                    const nextValue = event.currentTarget.textContent ?? "";
+                    draftEditTagRef.current = nextValue;
+                    setDraftEditTag(nextValue);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      applyEditTagChanges();
+                    }
+                  }}
+                >
+                  {draftEditTag}
+                </span>
               </div>
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-muted-foreground">Select a color</p>
@@ -257,9 +368,17 @@ export function ProjectTagsPopover({
                 variant="outline"
                 size="sm"
                 className="w-full text-xs"
-                onClick={() => setView({ type: "list" })}
+                onClick={applyEditTagChanges}
               >
                 Done
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-destructive hover:text-destructive"
+                onClick={deleteEditTag}
+              >
+                Delete label
               </Button>
             </div>
           </>
@@ -348,13 +467,14 @@ export function ProjectTagsPopover({
                         </button>
                         <button
                           type="button"
-                          title="Edit label color"
+                          title="Edit label"
+                          aria-label={`Edit label ${tag}`}
                           className={cn(
                             "flex h-7 w-7 shrink-0 items-center justify-center rounded",
                             "text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity",
                             "hover:bg-muted hover:text-foreground",
                           )}
-                          onClick={() => setView({ type: "edit", tag })}
+                          onClick={() => openEditView(tag)}
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"

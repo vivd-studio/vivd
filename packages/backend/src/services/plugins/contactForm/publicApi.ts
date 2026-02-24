@@ -18,3 +18,8 @@ export function getPublicPluginApiBaseUrl(): string {
 export function getContactFormSubmitEndpoint(): string {
   return `${getPublicPluginApiBaseUrl()}/plugins/contact/v1/submit`;
 }
+
+export function getEmailFeedbackEndpoint(provider: string = "ses"): string {
+  const normalizedProvider = provider.trim().toLowerCase() || "ses";
+  return `${getPublicPluginApiBaseUrl()}/email/v1/feedback/${normalizedProvider}`;
+}

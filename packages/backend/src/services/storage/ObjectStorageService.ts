@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -986,6 +987,75 @@ export async function getObjectBuffer(options: {
       ? contentTypeRaw
       : null;
   return { buffer, contentType };
+}
+
+function encodeCopySourceKey(key: string): string {
+  return key
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+export async function copyBucketPrefix(options: {
+  client: S3Client;
+  bucket: string;
+  sourceKeyPrefix: string;
+  targetKeyPrefix: string;
+  concurrency?: number;
+}): Promise<{
+  objectsCopied: number;
+  errors: Array<{ sourceKey: string; targetKey: string; error: string }>;
+}> {
+  const bucket = options.bucket.trim();
+  const sourceKeyPrefix = normalizeKeyPrefix(options.sourceKeyPrefix);
+  const targetKeyPrefix = normalizeKeyPrefix(options.targetKeyPrefix);
+
+  if (!bucket) {
+    throw new Error("Bucket is required");
+  }
+
+  if (sourceKeyPrefix === targetKeyPrefix) {
+    throw new Error("Source and target prefixes must differ");
+  }
+
+  const sourceObjects = await listBucketObjects({
+    client: options.client,
+    bucket,
+    keyPrefix: sourceKeyPrefix,
+  });
+
+  let objectsCopied = 0;
+  const errors: Array<{ sourceKey: string; targetKey: string; error: string }> = [];
+
+  await mapLimit(sourceObjects, options.concurrency ?? 6, async (object) => {
+    const sourceKey = object.key;
+    const relativeKey = sourceKey.startsWith(sourceKeyPrefix)
+      ? sourceKey.slice(sourceKeyPrefix.length)
+      : "";
+    if (!relativeKey) return;
+
+    const targetKey = `${targetKeyPrefix}${relativeKey}`;
+    const copySource = `${bucket}/${encodeCopySourceKey(sourceKey)}`;
+
+    try {
+      await options.client.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          Key: targetKey,
+          CopySource: copySource,
+        }),
+      );
+      objectsCopied += 1;
+    } catch (err) {
+      errors.push({
+        sourceKey,
+        targetKey,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  return { objectsCopied, errors };
 }
 
 export async function deleteBucketPrefix(options: {

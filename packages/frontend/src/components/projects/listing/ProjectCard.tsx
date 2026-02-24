@@ -34,6 +34,7 @@ import {
   Eye,
   EyeOff,
   Image,
+  Pencil,
   Tags,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
@@ -56,6 +57,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 
 export interface VersionInfo {
   version: number;
@@ -163,6 +165,30 @@ export function ProjectCard({
       });
     },
   });
+  const deleteTagMutation = trpc.project.deleteTag.useMutation({
+    onSuccess: () => {
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to delete label", {
+        description: error.message,
+      });
+    },
+  });
+  const renameSlugMutation = trpc.project.renameSlug.useMutation({
+    onSuccess: (data) => {
+      toast.success("Project renamed", {
+        description: `${data.oldSlug} -> ${data.newSlug}`,
+      });
+      setShowRenameDialog(false);
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to rename project", {
+        description: error.message,
+      });
+    },
+  });
 
   const { getColor } = useTagColors();
 
@@ -170,6 +196,8 @@ export function ProjectCard({
     project.currentVersion || 1,
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [renameSlugInput, setRenameSlugInput] = useState(project.slug);
   const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
@@ -188,6 +216,8 @@ export function ProjectCard({
     ROUTES.PROJECT_ANALYTICS?.(project.slug) ??
     `/vivd-studio/projects/${project.slug}/analytics`;
   const canManagePreview = membership?.organizationRole !== "client_editor";
+  const canRenameProject = membership?.organizationRole !== "client_editor";
+  const isRenamePending = renameSlugMutation.isPending;
 
   const getPreviewUrl = () => {
     const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
@@ -239,6 +269,10 @@ export function ProjectCard({
       setSelectedVersion(project.currentVersion);
     }
   }, [project.currentVersion]);
+
+  useEffect(() => {
+    setRenameSlugInput(project.slug);
+  }, [project.slug]);
 
   const hasMultipleVersions = (project.totalVersions || 1) > 1;
   const versions = project.versions || [];
@@ -328,13 +362,13 @@ export function ProjectCard({
   return (
     <>
       <Card
-        className={`flex flex-col h-full overflow-hidden transition-all min-h-[160px] bg-card/50 border-border/50 shadow-sm hover:shadow-md ${
+        className={`relative flex flex-col h-full overflow-hidden transition-all min-h-[160px] bg-card/50 border-border/50 shadow-sm hover:shadow-md ${
           isProcessing
             ? "border-primary/60 ring-1 ring-primary/20 animate-pulse duration-3000"
             : ""
         } ${isCompleted ? "cursor-pointer hover:border-primary/40 hover:bg-card" : ""}`}
         onClick={() => {
-          if (isCompleted) {
+          if (isCompleted && !isRenamePending) {
             navigate(`/vivd-studio/projects/${project.slug}`);
           }
         }}
@@ -386,7 +420,7 @@ export function ProjectCard({
                 }
                 projectTags={projectTags}
                 availableTags={availableTags}
-                isSaving={updateTagsMutation.isPending}
+                isSaving={updateTagsMutation.isPending || deleteTagMutation.isPending}
                 onCommitTags={(tags) => {
                   const isUnchanged =
                     tags.length === projectTags.length &&
@@ -398,12 +432,18 @@ export function ProjectCard({
                     tags,
                   });
                 }}
+                onDeleteTags={(tags) => {
+                  for (const tag of Array.from(new Set(tags))) {
+                    deleteTagMutation.mutate({ tag });
+                  }
+                }}
               >
                 <div
                   ref={tagsAreaAnchorRef}
                   className="flex min-h-[22px] max-w-[200px] cursor-pointer flex-wrap justify-end gap-1 text-right"
                   title="Click to edit labels"
                   onClick={(e) => {
+                    if (isRenamePending) return;
                     e.stopPropagation();
                     openTagsPopover("tags");
                   }}
@@ -528,6 +568,7 @@ export function ProjectCard({
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
                 onClick={(e) => e.stopPropagation()}
+                disabled={isRenamePending}
               >
                 <MoreVertical className="w-4 h-4" />
               </Button>
@@ -673,6 +714,18 @@ export function ProjectCard({
                 <Globe className="w-4 h-4 mr-2" />
                 {project.publishedDomain ? "Manage publishing" : "Publish site"}
               </DropdownMenuItem>
+              {canRenameProject && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRenameSlugInput(project.slug);
+                    setShowRenameDialog(true);
+                  }}
+                  disabled={renameSlugMutation.isPending}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Rename project slug
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={() => onDelete(project.slug)}
                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
@@ -692,6 +745,7 @@ export function ProjectCard({
                 navigate(analyticsPath);
               }}
               title="Analytics"
+              disabled={isRenamePending}
             >
               <BarChart3 className="h-4 w-4" />
             </Button>
@@ -701,7 +755,7 @@ export function ProjectCard({
               variant="outline"
               size="sm"
               className="gap-1.5 border-indigo-300 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-400 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"
-              disabled={isProcessing || isRegenerating}
+              disabled={isProcessing || isRegenerating || isRenamePending}
               onClick={(e) => {
                 e.stopPropagation();
                 onRegenerate(project.slug, selectedVersion);
@@ -715,6 +769,14 @@ export function ProjectCard({
             </Button>
           )}
         </CardFooter>
+        {isRenamePending ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium shadow-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Renaming project slug...
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
@@ -742,6 +804,62 @@ export function ProjectCard({
               }}
             >
               Force Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showRenameDialog}
+        onOpenChange={(open) => {
+          if (isRenamePending) return;
+          setShowRenameDialog(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rename project slug?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Change <strong>{project.slug}</strong> to a new URL slug. This updates
+              project references across the control plane. This can take a while
+              and project actions stay locked until it completes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Input
+              value={renameSlugInput}
+              onChange={(event) => setRenameSlugInput(event.target.value)}
+              placeholder="new-project-slug"
+              autoFocus
+              disabled={isRenamePending}
+            />
+            {isRenamePending ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Renaming in progress. Please keep this page open.
+              </div>
+            ) : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={renameSlugMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                renameSlugMutation.isPending ||
+                !renameSlugInput.trim() ||
+                renameSlugInput.trim().toLowerCase() === project.slug.toLowerCase()
+              }
+              onClick={() => {
+                const nextSlug = renameSlugInput.trim();
+                renameSlugMutation.mutate({
+                  oldSlug: project.slug,
+                  newSlug: nextSlug,
+                  confirmationText: nextSlug,
+                });
+              }}
+            >
+              {renameSlugMutation.isPending ? "Renaming..." : "Rename slug"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

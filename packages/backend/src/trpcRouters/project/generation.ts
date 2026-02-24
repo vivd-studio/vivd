@@ -35,6 +35,7 @@ import {
 } from "../../services/project/ProjectArtifactsService";
 import { getObjectDownloadUrl } from "../../services/storage/ObjectStorageService";
 import { thumbnailService } from "../../services/project/ThumbnailService";
+import { alignProjectArtifactKeyToSlug } from "../../services/project/slugRename";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -773,13 +774,17 @@ export const projectGenerationProcedures = {
 
           const publishInfo = publishedSites.get(slug);
 
-          const thumbnailUrl =
-            versionData?.thumbnailKey
-              ? await getObjectDownloadUrl({
-                  key: versionData.thumbnailKey,
-                  expiresInSeconds: 60 * 60,
-                })
-              : null;
+          const thumbnailKey = alignProjectArtifactKeyToSlug({
+            organizationId,
+            slug,
+            key: versionData?.thumbnailKey ?? null,
+          });
+          const thumbnailUrl = thumbnailKey
+            ? await getObjectDownloadUrl({
+                key: thumbnailKey,
+                expiresInSeconds: 60 * 60,
+              })
+            : null;
 
           return {
             slug,

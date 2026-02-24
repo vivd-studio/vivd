@@ -54,4 +54,44 @@ export const projectTagProcedures = {
         tags: normalizedTags,
       };
     }),
+  deleteTag: adminProcedure
+    .input(
+      z.object({
+        tag: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+
+      let normalizedTag: string;
+      try {
+        normalizedTag = normalizeProjectTags([input.tag])[0] ?? "";
+      } catch (error) {
+        if (error instanceof ProjectTagsValidationError) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+
+      if (!normalizedTag) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Tag cannot be empty.",
+        });
+      }
+
+      const result = await projectMetaService.removeTagFromOrganization({
+        organizationId,
+        tag: normalizedTag,
+      });
+
+      return {
+        success: true,
+        tag: normalizedTag,
+        updatedProjects: result.updatedSlugs.length,
+      };
+    }),
 };

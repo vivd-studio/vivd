@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getManifestMock, setTagsMock } = vi.hoisted(() => ({
+const { getManifestMock, setTagsMock, removeTagFromOrganizationMock } = vi.hoisted(() => ({
   getManifestMock: vi.fn(),
   setTagsMock: vi.fn(),
+  removeTagFromOrganizationMock: vi.fn(),
 }));
 
 vi.mock("../src/generator/versionUtils", () => ({
@@ -12,6 +13,7 @@ vi.mock("../src/generator/versionUtils", () => ({
 vi.mock("../src/services/project/ProjectMetaService", () => ({
   projectMetaService: {
     setTags: setTagsMock,
+    removeTagFromOrganization: removeTagFromOrganizationMock,
   },
 }));
 
@@ -59,11 +61,13 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 describe("project.updateTags", () => {
   const tagsRouter = router({
     updateTags: projectTagProcedures.updateTags,
+    deleteTag: projectTagProcedures.deleteTag,
   });
 
   beforeEach(() => {
     getManifestMock.mockReset();
     setTagsMock.mockReset();
+    removeTagFromOrganizationMock.mockReset();
     getManifestMock.mockResolvedValue({
       url: "https://example.com",
       tags: [],
@@ -73,6 +77,9 @@ describe("project.updateTags", () => {
       publicPreviewEnabled: true,
     });
     setTagsMock.mockResolvedValue(undefined);
+    removeTagFromOrganizationMock.mockResolvedValue({
+      updatedSlugs: ["site-1"],
+    });
   });
 
   it("stores normalized tags", async () => {
@@ -155,5 +162,73 @@ describe("project.updateTags", () => {
       code: "UNAUTHORIZED",
     });
     expect(setTagsMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes a label across all projects in the organization", async () => {
+    removeTagFromOrganizationMock.mockResolvedValueOnce({
+      updatedSlugs: ["site-1", "site-2"],
+    });
+    const caller = tagsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.deleteTag({ tag: " #Marketing " }),
+    ).resolves.toEqual({
+      success: true,
+      tag: "marketing",
+      updatedProjects: 2,
+    });
+
+    expect(removeTagFromOrganizationMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      tag: "marketing",
+    });
+  });
+
+  it("returns BAD_REQUEST when deleting an empty label", async () => {
+    const caller = tagsRouter.createCaller(makeContext());
+
+    await expect(
+      caller.deleteTag({ tag: "   " }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Tag cannot be empty.",
+    });
+    expect(removeTagFromOrganizationMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks client editors from deleting labels", async () => {
+    const caller = tagsRouter.createCaller(
+      makeContext({
+        session: {
+          session: {
+            id: "sess-1",
+            userId: "user-1",
+            expiresAt: new Date(Date.now() + 60_000),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ipAddress: null,
+            userAgent: null,
+          },
+          user: {
+            id: "user-1",
+            email: "client@example.com",
+            name: "Client",
+            role: "super_admin",
+            emailVerified: true,
+            image: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+        organizationRole: "client_editor",
+      }),
+    );
+
+    await expect(
+      caller.deleteTag({ tag: "marketing" }),
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(removeTagFromOrganizationMock).not.toHaveBeenCalled();
   });
 });

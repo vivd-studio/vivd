@@ -18,6 +18,8 @@ import { studioMachineProvider } from "../services/studioMachines";
 import { pluginEntitlementService } from "../services/plugins/PluginEntitlementService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
 import { contactFormTurnstileService } from "../services/plugins/contactForm/turnstile";
+import { getEmailFeedbackEndpoint } from "../services/plugins/contactForm/publicApi";
+import { emailDeliverabilityService } from "../services/email/deliverability";
 import { PLUGIN_IDS } from "../services/plugins/registry";
 import {
   getSystemSettingValue,
@@ -68,6 +70,12 @@ const pluginEntitlementStateSchema = z.enum([
   "enabled",
   "suspended",
 ]);
+const emailDeliverabilityPolicyInputSchema = z.object({
+  autoSuppressBounces: z.boolean(),
+  autoSuppressComplaints: z.boolean(),
+  complaintRateThresholdPercent: z.number().min(0).max(100),
+  bounceRateThresholdPercent: z.number().min(0).max(100),
+});
 
 function getGlobalUserRoleForOrganizationRole(
   _role: z.infer<typeof organizationRoleSchema>,
@@ -574,6 +582,46 @@ export const superAdminRouter = router({
           notes: entitlement.notes,
           changedByUserId: entitlement.changedByUserId,
           updatedAt: entitlement.updatedAt,
+        },
+      };
+    }),
+
+  emailDeliverabilityOverview: superAdminProcedure.query(async () => {
+    const overview = await emailDeliverabilityService.getOverview();
+    return {
+      ...overview,
+      webhookEndpoints: {
+        ses: getEmailFeedbackEndpoint("ses"),
+      },
+    };
+  }),
+
+  emailDeliverabilityUpdatePolicy: superAdminProcedure
+    .input(emailDeliverabilityPolicyInputSchema)
+    .mutation(async ({ input }) => {
+      const overview = await emailDeliverabilityService.updatePolicy(input);
+      return {
+        ...overview,
+        webhookEndpoints: {
+          ses: getEmailFeedbackEndpoint("ses"),
+        },
+      };
+    }),
+
+  emailDeliverabilityUnsuppressRecipient: superAdminProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const overview = await emailDeliverabilityService.unsuppressRecipient({
+        email: input.email,
+      });
+      return {
+        ...overview,
+        webhookEndpoints: {
+          ses: getEmailFeedbackEndpoint("ses"),
         },
       };
     }),

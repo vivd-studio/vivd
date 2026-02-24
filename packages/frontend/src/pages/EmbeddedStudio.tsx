@@ -13,6 +13,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +49,7 @@ import {
   Image,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plug,
   Trash2,
 } from "lucide-react";
@@ -165,13 +167,34 @@ export default function EmbeddedStudio() {
       });
     },
   });
+  const renameSlugMutation = trpc.project.renameSlug.useMutation({
+    onSuccess: (data) => {
+      toast.success("Project renamed", {
+        description: `${data.oldSlug} -> ${data.newSlug}`,
+      });
+      setShowRenameDialog(false);
+      utils.project.list.invalidate();
+      navigate(`${ROUTES.PROJECT(data.newSlug)}${location.search}`, {
+        replace: true,
+      });
+    },
+    onError: (error) => {
+      toast.error("Failed to rename project", {
+        description: error.message,
+      });
+    },
+  });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [renameSlugInput, setRenameSlugInput] = useState(projectSlug ?? "");
   const { data: session } = authClient.useSession();
   const { data: membership } = trpc.organization.getMyMembership.useQuery(
     undefined,
     { enabled: !!session },
   );
   const canManagePreview = membership?.organizationRole !== "client_editor";
+  const canRenameProject = membership?.organizationRole !== "client_editor";
+  const isRenamePending = renameSlugMutation.isPending;
 
   // Reset local state when navigating between projects.
   useEffect(() => {
@@ -182,6 +205,10 @@ export default function EmbeddedStudio() {
     setStudioAccessTokenOverride(null);
     setStudioReloadNonce(0);
   }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
+
+  useEffect(() => {
+    setRenameSlugInput(projectSlug ?? "");
+  }, [projectSlug]);
 
   // If we navigated back from fullscreen with `?view=studio`, prefer showing the running studio.
   useEffect(() => {
@@ -202,6 +229,7 @@ export default function EmbeddedStudio() {
 
   const handleEdit = () => {
     if (!projectSlug || !project) return;
+    if (isRenamePending) return;
     if (editRequested || startStudio.isPending || hardRestartStudio.isPending) return;
     setEditRequested(true);
     setStudioUrlOverride(null);
@@ -211,6 +239,7 @@ export default function EmbeddedStudio() {
 
   const handleHardRestart = async (requestedVersion?: number) => {
     if (!projectSlug || !project) return;
+    if (isRenamePending) return;
 
     const targetVersion =
       typeof requestedVersion === "number" &&
@@ -422,6 +451,7 @@ export default function EmbeddedStudio() {
   }, [externalPreview, projectSlug, project]);
 
   const handleCopyPreviewUrl = () => {
+    if (isRenamePending) return;
     if (!externalPreview || externalPreview.status !== "ready") return;
     const absoluteUrl = new URL(externalPreview.url, window.location.origin).toString();
 
@@ -438,6 +468,7 @@ export default function EmbeddedStudio() {
   };
 
   const handleRegenerateThumbnail = () => {
+    if (isRenamePending) return;
     if (!projectSlug) return;
     regenerateThumbnailMutation.mutate({ slug: projectSlug, version: studioVersion });
   };
@@ -576,7 +607,7 @@ export default function EmbeddedStudio() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {!studioIframeSrc ? (
         <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
           <SidebarTrigger />
@@ -598,7 +629,7 @@ export default function EmbeddedStudio() {
           {!editRequested ? (
             <Button
               onClick={handleEdit}
-              disabled={startStudio.isPending || hardRestartStudio.isPending}
+              disabled={startStudio.isPending || hardRestartStudio.isPending || isRenamePending}
             >
               Edit
             </Button>
@@ -606,6 +637,7 @@ export default function EmbeddedStudio() {
           <Button
             variant="outline"
             onClick={() => setPublishDialogOpen(true)}
+            disabled={isRenamePending}
           >
             Publish
           </Button>
@@ -615,6 +647,7 @@ export default function EmbeddedStudio() {
               size="icon"
               onClick={() => analyticsPath && navigate(analyticsPath)}
               title="Analytics"
+              disabled={isRenamePending}
             >
               <BarChart3 className="h-4 w-4" />
             </Button>
@@ -622,7 +655,12 @@ export default function EmbeddedStudio() {
           <Separator orientation="vertical" className="h-4 mx-0.5" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={isRenamePending}
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -630,7 +668,7 @@ export default function EmbeddedStudio() {
               {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
               <DropdownMenuItem
                 onClick={handleCopyPreviewUrl}
-                disabled={!previewIframeSrc || !publicPreviewEnabled}
+                disabled={!previewIframeSrc || !publicPreviewEnabled || isRenamePending}
               >
                 <Copy className="h-4 w-4 mr-2" />
                 {previewUrlCopied
@@ -648,7 +686,7 @@ export default function EmbeddedStudio() {
                       enabled: !publicPreviewEnabled,
                     });
                   }}
-                  disabled={setPublicPreviewEnabledMutation.isPending}
+                  disabled={setPublicPreviewEnabledMutation.isPending || isRenamePending}
                 >
                   {publicPreviewEnabled ? (
                     <EyeOff className="h-4 w-4 mr-2" />
@@ -663,6 +701,7 @@ export default function EmbeddedStudio() {
               {project?.url && (
                 <DropdownMenuItem
                   onClick={() => window.open(project.url, "_blank")}
+                  disabled={isRenamePending}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Original website
@@ -677,7 +716,7 @@ export default function EmbeddedStudio() {
                     "_blank",
                   );
                 }}
-                disabled={!isSelectedVersionCompleted}
+                disabled={!isSelectedVersionCompleted || isRenamePending}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download as ZIP
@@ -686,7 +725,8 @@ export default function EmbeddedStudio() {
                 onClick={handleRegenerateThumbnail}
                 disabled={
                   !isSelectedVersionCompleted ||
-                  regenerateThumbnailMutation.isPending
+                  regenerateThumbnailMutation.isPending ||
+                  isRenamePending
                 }
               >
                 {regenerateThumbnailMutation.isPending ? (
@@ -700,6 +740,7 @@ export default function EmbeddedStudio() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
+                disabled={isRenamePending}
               >
                 <Plug className="h-4 w-4 mr-2" />
                 Plugins
@@ -707,15 +748,29 @@ export default function EmbeddedStudio() {
               {analyticsAvailable ? (
                 <DropdownMenuItem
                   onClick={() => analyticsPath && navigate(analyticsPath)}
+                  disabled={isRenamePending}
                 >
                   <BarChart3 className="h-4 w-4 mr-2" />
                   Analytics
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuSeparator />
+              {canRenameProject ? (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRenameSlugInput(projectSlug ?? "");
+                    setShowRenameDialog(true);
+                  }}
+                  disabled={renameSlugMutation.isPending || isRenamePending}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Rename project slug
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onClick={() => setShowDeleteConfirm(true)}
                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                disabled={isRenamePending}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete project
@@ -823,6 +878,64 @@ export default function EmbeddedStudio() {
         />
       ) : null}
 
+      <AlertDialog
+        open={showRenameDialog}
+        onOpenChange={(open) => {
+          if (isRenamePending) return;
+          setShowRenameDialog(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rename project slug?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Change <strong>{projectSlug}</strong> to a new URL slug. This
+              updates project references across the control plane. This can take
+              a while and project actions stay locked until it completes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Input
+              value={renameSlugInput}
+              onChange={(event) => setRenameSlugInput(event.target.value)}
+              placeholder="new-project-slug"
+              autoFocus
+              disabled={isRenamePending}
+            />
+            {isRenamePending ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Renaming in progress. Please keep this page open.
+              </div>
+            ) : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={renameSlugMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                renameSlugMutation.isPending ||
+                !projectSlug ||
+                !renameSlugInput.trim() ||
+                renameSlugInput.trim().toLowerCase() === projectSlug.toLowerCase()
+              }
+              onClick={() => {
+                if (!projectSlug) return;
+                const nextSlug = renameSlugInput.trim();
+                renameSlugMutation.mutate({
+                  oldSlug: projectSlug,
+                  newSlug: nextSlug,
+                  confirmationText: nextSlug,
+                });
+              }}
+            >
+              {renameSlugMutation.isPending ? "Renaming..." : "Rename slug"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -853,6 +966,18 @@ export default function EmbeddedStudio() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {isRenamePending ? (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm">
+          <div className="flex max-w-sm flex-col items-center gap-2 rounded-lg border bg-card px-4 py-3 text-center shadow-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div className="text-sm font-medium">Renaming project slug...</div>
+            <div className="text-xs text-muted-foreground">
+              This may take a while. Project actions are temporarily disabled.
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

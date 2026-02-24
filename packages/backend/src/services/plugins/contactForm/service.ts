@@ -25,7 +25,9 @@ import {
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
 } from "./config";
-import { getContactFormSubmitEndpoint } from "./publicApi";
+import {
+  getContactFormSubmitEndpoint,
+} from "./publicApi";
 import { inferContactFormAutoSourceHosts } from "./sourceHosts";
 import { getContactFormSnippets } from "./snippets";
 

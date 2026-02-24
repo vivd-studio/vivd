@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { randomUUID } from "node:crypto";
 import {
   protectedProcedure,
   adminProcedure,
@@ -26,7 +27,19 @@ import path from "path";
 import fs from "fs";
 import { publishService } from "../../services/publish/PublishService";
 import { db } from "../../db";
-import { organization, projectMember, projectMeta, publishedSite } from "../../db/schema";
+import {
+  analyticsEvent,
+  contactFormSubmission,
+  organization,
+  pluginEntitlement,
+  projectMember,
+  projectMeta,
+  projectPluginInstance,
+  projectPublishChecklist,
+  projectVersion,
+  publishedSite,
+  usageRecord,
+} from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import {
   getVivdInternalFilesPath,
@@ -47,12 +60,57 @@ import {
 } from "../../services/storage/ObjectStorageService";
 import { migrateProjectMetadataToDbFromFilesystem } from "../../services/project/ProjectMetaMigrationService";
 import {
+  copyProjectArtifactsInBucket,
   deleteProjectArtifactsFromBucket,
   deleteProjectVersionArtifactsFromBucket,
 } from "../../services/project/ProjectArtifactsService";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { projectMetaService } from "../../services/project/ProjectMetaService";
 import { getProjectArtifactKeyPrefix } from "../../services/project/ProjectStoragePaths";
+import { rewriteProjectArtifactKeyForSlug } from "../../services/project/slugRename";
+
+const PROJECT_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+function normalizeProjectSlug(input: string, fieldName: string): string {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error(`${fieldName} is required`);
+  }
+  if (!PROJECT_SLUG_PATTERN.test(normalized)) {
+    throw new Error(
+      `${fieldName} must use lowercase letters, numbers, and hyphens only`,
+    );
+  }
+  return normalized;
+}
+
+function rewriteChecklistProjectSlug(checklist: unknown, newSlug: string): unknown {
+  if (!checklist || typeof checklist !== "object" || Array.isArray(checklist)) {
+    return checklist;
+  }
+
+  return {
+    ...(checklist as Record<string, unknown>),
+    projectSlug: newSlug,
+  };
+}
+
+function moveDirectory(fromPath: string, toPath: string): void {
+  if (!fs.existsSync(fromPath)) return;
+  if (fs.existsSync(toPath)) {
+    throw new Error(`Target path already exists: ${toPath}`);
+  }
+
+  fs.mkdirSync(path.dirname(toPath), { recursive: true });
+  try {
+    fs.renameSync(fromPath, toPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "EXDEV") throw err;
+    fs.cpSync(fromPath, toPath, { recursive: true });
+    fs.rmSync(fromPath, { recursive: true, force: true });
+  }
+}
 
 export const projectMaintenanceProcedures = {
   /**
@@ -94,6 +152,329 @@ export const projectMaintenanceProcedures = {
         previousStatus: currentStatus,
         newStatus: "failed",
         message: `Reset ${slug} v${targetVersion} from '${currentStatus}' to 'failed'`,
+      };
+    }),
+
+  /**
+   * Rename a project slug within the same organization.
+   *
+   * V1 safety constraints:
+   * - project must be unpublished
+   * - copy bucket prefix first, then DB cutover in transaction
+   */
+  renameSlug: adminProcedure
+    .input(
+      z.object({
+        oldSlug: z.string().min(1),
+        newSlug: z.string().min(1),
+        confirmationText: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const oldSlug = normalizeProjectSlug(input.oldSlug, "oldSlug");
+      const newSlug = normalizeProjectSlug(input.newSlug, "newSlug");
+      const confirmationText = normalizeProjectSlug(
+        input.confirmationText,
+        "confirmationText",
+      );
+
+      if (oldSlug === newSlug) {
+        throw new Error("New slug must be different from the current slug.");
+      }
+      if (confirmationText !== newSlug) {
+        throw new Error("Confirmation text must match the new slug.");
+      }
+
+      const sourceProject = await projectMetaService.getProject(organizationId, oldSlug);
+      if (!sourceProject) {
+        throw new Error("Project not found.");
+      }
+
+      const existingTarget = await projectMetaService.getProject(organizationId, newSlug);
+      if (existingTarget) {
+        throw new Error(`Project slug "${newSlug}" is already in use.`);
+      }
+
+      const publishInfo = await publishService.getPublishedInfo(organizationId, oldSlug);
+      if (publishInfo) {
+        throw new Error(
+          `Cannot rename a published project. Unpublish "${publishInfo.domain}" first.`,
+        );
+      }
+
+      const versions = await projectMetaService.listProjectVersions(organizationId, oldSlug);
+      for (const versionRow of versions) {
+        try {
+          await studioMachineProvider.stop(
+            organizationId,
+            oldSlug,
+            versionRow.version,
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[RenameSlug] Failed to stop studio for ${oldSlug}/v${versionRow.version}: ${message}`,
+          );
+        }
+      }
+
+      let bucketObjectsCopied = 0;
+      try {
+        const copyRes = await copyProjectArtifactsInBucket({
+          organizationId,
+          sourceSlug: oldSlug,
+          targetSlug: newSlug,
+        });
+        if (copyRes.copied) {
+          bucketObjectsCopied = copyRes.objectsCopied;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to copy project artifacts for rename: ${message}`);
+      }
+
+      let dbRowsMoved = 0;
+      try {
+        await db.transaction(async (tx) => {
+          const source = await tx.query.projectMeta.findFirst({
+            where: and(
+              eq(projectMeta.organizationId, organizationId),
+              eq(projectMeta.slug, oldSlug),
+            ),
+          });
+          if (!source) {
+            throw new Error("Project not found during rename.");
+          }
+
+          const target = await tx.query.projectMeta.findFirst({
+            where: and(
+              eq(projectMeta.organizationId, organizationId),
+              eq(projectMeta.slug, newSlug),
+            ),
+            columns: { slug: true },
+          });
+          if (target) {
+            throw new Error(`Project slug "${newSlug}" is already in use.`);
+          }
+
+          await tx.insert(projectMeta).values({
+            ...source,
+            slug: newSlug,
+            updatedAt: new Date(),
+          });
+          dbRowsMoved += 1;
+
+          const sourceVersions = await tx
+            .select()
+            .from(projectVersion)
+            .where(
+              and(
+                eq(projectVersion.organizationId, organizationId),
+                eq(projectVersion.projectSlug, oldSlug),
+              ),
+            );
+          if (sourceVersions.length > 0) {
+            await tx.insert(projectVersion).values(
+              sourceVersions.map((row) => ({
+                ...row,
+                id: randomUUID(),
+                projectSlug: newSlug,
+                thumbnailKey: rewriteProjectArtifactKeyForSlug({
+                  organizationId,
+                  oldSlug,
+                  newSlug,
+                  key: row.thumbnailKey,
+                }),
+              })),
+            );
+            dbRowsMoved += sourceVersions.length;
+          }
+
+          const sourceChecklists = await tx
+            .select()
+            .from(projectPublishChecklist)
+            .where(
+              and(
+                eq(projectPublishChecklist.organizationId, organizationId),
+                eq(projectPublishChecklist.projectSlug, oldSlug),
+              ),
+            );
+          if (sourceChecklists.length > 0) {
+            await tx.insert(projectPublishChecklist).values(
+              sourceChecklists.map((row) => ({
+                ...row,
+                id: randomUUID(),
+                projectSlug: newSlug,
+                checklist: rewriteChecklistProjectSlug(row.checklist, newSlug),
+              })),
+            );
+            dbRowsMoved += sourceChecklists.length;
+          }
+
+          const updatedPlugins = await tx
+            .update(projectPluginInstance)
+            .set({ projectSlug: newSlug, updatedAt: new Date() })
+            .where(
+              and(
+                eq(projectPluginInstance.organizationId, organizationId),
+                eq(projectPluginInstance.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: projectPluginInstance.id });
+          dbRowsMoved += updatedPlugins.length;
+
+          const updatedContactSubmissions = await tx
+            .update(contactFormSubmission)
+            .set({ projectSlug: newSlug })
+            .where(
+              and(
+                eq(contactFormSubmission.organizationId, organizationId),
+                eq(contactFormSubmission.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: contactFormSubmission.id });
+          dbRowsMoved += updatedContactSubmissions.length;
+
+          const updatedAnalytics = await tx
+            .update(analyticsEvent)
+            .set({ projectSlug: newSlug })
+            .where(
+              and(
+                eq(analyticsEvent.organizationId, organizationId),
+                eq(analyticsEvent.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: analyticsEvent.id });
+          dbRowsMoved += updatedAnalytics.length;
+
+          const updatedMembers = await tx
+            .update(projectMember)
+            .set({ projectSlug: newSlug })
+            .where(
+              and(
+                eq(projectMember.organizationId, organizationId),
+                eq(projectMember.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: projectMember.id });
+          dbRowsMoved += updatedMembers.length;
+
+          const updatedEntitlements = await tx
+            .update(pluginEntitlement)
+            .set({ projectSlug: newSlug, updatedAt: new Date() })
+            .where(
+              and(
+                eq(pluginEntitlement.organizationId, organizationId),
+                eq(pluginEntitlement.scope, "project"),
+                eq(pluginEntitlement.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: pluginEntitlement.id });
+          dbRowsMoved += updatedEntitlements.length;
+
+          const updatedUsage = await tx
+            .update(usageRecord)
+            .set({ projectSlug: newSlug })
+            .where(
+              and(
+                eq(usageRecord.organizationId, organizationId),
+                eq(usageRecord.projectSlug, oldSlug),
+              ),
+            )
+            .returning({ id: usageRecord.id });
+          dbRowsMoved += updatedUsage.length;
+
+          const deletedSourceProject = await tx
+            .delete(projectMeta)
+            .where(
+              and(
+                eq(projectMeta.organizationId, organizationId),
+                eq(projectMeta.slug, oldSlug),
+              ),
+            )
+            .returning({ slug: projectMeta.slug });
+
+          if (deletedSourceProject.length === 0) {
+            throw new Error("Failed to finalize slug rename.");
+          }
+        });
+      } catch (err) {
+        if (bucketObjectsCopied > 0) {
+          try {
+            await deleteProjectArtifactsFromBucket({
+              organizationId,
+              slug: newSlug,
+            });
+          } catch (cleanupErr) {
+            const cleanupMessage =
+              cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+            console.warn(
+              `[RenameSlug] Failed to cleanup copied artifacts after DB failure (${organizationId}/${newSlug}): ${cleanupMessage}`,
+            );
+          }
+        }
+        throw err;
+      }
+
+      const warnings: string[] = [];
+
+      const tenantSourceDir = path.join(getTenantProjectsDir(organizationId), oldSlug);
+      const tenantTargetDir = path.join(getTenantProjectsDir(organizationId), newSlug);
+      const legacySourceDir = path.join(getProjectsRootDir(), oldSlug);
+      const legacyTargetDir = path.join(getProjectsRootDir(), newSlug);
+
+      const movePairs = [
+        { from: tenantSourceDir, to: tenantTargetDir },
+        { from: legacySourceDir, to: legacyTargetDir },
+      ];
+
+      const seen = new Set<string>();
+      for (const pair of movePairs) {
+        const key = `${pair.from}=>${pair.to}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        try {
+          moveDirectory(pair.from, pair.to);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          warnings.push(
+            `Local filesystem move failed (${pair.from} -> ${pair.to}): ${message}`,
+          );
+          console.warn(
+            `[RenameSlug] Local move failed for ${pair.from} -> ${pair.to}: ${message}`,
+          );
+        }
+      }
+
+      let bucketObjectsDeleted: number | null = null;
+      try {
+        const cleanupRes = await deleteProjectArtifactsFromBucket({
+          organizationId,
+          slug: oldSlug,
+        });
+        if (cleanupRes.deleted) {
+          bucketObjectsDeleted = cleanupRes.objectsDeleted;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warnings.push(`Source artifact cleanup failed: ${message}`);
+        console.warn(
+          `[RenameSlug] Source artifact cleanup failed for ${organizationId}/${oldSlug}: ${message}`,
+        );
+      }
+
+      return {
+        success: true,
+        oldSlug,
+        newSlug,
+        warnings,
+        summary: {
+          dbRowsMoved,
+          bucketObjectsCopied,
+          bucketObjectsDeleted,
+        },
       };
     }),
 

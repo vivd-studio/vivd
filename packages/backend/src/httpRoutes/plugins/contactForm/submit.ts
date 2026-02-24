@@ -11,6 +11,7 @@ import { inferContactFormAutoSourceHosts } from "../../../services/plugins/conta
 import { contactFormTurnstileService } from "../../../services/plugins/contactForm/turnstile";
 import { getEmailDeliveryService } from "../../../services/integrations/EmailDeliveryService";
 import { buildContactSubmissionEmail } from "../../../services/email/templates";
+import { emailDeliverabilityService } from "../../../services/email/deliverability";
 import {
   extractSourceHostFromHeaders,
   isHostAllowed,
@@ -467,6 +468,25 @@ export function createContactFormPublicRouter(
         );
       }
 
+      const recipientDeliveryFilter =
+        await emailDeliverabilityService.filterSuppressedRecipients({
+          recipientEmails,
+        });
+      if (recipientDeliveryFilter.deliverableRecipients.length === 0) {
+        console.warn("[PublicPlugins] Contact submission blocked (all recipients suppressed)", {
+          organizationId: pluginInstance.organizationId,
+          projectSlug: pluginInstance.projectSlug,
+          suppressedRecipientCount: recipientDeliveryFilter.suppressedRecipients.length,
+        });
+        return sendSubmitError(
+          req,
+          res,
+          503,
+          "plugin_not_configured",
+          "Contact form recipient email is temporarily unavailable",
+        );
+      }
+
       const ignoredPayloadKeys = new Set([
         "token",
         honeypotField,
@@ -752,7 +772,7 @@ export function createContactFormPublicRouter(
 
       const emailService = getEmailDeliveryService();
       const emailResult = await emailService.send({
-        to: recipientEmails,
+        to: recipientDeliveryFilter.deliverableRecipients,
         subject: sanitizeSubject(fields._subject || "", pluginInstance.projectSlug),
         text: submissionEmail.text,
         html: submissionEmail.html,

@@ -3,6 +3,7 @@ import {
   createContactFormPublicRouter,
   type ContactFormPublicRouterDeps,
 } from "./contactForm/submit";
+import { createEmailFeedbackRouter } from "./contactForm/feedback";
 import { createAnalyticsPublicRouter } from "./analytics/runtime";
 
 /**
@@ -27,6 +28,7 @@ export function createPublicPluginsRouter(
     next();
   });
 
+  router.use(createEmailFeedbackRouter());
   router.use("/plugins", createAnalyticsPublicRouter(deps));
   router.use("/plugins", createContactFormPublicRouter(deps));
   return router;

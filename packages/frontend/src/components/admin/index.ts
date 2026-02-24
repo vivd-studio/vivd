@@ -15,5 +15,8 @@ export { MachinesTab } from "./machines";
 // Plugins module (super-admin)
 export { PluginsTab } from "./plugins";
 
+// Email module (super-admin)
+export { EmailTab } from "./email";
+
 // Usage module
 export { UsageStatsCard } from "./usage";

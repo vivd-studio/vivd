@@ -294,6 +294,46 @@ class ProjectMetaService {
     }
   }
 
+  async removeTagFromOrganization(options: {
+    organizationId: string;
+    tag: string;
+  }): Promise<{ updatedSlugs: string[] }> {
+    const projects = await db.query.projectMeta.findMany({
+      where: eq(projectMeta.organizationId, options.organizationId),
+      columns: {
+        slug: true,
+        tags: true,
+      },
+    });
+
+    const updates = projects.flatMap((project) => {
+      const nextTags = project.tags.filter((tag) => tag !== options.tag);
+      if (nextTags.length === project.tags.length) return [];
+      return [{ slug: project.slug, tags: nextTags }];
+    });
+
+    if (updates.length === 0) {
+      return { updatedSlugs: [] };
+    }
+
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      for (const update of updates) {
+        await tx
+          .update(projectMeta)
+          .set({ tags: update.tags, updatedAt: now })
+          .where(
+            and(
+              eq(projectMeta.organizationId, options.organizationId),
+              eq(projectMeta.slug, update.slug),
+            ),
+          );
+      }
+    });
+
+    return { updatedSlugs: updates.map((update) => update.slug) };
+  }
+
   async touchUpdatedAt(organizationId: string, slug: string): Promise<void> {
     await db
       .update(projectMeta)

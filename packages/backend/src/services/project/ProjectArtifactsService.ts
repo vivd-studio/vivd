@@ -2,8 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import {
+  copyBucketPrefix,
   createS3Client,
   deleteBucketPrefix,
+  doesPrefixHaveObjects,
   getObjectStorageConfigFromEnv,
   uploadDirectoryToBucket,
 } from "../storage/ObjectStorageService";
@@ -265,6 +267,50 @@ export async function uploadProjectThumbnailBufferToBucket(options: {
   );
 
   return { uploaded: true, key };
+}
+
+export async function copyProjectArtifactsInBucket(options: {
+  organizationId: string;
+  sourceSlug: string;
+  targetSlug: string;
+}): Promise<{ copied: boolean; objectsCopied: number }> {
+  const storage = getStorage();
+  if (!storage) return { copied: false, objectsCopied: 0 };
+
+  const sourcePrefix = getProjectBasePrefix({
+    tenantId: options.organizationId,
+    slug: options.sourceSlug,
+  });
+  const targetPrefix = getProjectBasePrefix({
+    tenantId: options.organizationId,
+    slug: options.targetSlug,
+  });
+
+  const targetHasObjects = await doesPrefixHaveObjects({
+    client: storage.client,
+    bucket: storage.bucket,
+    keyPrefix: targetPrefix,
+  });
+  if (targetHasObjects) {
+    throw new Error(
+      `Target artifact prefix already exists for slug "${options.targetSlug}".`,
+    );
+  }
+
+  const res = await copyBucketPrefix({
+    client: storage.client,
+    bucket: storage.bucket,
+    sourceKeyPrefix: sourcePrefix,
+    targetKeyPrefix: targetPrefix,
+  });
+  if (res.errors.length > 0) {
+    const first = res.errors[0];
+    throw new Error(
+      `Artifact copy failed for ${res.errors.length} object(s). First failure: ${first?.sourceKey ?? "unknown"} -> ${first?.targetKey ?? "unknown"} (${first?.error ?? "unknown error"})`,
+    );
+  }
+
+  return { copied: true, objectsCopied: res.objectsCopied };
 }
 
 export function getProjectPreviewMetaPathOnDisk(options: {
