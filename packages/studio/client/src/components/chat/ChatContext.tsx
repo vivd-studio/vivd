@@ -18,6 +18,15 @@ import {
 import { useOptionalPreview } from "../preview/PreviewContext";
 import { formatMessageWithSelector } from "./SelectedElementPill";
 import {
+  markEventAsProcessed,
+  normalizeErrorMessage,
+  normalizeMessagePart,
+  type EventDedupState,
+  upsertDeltaStreamingPart,
+  upsertToolStartedPart,
+  updateToolPartStatus,
+} from "./chatStreamUtils";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -130,60 +139,6 @@ export interface ModelTier {
   provider: string;
   modelId: string;
   label: string;
-}
-
-function normalizeToolStatus(part: any): "running" | "completed" | "error" | undefined {
-  const status = part?.status ?? part?.state?.status;
-  if (status === "running" || status === "completed" || status === "error") {
-    return status;
-  }
-  return undefined;
-}
-
-function normalizeErrorMessage(value: unknown): string | undefined {
-  if (!value) return undefined;
-  if (value instanceof Error) return value.message || "Unknown error";
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || undefined;
-  }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const nestedCandidates = [
-      record.message,
-      record.error,
-      record.reason,
-      record.detail,
-    ];
-    for (const candidate of nestedCandidates) {
-      const nested = normalizeErrorMessage(candidate);
-      if (nested) return nested;
-    }
-    try {
-      const serialized = JSON.stringify(value);
-      if (serialized && serialized !== "{}") return serialized;
-    } catch {
-      // Ignore serialization errors.
-    }
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return undefined;
-}
-
-function normalizeMessagePart(part: any): any {
-  if (!part || typeof part !== "object") return part;
-  if (part.type !== "tool") return part;
-
-  return {
-    ...part,
-    status: normalizeToolStatus(part) ?? "completed",
-    input: part.input ?? part.state?.input,
-    error: normalizeErrorMessage(
-      part.error ?? part.state?.error ?? part.output?.error ?? part.state?.output?.error,
-    ),
-  };
 }
 
 interface ChatContextValue {
@@ -376,9 +331,9 @@ export function ChatProvider({
   // Track last processed event ID per session for resumable SSE streams
   // This prevents replay of old events (like session.completed) on reconnect
   const lastEventIdBySession = useRef<Map<string, string>>(new Map());
-  const processedEventIdsBySession = useRef<
-    Map<string, { ids: Set<string>; queue: string[] }>
-  >(new Map());
+  const processedEventIdsBySession = useRef<Map<string, EventDedupState>>(
+    new Map(),
+  );
   const EVENT_ID_DEDUPE_WINDOW = 500;
 
   // Session error state (for quota limits, API errors, etc.)
@@ -419,6 +374,22 @@ export function ChatProvider({
       );
     }
   }, []);
+
+  const buildRunTaskPayload = useCallback(
+    (task: string, sessionId?: string | null) => ({
+      projectSlug,
+      task,
+      ...(sessionId ? { sessionId } : {}),
+      version,
+      model: selectedModel
+        ? {
+            provider: selectedModel.provider,
+            modelId: selectedModel.modelId,
+          }
+        : undefined,
+    }),
+    [projectSlug, version, selectedModel],
+  );
 
   // Load saved model preference or auto-select first model when models become available
   useEffect(() => {
@@ -528,6 +499,8 @@ export function ChatProvider({
     setIsStreaming(false);
     setStreamingParts([]);
     setIsSessionHydrating(false);
+    lastEventIdBySession.current.clear();
+    processedEventIdsBySession.current.clear();
     autoSelectLockedRef.current = false;
     hasAutoSelectedRunningSessionRef.current = false;
   }, [projectSlug]);
@@ -612,56 +585,17 @@ export function ChatProvider({
         ]);
         setInput("");
 
-        // Always start new session when startNewSession is true
-        if (startNewSession) {
-          runTaskMutation.mutate({
-            projectSlug,
-            task: pendingMessage,
-            version,
-            model: selectedModel
-              ? {
-                  provider: selectedModel.provider,
-                  modelId: selectedModel.modelId,
-                }
-              : undefined,
-          });
-        } else {
-          // Use current session if exists
-          const currentSessionId = selectedSessionId;
-          if (currentSessionId) {
-            runTaskMutation.mutate({
-              projectSlug,
-              task: pendingMessage,
-              sessionId: currentSessionId,
-              version,
-              model: selectedModel
-                ? {
-                    provider: selectedModel.provider,
-                    modelId: selectedModel.modelId,
-                  }
-                : undefined,
-            });
-          } else {
-            runTaskMutation.mutate({
-              projectSlug,
-              task: pendingMessage,
-              version,
-              model: selectedModel
-                ? {
-                    provider: selectedModel.provider,
-                    modelId: selectedModel.modelId,
-                  }
-                : undefined,
-            });
-          }
-        }
+        const targetSessionId = startNewSession ? null : selectedSessionId;
+        runTaskMutation.mutate(
+          buildRunTaskPayload(pendingMessage, targetSessionId),
+        );
       }, 100);
     }
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
-    projectSlug,
-    version,
+    selectedSessionId,
+    buildRunTaskPayload,
   ]);
 
   useEffect(() => {
@@ -818,23 +752,15 @@ export function ChatProvider({
       onData: (trackedEvent) => {
         // Track and dedupe event IDs to avoid duplicate UI rendering on replay.
         if (selectedSessionId && trackedEvent.id) {
-          const entry =
-            processedEventIdsBySession.current.get(selectedSessionId) ?? {
-              ids: new Set<string>(),
-              queue: [],
-            };
-          if (entry.ids.has(trackedEvent.id)) {
+          const isNewEvent = markEventAsProcessed(
+            processedEventIdsBySession.current,
+            selectedSessionId,
+            trackedEvent.id,
+            EVENT_ID_DEDUPE_WINDOW,
+          );
+          if (!isNewEvent) {
             return;
           }
-          entry.ids.add(trackedEvent.id);
-          entry.queue.push(trackedEvent.id);
-          if (entry.queue.length > EVENT_ID_DEDUPE_WINDOW) {
-            const evicted = entry.queue.shift();
-            if (evicted) {
-              entry.ids.delete(evicted);
-            }
-          }
-          processedEventIdsBySession.current.set(selectedSessionId, entry);
 
           // Keep pointer for resumable streams.
           lastEventIdBySession.current.set(selectedSessionId, trackedEvent.id);
@@ -856,62 +782,20 @@ export function ChatProvider({
             break;
 
           case "reasoning.delta":
-            // Ensure we mark as streaming when receiving content
+          case "message.delta": {
             setIsStreaming(true);
             setIsWaiting(false);
             if ("content" in innerData && "partId" in innerData) {
-              const partId = innerData.partId;
-              setStreamingParts((prev) => {
-                const existingIndex = prev.findIndex((p) => p.id === partId);
-                if (existingIndex !== -1) {
-                  const newParts = [...prev];
-                  newParts[existingIndex] = {
-                    ...newParts[existingIndex],
-                    text: newParts[existingIndex].text + innerData.content,
-                  };
-                  return newParts;
-                } else {
-                  return [
-                    ...prev,
-                    {
-                      id: partId,
-                      type: "reasoning",
-                      text: innerData.content,
-                    },
-                  ];
-                }
-              });
+              const partId = innerData.partId as string;
+              const content = innerData.content as string;
+              const partType =
+                innerData.kind === "reasoning.delta" ? "reasoning" : "text";
+              setStreamingParts((prev) =>
+                upsertDeltaStreamingPart(prev, partId, partType, content),
+              );
             }
             break;
-
-          case "message.delta":
-            // Ensure we mark as streaming when receiving content
-            setIsStreaming(true);
-            setIsWaiting(false);
-            if ("content" in innerData && "partId" in innerData) {
-              const partId = innerData.partId;
-              setStreamingParts((prev) => {
-                const existingIndex = prev.findIndex((p) => p.id === partId);
-                if (existingIndex !== -1) {
-                  const newParts = [...prev];
-                  newParts[existingIndex] = {
-                    ...newParts[existingIndex],
-                    text: newParts[existingIndex].text + innerData.content,
-                  };
-                  return newParts;
-                } else {
-                  return [
-                    ...prev,
-                    {
-                      id: partId,
-                      type: "text",
-                      text: innerData.content,
-                    },
-                  ];
-                }
-              });
-            }
-            break;
+          }
 
           case "tool.started":
             if ("toolId" in innerData && "tool" in innerData) {
@@ -922,31 +806,9 @@ export function ChatProvider({
               const title =
                 "title" in innerData ? (innerData.title as string) : undefined;
 
-              setStreamingParts((prev) => {
-                const existingIndex = prev.findIndex((p) => p.id === toolId);
-                if (existingIndex >= 0) {
-                  const next = [...prev];
-                  next[existingIndex] = {
-                    ...next[existingIndex],
-                    type: "tool",
-                    tool,
-                    title,
-                    status: "running",
-                  };
-                  return next;
-                }
-
-                return [
-                  ...prev,
-                  {
-                    id: toolId,
-                    type: "tool",
-                    tool,
-                    title,
-                    status: "running",
-                  },
-                ];
-              });
+              setStreamingParts((prev) =>
+                upsertToolStartedPart(prev, toolId, tool, title),
+              );
             }
             break;
 
@@ -954,9 +816,7 @@ export function ChatProvider({
             if ("toolId" in innerData) {
               const toolId = innerData.toolId as string;
               setStreamingParts((prev) =>
-                prev.map((p) =>
-                  p.id === toolId ? { ...p, status: "completed" } : p,
-                ),
+                updateToolPartStatus(prev, toolId, "completed"),
               );
             }
             break;
@@ -968,11 +828,7 @@ export function ChatProvider({
                 "error" in innerData ? innerData.error : undefined,
               );
               setStreamingParts((prev) =>
-                prev.map((p) =>
-                  p.id === toolId
-                    ? { ...p, status: "error", error: errorMessage }
-                    : p,
-                ),
+                updateToolPartStatus(prev, toolId, "error", errorMessage),
               );
             }
             break;
@@ -1070,7 +926,9 @@ export function ChatProvider({
       setIsSessionHydrating(false);
       const mappedMessages: Message[] = sessionMessages.map((msg: any) => {
         const role = msg.info?.role === "assistant" ? "agent" : "user";
-        const normalizedParts = (msg.parts ?? []).map(normalizeMessagePart);
+        const normalizedParts = (msg.parts ?? [])
+          .map(normalizeMessagePart)
+          .filter(Boolean);
         const textContent =
           normalizedParts
             ?.filter((p: any) => p.type === "text")
@@ -1393,44 +1251,10 @@ export function ChatProvider({
 
     debugLog("[Vivd] Sending prompt:", task);
 
-    if (selectedSessionId) {
-      setMessages((prev) => [...prev, { role: "user", content: task }]);
-      runTaskMutation.mutate(
-        {
-          projectSlug,
-          task,
-          sessionId: selectedSessionId,
-          version,
-          model: selectedModel
-            ? {
-                provider: selectedModel.provider,
-                modelId: selectedModel.modelId,
-              }
-            : undefined,
-        },
-        {
-          onSettled: () => setIsSending(false),
-        },
-      );
-    } else {
-      setMessages((prev) => [...prev, { role: "user", content: task }]);
-      runTaskMutation.mutate(
-        {
-          projectSlug,
-          task,
-          version,
-          model: selectedModel
-            ? {
-                provider: selectedModel.provider,
-                modelId: selectedModel.modelId,
-              }
-            : undefined,
-        },
-        {
-          onSettled: () => setIsSending(false),
-        },
-      );
-    }
+    setMessages((prev) => [...prev, { role: "user", content: task }]);
+    runTaskMutation.mutate(buildRunTaskPayload(task, selectedSessionId), {
+      onSettled: () => setIsSending(false),
+    });
   };
 
   const handleNewSession = () => {

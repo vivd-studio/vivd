@@ -20,6 +20,11 @@ import {
   parseVivdInternalTags,
 } from "./SelectedElementPill";
 import { useChatContext } from "./ChatContext";
+import {
+  normalizeErrorMessage,
+  sanitizeThoughtText,
+  normalizeToolStatus,
+} from "./chatStreamUtils";
 
 export function MessageList() {
   const {
@@ -447,25 +452,30 @@ function MessagePartBubble({
   isLast?: boolean;
 }) {
   if (part.type === "reasoning") {
+    const thoughtText = sanitizeThoughtText(part.text ?? "");
+    if (!thoughtText.trim()) {
+      return null;
+    }
+
     // Determine active state: must be streaming AND be the last item
     const isActive = isStreaming && isLast;
 
     return (
       <ThinkingBlock
-        text={part.text}
+        text={thoughtText}
         isStreaming={isActive} // Only show spinner if active
         label="Thought"
       />
     );
   }
   if (part.type === "tool") {
-    const toolStatus = part.status ?? part.state?.status;
-    const toolError =
+    const toolStatus = normalizeToolStatus(part) ?? "completed";
+    const toolError = normalizeErrorMessage(
       part.error ??
-      part.state?.error?.message ??
-      part.state?.error ??
-      part.output?.error ??
-      part.state?.output?.error;
+        part.state?.error ??
+        part.output?.error ??
+        part.state?.output?.error,
+    );
 
     return (
       <div className="rounded-lg px-3 py-2 text-xs font-mono w-full max-w-md">
