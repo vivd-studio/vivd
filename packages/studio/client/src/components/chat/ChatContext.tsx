@@ -5,27 +5,37 @@ import {
   useEffect,
   useRef,
   useCallback,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
-import { getVivdStudioToken, VIVD_STUDIO_TOKEN_HEADER } from "@/lib/studioAuth";
 import {
-  POLLING_IDLE,
   POLLING_INFREQUENT,
-  getActivePollingInterval,
-  getSessionStatusPollingInterval,
 } from "@/app/config/polling";
 import { useOptionalPreview } from "../preview/PreviewContext";
-import { formatMessageWithSelector } from "./SelectedElementPill";
 import {
   markEventAsProcessed,
-  normalizeErrorMessage,
-  normalizeMessagePart,
   type EventDedupState,
-  upsertDeltaStreamingPart,
-  upsertToolStartedPart,
-  updateToolPartStatus,
 } from "./chatStreamUtils";
+import type {
+  ChatContextValue,
+  Message,
+  ModelTier,
+  SessionDebugState,
+  SessionError,
+  UsageData,
+} from "./chatTypes";
+import {
+  calculateUsageFromSessionMessages,
+  mapSessionMessagesToChatMessages,
+  shouldRecoverFromMissedStreamEvents,
+} from "./chatMessageUtils";
+import { useChatAttachments } from "./useChatAttachments";
+import { useChatSessions } from "./useChatSessions";
+import {
+  handleSessionEvent,
+  handleSessionStreamError,
+} from "./chatEventHandlers";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,176 +47,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-
-// Types
-export interface Message {
-  id?: string;
-  role: "user" | "agent";
-  content: string;
-  parts?: any[];
-}
-
-interface Session {
-  id: string;
-  title?: string;
-  time?: {
-    created?: number;
-    updated?: number;
-  };
-  revert?: { messageID: string };
-}
-
-interface AttachedElement {
-  selector: string;
-  description: string;
-  text?: string;
-  filename?: string;
-  astroSourceFile?: string | null;
-  astroSourceLoc?: string | null;
-}
-
-export interface AttachedImage {
-  file: File;
-  previewUrl: string;
-  tempId: string;
-}
-
-export interface AttachedFile {
-  path: string;
-  filename: string;
-  id: string;
-}
-
-// Debug state for session monitoring
-export interface UsageData {
-  cost: number;
-  tokens: {
-    input: number;
-    output: number;
-    reasoning: number;
-    cache: {
-      read: number;
-      write: number;
-    };
-  };
-}
-
-// Debug state for session monitoring
-export interface SessionDebugState {
-  selectedSessionId: string | null;
-  isStreaming: boolean;
-  isWaiting: boolean;
-  isThinking: boolean;
-  streamingPartsCount: number;
-  messagesCount: number;
-  sseConnected: boolean;
-  lastEventTime: string | null;
-  lastEventType: string | null;
-  lastEventId: string | null; // Last processed event ID for resumable streams
-  sessionError: SessionError | null;
-  sessionStatus: string | null; // "idle" | "busy" | "retry" from backend
-  usage: UsageData | null;
-}
-
-export interface SessionError {
-  type: string;
-  message: string;
-  attempt?: number;
-  nextRetryAt?: number;
-}
-
-// Usage limit status from backend
-export interface UsageLimitStatus {
-  blocked: boolean; // True if cost limits exceeded (blocks agent/generation)
-  imageGenBlocked: boolean; // True if image generation limit exceeded (blocks only images)
-  warnings: string[];
-  usage: {
-    daily: { current: number; limit: number; percentage: number };
-    weekly: { current: number; limit: number; percentage: number };
-    monthly: { current: number; limit: number; percentage: number };
-    imageGen: { current: number; limit: number; percentage: number };
-  };
-  nextReset: {
-    daily: Date | string;
-    weekly: Date | string;
-    monthly: Date | string;
-  };
-}
-
-// Model tier from backend
-export interface ModelTier {
-  tier: "standard" | "advanced" | "pro";
-  provider: string;
-  modelId: string;
-  label: string;
-}
-
-interface ChatContextValue {
-  // Project info
-  projectSlug: string;
-  version?: number;
-
-  // Session state
-  sessions: Session[];
-  sessionsLoading: boolean;
-  selectedSessionId: string | null;
-  setSelectedSessionId: (id: string | null) => void;
-  isSessionHydrating: boolean;
-
-  // Messages
-  messages: Message[];
-
-  // Streaming state
-  isStreaming: boolean;
-  isWaiting: boolean;
-  isThinking: boolean;
-  streamingParts: any[];
-
-  // Input state
-  input: string;
-  setInput: (value: string) => void;
-  attachedElement: AttachedElement | null;
-  setAttachedElement: (element: AttachedElement | null) => void;
-  attachedImages: AttachedImage[];
-  addAttachedImages: (images: AttachedImage[]) => void;
-  removeAttachedImage: (tempId: string) => void;
-  attachedFiles: AttachedFile[];
-  addAttachedFile: (file: AttachedFile) => void;
-  removeAttachedFile: (id: string) => void;
-
-  // Element selector
-  selectorMode: boolean;
-  setSelectorMode: ((mode: boolean) => void) | undefined;
-  selectorModeAvailable: boolean;
-
-  // Derived state
-  isReverted: boolean;
-  isLoading: boolean;
-
-  // Debug
-  sessionDebugState: SessionDebugState;
-
-  // Error state
-  sessionError: SessionError | null;
-  clearSessionError: () => void;
-
-  // Usage limits
-  usageLimitStatus: UsageLimitStatus | null;
-  isUsageBlocked: boolean;
-
-  // Model selection
-  availableModels: ModelTier[];
-  selectedModel: ModelTier | null;
-  setSelectedModel: (model: ModelTier | null) => void;
-
-  // Actions
-  handleSend: () => void;
-  handleNewSession: () => void;
-  handleDeleteSession: (e: React.MouseEvent, sessionId: string) => void;
-  handleRevert: (messageId: string) => void;
-  handleUnrevert: () => void;
-  handleStopGeneration: () => void;
-}
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
@@ -254,43 +94,20 @@ export function ChatProvider({
   const selectedElement = previewContext?.selectedElement ?? null;
   const clearSelectedElement = previewContext?.clearSelectedElement;
 
-  // Local state for attached element (shown as pill)
-  const [attachedElement, setAttachedElement] =
-    useState<AttachedElement | null>(null);
-
-  // Local state for attached images (dropped/pasted in chat)
-  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
-
-  const addAttachedImages = useCallback((images: AttachedImage[]) => {
-    setAttachedImages((prev) => [...prev, ...images]);
-  }, []);
-
-  const removeAttachedImage = useCallback((tempId: string) => {
-    setAttachedImages((prev) => {
-      const toRemove = prev.find((img) => img.tempId === tempId);
-      if (toRemove) {
-        URL.revokeObjectURL(toRemove.previewUrl);
-      }
-      return prev.filter((img) => img.tempId !== tempId);
-    });
-  }, []);
-
-  // Local state for attached files (from asset explorer context menu)
-  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-
-  const addAttachedFile = useCallback((file: AttachedFile) => {
-    setAttachedFiles((prev) => {
-      // Avoid duplicates by path
-      if (prev.some((f) => f.path === file.path)) {
-        return prev;
-      }
-      return [...prev, file];
-    });
-  }, []);
-
-  const removeAttachedFile = useCallback((id: string) => {
-    setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
-  }, []);
+  const {
+    attachedElement,
+    setAttachedElement,
+    attachedImages,
+    addAttachedImages,
+    removeAttachedImage,
+    attachedFiles,
+    addAttachedFile,
+    removeAttachedFile,
+    buildTaskWithAttachments,
+  } = useChatAttachments({
+    projectSlug,
+    version,
+  });
 
   const [messages, setMessages] = useState<Message[]>([]);
   // Ref to access current messages in effects without adding to dependency array
@@ -299,19 +116,9 @@ export function ChatProvider({
   const [input, setInput] = useState("");
   // Track if we're in the process of sending (includes image upload phase)
   const [isSending, setIsSending] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
-    null,
-  );
-  const [isSessionHydrating, setIsSessionHydrating] = useState(false);
-  const bootstrapSessionsPollUntilRef = useRef(Date.now() + 60_000);
   const pendingSessionIdRef = useRef<string | null>(null);
   const autoSelectLockedRef = useRef(false);
   const hasAutoSelectedRunningSessionRef = useRef(false);
-
-  // Derive isReverted from session data instead of local state
-  const selectedSession = sessions.find((s) => s.id === selectedSessionId);
-  const isReverted = Boolean(selectedSession?.revert);
 
   // Real-time streaming state from SSE subscription
   const [isStreaming, setIsStreaming] = useState(false);
@@ -321,6 +128,33 @@ export function ChatProvider({
   // Track if we're waiting for agent response
   const isWaitingForAgent = useRef(false);
   const [isWaiting, setIsWaiting] = useState(false);
+
+  const {
+    sessions,
+    sessionsLoading,
+    selectedSessionId,
+    setSelectedSessionId,
+    selectSession,
+    isSessionHydrating,
+    setIsSessionHydrating,
+    sessionMessages,
+    sessionMessagesIsError,
+    sessionMessagesError,
+    refetchMessages,
+    refetchSessions,
+    currentSessionStatus,
+    shouldSubscribeToSessionEvents,
+  } = useChatSessions({
+    projectSlug,
+    version,
+    isActive: isWaiting || isStreaming,
+    autoSelectLockedRef,
+    hasAutoSelectedRunningSessionRef,
+  });
+
+  // Derive isReverted from session data instead of local state
+  const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+  const isReverted = Boolean(selectedSession?.revert);
 
   // Debug tracking for SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
@@ -449,50 +283,6 @@ export function ChatProvider({
     setConfirmDialog((prev) => ({ ...prev, open: false }));
   }, []);
 
-  // On studio boot, OpenCode data hydration can lag the initial UI render.
-  // Poll sessions for a short window so existing sessions appear without requiring user interaction.
-  useEffect(() => {
-    bootstrapSessionsPollUntilRef.current = Date.now() + 60_000;
-  }, [projectSlug, version]);
-
-  // Poll for sessions to keep the list and status updated
-  const {
-    data: sessionsData,
-    refetch: refetchSessions,
-    isLoading: sessionsLoading,
-  } = trpc.agent.listSessions.useQuery(
-    { projectSlug, version },
-    {
-      refetchOnMount: true,
-      refetchInterval: (query) => {
-        const activeInterval = getActivePollingInterval(isWaiting || isStreaming);
-        if (activeInterval) return activeInterval;
-
-        const sessionsCount = query.state.data?.length ?? 0;
-        const shouldBootstrapPoll =
-          sessionsCount === 0 &&
-          Date.now() < bootstrapSessionsPollUntilRef.current;
-
-        return shouldBootstrapPoll ? POLLING_IDLE : false;
-      },
-    },
-  );
-
-  // Poll for session statuses - this is the source of truth for whether a session is active
-  const { data: sessionStatuses } = trpc.agent.getSessionsStatus.useQuery(
-    { projectSlug, version },
-    {
-      refetchInterval: getSessionStatusPollingInterval(
-        isWaiting || isStreaming,
-      ),
-    },
-  );
-
-  // Get current session's status from polled data
-  const currentSessionStatus = selectedSessionId
-    ? sessionStatuses?.[selectedSessionId]
-    : undefined;
-
   useEffect(() => {
     setSelectedSessionId(null);
     setMessages([]);
@@ -599,65 +389,6 @@ export function ChatProvider({
   ]);
 
   useEffect(() => {
-    if (sessionsData) {
-      setSessions(sessionsData);
-    }
-  }, [sessionsData]);
-
-  useEffect(() => {
-    if (
-      selectedSessionId ||
-      autoSelectLockedRef.current ||
-      hasAutoSelectedRunningSessionRef.current
-    ) {
-      return;
-    }
-
-    if (!sessionStatuses || sessions.length === 0) {
-      return;
-    }
-
-    const activeSessions = sessions.filter((session) => {
-      const status = sessionStatuses?.[session.id];
-      return status && status.type !== "idle";
-    });
-
-    if (activeSessions.length === 0) {
-      return;
-    }
-
-    const getSessionTimestamp = (session: Session) =>
-      session.time?.updated ?? session.time?.created ?? 0;
-    const mostRecentSession = activeSessions.reduce((latest, session) => {
-      return getSessionTimestamp(session) > getSessionTimestamp(latest)
-        ? session
-        : latest;
-    }, activeSessions[0]);
-
-    hasAutoSelectedRunningSessionRef.current = true;
-    setSelectedSessionId(mostRecentSession.id);
-  }, [selectedSessionId, sessionStatuses, sessions]);
-
-  // Poll for messages of the selected session
-  const {
-    data: sessionMessages,
-    refetch: refetchMessages,
-    isError: sessionMessagesIsError,
-    error: sessionMessagesError,
-  } = trpc.agent.getSessionContent.useQuery(
-      {
-        sessionId: selectedSessionId!,
-        projectSlug,
-        version,
-      },
-      {
-        enabled: !!selectedSessionId,
-        // Poll when active as a recovery mechanism in case SSE events are missed
-        refetchInterval: getActivePollingInterval(isWaiting || isStreaming),
-      },
-    );
-
-  useEffect(() => {
     if (!selectedSessionId) return;
     if (!sessionMessagesIsError) return;
 
@@ -668,21 +399,6 @@ export function ChatProvider({
         (sessionMessagesError as any)?.message || "Failed to load session",
     });
   }, [selectedSessionId, sessionMessagesIsError, sessionMessagesError]);
-
-  // Force refetch messages when switching to a session
-  // This ensures we get fresh data even if the session completed while we were away
-  useEffect(() => {
-    if (selectedSessionId) {
-      refetchMessages();
-    }
-  }, [selectedSessionId, refetchMessages]);
-
-  const shouldSubscribeToSessionEvents =
-    !!selectedSessionId &&
-    (isWaiting ||
-      isStreaming ||
-      currentSessionStatus?.type === "busy" ||
-      currentSessionStatus?.type === "retry");
 
   // Sync local streaming state with the polled session status (source of truth)
   // This handles cases where SSE events were missed (reconnection, session switch, page refresh)
@@ -767,156 +483,37 @@ export function ChatProvider({
         }
 
         const event = trackedEvent.data;
-        const innerData = event.data;
+        const innerData = event.data as { kind: string; [key: string]: unknown };
 
         // Track debug info
         setLastEventTime(new Date().toISOString());
         setLastEventType(innerData.kind);
 
-        switch (innerData.kind) {
-          case "thinking.started":
-            // Clear any stale streaming parts from previous turns
-            setStreamingParts([]);
-            setIsStreaming(false);
-            setIsWaiting(true);
-            break;
-
-          case "reasoning.delta":
-          case "message.delta": {
-            setIsStreaming(true);
-            setIsWaiting(false);
-            if ("content" in innerData && "partId" in innerData) {
-              const partId = innerData.partId as string;
-              const content = innerData.content as string;
-              const partType =
-                innerData.kind === "reasoning.delta" ? "reasoning" : "text";
-              setStreamingParts((prev) =>
-                upsertDeltaStreamingPart(prev, partId, partType, content),
-              );
-            }
-            break;
-          }
-
-          case "tool.started":
-            if ("toolId" in innerData && "tool" in innerData) {
-              setIsStreaming(true);
-              setIsWaiting(false);
-              const toolId = innerData.toolId as string;
-              const tool = innerData.tool as string;
-              const title =
-                "title" in innerData ? (innerData.title as string) : undefined;
-
-              setStreamingParts((prev) =>
-                upsertToolStartedPart(prev, toolId, tool, title),
-              );
-            }
-            break;
-
-          case "tool.completed":
-            if ("toolId" in innerData) {
-              const toolId = innerData.toolId as string;
-              setStreamingParts((prev) =>
-                updateToolPartStatus(prev, toolId, "completed"),
-              );
-            }
-            break;
-
-          case "tool.error":
-            if ("toolId" in innerData) {
-              const toolId = innerData.toolId as string;
-              const errorMessage = normalizeErrorMessage(
-                "error" in innerData ? innerData.error : undefined,
-              );
-              setStreamingParts((prev) =>
-                updateToolPartStatus(prev, toolId, "error", errorMessage),
-              );
-            }
-            break;
-
-          case "session.completed":
-            setIsStreaming(false);
-            setStreamingParts([]);
-            isWaitingForAgent.current = false;
-            setIsWaiting(false);
-            setSessionError(null); // Clear any previous errors on success
-            refetchMessages();
-            // Refetch usage status immediately to get accurate limits after task completion
-            refetchUsageStatus();
-            onTaskComplete?.();
-            break;
-
-          case "session.error":
-            // Handle session errors (quota exceeded, retry status, etc.)
-            if ("errorType" in innerData && "message" in innerData) {
-              setSessionError({
-                type: innerData.errorType as string,
-                message: innerData.message as string,
-                attempt: (innerData as any).attempt,
-                nextRetryAt: (innerData as any).nextRetryAt,
-              });
-              // Clear waiting states - we're in an error state now
-              setIsWaiting(false);
-              setIsStreaming(false);
-              setStreamingParts([]);
-              isWaitingForAgent.current = false;
-            }
-            break;
-
-          case "usage.updated":
-            // Real-time usage updates during streaming.
-            // These are delta values for individual steps.
-            // The history calculation from sessionMessages is the source of truth
-            // and will correct any accumulated values on next poll (every 2s).
-            // Server-side idempotency prevents duplicate recording, so this is
-            // purely for UI responsiveness during active streaming.
-            if ("cost" in innerData && "tokens" in innerData) {
-              setUsage((prev) => {
-                const prevCost = prev?.cost || 0;
-                const prevTokens = prev?.tokens || {
-                  input: 0,
-                  output: 0,
-                  reasoning: 0,
-                  cache: { read: 0, write: 0 },
-                };
-
-                // Add delta to previous total for real-time feedback
-                return {
-                  cost: prevCost + (innerData.cost as number),
-                  tokens: {
-                    input: prevTokens.input + (innerData.tokens as any).input,
-                    output:
-                      prevTokens.output + (innerData.tokens as any).output,
-                    reasoning:
-                      prevTokens.reasoning +
-                      ((innerData.tokens as any).reasoning || 0),
-                    cache: {
-                      read:
-                        prevTokens.cache.read +
-                        ((innerData.tokens as any).cache?.read || 0),
-                      write:
-                        prevTokens.cache.write +
-                        ((innerData.tokens as any).cache?.write || 0),
-                    },
-                  },
-                };
-              });
-            }
-            break;
-        }
+        handleSessionEvent({
+          eventData: innerData,
+          setStreamingParts,
+          setIsStreaming,
+          setIsWaiting,
+          isWaitingForAgent,
+          setSessionError,
+          refetchMessages,
+          refetchUsageStatus,
+          setUsage,
+          onTaskComplete,
+        });
       },
       onError: (err) => {
         console.error("[SessionEvents] Subscription error:", err);
-        setSseConnected(false);
-        setIsStreaming(false);
-        setIsWaiting(false);
-        isWaitingForAgent.current = false;
-        setSessionError({
-          type: "stream",
-          message: err?.message || "Live updates disconnected",
+        handleSessionStreamError({
+          error: err,
+          setSseConnected,
+          setIsStreaming,
+          setIsWaiting,
+          isWaitingForAgent,
+          setSessionError,
+          refetchMessages,
+          refetchSessions,
         });
-        // Refetch messages on SSE error to ensure state is synchronized
-        refetchMessages();
-        refetchSessions();
       },
     },
   );
@@ -924,91 +521,30 @@ export function ChatProvider({
   useEffect(() => {
     if (sessionMessages && selectedSessionId) {
       setIsSessionHydrating(false);
-      const mappedMessages: Message[] = sessionMessages.map((msg: any) => {
-        const role = msg.info?.role === "assistant" ? "agent" : "user";
-        const normalizedParts = (msg.parts ?? [])
-          .map(normalizeMessagePart)
-          .filter(Boolean);
-        const textContent =
-          normalizedParts
-            ?.filter((p: any) => p.type === "text")
-            .map((p: any) => p.text)
-            .join("\n") || "";
-
-        return {
-          id: msg.info?.id,
-          role,
-          content: textContent,
-          parts: normalizedParts,
-        };
-      });
+      const mappedMessages = mapSessionMessagesToChatMessages(sessionMessages);
       setMessages(mappedMessages);
 
-      // Calculate total usage from history
-      let totalCost = 0;
-      const totalTokens = {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      };
-
-      sessionMessages.forEach((msg: any) => {
-        const info = msg.info || msg; // Handle wrapped or direct message
-        if (info && info.role === "assistant" && info.cost) {
-          totalCost += info.cost || 0;
-          if (info.tokens) {
-            totalTokens.input += info.tokens.input || 0;
-            totalTokens.output += info.tokens.output || 0;
-            totalTokens.reasoning += info.tokens.reasoning || 0;
-            if (info.tokens.cache) {
-              totalTokens.cache.read += info.tokens.cache.read || 0;
-              totalTokens.cache.write += info.tokens.cache.write || 0;
-            }
-          }
-        }
-      });
-
-      if (totalCost > 0) {
-        setUsage({
-          cost: totalCost,
-          tokens: totalTokens,
-        });
+      const calculatedUsage = calculateUsageFromSessionMessages(sessionMessages);
+      if (calculatedUsage) {
+        setUsage(calculatedUsage);
       }
 
       // Recovery: If we're waiting/streaming but the fetched messages include a
       // NEWER agent response than what's in our current messages, we likely missed
       // the SSE event. Only apply recovery if we sent a user message that the server
       // has now responded to.
-      if ((isWaiting || isStreaming) && mappedMessages.length > 0) {
-        const lastFetchedMessage = mappedMessages[mappedMessages.length - 1];
-        const currentMessages = messagesRef.current;
-        const lastLocalMessage = currentMessages[currentMessages.length - 1];
-
-        // Only recover if:
-        // 1. The fetched messages end with an agent message with content
-        // 2. AND our local messages also end with a user message that was already sent
-        //    (meaning the server has responded but we missed the SSE)
-        // 3. OR fetched message count is higher (new messages arrived)
-        const serverHasAgentResponse =
-          lastFetchedMessage.role === "agent" && lastFetchedMessage.content;
-        const localEndsWithUser = lastLocalMessage?.role === "user";
-        const fetchedMessageCountHigher =
-          mappedMessages.length > currentMessages.length;
-
-        if (
-          serverHasAgentResponse &&
-          (localEndsWithUser || fetchedMessageCountHigher)
-        ) {
-          debugLog(
-            "[ChatContext] Recovery: Task completed but state was stuck. Resetting.",
-          );
-          setIsStreaming(false);
-          setIsWaiting(false);
-          isWaitingForAgent.current = false;
-          setStreamingParts([]);
-          onTaskComplete?.();
-        }
+      if (
+        (isWaiting || isStreaming) &&
+        shouldRecoverFromMissedStreamEvents(mappedMessages, messagesRef.current)
+      ) {
+        debugLog(
+          "[ChatContext] Recovery: Task completed but state was stuck. Resetting.",
+        );
+        setIsStreaming(false);
+        setIsWaiting(false);
+        isWaitingForAgent.current = false;
+        setStreamingParts([]);
+        onTaskComplete?.();
       }
     }
   }, [sessionMessages, selectedSessionId]);
@@ -1056,7 +592,7 @@ export function ChatProvider({
   });
 
   const handleDeleteSession = async (
-    e: React.MouseEvent,
+    e: MouseEvent,
     sessionId: string,
   ) => {
     e.stopPropagation();
@@ -1173,71 +709,7 @@ export function ChatProvider({
     // Set sending state immediately to prevent duplicate submissions
     setIsSending(true);
 
-    let task = input.trim() || "I want to change this element";
-    if (attachedElement) {
-      task = formatMessageWithSelector(
-        task,
-        attachedElement.selector,
-        attachedElement.filename,
-        attachedElement.text,
-        attachedElement.astroSourceFile,
-        attachedElement.astroSourceLoc,
-      );
-    }
-
-    // Upload attached images and build internal message
-    if (attachedImages.length > 0 && version) {
-      try {
-        const uploadedPaths: string[] = [];
-        for (const img of attachedImages) {
-          const formData = new FormData();
-          formData.append("file", img.file);
-
-          const token = getVivdStudioToken();
-          const headers = new Headers();
-          if (token) headers.set(VIVD_STUDIO_TOKEN_HEADER, token);
-
-          const response = await fetch(
-            `/vivd-studio/api/upload-dropped-file/${projectSlug}/${version}`,
-            {
-              method: "POST",
-              body: formData,
-              credentials: "include",
-              headers,
-            },
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            uploadedPaths.push(data.path);
-          } else {
-            console.error("Failed to upload file:", img.file.name);
-          }
-        }
-
-        // Inject internal tag for each uploaded file
-        for (const imgPath of uploadedPaths) {
-          const filename = imgPath.split("/").pop() || "file";
-          task += `\n<vivd-internal type="dropped-file" filename="${filename}" path="${imgPath}" />`;
-        }
-
-        // Revoke preview URLs and clear attached images
-        for (const img of attachedImages) {
-          URL.revokeObjectURL(img.previewUrl);
-        }
-        setAttachedImages([]);
-      } catch (error) {
-        console.error("Error uploading dropped images:", error);
-      }
-    }
-
-    // Inject internal tags for attached files (from asset explorer)
-    if (attachedFiles.length > 0) {
-      for (const file of attachedFiles) {
-        task += `\n<vivd-internal type="attached-file" filename="${file.filename}" path="${file.path}" />`;
-      }
-      setAttachedFiles([]);
-    }
+    const task = await buildTaskWithAttachments(input);
 
     setInput("");
     setAttachedElement(null);
@@ -1296,10 +768,7 @@ export function ChatProvider({
     sessions,
     sessionsLoading,
     selectedSessionId,
-    setSelectedSessionId: (sessionId) => {
-      autoSelectLockedRef.current = true;
-      setSelectedSessionId(sessionId);
-    },
+    setSelectedSessionId: selectSession,
     isSessionHydrating,
     messages,
     isStreaming,

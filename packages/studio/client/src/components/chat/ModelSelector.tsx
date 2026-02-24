@@ -6,13 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-
-export interface ModelTier {
-  tier: "standard" | "advanced" | "pro";
-  provider: string;
-  modelId: string;
-  label: string;
-}
+import type { ModelTier } from "./chatTypes";
 
 interface ModelSelectorProps {
   models: ModelTier[];

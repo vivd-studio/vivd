@@ -26,6 +26,29 @@ export type CreateProjectVersionInput = {
   createdAt: Date;
 };
 
+const DEFAULT_PROJECT_TAG_COLOR_IDS = [
+  "red",
+  "orange",
+  "yellow",
+  "lime",
+  "green",
+  "teal",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "pink",
+  "slate",
+] as const;
+
+function getDefaultProjectTagColorId(tag: string): string {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = (hash * 31 + tag.charCodeAt(i)) >>> 0;
+  }
+  return DEFAULT_PROJECT_TAG_COLOR_IDS[hash % DEFAULT_PROJECT_TAG_COLOR_IDS.length]!;
+}
+
 function parseMaxProjectsLimit(value: unknown): number | null {
   if (!value || typeof value !== "object") return null;
   const raw = (value as Record<string, unknown>).maxProjects;
@@ -315,6 +338,7 @@ class ProjectMetaService {
         tags.map((tag) => ({
           organizationId: options.organizationId,
           tag,
+          colorId: getDefaultProjectTagColorId(tag),
           createdAt: now,
           updatedAt: now,
         })),
@@ -447,7 +471,9 @@ class ProjectMetaService {
           .values({
             organizationId: options.organizationId,
             tag: options.toTag,
-            colorId: sourceTag?.colorId ?? null,
+            colorId:
+              sourceTag?.colorId ??
+              getDefaultProjectTagColorId(options.fromTag),
             createdAt: now,
             updatedAt: now,
           })
