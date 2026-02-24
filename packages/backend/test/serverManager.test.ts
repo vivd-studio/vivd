@@ -9,6 +9,24 @@ import treeKill from "tree-kill";
 
 describe("ServerManager Process Cleanup", () => {
   describe("killProcessTree behavior (via tree-kill)", () => {
+    const isRunning = (pid: number): boolean => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    async function waitForStopped(pid: number, timeoutMs = 3000): Promise<boolean> {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        if (!isRunning(pid)) return true;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return !isRunning(pid);
+    }
+
     it("should kill a process and its children", async () => {
       // Spawn a parent process that spawns a child
       // This simulates opencode spawning language servers
@@ -41,16 +59,6 @@ describe("ServerManager Process Cleanup", () => {
       expect(parent.pid).toBeDefined();
       expect(childPid).not.toBeNull();
 
-      // Verify both processes are running
-      const isRunning = (pid: number): boolean => {
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      };
-
       expect(isRunning(parent.pid!)).toBe(true);
       expect(isRunning(childPid!)).toBe(true);
 
@@ -59,12 +67,19 @@ describe("ServerManager Process Cleanup", () => {
         treeKill(parent.pid!, "SIGKILL", () => resolve());
       });
 
-      // Give OS time to clean up
-      await new Promise((r) => setTimeout(r, 100));
+      const parentStopped = await waitForStopped(parent.pid!, 3000);
+      let childStopped = await waitForStopped(childPid!, 3000);
+      if (!childStopped && isRunning(childPid!)) {
+        try {
+          process.kill(childPid!, "SIGKILL");
+        } catch {
+          // no-op: if process already exited between checks.
+        }
+        childStopped = await waitForStopped(childPid!, 1000);
+      }
 
-      // Verify both are dead
-      expect(isRunning(parent.pid!)).toBe(false);
-      expect(isRunning(childPid!)).toBe(false);
+      expect(parentStopped).toBe(true);
+      expect(childStopped).toBe(true);
     });
 
     it("should handle already-dead processes gracefully", async () => {

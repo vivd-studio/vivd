@@ -296,6 +296,25 @@ describe("AppSidebar search", () => {
     ).toBe("");
   });
 
+  it("does not persist the search border after entering text", () => {
+    renderSidebar();
+
+    const searchInput = screen.getByRole("textbox", { name: "Search" });
+    const classTokens = searchInput.className.split(/\s+/);
+
+    expect(classTokens).toContain(
+      "focus-visible:shadow-[0_0_0_1px_hsl(var(--primary))]",
+    );
+
+    fireEvent.change(searchInput, {
+      target: { value: "settings" },
+    });
+
+    expect(searchInput.className.split(/\s+/)).not.toContain(
+      "shadow-[0_0_0_1px_hsl(var(--primary))]",
+    );
+  });
+
   it("hides the search input while the sidebar is collapsed", () => {
     renderSidebar({ sidebarOpen: false });
 

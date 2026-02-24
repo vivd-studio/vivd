@@ -1095,9 +1095,9 @@ export function AppSidebar() {
                   onChange={(event) => setSidebarSearchQuery(event.target.value)}
                   className={cn(
                     "pl-8 border-0 bg-transparent placeholder:text-muted-foreground/70 shadow-none transition-colors",
-                    "focus-visible:ring-0 focus-visible:bg-background/90 focus-visible:shadow-[0_0_0_1px_hsl(var(--sidebar-border))]",
+                    "focus-visible:ring-0 focus-visible:bg-background/90 focus-visible:shadow-[0_0_0_1px_hsl(var(--primary))]",
                     sidebarSearchQuery.trim()
-                      ? "bg-background/85 shadow-[0_0_0_1px_hsl(var(--sidebar-border))]"
+                      ? "bg-background/85"
                       : "hover:bg-sidebar-accent/30",
                   )}
                 />

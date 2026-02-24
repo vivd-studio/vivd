@@ -5,6 +5,7 @@ export interface Message {
   role: "user" | "agent";
   content: string;
   parts?: any[];
+  createdAt?: number;
 }
 
 export interface Session {

@@ -37,6 +37,7 @@ describe("EmailDeliveryService", () => {
     delete process.env.VIVD_SES_FROM_EMAIL;
     delete process.env.RESEND_API_KEY;
     delete process.env.VIVD_EMAIL_FROM;
+    delete process.env.VIVD_FROM_EMAIL;
   });
 
   afterEach(() => {
@@ -48,6 +49,7 @@ describe("EmailDeliveryService", () => {
     delete process.env.VIVD_SES_FROM_EMAIL;
     delete process.env.RESEND_API_KEY;
     delete process.env.VIVD_EMAIL_FROM;
+    delete process.env.VIVD_FROM_EMAIL;
     vi.restoreAllMocks();
     sesSendMock.mockReset();
     sesClientCtorMock.mockClear();

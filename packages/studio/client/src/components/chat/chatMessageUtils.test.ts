@@ -48,6 +48,64 @@ describe("chatMessageUtils", () => {
     ]);
   });
 
+  it("maps message timestamps from session metadata", () => {
+    const mapped = mapSessionMessagesToChatMessages([
+      {
+        info: {
+          id: "m-user",
+          role: "user",
+          time: { created: 1700000000 },
+        },
+        parts: [{ type: "text", text: "Hi" }],
+      },
+      {
+        info: {
+          id: "m-agent",
+          role: "assistant",
+          time: { created: "2026-02-24T22:00:00.000Z" },
+        },
+        parts: [{ type: "text", text: "Hello" }],
+      },
+    ]);
+
+    expect(mapped[0]).toMatchObject({
+      id: "m-user",
+      role: "user",
+      createdAt: 1700000000 * 1000,
+    });
+    expect(mapped[1]).toMatchObject({
+      id: "m-agent",
+      role: "agent",
+      createdAt: Date.parse("2026-02-24T22:00:00.000Z"),
+    });
+  });
+
+  it("merges contiguous assistant messages into a single agent message", () => {
+    const mapped = mapSessionMessagesToChatMessages([
+      {
+        info: { id: "u1", role: "user", time: { created: 1700000000 } },
+        parts: [{ type: "text", text: "Fix this" }],
+      },
+      {
+        info: { id: "a1", role: "assistant", time: { created: 1700000001 } },
+        parts: [{ id: "t1", type: "tool", tool: "read", status: "completed" }],
+      },
+      {
+        info: { id: "a2", role: "assistant", time: { created: 1700000002 } },
+        parts: [{ type: "text", text: "Done" }],
+      },
+    ]);
+
+    expect(mapped).toHaveLength(2);
+    expect(mapped[1]).toMatchObject({
+      id: "a2",
+      role: "agent",
+      content: "Done",
+      createdAt: 1700000002 * 1000,
+    });
+    expect(mapped[1].parts).toHaveLength(2);
+  });
+
   it("aggregates assistant usage totals from session history", () => {
     const usage = calculateUsageFromSessionMessages([
       {

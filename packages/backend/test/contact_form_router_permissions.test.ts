@@ -276,8 +276,7 @@ describe("plugins.contactEnsure permissions", () => {
       }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message:
-        "Recipient email is not verified in this organization: unverified@example.com",
+      message: "Recipient email is not verified for this project: unverified@example.com",
     });
   });
 

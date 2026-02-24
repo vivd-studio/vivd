@@ -1,5 +1,3 @@
-import express from "express";
-import { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { recordFeedbackMock, verifyWebhookMock } = vi.hoisted(() => ({
@@ -27,30 +25,64 @@ async function postResendWebhook(body: string, headers?: Record<string, string>)
     "../src/httpRoutes/plugins/contactForm/feedback"
   );
 
-  const app = express();
-  app.use(createEmailFeedbackRouter());
-  const server = app.listen(0);
-
-  try {
-    const { port } = server.address() as AddressInfo;
-    const response = await fetch(`http://127.0.0.1:${port}/email/v1/feedback/resend`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "svix-id": "msg_123",
-        "svix-timestamp": "1708785600",
-        "svix-signature": "v1,test",
-        ...(headers || {}),
-      },
-      body,
-    });
-
-    return response;
-  } finally {
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve());
-    });
+  // Avoid opening sockets in restricted environments by invoking the route handler directly.
+  const router = createEmailFeedbackRouter() as unknown as {
+    stack?: Array<{
+      route?: {
+        path?: string;
+        stack?: Array<{ handle: (req: any, res: any) => unknown }>;
+      };
+    }>;
+  };
+  const resendLayer = router.stack?.find(
+    (layer) => layer.route?.path === "/email/v1/feedback/resend",
+  );
+  const resendStack = resendLayer?.route?.stack;
+  const resendHandler =
+    resendStack && resendStack.length > 0 ? resendStack[resendStack.length - 1].handle : null;
+  if (!resendHandler) {
+    throw new Error("Could not resolve resend feedback route handler");
   }
+
+  const headerMap = new Map<string, string>();
+  for (const [key, value] of Object.entries({
+    "content-type": "application/json",
+    "svix-id": "msg_123",
+    "svix-timestamp": "1708785600",
+    "svix-signature": "v1,test",
+    ...(headers || {}),
+  })) {
+    headerMap.set(key.toLowerCase(), value);
+  }
+
+  let statusCode = 200;
+  let payload: unknown = null;
+  const req = {
+    body,
+    query: {},
+    get(name: string) {
+      return headerMap.get(name.toLowerCase()) ?? undefined;
+    },
+  };
+  const res = {
+    status(code: number) {
+      statusCode = code;
+      return this;
+    },
+    json(value: unknown) {
+      payload = value;
+      return this;
+    },
+  };
+
+  await resendHandler(req, res);
+
+  return {
+    status: statusCode,
+    async json() {
+      return payload;
+    },
+  };
 }
 
 describe("createEmailFeedbackRouter (Resend)", () => {

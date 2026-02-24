@@ -70,8 +70,11 @@ export function handleSessionEvent({
         const tool = eventData.tool as string;
         const title =
           "title" in eventData ? (eventData.title as string) : undefined;
+        const input = "input" in eventData ? eventData.input : undefined;
 
-        setStreamingParts((prev) => upsertToolStartedPart(prev, toolId, tool, title));
+        setStreamingParts((prev) =>
+          upsertToolStartedPart(prev, toolId, tool, title, input),
+        );
       }
       return;
 

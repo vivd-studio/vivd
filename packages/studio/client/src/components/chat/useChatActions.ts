@@ -102,6 +102,7 @@ export function useChatActions({
           role: "agent",
           content:
             "I ran into an issue and couldn't complete that request. Please try again.",
+          createdAt: Date.now(),
         },
       ]);
       setSessionError(
@@ -129,7 +130,10 @@ export function useChatActions({
       setSessionError(null);
       setStreamingParts([]);
 
-      setMessages((prev) => [...prev, { role: "user", content: task }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: task, createdAt: Date.now() },
+      ]);
       runTaskMutation.mutate(buildRunTaskPayload(task, targetSessionId), {
         onSettled: options?.onSettled,
       });

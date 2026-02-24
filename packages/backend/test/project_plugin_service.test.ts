@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   findFirstMock,
   organizationMemberFindManyMock,
+  contactFormRecipientVerificationFindManyMock,
   insertMock,
   insertValuesMock,
   insertReturningMock,
@@ -13,6 +14,7 @@ const {
 } = vi.hoisted(() => {
   const findFirstMock = vi.fn();
   const organizationMemberFindManyMock = vi.fn();
+  const contactFormRecipientVerificationFindManyMock = vi.fn();
 
   const insertReturningMock = vi.fn();
   const insertValuesMock = vi.fn(() => ({ returning: insertReturningMock }));
@@ -26,6 +28,7 @@ const {
   return {
     findFirstMock,
     organizationMemberFindManyMock,
+    contactFormRecipientVerificationFindManyMock,
     insertMock,
     insertValuesMock,
     insertReturningMock,
@@ -45,6 +48,9 @@ vi.mock("../src/db", () => ({
       },
       organizationMember: {
         findMany: organizationMemberFindManyMock,
+      },
+      contactFormRecipientVerification: {
+        findMany: contactFormRecipientVerificationFindManyMock,
       },
     },
     insert: insertMock,
@@ -73,6 +79,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
   beforeEach(() => {
     findFirstMock.mockReset();
     organizationMemberFindManyMock.mockReset();
+    contactFormRecipientVerificationFindManyMock.mockReset();
     insertMock.mockClear();
     insertValuesMock.mockClear();
     insertReturningMock.mockReset();
@@ -88,6 +95,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
         },
       },
     ]);
+    contactFormRecipientVerificationFindManyMock.mockResolvedValue([]);
   });
 
   it("returns existing enabled instances idempotently", async () => {

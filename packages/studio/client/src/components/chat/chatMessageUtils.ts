@@ -1,25 +1,84 @@
 import { normalizeMessagePart } from "./chatStreamUtils";
 import type { Message, UsageData } from "./chatTypes";
 
+function normalizeTimestamp(value: unknown): number | undefined {
+  if (value == null) return undefined;
+
+  const toMillis = (n: number) => (n < 1_000_000_000_000 ? n * 1000 : n);
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return toMillis(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+
+    const asNumber = Number(trimmed);
+    if (Number.isFinite(asNumber)) {
+      return toMillis(asNumber);
+    }
+
+    const parsed = Date.parse(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function mergeAgentMessages(messages: Message[]): Message[] {
+  const merged: Message[] = [];
+
+  for (const message of messages) {
+    const previous = merged[merged.length - 1];
+
+    if (message.role === "agent" && previous?.role === "agent") {
+      const mergedContent = [previous.content, message.content]
+        .filter((segment) => segment && segment.trim().length > 0)
+        .join("\n")
+        .trim();
+
+      merged[merged.length - 1] = {
+        ...previous,
+        id: message.id ?? previous.id,
+        content: mergedContent,
+        parts: [...(previous.parts ?? []), ...(message.parts ?? [])],
+        createdAt: message.createdAt ?? previous.createdAt,
+      };
+      continue;
+    }
+
+    merged.push(message);
+  }
+
+  return merged;
+}
+
 export function mapSessionMessagesToChatMessages(sessionMessages: any[]): Message[] {
-  return sessionMessages.map((msg: any) => {
+  const normalizedMessages = sessionMessages.map((msg: any) => {
     const role = msg.info?.role === "assistant" ? "agent" : "user";
     const normalizedParts = (msg.parts ?? [])
       .map(normalizeMessagePart)
       .filter(Boolean);
     const textContent =
       normalizedParts
-        ?.filter((part: any) => part.type === "text")
-        .map((part: any) => part.text)
-        .join("\n") || "";
+      ?.filter((part: any) => part.type === "text")
+      .map((part: any) => part.text)
+      .join("\n") || "";
+    const createdAt = normalizeTimestamp(msg.info?.time?.created);
 
     return {
       id: msg.info?.id,
       role,
       content: textContent,
       parts: normalizedParts,
+      ...(createdAt != null ? { createdAt } : {}),
     };
   });
+
+  return mergeAgentMessages(normalizedMessages);
 }
 
 export function calculateUsageFromSessionMessages(

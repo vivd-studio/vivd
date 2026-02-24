@@ -1,7 +1,20 @@
 export type ToolStatus = "running" | "completed" | "error";
 export type DeltaPartType = "reasoning" | "text";
 export type EventDedupState = { ids: Set<string>; queue: string[] };
+export type ToolActivityLabelParts = { action: string; target?: string };
 const REDACTED_THOUGHT_PATTERN = /\[REDACTED\]/gi;
+const TOOL_TARGET_INPUT_KEYS = [
+  "path",
+  "filePath",
+  "filepath",
+  "filename",
+  "file",
+  "target",
+  "targetPath",
+  "source",
+  "sourcePath",
+  "sourceFile",
+] as const;
 
 export function normalizeToolStatus(
   part: any,
@@ -70,6 +83,108 @@ export function normalizeMessagePart(part: any): any {
   };
 }
 
+function pathToFilename(pathLike: string): string | undefined {
+  const trimmed = pathLike.trim();
+  if (!trimmed) return undefined;
+
+  const withoutQuery = trimmed.split(/[?#]/)[0] ?? trimmed;
+  const segments = withoutQuery.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] || undefined;
+}
+
+function parseObjectInput(input: unknown): Record<string, unknown> | null {
+  if (!input) return null;
+
+  if (typeof input === "object" && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+
+  if (typeof input !== "string") {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Ignore invalid JSON.
+  }
+
+  return null;
+}
+
+function extractToolTargetName(input: unknown): string | undefined {
+  if (typeof input === "string") {
+    return pathToFilename(input);
+  }
+
+  const obj = parseObjectInput(input);
+  if (!obj) return undefined;
+
+  for (const key of TOOL_TARGET_INPUT_KEYS) {
+    const value = obj[key];
+    if (typeof value !== "string") continue;
+    const filename = pathToFilename(value);
+    if (filename) return filename;
+  }
+
+  return undefined;
+}
+
+export function getToolActivityLabelParts(part: any): ToolActivityLabelParts {
+  const status = normalizeToolStatus(part) ?? "completed";
+  const toolName = String(part?.tool ?? "").trim().toLowerCase();
+  const target = extractToolTargetName(part?.input);
+
+  if (toolName === "read") {
+    if (status === "running") {
+      return { action: "Exploring", target: `${target ?? "file"}...` };
+    }
+    if (status === "error") {
+      return { action: "Failed exploring", target: target ?? "file" };
+    }
+    return { action: "Explored", target: target ?? "file" };
+  }
+
+  if (toolName === "edit") {
+    if (status === "running") {
+      return { action: "Editing", target: `${target ?? "file"}...` };
+    }
+    if (status === "error") {
+      return { action: "Failed editing", target: target ?? "file" };
+    }
+    return { action: "Edited", target: target ?? "file" };
+  }
+
+  if (toolName === "glob") {
+    if (status === "running") return { action: "Exploring", target: "files..." };
+    if (status === "error") return { action: "Failed exploring", target: "files" };
+    return { action: "Explored", target: "files" };
+  }
+
+  if (toolName === "bash") {
+    if (status === "running") return { action: "Running", target: "command..." };
+    if (status === "error") return { action: "Command failed" };
+    return { action: "Executed", target: "command" };
+  }
+
+  if (status === "running") return { action: "Running", target: "tool..." };
+  if (status === "error") return { action: "Tool failed" };
+  return { action: "Completed", target: "tool action" };
+}
+
+export function getToolActivityLabel(part: any): string {
+  const parts = getToolActivityLabelParts(part);
+  return parts.target ? `${parts.action} ${parts.target}` : parts.action;
+}
+
 export function upsertDeltaStreamingPart(
   prev: any[],
   partId: string,
@@ -110,6 +225,7 @@ export function upsertToolStartedPart(
   toolId: string,
   tool: string,
   title?: string,
+  input?: unknown,
 ): any[] {
   const existingIndex = prev.findIndex((p) => p.id === toolId);
   const nextPart = {
@@ -117,6 +233,7 @@ export function upsertToolStartedPart(
     type: "tool",
     tool,
     title,
+    input,
     status: "running" as const,
   };
 
