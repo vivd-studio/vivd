@@ -105,12 +105,25 @@ export class FlyProviderConfig {
     return parsePositiveInt(process.env.FLY_STUDIO_RECONCILER_CONCURRENCY, 100);
   }
 
-  get maxMachineAgeDays(): number {
+  get maxMachineInactivityDays(): number {
+    const fromNew = process.env.FLY_STUDIO_RECONCILER_MAX_MACHINE_INACTIVITY_DAYS;
+    if (typeof fromNew === "string" && fromNew.trim()) {
+      return parsePositiveInt(fromNew, 7);
+    }
     return parsePositiveInt(process.env.FLY_STUDIO_RECONCILER_MAX_MACHINE_AGE_DAYS, 7);
   }
 
+  get maxMachineInactivityMs(): number {
+    return this.maxMachineInactivityDays * 24 * 60 * 60 * 1000;
+  }
+
+  // Backwards-compatible aliases for older call sites.
+  get maxMachineAgeDays(): number {
+    return this.maxMachineInactivityDays;
+  }
+
   get maxMachineAgeMs(): number {
-    return this.maxMachineAgeDays * 24 * 60 * 60 * 1000;
+    return this.maxMachineInactivityMs;
   }
 
   get idleTimeoutMs(): number {

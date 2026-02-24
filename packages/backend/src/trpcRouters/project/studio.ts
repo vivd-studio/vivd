@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
+import { recordStudioVisit } from "../../services/studioMachines/visitStore";
 import { db } from "../../db";
 import { organization, projectPluginInstance, session as sessionTable } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
@@ -179,8 +180,8 @@ export const studioProcedures = {
       }
 
       try {
-          const { studioId, url, port, accessToken } =
-            await studioMachineProvider.ensureRunning({
+        const { studioId, url, port, accessToken } =
+          await studioMachineProvider.ensureRunning({
             organizationId,
             projectSlug: input.slug,
             version: input.version,
@@ -191,6 +192,18 @@ export const studioProcedures = {
               ...studioToolPolicyEnv,
             },
           });
+        try {
+          await recordStudioVisit({
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[StudioMachine] Failed to persist visit for ${organizationId}:${input.slug}/v${input.version}: ${message}`,
+          );
+        }
 
         return {
           success: true as const,
@@ -266,17 +279,29 @@ export const studioProcedures = {
       try {
         const { studioId, url, port, accessToken } =
           await studioMachineProvider.restart({
-          organizationId,
-          projectSlug: input.slug,
-          version: input.version,
-          mode: "hard",
-          env: {
-            MAIN_BACKEND_URL: mainBackendUrl,
-            SESSION_TOKEN: sessionToken,
-            GITHUB_REPO_PREFIX: githubRepoPrefix,
-            ...studioToolPolicyEnv,
-          },
-        });
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
+            mode: "hard",
+            env: {
+              MAIN_BACKEND_URL: mainBackendUrl,
+              SESSION_TOKEN: sessionToken,
+              GITHUB_REPO_PREFIX: githubRepoPrefix,
+              ...studioToolPolicyEnv,
+            },
+          });
+        try {
+          await recordStudioVisit({
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[StudioMachine] Failed to persist visit for ${organizationId}:${input.slug}/v${input.version}: ${message}`,
+          );
+        }
 
         return {
           success: true as const,
@@ -321,6 +346,18 @@ export const studioProcedures = {
     )
     .mutation(async ({ ctx, input }) => {
       await studioMachineProvider.touch(ctx.organizationId!, input.slug, input.version);
+      try {
+        await recordStudioVisit({
+          organizationId: ctx.organizationId!,
+          projectSlug: input.slug,
+          version: input.version,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[StudioMachine] Failed to persist visit for ${ctx.organizationId!}:${input.slug}/v${input.version}: ${message}`,
+        );
+      }
       return { success: true };
     }),
 

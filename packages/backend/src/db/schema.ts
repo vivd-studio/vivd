@@ -319,6 +319,39 @@ export const projectVersion = pgTable(
   ]
 );
 
+export const studioMachineVisit = pgTable(
+  "studio_machine_visit",
+  {
+    organizationId: text("organization_id").notNull(),
+    projectSlug: text("project_slug").notNull(),
+    version: integer("version").notNull(),
+    lastVisitedAt: timestamp("last_visited_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.organizationId, table.projectSlug, table.version],
+    }),
+    foreignKey({
+      columns: [table.organizationId, table.projectSlug, table.version],
+      foreignColumns: [
+        projectVersion.organizationId,
+        projectVersion.projectSlug,
+        projectVersion.version,
+      ],
+    }).onDelete("cascade"),
+    index("studio_machine_visit_last_visited_idx").on(table.lastVisitedAt),
+    index("studio_machine_visit_org_last_visited_idx").on(
+      table.organizationId,
+      table.lastVisitedAt,
+    ),
+  ],
+);
+
 export const projectPublishChecklist = pgTable(
   "project_publish_checklist",
   {
@@ -548,6 +581,25 @@ export const projectVersionRelations = relations(
       references: [projectMeta.organizationId, projectMeta.slug],
     }),
     publishChecklists: many(projectPublishChecklist),
+    studioMachineVisits: many(studioMachineVisit),
+  }),
+);
+
+export const studioMachineVisitRelations = relations(
+  studioMachineVisit,
+  ({ one }) => ({
+    projectVersion: one(projectVersion, {
+      fields: [
+        studioMachineVisit.organizationId,
+        studioMachineVisit.projectSlug,
+        studioMachineVisit.version,
+      ],
+      references: [
+        projectVersion.organizationId,
+        projectVersion.projectSlug,
+        projectVersion.version,
+      ],
+    }),
   }),
 );
 

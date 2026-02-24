@@ -242,9 +242,13 @@ export async function warmReconcileStudioMachineWorkflow(
 export type ReconcileStudioMachinesInnerDeps = {
   getDesiredImage: () => Promise<string>;
   listMachines: () => Promise<FlyMachine[]>;
-  maxMachineAgeMs: number;
+  maxMachineInactivityMs: number;
   reconcilerDryRun: boolean;
   getStudioIdentityFromMachine: (machine: FlyMachine) => StudioIdentity | null;
+  getStudioKeyForIdentity: (identity: StudioIdentity) => string;
+  listStudioVisitMsByIdentity: (
+    identities: StudioIdentity[],
+  ) => Promise<Map<string, number>>;
   getMachineCreatedAtMs: (machine: FlyMachine) => number | null;
   reconcilerConcurrency: number;
   getMachine: (machineId: string) => Promise<FlyMachine>;
@@ -310,7 +314,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
   const desiredImage = await deps.getDesiredImage();
   const machines = await deps.listMachines();
   const now = Date.now();
-  const maxAgeMs = deps.maxMachineAgeMs;
+  const maxInactivityMs = deps.maxMachineInactivityMs;
   const dryRun = deps.reconcilerDryRun;
 
   const result: FlyStudioMachineReconcileResult = {
@@ -328,20 +332,35 @@ export async function reconcileStudioMachinesInnerWorkflow(
     return identity ? [{ machine, identity }] : [];
   });
   result.scanned = studioMachines.length;
+  const lastVisitedAtMsByStudioKey = await deps.listStudioVisitMsByIdentity(
+    studioMachines.map(({ identity }) => identity),
+  );
 
   await mapLimit(studioMachines, deps.reconcilerConcurrency, async ({ machine, identity }) => {
+    const studioKey = deps.getStudioKeyForIdentity(identity);
+    const lastVisitedAtMs = lastVisitedAtMsByStudioKey.get(studioKey) ?? null;
+    const inactivityMs = lastVisitedAtMs !== null ? now - lastVisitedAtMs : null;
     const createdAtMs = deps.getMachineCreatedAtMs(machine);
-    const ageMs = createdAtMs ? now - createdAtMs : null;
-    const isOld = ageMs !== null && ageMs >= maxAgeMs;
+    const createdAgeMs = createdAtMs !== null ? now - createdAtMs : null;
+    const isInactive = inactivityMs !== null && inactivityMs >= maxInactivityMs;
+    const isInactiveByCreatedAtFallback =
+      lastVisitedAtMs === null &&
+      createdAgeMs !== null &&
+      createdAgeMs >= maxInactivityMs;
+    const shouldGc = isInactive || isInactiveByCreatedAtFallback;
 
-    // Prefer GC over image warmups for very old machines.
-    if (isOld) {
+    // Prefer GC over image warmups for inactive machines.
+    if (shouldGc) {
       const state = machine.state || "unknown";
       if (state === "destroyed" || state === "destroying") return;
+      const reason = isInactive ? "inactivity" : "created_at_fallback";
+      const ageDays = isInactive
+        ? Math.floor((inactivityMs || 0) / (24 * 60 * 60 * 1000))
+        : Math.floor((createdAgeMs || 0) / (24 * 60 * 60 * 1000));
 
       if (dryRun) {
         console.log(
-          `[FlyMachines] (dry-run) GC old machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} ageDays=${ageMs ? Math.floor(ageMs / (24 * 60 * 60 * 1000)) : "?"}`,
+          `[FlyMachines] (dry-run) GC inactive machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) state=${state} reason=${reason} ageDays=${ageDays}`,
         );
         return;
       }
@@ -366,7 +385,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
         await deps.destroyMachine(machine.id);
         result.destroyedOldMachines++;
         console.log(
-          `[FlyMachines] Destroyed old machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version})`,
+          `[FlyMachines] Destroyed inactive machine ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) reason=${reason} ageDays=${ageDays}`,
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

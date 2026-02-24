@@ -12,6 +12,7 @@ const {
   emitSessionEventMock,
   createAgentEventMock,
   getSystemPromptForSessionStartMock,
+  finishSessionRunsMock,
 } = vi.hoisted(() => ({
   getClientAndDirectoryMock: vi.fn(),
   sessionCreateMock: vi.fn(),
@@ -24,6 +25,7 @@ const {
   emitSessionEventMock: vi.fn(),
   createAgentEventMock: vi.fn((_sessionId, _type, payload) => payload),
   getSystemPromptForSessionStartMock: vi.fn(),
+  finishSessionRunsMock: vi.fn(),
 }));
 
 vi.mock("./serverManager.js", () => ({
@@ -70,6 +72,14 @@ vi.mock("../services/agent/AgentInstructionsService.js", () => ({
   },
 }));
 
+vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
+  agentLeaseReporter: {
+    startRun: vi.fn(),
+    finishRun: vi.fn(),
+    finishSession: finishSessionRunsMock,
+  },
+}));
+
 import { abortSession, getSessionsStatus, listSessions, runTask } from "./index.js";
 
 describe("opencode index session behavior", () => {
@@ -85,6 +95,7 @@ describe("opencode index session behavior", () => {
     emitSessionEventMock.mockReset();
     createAgentEventMock.mockClear();
     getSystemPromptForSessionStartMock.mockReset();
+    finishSessionRunsMock.mockReset();
 
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
     sessionStatusMock.mockResolvedValue({ data: {}, error: undefined });
@@ -160,6 +171,7 @@ describe("opencode index session behavior", () => {
     await expect(abortSession("sess-9", "/workspace/project")).resolves.toBe(true);
 
     expect(sessionAbortMock).toHaveBeenCalledWith({ path: { id: "sess-9" } });
+    expect(finishSessionRunsMock).toHaveBeenCalledWith("sess-9");
     expect(setSessionStatusMock).toHaveBeenCalledWith("sess-9", { type: "idle" });
     expect(emitSessionEventMock).toHaveBeenCalledWith(
       "sess-9",

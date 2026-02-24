@@ -4,6 +4,7 @@ import type {
   StudioMachineStartArgs,
   StudioMachineStartResult,
 } from "../types";
+import { listStudioVisitMsByIdentity } from "../visitStore";
 import type {
   FlyMachine,
   FlyMachineConfig,
@@ -545,9 +546,13 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     return reconcileStudioMachinesInnerWorkflow({
       getDesiredImage: async () => desiredImage,
       listMachines: () => this.apiClient.listMachines(),
-      maxMachineAgeMs: this.config.maxMachineAgeMs,
+      maxMachineInactivityMs: this.config.maxMachineInactivityMs,
       reconcilerDryRun: this.config.reconcilerDryRun,
       getStudioIdentityFromMachine,
+      getStudioKeyForIdentity: (identity) =>
+        this.config.key(identity.organizationId, identity.projectSlug, identity.version),
+      listStudioVisitMsByIdentity: (identities) =>
+        listStudioVisitMsByIdentity(identities),
       getMachineCreatedAtMs,
       reconcilerConcurrency: this.config.reconcilerConcurrency,
       getMachine: (machineId) => this.getMachine(machineId),

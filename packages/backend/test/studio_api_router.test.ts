@@ -14,6 +14,9 @@ const {
   getProjectVersionMock,
   listCatalogForProjectMock,
   renderAgentInstructionsMock,
+  reportAgentLeaseActiveMock,
+  reportAgentLeaseIdleMock,
+  touchStudioMachineMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
   updateSessionTitleMock: vi.fn(),
@@ -28,6 +31,9 @@ const {
   getProjectVersionMock: vi.fn(),
   listCatalogForProjectMock: vi.fn(),
   renderAgentInstructionsMock: vi.fn(),
+  reportAgentLeaseActiveMock: vi.fn(),
+  reportAgentLeaseIdleMock: vi.fn(),
+  touchStudioMachineMock: vi.fn(),
 }));
 
 vi.mock("../src/services/usage/UsageService", () => ({
@@ -78,6 +84,19 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
 vi.mock("../src/services/agent/AgentInstructionsService", () => ({
   agentInstructionsService: {
     render: renderAgentInstructionsMock,
+  },
+}));
+
+vi.mock("../src/services/project/StudioAgentLeaseService", () => ({
+  studioAgentLeaseService: {
+    reportActive: reportAgentLeaseActiveMock,
+    reportIdle: reportAgentLeaseIdleMock,
+  },
+}));
+
+vi.mock("../src/services/studioMachines", () => ({
+  studioMachineProvider: {
+    touch: touchStudioMachineMock,
   },
 }));
 
@@ -136,6 +155,9 @@ describe("studioApi router", () => {
     getProjectVersionMock.mockReset();
     listCatalogForProjectMock.mockReset();
     renderAgentInstructionsMock.mockReset();
+    reportAgentLeaseActiveMock.mockReset();
+    reportAgentLeaseIdleMock.mockReset();
+    touchStudioMachineMock.mockReset();
 
     recordAiCostMock.mockResolvedValue(undefined);
     updateSessionTitleMock.mockResolvedValue(undefined);
@@ -172,6 +194,13 @@ describe("studioApi router", () => {
       instructionsHash: "hash-1",
       templateSource: "default",
     });
+    reportAgentLeaseActiveMock.mockReturnValue({
+      leaseState: "active",
+      ageMs: 1_000,
+      activeRuns: 1,
+    });
+    reportAgentLeaseIdleMock.mockReturnValue({ removed: true });
+    touchStudioMachineMock.mockResolvedValue(undefined);
   });
 
   it("records each usage report with session/project linkage", async () => {
@@ -346,6 +375,85 @@ describe("studioApi router", () => {
       hasUnsavedChanges: true,
       headCommitHash: null,
       workingCommitHash: null,
+    });
+  });
+
+  it("touches the studio machine when an active agent lease is accepted", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.reportAgentTaskLease({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 3,
+      sessionId: "sess-1",
+      runId: "run-1",
+      state: "active",
+    });
+
+    expect(reportAgentLeaseActiveMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site-1",
+      version: 3,
+      studioId: "studio-1",
+      sessionId: "sess-1",
+      runId: "run-1",
+    });
+    expect(touchStudioMachineMock).toHaveBeenCalledWith("org-1", "site-1", 3);
+    expect(result).toEqual({
+      success: true,
+      keepalive: true,
+      leaseState: "active",
+    });
+  });
+
+  it("does not touch machine when an agent lease exceeded max age", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+    reportAgentLeaseActiveMock.mockReturnValueOnce({
+      leaseState: "max_exceeded",
+      ageMs: 9_999,
+      activeRuns: 0,
+    });
+
+    const result = await caller.reportAgentTaskLease({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 3,
+      sessionId: "sess-1",
+      runId: "run-1",
+      state: "active",
+    });
+
+    expect(touchStudioMachineMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: true,
+      keepalive: false,
+      leaseState: "max_exceeded",
+    });
+  });
+
+  it("clears lease run on idle reports", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.reportAgentTaskLease({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 3,
+      sessionId: "sess-1",
+      runId: "run-1",
+      state: "idle",
+    });
+
+    expect(reportAgentLeaseIdleMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site-1",
+      version: 3,
+      runId: "run-1",
+    });
+    expect(touchStudioMachineMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: true,
+      keepalive: false,
+      leaseState: "idle",
     });
   });
 

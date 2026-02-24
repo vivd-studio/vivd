@@ -145,7 +145,7 @@ export function MachinesTab() {
 
       const result = data.result;
       toast.success("Reconcile completed", {
-        description: `Warmed ${result.warmedOutdatedImages} reconciled • destroyed ${result.destroyedOldMachines} old • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
+        description: `Warmed ${result.warmedOutdatedImages} reconciled • destroyed ${result.destroyedOldMachines} inactive • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
       });
       await utils.superadmin.listStudioMachines.invalidate();
     },
@@ -616,7 +616,7 @@ export function MachinesTab() {
               - reconcile non-running machine drift (image/services/guest/token)
               <br />
               - warm reconciled machines (update config → start → wait for /health → suspend)
-              <br />- destroy machines older than the configured max age
+              <br />- destroy machines not visited for the configured max inactivity window
               <br />- note: Fly machine region is immutable; destroy/recreate to move regions
             </AlertDialogDescription>
           </AlertDialogHeader>

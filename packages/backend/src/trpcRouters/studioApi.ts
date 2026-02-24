@@ -13,8 +13,10 @@ import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils"
 import { thumbnailService } from "../services/project/ThumbnailService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
+import { studioAgentLeaseService } from "../services/project/StudioAgentLeaseService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
+import { studioMachineProvider } from "../services/studioMachines";
 
 /**
  * Schema for token data in usage reports
@@ -313,6 +315,73 @@ export const studioApiRouter = router({
       });
 
       return { success: true };
+    }),
+
+  /**
+   * Receive agent task lease heartbeats from connected studio runtimes.
+   * Keeps machines alive while an agent run is active, but applies a hard cap.
+   */
+  reportAgentTaskLease: projectMemberProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        sessionId: z.string().min(1),
+        runId: z.string().min(1),
+        state: z.enum(["active", "idle"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+
+      if (input.state === "idle") {
+        studioAgentLeaseService.reportIdle({
+          organizationId,
+          slug: input.slug,
+          version: input.version,
+          runId: input.runId,
+        });
+        return {
+          success: true,
+          keepalive: false,
+          leaseState: "idle" as const,
+        };
+      }
+
+      const lease = studioAgentLeaseService.reportActive({
+        organizationId,
+        slug: input.slug,
+        version: input.version,
+        studioId: input.studioId,
+        sessionId: input.sessionId,
+        runId: input.runId,
+      });
+
+      if (lease.leaseState === "active") {
+        try {
+          await studioMachineProvider.touch(
+            organizationId,
+            input.slug,
+            input.version,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[StudioAPI] Failed to touch machine for active agent lease ${organizationId}:${input.slug}/v${input.version}: ${message}`,
+          );
+        }
+      } else {
+        console.warn(
+          `[StudioAPI] Agent lease max exceeded for ${organizationId}:${input.slug}/v${input.version} session=${input.sessionId} run=${input.runId} ageMs=${lease.ageMs}`,
+        );
+      }
+
+      return {
+        success: true,
+        keepalive: lease.leaseState === "active",
+        leaseState: lease.leaseState,
+      };
     }),
 
   /**

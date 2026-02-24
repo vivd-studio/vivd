@@ -1,4 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk";
+import crypto from "node:crypto";
 import { useEvents, type ToolCall } from "./useEvents.js";
 import {
   agentEventEmitter,
@@ -16,6 +17,7 @@ import {
 } from "./eventEmitter.js";
 import { serverManager } from "./serverManager.js";
 import { usageReporter } from "../services/reporting/UsageReporter.js";
+import { agentLeaseReporter } from "../services/reporting/AgentLeaseReporter.js";
 import { requestBucketSyncAfterAgentTask } from "../services/sync/AgentTaskSyncService.js";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService.js";
 
@@ -90,6 +92,24 @@ export async function runTask(
 
   const currentSessionId = await getOrCreateSession(client, directory, sessionId);
   const isNewSession = !sessionId;
+  const leaseRunId = crypto.randomUUID();
+  const connectedProjectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+  const connectedProjectVersion = Number.parseInt(
+    process.env.VIVD_PROJECT_VERSION || "",
+    10,
+  );
+  if (
+    connectedProjectSlug &&
+    Number.isFinite(connectedProjectVersion) &&
+    connectedProjectVersion > 0
+  ) {
+    agentLeaseReporter.startRun({
+      runId: leaseRunId,
+      sessionId: currentSessionId,
+      projectSlug: connectedProjectSlug,
+      version: connectedProjectVersion,
+    });
+  }
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
   let completionHandled = false;
 
@@ -182,6 +202,7 @@ export async function runTask(
     onIdle: () => {
       if (completionHandled) return;
       completionHandled = true;
+      agentLeaseReporter.finishRun(leaseRunId);
 
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
@@ -216,6 +237,9 @@ export async function runTask(
           nextRetryAt: error.nextRetryAt,
         } as SessionErrorData),
       );
+      if (error.type === "error") {
+        agentLeaseReporter.finishRun(leaseRunId);
+      }
     },
   });
 
@@ -233,6 +257,7 @@ export async function runTask(
       } as SessionErrorData),
     );
     agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
+    agentLeaseReporter.finishRun(leaseRunId);
     stop();
     throw new Error(message);
   }
@@ -268,6 +293,7 @@ export async function runTask(
       } as SessionErrorData),
     );
     agentEventEmitter.setSessionStatus(currentSessionId, { type: "idle" });
+    agentLeaseReporter.finishRun(leaseRunId);
     stop();
     throw new Error(message);
   }
@@ -369,6 +395,7 @@ export async function deleteSession(sessionId: string, directory: string) {
   const { client } = await serverManager.getClientAndDirectory(directory);
   const result = await client.session.delete({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
+  agentLeaseReporter.finishSession(sessionId);
   return true;
 }
 
@@ -377,6 +404,7 @@ export async function abortSession(sessionId: string, directory: string) {
   const result = await client.session.abort({ path: { id: sessionId } });
   if (result.error) throw new Error(JSON.stringify(result.error));
 
+  agentLeaseReporter.finishSession(sessionId);
   agentEventEmitter.setSessionStatus(sessionId, { type: "idle" });
   agentEventEmitter.emitSessionEvent(
     sessionId,

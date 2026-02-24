@@ -18,9 +18,9 @@
 
 ## Latest Progress (Top 3)
 
-- 2026-02-24: made route navigation feedback more noticeable with a subtle global top loading indicator on pathname changes (`RouteTransitionLoading`, minimum visible duration), while keeping `RouteLoadingIndicator` as route `Suspense` fallback and avoiding fullscreen in-app flashes.
+- 2026-02-24: implemented bounded agent-run machine keepalive: connected Studio now reports per-run active/idle lease heartbeats to backend (`studioApi.reportAgentTaskLease`), backend touches machines only for active leases, and leases hard-cap via `AGENT_LEASE_MAX_MS` to prevent endless uptime when sessions get stuck or stop signals are missed.
+- 2026-02-24: changed Fly studio-machine GC policy from machine-age to visit-inactivity: visits are now persisted from `project.startStudio`, `project.hardRestartStudio`, and `project.touchStudio`, and reconciler destroy logic now targets machines not visited for the configured inactivity window (with created-at fallback for legacy machines missing visit records).
 - 2026-02-24: standardized loading UX across frontend and studio by routing page/tab/query loading placeholders through shared `LoadingSpinner`/`CenteredLoading` components and keeping loading visuals consistent.
-- 2026-02-24: hardened chat error handling for provider/platform failures: added session-error sanitization (`chatErrorPolicy.ts`) so frontend banners avoid leaking raw upstream/internal messages, and prevented false `session.completed` emission after terminal `session.status:error` in OpenCode event handling.
 
 ## Active Priorities
 

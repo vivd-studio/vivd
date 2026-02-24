@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   setSessionStatusMock,
@@ -11,6 +11,8 @@ const {
   usageReportMock,
   updateSessionTitleMock,
   getSystemPromptForSessionStartMock,
+  startRunMock,
+  finishRunMock,
 } = vi.hoisted(() => ({
   setSessionStatusMock: vi.fn(),
   emitSessionEventMock: vi.fn(),
@@ -22,6 +24,8 @@ const {
   usageReportMock: vi.fn(),
   updateSessionTitleMock: vi.fn(),
   getSystemPromptForSessionStartMock: vi.fn(),
+  startRunMock: vi.fn(),
+  finishRunMock: vi.fn(),
 }));
 
 let onIdleHandler: (() => void) | undefined;
@@ -76,11 +80,22 @@ vi.mock("../services/agent/AgentInstructionsService.js", () => ({
   },
 }));
 
+vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
+  agentLeaseReporter: {
+    startRun: startRunMock,
+    finishRun: finishRunMock,
+    finishSession: vi.fn(),
+  },
+}));
+
 import { runTask } from "./index.js";
 
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+const originalProjectSlug = process.env.VIVD_PROJECT_SLUG;
+const originalProjectVersion = process.env.VIVD_PROJECT_VERSION;
 
 describe("runTask completion sync", () => {
   beforeEach(() => {
@@ -95,12 +110,16 @@ describe("runTask completion sync", () => {
     usageReportMock.mockReset();
     updateSessionTitleMock.mockReset();
     getSystemPromptForSessionStartMock.mockReset();
+    startRunMock.mockReset();
+    finishRunMock.mockReset();
 
     startMock.mockResolvedValue(undefined);
     stopMock.mockReturnValue(undefined);
     usageReportMock.mockResolvedValue(undefined);
     updateSessionTitleMock.mockResolvedValue(undefined);
     getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
+    process.env.VIVD_PROJECT_SLUG = "site-1";
+    process.env.VIVD_PROJECT_VERSION = "1";
 
     getClientAndDirectoryMock.mockResolvedValue({
       directory: "/workspace/project",
@@ -129,6 +148,20 @@ describe("runTask completion sync", () => {
       sessionId: "session-1",
       projectDir: "/workspace/project",
     });
+    expect(startRunMock).toHaveBeenCalledTimes(1);
+    expect(startRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        projectSlug: "site-1",
+        version: 1,
+      }),
+    );
+    expect(finishRunMock).toHaveBeenCalledTimes(1);
     expect(stopMock).toHaveBeenCalledTimes(1);
   });
+});
+
+afterAll(() => {
+  process.env.VIVD_PROJECT_SLUG = originalProjectSlug;
+  process.env.VIVD_PROJECT_VERSION = originalProjectVersion;
 });
