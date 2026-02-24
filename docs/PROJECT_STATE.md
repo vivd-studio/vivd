@@ -13,6 +13,7 @@
 
 ## Progress Log
 
+- 2026-02-24: fixed GHCR Studio image discovery to follow paginated `tags/list` responses (instead of only the first page), so latest-image resolution now sees newer tags like `0.6.7` beyond the first 100 tags; also reduced Super Admin machine selector history to recent entries (`semverLimit=12`, `devLimit=12`) to avoid clutter from old image tags while preserving explicit pinned-tag visibility.
 - 2026-02-24: added a dedicated Fly Vertex-only agent integration test in `packages/backend/test/integration/fly_vertex_only_agent_reply.test.ts`: it boots a studio machine with `OPENROUTER_API_KEY`/`GOOGLE_API_KEY` explicitly blanked while passing Vertex env (`GOOGLE_CLOUD_PROJECT` + ADC vars), asserts machine runtime env wiring, and verifies the agent returns an assistant reply using a Google model selection.
 - 2026-02-24: tuned app-wide sidebar search input active-state affordance in `packages/frontend/src/components/shell/AppSidebar.tsx` so the field remains borderless at rest but uses a more separated filled background plus subtle outline shadow when focused or populated, improving focus visibility without reintroducing a static border.
 - 2026-02-24: removed outdated agent-instruction guidance claiming AI image create/edit is unavailable; the default Studio agent instruction template in `packages/backend/src/services/agent/AgentInstructionsService.ts` no longer includes that limitation.

@@ -364,6 +364,12 @@ describe("superadmin router", () => {
       desiredImageSource: "fallback",
       latestImage: "ghcr.io/vivd-studio/vivd-studio:0.6.0",
     });
+    expect(listStudioImagesFromGhcrMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semverLimit: 12,
+        devLimit: 12,
+      }),
+    );
   });
 
   it("refuses override-tag updates while FLY_STUDIO_IMAGE is set", async () => {

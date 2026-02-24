@@ -98,20 +98,75 @@ async function fetchGhcrTags(options: {
   token: string;
   timeoutMs: number;
 }): Promise<string[]> {
-  const tagsUrl = `https://ghcr.io/v2/${options.ownerRepo}/tags/list`;
-  const data = await fetchJsonWithTimeout<{ tags?: string[] }>(
-    tagsUrl,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${options.token}`,
-      },
-    },
-    options.timeoutMs,
-  );
+  const headers = {
+    Authorization: `Bearer ${options.token}`,
+  };
+  const collected = new Set<string>();
+  const seenUrls = new Set<string>();
+  const maxPages = 100;
+  let pageCount = 0;
+  let tagsUrl = new URL(`https://ghcr.io/v2/${options.ownerRepo}/tags/list`);
+  tagsUrl.searchParams.set("n", "100");
 
-  if (!Array.isArray(data.tags)) return [];
-  return data.tags.filter((tag): tag is string => typeof tag === "string");
+  while (true) {
+    const normalizedUrl = tagsUrl.toString();
+    if (seenUrls.has(normalizedUrl)) break;
+    seenUrls.add(normalizedUrl);
+
+    const response = await fetchWithTimeout(
+      normalizedUrl,
+      {
+        method: "GET",
+        headers,
+      },
+      options.timeoutMs,
+    );
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as { tags?: string[] };
+    if (Array.isArray(data.tags)) {
+      for (const tag of data.tags) {
+        if (typeof tag === "string") collected.add(tag);
+      }
+    }
+
+    pageCount += 1;
+    if (pageCount >= maxPages) break;
+
+    const next = parseGhcrNextTagsUrl({
+      currentUrl: normalizedUrl,
+      linkHeader: response.headers.get("link"),
+    });
+    if (!next) break;
+    tagsUrl = new URL(next);
+  }
+
+  return Array.from(collected);
+}
+
+function parseGhcrNextTagsUrl(options: {
+  currentUrl: string;
+  linkHeader: string | null;
+}): string | null {
+  const { currentUrl, linkHeader } = options;
+  if (!linkHeader) return null;
+
+  const entries = linkHeader.split(",");
+  for (const entry of entries) {
+    const match = entry.match(/<([^>]+)>\s*;\s*rel="?next"?/i);
+    if (!match) continue;
+    const nextRef = match[1]?.trim();
+    if (!nextRef) continue;
+    try {
+      return new URL(nextRef, currentUrl).toString();
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 type SemverCandidate = {

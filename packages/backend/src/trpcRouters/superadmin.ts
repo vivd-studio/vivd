@@ -195,8 +195,8 @@ export const superAdminRouter = router({
       const listed = await listStudioImagesFromGhcr({
         repository,
         timeoutMs: 10_000,
-        semverLimit: 50,
-        devLimit: 50,
+        semverLimit: 12,
+        devLimit: 12,
       });
       imageBase = listed.imageBase;
       images = listed.images;

@@ -20,13 +20,26 @@ function jsonResponse(body: unknown, status = 200): Response {
 function installGhcrMock(options: {
   ownerRepo?: string;
   tags: string[];
+  tagsPages?: string[][];
   readyTags?: string[];
   manifestStatusByTag?: Record<string, number>;
   headStatusByTag?: Record<string, number>;
 }) {
   const ownerRepo = options.ownerRepo || "vivd-studio/vivd-studio";
+  const tagsPages = options.tagsPages && options.tagsPages.length > 0
+    ? options.tagsPages
+    : [options.tags];
   const readyTags = new Set(options.readyTags || []);
   const manifestPrefix = `https://ghcr.io/v2/${ownerRepo}/manifests/`;
+  const tagsListPrefix = `https://ghcr.io/v2/${ownerRepo}/tags/list`;
+  const pageByLast = new Map<string | null, { index: number; tags: string[] }>();
+  pageByLast.set(null, { index: 0, tags: tagsPages[0] || [] });
+  for (let i = 1; i < tagsPages.length; i += 1) {
+    const prevPage = tagsPages[i - 1] || [];
+    const lastTag = prevPage[prevPage.length - 1] || null;
+    if (!lastTag) continue;
+    pageByLast.set(lastTag, { index: i, tags: tagsPages[i] || [] });
+  }
 
   const mockFetch = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -37,8 +50,23 @@ function installGhcrMock(options: {
         return jsonResponse({ token: "test-token" });
       }
 
-      if (url === `https://ghcr.io/v2/${ownerRepo}/tags/list`) {
-        return jsonResponse({ tags: options.tags });
+      if (url.startsWith(tagsListPrefix)) {
+        const parsed = new URL(url);
+        const last = parsed.searchParams.get("last");
+        const page = pageByLast.get(last);
+        if (!page) {
+          throw new Error(`Unexpected GHCR tags page request in test: ${url}`);
+        }
+        const headers = new Headers({ "content-type": "application/json" });
+        const pageTags = page.tags;
+        const lastTag = pageTags[pageTags.length - 1];
+        if (lastTag && page.index < tagsPages.length - 1) {
+          headers.set(
+            "link",
+            `</v2/${ownerRepo}/tags/list?last=${encodeURIComponent(lastTag)}&n=100>; rel="next"`,
+          );
+        }
+        return new Response(JSON.stringify({ tags: pageTags }), { status: 200, headers });
       }
 
       if (url.startsWith(manifestPrefix)) {
@@ -106,6 +134,24 @@ describe("GHCR studio image readiness", () => {
     });
 
     expect(image).toBe("ghcr.io/vivd-studio/vivd-studio:v0.6.0");
+  });
+
+  it("follows tags/list pagination to resolve the true latest semver", async () => {
+    installGhcrMock({
+      tags: [],
+      tagsPages: [
+        ["0.5.4", "v0.5.4", "0.6.0", "v0.6.0"],
+        ["0.6.1", "v0.6.1", "0.6.7", "v0.6.7"],
+      ],
+      readyTags: ["0.5.4", "0.6.0", "0.6.1", "0.6.7"],
+    });
+
+    const image = await resolveLatestSemverImageFromGhcr({
+      repository: "ghcr.io/vivd-studio/vivd-studio",
+      timeoutMs: 5_000,
+    });
+
+    expect(image).toBe("ghcr.io/vivd-studio/vivd-studio:0.6.7");
   });
 
   it("throws when semver tags exist but none are manifest-ready", async () => {
