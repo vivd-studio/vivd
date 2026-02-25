@@ -158,4 +158,22 @@ describe("UsageService", () => {
     });
     expect(String(payload?.idempotencyKey)).toMatch(/^image_gen:project-a:\d+$/);
   });
+
+  it("uses explicit idempotency keys for image generation events", async () => {
+    txReturningMock.mockResolvedValueOnce([]);
+
+    await usageService.recordImageGeneration(
+      "org-1",
+      "project-a",
+      "studio_image_gen:gen-123",
+    );
+
+    expect(txValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        eventType: "image_gen",
+        idempotencyKey: "studio_image_gen:gen-123",
+      }),
+    );
+  });
 });

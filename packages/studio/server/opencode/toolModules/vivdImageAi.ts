@@ -1,8 +1,15 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { z } from "zod";
+import { isConnectedMode } from "@vivd/shared";
 import { WEBP_QUALITY } from "../../config.js";
+import {
+  createImageGeneration,
+  extractImageFromResponse,
+} from "../../services/integrations/OpenRouterImageService.js";
+import { usageReporter } from "../../services/reporting/UsageReporter.js";
 import type { OpencodeToolDefinition } from "./types.js";
 
 const DEFAULT_IMAGE_MODEL = "google/gemini-3-pro-image-preview";
@@ -97,58 +104,6 @@ function ensureUniqueFilePath(filePath: string): string {
   return candidate;
 }
 
-async function callOpenRouter(apiKey: string, body: Record<string, unknown>): Promise<any> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://github.com/vivd",
-      "X-Title": "Vivd",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "Unknown OpenRouter error");
-    throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
-  }
-
-  return response.json();
-}
-
-function extractImageFromResponse(result: any): string | null {
-  if (!result?.choices?.[0]?.message) {
-    return null;
-  }
-
-  const message = result.choices[0].message;
-
-  if (Array.isArray(message.images) && message.images.length > 0) {
-    const imageObj = message.images[0];
-    const imageUrl = imageObj?.image_url?.url || imageObj?.imageUrl?.url;
-    if (typeof imageUrl === "string" && imageUrl.length > 0) {
-      return imageUrl;
-    }
-  }
-
-  if (typeof message.content === "string" && message.content.startsWith("http")) {
-    return message.content;
-  }
-
-  if (Array.isArray(message.content)) {
-    const textContent = message.content
-      .filter((entry: any) => entry?.type === "text")
-      .map((entry: any) => entry.text)
-      .join("");
-    if (textContent.startsWith("http")) {
-      return textContent;
-    }
-  }
-
-  return null;
-}
-
 async function decodeGeneratedImage(imagePayload: string): Promise<Buffer> {
   if (imagePayload.startsWith("http")) {
     const response = await fetch(imagePayload);
@@ -199,6 +154,30 @@ function resolveOutputDirectory(
   }
 
   return DEFAULT_OUTPUT_DIR;
+}
+
+async function getImageGenerationLimitError(): Promise<string | null> {
+  if (!isConnectedMode()) return null;
+
+  const status = await usageReporter.fetchStatus();
+  if (!status) {
+    return "Unable to verify usage limits - backend unavailable. Please try again later.";
+  }
+
+  if (status.blocked || status.imageGenBlocked) {
+    const warning = status.warnings.find((entry) =>
+      entry.toLowerCase().includes("image"),
+    );
+    if (warning) return warning;
+
+    if (status.imageGenBlocked) {
+      return `Image generation limit reached: ${status.usage.imageGen.current}/${status.usage.imageGen.limit} images this month`;
+    }
+
+    return status.warnings[0] ?? "Usage limit exceeded.";
+  }
+
+  return null;
 }
 
 export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
@@ -276,6 +255,23 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
           : "create"
         : requestedOperation;
 
+    const imageGenLimitError = await getImageGenerationLimitError();
+    if (imageGenLimitError) {
+      return JSON.stringify(
+        {
+          tool: toolName,
+          ok: false,
+          operation,
+          error: {
+            code: "IMAGE_GEN_LIMIT_EXCEEDED",
+            message: imageGenLimitError,
+          },
+        },
+        null,
+        2,
+      );
+    }
+
     try {
       const resolvedInputs: ResolvedImageInput[] = dedupedImages.map((imagePath) => {
         const absolutePath = safeJoin(context.directory, imagePath);
@@ -307,7 +303,7 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
         });
       }
 
-      const result = await callOpenRouter(apiKey, {
+      const { data: result, generationId } = await createImageGeneration(apiKey, {
         model,
         messages: [{ role: "user", content }],
         modalities: ["image", "text"],
@@ -349,6 +345,12 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
       const outputRelativePath = normalizeRelativePath(
         path.relative(context.directory, outputAbsolutePath),
       );
+
+      const projectPath = (process.env.VIVD_PROJECT_SLUG || context.directory || "").trim();
+      const idempotencyKey = generationId
+        ? `studio_image_gen:${generationId}`
+        : `studio_image_gen:${randomUUID()}`;
+      await usageReporter.reportImageGeneration(projectPath || undefined, idempotencyKey);
 
       return JSON.stringify(
         {

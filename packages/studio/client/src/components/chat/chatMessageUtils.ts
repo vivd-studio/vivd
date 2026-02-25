@@ -1,6 +1,12 @@
 import { normalizeMessagePart } from "./chatStreamUtils";
 import type { Message, UsageData } from "./chatTypes";
 
+type MapSessionMessagesOptions = {
+  sessionStatusType?: string | null;
+};
+
+const TERMINAL_SESSION_STATUS_TYPES = new Set(["idle", "done", "error"]);
+
 function normalizeTimestamp(value: unknown): number | undefined {
   if (value == null) return undefined;
 
@@ -56,7 +62,52 @@ function mergeAgentMessages(messages: Message[]): Message[] {
   return merged;
 }
 
-export function mapSessionMessagesToChatMessages(sessionMessages: any[]): Message[] {
+function finalizeInterruptedToolParts(
+  messages: Message[],
+  sessionStatusType?: string | null,
+): Message[] {
+  if (!TERMINAL_SESSION_STATUS_TYPES.has(sessionStatusType ?? "")) {
+    return messages;
+  }
+
+  return messages.map((message) => {
+    if (message.role !== "agent" || !message.parts || message.parts.length === 0) {
+      return message;
+    }
+
+    const hasRenderableText = message.parts.some((part: any) => {
+      if (part?.type !== "text") return false;
+      const text = typeof part?.text === "string" ? part.text : "";
+      return text.trim().length > 0;
+    });
+
+    let changed = false;
+    const nextParts = message.parts.map((part: any) => {
+      if (part?.type !== "tool" || part?.status !== "running") {
+        return part;
+      }
+
+      changed = true;
+      if (hasRenderableText) {
+        return { ...part, status: "completed", error: undefined };
+      }
+
+      return {
+        ...part,
+        status: "error",
+        error: part.error ?? "Tool execution interrupted before completion.",
+      };
+    });
+
+    if (!changed) return message;
+    return { ...message, parts: nextParts };
+  });
+}
+
+export function mapSessionMessagesToChatMessages(
+  sessionMessages: any[],
+  options: MapSessionMessagesOptions = {},
+): Message[] {
   const normalizedMessages = sessionMessages.map((msg: any) => {
     const role = msg.info?.role === "assistant" ? "agent" : "user";
     const normalizedParts = (msg.parts ?? [])
@@ -78,7 +129,11 @@ export function mapSessionMessagesToChatMessages(sessionMessages: any[]): Messag
     };
   });
 
-  return mergeAgentMessages(normalizedMessages);
+  const mergedMessages = mergeAgentMessages(normalizedMessages);
+  return finalizeInterruptedToolParts(
+    mergedMessages,
+    options.sessionStatusType,
+  );
 }
 
 export function calculateUsageFromSessionMessages(

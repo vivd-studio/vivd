@@ -532,7 +532,9 @@ export function ChatProvider({
   useEffect(() => {
     if (sessionMessages && selectedSessionId) {
       setIsSessionHydrating(false);
-      const mappedMessages = mapSessionMessagesToChatMessages(sessionMessages);
+      const mappedMessages = mapSessionMessagesToChatMessages(sessionMessages, {
+        sessionStatusType: currentSessionStatus?.type,
+      });
       setMessages(mappedMessages);
 
       const calculatedUsage = calculateUsageFromSessionMessages(sessionMessages);
@@ -558,7 +560,7 @@ export function ChatProvider({
         onTaskComplete?.();
       }
     }
-  }, [sessionMessages, selectedSessionId]);
+  }, [sessionMessages, selectedSessionId, currentSessionStatus?.type]);
 
   // Derive thinking state from streaming status or message heuristic
   const isThinking = isStreaming || isWaiting;

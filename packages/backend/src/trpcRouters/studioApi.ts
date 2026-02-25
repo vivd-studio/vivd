@@ -44,6 +44,12 @@ const studioUsageReportSchema = z.object({
   timestamp: z.string(),
 });
 
+const studioImageGenerationReportSchema = z.object({
+  projectPath: z.string().optional(),
+  idempotencyKey: z.string().trim().min(1).max(255).optional(),
+  timestamp: z.string(),
+});
+
 const checklistItemSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -119,6 +125,34 @@ export const studioApiRouter = router({
       }
 
       return { success: true, recorded: input.reports.length };
+    }),
+
+  /**
+   * Receive image-generation usage reports from studio tools.
+   * Called when image generation succeeds in connected studio mode.
+   */
+  reportImageGeneration: orgProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        report: studioImageGenerationReportSchema,
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const organizationId = ctx.organizationId!;
+      const userId = ctx.session.user.id;
+
+      await usageService.recordImageGeneration(
+        organizationId,
+        input.report.projectPath,
+        input.report.idempotencyKey,
+      );
+
+      console.log(
+        `[StudioAPI] Received image generation report from studio ${input.studioId} (user: ${userId})`,
+      );
+
+      return { success: true };
     }),
 
   /**

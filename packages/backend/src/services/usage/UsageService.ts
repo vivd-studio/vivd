@@ -246,12 +246,15 @@ class UsageService {
   async recordImageGeneration(
     organizationId: string,
     projectSlug?: string,
+    idempotencyKeyOverride?: string,
   ): Promise<void> {
     const now = new Date();
-    // Generate a unique idempotency key for image gen (timestamp-based since no partId)
-    const idempotencyKey = `image_gen:${
-      projectSlug || "unknown"
-    }:${now.getTime()}`;
+    const normalizedOverride = idempotencyKeyOverride?.trim();
+    // Fall back to timestamp key for local callers that don't pass an explicit key.
+    const idempotencyKey =
+      normalizedOverride && normalizedOverride.length > 0
+        ? normalizedOverride
+        : `image_gen:${projectSlug || "unknown"}:${now.getTime()}`;
 
     try {
       const didInsert = await db.transaction(async (tx) => {

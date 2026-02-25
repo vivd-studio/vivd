@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   recordAiCostMock,
+  recordImageGenerationMock,
   updateSessionTitleMock,
   checkLimitsMock,
   touchProjectUpdatedAtMock,
@@ -19,6 +20,7 @@ const {
   touchStudioMachineMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
+  recordImageGenerationMock: vi.fn(),
   updateSessionTitleMock: vi.fn(),
   checkLimitsMock: vi.fn(),
   touchProjectUpdatedAtMock: vi.fn(),
@@ -39,6 +41,7 @@ const {
 vi.mock("../src/services/usage/UsageService", () => ({
   usageService: {
     recordAiCost: recordAiCostMock,
+    recordImageGeneration: recordImageGenerationMock,
     updateSessionTitle: updateSessionTitleMock,
   },
 }));
@@ -143,6 +146,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 describe("studioApi router", () => {
   beforeEach(() => {
     recordAiCostMock.mockReset();
+    recordImageGenerationMock.mockReset();
     updateSessionTitleMock.mockReset();
     checkLimitsMock.mockReset();
     touchProjectUpdatedAtMock.mockReset();
@@ -160,6 +164,7 @@ describe("studioApi router", () => {
     touchStudioMachineMock.mockReset();
 
     recordAiCostMock.mockResolvedValue(undefined);
+    recordImageGenerationMock.mockResolvedValue(undefined);
     updateSessionTitleMock.mockResolvedValue(undefined);
     checkLimitsMock.mockResolvedValue({ blocked: false });
     touchProjectUpdatedAtMock.mockResolvedValue(undefined);
@@ -276,6 +281,27 @@ describe("studioApi router", () => {
       "New title",
       "site-1",
     );
+  });
+
+  it("records image generation usage reports with project scope and idempotency key", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+    const runAt = new Date().toISOString();
+
+    const result = await caller.reportImageGeneration({
+      studioId: "studio-1",
+      report: {
+        projectPath: "site-1",
+        idempotencyKey: "studio_image_gen:gen-123",
+        timestamp: runAt,
+      },
+    });
+
+    expect(recordImageGenerationMock).toHaveBeenCalledWith(
+      "org-1",
+      "site-1",
+      "studio_image_gen:gen-123",
+    );
+    expect(result).toEqual({ success: true });
   });
 
   it("returns current limit status for the active organization", async () => {

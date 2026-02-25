@@ -85,6 +85,14 @@ function normalizeProjectSlug(input: string, fieldName: string): string {
   return normalized;
 }
 
+function normalizeProjectTitle(input: string): string {
+  const normalized = input.trim();
+  if (!normalized) {
+    throw new Error("Project title is required");
+  }
+  return normalized;
+}
+
 function rewriteChecklistProjectSlug(checklist: unknown, newSlug: string): unknown {
   if (!checklist || typeof checklist !== "object" || Array.isArray(checklist)) {
     return checklist;
@@ -153,6 +161,36 @@ export const projectMaintenanceProcedures = {
         previousStatus: currentStatus,
         newStatus: "failed",
         message: `Reset ${slug} v${targetVersion} from '${currentStatus}' to 'failed'`,
+      };
+    }),
+
+  updateTitle: adminProcedure
+    .input(
+      z.object({
+        slug: z.string().min(1),
+        title: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const slug = input.slug.trim();
+      if (!slug) {
+        throw new Error("Project slug is required");
+      }
+
+      const title = normalizeProjectTitle(input.title);
+      const result = await projectMetaService.setProjectTitle({
+        organizationId,
+        slug,
+        title,
+      });
+
+      return {
+        success: true,
+        slug,
+        title,
+        updatedVersions: result.updatedVersions,
+        message: `Updated project title for "${slug}"`,
       };
     }),
 

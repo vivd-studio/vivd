@@ -11,6 +11,7 @@ import {
   getConnectedOrganizationId,
   getSessionToken,
   getStudioId,
+  type StudioImageGenerationReport,
   type StudioUsageReport,
 } from "@vivd/shared";
 import type { UsageData } from "../../opencode/useEvents.js";
@@ -86,6 +87,60 @@ class UsageReporter {
       this.flush().catch((err) => {
         console.error("[UsageReporter] Immediate flush error:", err);
       });
+    }
+  }
+
+  /**
+   * Report a successful image generation event from Studio tools.
+   */
+  async reportImageGeneration(
+    projectPath?: string,
+    idempotencyKey?: string,
+  ): Promise<void> {
+    if (!isConnectedMode()) return;
+
+    const backendUrl = getBackendUrl();
+    const sessionToken = getSessionToken();
+    const studioId = getStudioId();
+    const organizationId = getConnectedOrganizationId();
+    if (!backendUrl || !sessionToken || !studioId) {
+      console.error("[UsageReporter] Missing backend configuration for image generation");
+      return;
+    }
+
+    const report: StudioImageGenerationReport = {
+      projectPath,
+      idempotencyKey,
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/api/trpc/studioApi.reportImageGeneration`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionToken}`,
+            ...(organizationId
+              ? { "x-vivd-organization-id": organizationId }
+              : {}),
+          },
+          body: JSON.stringify({
+            studioId,
+            report,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        console.error(
+          `[UsageReporter] Image generation report failed ${response.status}: ${errorText}`,
+        );
+      }
+    } catch (err) {
+      console.error("[UsageReporter] Image generation report network error:", err);
     }
   }
 

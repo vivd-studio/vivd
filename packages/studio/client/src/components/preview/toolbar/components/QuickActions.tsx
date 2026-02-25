@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
+import type { PanelLayoutMode } from "../../PreviewContext";
 
 interface QuickActionsProps {
   projectSlug: string | undefined;
@@ -54,6 +55,8 @@ interface QuickActionsProps {
   handleRestartDevServer?: (options?: { clean?: boolean }) => void;
   isRestartingDevServer?: boolean;
   devServerRestartKind?: "restart" | "clean" | null;
+  panelLayoutMode: PanelLayoutMode;
+  setPanelLayoutMode: (mode: PanelLayoutMode) => void;
   historyPanelOpen: boolean;
   setHistoryPanelOpen: (value: boolean) => void;
   publishDialogOpen: boolean;
@@ -93,6 +96,8 @@ export function QuickActions({
   handleRestartDevServer,
   isRestartingDevServer,
   devServerRestartKind,
+  panelLayoutMode,
+  setPanelLayoutMode,
   historyPanelOpen,
   setHistoryPanelOpen,
   setPublishDialogOpen,
@@ -336,6 +341,29 @@ export function QuickActions({
             <ExternalLink className="w-4 h-4 mr-2" />
             Open in New Tab
           </DropdownMenuItem>
+          {projectSlug && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setPanelLayoutMode("assets-left")}
+              >
+                <Check
+                  className={`w-4 h-4 mr-2 ${
+                    panelLayoutMode === "assets-left" ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+                Assets left, Agent right
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPanelLayoutMode("agent-left")}>
+                <Check
+                  className={`w-4 h-4 mr-2 ${
+                    panelLayoutMode === "agent-left" ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+                Agent left, Assets right
+              </DropdownMenuItem>
+            </>
+          )}
           {projectSlug && (
             <>
               <DropdownMenuItem onClick={handleDownloadZip}>

@@ -43,6 +43,8 @@ interface SelectedElement {
   astroSourceLoc?: string | null;
 }
 
+export type PanelLayoutMode = "assets-left" | "agent-left";
+
 interface PreviewContextValue {
   // Props
   url: string | null;
@@ -57,6 +59,8 @@ interface PreviewContextValue {
   setChatOpen: (open: boolean) => void;
   assetsOpen: boolean;
   setAssetsOpen: (open: boolean) => void;
+  panelLayoutMode: PanelLayoutMode;
+  setPanelLayoutMode: (mode: PanelLayoutMode) => void;
   refreshKey: number;
   selectedVersion: number;
   mobileView: boolean;
@@ -91,6 +95,8 @@ interface PreviewContextValue {
   hasMultipleVersions: boolean;
   enabledPlugins: string[];
   analyticsAvailable: boolean;
+  assetPanelSide: "left" | "right";
+  chatPanelSide: "left" | "right";
 
   // Handlers
   handleVersionSelect: (version: number) => void;
@@ -181,6 +187,15 @@ export function PreviewProvider({
   const [copied, setCopied] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [panelLayoutMode, setPanelLayoutMode] = useState<PanelLayoutMode>(
+    () => {
+      if (typeof window === "undefined") return "assets-left";
+      const stored = window.localStorage.getItem("previewModal.panelLayoutMode");
+      return stored === "agent-left" || stored === "assets-left"
+        ? stored
+        : "assets-left";
+    },
+  );
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
   const iframeLoadingDelayTimerRef = useRef<number | null>(null);
@@ -192,6 +207,13 @@ export function PreviewProvider({
   const [mobileScale, setMobileScale] = useState(1);
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const assetPanelSide = panelLayoutMode === "assets-left" ? "left" : "right";
+  const chatPanelSide = panelLayoutMode === "assets-left" ? "right" : "left";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("previewModal.panelLayoutMode", panelLayoutMode);
+  }, [panelLayoutMode]);
 
   const clearIframeLoadingDelayTimer = useCallback(() => {
     if (iframeLoadingDelayTimerRef.current === null) return;
@@ -996,7 +1018,7 @@ export function PreviewProvider({
     defaultWidth: 320,
     minWidth: 250,
     maxWidth: 500,
-    side: "left",
+    side: assetPanelSide,
   });
 
   const chatPanel = useResizablePanel({
@@ -1004,7 +1026,7 @@ export function PreviewProvider({
     defaultWidth: 400,
     minWidth: 320,
     maxWidth: 600,
-    side: "right",
+    side: chatPanelSide,
   });
 
   // Build version-aware URL - use dynamic URL from previewInfo if available
@@ -1242,6 +1264,8 @@ export function PreviewProvider({
     setChatOpen,
     assetsOpen,
     setAssetsOpen,
+    panelLayoutMode,
+    setPanelLayoutMode,
     refreshKey,
     selectedVersion,
     mobileView,
@@ -1276,6 +1300,8 @@ export function PreviewProvider({
     hasMultipleVersions,
     enabledPlugins,
     analyticsAvailable,
+    assetPanelSide,
+    chatPanelSide,
 
     // Handlers
     handleVersionSelect,

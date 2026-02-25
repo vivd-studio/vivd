@@ -48,6 +48,7 @@ import {
 import { useState } from "react";
 import { DEVICE_PRESETS } from "../../types";
 import type { DevicePreset } from "../../types";
+import type { PanelLayoutMode } from "../../PreviewContext";
 
 interface MobileActionsMenuProps {
   // View state
@@ -69,6 +70,8 @@ interface MobileActionsMenuProps {
   setAssetsOpen: (value: boolean) => void;
   chatOpen: boolean;
   setChatOpen: (value: boolean) => void;
+  panelLayoutMode: PanelLayoutMode;
+  setPanelLayoutMode: (mode: PanelLayoutMode) => void;
   editMode: boolean;
   hasUnsavedChanges: boolean;
   toggleEditMode: () => void;
@@ -134,6 +137,8 @@ export function MobileActionsMenu({
   setAssetsOpen,
   chatOpen,
   setChatOpen,
+  panelLayoutMode,
+  setPanelLayoutMode,
   editMode,
   hasUnsavedChanges,
   toggleEditMode,
@@ -303,6 +308,22 @@ export function MobileActionsMenu({
                 {chatOpen ? "Hide Agent" : "Show Agent"}
               </DropdownMenuItem>
             )}
+            <DropdownMenuItem onClick={() => setPanelLayoutMode("assets-left")}>
+              <Check
+                className={`w-4 h-4 mr-2 ${
+                  panelLayoutMode === "assets-left" ? "opacity-100" : "opacity-0"
+                }`}
+              />
+              Assets left, Agent right
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPanelLayoutMode("agent-left")}>
+              <Check
+                className={`w-4 h-4 mr-2 ${
+                  panelLayoutMode === "agent-left" ? "opacity-100" : "opacity-0"
+                }`}
+              />
+              Agent left, Assets right
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={toggleEditMode}
               disabled={hasUnsavedChanges && !editMode}

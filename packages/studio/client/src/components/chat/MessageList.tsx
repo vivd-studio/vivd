@@ -579,11 +579,11 @@ function UserMessageRow({
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+            className="text-[11px] text-muted-foreground/75 hover:text-muted-foreground h-6 px-2"
             onClick={() => onRevert(message.id!)}
           >
             <Undo2 className="w-3 h-3 mr-1" />
-            Revert to before this
+            Revert to here
           </Button>
         ) : (
           <span aria-hidden="true" className="h-6 w-px opacity-0" />

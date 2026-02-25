@@ -298,6 +298,43 @@ class ProjectMetaService {
       .where(and(eq(projectMeta.organizationId, organizationId), eq(projectMeta.slug, slug)));
   }
 
+  async setProjectTitle(options: {
+    organizationId: string;
+    slug: string;
+    title: string;
+  }): Promise<{ updatedVersions: number }> {
+    return db.transaction(async (tx) => {
+      const now = new Date();
+      const projectRows = await tx
+        .update(projectMeta)
+        .set({ title: options.title, updatedAt: now })
+        .where(
+          and(
+            eq(projectMeta.organizationId, options.organizationId),
+            eq(projectMeta.slug, options.slug),
+          ),
+        )
+        .returning({ slug: projectMeta.slug });
+
+      if (projectRows.length === 0) {
+        throw new Error("Project not found");
+      }
+
+      const versionRows = await tx
+        .update(projectVersion)
+        .set({ title: options.title, updatedAt: now })
+        .where(
+          and(
+            eq(projectVersion.organizationId, options.organizationId),
+            eq(projectVersion.projectSlug, options.slug),
+          ),
+        )
+        .returning({ id: projectVersion.id });
+
+      return { updatedVersions: versionRows.length };
+    });
+  }
+
   async setTags(options: {
     organizationId: string;
     slug: string;

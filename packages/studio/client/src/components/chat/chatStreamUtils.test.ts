@@ -50,7 +50,7 @@ describe("chatStreamUtils reasoning sanitization", () => {
         status: "running",
         input: { path: "src/pages/index.html" },
       }),
-    ).toBe("Exploring index.html...");
+    ).toBe("Reading index.html...");
 
     expect(
       getToolActivityLabel({
@@ -59,7 +59,25 @@ describe("chatStreamUtils reasoning sanitization", () => {
         status: "completed",
         input: { path: "src/pages/index.html" },
       }),
-    ).toBe("Explored index.html");
+    ).toBe("Read index.html");
+  });
+
+  it("formats grep tool labels as exploring states", () => {
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "Grep",
+        status: "running",
+      }),
+    ).toBe("Exploring files...");
+
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "grep",
+        status: "completed",
+      }),
+    ).toBe("Explored files");
   });
 
   it("formats edit tool labels with filename and status", () => {
@@ -138,6 +156,24 @@ describe("chatStreamUtils reasoning sanitization", () => {
         status: "completed",
       }),
     ).toBe("Executed command");
+  });
+
+  it("formats vivd_image_ai tool labels as image generation states", () => {
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "vivd_image_ai",
+        status: "running",
+      }),
+    ).toBe("Generating image...");
+
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "vivd_image_ai",
+        status: "completed",
+      }),
+    ).toBe("Generated image");
   });
 
   it("stores tool input on started parts for live filename labels", () => {

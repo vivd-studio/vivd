@@ -28,6 +28,18 @@ export interface StudioUsageReport {
 }
 
 /**
+ * Image-generation usage report sent from studio to main backend.
+ */
+export interface StudioImageGenerationReport {
+  /** Workspace/project path */
+  projectPath?: string;
+  /** Stable key for retry-safe dedupe */
+  idempotencyKey?: string;
+  /** ISO timestamp */
+  timestamp: string;
+}
+
+/**
  * Studio configuration for standalone/connected modes.
  */
 export interface StudioConfig {

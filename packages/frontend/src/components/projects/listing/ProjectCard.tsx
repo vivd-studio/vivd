@@ -36,6 +36,7 @@ import {
   Image,
   Pencil,
   Tags,
+  Type,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
@@ -214,6 +215,20 @@ export function ProjectCard({
       });
     },
   });
+  const updateTitleMutation = trpc.project.updateTitle.useMutation({
+    onSuccess: (data) => {
+      toast.success("Project title updated", {
+        description: `New title: ${data.title}`,
+      });
+      setShowEditTitleDialog(false);
+      utils.project.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("Failed to update project title", {
+        description: error.message,
+      });
+    },
+  });
 
   const getColor = (tag: string) => getTagColor(tag, tagColorMap);
 
@@ -221,7 +236,9 @@ export function ProjectCard({
     project.currentVersion || 1,
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [editTitleInput, setEditTitleInput] = useState(project.title ?? "");
   const [renameSlugInput, setRenameSlugInput] = useState(project.slug);
   const [showVersionManagement, setShowVersionManagement] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
@@ -243,6 +260,7 @@ export function ProjectCard({
   const canManagePreview = membership?.organizationRole !== "client_editor";
   const canRenameProject = membership?.organizationRole !== "client_editor";
   const isRenamePending = renameSlugMutation.isPending;
+  const isTitleUpdatePending = updateTitleMutation.isPending;
 
   const getPreviewUrl = () => {
     const shareablePath = `/vivd-studio/api/preview/${project.slug}/v${selectedVersion}/`;
@@ -298,6 +316,10 @@ export function ProjectCard({
   useEffect(() => {
     setRenameSlugInput(project.slug);
   }, [project.slug]);
+
+  useEffect(() => {
+    setEditTitleInput(project.title ?? "");
+  }, [project.title]);
 
   const hasMultipleVersions = (project.totalVersions || 1) > 1;
   const versions = project.versions || [];
@@ -756,10 +778,22 @@ export function ProjectCard({
               {canRenameProject && (
                 <DropdownMenuItem
                   onClick={() => {
+                    setEditTitleInput(project.title ?? "");
+                    setShowEditTitleDialog(true);
+                  }}
+                  disabled={isTitleUpdatePending || renameSlugMutation.isPending}
+                >
+                  <Type className="w-4 h-4 mr-2" />
+                  Edit project title
+                </DropdownMenuItem>
+              )}
+              {canRenameProject && (
+                <DropdownMenuItem
+                  onClick={() => {
                     setRenameSlugInput(project.slug);
                     setShowRenameDialog(true);
                   }}
-                  disabled={renameSlugMutation.isPending}
+                  disabled={renameSlugMutation.isPending || isTitleUpdatePending}
                 >
                   <Pencil className="w-4 h-4 mr-2" />
                   Rename project slug
@@ -843,6 +877,59 @@ export function ProjectCard({
               }}
             >
               Force Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showEditTitleDialog}
+        onOpenChange={(open) => {
+          if (isTitleUpdatePending) return;
+          setShowEditTitleDialog(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit project title</AlertDialogTitle>
+            <AlertDialogDescription>
+              Update the display name shown for this project in listings, search,
+              and navigation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Input
+              value={editTitleInput}
+              onChange={(event) => setEditTitleInput(event.target.value)}
+              placeholder="Project title"
+              autoFocus
+              disabled={isTitleUpdatePending}
+            />
+            {isTitleUpdatePending ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Saving title...
+              </div>
+            ) : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTitleUpdatePending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                isTitleUpdatePending ||
+                !editTitleInput.trim() ||
+                editTitleInput.trim() === (project.title ?? "").trim()
+              }
+              onClick={() => {
+                updateTitleMutation.mutate({
+                  slug: project.slug,
+                  title: editTitleInput.trim(),
+                });
+              }}
+            >
+              {isTitleUpdatePending ? "Saving..." : "Save title"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

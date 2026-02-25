@@ -16,6 +16,7 @@ import {
 import { useToolbarState } from "./useToolbarState";
 import {
   AgentButton,
+  AssetsButton,
   EditControls,
   MobileActionsMenu,
   QuickActions,
@@ -42,6 +43,8 @@ export function StudioToolbar() {
     originalUrl,
     copied,
     selectedVersion,
+    panelLayoutMode,
+    setPanelLayoutMode,
     previewMode,
     versions,
     hasMultipleVersions,
@@ -209,6 +212,10 @@ export function StudioToolbar() {
           projectSlug={projectSlug}
           assetsOpen={assetsOpen}
           setAssetsOpen={setAssetsOpen}
+          chatOpen={chatOpen}
+          setChatOpen={setChatOpen}
+          panelLayoutMode={panelLayoutMode}
+          canUseAgent={canUseAgent}
           editMode={editMode}
           hasUnsavedChanges={hasUnsavedChanges}
           toggleEditMode={toggleEditMode}
@@ -216,13 +223,25 @@ export function StudioToolbar() {
 
         {/* Right Section */}
         <div className="flex items-center gap-1 ml-auto shrink-0">
-          {/* Agent Button */}
-          <AgentButton
-            projectSlug={projectSlug}
-            chatOpen={chatOpen}
-            setChatOpen={setChatOpen}
-            canUseAgent={canUseAgent}
-          />
+          {projectSlug && canUseAgent && (
+            <>
+              {panelLayoutMode === "assets-left" ? (
+                <AgentButton
+                  projectSlug={projectSlug}
+                  chatOpen={chatOpen}
+                  setChatOpen={setChatOpen}
+                  canUseAgent={canUseAgent}
+                />
+              ) : (
+                <AssetsButton
+                  projectSlug={projectSlug}
+                  assetsOpen={assetsOpen}
+                  setAssetsOpen={setAssetsOpen}
+                />
+              )}
+              <div className="hidden md:block h-5 w-px bg-border mx-1" />
+            </>
+          )}
 
           {/* Quick Actions */}
           <QuickActions
@@ -238,6 +257,8 @@ export function StudioToolbar() {
             handleRestartDevServer={handleRestartDevServer}
             isRestartingDevServer={isRestartingDevServer}
             devServerRestartKind={devServerRestartKind}
+            panelLayoutMode={panelLayoutMode}
+            setPanelLayoutMode={setPanelLayoutMode}
             historyPanelOpen={historyPanelOpen}
             setHistoryPanelOpen={setHistoryPanelOpen}
             publishDialogOpen={publishDialogOpen}
@@ -281,6 +302,8 @@ export function StudioToolbar() {
             setAssetsOpen={setAssetsOpen}
             chatOpen={chatOpen}
             setChatOpen={setChatOpen}
+            panelLayoutMode={panelLayoutMode}
+            setPanelLayoutMode={setPanelLayoutMode}
             editMode={editMode}
             hasUnsavedChanges={hasUnsavedChanges}
             toggleEditMode={toggleEditMode}

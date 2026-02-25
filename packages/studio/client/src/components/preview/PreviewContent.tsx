@@ -94,6 +94,8 @@ export function PreviewContent() {
     setChatOpen,
     handleTaskComplete,
     handleRefresh,
+    assetPanelSide,
+    chatPanelSide,
     assetPanel,
     chatPanel,
     iframeLoading,
@@ -347,27 +349,52 @@ export function PreviewContent() {
     return navigableFiles[currentFileIndex] || null;
   }, [navigableFiles, currentFileIndex, viewingImagePath]);
 
+  const assetPanelContent =
+    projectSlug && version !== undefined && assetsOpen ? (
+      <div
+        className={`absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:min-w-0 ${
+          assetPanelSide === "left" ? "md:border-r" : "md:border-l"
+        }`}
+        style={{ width: assetPanel.width }}
+      >
+        <DeferredPanel>
+          <AssetExplorer
+            projectSlug={projectSlug}
+            version={selectedVersion}
+            onClose={() => setAssetsOpen(false)}
+          />
+        </DeferredPanel>
+        <div className="hidden md:block">
+          <ResizeHandle
+            side={assetPanelSide}
+            onMouseDown={assetPanel.handleMouseDown}
+          />
+        </div>
+      </div>
+    ) : null;
+
+  const chatPanelContent =
+    projectSlug && chatOpen ? (
+      <div
+        className={`absolute inset-0 z-40 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:min-w-0 ${
+          chatPanelSide === "left" ? "md:border-r" : "md:border-l"
+        }`}
+        style={{ width: chatPanel.width }}
+      >
+        <div className="hidden md:block">
+          <ResizeHandle side={chatPanelSide} onMouseDown={chatPanel.handleMouseDown} />
+        </div>
+        <DeferredPanel>
+          <ChatPanelContent onClose={() => setChatOpen(false)} />
+        </DeferredPanel>
+      </div>
+    ) : null;
+
   // Inner content that needs ChatProvider context
   const mainContent = (
     <div className="flex flex-1 min-h-0 relative">
-      {/* Asset Explorer Panel - Left side (full-screen overlay on mobile) */}
-      {projectSlug && version !== undefined && assetsOpen && (
-        <div
-          className="absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:border-r md:min-w-0"
-          style={{ width: assetPanel.width }}
-        >
-          <DeferredPanel>
-            <AssetExplorer
-              projectSlug={projectSlug}
-              version={selectedVersion}
-              onClose={() => setAssetsOpen(false)}
-            />
-          </DeferredPanel>
-          <div className="hidden md:block">
-            <ResizeHandle side="left" onMouseDown={assetPanel.handleMouseDown} />
-          </div>
-        </div>
-      )}
+      {assetPanelSide === "left" ? assetPanelContent : null}
+      {chatPanelSide === "left" ? chatPanelContent : null}
 
       <div
         ref={mobileContainerRef}
@@ -577,20 +604,8 @@ export function PreviewContent() {
         </>
       )}
 
-      {/* Chat Panel - Right side (full-screen overlay on mobile) */}
-      {projectSlug && chatOpen && (
-        <div
-          className="absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:border-l md:min-w-0"
-          style={{ width: chatPanel.width }}
-        >
-          <div className="hidden md:block">
-            <ResizeHandle side="right" onMouseDown={chatPanel.handleMouseDown} />
-          </div>
-          <DeferredPanel>
-            <ChatPanelContent onClose={() => setChatOpen(false)} />
-          </DeferredPanel>
-        </div>
-      )}
+      {assetPanelSide === "right" ? assetPanelContent : null}
+      {chatPanelSide === "right" ? chatPanelContent : null}
     </div>
   );
 

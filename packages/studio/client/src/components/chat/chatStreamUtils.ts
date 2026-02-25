@@ -145,54 +145,109 @@ function extractToolTargetName(input: unknown): string | undefined {
   return undefined;
 }
 
+type ToolLabelBuilderContext = { status: ToolStatus; target?: string };
+type ToolLabelBuilder = (context: ToolLabelBuilderContext) => ToolActivityLabelParts;
+
+function createTargetedToolLabelBuilder({
+  runningAction,
+  completedAction,
+  errorAction,
+  fallbackTarget,
+  runningFallbackTarget = fallbackTarget,
+  includeErrorTarget = true,
+}: {
+  runningAction: string;
+  completedAction: string;
+  errorAction: string;
+  fallbackTarget: string;
+  runningFallbackTarget?: string | null;
+  includeErrorTarget?: boolean;
+}): ToolLabelBuilder {
+  return ({ status, target }) => {
+    if (status === "running") {
+      const runningTarget = target ?? runningFallbackTarget;
+      if (!runningTarget) return { action: runningAction };
+      return { action: runningAction, target: `${runningTarget}...` };
+    }
+    if (status === "error") {
+      if (!includeErrorTarget) return { action: errorAction };
+      return { action: errorAction, target: target ?? fallbackTarget };
+    }
+    return { action: completedAction, target: target ?? fallbackTarget };
+  };
+}
+
+function createActionOnlyToolLabelBuilder({
+  runningAction,
+  completedAction,
+  errorAction,
+}: {
+  runningAction: string;
+  completedAction: string;
+  errorAction: string;
+}): ToolLabelBuilder {
+  return ({ status }) => {
+    if (status === "running") return { action: `${runningAction}...` };
+    if (status === "error") return { action: errorAction };
+    return { action: completedAction };
+  };
+}
+
+const TOOL_ACTIVITY_LABEL_BUILDERS: Record<string, ToolLabelBuilder> = {
+  read: createTargetedToolLabelBuilder({
+    runningAction: "Reading",
+    completedAction: "Read",
+    errorAction: "Failed reading",
+    fallbackTarget: "file",
+  }),
+  grep: createTargetedToolLabelBuilder({
+    runningAction: "Exploring",
+    completedAction: "Explored",
+    errorAction: "Failed exploring",
+    fallbackTarget: "files",
+  }),
+  edit: createTargetedToolLabelBuilder({
+    runningAction: "Editing",
+    completedAction: "Edited",
+    errorAction: "Failed editing",
+    fallbackTarget: "file",
+  }),
+  write: createTargetedToolLabelBuilder({
+    runningAction: "Editing",
+    completedAction: "Edited",
+    errorAction: "Failed editing",
+    fallbackTarget: "file",
+    runningFallbackTarget: null,
+  }),
+  glob: createTargetedToolLabelBuilder({
+    runningAction: "Exploring",
+    completedAction: "Explored",
+    errorAction: "Failed exploring",
+    fallbackTarget: "files",
+  }),
+  bash: createTargetedToolLabelBuilder({
+    runningAction: "Running",
+    completedAction: "Executed",
+    errorAction: "Command failed",
+    fallbackTarget: "command",
+    runningFallbackTarget: "command",
+    includeErrorTarget: false,
+  }),
+  vivd_image_ai: createActionOnlyToolLabelBuilder({
+    runningAction: "Generating image",
+    completedAction: "Generated image",
+    errorAction: "Failed generating image",
+  }),
+};
+
 export function getToolActivityLabelParts(part: any): ToolActivityLabelParts {
   const status = normalizeToolStatus(part) ?? "completed";
   const toolName = String(part?.tool ?? "").trim().toLowerCase();
   const target = extractToolTargetName(part?.input);
 
-  if (toolName === "read") {
-    if (status === "running") {
-      return { action: "Exploring", target: `${target ?? "file"}...` };
-    }
-    if (status === "error") {
-      return { action: "Failed exploring", target: target ?? "file" };
-    }
-    return { action: "Explored", target: target ?? "file" };
-  }
-
-  if (toolName === "edit") {
-    if (status === "running") {
-      return { action: "Editing", target: `${target ?? "file"}...` };
-    }
-    if (status === "error") {
-      return { action: "Failed editing", target: target ?? "file" };
-    }
-    return { action: "Edited", target: target ?? "file" };
-  }
-
-  if (toolName === "write") {
-    if (status === "running") {
-      if (target) {
-        return { action: "Editing", target: `${target}...` };
-      }
-      return { action: "Editing" };
-    }
-    if (status === "error") {
-      return { action: "Failed editing", target: target ?? "file" };
-    }
-    return { action: "Edited", target: target ?? "file" };
-  }
-
-  if (toolName === "glob") {
-    if (status === "running") return { action: "Exploring", target: "files..." };
-    if (status === "error") return { action: "Failed exploring", target: "files" };
-    return { action: "Explored", target: "files" };
-  }
-
-  if (toolName === "bash") {
-    if (status === "running") return { action: "Running", target: "command..." };
-    if (status === "error") return { action: "Command failed" };
-    return { action: "Executed", target: "command" };
+  const builder = TOOL_ACTIVITY_LABEL_BUILDERS[toolName];
+  if (builder) {
+    return builder({ status, target });
   }
 
   if (status === "running") return { action: "Running", target: "tool..." };

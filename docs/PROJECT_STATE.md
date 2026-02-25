@@ -18,6 +18,15 @@
 
 ## Latest Progress (Top 9)
 
+- 2026-02-25: implemented a Studio preview panel-layout toggle with persisted preference (`previewModal.panelLayoutMode`): users can now switch between `Assets left + Agent right` and `Agent left + Assets right`; panel placement, resize-handle direction, and desktop/mobile toolbar controls are now wired to the selected mode.
+- 2026-02-25: enforced connected-mode image limits in Studio agent image generation: `vivd_image_ai` now checks backend usage status before provider calls, fails closed when limits cannot be verified, and returns explicit structured tool errors (`IMAGE_GEN_LIMIT_EXCEEDED`) so the agent can react to quota/availability issues.
+- 2026-02-25: fixed Studio chat recovery for interrupted tool calls after reload/reopen by terminal-normalizing persisted `status: "running"` tool parts when the session is no longer active (idle/done/error): stale runs now render as interrupted (`error`) when no final assistant text exists, or as completed when a final response is present, preventing indefinite `Generating image...` states.
+- 2026-02-25: added editable project display titles in control-plane project cards (alongside existing slug rename): introduced backend `project.updateTitle` mutation and wired a new `Edit project title` action/dialog so teams can update the human-readable name shown in listings/search/navigation without changing URLs.
+- 2026-02-25: aligned Studio `vivd_image_ai` usage tracking with backend image accounting by introducing a dedicated connected-mode report path (`studioApi.reportImageGeneration` → `UsageService.recordImageGeneration` with optional idempotency key), and refactored the Studio tool to use a centralized OpenRouter image helper plus success-time image-gen reporting.
+- 2026-02-25: brightened Studio chat composer active-state color emphasis further by switching shared `vivd-surface-field` focus border/halo from `--ring` to `--primary`, making green-theme focus states more vivid and easier to spot.
+- 2026-02-25: updated the Studio chat user-message revert CTA copy from `Revert to before this` to `Revert to here`, and made the control visually subtler with slightly smaller text plus softer muted color treatment.
+- 2026-02-25: strengthened Studio chat composer active-state visibility across themes by updating shared `vivd-surface-field` focus styling to keep the ring-colored border plus a subtle two-layer focus halo, improving contrast on green-heavy palettes in both light and dark mode.
+- 2026-02-25: refactored Studio chat tool-activity copy into a centralized per-tool label builder map (`chatStreamUtils`) to simplify future wording updates; updated wording for `read` (`Reading...` / `Read`), added explicit `grep` phrasing (`Exploring...` / `Explored`), and added image-generation phrasing for `vivd_image_ai` (`Generating image...` / `Generated image`).
 - 2026-02-25: fixed organization-header normalization for backend context + preview runtime to support real DB organization IDs (including underscores/mixed case) instead of slug-only coercion; this prevents internal preview/token flows (including thumbnail capture and Studio machine calls) from dropping valid org IDs and returning false `404 Not found`.
 - 2026-02-25: added anti-loop safeguards for the Studio interrupted-run continue CTA: a synchronous click lock now prevents duplicate `continue` submissions from rapid double-clicks, and the CTA is suppressed while the latest user message is already `continue` (until a new agent response arrives), avoiding immediate re-show/re-submit loops.
 - 2026-02-25: refined Studio interrupted-run chat UX so the `Done` divider is now hidden whenever the `Agent interrupted, click to continue` CTA is displayed, preventing mixed terminal cues for incomplete runs.
@@ -72,7 +81,6 @@
 6. Validate lifecycle sync hardening in real Fly runs (including larger OpenCode payloads).
 7. Add Phase 4 E2E smoke coverage for critical cross-service flows.
 8. Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
-9. Add a Studio preview layout setting to toggle panel positions between `Assets left + Agent right` and `Agent left + Assets right`, with persisted per-user preference.
 
 ## Open Decisions
 

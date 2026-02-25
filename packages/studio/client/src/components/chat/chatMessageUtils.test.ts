@@ -50,6 +50,88 @@ describe("chatMessageUtils", () => {
     ]);
   });
 
+  it("marks stale running tools as interrupted when session is idle", () => {
+    const mapped = mapSessionMessagesToChatMessages(
+      [
+        {
+          info: { id: "m1", role: "assistant" },
+          parts: [{ id: "tool-1", type: "tool", tool: "vivd_image_ai", status: "running" }],
+        },
+      ],
+      { sessionStatusType: "idle" },
+    );
+
+    expect(mapped).toEqual([
+      {
+        id: "m1",
+        role: "agent",
+        content: "",
+        parts: [
+          {
+            id: "tool-1",
+            type: "tool",
+            tool: "vivd_image_ai",
+            status: "error",
+            input: undefined,
+            error: "Tool execution interrupted before completion.",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps running tools while session is still active", () => {
+    const mapped = mapSessionMessagesToChatMessages(
+      [
+        {
+          info: { id: "m1", role: "assistant" },
+          parts: [{ id: "tool-1", type: "tool", tool: "vivd_image_ai", status: "running" }],
+        },
+      ],
+      { sessionStatusType: "busy" },
+    );
+
+    expect(mapped[0]?.parts?.[0]).toMatchObject({
+      id: "tool-1",
+      status: "running",
+    });
+  });
+
+  it("keeps running tools when session status is unknown", () => {
+    const mapped = mapSessionMessagesToChatMessages([
+      {
+        info: { id: "m1", role: "assistant" },
+        parts: [{ id: "tool-1", type: "tool", tool: "vivd_image_ai", status: "running" }],
+      },
+    ]);
+
+    expect(mapped[0]?.parts?.[0]).toMatchObject({
+      id: "tool-1",
+      status: "running",
+    });
+  });
+
+  it("converts stale running tools to completed when a final text response exists", () => {
+    const mapped = mapSessionMessagesToChatMessages(
+      [
+        {
+          info: { id: "m1", role: "assistant" },
+          parts: [
+            { id: "tool-1", type: "tool", tool: "read", status: "running" },
+            { id: "text-1", type: "text", text: "Done." },
+          ],
+        },
+      ],
+      { sessionStatusType: "done" },
+    );
+
+    expect(mapped[0]?.parts?.[0]).toMatchObject({
+      id: "tool-1",
+      status: "completed",
+    });
+    expect((mapped[0]?.parts?.[0] as any)?.error).toBeUndefined();
+  });
+
   it("maps message timestamps from session metadata", () => {
     const mapped = mapSessionMessagesToChatMessages([
       {

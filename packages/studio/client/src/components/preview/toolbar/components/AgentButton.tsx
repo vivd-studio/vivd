@@ -17,22 +17,18 @@ export function AgentButton({
   if (!projectSlug || !canUseAgent) return null;
 
   return (
-    <>
-      <Button
-        variant={chatOpen ? "secondary" : "outline"}
-        size="sm"
-        onClick={() => setChatOpen(!chatOpen)}
-        className={`hidden md:flex h-8 ${
-          !chatOpen
-            ? "border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400"
-            : ""
-        }`}
-      >
-        <MessageSquare className="w-4 h-4 mr-1.5" />
-        <span className="hidden lg:inline">Agent</span>
-      </Button>
-
-      <div className="hidden md:block h-5 w-px bg-border mx-1" />
-    </>
+    <Button
+      variant={chatOpen ? "secondary" : "outline"}
+      size="sm"
+      onClick={() => setChatOpen(!chatOpen)}
+      className={`hidden md:flex h-8 ${
+        !chatOpen
+          ? "border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400"
+          : ""
+      }`}
+    >
+      <MessageSquare className="w-4 h-4 mr-1.5" />
+      <span className="hidden lg:inline">Agent</span>
+    </Button>
   );
 }

@@ -6,6 +6,10 @@ import sizeOf from "image-size";
 import ignore from "ignore";
 import sharp from "sharp";
 import { WEBP_QUALITY } from "../config.js";
+import {
+  createImageGeneration,
+  extractImageFromResponse,
+} from "../services/integrations/OpenRouterImageService.js";
 import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 
@@ -154,60 +158,8 @@ async function callOpenRouter(body: any): Promise<any> {
     throw new Error("OPENROUTER_API_KEY not set");
   }
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://github.com/vivd",
-      "X-Title": "Vivd",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} ${error}`);
-  }
-
-  return response.json();
-}
-
-function extractImageFromResponse(result: any): string | null {
-  if (!result.choices || !result.choices[0]) {
-    return null;
-  }
-
-  const message = result.choices[0].message;
-
-  // Check for images in the OpenRouter format
-  if (message.images && message.images.length > 0) {
-    const imgObj = message.images[0];
-    const imageUrl = imgObj.image_url?.url || imgObj.imageUrl?.url;
-    if (imageUrl) {
-      return imageUrl;
-    }
-  }
-
-  // Fallback: check content for markdown or URL
-  if (message.content) {
-    let content = "";
-    if (typeof message.content === "string") {
-      content = message.content;
-    } else if (Array.isArray(message.content)) {
-      content = message.content
-        .filter((c: any) => c.type === "text")
-        .map((c: any) => c.text)
-        .join("");
-    }
-
-    // Check for Markdown image link ![alt](url)
-    const match = content.match(/\!\[.*?\]\((.*?)\)/);
-    if (match) return match[1];
-    if (content.startsWith("http")) return content;
-  }
-
-  return null;
+  const { data } = await createImageGeneration(apiKey, body);
+  return data;
 }
 
 async function saveGeneratedImage(
