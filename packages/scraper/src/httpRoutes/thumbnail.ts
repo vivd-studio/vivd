@@ -69,7 +69,19 @@ thumbnailRouter.post("/", async (req, res) => {
 
     const status = response.status();
     if (status >= 400) {
-      throw new Error(`Preview returned HTTP ${status}`);
+      let detail = "";
+      try {
+        const bodyText = await response.text();
+        if (bodyText) {
+          const compact = bodyText.replace(/\s+/g, " ").trim();
+          if (compact) {
+            detail = `: ${compact.slice(0, 240)}`;
+          }
+        }
+      } catch {
+        // ignore body parsing failures, keep status-only error
+      }
+      throw new Error(`Preview returned HTTP ${status}${detail}`);
     }
 
     const contentType = response.headers()["content-type"] || "";

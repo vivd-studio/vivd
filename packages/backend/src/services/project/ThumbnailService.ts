@@ -17,11 +17,49 @@ const PREVIEW_BASE_URL =
       ? process.env.DOMAIN
       : `https://${process.env.DOMAIN}`;
 const DEBOUNCE_MS = 5000; // 5 second debounce window
+const NON_RETRYABLE_COOLDOWN_MS = 60_000;
+const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const NON_RETRYABLE_HTTP_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
 
 type PendingGeneration = {
   timeout: NodeJS.Timeout;
   resolve: () => void;
 };
+
+type FailureCooldown = {
+  until: number;
+  reason: string;
+};
+
+function extractPreviewHttpStatus(message: string): number | null {
+  const match = message.match(/HTTP\s+(\d{3})/i);
+  if (!match?.[1]) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function shouldRetryCaptureError(message: string): boolean {
+  const status = extractPreviewHttpStatus(message);
+  if (status !== null) {
+    return RETRYABLE_HTTP_STATUS_CODES.has(status);
+  }
+
+  // JSON responses from preview are usually policy/gating failures, not transient startup errors.
+  if (message.includes("Preview returned JSON instead of HTML")) {
+    return false;
+  }
+
+  // Unknown/non-HTTP failures (timeouts, browser flakiness, network hiccups) can be retried.
+  return true;
+}
+
+function shouldCooldownAfterFailure(message: string): boolean {
+  const status = extractPreviewHttpStatus(message);
+  if (status !== null) {
+    return NON_RETRYABLE_HTTP_STATUS_CODES.has(status);
+  }
+  return message.includes("Preview returned JSON instead of HTML");
+}
 
 /**
  * Service for generating project thumbnails.
@@ -29,6 +67,7 @@ type PendingGeneration = {
  */
 class ThumbnailService {
   private pendingGenerations: Map<string, PendingGeneration> = new Map();
+  private failureCooldownByKey: Map<string, FailureCooldown> = new Map();
 
   private async captureThumbnailWithRetry(
     previewUrl: string,
@@ -45,6 +84,13 @@ class ThumbnailService {
       } catch (err) {
         lastError = err;
         const message = err instanceof Error ? err.message : String(err);
+        const retryable = shouldRetryCaptureError(message);
+        if (!retryable) {
+          console.warn(
+            `[Thumbnail] Capture attempt ${attempt}/${maxAttempts} failed for ${slug} v${version}: ${message}. Not retrying.`,
+          );
+          break;
+        }
         if (attempt >= maxAttempts) break;
 
         const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
@@ -130,6 +176,22 @@ class ThumbnailService {
     slug: string,
     version: number
   ): Promise<void> {
+    const key = `${organizationId}:${slug}-v${version}`;
+    const cooldown = this.failureCooldownByKey.get(key);
+    if (cooldown) {
+      if (cooldown.until > Date.now()) {
+        const secondsLeft = Math.max(
+          1,
+          Math.ceil((cooldown.until - Date.now()) / 1000),
+        );
+        console.warn(
+          `[Thumbnail] Skipping for ${slug} v${version}: cooling down after recent non-retryable failure (${secondsLeft}s left). Last error: ${cooldown.reason}`,
+        );
+        return;
+      }
+      this.failureCooldownByKey.delete(key);
+    }
+
     const basePreviewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
 
     const project = await projectMetaService.getProject(organizationId, slug);
@@ -201,9 +263,19 @@ class ThumbnailService {
         console.warn(`[Thumbnail] Bucket upload failed: ${message}`);
       }
 
+      this.failureCooldownByKey.delete(key);
       console.log(`[Thumbnail] Generated successfully for ${slug} v${version}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (shouldCooldownAfterFailure(message)) {
+        const until = Date.now() + NON_RETRYABLE_COOLDOWN_MS;
+        this.failureCooldownByKey.set(key, { until, reason: message });
+        console.warn(
+          `[Thumbnail] Cooling down ${slug} v${version} for ${Math.round(
+            NON_RETRYABLE_COOLDOWN_MS / 1000,
+          )}s after non-retryable failure.`,
+        );
+      }
       console.error(`[Thumbnail] Failed for ${slug} v${version}: ${message}`);
       throw err;
     }
