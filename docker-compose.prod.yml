@@ -2,6 +2,7 @@ services:
   caddy:
     image: ghcr.io/vivd-studio/vivd-caddy:latest
     pull_policy: always
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
     restart: unless-stopped
     volumes:
       - caddy_data:/data
