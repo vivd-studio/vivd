@@ -37,6 +37,7 @@ const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 80;
 export function MessageList() {
   const {
     messages,
+    selectedSessionId,
     isThinking,
     isWaiting,
     isLoading,
@@ -154,6 +155,20 @@ export function MessageList() {
     },
     [],
   );
+
+  useEffect(() => {
+    partOrderRef.current.clear();
+    nextPartOrderRef.current = 0;
+    runStatusRef.current.clear();
+    runSeenInProgressRef.current.clear();
+    workedCollapseTimersRef.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    workedCollapseTimersRef.current.clear();
+    setLiveParts([]);
+    setWorkedOpenRunIds(new Set());
+    setWorkedAutoCollapsedRunIds(new Set());
+  }, [selectedSessionId]);
 
   useEffect(() => {
     let frameId: number | null = null;
@@ -415,7 +430,11 @@ export function MessageList() {
             <AgentMessageRow
               key={item.key}
               item={item}
-              orderedParts={orderPartsBySeenSequence(item.orderedParts)}
+              orderedParts={
+                item.runInProgress
+                  ? orderPartsBySeenSequence(item.orderedParts)
+                  : item.orderedParts
+              }
               workedOpen={workedOpenRunIds.has(item.runId)}
               onToggleWorked={() =>
                 setWorkedOpenRunIds((prev) => {

@@ -250,3 +250,28 @@ export function shouldSuggestInterruptedContinue(options: {
 
   return !hasFinalAgentResponse(options.messages);
 }
+
+export function shouldHoldWaitingForStaleTerminalStatus(options: {
+  sessionStatus: string | null | undefined;
+  isWaitingForAgent: boolean;
+  lastUserMessageAt?: number;
+  now?: number;
+  graceMs?: number;
+}): boolean {
+  if (!options.isWaitingForAgent) {
+    return false;
+  }
+
+  const status = options.sessionStatus;
+  if (status !== "idle" && status !== "done") {
+    return false;
+  }
+
+  if (!options.lastUserMessageAt) {
+    return false;
+  }
+
+  const now = options.now ?? Date.now();
+  const graceMs = options.graceMs ?? 6000;
+  return now - options.lastUserMessageAt < graceMs;
+}

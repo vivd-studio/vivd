@@ -27,6 +27,7 @@ import type {
 import {
   calculateUsageFromSessionMessages,
   mapSessionMessagesToChatMessages,
+  shouldHoldWaitingForStaleTerminalStatus,
   shouldRecoverFromMissedStreamEvents,
 } from "./chatMessageUtils";
 import { useChatAttachments } from "./useChatAttachments";
@@ -390,7 +391,30 @@ export function ChatProvider({
   useEffect(() => {
     if (!currentSessionStatus) return;
 
+    const lastUserMessageAt = (() => {
+      for (let i = messagesRef.current.length - 1; i >= 0; i -= 1) {
+        const message = messagesRef.current[i];
+        if (message?.role === "user") {
+          return message.createdAt;
+        }
+      }
+      return undefined;
+    })();
+
+    const shouldHoldTerminalStateReset = shouldHoldWaitingForStaleTerminalStatus({
+      sessionStatus: currentSessionStatus.type,
+      isWaitingForAgent: isWaitingForAgent.current,
+      lastUserMessageAt,
+    });
+
     if ((currentSessionStatus as any).type === "done") {
+      if (shouldHoldTerminalStateReset) {
+        if (!isWaiting) {
+          setIsWaiting(true);
+        }
+        return;
+      }
+
       if (isStreaming || isWaiting || isWaitingForAgent.current) {
         debugLog(
           "[ChatContext] Session status is done - clearing waiting/streaming state",
@@ -402,9 +426,9 @@ export function ChatProvider({
         refetchMessages();
       }
     } else if (currentSessionStatus.type === "idle") {
-      // If we just sent a message (isWaitingForAgent.current is true), don't reset
-      // The session status may still be "idle" from the previous task - wait for it to update
-      if (isWaitingForAgent.current) {
+      // If we just sent a message, allow a short grace window because polled
+      // terminal status can lag behind the new run's busy transition.
+      if (shouldHoldTerminalStateReset) {
         if (!isWaiting) {
           setIsWaiting(true);
         }

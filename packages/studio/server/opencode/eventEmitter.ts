@@ -121,6 +121,7 @@ class AgentEventEmitter extends EventEmitter {
   private sessionBuffers: Map<string, AgentEvent[]> = new Map();
   private sessionSequences: Map<string, number> = new Map();
   private sessionStatuses: Map<string, SessionStatus> = new Map();
+  private sessionStatusUpdatedAt: Map<string, number> = new Map();
   private completedSessions: Set<string> = new Set();
   private static readonly BUFFER_CLEANUP_DELAY_MS = 5 * 60 * 1000;
 
@@ -264,13 +265,32 @@ class AgentEventEmitter extends EventEmitter {
   setSessionStatus(sessionId: string, status: SessionStatus): void {
     if (status.type === "idle") {
       this.sessionStatuses.delete(sessionId);
+      this.sessionStatusUpdatedAt.delete(sessionId);
       return;
     }
     this.sessionStatuses.set(sessionId, status);
+    this.sessionStatusUpdatedAt.set(sessionId, Date.now());
   }
 
   getSessionStatuses(): Record<string, SessionStatus> {
     return Object.fromEntries(this.sessionStatuses.entries());
+  }
+
+  getSessionStatusSnapshots(): Record<
+    string,
+    { status: SessionStatus; updatedAt: number }
+  > {
+    const snapshots: Record<
+      string,
+      { status: SessionStatus; updatedAt: number }
+    > = {};
+    for (const [sessionId, status] of this.sessionStatuses.entries()) {
+      snapshots[sessionId] = {
+        status,
+        updatedAt: this.sessionStatusUpdatedAt.get(sessionId) ?? 0,
+      };
+    }
+    return snapshots;
   }
 
   private nextSequence(sessionId: string): number {
@@ -286,6 +306,7 @@ class AgentEventEmitter extends EventEmitter {
   private updateSessionStatus(sessionId: string, event: AgentEvent): void {
     if (event.type === "session.completed") {
       this.sessionStatuses.delete(sessionId);
+      this.sessionStatusUpdatedAt.delete(sessionId);
       return;
     }
 
@@ -297,10 +318,12 @@ class AgentEventEmitter extends EventEmitter {
         message: data.message,
         next: data.nextRetryAt,
       });
+      this.sessionStatusUpdatedAt.set(sessionId, Date.now());
       return;
     }
 
     this.sessionStatuses.set(sessionId, { type: "busy" });
+    this.sessionStatusUpdatedAt.set(sessionId, Date.now());
   }
 }
 

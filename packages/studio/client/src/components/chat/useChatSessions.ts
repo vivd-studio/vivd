@@ -73,12 +73,13 @@ export function useChatSessions({
   }, [sessionsData]);
 
   // Poll for session statuses - this is the source of truth for whether a session is active
-  const { data: sessionStatuses } = trpc.agent.getSessionsStatus.useQuery(
-    { projectSlug, version },
-    {
-      refetchInterval: getSessionStatusPollingInterval(isActive),
-    },
-  );
+  const { data: sessionStatuses, refetch: refetchSessionStatuses } =
+    trpc.agent.getSessionsStatus.useQuery(
+      { projectSlug, version },
+      {
+        refetchInterval: getSessionStatusPollingInterval(isActive),
+      },
+    );
 
   // Get current session's status from polled data
   const currentSessionStatus = selectedSessionId
@@ -149,8 +150,9 @@ export function useChatSessions({
   useEffect(() => {
     if (selectedSessionId) {
       refetchMessages();
+      refetchSessionStatuses();
     }
-  }, [selectedSessionId, refetchMessages]);
+  }, [selectedSessionId, refetchMessages, refetchSessionStatuses]);
 
   const shouldSubscribeToSessionEvents =
     !!selectedSessionId &&

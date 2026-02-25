@@ -18,6 +18,7 @@
 
 ## Latest Progress (Top 9)
 
+- 2026-02-25: re-applied Studio chat reliability fixes after refactor rollback: added a short stale-terminal grace in `ChatContext` to prevent newly sent prompts from being immediately marked interrupted by lagging `idle`/`done` poll state; restored session-switch part-order reset + persisted-order rendering for non-active runs; and hardened backend session-status reconciliation with fresh-busy timestamp snapshots plus robust handling of partial/unkeyed OpenCode status payloads.
 - 2026-02-25: implemented a Studio preview panel-layout toggle with persisted preference (`previewModal.panelLayoutMode`): users can now switch between `Assets left + Agent right` and `Agent left + Assets right`; panel placement, resize-handle direction, and desktop/mobile toolbar controls are now wired to the selected mode.
 - 2026-02-25: enforced connected-mode image limits in Studio agent image generation: `vivd_image_ai` now checks backend usage status before provider calls, fails closed when limits cannot be verified, and returns explicit structured tool errors (`IMAGE_GEN_LIMIT_EXCEEDED`) so the agent can react to quota/availability issues.
 - 2026-02-25: fixed Studio chat recovery for interrupted tool calls after reload/reopen by terminal-normalizing persisted `status: "running"` tool parts when the session is no longer active (idle/done/error): stale runs now render as interrupted (`error`) when no final assistant text exists, or as completed when a final response is present, preventing indefinite `Generating image...` states.

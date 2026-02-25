@@ -8,6 +8,7 @@ const {
   sessionAbortMock,
   sessionPromptAsyncMock,
   getSessionStatusesMock,
+  getSessionStatusSnapshotsMock,
   setSessionStatusMock,
   emitSessionEventMock,
   createAgentEventMock,
@@ -21,6 +22,7 @@ const {
   sessionAbortMock: vi.fn(),
   sessionPromptAsyncMock: vi.fn(),
   getSessionStatusesMock: vi.fn(),
+  getSessionStatusSnapshotsMock: vi.fn(),
   setSessionStatusMock: vi.fn(),
   emitSessionEventMock: vi.fn(),
   createAgentEventMock: vi.fn((_sessionId, _type, payload) => payload),
@@ -37,6 +39,7 @@ vi.mock("./serverManager.js", () => ({
 vi.mock("./eventEmitter.js", () => ({
   agentEventEmitter: {
     getSessionStatuses: getSessionStatusesMock,
+    getSessionStatusSnapshots: getSessionStatusSnapshotsMock,
     setSessionStatus: setSessionStatusMock,
     emitSessionEvent: emitSessionEventMock,
   },
@@ -91,6 +94,7 @@ describe("opencode index session behavior", () => {
     sessionAbortMock.mockReset();
     sessionPromptAsyncMock.mockReset();
     getSessionStatusesMock.mockReset();
+    getSessionStatusSnapshotsMock.mockReset();
     setSessionStatusMock.mockReset();
     emitSessionEventMock.mockReset();
     createAgentEventMock.mockClear();
@@ -103,6 +107,7 @@ describe("opencode index session behavior", () => {
     sessionCreateMock.mockResolvedValue({ data: { id: "sess-new" }, error: undefined });
     sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: undefined });
     getSessionStatusesMock.mockReturnValue({});
+    getSessionStatusSnapshotsMock.mockReturnValue({});
     getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
 
     getClientAndDirectoryMock.mockResolvedValue({
@@ -168,6 +173,84 @@ describe("opencode index session behavior", () => {
       "sess-1": { type: "busy" },
       "sess-2": { type: "idle" },
       "sess-3": { type: "retry", message: "retrying", attempt: 2 },
+    });
+  });
+
+  it("defaults missing statuses to idle instead of stale emitter busy", async () => {
+    sessionListMock.mockResolvedValueOnce({
+      data: [
+        { id: "sess-1", directory: "/workspace/project/" },
+        { id: "sess-2", directory: "/workspace/project/" },
+      ],
+      error: undefined,
+    });
+    sessionStatusMock.mockResolvedValueOnce({
+      data: [{ type: "busy" }],
+      error: undefined,
+    });
+    getSessionStatusesMock.mockReturnValueOnce({
+      "sess-1": { type: "busy" },
+      "sess-2": { type: "busy" },
+    });
+
+    const result = await getSessionsStatus("/workspace/project");
+
+    expect(result).toEqual({
+      "sess-1": { type: "idle" },
+      "sess-2": { type: "idle" },
+    });
+  });
+
+  it("maps unkeyed backend status arrays by session index", async () => {
+    sessionListMock.mockResolvedValueOnce({
+      data: [
+        { id: "sess-1", directory: "/workspace/project/" },
+        { id: "sess-2", directory: "/workspace/project/" },
+      ],
+      error: undefined,
+    });
+    sessionStatusMock.mockResolvedValueOnce({
+      data: [{ type: "idle" }, { type: "busy" }],
+      error: undefined,
+    });
+    getSessionStatusesMock.mockReturnValueOnce({
+      "sess-1": { type: "busy" },
+      "sess-2": { type: "idle" },
+    });
+
+    const result = await getSessionsStatus("/workspace/project");
+
+    expect(result).toEqual({
+      "sess-1": { type: "idle" },
+      "sess-2": { type: "busy" },
+    });
+  });
+
+  it("keeps fresh emitter busy when backend status is temporarily ambiguous", async () => {
+    const now = Date.now();
+
+    sessionListMock.mockResolvedValueOnce({
+      data: [{ id: "sess-1", directory: "/workspace/project/" }],
+      error: undefined,
+    });
+    sessionStatusMock.mockResolvedValueOnce({
+      data: [{ status: "unknown-shape" }],
+      error: undefined,
+    });
+    getSessionStatusesMock.mockReturnValueOnce({
+      "sess-1": { type: "busy" },
+    });
+    getSessionStatusSnapshotsMock.mockReturnValueOnce({
+      "sess-1": {
+        status: { type: "busy" },
+        updatedAt: now,
+      },
+    });
+
+    const result = await getSessionsStatus("/workspace/project");
+
+    expect(result).toEqual({
+      "sess-1": { type: "busy" },
     });
   });
 

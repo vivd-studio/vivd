@@ -460,11 +460,18 @@ export async function getSessionsStatus(directory: string) {
 
   const normalizedStatuses = normalizeSessionStatuses(result.data, sessions);
   const emitterStatuses = agentEventEmitter.getSessionStatuses();
+  const emitterStatusSnapshots = agentEventEmitter.getSessionStatusSnapshots();
+  const FRESH_BUSY_STATUS_MAX_AGE_MS = 15_000;
+  const now = Date.now();
 
   const statusMap: Record<string, SessionStatus> = {};
   for (const session of sessions) {
     const normalized = normalizedStatuses[session.id];
     const emitter = emitterStatuses[session.id];
+    const emitterUpdatedAt = emitterStatusSnapshots[session.id]?.updatedAt ?? 0;
+    const emitterAgeMs = emitterUpdatedAt > 0 ? now - emitterUpdatedAt : Infinity;
+    const hasFreshEmitterBusy =
+      emitter?.type === "busy" && emitterAgeMs <= FRESH_BUSY_STATUS_MAX_AGE_MS;
 
     if (normalized) {
       // Prefer OpenCode's current status over emitter snapshots so stale
@@ -472,9 +479,10 @@ export async function getSessionsStatus(directory: string) {
       if (
         normalized.type === "idle" &&
         emitter &&
-        (emitter as any).type === "retry"
+        ((emitter as any).type === "retry" || hasFreshEmitterBusy)
       ) {
-        // Keep retry visible when OpenCode briefly reports idle during retries.
+        // Keep retry (and very fresh busy right after prompt submit) visible when
+        // OpenCode briefly reports idle during status propagation.
         statusMap[session.id] = emitter;
       } else {
         statusMap[session.id] = normalized;
@@ -482,14 +490,23 @@ export async function getSessionsStatus(directory: string) {
       continue;
     }
 
-    if (emitter) {
+    // Backend payloads can be partial/ambiguous. Keep retry visibility and
+    // trust only a short-lived local busy status; otherwise default to idle.
+    if (emitter && ((emitter as any).type === "retry" || hasFreshEmitterBusy)) {
       statusMap[session.id] = emitter;
-    } else {
-      statusMap[session.id] = { type: "idle" };
+      continue;
     }
+
+    statusMap[session.id] = { type: "idle" };
   }
 
   return statusMap;
+}
+
+function isSessionStatusLike(value: unknown): value is SessionStatus {
+  if (!value || typeof value !== "object") return false;
+  const type = (value as any).type;
+  return type === "idle" || type === "busy" || type === "done" || type === "retry";
 }
 
 function normalizeSessionStatuses(
@@ -500,13 +517,19 @@ function normalizeSessionStatuses(
 
   if (Array.isArray(data)) {
     const mapped: Record<string, SessionStatus> = {};
+    const unkeyed: SessionStatus[] = [];
     for (const entry of data) {
       if (!entry || typeof entry !== "object") continue;
       const record = entry as Record<string, any>;
       const id = record.sessionID ?? record.sessionId ?? record.id;
-      const status = (record.status ?? record) as SessionStatus;
-      if (id && status && typeof status === "object" && "type" in status) {
+      const statusCandidate = record.status ?? record;
+      if (!isSessionStatusLike(statusCandidate)) continue;
+      const status = statusCandidate as SessionStatus;
+
+      if (id) {
         mapped[id] = status;
+      } else {
+        unkeyed.push(status);
       }
     }
 
@@ -514,11 +537,19 @@ function normalizeSessionStatuses(
       return mapped;
     }
 
-    if (data.length === 1 && sessions.length === 1) {
-      const onlyStatus = data[0] as SessionStatus;
-      if (onlyStatus && typeof onlyStatus === "object" && "type" in onlyStatus) {
-        return { [sessions[0].id]: onlyStatus };
+    if (unkeyed.length === sessions.length && sessions.length > 0) {
+      const indexMapped: Record<string, SessionStatus> = {};
+      sessions.forEach((session, index) => {
+        const status = unkeyed[index];
+        if (status) indexMapped[session.id] = status;
+      });
+      if (Object.keys(indexMapped).length > 0) {
+        return indexMapped;
       }
+    }
+
+    if (unkeyed.length === 1 && sessions.length === 1) {
+      return { [sessions[0].id]: unkeyed[0] };
     }
 
     return {};
@@ -532,6 +563,12 @@ function normalizeSessionStatuses(
   }
 
   if (typeof data === "object") {
+    if (isSessionStatusLike(data)) {
+      if (sessions.length === 1) {
+        return { [sessions[0].id]: data };
+      }
+      return {};
+    }
     return data as Record<string, SessionStatus>;
   }
 

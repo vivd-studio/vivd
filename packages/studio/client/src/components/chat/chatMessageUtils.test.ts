@@ -3,6 +3,7 @@ import {
   calculateUsageFromSessionMessages,
   hasFinalAgentResponse,
   mapSessionMessagesToChatMessages,
+  shouldHoldWaitingForStaleTerminalStatus,
   shouldRecoverFromMissedStreamEvents,
   shouldSuggestInterruptedContinue,
 } from "./chatMessageUtils";
@@ -325,5 +326,41 @@ describe("chatMessageUtils", () => {
     });
 
     expect(shouldSuggest).toBe(false);
+  });
+
+  it("holds waiting briefly for stale done status right after a new send", () => {
+    const shouldHold = shouldHoldWaitingForStaleTerminalStatus({
+      sessionStatus: "done",
+      isWaitingForAgent: true,
+      lastUserMessageAt: 10_000,
+      now: 14_000,
+      graceMs: 6_000,
+    });
+
+    expect(shouldHold).toBe(true);
+  });
+
+  it("does not hold waiting once terminal status outlives grace window", () => {
+    const shouldHold = shouldHoldWaitingForStaleTerminalStatus({
+      sessionStatus: "idle",
+      isWaitingForAgent: true,
+      lastUserMessageAt: 10_000,
+      now: 17_000,
+      graceMs: 6_000,
+    });
+
+    expect(shouldHold).toBe(false);
+  });
+
+  it("does not hold waiting for non-terminal statuses", () => {
+    const shouldHold = shouldHoldWaitingForStaleTerminalStatus({
+      sessionStatus: "busy",
+      isWaitingForAgent: true,
+      lastUserMessageAt: 10_000,
+      now: 11_000,
+      graceMs: 6_000,
+    });
+
+    expect(shouldHold).toBe(false);
   });
 });
