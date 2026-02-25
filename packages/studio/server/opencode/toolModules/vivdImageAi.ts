@@ -9,7 +9,9 @@ import {
   createImageGeneration,
   extractImageFromResponse,
 } from "../../services/integrations/OpenRouterImageService.js";
+import { projectTouchReporter } from "../../services/reporting/ProjectTouchReporter.js";
 import { usageReporter } from "../../services/reporting/UsageReporter.js";
+import { requestBucketSync } from "../../services/sync/AgentTaskSyncService.js";
 import type { OpencodeToolDefinition } from "./types.js";
 
 const DEFAULT_IMAGE_MODEL = "google/gemini-3-pro-image-preview";
@@ -19,6 +21,9 @@ const IMAGE_CREATION_MODEL =
   (process.env.HERO_GENERATION_MODEL || "").trim() || DEFAULT_IMAGE_MODEL;
 const MAX_INPUT_IMAGES = 5;
 const DEFAULT_OUTPUT_DIR = "images";
+const ASTRO_OUTPUT_DIR = "public/images";
+const IMAGE_DOWNLOAD_TIMEOUT_MS =
+  Number.parseInt(process.env.VIVD_IMAGE_AI_DOWNLOAD_TIMEOUT_MS || "", 10) || 300_000;
 const IMAGE_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",
@@ -36,6 +41,16 @@ interface ResolvedImageInput {
   relativePath: string;
   mimeType: string;
   base64: string;
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") return true;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: string }).name === "AbortError"
+  );
 }
 
 function normalizeRelativePath(inputPath: string): string {
@@ -106,7 +121,20 @@ function ensureUniqueFilePath(filePath: string): string {
 
 async function decodeGeneratedImage(imagePayload: string): Promise<Buffer> {
   if (imagePayload.startsWith("http")) {
-    const response = await fetch(imagePayload);
+    let response: Response;
+    try {
+      response = await fetch(imagePayload, {
+        signal: AbortSignal.timeout(IMAGE_DOWNLOAD_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new Error(
+          `Timed out downloading generated image after ${IMAGE_DOWNLOAD_TIMEOUT_MS}ms.`,
+        );
+      }
+      throw error;
+    }
+
     if (!response.ok) {
       throw new Error(`Failed to download generated image: ${response.status}`);
     }
@@ -141,6 +169,7 @@ function buildPrompt(
 }
 
 function resolveOutputDirectory(
+  projectDir: string,
   outputDir: string,
   operation: Exclude<ImageOperation, "auto">,
   firstImagePath: string | undefined,
@@ -151,6 +180,23 @@ function resolveOutputDirectory(
   if (operation === "edit" && firstImagePath) {
     const imageDir = path.posix.dirname(normalizeRelativePath(firstImagePath));
     return imageDir === "." ? "" : imageDir;
+  }
+
+  const astroConfigCandidates = [
+    "astro.config.mjs",
+    "astro.config.js",
+    "astro.config.ts",
+    "astro.config.cjs",
+    "astro.config.mts",
+  ];
+  const hasAstroConfig = astroConfigCandidates.some((candidate) =>
+    fs.existsSync(path.join(projectDir, candidate)),
+  );
+  if (hasAstroConfig) return ASTRO_OUTPUT_DIR;
+
+  const publicImagesAbsolute = path.join(projectDir, ASTRO_OUTPUT_DIR);
+  if (fs.existsSync(publicImagesAbsolute) && fs.statSync(publicImagesAbsolute).isDirectory()) {
+    return ASTRO_OUTPUT_DIR;
   }
 
   return DEFAULT_OUTPUT_DIR;
@@ -206,11 +252,12 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
       .string()
       .default("")
       .describe(
-        "Optional output directory (relative to project root). Defaults to source image directory for edits, or images/ for prompt-only creates.",
+        "Optional output directory (relative to project root). Defaults to source image directory for edits, or auto-detected public/images (Astro) vs images/ for prompt-only creates.",
       ),
   },
   async execute(args, context) {
     const toolName = "vivd_image_ai";
+    const startedAt = Date.now();
     const apiKey = (process.env.OPENROUTER_API_KEY || "").trim();
     if (!apiKey) {
       return JSON.stringify(
@@ -255,8 +302,13 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
           : "create"
         : requestedOperation;
 
+    console.log(
+      `[${toolName}] start op=${operation} cwd=${context.directory} inputs=${dedupedImages.length} promptLen=${prompt.length} outputDir=${args.outputDir.trim() || "(default)"}`,
+    );
+
     const imageGenLimitError = await getImageGenerationLimitError();
     if (imageGenLimitError) {
+      console.warn(`[${toolName}] blocked by usage limit: ${imageGenLimitError}`);
       return JSON.stringify(
         {
           tool: toolName,
@@ -308,6 +360,9 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
         messages: [{ role: "user", content }],
         modalities: ["image", "text"],
       });
+      console.log(
+        `[${toolName}] provider response op=${operation} model=${model} generationId=${generationId || "none"} elapsedMs=${Date.now() - startedAt}`,
+      );
 
       const imagePayload = extractImageFromResponse(result);
       if (!imagePayload) {
@@ -315,6 +370,7 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
       }
 
       const outputDir = resolveOutputDirectory(
+        context.directory,
         args.outputDir,
         operation,
         resolvedInputs[0]?.relativePath,
@@ -338,6 +394,9 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
       const outputAbsolutePath = ensureUniqueFilePath(
         path.join(outputDirAbsolute, `${baseName}-${timestamp}.webp`),
       );
+      console.log(
+        `[${toolName}] writing image to ${outputAbsolutePath} (outputDir=${outputDir || "."})`,
+      );
 
       const generatedBuffer = await decodeGeneratedImage(imagePayload);
       await sharp(generatedBuffer).webp({ quality: WEBP_QUALITY }).toFile(outputAbsolutePath);
@@ -345,12 +404,43 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
       const outputRelativePath = normalizeRelativePath(
         path.relative(context.directory, outputAbsolutePath),
       );
+      const writtenBytes = fs.statSync(outputAbsolutePath).size;
 
       const projectPath = (process.env.VIVD_PROJECT_SLUG || context.directory || "").trim();
       const idempotencyKey = generationId
         ? `studio_image_gen:${generationId}`
         : `studio_image_gen:${randomUUID()}`;
-      await usageReporter.reportImageGeneration(projectPath || undefined, idempotencyKey);
+      void Promise.resolve(
+        usageReporter.reportImageGeneration(projectPath || undefined, idempotencyKey),
+      )
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`[${toolName}] usage report failed: ${message}`);
+        });
+
+      const connectedProjectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+      const connectedProjectVersion = Number.parseInt(
+        process.env.VIVD_PROJECT_VERSION || "",
+        10,
+      );
+      if (connectedProjectSlug) {
+        projectTouchReporter.touch(connectedProjectSlug);
+      }
+      if (
+        connectedProjectSlug &&
+        Number.isFinite(connectedProjectVersion) &&
+        connectedProjectVersion > 0
+      ) {
+        requestBucketSync("image-ai-created-opencode", {
+          slug: connectedProjectSlug,
+          version: connectedProjectVersion,
+          path: outputRelativePath,
+        });
+      }
+
+      console.log(
+        `[${toolName}] success op=${operation} output=${outputRelativePath} bytes=${writtenBytes} elapsedMs=${Date.now() - startedAt}`,
+      );
 
       return JSON.stringify(
         {
@@ -369,6 +459,13 @@ export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error(
+        `[${toolName}] failed op=${operation} elapsedMs=${Date.now() - startedAt}: ${message}`,
+      );
+      if (stack) {
+        console.error(stack);
+      }
       return JSON.stringify(
         {
           tool: toolName,

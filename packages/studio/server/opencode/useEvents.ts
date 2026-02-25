@@ -47,6 +47,9 @@ export interface EventCallbacks {
 
 const INACTIVITY_TIMEOUT_MS = 60 * 1000;
 type ToolStatus = "running" | "completed" | "error";
+const DEBUG_EVENTS = new Set(["1", "true", "yes", "on"]).has(
+  (process.env.VIVD_OPENCODE_DEBUG_EVENTS || "").trim().toLowerCase(),
+);
 
 export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}) {
   let isActive = true;
@@ -60,17 +63,25 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
     }
     inactivityTimer = setTimeout(() => {
       if (isActive && lastEvent) {
+        const summary = summarizeEvent(lastEvent);
         console.warn(
           `[useEvents] No events received for ${
             INACTIVITY_TIMEOUT_MS / 1000
-          }s. Last event:`,
-          JSON.stringify(lastEvent, null, 2),
+          }s. Last event summary:`,
+          JSON.stringify(summary),
         );
         console.warn(
           `[useEvents] Last event was at: ${new Date(
             lastEventTime,
           ).toISOString()}`,
         );
+        if (DEBUG_EVENTS) {
+          const raw = JSON.stringify(lastEvent);
+          const maxLength = 4000;
+          const clipped =
+            raw.length > maxLength ? `${raw.slice(0, maxLength)}...[truncated]` : raw;
+          console.warn(`[useEvents][debug] Last event payload: ${clipped}`);
+        }
       }
     }, INACTIVITY_TIMEOUT_MS);
   };
@@ -95,6 +106,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
           string,
           Array<{ partId: string; delta: string }>
         >();
+        const loggedEncryptedToolMarkers = new Set<string>();
         let hasObservedSessionActivity = false;
         let hasTerminalSessionError = false;
 
@@ -220,6 +232,15 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                   }
                 }
               } else if (part.type === "reasoning") {
+                const encryptedToolMarkers = getEncryptedToolMarkers(part);
+                for (const marker of encryptedToolMarkers) {
+                  if (!loggedEncryptedToolMarkers.has(marker)) {
+                    loggedEncryptedToolMarkers.add(marker);
+                    console.warn(
+                      `[useEvents] Detected encrypted tool marker in reasoning metadata: ${marker} (session=${getEventSessionId(event) || callbacks.sessionId || "unknown"})`,
+                    );
+                  }
+                }
                 if (messageId) {
                   assistantMessageIds.add(messageId);
                   flushPendingUnknownTextIfKnown(messageId);
@@ -302,6 +323,10 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                         }
                       : undefined,
                   };
+
+                  console.log(
+                    `[useEvents] Tool state update session=${getEventSessionId(event) || callbacks.sessionId || "unknown"} tool=${toolCall.tool || "unknown"} id=${toolCall.id} status=${currentStatus}`,
+                  );
 
                   if (currentStatus === "running") {
                     callbacks.onToolCall?.(toolCall);
@@ -489,6 +514,78 @@ function formatErrorMessage(
     }
   }
   return fallback;
+}
+
+function getEncryptedToolMarkers(part: any): string[] {
+  const details = part?.metadata?.openrouter?.reasoning_details;
+  if (!Array.isArray(details)) return [];
+  return details.flatMap((entry: any) => {
+    if (!entry || entry.type !== "reasoning.encrypted") return [];
+    if (typeof entry.id !== "string" || entry.id.trim().length === 0) return [];
+    return [entry.id.trim()];
+  });
+}
+
+function summarizeEvent(event: any): Record<string, unknown> {
+  const type = typeof event?.type === "string" ? event.type : "unknown";
+  const properties = event?.properties ?? {};
+  const summary: Record<string, unknown> = {
+    type,
+    sessionID: getEventSessionId(event) || undefined,
+  };
+
+  if (type === "message.updated") {
+    summary.messageID = properties?.info?.id;
+    summary.role = properties?.info?.role;
+    return summary;
+  }
+
+  if (type === "message.part.updated") {
+    const part = properties?.part ?? {};
+    summary.partID = part.id;
+    summary.messageID = part.messageID;
+    summary.partType = part.type;
+    if (typeof properties?.delta === "string") {
+      summary.deltaLength = properties.delta.length;
+    }
+
+    if (part.type === "reasoning" || part.type === "text") {
+      summary.textLength = typeof part.text === "string" ? part.text.length : 0;
+    }
+
+    if (part.type === "tool") {
+      summary.tool = part.tool;
+      summary.toolStatus = getToolStatus(part) ?? "unknown";
+    }
+
+    const encryptedToolMarkers = getEncryptedToolMarkers(part);
+    if (encryptedToolMarkers.length > 0) {
+      summary.encryptedToolMarkers = encryptedToolMarkers.slice(0, 5);
+    }
+    return summary;
+  }
+
+  if (type === "message.part.delta") {
+    summary.partID = properties?.partID;
+    summary.messageID = properties?.messageID;
+    summary.field = properties?.field;
+    if (typeof properties?.delta === "string") {
+      summary.deltaLength = properties.delta.length;
+    }
+    return summary;
+  }
+
+  if (type === "session.status") {
+    const status = properties?.status ?? {};
+    summary.status = status?.type;
+    if (status?.attempt !== undefined) summary.attempt = status.attempt;
+    if (typeof status?.message === "string" && status.message.trim().length > 0) {
+      summary.message = status.message;
+    }
+    return summary;
+  }
+
+  return summary;
 }
 
 function getEventSessionId(event: any): string | null {

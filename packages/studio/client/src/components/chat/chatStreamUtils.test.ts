@@ -165,7 +165,7 @@ describe("chatStreamUtils reasoning sanitization", () => {
         tool: "vivd_image_ai",
         status: "running",
       }),
-    ).toBe("Generating image...");
+    ).toBe("Generating image (this can take a while)...");
 
     expect(
       getToolActivityLabel({

@@ -144,6 +144,9 @@ export async function runTask(
       );
     },
     onToolCall: (toolCall: ToolCall) => {
+      console.log(
+        `[OpenCode] tool.started session=${currentSessionId} tool=${toolCall.tool || "unknown"} id=${toolCall.id}`,
+      );
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
         createAgentEvent(currentSessionId, "tool.started", {
@@ -159,6 +162,9 @@ export async function runTask(
       // @ts-ignore - SDK tool call fields vary by version.
       const isError =
         toolCall.state?.status === "error" || toolCall.status === "error";
+      console.log(
+        `[OpenCode] tool.${isError ? "error" : "completed"} session=${currentSessionId} tool=${toolCall.tool || "unknown"} id=${toolCall.id}${toolCall.error ? ` error=${toolCall.error}` : ""}`,
+      );
       if (isError) {
         agentEventEmitter.emitSessionEvent(
           currentSessionId,

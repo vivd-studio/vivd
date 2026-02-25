@@ -1,12 +1,25 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { isConnectedModeMock, fetchStatusMock, reportImageGenerationMock, createImageGenerationMock } =
-  vi.hoisted(() => ({
-    isConnectedModeMock: vi.fn(),
-    fetchStatusMock: vi.fn(),
-    reportImageGenerationMock: vi.fn(),
-    createImageGenerationMock: vi.fn(),
-  }));
+const {
+  isConnectedModeMock,
+  fetchStatusMock,
+  reportImageGenerationMock,
+  createImageGenerationMock,
+  extractImageFromResponseMock,
+  projectTouchMock,
+  requestBucketSyncMock,
+} = vi.hoisted(() => ({
+  isConnectedModeMock: vi.fn(),
+  fetchStatusMock: vi.fn(),
+  reportImageGenerationMock: vi.fn(),
+  createImageGenerationMock: vi.fn(),
+  extractImageFromResponseMock: vi.fn(),
+  projectTouchMock: vi.fn(),
+  requestBucketSyncMock: vi.fn(),
+}));
 
 vi.mock("@vivd/shared", () => ({
   isConnectedMode: isConnectedModeMock,
@@ -19,28 +32,49 @@ vi.mock("../../services/reporting/UsageReporter.js", () => ({
   },
 }));
 
+vi.mock("../../services/reporting/ProjectTouchReporter.js", () => ({
+  projectTouchReporter: {
+    touch: projectTouchMock,
+  },
+}));
+
+vi.mock("../../services/sync/AgentTaskSyncService.js", () => ({
+  requestBucketSync: requestBucketSyncMock,
+}));
+
 vi.mock("../../services/integrations/OpenRouterImageService.js", () => ({
   createImageGeneration: createImageGenerationMock,
-  extractImageFromResponse: vi.fn(() => null),
+  extractImageFromResponse: extractImageFromResponseMock,
 }));
 
 import { vivdImageAiToolDefinition } from "./vivdImageAi.js";
 
 describe("vivdImageAiToolDefinition", () => {
   const originalApiKey = process.env.OPENROUTER_API_KEY;
+  const originalProjectSlug = process.env.VIVD_PROJECT_SLUG;
+  const originalProjectVersion = process.env.VIVD_PROJECT_VERSION;
+  const samplePngBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6V7kQAAAAASUVORK5CYII=";
 
   beforeEach(() => {
     isConnectedModeMock.mockReset();
     fetchStatusMock.mockReset();
     reportImageGenerationMock.mockReset();
     createImageGenerationMock.mockReset();
+    extractImageFromResponseMock.mockReset();
+    projectTouchMock.mockReset();
+    requestBucketSyncMock.mockReset();
 
     isConnectedModeMock.mockReturnValue(true);
     process.env.OPENROUTER_API_KEY = "test-key";
+    delete process.env.VIVD_PROJECT_SLUG;
+    delete process.env.VIVD_PROJECT_VERSION;
   });
 
   afterEach(() => {
     process.env.OPENROUTER_API_KEY = originalApiKey;
+    process.env.VIVD_PROJECT_SLUG = originalProjectSlug;
+    process.env.VIVD_PROJECT_VERSION = originalProjectVersion;
   });
 
   it("returns a limit error and skips provider calls when image generation is blocked", async () => {
@@ -96,5 +130,83 @@ describe("vivdImageAiToolDefinition", () => {
     expect(result.error?.code).toBe("IMAGE_GEN_LIMIT_EXCEEDED");
     expect(String(result.error?.message)).toContain("Unable to verify usage limits");
     expect(createImageGenerationMock).not.toHaveBeenCalled();
+  });
+
+  it("defaults create outputs to public/images for Astro workspaces", async () => {
+    isConnectedModeMock.mockReturnValue(false);
+    createImageGenerationMock.mockResolvedValue({
+      data: { id: "gen_astro_1" },
+      generationId: "gen_astro_1",
+    });
+    extractImageFromResponseMock.mockReturnValue(`data:image/png;base64,${samplePngBase64}`);
+
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-image-ai-astro-"));
+    fs.writeFileSync(path.join(workspaceDir, "astro.config.mjs"), "export default {};\n", "utf-8");
+
+    try {
+      const raw = await vivdImageAiToolDefinition.execute(
+        {
+          prompt: "Generate an urban hero image",
+          images: [],
+          operation: "create",
+          outputDir: "",
+        },
+        { directory: workspaceDir },
+      );
+
+      const result = JSON.parse(raw);
+      expect(result.ok).toBe(true);
+      expect(result.output.path.startsWith("public/images/")).toBe(true);
+      expect(fs.existsSync(path.join(workspaceDir, result.output.path))).toBe(true);
+    } finally {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns success even when usage report submission fails", async () => {
+    isConnectedModeMock.mockReturnValue(true);
+    fetchStatusMock.mockResolvedValue({
+      blocked: false,
+      imageGenBlocked: false,
+      warnings: [],
+      usage: {
+        daily: { current: 0, limit: 1000, percentage: 0 },
+        weekly: { current: 0, limit: 2500, percentage: 0 },
+        monthly: { current: 0, limit: 5000, percentage: 0 },
+        imageGen: { current: 1, limit: 25, percentage: 0.04 },
+      },
+      nextReset: {
+        daily: new Date().toISOString(),
+        weekly: new Date().toISOString(),
+        monthly: new Date().toISOString(),
+      },
+    });
+    reportImageGenerationMock.mockRejectedValue(new Error("backend timeout"));
+    createImageGenerationMock.mockResolvedValue({
+      data: { id: "gen_usage_fail_1" },
+      generationId: "gen_usage_fail_1",
+    });
+    extractImageFromResponseMock.mockReturnValue(`data:image/png;base64,${samplePngBase64}`);
+
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-image-ai-usage-"));
+
+    try {
+      const raw = await vivdImageAiToolDefinition.execute(
+        {
+          prompt: "Generate an image despite usage reporter issues",
+          images: [],
+          operation: "create",
+          outputDir: "",
+        },
+        { directory: workspaceDir },
+      );
+
+      const result = JSON.parse(raw);
+      expect(result.ok).toBe(true);
+      expect(reportImageGenerationMock).toHaveBeenCalledTimes(1);
+      expect(fs.existsSync(path.join(workspaceDir, result.output.path))).toBe(true);
+    } finally {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
   });
 });

@@ -234,7 +234,7 @@ const TOOL_ACTIVITY_LABEL_BUILDERS: Record<string, ToolLabelBuilder> = {
     includeErrorTarget: false,
   }),
   vivd_image_ai: createActionOnlyToolLabelBuilder({
-    runningAction: "Generating image",
+    runningAction: "Generating image (this can take a while)",
     completedAction: "Generated image",
     errorAction: "Failed generating image",
   }),
