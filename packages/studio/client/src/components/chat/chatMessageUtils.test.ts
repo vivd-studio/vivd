@@ -230,4 +230,18 @@ describe("chatMessageUtils", () => {
 
     expect(shouldSuggest).toBe(false);
   });
+
+  it("does not suggest continue again when latest user message is already continue", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "idle",
+      messages: [
+        { role: "user", content: "Do the task" },
+        { role: "user", content: "Continue" },
+      ],
+      isThinking: false,
+      isLoading: false,
+    });
+
+    expect(shouldSuggest).toBe(false);
+  });
 });

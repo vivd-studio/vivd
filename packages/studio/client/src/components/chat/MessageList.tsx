@@ -544,7 +544,8 @@ export function MessageList() {
           </div>
         )}
 
-        {messages.length > 0 &&
+        {!shouldShowInterruptedContinue &&
+          messages.length > 0 &&
           messages[messages.length - 1].role === "agent" &&
           !isThinking &&
           !isLoading && (

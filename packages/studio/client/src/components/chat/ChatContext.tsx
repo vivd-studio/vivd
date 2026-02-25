@@ -117,6 +117,7 @@ export function ChatProvider({
   // Track if we're in the process of sending (includes image upload phase)
   const [isSending, setIsSending] = useState(false);
   const pendingSessionIdRef = useRef<string | null>(null);
+  const continueClickLockRef = useRef(false);
   const autoSelectLockedRef = useRef(false);
   const hasAutoSelectedRunningSessionRef = useRef(false);
 
@@ -295,6 +296,7 @@ export function ChatProvider({
 
   useEffect(() => {
     const isPendingSession = pendingSessionIdRef.current === selectedSessionId;
+    continueClickLockRef.current = false;
 
     setStreamingParts([]);
     setIsStreaming(false);
@@ -590,6 +592,7 @@ export function ChatProvider({
   const handleContinueSession = useCallback(() => {
     if (
       !selectedSessionId ||
+      continueClickLockRef.current ||
       isStreaming ||
       runTaskMutation.isPending ||
       isSending ||
@@ -598,7 +601,12 @@ export function ChatProvider({
       return;
     }
 
-    sendTask("continue", selectedSessionId);
+    continueClickLockRef.current = true;
+    sendTask("continue", selectedSessionId, {
+      onSettled: () => {
+        continueClickLockRef.current = false;
+      },
+    });
   }, [
     selectedSessionId,
     isStreaming,

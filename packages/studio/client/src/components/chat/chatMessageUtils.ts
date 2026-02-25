@@ -185,5 +185,13 @@ export function shouldSuggestInterruptedContinue(options: {
     return false;
   }
 
+  const lastMessage = options.messages[options.messages.length - 1];
+  if (
+    lastMessage.role === "user" &&
+    lastMessage.content.trim().toLowerCase() === "continue"
+  ) {
+    return false;
+  }
+
   return !hasFinalAgentResponse(options.messages);
 }
