@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Eye, X, Sparkles } from "lucide-react";
 import { ModeToggle } from "@/components/theme";
-import faviconSvg from "/favicon-transparent.svg";
+import { VivdIcon } from "@/components/common";
 import { ROUTES } from "@/app/router";
 
 export function ScratchHeader({
@@ -28,7 +28,7 @@ export function ScratchHeader({
         onClick={handleClose}
         className="hover:opacity-80 transition-opacity focus:outline-none cursor-pointer"
       >
-        <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
+        <VivdIcon className="h-6 w-6" />
       </button>
 
       {/* Separator */}

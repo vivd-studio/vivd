@@ -9,7 +9,7 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EmptyStatePrompt } from "./EmptyStatePrompt";
@@ -25,12 +25,18 @@ import {
   sanitizeThoughtText,
   normalizeToolStatus,
 } from "./chatStreamUtils";
+import {
+  buildChatTimelineModel,
+  mergeLiveParts,
+  type ChatTimelineItem,
+} from "./chatTimelineBuilder";
+
+const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 80;
 
 export function MessageList() {
   const {
     messages,
     isThinking,
-    isStreaming,
     isWaiting,
     isLoading,
     isSessionHydrating,
@@ -45,10 +51,78 @@ export function MessageList() {
     isUsageBlocked,
   } = useChatContext();
 
-  // Track dismissed warnings for this session
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
   const [showRevertNotice, setShowRevertNotice] = useState(false);
-  const [liveActionParts, setLiveActionParts] = useState<any[]>([]);
+  const [liveParts, setLiveParts] = useState<any[]>([]);
+  const [workedOpenRunIds, setWorkedOpenRunIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [workedAutoCollapsedRunIds, setWorkedAutoCollapsedRunIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const partOrderRef = useRef<Map<string, number>>(new Map());
+  const nextPartOrderRef = useRef(0);
+  const runStatusRef = useRef<Map<string, "in-progress" | "completed" | "other">>(
+    new Map(),
+  );
+  const runSeenInProgressRef = useRef<Set<string>>(new Set());
+  const workedCollapseTimersRef = useRef<Map<string, number>>(new Map());
+  const workedAutoCollapsedRunIdsRef = useRef<Set<string>>(new Set());
+  const stickToBottomRef = useRef(true);
+  const isProgrammaticScrollRef = useRef(false);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const autoScrollReleaseRef = useRef<number | null>(null);
+  const pendingScrollBehaviorRef = useRef<ScrollBehavior>("auto");
+  const WORKED_AUTO_COLLAPSE_DELAY_MS = 1200;
+
+  const isRunInProgress = isThinking || isLoading;
+
+  const getScrollViewport = (): HTMLDivElement | null =>
+    scrollRef.current?.querySelector<HTMLDivElement>(
+      "[data-radix-scroll-area-viewport]",
+    ) ?? null;
+
+  const scheduleScrollToBottom = (behavior: ScrollBehavior) => {
+    pendingScrollBehaviorRef.current =
+      behavior === "smooth" || pendingScrollBehaviorRef.current === "smooth"
+        ? "smooth"
+        : "auto";
+
+    if (autoScrollFrameRef.current != null) return;
+
+    autoScrollFrameRef.current = window.requestAnimationFrame(() => {
+      autoScrollFrameRef.current = null;
+      const viewport = getScrollViewport();
+      if (!viewport) return;
+
+      isProgrammaticScrollRef.current = true;
+      viewport.scrollTo({
+        top: viewport.scrollHeight,
+        behavior: pendingScrollBehaviorRef.current,
+      });
+      pendingScrollBehaviorRef.current = "auto";
+
+      if (autoScrollReleaseRef.current != null) {
+        window.clearTimeout(autoScrollReleaseRef.current);
+      }
+      autoScrollReleaseRef.current = window.setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+        autoScrollReleaseRef.current = null;
+
+        const distanceFromBottom =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        stickToBottomRef.current =
+          distanceFromBottom <= CHAT_SCROLL_BOTTOM_THRESHOLD_PX;
+      }, 220);
+    });
+  };
+
+  useEffect(() => {
+    workedAutoCollapsedRunIdsRef.current = workedAutoCollapsedRunIds;
+  }, [workedAutoCollapsedRunIds]);
 
   useEffect(() => {
     try {
@@ -62,27 +136,68 @@ export function MessageList() {
     }
   }, []);
 
-  const dismissRevertNotice = () => {
-    setShowRevertNotice(false);
-  };
-
-  const onSuggestionClick = (suggestion: string) => setInput(suggestion);
-
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const partOrderRef = useRef<Map<string, number>>(new Map());
-  const nextPartOrderRef = useRef(0);
+  useEffect(
+    () => () => {
+      workedCollapseTimersRef.current.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      workedCollapseTimersRef.current.clear();
+      if (autoScrollFrameRef.current != null) {
+        window.cancelAnimationFrame(autoScrollFrameRef.current);
+      }
+      if (autoScrollReleaseRef.current != null) {
+        window.clearTimeout(autoScrollReleaseRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    // Only scroll when there are messages - don't scroll on empty session
+    let frameId: number | null = null;
+    let viewport: HTMLDivElement | null = null;
+    let handleScroll: (() => void) | null = null;
+
+    const bindViewport = () => {
+      viewport = getScrollViewport();
+      if (!viewport) {
+        frameId = window.requestAnimationFrame(bindViewport);
+        return;
+      }
+
+      handleScroll = () => {
+        if (isProgrammaticScrollRef.current || !viewport) return;
+        const distanceFromBottom =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        stickToBottomRef.current =
+          distanceFromBottom <= CHAT_SCROLL_BOTTOM_THRESHOLD_PX;
+      };
+
+      handleScroll();
+      viewport.addEventListener("scroll", handleScroll, { passive: true });
+    };
+
+    bindViewport();
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      if (viewport && handleScroll) {
+        viewport.removeEventListener("scroll", handleScroll);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (
       messages.length > 0 ||
-      isThinking ||
+      isRunInProgress ||
       (streamingParts && streamingParts.length > 0)
     ) {
-      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      if (!stickToBottomRef.current) return;
+      scheduleScrollToBottom(isRunInProgress ? "smooth" : "auto");
     }
-  }, [messages, isThinking, streamingParts]);
+  }, [messages, isRunInProgress, streamingParts]);
 
   useEffect(() => {
     if (!streamingParts || streamingParts.length === 0) return;
@@ -93,6 +208,18 @@ export function MessageList() {
       nextPartOrderRef.current += 1;
     }
   }, [streamingParts]);
+
+  useEffect(() => {
+    for (const message of messages) {
+      if (!message.parts || message.parts.length === 0) continue;
+      for (const part of message.parts) {
+        const partId = part?.id;
+        if (!partId || partOrderRef.current.has(partId)) continue;
+        partOrderRef.current.set(partId, nextPartOrderRef.current);
+        nextPartOrderRef.current += 1;
+      }
+    }
+  }, [messages]);
 
   const orderPartsBySeenSequence = (parts: any[] | undefined): any[] => {
     if (!parts || parts.length < 2) return parts ?? [];
@@ -113,34 +240,131 @@ export function MessageList() {
   };
 
   useEffect(() => {
-    if (!isThinking && !isLoading && !isWaiting) {
-      if (liveActionParts.length > 0) {
-        setLiveActionParts([]);
+    if (!isRunInProgress) {
+      if (liveParts.length > 0) {
+        setLiveParts([]);
       }
       return;
     }
 
-    const incomingActionParts = orderPartsBySeenSequence(streamingParts).filter(
-      (part: any) => part?.type === "reasoning" || part?.type === "tool",
+    const incomingParts = orderPartsBySeenSequence(streamingParts).filter(
+      (part: any) =>
+        part?.type === "reasoning" || part?.type === "tool" || part?.type === "text",
     );
-    if (incomingActionParts.length === 0) return;
+    if (incomingParts.length === 0) return;
 
-    setLiveActionParts((prev) => mergeLiveActionParts(prev, incomingActionParts));
-  }, [streamingParts, isThinking, isLoading, isWaiting]);
+    setLiveParts((prev) => mergeLiveParts(prev, incomingParts));
+  }, [streamingParts, isRunInProgress, liveParts.length]);
 
-  const previousUserTimestampByMessageIndex = new Map<number, number | undefined>();
-  let mostRecentUserTimestamp: number | undefined;
-  for (let index = 0; index < messages.length; index += 1) {
-    previousUserTimestampByMessageIndex.set(index, mostRecentUserTimestamp);
-    const message = messages[index];
-    if (message.role === "user" && message.createdAt) {
-      mostRecentUserTimestamp = message.createdAt;
+  const orderedLiveParts = useMemo(
+    () => orderPartsBySeenSequence(liveParts),
+    [liveParts],
+  );
+
+  const timeline = useMemo(
+    () =>
+      buildChatTimelineModel({
+        messages,
+        liveParts: orderedLiveParts,
+        isWorking: isRunInProgress,
+        isWaiting,
+      }),
+    [messages, orderedLiveParts, isRunInProgress, isWaiting],
+  );
+
+  useEffect(() => {
+    const nextStatusMap = new Map<string, "in-progress" | "completed" | "other">();
+    const newlyCompletedRunIds: string[] = [];
+
+    for (const item of timeline.items) {
+      if (item.kind !== "agent") continue;
+      const nextStatus: "in-progress" | "completed" | "other" = item.runInProgress
+        ? "in-progress"
+        : item.showWorkedSection
+          ? "completed"
+          : "other";
+
+      nextStatusMap.set(item.runId, nextStatus);
+      const previousStatus = runStatusRef.current.get(item.runId);
+
+      if (nextStatus === "in-progress") {
+        runSeenInProgressRef.current.add(item.runId);
+      }
+
+      const hasBeenActive = runSeenInProgressRef.current.has(item.runId);
+      if (
+        nextStatus === "completed" &&
+        previousStatus !== "completed" &&
+        hasBeenActive
+      ) {
+        newlyCompletedRunIds.push(item.runId);
+      }
     }
-  }
+
+    runStatusRef.current = nextStatusMap;
+
+    const activeRunIds = new Set(nextStatusMap.keys());
+    runSeenInProgressRef.current = new Set(
+      [...runSeenInProgressRef.current].filter((runId) => activeRunIds.has(runId)),
+    );
+
+    setWorkedOpenRunIds((prev) => {
+      const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
+      let changed = next.size !== prev.size;
+      for (const runId of newlyCompletedRunIds) {
+        if (!next.has(runId)) {
+          next.add(runId);
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+
+    setWorkedAutoCollapsedRunIds((prev) => {
+      const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
+      return next.size === prev.size ? prev : next;
+    });
+
+    workedCollapseTimersRef.current.forEach((timerId, runId) => {
+      if (activeRunIds.has(runId)) return;
+      window.clearTimeout(timerId);
+      workedCollapseTimersRef.current.delete(runId);
+    });
+
+    for (const runId of newlyCompletedRunIds) {
+      if (
+        workedCollapseTimersRef.current.has(runId) ||
+        workedAutoCollapsedRunIdsRef.current.has(runId)
+      ) {
+        continue;
+      }
+
+      const timerId = window.setTimeout(() => {
+        workedCollapseTimersRef.current.delete(runId);
+        setWorkedOpenRunIds((prev) => {
+          if (!prev.has(runId)) return prev;
+          const next = new Set(prev);
+          next.delete(runId);
+          return next;
+        });
+        setWorkedAutoCollapsedRunIds((prev) => {
+          if (prev.has(runId)) return prev;
+          const next = new Set(prev);
+          next.add(runId);
+          return next;
+        });
+      }, WORKED_AUTO_COLLAPSE_DELAY_MS);
+
+      workedCollapseTimersRef.current.set(runId, timerId);
+    }
+  }, [timeline.items, isRunInProgress]);
+
+  const onSuggestionClick = (suggestion: string) => setInput(suggestion);
 
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
-      <div className="flex flex-col gap-2 px-3 py-3 md:px-5 md:py-4">
+      <div className="flex flex-col gap-2 px-4 pt-4 pb-16 md:px-6 md:pt-5 md:pb-20">
         {showRevertNotice && (
           <div className="flex justify-center">
             <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 max-w-[90%] w-full">
@@ -154,13 +378,14 @@ export function MessageList() {
                 variant="ghost"
                 size="sm"
                 className="shrink-0 h-6 w-6 p-0"
-                onClick={dismissRevertNotice}
+                onClick={() => setShowRevertNotice(false)}
               >
                 <X className="w-4 h-4" />
               </Button>
             </div>
           </div>
         )}
+
         {messages.length === 0 &&
           (isSessionHydrating ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -169,301 +394,35 @@ export function MessageList() {
           ) : (
             <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
           ))}
-        {messages.map((msg, i) => {
-          // Skip empty messages (no content and no parts)
-          if (!msg.content && (!msg.parts || msg.parts.length === 0)) {
-            return null;
-          }
 
-          // Skip agent messages that have parts currently being rendered in streamingParts
-          // This prevents duplicate Thought/Tool Call blocks during streaming
-          const isLastMessage = i === messages.length - 1;
-          if (
-            isLastMessage &&
-            msg.role === "agent" &&
-            (isStreaming || isWaiting || isLoading)
-          ) {
-            return null;
-          }
-
-          // Also skip if any part of this message overlaps with current streaming parts
-          // This handles cases where polling returns partial data while still streaming
-          if (
-            msg.role === "agent" &&
-            isStreaming &&
-            msg.parts &&
-            streamingParts &&
-            streamingParts.length > 0
-          ) {
-            const streamingPartIds = new Set(streamingParts.map((p) => p.id));
-            const hasOverlap = msg.parts.some(
-              (p: any) => p.id && streamingPartIds.has(p.id),
-            );
-            if (hasOverlap) {
-              return null;
-            }
-          }
-
-          const isUser = msg.role === "user";
-          const previousUserTimestamp = previousUserTimestampByMessageIndex.get(i);
-
-          return (
-            <div
-              key={i}
-              className={`flex flex-col gap-1 ${
-                isUser ? "items-end" : "items-start w-full"
-              }`}
-            >
-              {/* Revert button above user messages - backend handles finding assistant messages */}
-              {isUser && msg.id && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
-                  onClick={() => handleRevert(msg.id!)}
-                >
-                  <Undo2 className="w-3 h-3 mr-1" />
-                  Revert to before this
-                </Button>
-              )}
-
-              {/* User Message Bubble */}
-              {isUser ? (
-                (() => {
-                  // Parse all vivd-internal tags (unified for images and element refs)
-                  const { cleanMessage, internalTags } = parseVivdInternalTags(
-                    msg.content,
-                  );
-
-                  // Separate by type
-                  const imageTags = internalTags.filter(
-                    (t) => t.type === "dropped-file",
-                  );
-                  const fileTags = internalTags.filter(
-                    (t) => t.type === "attached-file",
-                  );
-                  const elementTag = internalTags.find(
-                    (t) => t.type === "element-ref",
-                  );
-                  const hasElementRef =
-                    Boolean(elementTag?.selector) ||
-                    Boolean(elementTag?.["source-file"]);
-
-                  return (
-                    <div className="max-w-[90%] min-w-0">
-                      <div className="rounded-lg px-3 py-1.5 overflow-x-hidden bg-muted dark:bg-muted/45 text-foreground">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            p: ({ node, ...props }) => (
-                              <p {...props} className="m-0" />
-                            ),
-                            a: ({ node, ...props }) => (
-                              <a
-                                {...props}
-                                className="underline hover:text-foreground/80"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              />
-                            ),
-                            code: (props: any) => {
-                              const { inline, className, ...rest } = props;
-                              return (
-                                <code
-                                  {...rest}
-                                  className={`${
-                                    inline
-                                      ? "bg-foreground/10 rounded px-1 break-words"
-                                      : "whitespace-pre-wrap break-words"
-                                  } ${className ?? ""}`}
-                                />
-                              );
-                            },
-                            pre: ({ node, className, ...props }) => (
-                              <pre
-                                {...props}
-                                className={`bg-foreground/10 p-2 rounded max-w-full overflow-x-auto whitespace-pre-wrap break-words ${
-                                  className ?? ""
-                                }`}
-                              />
-                            ),
-                          }}
-                        >
-                          {cleanMessage}
-                        </ReactMarkdown>
-                        {/* Show all attachment pills (images, files, and element refs) */}
-                        {(imageTags.length > 0 ||
-                          fileTags.length > 0 ||
-                          hasElementRef) && (
-                          <div className="mt-1.5 pt-1.5 border-t border-foreground/10 flex flex-wrap gap-1">
-                            {imageTags.map((tag, idx) => (
-                              <DroppedImagePill
-                                key={`img-${idx}`}
-                                filename={tag.filename || "image"}
-                              />
-                            ))}
-                            {fileTags.map((tag, idx) => (
-                              <AttachedFileRefPill
-                                key={`file-${idx}`}
-                                filename={tag.filename || "file"}
-                              />
-                            ))}
-                            {hasElementRef && (
-                              <ElementRefPill
-                                key="element"
-                                selector={elementTag?.selector}
-                                sourceFile={elementTag?.["source-file"]}
-                                sourceLoc={elementTag?.["source-loc"]}
-                              />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {msg.createdAt && (
-                        <div className="mt-0.5 px-1 text-[10px] text-muted-foreground/60 text-right">
-                          {formatMessageTime(msg.createdAt)}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
-              ) : (
-                /* Agent Message Construction - Split into parts */
-                <div className="flex flex-col gap-1 w-full items-start overflow-hidden">
-                  {msg.parts && msg.parts.length > 0 ? (
-                    (() => {
-                      const orderedParts = orderPartsBySeenSequence(msg.parts);
-                      const actionParts = orderedParts.filter(
-                        (part: any) =>
-                          part?.type === "reasoning" || part?.type === "tool",
-                      );
-                      const responseParts = orderedParts.filter(
-                        (part: any) => part?.type === "text",
-                      );
-                      const isRunInProgress =
-                        isLastMessage && (isStreaming || isWaiting || isLoading);
-                      const shouldShowWorkedSection =
-                        actionParts.length > 0 && responseParts.length > 0;
-
-                      return (
-                        <>
-                          {shouldShowWorkedSection && (
-                            <WorkedSessionSection
-                              label={formatWorkedLabel(
-                                previousUserTimestamp,
-                                msg.createdAt,
-                              )}
-                              defaultOpen={isRunInProgress}
-                            >
-                              {actionParts.map((part: any, pIndex: number) => (
-                                <MessagePartBubble
-                                  key={part?.id ?? `action-${pIndex}`}
-                                  part={part}
-                                  isStreaming={isRunInProgress}
-                                />
-                              ))}
-                            </WorkedSessionSection>
-                          )}
-                          {!shouldShowWorkedSection &&
-                            actionParts.map((part: any, pIndex: number) => (
-                              <MessagePartBubble
-                                key={part?.id ?? `action-${pIndex}`}
-                                part={part}
-                                isStreaming={isRunInProgress}
-                              />
-                            ))}
-                          {responseParts.map((part: any, pIndex: number) => (
-                            <MessagePartBubble
-                              key={part?.id ?? `response-${pIndex}`}
-                              part={part}
-                            />
-                          ))}
-                        </>
-                      );
-                    })()
-                  ) : (
-                    /* Fallback for legacy messages */
-                    <div className="rounded-lg px-3 py-1.5 w-full min-w-0 prose prose-sm dark:prose-invert max-w-none break-words overflow-x-hidden">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          pre: ({ node, className, ...props }) => (
-                            <pre
-                              {...props}
-                              className={`max-w-full overflow-x-auto whitespace-pre-wrap break-words ${
-                                className ?? ""
-                              }`}
-                            />
-                          ),
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Streaming / Loading State - only show when we have messages (not in empty state) */}
-        {messages.length > 0 && (isLoading || isThinking) && (
-          <div className="flex justify-start w-full">
-            <div className="flex flex-col gap-1 w-full items-start">
-              {/* Streaming Parts */}
-              {(() => {
-                const displayStreamingActionParts = liveActionParts;
-                const lastStreamingActionPart =
-                  displayStreamingActionParts[displayStreamingActionParts.length - 1];
-                const hasActiveStreamingState =
-                  Boolean(lastStreamingActionPart) &&
-                  (lastStreamingActionPart.type === "reasoning" ||
-                    normalizeToolStatus(lastStreamingActionPart) === "running");
-                const showWorkingFallback =
-                  displayStreamingActionParts.length > 0 && !hasActiveStreamingState;
-
-                return (
-                  <>
-                    {displayStreamingActionParts.map((part, idx) => {
-                      const isLast = idx === displayStreamingActionParts.length - 1;
-                      return (
-                        <MessagePartBubble
-                          key={part?.id ?? `streaming-part-${idx}`}
-                          part={part}
-                          isStreaming={true}
-                          isLast={isLast}
-                        />
-                      );
-                    })}
-                    {showWorkingFallback && (
-                      <AgentStateRow
-                        label={
-                          <LoadingStateLabel
-                            prefix={<span className="font-semibold">Working</span>}
-                          />
-                        }
-                        tone="muted"
-                      />
-                    )}
-                    {displayStreamingActionParts.length === 0 && isWaiting && (
-                      <AgentStateRow
-                        label={
-                          <LoadingStateLabel
-                            prefix={<span className="font-semibold">Waiting</span>}
-                          />
-                        }
-                        tone="muted"
-                      />
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
+        {timeline.items.map((item) =>
+          item.kind === "user" ? (
+            <UserMessageRow
+              key={item.key}
+              message={item.message}
+              onRevert={handleRevert}
+            />
+          ) : (
+            <AgentMessageRow
+              key={item.key}
+              item={item}
+              orderedParts={orderPartsBySeenSequence(item.orderedParts)}
+              workedOpen={workedOpenRunIds.has(item.runId)}
+              onToggleWorked={() =>
+                setWorkedOpenRunIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(item.runId)) {
+                    next.delete(item.runId);
+                  } else {
+                    next.add(item.runId);
+                  }
+                  return next;
+                })
+              }
+            />
+          ),
         )}
 
-        {/* Usage Limit Blocked Banner */}
         {isUsageBlocked && usageLimitStatus && (
           <div className="flex justify-center py-2">
             <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
@@ -485,7 +444,6 @@ export function MessageList() {
           </div>
         )}
 
-        {/* Usage Warning Banner (approaching limits) */}
         {!isUsageBlocked &&
           usageLimitStatus?.warnings &&
           usageLimitStatus.warnings.length > 0 &&
@@ -518,7 +476,6 @@ export function MessageList() {
             </div>
           )}
 
-        {/* Session Error Display */}
         {sessionError && (
           <div className="flex justify-center py-2">
             <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
@@ -552,7 +509,6 @@ export function MessageList() {
           </div>
         )}
 
-        {/* Restore button when session is reverted */}
         {isReverted && (
           <div className="flex justify-center py-2">
             <Button
@@ -567,17 +523,183 @@ export function MessageList() {
           </div>
         )}
 
-        {/* Subtle "Done" indicator when generation is complete */}
         {messages.length > 0 &&
           messages[messages.length - 1].role === "agent" &&
           !isThinking &&
           !isLoading && (
-            <SessionDivider label="Done" />
+            <SessionDivider label="Done" className="mb-0" />
           )}
 
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className="h-px" />
       </div>
     </ScrollArea>
+  );
+}
+
+function UserMessageRow({
+  message,
+  onRevert,
+}: {
+  message: Extract<ChatTimelineItem, { kind: "user" }>["message"];
+  onRevert: (messageId: string) => void;
+}) {
+  const { cleanMessage, internalTags } = parseVivdInternalTags(message.content);
+  const imageTags = internalTags.filter((tag) => tag.type === "dropped-file");
+  const fileTags = internalTags.filter((tag) => tag.type === "attached-file");
+  const elementTag = internalTags.find((tag) => tag.type === "element-ref");
+  const hasElementRef =
+    Boolean(elementTag?.selector) || Boolean(elementTag?.["source-file"]);
+
+  return (
+    <div className="flex flex-col gap-1 items-end chat-row-enter">
+      <div className="h-6 flex items-center justify-end">
+        {message.id ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+            onClick={() => onRevert(message.id!)}
+          >
+            <Undo2 className="w-3 h-3 mr-1" />
+            Revert to before this
+          </Button>
+        ) : (
+          <span aria-hidden="true" className="h-6 w-px opacity-0" />
+        )}
+      </div>
+
+      <div className="max-w-[90%] min-w-0">
+        <div className="rounded-lg px-4 pt-2 pb-2.5 overflow-x-hidden bg-muted dark:bg-muted/20 text-foreground text-sm leading-relaxed">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={getChatMarkdownComponents({ compactParagraphs: true })}
+          >
+            {cleanMessage}
+          </ReactMarkdown>
+
+          {(imageTags.length > 0 || fileTags.length > 0 || hasElementRef) && (
+            <div className="mt-1.5 pt-1.5 border-t border-foreground/10 flex flex-wrap gap-1">
+              {imageTags.map((tag, idx) => (
+                <DroppedImagePill
+                  key={`img-${idx}`}
+                  filename={tag.filename || "image"}
+                />
+              ))}
+              {fileTags.map((tag, idx) => (
+                <AttachedFileRefPill
+                  key={`file-${idx}`}
+                  filename={tag.filename || "file"}
+                />
+              ))}
+              {hasElementRef && (
+                <ElementRefPill
+                  key="element"
+                  selector={elementTag?.selector}
+                  sourceFile={elementTag?.["source-file"]}
+                  sourceLoc={elementTag?.["source-loc"]}
+                />
+              )}
+            </div>
+          )}
+        </div>
+        {message.createdAt && (
+          <div className="mt-0.5 px-1 text-[10px] text-muted-foreground/60 text-right">
+            {formatMessageTime(message.createdAt)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AgentMessageRow({
+  item,
+  orderedParts,
+  workedOpen,
+  onToggleWorked,
+}: {
+  item: Extract<ChatTimelineItem, { kind: "agent" }>;
+  orderedParts: any[];
+  workedOpen: boolean;
+  onToggleWorked: () => void;
+}) {
+  const orderedActionParts = orderedParts.filter(
+    (part) => part?.type === "reasoning" || part?.type === "tool",
+  );
+  const orderedResponseParts = orderedParts.filter(
+    (part) => part?.type === "text",
+  );
+  const hasLegacyContent =
+    item.message &&
+    (!item.message.parts || item.message.parts.length === 0) &&
+    item.message.content;
+  const lastOrderedActionPart = orderedActionParts[orderedActionParts.length - 1];
+  const hasActiveOrderedAction =
+    Boolean(lastOrderedActionPart) &&
+    (lastOrderedActionPart?.type === "reasoning" ||
+      normalizeToolStatus(lastOrderedActionPart) === "running");
+
+  return (
+    <div className="flex flex-col gap-1 w-full items-start overflow-hidden chat-row-enter">
+      {item.showWorkedSection ? (
+        <WorkedSessionSection
+          label={item.workedLabel ?? "Worked session"}
+          isOpen={workedOpen}
+          onToggle={onToggleWorked}
+        >
+          {orderedActionParts.map((part, index) => (
+            <MessagePartBubble
+              key={part?.id ?? `worked-action-${index}`}
+              part={part}
+              isStreaming={false}
+              isLast={index === orderedActionParts.length - 1}
+            />
+          ))}
+        </WorkedSessionSection>
+      ) : (
+        <>
+          {orderedParts.map((part, index) => (
+            <MessagePartBubble
+              key={part?.id ?? `live-part-${index}`}
+              part={part}
+              isStreaming={item.runInProgress}
+              isLast={index === orderedParts.length - 1}
+            />
+          ))}
+          {item.runInProgress && item.fallbackState && !hasActiveOrderedAction && (
+            <AgentStateRow
+              label={
+                <LoadingStateLabel
+                  prefix={
+                    <span className="font-semibold">
+                      {item.fallbackState === "waiting" ? "Waiting" : "Working"}
+                    </span>
+                  }
+                />
+              }
+              tone="muted"
+            />
+          )}
+        </>
+      )}
+
+      {item.showWorkedSection &&
+        orderedResponseParts.map((part, index) => (
+          <MessagePartBubble
+            key={part?.id ?? `response-${index}`}
+            part={part}
+            isStreaming={item.runInProgress}
+            isLast={index === orderedResponseParts.length - 1}
+          />
+        ))}
+
+      {hasLegacyContent && (
+        <AgentMarkdownBlock
+          text={item.message?.content ?? ""}
+          isStreaming={item.runInProgress}
+        />
+      )}
+    </div>
   );
 }
 
@@ -588,56 +710,39 @@ function formatMessageTime(timestamp: number): string {
   });
 }
 
-function formatWorkedLabel(
-  startedAt?: number,
-  completedAt?: number,
-): string {
-  if (!startedAt || !completedAt || completedAt <= startedAt) {
-    return "Worked session";
-  }
-
-  const durationSec = Math.max(1, Math.round((completedAt - startedAt) / 1000));
-  if (durationSec < 60) {
-    return `Worked for ${durationSec}s`;
-  }
-
-  const minutes = Math.floor(durationSec / 60);
-  const seconds = durationSec % 60;
-  if (seconds === 0) {
-    return `Worked for ${minutes}m`;
-  }
-  return `Worked for ${minutes}m ${seconds}s`;
-}
-
 function WorkedSessionSection({
   label,
   children,
-  defaultOpen = false,
+  isOpen,
+  onToggle,
 }: {
   label: string;
   children: ReactNode;
-  defaultOpen?: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    setIsOpen(defaultOpen);
-  }, [defaultOpen]);
-
   return (
     <div className="w-full">
       <SessionDivider
         label={label}
-        onClick={() => setIsOpen((prev) => !prev)}
-        icon={isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        onClick={onToggle}
+        icon={
+          isOpen ? (
+            <ChevronDown className="w-3 h-3" />
+          ) : (
+            <ChevronRight className="w-3 h-3" />
+          )
+        }
         className="text-muted-foreground/80 hover:text-muted-foreground"
       />
       <div
-        className={`overflow-hidden transition-all duration-200 ease-out ${
+        className={`overflow-hidden transition-all duration-300 ease-out ${
           isOpen ? "max-h-[30rem] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        <div className="mt-0.5 flex flex-col gap-0.5">{children}</div>
+        <div className="max-h-[28rem] overflow-y-auto py-1.5 pr-1">
+          <div className="flex flex-col gap-0.5">{children}</div>
+        </div>
       </div>
     </div>
   );
@@ -670,7 +775,7 @@ function SessionDivider({
       <button
         type="button"
         onClick={onClick}
-        className={`w-full flex items-center gap-3 my-3 py-0.5 text-xs transition-colors ${className}`}
+        className={`w-full flex items-center gap-3 my-4 py-1 text-xs transition-colors ${className}`}
       >
         {content}
       </button>
@@ -679,7 +784,7 @@ function SessionDivider({
 
   return (
     <div
-      className={`w-full flex items-center gap-3 my-3 py-0.5 text-xs text-muted-foreground ${className}`}
+      className={`w-full flex items-center gap-3 my-4 py-1 text-xs text-muted-foreground ${className}`}
     >
       {content}
     </div>
@@ -701,7 +806,6 @@ function MessagePartBubble({
       return null;
     }
 
-    // Determine active state: must be streaming AND be the last item
     const isActive = isStreaming && isLast;
 
     return (
@@ -709,18 +813,18 @@ function MessagePartBubble({
         label={
           isActive ? (
             <LoadingStateLabel
-              prefix={<span className="font-semibold">Thinking</span>}
+              prefix={<span className="font-bold">Thinking</span>}
             />
           ) : (
             <span className="font-semibold">Thought</span>
           )
         }
         tone="muted"
-      >
-        <ThoughtContent text={thoughtText} />
-      </AgentActivityRow>
+        renderContent={(isOpen) => <ThoughtContent text={thoughtText} isOpen={isOpen} />}
+      />
     );
   }
+
   if (part.type === "tool") {
     const toolStatus = normalizeToolStatus(part) ?? "completed";
     const toolLabelParts = getToolActivityLabelParts(part);
@@ -740,15 +844,15 @@ function MessagePartBubble({
             <LoadingStateLabel
               prefix={
                 <span className="inline-flex items-baseline gap-1">
-                  <span className="font-semibold">{actionText}</span>
-                  {targetText && <span>{targetText}</span>}
+                  <span className="font-bold">{actionText}</span>
+                  {targetText && <span className="font-normal">{targetText}</span>}
                 </span>
               }
             />
           ) : (
             <span className="inline-flex items-baseline gap-1">
-              <span className="font-semibold">{actionText}</span>
-              {targetText && <span>{targetText}</span>}
+              <span className="font-bold">{actionText}</span>
+              {targetText && <span className="font-normal">{targetText}</span>}
             </span>
           )
         }
@@ -777,71 +881,51 @@ function MessagePartBubble({
       </AgentActivityRow>
     );
   }
+
   if (part.type === "text") {
     return (
-      <div className="rounded-lg px-3 py-1.5 w-full min-w-0 prose prose-sm dark:prose-invert max-w-none break-words overflow-x-hidden">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            pre: ({ node, className, ...props }) => (
-              <pre
-                {...props}
-                className={`max-w-full overflow-x-auto whitespace-pre-wrap break-words ${
-                  className ?? ""
-                }`}
-              />
-            ),
-          }}
-        >
-          {part.text}
-        </ReactMarkdown>
-      </div>
+      <AgentMarkdownBlock text={part.text ?? ""} isStreaming={isStreaming && isLast} />
     );
   }
+
   return null;
 }
 
-function mergeLiveActionParts(prev: any[], incoming: any[]): any[] {
-  const next = [...prev];
-  const indexById = new Map<string, number>();
+function AgentMarkdownBlock({
+  text,
+  isStreaming = false,
+}: {
+  text: string;
+  isStreaming?: boolean;
+}) {
+  const [animateChunk, setAnimateChunk] = useState(false);
+  const previousTextRef = useRef(text);
 
-  next.forEach((part, index) => {
-    if (part?.id) {
-      indexById.set(String(part.id), index);
+  useEffect(() => {
+    if (!isStreaming) {
+      previousTextRef.current = text;
+      setAnimateChunk(false);
+      return;
     }
-  });
+    if (text === previousTextRef.current) return;
 
-  for (const part of incoming) {
-    const partId = part?.id ? String(part.id) : undefined;
-    if (partId && indexById.has(partId)) {
-      const existingIndex = indexById.get(partId)!;
-      next[existingIndex] = { ...next[existingIndex], ...part };
-      continue;
-    }
+    previousTextRef.current = text;
+    setAnimateChunk(true);
+    const timer = window.setTimeout(() => setAnimateChunk(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [text, isStreaming]);
 
-    if (partId) {
-      indexById.set(partId, next.length);
-      next.push(part);
-      continue;
-    }
-
-    const existingAnonIndex = next.findIndex(
-      (candidate) =>
-        !candidate?.id &&
-        candidate?.type === part?.type &&
-        candidate?.tool === part?.tool &&
-        candidate?.title === part?.title,
-    );
-
-    if (existingAnonIndex >= 0) {
-      next[existingAnonIndex] = { ...next[existingAnonIndex], ...part };
-      continue;
-    }
-
-    next.push(part);
-  }
-
-  return next;
+  return (
+    <div
+      className={`rounded-lg px-3 py-1.5 w-full min-w-0 text-sm leading-relaxed max-w-none break-words overflow-x-hidden ${
+        animateChunk ? "chat-stream-chunk-fade" : ""
+      }`}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={getChatMarkdownComponents()}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 function stripTrailingDots(value?: string): string | undefined {
@@ -849,16 +933,16 @@ function stripTrailingDots(value?: string): string | undefined {
   return value.replace(/\.+\s*$/, "");
 }
 
-function ThoughtContent({ text }: { text: string }) {
+function ThoughtContent({ text, isOpen }: { text: string; isOpen: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!isOpen || !scrollRef.current) return;
     scrollRef.current.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [text]);
+  }, [text, isOpen]);
 
   return (
     <div ref={scrollRef} className="max-h-32 overflow-y-auto whitespace-pre-wrap pr-1">
@@ -914,8 +998,8 @@ function AgentStateRow({
 
   return (
     <div className="w-full max-w-md">
-      <div className={`text-xs font-medium py-0.5 px-1 ${toneClass}`}>
-        {label}
+      <div className={`text-xs font-medium py-0.5 px-1 leading-5 ${toneClass}`}>
+        <span className="inline-flex items-center gap-1">{label}</span>
       </div>
     </div>
   );
@@ -924,11 +1008,13 @@ function AgentStateRow({
 function AgentActivityRow({
   label,
   children,
+  renderContent,
   defaultOpen = false,
   tone = "muted",
 }: {
   label: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
+  renderContent?: (isOpen: boolean) => ReactNode;
   defaultOpen?: boolean;
   tone?: "muted" | "destructive";
 }) {
@@ -964,10 +1050,73 @@ function AgentActivityRow({
             : "max-h-0 opacity-0 -translate-y-0.5"
         }`}
       >
-        <div className="mt-0.5 ml-1 pl-2 pr-1 pb-1 border-l border-border/60 text-xs text-muted-foreground">
-          {children}
-        </div>
+        {isOpen && (
+          <div className="mt-0.5 ml-1 pl-2 pr-1 pb-1 border-l border-border/60 text-xs text-muted-foreground">
+            {renderContent ? renderContent(isOpen) : children}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function getChatMarkdownComponents({
+  compactParagraphs = false,
+}: {
+  compactParagraphs?: boolean;
+} = {}) {
+  const paragraphClass = compactParagraphs
+    ? "mb-0 last:mb-0 break-words"
+    : "mb-3 last:mb-0 break-words";
+  const listClass = compactParagraphs
+    ? "my-1 pl-5 space-y-0.5"
+    : "my-2 pl-5 space-y-1";
+  const headingClass =
+    "text-sm leading-relaxed font-semibold mb-2 mt-3 first:mt-0";
+
+  return {
+    p: ({ children }: any) => <p className={paragraphClass}>{children}</p>,
+    h1: ({ children }: any) => <h1 className={headingClass}>{children}</h1>,
+    h2: ({ children }: any) => <h2 className={headingClass}>{children}</h2>,
+    h3: ({ children }: any) => <h3 className={headingClass}>{children}</h3>,
+    h4: ({ children }: any) => <h4 className={headingClass}>{children}</h4>,
+    h5: ({ children }: any) => <h5 className={headingClass}>{children}</h5>,
+    h6: ({ children }: any) => <h6 className={headingClass}>{children}</h6>,
+    ul: ({ children }: any) => <ul className={`${listClass} list-disc`}>{children}</ul>,
+    ol: ({ children }: any) => (
+      <ol className={`${listClass} list-decimal`}>{children}</ol>
+    ),
+    li: ({ children }: any) => <li className="break-words">{children}</li>,
+    a: ({ children, href }: any) => (
+      <a
+        href={href}
+        className="text-primary underline underline-offset-2 break-all"
+        target="_blank"
+        rel="noreferrer"
+      >
+        {children}
+      </a>
+    ),
+    code: ({ inline, children }: any) =>
+      inline ? (
+        <code className="rounded bg-muted/50 px-1 py-0.5 text-[0.92em] break-words">
+          {children}
+        </code>
+      ) : (
+        <code className="text-xs leading-relaxed">{children}</code>
+      ),
+    pre: ({ children }: any) => (
+      <pre className="my-2 overflow-x-auto rounded-md bg-muted/40 px-3 py-2 text-xs leading-relaxed">
+        {children}
+      </pre>
+    ),
+    strong: ({ children }: any) => (
+      <strong className="font-semibold text-foreground">{children}</strong>
+    ),
+    blockquote: ({ children }: any) => (
+      <blockquote className="my-2 border-l-2 border-border/70 pl-3 text-muted-foreground">
+        {children}
+      </blockquote>
+    ),
+  };
 }

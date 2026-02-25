@@ -7,6 +7,7 @@ export const COLOR_THEME_VALUES = [
   "vivd-green",
   "vivd-sharp",
   "ocean",
+  "mono",
 ] as const;
 export type ColorTheme = (typeof COLOR_THEME_VALUES)[number];
 
@@ -23,4 +24,3 @@ export function isColorTheme(value: unknown): value is ColorTheme {
     (COLOR_THEME_VALUES as readonly string[]).includes(value)
   );
 }
-

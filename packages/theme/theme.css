@@ -20,11 +20,11 @@
     --primary-foreground: 0 0% 100%;
 
     /* Secondary: Light gray */
-    --secondary: 220 14% 96%;
+    --secondary: 220 14% 95%;
     --secondary-foreground: 224 10% 25%;
 
     /* Muted: Soft gray */
-    --muted: 220 14% 96%;
+    --muted: 220 14% 94%;
     --muted-foreground: 220 9% 46%;
 
     /* Accent: Subtle indigo */
@@ -34,8 +34,8 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
+    --border: 220 13% 89%;
+    --input: 220 13% 89%;
     --ring: 217 91% 60%;
 
     --chart-1: 217 91% 60%; /* Blue */
@@ -45,7 +45,7 @@
     --chart-5: 0 84% 60%; /* Red */
 
     /* Chat user bubble: softer blue-gray */
-    --chat-user: 220 13% 91%;
+    --chat-user: 220 13% 88%;
     --chat-user-foreground: 224 10% 20%;
   }
 
@@ -114,11 +114,11 @@
     --primary-foreground: 40 33% 98%;
 
     /* Secondary: Soft cream */
-    --secondary: 43 60% 94%;
+    --secondary: 43 60% 92%;
     --secondary-foreground: 20 25% 22%;
 
     /* Muted: Very light warm gray */
-    --muted: 40 20% 94%;
+    --muted: 40 20% 92%;
     --muted-foreground: 20 10% 50%;
 
     /* Accent: Rich Gold */
@@ -128,8 +128,8 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 40 15% 88%;
-    --input: 40 15% 88%;
+    --border: 40 15% 86%;
+    --input: 40 15% 86%;
     --ring: 153 50% 30%;
 
     /* Charts */
@@ -140,7 +140,7 @@
     --chart-5: 193 24% 76%;
 
     /* Chat user bubble: soft sage-gray */
-    --chat-user: 153 20% 85%;
+    --chat-user: 153 20% 82%;
     --chat-user-foreground: 20 25% 18%;
   }
 
@@ -210,11 +210,11 @@
     --primary-foreground: 0 0% 100%;
 
     /* Secondary: Warm cream with more saturation */
-    --secondary: 43 50% 92%;
+    --secondary: 43 50% 90%;
     --secondary-foreground: 20 30% 18%;
 
     /* Muted: Clean gray */
-    --muted: 40 10% 94%;
+    --muted: 40 10% 92%;
     --muted-foreground: 20 15% 45%;
 
     /* Accent: Vibrant Gold */
@@ -224,8 +224,8 @@
     --destructive: 0 80% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 40 20% 85%;
-    --input: 40 20% 85%;
+    --border: 40 20% 82%;
+    --input: 40 20% 82%;
     --ring: 152 60% 35%;
 
     /* Charts */
@@ -236,7 +236,7 @@
     --chart-5: 193 35% 55%;
 
     /* Chat user bubble: soft green-gray */
-    --chat-user: 152 15% 82%;
+    --chat-user: 152 15% 79%;
     --chat-user-foreground: 20 30% 12%;
   }
 
@@ -306,11 +306,11 @@
     --primary-foreground: 0 0% 100%;
 
     /* Secondary: Pure light gray */
-    --secondary: 0 0% 95%;
+    --secondary: 0 0% 92%;
     --secondary-foreground: 0 0% 10%;
 
     /* Muted: Neutral gray */
-    --muted: 0 0% 95%;
+    --muted: 0 0% 92%;
     --muted-foreground: 0 0% 40%;
 
     /* Accent: Maximum Saturation Gold */
@@ -320,8 +320,8 @@
     --destructive: 0 90% 48%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 88%;
-    --input: 0 0% 88%;
+    --border: 0 0% 84%;
+    --input: 0 0% 84%;
     --ring: 152 80% 30%;
 
     /* Charts */
@@ -332,7 +332,7 @@
     --chart-5: 193 50% 50%;
 
     /* Chat user bubble: clean gray */
-    --chat-user: 0 0% 88%;
+    --chat-user: 0 0% 84%;
     --chat-user-foreground: 0 0% 10%;
   }
 
@@ -402,11 +402,11 @@
     --primary-foreground: 0 0% 100%;
 
     /* Secondary: Soft foam */
-    --secondary: 210 40% 96%;
+    --secondary: 210 40% 94%;
     --secondary-foreground: 222 47% 11%;
 
     /* Muted: Mist */
-    --muted: 210 40% 96%;
+    --muted: 210 40% 94%;
     --muted-foreground: 215 16% 47%;
 
     /* Accent: Coral/Teal */
@@ -416,8 +416,8 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
     --ring: 199 89% 48%;
 
     /* Charts */
@@ -428,7 +428,7 @@
     --chart-5: 0 84% 60%; /* Red */
 
     /* Chat user bubble: soft blue */
-    --chat-user: 210 40% 96%;
+    --chat-user: 210 40% 93%;
     --chat-user-foreground: 222 47% 11%;
   }
 
@@ -477,6 +477,90 @@
     /* Chat user bubble: deep blue */
     --chat-user: 217 33% 25%;
     --chat-user-foreground: 210 40% 98%;
+  }
+
+  /* ============================================
+     MONO Theme (Near-White + Near-Black)
+     ============================================ */
+  [data-color-theme="mono"] {
+    /* Mono Light Theme - Crisp grayscale */
+    --background: 0 0% 99%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    --primary: 0 0% 10%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 12%;
+
+    --muted: 0 0% 93%;
+    --muted-foreground: 0 0% 36%;
+
+    --accent: 0 0% 85%;
+    --accent-foreground: 0 0% 8%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 82%;
+    --input: 0 0% 82%;
+    --ring: 0 0% 20%;
+
+    --chart-1: 0 0% 20%;
+    --chart-2: 0 0% 35%;
+    --chart-3: 0 0% 50%;
+    --chart-4: 0 0% 65%;
+    --chart-5: 0 0% 80%;
+
+    --chat-user: 0 0% 87%;
+    --chat-user-foreground: 0 0% 12%;
+  }
+
+  [data-color-theme="mono"].dark,
+  .dark[data-color-theme="mono"] {
+    /* Mono Dark Theme - Near-black UI */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 96%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 6%;
+
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 21%;
+    --muted-foreground: 0 0% 70%;
+
+    --accent: 0 0% 26%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 0 0% 92%;
+
+    --chart-1: 0 0% 90%;
+    --chart-2: 0 0% 76%;
+    --chart-3: 0 0% 64%;
+    --chart-4: 0 0% 52%;
+    --chart-5: 0 0% 40%;
+
+    --chat-user: 0 0% 16%;
+    --chat-user-foreground: 0 0% 96%;
   }
 }
 

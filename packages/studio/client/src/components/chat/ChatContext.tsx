@@ -556,7 +556,6 @@ export function ChatProvider({
         !attachedElement &&
         attachedImages.length === 0 &&
         attachedFiles.length === 0) ||
-      isWaiting ||
       isStreaming ||
       runTaskMutation.isPending ||
       isSending

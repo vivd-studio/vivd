@@ -189,7 +189,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
   return (
     <div
       className={cn(
-        "p-3 md:p-6 mt-auto transition-colors",
+        "px-3 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0 mt-auto transition-colors",
         isDragOver ? "bg-primary/5" : "",
         className,
       )}
@@ -248,12 +248,12 @@ export function ChatComposer({ className }: ChatComposerProps) {
 
       {/* Main input container - single shared surface for textarea + action row */}
       <div
-        className={`rounded-xl border-2 bg-card overflow-hidden transition-all shadow-sm ${
+        className={`rounded-xl border bg-card overflow-hidden transition-[border-color,box-shadow,background-color] shadow-sm ${
           isDragOver
-            ? "border-primary border-dashed"
+            ? "border-primary border-dashed shadow-[0_0_0_1px_hsl(var(--ring)/0.35)]"
             : isUsageBlocked
-              ? "border-destructive/50"
-              : "border-primary/20 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/40"
+              ? "border-destructive/55"
+              : "border-border/90 focus-within:border-[hsl(var(--ring))]"
         }`}
       >
         {/* Textarea - inside container with proper padding */}

@@ -88,9 +88,72 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
         const reasoningState = new Map<string, number>();
         const textState = new Map<string, number>();
         const usageState = new Map<string, number>();
+        const messageRoles = new Map<string, string>();
+        const partTypes = new Map<string, string>();
         const assistantMessageIds = new Set<string>();
+        const pendingUnknownTextByMessage = new Map<
+          string,
+          Array<{ partId: string; delta: string }>
+        >();
         let hasObservedSessionActivity = false;
         let hasTerminalSessionError = false;
+
+        const queueUnknownText = (
+          messageId: string,
+          partId: string,
+          delta: string,
+        ) => {
+          if (!messageId || !partId || !delta) return;
+          const pending = pendingUnknownTextByMessage.get(messageId) ?? [];
+          pending.push({ partId, delta });
+          pendingUnknownTextByMessage.set(messageId, pending);
+        };
+
+        const flushPendingUnknownTextIfKnown = (messageId: string) => {
+          if (!messageId) return;
+          const pending = pendingUnknownTextByMessage.get(messageId);
+          if (!pending || pending.length === 0) return;
+
+          const role = messageRoles.get(messageId);
+          const isAssistantMessage =
+            role === "assistant" || assistantMessageIds.has(messageId);
+
+          if (isAssistantMessage) {
+            for (const chunk of pending) {
+              callbacks.onText?.(chunk.delta, chunk.partId);
+            }
+            pendingUnknownTextByMessage.delete(messageId);
+            return;
+          }
+
+          if (role === "user") {
+            pendingUnknownTextByMessage.delete(messageId);
+          }
+        };
+
+        const emitOrBufferTextChunk = ({
+          messageId,
+          partId,
+          delta,
+          messageRole,
+          isAssistantMessage,
+        }: {
+          messageId: string;
+          partId: string;
+          delta: string;
+          messageRole: string | undefined;
+          isAssistantMessage: boolean;
+        }) => {
+          if (!delta) return;
+          if (isAssistantMessage) {
+            callbacks.onText?.(delta, partId);
+            return;
+          }
+          if (messageRole === "user") {
+            return;
+          }
+          queueUnknownText(messageId, partId, delta);
+        };
 
         for await (const event of events.stream) {
           if (!isActive) break;
@@ -111,14 +174,28 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
 
             if (event.type === "message.updated") {
               const { info } = (event as any).properties;
-              if (info?.role === "assistant") {
-                assistantMessageIds.add(info.id);
+              if (info?.id && typeof info.id === "string") {
+                if (typeof info.role === "string") {
+                  messageRoles.set(info.id, info.role);
+                }
+                if (info?.role === "assistant") {
+                  assistantMessageIds.add(info.id);
+                }
+                flushPendingUnknownTextIfKnown(info.id);
               }
             }
 
             if (event.type === "message.part.updated") {
-              const { part } = (event as any).properties;
-              const isAssistantMessage = assistantMessageIds.has(part.messageID);
+              const { part, delta } = (event as any).properties;
+              const partDelta = typeof delta === "string" ? delta : "";
+              if (part?.id && typeof part.id === "string" && part?.type) {
+                partTypes.set(part.id, String(part.type));
+              }
+              const messageId =
+                typeof part?.messageID === "string" ? part.messageID : "";
+              const messageRole = messageRoles.get(messageId);
+              const isAssistantMessage =
+                messageRole === "assistant" || assistantMessageIds.has(messageId);
               hasObservedSessionActivity = true;
 
               if (part.type === "step-finish") {
@@ -143,6 +220,10 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                   }
                 }
               } else if (part.type === "reasoning") {
+                if (messageId) {
+                  assistantMessageIds.add(messageId);
+                  flushPendingUnknownTextIfKnown(messageId);
+                }
                 // Reasoning parts can arrive before the corresponding assistant message
                 // has been seen via `message.updated`. We still want to stream them so
                 // the UI can show thought blocks during generation.
@@ -154,22 +235,50 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
 
                 const text = part.text || "";
                 const lastLength = reasoningState.get(part.id) || 0;
-                if (text.length > lastLength) {
+                if (partDelta.length > 0) {
+                  callbacks.onReasoning?.(partDelta, part.id);
+                  if (text.length >= lastLength + partDelta.length) {
+                    reasoningState.set(part.id, text.length);
+                  } else {
+                    reasoningState.set(part.id, lastLength + partDelta.length);
+                  }
+                } else if (text.length > lastLength) {
                   const newContent = text.slice(lastLength);
                   callbacks.onReasoning?.(newContent, part.id);
                   reasoningState.set(part.id, text.length);
                 }
               } else if (part.type === "text") {
-                if (!isAssistantMessage) continue;
-
                 const text = part.text || "";
                 const lastLength = textState.get(part.id) || 0;
-                if (text.length > lastLength) {
+                if (partDelta.length > 0) {
+                  if (text.length >= lastLength + partDelta.length) {
+                    textState.set(part.id, text.length);
+                  } else {
+                    textState.set(part.id, lastLength + partDelta.length);
+                  }
+                  emitOrBufferTextChunk({
+                    messageId,
+                    partId: part.id,
+                    delta: partDelta,
+                    messageRole,
+                    isAssistantMessage,
+                  });
+                } else if (text.length > lastLength) {
                   const newContent = text.slice(lastLength);
-                  callbacks.onText?.(newContent, part.id);
                   textState.set(part.id, text.length);
+                  emitOrBufferTextChunk({
+                    messageId,
+                    partId: part.id,
+                    delta: newContent,
+                    messageRole,
+                    isAssistantMessage,
+                  });
                 }
               } else if (part.type === "tool") {
+                if (messageId) {
+                  assistantMessageIds.add(messageId);
+                  flushPendingUnknownTextIfKnown(messageId);
+                }
                 const currentStatus = getToolStatus(part);
                 if (!currentStatus) {
                   continue;
@@ -203,6 +312,50 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                     callbacks.onToolCallFinished?.(toolCall);
                   }
                 }
+              }
+            } else if (event.type === "message.part.delta") {
+              const properties = (event as any).properties ?? {};
+              const partId = typeof properties.partID === "string" ? properties.partID : "";
+              const messageId =
+                typeof properties.messageID === "string" ? properties.messageID : "";
+              const field =
+                typeof properties.field === "string" ? properties.field : "";
+              const deltaText =
+                typeof properties.delta === "string" ? properties.delta : "";
+              if (!partId || !messageId || !deltaText) {
+                continue;
+              }
+              if (field && field !== "text") {
+                continue;
+              }
+
+              hasObservedSessionActivity = true;
+              const partType = partTypes.get(partId);
+              const messageRole = messageRoles.get(messageId);
+              const isAssistantMessage =
+                messageRole === "assistant" || assistantMessageIds.has(messageId);
+
+              if (partType === "reasoning") {
+                assistantMessageIds.add(messageId);
+                flushPendingUnknownTextIfKnown(messageId);
+                if (!seenParts.has(partId)) {
+                  callbacks.onStartThinking?.();
+                  seenParts.add(partId);
+                }
+                callbacks.onReasoning?.(deltaText, partId);
+                reasoningState.set(
+                  partId,
+                  (reasoningState.get(partId) || 0) + deltaText.length,
+                );
+              } else {
+                emitOrBufferTextChunk({
+                  messageId,
+                  partId,
+                  delta: deltaText,
+                  messageRole,
+                  isAssistantMessage,
+                });
+                textState.set(partId, (textState.get(partId) || 0) + deltaText.length);
               }
             } else if (event.type === "session.idle") {
               if (hasTerminalSessionError) {

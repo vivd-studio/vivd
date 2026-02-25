@@ -221,7 +221,13 @@ function OrganizationSwitcher({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-linear-to-br from-emerald-500 to-amber-500 text-white font-bold">
+              <div
+                className="flex aspect-square size-8 items-center justify-center rounded-lg text-white font-bold"
+                style={{
+                  background:
+                    "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--chart-2)) 100%)",
+                }}
+              >
                 v
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -229,7 +235,8 @@ function OrganizationSwitcher({
                   vi
                   <span
                     style={{
-                      background: "linear-gradient(135deg, #10B981 0%, #F59E0B 100%)",
+                      background:
+                        "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--chart-2)) 100%)",
                       WebkitBackgroundClip: "text",
                       WebkitTextFillColor: "transparent",
                       backgroundClip: "text",

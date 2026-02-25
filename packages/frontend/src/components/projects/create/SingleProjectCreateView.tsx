@@ -12,7 +12,7 @@ import { Form } from "@/components/ui/form";
 import { UrlFormFields } from "./UrlFormFields";
 import { Globe, Sparkles, ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
-import faviconSvg from "/favicon-transparent.svg";
+import { VivdIcon } from "@/components/common";
 
 type WizardStep = "choice" | "url" | "import";
 
@@ -113,12 +113,13 @@ export function SingleProjectCreateView() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
       {/* Logo */}
       <div className="mb-8 flex items-center gap-3">
-        <img src={faviconSvg} alt="vivd" className="h-12 w-12" />
+        <VivdIcon className="h-12 w-12" />
         <span className="text-3xl font-bold tracking-tight">
           vi
           <span
             style={{
-              background: "linear-gradient(135deg, #10B981 0%, #F59E0B 100%)",
+              background:
+                "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--chart-2)) 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",

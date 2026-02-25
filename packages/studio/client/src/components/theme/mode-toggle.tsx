@@ -1,4 +1,5 @@
 import { Moon, Sun, Palette } from "lucide-react";
+import type { ColorTheme } from "@vivd/shared/types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,36 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "./theme-provider";
+
+type ColorThemeOption = {
+  value: ColorTheme;
+  label: string;
+  preview: [string, string];
+};
+
+const COLOR_THEME_OPTIONS: ColorThemeOption[] = [
+  { value: "clean", label: "Clean", preview: ["#ffffff", "#3b82f6"] },
+  { value: "natural", label: "Natural", preview: ["#8b5e3c", "#c9a227"] },
+  { value: "vivd-green", label: "Vivd Green", preview: ["#10b981", "#f59e0b"] },
+  { value: "vivd-sharp", label: "Vivd Sharp", preview: ["#059669", "#f59e0b"] },
+  { value: "ocean", label: "Ocean", preview: ["#0ea5e9", "#14b8a6"] },
+  { value: "mono", label: "Mono", preview: ["#fafafa", "#0b0b0b"] },
+];
+
+function ThemeIndicator({ preview }: { preview: [string, string] }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="h-2.5 w-2.5 rounded-full border border-black/10 dark:border-white/20"
+        style={{ backgroundColor: preview[0] }}
+      />
+      <span
+        className="h-2.5 w-2.5 rounded-full border border-black/10 dark:border-white/20"
+        style={{ backgroundColor: preview[1] }}
+      />
+    </span>
+  );
+}
 
 export function ModeToggle() {
   const { setTheme, colorTheme, setColorTheme } = useTheme();
@@ -40,36 +71,16 @@ export function ModeToggle() {
         <DropdownMenuLabel className="flex items-center gap-2">
           <Palette className="h-3.5 w-3.5" /> Color Theme
         </DropdownMenuLabel>
-        <DropdownMenuItem
-          onClick={() => setColorTheme("clean")}
-          className={colorTheme === "clean" ? "bg-accent" : ""}
-        >
-          Clean
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setColorTheme("natural")}
-          className={colorTheme === "natural" ? "bg-accent" : ""}
-        >
-          Natural
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setColorTheme("vivd-green")}
-          className={colorTheme === "vivd-green" ? "bg-accent" : ""}
-        >
-          Vivd Green
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setColorTheme("vivd-sharp")}
-          className={colorTheme === "vivd-sharp" ? "bg-accent" : ""}
-        >
-          Vivd Sharp
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setColorTheme("ocean")}
-          className={colorTheme === "ocean" ? "bg-accent" : ""}
-        >
-          Ocean
-        </DropdownMenuItem>
+        {COLOR_THEME_OPTIONS.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            onClick={() => setColorTheme(option.value)}
+            className={colorTheme === option.value ? "bg-accent" : ""}
+          >
+            <ThemeIndicator preview={option.preview} />
+            <span>{option.label}</span>
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
