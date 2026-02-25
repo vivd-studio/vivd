@@ -11,6 +11,7 @@ import {
 } from "./db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { domainService } from "./services/publish/DomainService";
+import { normalizeOrganizationId } from "./lib/organizationIdentifiers";
 
 type UserMembership = {
   organizationId: string;
@@ -69,18 +70,6 @@ function extractRequestHost(req: trpcExpress.CreateExpressContextOptions["req"])
   return raw.split(",")[0]?.trim() ?? null;
 }
 
-function normalizeRequestedOrganizationId(input: string | null): string | null {
-  if (!input) return null;
-  const normalized = input.trim();
-  if (!normalized) return null;
-  if (normalized.length > 128) return null;
-  // Accept DB-backed organization IDs (which may include "_" or mixed case),
-  // while still blocking control chars, whitespace and path separators.
-  if (/[\u0000-\u001f\u007f]/.test(normalized)) return null;
-  if (/[\s/\\]/.test(normalized)) return null;
-  return normalized;
-}
-
 export const createContext = async ({
   req,
   res,
@@ -96,7 +85,7 @@ export const createContext = async ({
 
   let session = await getSession(headers);
   const resolvedHost = await domainService.resolveHost(extractRequestHost(req));
-  const requestedOrganizationId = normalizeRequestedOrganizationId(
+  const requestedOrganizationId = normalizeOrganizationId(
     headers.get("x-vivd-organization-id"),
   );
   const authHeader = headers.get("authorization");

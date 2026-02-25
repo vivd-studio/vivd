@@ -18,6 +18,7 @@ import {
 import { gitService } from "../services/integrations/GitService";
 import { createContext } from "../trpc";
 import { checkOrganizationAccess } from "../lib/organizationAccess";
+import { normalizeOrganizationId } from "../lib/organizationIdentifiers";
 
 type AuthLike = {
   api: {
@@ -25,13 +26,13 @@ type AuthLike = {
   };
 };
 
-const ID_LIKE_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
-function normalizeIdLike(value: unknown): string | null {
+function normalizeSlug(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().toLowerCase();
   if (!trimmed) return null;
-  if (!ID_LIKE_PATTERN.test(trimmed)) return null;
+  if (!SLUG_PATTERN.test(trimmed)) return null;
   return trimmed;
 }
 
@@ -287,7 +288,7 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
 
       const requestedOrganizationId =
         req.query.organizationId !== undefined
-          ? normalizeIdLike(req.query.organizationId)
+          ? normalizeOrganizationId(req.query.organizationId)
           : "";
       if (req.query.organizationId !== undefined && !requestedOrganizationId) {
         return res.status(400).json({ error: "Invalid organizationId" });
@@ -390,7 +391,7 @@ export function createImportRouter(deps: { auth: AuthLike; upload: Multer }) {
           : "completed";
 
       const requestedSlug =
-        req.query.slug !== undefined ? (normalizeIdLike(req.query.slug) ?? "") : "";
+        req.query.slug !== undefined ? (normalizeSlug(req.query.slug) ?? "") : "";
       if (req.query.slug !== undefined && !requestedSlug) {
         return res.status(400).json({ error: "Invalid slug" });
       }

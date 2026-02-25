@@ -27,6 +27,7 @@ import {
   getObjectBuffer,
   getObjectStorageConfigFromEnv,
 } from "../services/storage/ObjectStorageService";
+import { normalizeOrganizationId } from "../lib/organizationIdentifiers";
 
 type CreateContextResult = {
   session: any;
@@ -91,18 +92,6 @@ function isHttpsRequest(req: express.Request): boolean {
     return xfProto[0].split(",")[0].trim() === "https";
   }
   return false;
-}
-
-function normalizeRequestedOrganizationId(input: string | null): string | null {
-  if (!input) return null;
-  const normalized = input.trim();
-  if (!normalized) return null;
-  if (normalized.length > 128) return null;
-  // Accept DB-backed organization IDs (which may include "_" or mixed case),
-  // while still blocking control chars, whitespace and path separators.
-  if (/[\u0000-\u001f\u007f]/.test(normalized)) return null;
-  if (/[\s/\\]/.test(normalized)) return null;
-  return normalized;
 }
 
 type CachedPublicPreviewSetting = { enabled: boolean; fetchedAt: number };
@@ -539,7 +528,7 @@ export function createProjectRuntimeRouter(
     if (!organizationId && tokenOk) {
       // Internal services (e.g. scraper) can pass explicit org context via header.
       // We only honor this when the internal preview token is present.
-      const candidate = normalizeRequestedOrganizationId(
+      const candidate = normalizeOrganizationId(
         req.get("x-vivd-organization-id") ?? null,
       );
       if (candidate) {

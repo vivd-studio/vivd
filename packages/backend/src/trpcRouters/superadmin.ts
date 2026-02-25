@@ -32,6 +32,10 @@ import {
   listStudioImagesFromGhcr,
   normalizeGhcrRepository,
 } from "../services/studioMachines/fly/ghcr";
+import {
+  organizationIdSchema,
+  organizationSlugSchema,
+} from "../lib/organizationIdentifiers";
 
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
@@ -46,12 +50,6 @@ function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   }
   return headers;
 }
-
-const organizationIdSchema = z
-  .string()
-  .min(2)
-  .max(64)
-  .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, "Invalid organization slug");
 
 const organizationRoleSchema = z.enum([
   "owner",
@@ -713,7 +711,7 @@ export const superAdminRouter = router({
   createOrganization: superAdminProcedure
     .input(
       z.object({
-        slug: organizationIdSchema,
+        slug: organizationSlugSchema,
         name: z.string().min(1).max(128),
       }),
     )

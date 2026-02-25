@@ -264,6 +264,24 @@ describe("organization router", () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
+  it("accepts non-slug organization IDs when selecting active organization", async () => {
+    findOrganizationMock.mockResolvedValueOnce({
+      id: "Org_A2",
+      slug: "tenant-two",
+      status: "active",
+    });
+    getTenantHostsForOrganizationsMock.mockResolvedValueOnce(
+      new Map([["Org_A2", "tenant-two.localhost"]]),
+    );
+    const caller = organizationRouter.createCaller(makeContext());
+
+    const result = await caller.setActiveOrganization({ organizationId: " Org_A2 " });
+
+    expect(findOrganizationMock).toHaveBeenCalled();
+    expect(updateSetMock).toHaveBeenCalledWith({ activeOrganizationId: "Org_A2" });
+    expect(result).toEqual({ success: true, tenantHost: "tenant-two.localhost" });
+  });
+
   it("allows super-admin selection and persists active org even when suspended", async () => {
     findOrganizationMock.mockResolvedValueOnce({
       id: "org-2",

@@ -205,6 +205,33 @@ describe("import route safety checks", () => {
     expect(checkOrganizationAccessMock).not.toHaveBeenCalled();
   });
 
+  it("accepts non-slug organization IDs in import override query", async () => {
+    const handler = getImportHandler();
+    const req = {
+      query: {
+        organizationId: "Org_A2",
+      },
+      body: {},
+      headers: {},
+      file: undefined,
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(checkOrganizationAccessMock).toHaveBeenCalledWith({
+      session: {
+        user: {
+          id: "user-1",
+          role: "admin",
+        },
+      },
+      organizationId: "Org_A2",
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "Missing file" });
+  });
+
   it("rejects imported ZIP archives that contain symlinks", async () => {
     extractZipMock.mockImplementationOnce(
       async (_zipPath: string, options: { dir: string }) => {

@@ -14,14 +14,9 @@ import {
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { auth } from "../auth";
 import { domainService } from "../services/publish/DomainService";
+import { organizationIdSchema } from "../lib/organizationIdentifiers";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
-
-const organizationIdSchema = z
-  .string()
-  .min(2)
-  .max(64)
-  .regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, "Invalid organization id");
 
 function getGlobalUserRoleForMemberRole(
   _role: z.infer<typeof memberRoleSchema>,
