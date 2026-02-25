@@ -6,6 +6,8 @@ type MapSessionMessagesOptions = {
 };
 
 const TERMINAL_SESSION_STATUS_TYPES = new Set(["idle", "done", "error"]);
+const INTERRUPTED_CONTINUE_MIN_AGE_MS = 10_000;
+const STALE_TERMINAL_WAIT_GRACE_MS = 15_000;
 
 function normalizeTimestamp(value: unknown): number | undefined {
   if (value == null) return undefined;
@@ -222,11 +224,11 @@ export function shouldSuggestInterruptedContinue(options: {
   messages: Message[];
   isThinking: boolean;
   isLoading: boolean;
+  now?: number;
+  minAgeMs?: number;
 }): boolean {
   const isTerminalStatus =
-    options.sessionStatus == null ||
-    options.sessionStatus === "done" ||
-    options.sessionStatus === "idle";
+    options.sessionStatus === "done" || options.sessionStatus === "idle";
 
   if (!isTerminalStatus) {
     return false;
@@ -240,10 +242,21 @@ export function shouldSuggestInterruptedContinue(options: {
     return false;
   }
 
-  const lastMessage = options.messages[options.messages.length - 1];
+  const lastUserMessage = [...options.messages]
+    .reverse()
+    .find((message) => message.role === "user");
   if (
-    lastMessage.role === "user" &&
-    lastMessage.content.trim().toLowerCase() === "continue"
+    lastUserMessage &&
+    lastUserMessage.content.trim().toLowerCase() === "continue"
+  ) {
+    return false;
+  }
+
+  const lastUserCreatedAt = lastUserMessage?.createdAt;
+  if (
+    lastUserCreatedAt &&
+    (options.now ?? Date.now()) - lastUserCreatedAt <
+      (options.minAgeMs ?? INTERRUPTED_CONTINUE_MIN_AGE_MS)
   ) {
     return false;
   }
@@ -272,6 +285,6 @@ export function shouldHoldWaitingForStaleTerminalStatus(options: {
   }
 
   const now = options.now ?? Date.now();
-  const graceMs = options.graceMs ?? 6000;
+  const graceMs = options.graceMs ?? STALE_TERMINAL_WAIT_GRACE_MS;
   return now - options.lastUserMessageAt < graceMs;
 }

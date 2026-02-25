@@ -870,6 +870,8 @@ function MessagePartBubble({
     const toolStatus = normalizeToolStatus(part) ?? "completed";
     const toolLabelParts = getToolActivityLabelParts(part);
     const toolInput = summarizeToolInput(part.input);
+    const toolDescription =
+      toolStatus === "error" ? undefined : extractToolDescription(part.input);
     const isRunning = toolStatus === "running";
     const actionText = isRunning
       ? stripTrailingDots(toolLabelParts.action)
@@ -877,23 +879,29 @@ function MessagePartBubble({
     const targetText = isRunning
       ? stripTrailingDots(toolLabelParts.target)
       : toolLabelParts.target;
+    const toolActionLabel = (
+      <span className="inline-flex shrink-0 items-baseline gap-1">
+        <span className="font-bold">{actionText}</span>
+        {targetText && <span className="font-normal">{targetText}</span>}
+      </span>
+    );
 
     return (
       <AgentActivityRow
         label={
           isRunning ? (
-            <LoadingStateLabel
-              prefix={
-                <span className="inline-flex items-baseline gap-1">
-                  <span className="font-bold">{actionText}</span>
-                  {targetText && <span className="font-normal">{targetText}</span>}
-                </span>
-              }
-            />
+            <LoadingStateLabel prefix={toolActionLabel} />
           ) : (
-            <span className="inline-flex items-baseline gap-1">
-              <span className="font-bold">{actionText}</span>
-              {targetText && <span className="font-normal">{targetText}</span>}
+            <span className="inline-flex min-w-0 max-w-full items-baseline gap-1 whitespace-nowrap">
+              {toolActionLabel}
+              {toolDescription && (
+                <span
+                  className="min-w-0 truncate text-muted-foreground/70 font-normal"
+                  title={toolDescription}
+                >
+                  {toolDescription}
+                </span>
+              )}
             </span>
           )
         }
@@ -1028,6 +1036,38 @@ function summarizeToolInput(input: unknown): string | null {
   }
 }
 
+function parseToolObjectInput(input: unknown): Record<string, unknown> | null {
+  if (!input) return null;
+  if (typeof input === "object" && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+  if (typeof input !== "string") return null;
+
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Ignore invalid JSON input.
+  }
+  return null;
+}
+
+function extractToolDescription(input: unknown): string | undefined {
+  const obj = parseToolObjectInput(input);
+  if (!obj) return undefined;
+
+  const description = obj.description;
+  if (typeof description !== "string") return undefined;
+
+  const normalized = description.replace(/\s+/g, " ").trim();
+  return normalized || undefined;
+}
+
 function AgentStateRow({
   label,
   tone = "muted",
@@ -1073,9 +1113,9 @@ function AgentActivityRow({
         onClick={() => setIsOpen(!isOpen)}
         className="group w-full text-left hover:text-foreground transition-colors text-xs font-medium py-0.5 px-1"
       >
-        <span className={`inline-flex items-center gap-1 ${toneClass}`}>
-          <span>{label}</span>
-          <span className="inline-flex items-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150">
+        <span className={`flex items-center gap-1 ${toneClass}`}>
+          <span className="min-w-0 flex-1">{label}</span>
+          <span className="inline-flex shrink-0 items-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150">
             {isOpen ? (
               <ChevronDown className="w-3 h-3" />
             ) : (

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
+import { resolveStudioMainBackendUrl } from "../../services/studioMachines/backendCallbackUrl";
 import { recordStudioVisit } from "../../services/studioMachines/visitStore";
 import { db } from "../../db";
 import { organization, projectPluginInstance, session as sessionTable } from "../../db/schema";
@@ -145,25 +146,14 @@ export const studioProcedures = {
         organizationId,
         organizationRepoPrefix: org?.githubRepoPrefix ?? null,
       });
-      // Studio machines need a backend URL that is reachable *from the machine*.
-      // - Local provider spawns the studio as a child-process inside this backend container,
-      //   so `DOMAIN` (usually `http://localhost` via Caddy on :80) is not reachable.
-      // - Fly provider typically needs a public tunnel / `DOMAIN`.
-      //
-      // `BACKEND_URL` overrides this, and should always be the machine-reachable origin.
-      const backendOriginRaw =
-        process.env.BACKEND_URL ||
-        (studioMachineProvider.kind === "local"
-          ? `http://127.0.0.1:${process.env.PORT || 3000}`
-          : process.env.DOMAIN ||
-            process.env.BETTER_AUTH_URL ||
-            `http://127.0.0.1:${process.env.PORT || 3000}`);
-      const backendOrigin = backendOriginRaw.startsWith("http")
-        ? backendOriginRaw
-        : `https://${backendOriginRaw}`;
-      const mainBackendUrl = new URL("/vivd-studio", backendOrigin)
-        .toString()
-        .replace(/\/$/, "");
+      const mainBackendUrl = resolveStudioMainBackendUrl({
+        providerKind: studioMachineProvider.kind,
+        requestHost: ctx.requestHost,
+        backendUrlEnv: process.env.BACKEND_URL,
+        domainEnv: process.env.DOMAIN,
+        betterAuthUrlEnv: process.env.BETTER_AUTH_URL,
+        backendPort: process.env.PORT,
+      });
 
       // Resolve the user's session token for machine-to-backend authentication.
       // The auth session shape we expose to the app does not include the raw token.
@@ -250,19 +240,14 @@ export const studioProcedures = {
         organizationRepoPrefix: org?.githubRepoPrefix ?? null,
       });
 
-      const backendOriginRaw =
-        process.env.BACKEND_URL ||
-        (studioMachineProvider.kind === "local"
-          ? `http://127.0.0.1:${process.env.PORT || 3000}`
-          : process.env.DOMAIN ||
-            process.env.BETTER_AUTH_URL ||
-            `http://127.0.0.1:${process.env.PORT || 3000}`);
-      const backendOrigin = backendOriginRaw.startsWith("http")
-        ? backendOriginRaw
-        : `https://${backendOriginRaw}`;
-      const mainBackendUrl = new URL("/vivd-studio", backendOrigin)
-        .toString()
-        .replace(/\/$/, "");
+      const mainBackendUrl = resolveStudioMainBackendUrl({
+        providerKind: studioMachineProvider.kind,
+        requestHost: ctx.requestHost,
+        backendUrlEnv: process.env.BACKEND_URL,
+        domainEnv: process.env.DOMAIN,
+        betterAuthUrlEnv: process.env.BETTER_AUTH_URL,
+        backendPort: process.env.PORT,
+      });
 
       const sessionId = ctx.session.session.id;
       const sessionRecord = await db.query.session.findFirst({

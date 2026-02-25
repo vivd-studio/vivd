@@ -227,10 +227,10 @@ const TOOL_ACTIVITY_LABEL_BUILDERS: Record<string, ToolLabelBuilder> = {
   }),
   bash: createTargetedToolLabelBuilder({
     runningAction: "Running",
-    completedAction: "Executed",
+    completedAction: "Ran",
     errorAction: "Command failed",
-    fallbackTarget: "command",
-    runningFallbackTarget: "command",
+    fallbackTarget: "bash",
+    runningFallbackTarget: "bash",
     includeErrorTarget: false,
   }),
   vivd_image_ai: createActionOnlyToolLabelBuilder({

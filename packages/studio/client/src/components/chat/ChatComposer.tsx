@@ -44,8 +44,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
     selectorMode,
     setSelectorMode,
     isLoading,
-    isStreaming,
-    isWaiting,
+    isThinking,
     isUsageBlocked,
     selectorModeAvailable,
     availableModels,
@@ -55,7 +54,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
 
   // Combine loading and blocked states for disabling
   const isDisabled = isLoading || isUsageBlocked;
-  const isGenerating = isStreaming || isWaiting;
+  const isGenerating = isThinking;
 
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

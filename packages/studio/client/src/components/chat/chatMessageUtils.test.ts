@@ -314,6 +314,43 @@ describe("chatMessageUtils", () => {
     expect(shouldSuggest).toBe(false);
   });
 
+  it("does not suggest continue when terminal status is still unknown", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: null,
+      messages: [{ role: "user", content: "Do the task" }],
+      isThinking: false,
+      isLoading: false,
+    });
+
+    expect(shouldSuggest).toBe(false);
+  });
+
+  it("does not suggest continue immediately after a fresh user send", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "done",
+      messages: [{ role: "user", content: "Do the task", createdAt: 20_000 }],
+      isThinking: false,
+      isLoading: false,
+      now: 25_000,
+      minAgeMs: 10_000,
+    });
+
+    expect(shouldSuggest).toBe(false);
+  });
+
+  it("suggests continue once unresolved terminal state outlives the nudge delay", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "done",
+      messages: [{ role: "user", content: "Do the task", createdAt: 20_000 }],
+      isThinking: false,
+      isLoading: false,
+      now: 31_000,
+      minAgeMs: 10_000,
+    });
+
+    expect(shouldSuggest).toBe(true);
+  });
+
   it("does not suggest continue again when latest user message is already continue", () => {
     const shouldSuggest = shouldSuggestInterruptedContinue({
       sessionStatus: "idle",

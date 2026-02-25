@@ -147,7 +147,7 @@ describe("chatStreamUtils reasoning sanitization", () => {
         tool: "bash",
         status: "running",
       }),
-    ).toBe("Running command...");
+    ).toBe("Running bash...");
 
     expect(
       getToolActivityLabel({
@@ -155,7 +155,7 @@ describe("chatStreamUtils reasoning sanitization", () => {
         tool: "bash",
         status: "completed",
       }),
-    ).toBe("Executed command");
+    ).toBe("Ran bash");
   });
 
   it("formats vivd_image_ai tool labels as image generation states", () => {

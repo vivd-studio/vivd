@@ -130,6 +130,7 @@ export function ChatProvider({
   // Track if we're waiting for agent response
   const isWaitingForAgent = useRef(false);
   const [isWaiting, setIsWaiting] = useState(false);
+  const hasPendingAgentRun = isWaitingForAgent.current;
 
   const {
     sessions,
@@ -149,7 +150,7 @@ export function ChatProvider({
   } = useChatSessions({
     projectSlug,
     version,
-    isActive: isWaiting || isStreaming,
+    isActive: isWaiting || isStreaming || hasPendingAgentRun,
     autoSelectLockedRef,
     hasAutoSelectedRunningSessionRef,
   });
@@ -586,8 +587,13 @@ export function ChatProvider({
     }
   }, [sessionMessages, selectedSessionId, currentSessionStatus?.type]);
 
-  // Derive thinking state from streaming status or message heuristic
-  const isThinking = isStreaming || isWaiting;
+  const sessionStatusType = currentSessionStatus?.type;
+  const isSessionStatusActive =
+    sessionStatusType === "busy" || sessionStatusType === "retry";
+
+  // Keep run UI active while waiting locally, awaiting completion, or server reports active status.
+  const isThinking =
+    isStreaming || isWaiting || isWaitingForAgent.current || isSessionStatusActive;
 
   const handleSend = async () => {
     if (
