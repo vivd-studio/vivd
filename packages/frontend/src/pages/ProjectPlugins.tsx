@@ -1,10 +1,9 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { trpc, type RouterOutputs } from "@/lib/trpc";
+import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { toast } from "sonner";
-import { LoadingSpinner } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -31,8 +29,6 @@ import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 
 type SnippetKind = "html" | "astro";
 type ContactFormFieldType = "text" | "email" | "textarea";
-type AnalyticsRange = 7 | 30;
-type AnalyticsSummary = RouterOutputs["plugins"]["analyticsSummary"];
 
 type EditableContactFormField = {
   key: string;
@@ -94,35 +90,6 @@ function normalizeEmailAddress(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function formatInteger(value: number): string {
-  return new Intl.NumberFormat().format(value);
-}
-
-function formatRatio(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  return value.toFixed(2);
-}
-
-function formatPercent(value: number): string {
-  if (!Number.isFinite(value)) return "0%";
-  return `${value.toFixed(1)}%`;
-}
-
-function formatDeviceLabel(value: string): string {
-  switch (value) {
-    case "desktop":
-      return "Desktop";
-    case "mobile":
-      return "Mobile";
-    case "tablet":
-      return "Tablet";
-    case "bot":
-      return "Bot";
-    default:
-      return "Unknown";
-  }
-}
-
 function SectionCard({
   title,
   description,
@@ -179,24 +146,6 @@ function SnippetCard({
   );
 }
 
-function AnalyticsMetricCard({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: string;
-  caption?: string;
-}) {
-  return (
-    <section className="rounded-lg border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-      {caption ? <p className="mt-1 text-xs text-muted-foreground">{caption}</p> : null}
-    </section>
-  );
-}
-
 export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const utils = trpc.useUtils();
@@ -214,7 +163,6 @@ export default function ProjectPlugins() {
     { slug },
     { enabled: !!projectSlug },
   );
-  const [analyticsRangeDays, setAnalyticsRangeDays] = useState<AnalyticsRange>(30);
 
   const updateContactConfigMutation = trpc.plugins.contactUpdateConfig.useMutation({
     onSuccess: async () => {
@@ -273,12 +221,6 @@ export default function ProjectPlugins() {
   const contactInfo = contactInfoQuery.data;
   const analyticsInfo = analyticsInfoQuery.data;
   const analyticsEnabled = !!analyticsInfo?.enabled;
-  const analyticsSummaryQuery = trpc.plugins.analyticsSummary.useQuery(
-    { slug, rangeDays: analyticsRangeDays },
-    { enabled: !!projectSlug && analyticsEnabled },
-  );
-  const analyticsSummary: AnalyticsSummary | undefined = analyticsSummaryQuery.data;
-  const analyticsSnippets = analyticsInfo?.snippets ?? null;
   const pluginEnabled = !!contactInfo?.enabled;
   const snippets = contactInfo?.snippets;
   const inferredAutoSourceHosts = contactInfo?.usage?.inferredAutoSourceHosts || [];
@@ -459,20 +401,12 @@ export default function ProjectPlugins() {
   };
 
   const handleRefresh = () => {
-    const refetches: Array<Promise<unknown>> = [
+    void Promise.all([
       catalogQuery.refetch(),
       contactInfoQuery.refetch(),
       analyticsInfoQuery.refetch(),
-    ];
-    if (analyticsEnabled) {
-      refetches.push(analyticsSummaryQuery.refetch());
-    }
-    void Promise.all(refetches);
+    ]);
   };
-  const analyticsRangeLabel = analyticsRangeDays === 7 ? "Last 7 days" : "Last 30 days";
-  const analyticsMaxDailyEvents = analyticsSummary
-    ? Math.max(1, ...analyticsSummary.daily.map((point) => point.events))
-    : 1;
 
   if (!projectSlug) {
     return <div className="text-sm text-muted-foreground">Missing project slug.</div>;
@@ -496,8 +430,7 @@ export default function ProjectPlugins() {
             disabled={
               catalogQuery.isLoading ||
               contactInfoQuery.isLoading ||
-              analyticsInfoQuery.isLoading ||
-              analyticsSummaryQuery.isLoading
+              analyticsInfoQuery.isLoading
             }
           >
             <RefreshCw className="mr-1.5 h-4 w-4" />
@@ -1028,225 +961,18 @@ export default function ProjectPlugins() {
               Failed to load Analytics plugin info: {analyticsInfoQuery.error.message}
             </div>
           ) : null}
-          {analyticsEnabled && analyticsSummaryQuery.error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              Failed to load Analytics dashboard data: {analyticsSummaryQuery.error.message}
-            </div>
-          ) : null}
 
           {!analyticsEnabled ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
               Analytics access is managed in Super Admin → Plugins. Ask a super-admin
-              to enable Analytics for this project. Once enabled, dashboard stats
-              appear here automatically.
+              to enable Analytics for this project.
             </div>
           ) : null}
 
           {analyticsEnabled ? (
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  {analyticsSummary
-                    ? `${analyticsRangeLabel}: ${analyticsSummary.rangeStart} to ${analyticsSummary.rangeEnd}`
-                    : `${analyticsRangeLabel}`}
-                </p>
-                <div className="inline-flex rounded-md border p-0.5">
-                  <Button
-                    size="sm"
-                    variant={analyticsRangeDays === 7 ? "default" : "ghost"}
-                    onClick={() => setAnalyticsRangeDays(7)}
-                    disabled={analyticsSummaryQuery.isFetching}
-                  >
-                    7 days
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={analyticsRangeDays === 30 ? "default" : "ghost"}
-                    onClick={() => setAnalyticsRangeDays(30)}
-                    disabled={analyticsSummaryQuery.isFetching}
-                  >
-                    30 days
-                  </Button>
-                </div>
-              </div>
-
-              {analyticsSummaryQuery.isLoading ? (
-                <div className="rounded-md border bg-muted/20 px-3 py-8">
-                  <LoadingSpinner message="Loading analytics dashboard..." />
-                </div>
-              ) : analyticsSummary ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                    <AnalyticsMetricCard
-                      label="Pageviews"
-                      value={formatInteger(analyticsSummary.totals.pageviews)}
-                    />
-                    <AnalyticsMetricCard
-                      label="Unique visitors"
-                      value={formatInteger(analyticsSummary.totals.uniqueVisitors)}
-                    />
-                    <AnalyticsMetricCard
-                      label="Sessions"
-                      value={formatInteger(analyticsSummary.totals.uniqueSessions)}
-                    />
-                    <AnalyticsMetricCard
-                      label="Total events"
-                      value={formatInteger(analyticsSummary.totals.events)}
-                    />
-                    <AnalyticsMetricCard
-                      label="Avg pages / session"
-                      value={formatRatio(analyticsSummary.totals.avgPagesPerSession)}
-                    />
-                  </div>
-
-                  <SectionCard
-                    title="Daily traffic trend"
-                    description="Events per day in the selected range."
-                  >
-                    <div className="space-y-2">
-                      {analyticsSummary.daily.map((point) => (
-                        <div key={point.date} className="grid grid-cols-[72px_1fr_96px] items-center gap-3">
-                          <span className="text-xs text-muted-foreground">{point.date.slice(5)}</span>
-                          <Progress
-                            value={Math.round((point.events / analyticsMaxDailyEvents) * 100)}
-                          />
-                          <span className="text-right text-xs text-muted-foreground">
-                            {formatInteger(point.events)} events
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </SectionCard>
-
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <SectionCard title="Top pages" description="Most visited page paths.">
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium">Path</th>
-                              <th className="px-3 py-2 font-medium">Pageviews</th>
-                              <th className="px-3 py-2 font-medium">Visitors</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {analyticsSummary.topPages.length > 0 ? (
-                              analyticsSummary.topPages.map((row) => (
-                                <tr key={row.path} className="border-t">
-                                  <td className="px-3 py-2 text-xs break-all">{row.path}</td>
-                                  <td className="px-3 py-2">{formatInteger(row.pageviews)}</td>
-                                  <td className="px-3 py-2">{formatInteger(row.uniqueVisitors)}</td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr className="border-t">
-                                <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={3}>
-                                  No pageviews collected in this range yet.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </SectionCard>
-
-                    <SectionCard
-                      title="Top referrers"
-                      description="External hosts sending traffic to your site."
-                    >
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/30">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium">Referrer host</th>
-                              <th className="px-3 py-2 font-medium">Events</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {analyticsSummary.topReferrers.length > 0 ? (
-                              analyticsSummary.topReferrers.map((row) => (
-                                <tr key={row.referrerHost} className="border-t">
-                                  <td className="px-3 py-2 text-xs break-all">
-                                    {row.referrerHost}
-                                  </td>
-                                  <td className="px-3 py-2">{formatInteger(row.events)}</td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr className="border-t">
-                                <td className="px-3 py-3 text-sm text-muted-foreground" colSpan={2}>
-                                  No referrer data yet. Direct and untracked visits are common early on.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </SectionCard>
-                  </div>
-
-                  <SectionCard
-                    title="Device split"
-                    description="Share of events by visitor device type."
-                  >
-                    {analyticsSummary.devices.length > 0 ? (
-                      <div className="space-y-3">
-                        {analyticsSummary.devices.map((row) => (
-                          <div key={row.deviceType} className="space-y-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">
-                                {formatDeviceLabel(row.deviceType)}
-                              </span>
-                              <span>
-                                {formatInteger(row.events)} events ({formatPercent(row.share)})
-                              </span>
-                            </div>
-                            <Progress value={Math.min(100, Math.max(0, row.share))} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No device data collected in this range yet.
-                      </p>
-                    )}
-                  </SectionCard>
-
-                  <SectionCard
-                    title="Install details"
-                    description="Snippet and runtime notes for analytics tracking."
-                  >
-                    {analyticsSnippets ? (
-                      <div className="space-y-4">
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <SnippetCard
-                            title="HTML snippet"
-                            snippet={analyticsSnippets.html}
-                            onCopy={() => void handleCopy(analyticsSnippets.html, "html")}
-                          />
-                          <SnippetCard
-                            title="Astro snippet"
-                            snippet={analyticsSnippets.astro}
-                            onCopy={() => void handleCopy(analyticsSnippets.astro, "astro")}
-                          />
-                        </div>
-                        {analyticsInfo.instructions.length > 0 ? (
-                          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                            {analyticsInfo.instructions.map((line, index) => (
-                              <li key={`${index}-${line}`}>{line}</li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Snippets are available after analytics is enabled.
-                      </p>
-                    )}
-                  </SectionCard>
-                </div>
-              ) : null}
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Analytics reporting is available on the dedicated Analytics page.
+            </p>
           ) : null}
         </CardContent>
       </Card>

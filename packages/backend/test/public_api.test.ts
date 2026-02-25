@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  ContactRecipientVerificationEndpointUnavailableError,
   getContactFormSubmitEndpoint,
   getContactRecipientVerificationEndpoint,
   getPublicPluginApiBaseUrl,
@@ -8,6 +9,8 @@ import {
 const originalPublicPluginApiBaseUrl = process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
 const originalAppUrl = process.env.VIVD_APP_URL;
 const originalControlPlaneHost = process.env.CONTROL_PLANE_HOST;
+const originalDomain = process.env.DOMAIN;
+const originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
 
 function restoreEnvVar(
   name: string,
@@ -28,6 +31,8 @@ describe("plugin public API helpers", () => {
     );
     restoreEnvVar("VIVD_APP_URL", originalAppUrl);
     restoreEnvVar("CONTROL_PLANE_HOST", originalControlPlaneHost);
+    restoreEnvVar("DOMAIN", originalDomain);
+    restoreEnvVar("BETTER_AUTH_URL", originalBetterAuthUrl);
   });
 
   it("uses api.vivd.studio as default public base URL", () => {
@@ -70,13 +75,14 @@ describe("plugin public API helpers", () => {
     );
   });
 
-  it("falls back to public plugin host when no control-plane URL is available", () => {
+  it("throws when no control-plane URL is available", () => {
     delete process.env.VIVD_APP_URL;
     delete process.env.CONTROL_PLANE_HOST;
-    delete process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
+    delete process.env.DOMAIN;
+    delete process.env.BETTER_AUTH_URL;
 
-    expect(getContactRecipientVerificationEndpoint()).toBe(
-      "https://api.vivd.studio/plugins/contact/v1/recipient-verify",
+    expect(() => getContactRecipientVerificationEndpoint()).toThrow(
+      ContactRecipientVerificationEndpointUnavailableError,
     );
   });
 });

@@ -64,10 +64,27 @@ function pickPreferredOrganizationId(memberships: UserMembership[]): string | nu
   return memberships[0]?.organizationId ?? null;
 }
 
+function readForwardedHost(
+  value: string | string[] | undefined,
+): string | null {
+  if (typeof value === "string") {
+    const normalized = value.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    const normalized = value[0]?.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  return null;
+}
+
 function extractRequestHost(req: trpcExpress.CreateExpressContextOptions["req"]): string | null {
-  const raw = req.headers.host;
-  if (!raw) return null;
-  return raw.split(",")[0]?.trim() ?? null;
+  const forwarded = readForwardedHost(req.headers["x-forwarded-host"]);
+  if (forwarded) return forwarded;
+
+  const host = readForwardedHost(req.headers.host);
+  if (host) return host;
+  return null;
 }
 
 export const createContext = async ({

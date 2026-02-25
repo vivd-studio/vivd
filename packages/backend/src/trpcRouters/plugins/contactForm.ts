@@ -14,6 +14,7 @@ import {
   ContactRecipientVerificationPendingLimitError,
   ContactRecipientVerificationSendError,
 } from "../../services/plugins/contactForm/recipientVerification";
+import { ContactRecipientVerificationEndpointUnavailableError } from "../../services/plugins/contactForm/publicApi";
 
 const projectSlugInput = z.object({
   slug: z.string().min(1),
@@ -113,7 +114,10 @@ export const contactRequestRecipientVerificationPluginProcedure = projectMemberP
         projectSlug: input.slug,
         email: input.email,
         requestedByUserId: ctx.session.user.id,
-        requestHost: extractRequestHost(ctx.req.headers.host) ?? ctx.requestHost,
+        requestHost:
+          ctx.requestHost ??
+          extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
+          extractRequestHost(ctx.req.headers.host),
       });
     } catch (error) {
       if (
@@ -130,6 +134,13 @@ export const contactRequestRecipientVerificationPluginProcedure = projectMemberP
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: error.message,
+        });
+      }
+      if (error instanceof ContactRecipientVerificationEndpointUnavailableError) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Could not generate verification link for this host. Please contact support.",
         });
       }
       throw error;

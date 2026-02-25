@@ -411,6 +411,10 @@ class ContactFormRecipientVerificationService {
       }
     }
 
+    const verificationEndpoint = getContactRecipientVerificationEndpoint({
+      requestHost: options.requestHost,
+    });
+
     const verificationToken = generateVerificationToken();
     const verificationTokenHash = hashToken(verificationToken);
     const expiresAt = new Date(now.getTime() + tokenExpirySeconds * 1000);
@@ -449,9 +453,6 @@ class ContactFormRecipientVerificationService {
       });
     }
 
-    const verificationEndpoint = getContactRecipientVerificationEndpoint({
-      requestHost: options.requestHost,
-    });
     const verificationUrl = `${verificationEndpoint}?token=${encodeURIComponent(
       verificationToken,
     )}`;

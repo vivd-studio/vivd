@@ -2,6 +2,15 @@ const DEFAULT_PUBLIC_PLUGIN_API_BASE_URL = "https://api.vivd.studio";
 const CONTACT_RECIPIENT_VERIFY_CONTROL_PLANE_PATH =
   "/vivd-studio/api/plugins/contact/v1/recipient-verify";
 
+export class ContactRecipientVerificationEndpointUnavailableError extends Error {
+  constructor() {
+    super(
+      "Recipient verification link is unavailable because no control-plane origin could be resolved.",
+    );
+    this.name = "ContactRecipientVerificationEndpointUnavailableError";
+  }
+}
+
 function normalizeBaseUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return DEFAULT_PUBLIC_PLUGIN_API_BASE_URL;
@@ -88,6 +97,12 @@ function getControlPlaneOrigin(options?: {
   const controlPlaneHostOrigin = toHostOrigin(process.env.CONTROL_PLANE_HOST || "");
   if (controlPlaneHostOrigin) return controlPlaneHostOrigin;
 
+  const domainOrigin = normalizeOrigin(process.env.DOMAIN || "");
+  if (domainOrigin) return domainOrigin;
+
+  const betterAuthOrigin = normalizeOrigin(process.env.BETTER_AUTH_URL || "");
+  if (betterAuthOrigin) return betterAuthOrigin;
+
   return "";
 }
 
@@ -107,7 +122,7 @@ export function getContactRecipientVerificationEndpoint(options?: {
     return `${controlPlaneOrigin}${CONTACT_RECIPIENT_VERIFY_CONTROL_PLANE_PATH}`;
   }
 
-  return `${getPublicPluginApiBaseUrl()}/plugins/contact/v1/recipient-verify`;
+  throw new ContactRecipientVerificationEndpointUnavailableError();
 }
 
 export function getEmailFeedbackEndpoint(provider: string = "ses"): string {
