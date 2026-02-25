@@ -271,6 +271,7 @@ class ContactFormPluginService {
     projectSlug: string;
     email: string;
     requestedByUserId?: string | null;
+    requestHost?: string | null;
   }): Promise<ContactRecipientVerificationRequestResult> {
     const pluginInstance = await projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
@@ -287,6 +288,7 @@ class ContactFormPluginService {
       pluginInstanceId: pluginInstance.id,
       email: options.email,
       requestedByUserId: options.requestedByUserId,
+      requestHost: options.requestHost,
     });
   }
 

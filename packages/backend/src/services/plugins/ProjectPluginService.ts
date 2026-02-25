@@ -105,6 +105,7 @@ class ProjectPluginService {
     projectSlug: string;
     email: string;
     requestedByUserId?: string | null;
+    requestHost?: string | null;
   }): Promise<ContactRecipientVerificationRequestResult> {
     return contactFormPluginService.requestRecipientVerification(options);
   }

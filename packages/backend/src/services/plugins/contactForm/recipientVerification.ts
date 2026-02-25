@@ -282,6 +282,7 @@ class ContactFormRecipientVerificationService {
     pluginInstanceId: string;
     email: string;
     requestedByUserId?: string | null;
+    requestHost?: string | null;
   }): Promise<ContactRecipientVerificationRequestResult> {
     const normalizedEmail = normalizeEmailAddress(options.email);
     if (!recipientEmailSchema.safeParse(normalizedEmail).success) {
@@ -448,7 +449,9 @@ class ContactFormRecipientVerificationService {
       });
     }
 
-    const verificationEndpoint = getContactRecipientVerificationEndpoint();
+    const verificationEndpoint = getContactRecipientVerificationEndpoint({
+      requestHost: options.requestHost,
+    });
     const verificationUrl = `${verificationEndpoint}?token=${encodeURIComponent(
       verificationToken,
     )}`;

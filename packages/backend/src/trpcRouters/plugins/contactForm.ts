@@ -29,6 +29,20 @@ const contactRecipientInput = z.object({
   email: z.string().trim().min(1),
 });
 
+function extractRequestHost(
+  rawHost: string | string[] | undefined,
+): string | null {
+  if (typeof rawHost === "string") {
+    const normalized = rawHost.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  if (Array.isArray(rawHost) && rawHost.length > 0) {
+    const normalized = rawHost[0]?.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  return null;
+}
+
 export const contactEnsurePluginProcedure = projectMemberProcedure
   .input(projectSlugInput)
   .mutation(async ({ ctx, input }) => {
@@ -99,6 +113,7 @@ export const contactRequestRecipientVerificationPluginProcedure = projectMemberP
         projectSlug: input.slug,
         email: input.email,
         requestedByUserId: ctx.session.user.id,
+        requestHost: extractRequestHost(ctx.req.headers.host) ?? ctx.requestHost,
       });
     } catch (error) {
       if (
