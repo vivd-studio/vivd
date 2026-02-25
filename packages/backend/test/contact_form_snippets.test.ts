@@ -54,4 +54,14 @@ describe("contact form snippets", () => {
     expect(snippets.html).toContain('class="cf-turnstile"');
     expect(snippets.html).toContain('data-sitekey="0x4AAAAAAATESTKEY123"');
   });
+
+  it("binds submit handling via contact-form selector fallback", () => {
+    const token = "ppi_test.token123";
+    const submitEndpoint = "https://api.vivd.studio/plugins/contact/v1/submit";
+    const snippets = getContactFormSnippets(token, submitEndpoint);
+
+    expect(snippets.html).toContain('querySelectorAll("[data-vivd-contact-form]")');
+    expect(snippets.html).toContain('data-vivd-contact-bound');
+    expect(snippets.astro).toContain('querySelectorAll("[data-vivd-contact-form]")');
+  });
 });

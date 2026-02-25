@@ -10,17 +10,18 @@ describe("OpenCode config policy", () => {
     vi.restoreAllMocks();
   });
 
-  it("enforces question tool disablement by default", () => {
+  it("enforces question tool disablement and restricted permissions by default", () => {
     const config = JSON.parse(buildStudioOpencodeConfigContent(undefined));
     expect(config).toEqual(STUDIO_OPENCODE_CONFIG_OVERRIDES);
   });
 
-  it("preserves existing config and merges tool settings", () => {
+  it("preserves existing config and merges policy settings", () => {
     const config = JSON.parse(
       buildStudioOpencodeConfigContent(
         JSON.stringify({
           plugin: [{ source: "demo-plugin" }],
           tools: { imagen_generate: true },
+          permission: { bash: "ask" },
         }),
       ),
     );
@@ -31,6 +32,11 @@ describe("OpenCode config policy", () => {
         imagen_generate: true,
         question: false,
       },
+      permission: {
+        bash: "ask",
+        doom_loop: "deny",
+        external_directory: "deny",
+      },
     });
   });
 
@@ -40,6 +46,33 @@ describe("OpenCode config policy", () => {
     );
 
     expect(config).toEqual({
+      tools: { question: false },
+      permission: {
+        doom_loop: "deny",
+        external_directory: "deny",
+      },
+    });
+  });
+
+  it("overrides restricted permission fields from incoming config", () => {
+    const config = JSON.parse(
+      buildStudioOpencodeConfigContent(
+        JSON.stringify({
+          permission: {
+            doom_loop: "allow",
+            external_directory: "allow",
+            webfetch: "ask",
+          },
+        }),
+      ),
+    );
+
+    expect(config).toEqual({
+      permission: {
+        doom_loop: "deny",
+        external_directory: "deny",
+        webfetch: "ask",
+      },
       tools: { question: false },
     });
   });
@@ -59,6 +92,7 @@ describe("OpenCode config policy", () => {
     const merged = applyStudioOpencodeConfigPolicy({
       tools: { another_tool: true },
       command: { publish: false },
+      permission: { websearch: "ask" },
     });
 
     expect(merged).toEqual({
@@ -67,6 +101,11 @@ describe("OpenCode config policy", () => {
         question: false,
       },
       command: { publish: false },
+      permission: {
+        websearch: "ask",
+        doom_loop: "deny",
+        external_directory: "deny",
+      },
     });
   });
 
@@ -86,6 +125,10 @@ describe("OpenCode config policy", () => {
         question: false,
         vivd_plugins_catalog: true,
         vivd_plugins_contact_info: false,
+      },
+      permission: {
+        doom_loop: "deny",
+        external_directory: "deny",
       },
     });
   });

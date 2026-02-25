@@ -153,7 +153,14 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     if (idleTimeoutMs <= 0) return;
 
     const now = Date.now();
-    const machines = await this.apiClient.listMachines();
+    let machines: FlyMachine[];
+    try {
+      machines = await this.apiClient.listMachines();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[FlyMachines] Idle cleanup failed: ${message}`);
+      return;
+    }
 
     for (const machine of machines) {
       if (machine.state !== "started") continue;

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Users, Activity, Wrench, SlidersHorizontal } from "lucide-react";
+import { Users, Activity, Plug, Wrench, SlidersHorizontal } from "lucide-react";
 import { LoadingSpinner } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +29,11 @@ const OrgSettings = lazy(() =>
     default: module.OrgSettings,
   })),
 );
+const OrganizationPluginsTab = lazy(() =>
+  import("@/components/organization/OrganizationPluginsTab").then((module) => ({
+    default: module.OrganizationPluginsTab,
+  })),
+);
 
 function TabLoadingState() {
   return <LoadingSpinner message="Loading..." />;
@@ -40,7 +45,10 @@ export default function Organization() {
   const canEditSettings = organizationRole === "owner" || isSuperAdmin;
   const tab = searchParams.get("tab");
   const currentTab =
-    tab === "usage" || tab === "maintenance" || (tab === "settings" && canEditSettings)
+    tab === "usage" ||
+    tab === "maintenance" ||
+    tab === "plugins" ||
+    (tab === "settings" && canEditSettings)
       ? tab
       : "members";
 
@@ -88,6 +96,10 @@ export default function Organization() {
             <Wrench className="h-4 w-4" />
             Maintenance
           </TabsTrigger>
+          <TabsTrigger value="plugins" className="gap-2">
+            <Plug className="h-4 w-4" />
+            Plugins
+          </TabsTrigger>
           {canEditSettings && (
             <TabsTrigger value="settings" className="gap-2">
               <SlidersHorizontal className="h-4 w-4" />
@@ -111,6 +123,12 @@ export default function Organization() {
         <TabsContent value="maintenance" className="mt-6">
           <Suspense fallback={<TabLoadingState />}>
             <TenantMaintenanceTab />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="plugins" className="mt-6">
+          <Suspense fallback={<TabLoadingState />}>
+            <OrganizationPluginsTab />
           </Suspense>
         </TabsContent>
 

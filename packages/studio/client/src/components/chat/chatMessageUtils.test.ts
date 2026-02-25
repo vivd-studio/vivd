@@ -3,6 +3,7 @@ import {
   calculateUsageFromSessionMessages,
   hasFinalAgentResponse,
   mapSessionMessagesToChatMessages,
+  shouldDeferSessionHydrationWhilePendingRun,
   shouldHoldWaitingForStaleTerminalStatus,
   shouldRecoverFromMissedStreamEvents,
   shouldSuggestInterruptedContinue,
@@ -399,5 +400,57 @@ describe("chatMessageUtils", () => {
     });
 
     expect(shouldHold).toBe(false);
+  });
+
+  it("holds waiting when stale terminal status arrives after optimistic message loss", () => {
+    const shouldHold = shouldHoldWaitingForStaleTerminalStatus({
+      sessionStatus: "done",
+      isWaitingForAgent: true,
+      pendingRunStartedAt: 20_000,
+      lastUserMessageAt: undefined,
+      now: 24_000,
+      graceMs: 6_000,
+    });
+
+    expect(shouldHold).toBe(true);
+  });
+
+  it("defers stale message hydration while a pending run has no server acknowledgement yet", () => {
+    const shouldDefer = shouldDeferSessionHydrationWhilePendingRun({
+      isWaitingForAgent: true,
+      pendingRunStartedAt: 20_000,
+      now: 24_000,
+      currentMessages: [
+        { role: "user", content: "first", createdAt: 10_000 },
+        { role: "agent", content: "done", createdAt: 11_000 },
+        { role: "user", content: "follow up", createdAt: 20_001 },
+      ],
+      incomingMessages: [
+        { role: "user", content: "first", createdAt: 10_000 },
+        { role: "agent", content: "done", createdAt: 11_000 },
+      ],
+    });
+
+    expect(shouldDefer).toBe(true);
+  });
+
+  it("does not defer hydration once pending-run deferral window has elapsed", () => {
+    const shouldDefer = shouldDeferSessionHydrationWhilePendingRun({
+      isWaitingForAgent: true,
+      pendingRunStartedAt: 20_000,
+      now: 37_000,
+      maxDeferralMs: 15_000,
+      currentMessages: [
+        { role: "user", content: "first", createdAt: 10_000 },
+        { role: "agent", content: "done", createdAt: 11_000 },
+        { role: "user", content: "follow up", createdAt: 20_001 },
+      ],
+      incomingMessages: [
+        { role: "user", content: "first", createdAt: 10_000 },
+        { role: "agent", content: "done", createdAt: 11_000 },
+      ],
+    });
+
+    expect(shouldDefer).toBe(false);
   });
 });

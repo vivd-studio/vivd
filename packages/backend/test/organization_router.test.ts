@@ -4,11 +4,16 @@ const {
   findUserMock,
   findOrganizationMock,
   findOrganizationMemberMock,
+  findProjectMetaManyMock,
+  findProjectPluginInstanceManyMock,
+  findPluginEntitlementManyMock,
+  findPublishedSiteManyMock,
   selectMock,
   selectFromMock,
   selectInnerJoinMock,
   selectWhereMock,
   selectOrderByMock,
+  selectGroupByMock,
   updateMock,
   updateSetMock,
   updateWhereMock,
@@ -17,9 +22,16 @@ const {
   ensureManagedTenantDomainForOrganizationMock,
 } = vi.hoisted(() => {
   const selectOrderByMock = vi.fn();
-  const selectWhereMock = vi.fn(() => ({ orderBy: selectOrderByMock }));
+  const selectGroupByMock = vi.fn();
+  const selectWhereMock = vi.fn(() => ({
+    orderBy: selectOrderByMock,
+    groupBy: selectGroupByMock,
+  }));
   const selectInnerJoinMock = vi.fn(() => ({ where: selectWhereMock }));
-  const selectFromMock = vi.fn(() => ({ innerJoin: selectInnerJoinMock }));
+  const selectFromMock = vi.fn(() => ({
+    innerJoin: selectInnerJoinMock,
+    where: selectWhereMock,
+  }));
   const selectMock = vi.fn(() => ({ from: selectFromMock }));
 
   const updateWhereMock = vi.fn();
@@ -30,11 +42,16 @@ const {
     findUserMock: vi.fn(),
     findOrganizationMock: vi.fn(),
     findOrganizationMemberMock: vi.fn(),
+    findProjectMetaManyMock: vi.fn(),
+    findProjectPluginInstanceManyMock: vi.fn(),
+    findPluginEntitlementManyMock: vi.fn(),
+    findPublishedSiteManyMock: vi.fn(),
     selectMock,
     selectFromMock,
     selectInnerJoinMock,
     selectWhereMock,
     selectOrderByMock,
+    selectGroupByMock,
     updateMock,
     updateSetMock,
     updateWhereMock,
@@ -49,6 +66,10 @@ vi.mock("../src/db", () => ({
     query: {
       user: { findFirst: findUserMock },
       organization: { findFirst: findOrganizationMock },
+      projectMeta: { findMany: findProjectMetaManyMock },
+      projectPluginInstance: { findMany: findProjectPluginInstanceManyMock },
+      pluginEntitlement: { findMany: findPluginEntitlementManyMock },
+      publishedSite: { findMany: findPublishedSiteManyMock },
       organizationMember: {
         findFirst: findOrganizationMemberMock,
       },
@@ -128,11 +149,16 @@ describe("organization router", () => {
     findUserMock.mockReset();
     findOrganizationMock.mockReset();
     findOrganizationMemberMock.mockReset();
+    findProjectMetaManyMock.mockReset();
+    findProjectPluginInstanceManyMock.mockReset();
+    findPluginEntitlementManyMock.mockReset();
+    findPublishedSiteManyMock.mockReset();
     selectMock.mockReset();
     selectFromMock.mockReset();
     selectInnerJoinMock.mockReset();
     selectWhereMock.mockReset();
     selectOrderByMock.mockReset();
+    selectGroupByMock.mockReset();
     updateMock.mockReset();
     updateSetMock.mockReset();
     updateWhereMock.mockReset();
@@ -140,13 +166,25 @@ describe("organization router", () => {
     inferTenantBaseDomainFromHostMock.mockReset();
     ensureManagedTenantDomainForOrganizationMock.mockReset();
 
-    selectWhereMock.mockImplementation(() => ({ orderBy: selectOrderByMock }));
+    selectWhereMock.mockImplementation(() => ({
+      orderBy: selectOrderByMock,
+      groupBy: selectGroupByMock,
+    }));
     selectInnerJoinMock.mockImplementation(() => ({ where: selectWhereMock }));
-    selectFromMock.mockImplementation(() => ({ innerJoin: selectInnerJoinMock }));
+    selectFromMock.mockImplementation(() => ({
+      innerJoin: selectInnerJoinMock,
+      where: selectWhereMock,
+    }));
     selectMock.mockImplementation(() => ({ from: selectFromMock }));
 
     updateSetMock.mockImplementation(() => ({ where: updateWhereMock }));
     updateMock.mockImplementation(() => ({ set: updateSetMock }));
+
+    findProjectMetaManyMock.mockResolvedValue([]);
+    findProjectPluginInstanceManyMock.mockResolvedValue([]);
+    findPluginEntitlementManyMock.mockResolvedValue([]);
+    findPublishedSiteManyMock.mockResolvedValue([]);
+    selectGroupByMock.mockResolvedValue([]);
 
     findOrganizationMock.mockResolvedValue({
       id: "org-2",
@@ -304,5 +342,74 @@ describe("organization router", () => {
     });
     expect(updateSetMock).toHaveBeenCalledWith({ activeOrganizationId: "org-2" });
     expect(result).toEqual({ success: true, tenantHost: "tenant-two.localhost" });
+  });
+
+  it("returns plugin overview with high-signal contact-form issues", async () => {
+    findProjectMetaManyMock.mockResolvedValueOnce([
+      {
+        slug: "site-1",
+        title: "Site One",
+        updatedAt: new Date("2026-02-25T10:00:00.000Z"),
+      },
+    ]);
+    findProjectPluginInstanceManyMock.mockResolvedValueOnce([
+      {
+        projectSlug: "site-1",
+        pluginId: "contact_form",
+        status: "enabled",
+        configJson: {},
+      },
+    ]);
+    selectGroupByMock.mockResolvedValueOnce([
+      {
+        projectSlug: "site-1",
+        count: 2,
+      },
+    ]);
+    findPluginEntitlementManyMock.mockResolvedValueOnce([
+      {
+        scope: "project",
+        projectSlug: "site-1",
+        state: "enabled",
+        turnstileEnabled: true,
+        turnstileSiteKey: null,
+        turnstileSecretKey: null,
+      },
+    ]);
+    findPublishedSiteManyMock.mockResolvedValueOnce([
+      {
+        projectSlug: "site-1",
+        domain: "site-1.example.com",
+        publishedAt: new Date("2026-02-25T11:00:00.000Z"),
+      },
+    ]);
+
+    const caller = organizationRouter.createCaller(makeContext());
+
+    const result = await caller.pluginsOverview();
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      projectSlug: "site-1",
+      projectTitle: "Site One",
+      deployedDomain: "site-1.example.com",
+      contactForm: {
+        status: "enabled",
+        configuredRecipientCount: 0,
+        pendingRecipientCount: 2,
+        turnstileEnabled: true,
+        turnstileReady: false,
+      },
+      analytics: {
+        status: "not_installed",
+      },
+    });
+    expect(result.rows[0]?.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining([
+        "contact_no_recipients",
+        "contact_pending_recipients",
+        "contact_turnstile_not_ready",
+      ]),
+    );
   });
 });

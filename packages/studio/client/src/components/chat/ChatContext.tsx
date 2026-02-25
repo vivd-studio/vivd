@@ -27,6 +27,7 @@ import type {
 import {
   calculateUsageFromSessionMessages,
   mapSessionMessagesToChatMessages,
+  shouldDeferSessionHydrationWhilePendingRun,
   shouldHoldWaitingForStaleTerminalStatus,
   shouldRecoverFromMissedStreamEvents,
 } from "./chatMessageUtils";
@@ -131,6 +132,15 @@ export function ChatProvider({
   const isWaitingForAgent = useRef(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const hasPendingAgentRun = isWaitingForAgent.current;
+  const pendingRunStartedAtRef = useRef<number | null>(null);
+
+  const markPendingRunStart = useCallback(() => {
+    pendingRunStartedAtRef.current = Date.now();
+  }, []);
+
+  const clearPendingRunStart = useCallback(() => {
+    pendingRunStartedAtRef.current = null;
+  }, []);
 
   const {
     sessions,
@@ -282,6 +292,7 @@ export function ChatProvider({
     setIsWaiting,
     setStreamingParts,
     setSessionError,
+    clearPendingRunState: clearPendingRunStart,
   });
 
   useEffect(() => {
@@ -290,11 +301,12 @@ export function ChatProvider({
     setIsStreaming(false);
     setStreamingParts([]);
     setIsSessionHydrating(false);
+    clearPendingRunStart();
     lastEventIdBySession.current.clear();
     processedEventIdsBySession.current.clear();
     autoSelectLockedRef.current = false;
     hasAutoSelectedRunningSessionRef.current = false;
-  }, [projectSlug]);
+  }, [projectSlug, clearPendingRunStart]);
 
   useEffect(() => {
     const isPendingSession = pendingSessionIdRef.current === selectedSessionId;
@@ -320,8 +332,9 @@ export function ChatProvider({
     setMessages([]);
     setIsWaiting(false);
     isWaitingForAgent.current = false;
+    clearPendingRunStart();
     setIsSessionHydrating(Boolean(selectedSessionId));
-  }, [selectedSessionId]);
+  }, [selectedSessionId, clearPendingRunStart]);
 
   // Handle element selection - attach element and clear from context
   useEffect(() => {
@@ -360,16 +373,20 @@ export function ChatProvider({
         setIsWaiting(false);
         setStreamingParts([]);
         setSessionError(null);
+        clearPendingRunStart();
       }
 
       setInput("");
       debugLog("[Vivd] Sending pending prompt:", pendingMessage);
+      markPendingRunStart();
       sendTask(pendingMessage, targetSessionId);
     }
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
     selectedSessionId,
+    markPendingRunStart,
+    clearPendingRunStart,
     sendTask,
   ]);
 
@@ -406,6 +423,7 @@ export function ChatProvider({
       sessionStatus: currentSessionStatus.type,
       isWaitingForAgent: isWaitingForAgent.current,
       lastUserMessageAt,
+      pendingRunStartedAt: pendingRunStartedAtRef.current,
     });
 
     if ((currentSessionStatus as any).type === "done") {
@@ -423,6 +441,7 @@ export function ChatProvider({
         setIsStreaming(false);
         setIsWaiting(false);
         isWaitingForAgent.current = false;
+        clearPendingRunStart();
         setStreamingParts([]);
         refetchMessages();
       }
@@ -444,10 +463,12 @@ export function ChatProvider({
         setIsStreaming(false);
         setIsWaiting(false);
         isWaitingForAgent.current = false;
+        clearPendingRunStart();
         setStreamingParts([]);
         refetchMessages();
       }
     } else if (currentSessionStatus.type === "busy") {
+      clearPendingRunStart();
       // Session is active - ensure we're in streaming state
       if (!isStreaming && !isWaiting) {
         debugLog(
@@ -469,6 +490,7 @@ export function ChatProvider({
       setIsStreaming(false);
       setIsWaiting(false);
       isWaitingForAgent.current = false;
+      clearPendingRunStart();
     } else if ((currentSessionStatus as any).type === "error") {
       debugLog("[ChatContext] Session status is error:", currentSessionStatus);
       setSessionError(
@@ -482,8 +504,25 @@ export function ChatProvider({
       setIsStreaming(false);
       setIsWaiting(false);
       isWaitingForAgent.current = false;
+      clearPendingRunStart();
     }
-  }, [currentSessionStatus, isStreaming, isWaiting, refetchMessages]);
+  }, [
+    currentSessionStatus,
+    isStreaming,
+    isWaiting,
+    refetchMessages,
+    clearPendingRunStart,
+  ]);
+
+  const isPendingRunAcknowledgementEvent = (eventKind: string) =>
+    eventKind === "thinking.started" ||
+    eventKind === "reasoning.delta" ||
+    eventKind === "message.delta" ||
+    eventKind === "tool.started" ||
+    eventKind === "tool.completed" ||
+    eventKind === "tool.error" ||
+    eventKind === "session.completed" ||
+    eventKind === "session.error";
 
   // SSE subscription for real-time events
   trpc.agent.sessionEvents.useSubscription(
@@ -520,6 +559,9 @@ export function ChatProvider({
 
         const event = trackedEvent.data;
         const innerData = event.data as { kind: string; [key: string]: unknown };
+        if (isPendingRunAcknowledgementEvent(innerData.kind)) {
+          clearPendingRunStart();
+        }
 
         // Track debug info
         setLastEventTime(new Date().toISOString());
@@ -550,6 +592,7 @@ export function ChatProvider({
           refetchMessages,
           refetchSessions,
         });
+        clearPendingRunStart();
       },
     },
   );
@@ -560,7 +603,21 @@ export function ChatProvider({
       const mappedMessages = mapSessionMessagesToChatMessages(sessionMessages, {
         sessionStatusType: currentSessionStatus?.type,
       });
-      setMessages(mappedMessages);
+
+      const shouldDeferHydration = shouldDeferSessionHydrationWhilePendingRun({
+        isWaitingForAgent: isWaitingForAgent.current,
+        pendingRunStartedAt: pendingRunStartedAtRef.current,
+        currentMessages: messagesRef.current,
+        incomingMessages: mappedMessages,
+      });
+
+      if (!shouldDeferHydration) {
+        setMessages(mappedMessages);
+      } else {
+        debugLog(
+          "[ChatContext] Deferring stale hydration while pending run awaits acknowledgement",
+        );
+      }
 
       const calculatedUsage = calculateUsageFromSessionMessages(sessionMessages);
       if (calculatedUsage) {
@@ -581,11 +638,17 @@ export function ChatProvider({
         setIsStreaming(false);
         setIsWaiting(false);
         isWaitingForAgent.current = false;
+        clearPendingRunStart();
         setStreamingParts([]);
         onTaskComplete?.();
       }
     }
-  }, [sessionMessages, selectedSessionId, currentSessionStatus?.type]);
+  }, [
+    sessionMessages,
+    selectedSessionId,
+    currentSessionStatus?.type,
+    clearPendingRunStart,
+  ]);
 
   const sessionStatusType = currentSessionStatus?.type;
   const isSessionStatusActive =
@@ -616,6 +679,7 @@ export function ChatProvider({
     setAttachedElement(null);
 
     debugLog("[Vivd] Sending prompt:", task);
+    markPendingRunStart();
     sendTask(task, selectedSessionId, {
       onSettled: () => setIsSending(false),
     });
@@ -634,6 +698,7 @@ export function ChatProvider({
     }
 
     continueClickLockRef.current = true;
+    markPendingRunStart();
     sendTask("continue", selectedSessionId, {
       onSettled: () => {
         continueClickLockRef.current = false;
@@ -645,6 +710,7 @@ export function ChatProvider({
     runTaskMutation.isPending,
     isSending,
     isUsageBlocked,
+    markPendingRunStart,
     sendTask,
   ]);
 
@@ -657,6 +723,7 @@ export function ChatProvider({
     setIsStreaming(false);
     setIsWaiting(false);
     isWaitingForAgent.current = false;
+    clearPendingRunStart();
     setStreamingParts([]);
     // Clear any error from previous session
     setSessionError(null);

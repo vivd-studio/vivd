@@ -8,6 +8,7 @@ type MapSessionMessagesOptions = {
 const TERMINAL_SESSION_STATUS_TYPES = new Set(["idle", "done", "error"]);
 const INTERRUPTED_CONTINUE_MIN_AGE_MS = 10_000;
 const STALE_TERMINAL_WAIT_GRACE_MS = 15_000;
+const STALE_HYDRATION_DEFERRAL_MS = 15_000;
 
 function normalizeTimestamp(value: unknown): number | undefined {
   if (value == null) return undefined;
@@ -268,6 +269,7 @@ export function shouldHoldWaitingForStaleTerminalStatus(options: {
   sessionStatus: string | null | undefined;
   isWaitingForAgent: boolean;
   lastUserMessageAt?: number;
+  pendingRunStartedAt?: number | null;
   now?: number;
   graceMs?: number;
 }): boolean {
@@ -280,11 +282,53 @@ export function shouldHoldWaitingForStaleTerminalStatus(options: {
     return false;
   }
 
-  if (!options.lastUserMessageAt) {
+  const mostRecentRunSignalAt = Math.max(
+    options.lastUserMessageAt ?? 0,
+    options.pendingRunStartedAt ?? 0,
+  );
+
+  if (!mostRecentRunSignalAt) {
     return false;
   }
 
   const now = options.now ?? Date.now();
   const graceMs = options.graceMs ?? STALE_TERMINAL_WAIT_GRACE_MS;
-  return now - options.lastUserMessageAt < graceMs;
+  return now - mostRecentRunSignalAt < graceMs;
+}
+
+export function shouldDeferSessionHydrationWhilePendingRun(options: {
+  isWaitingForAgent: boolean;
+  pendingRunStartedAt?: number | null;
+  currentMessages: Message[];
+  incomingMessages: Message[];
+  now?: number;
+  maxDeferralMs?: number;
+}): boolean {
+  if (!options.isWaitingForAgent) {
+    return false;
+  }
+
+  const pendingRunStartedAt = options.pendingRunStartedAt ?? 0;
+  if (!pendingRunStartedAt) {
+    return false;
+  }
+
+  const now = options.now ?? Date.now();
+  const maxDeferralMs = options.maxDeferralMs ?? STALE_HYDRATION_DEFERRAL_MS;
+  if (now - pendingRunStartedAt >= maxDeferralMs) {
+    return false;
+  }
+
+  const localLastMessage =
+    options.currentMessages[options.currentMessages.length - 1];
+  if (!localLastMessage || localLastMessage.role !== "user") {
+    return false;
+  }
+
+  const localLastUserCreatedAt = localLastMessage.createdAt ?? 0;
+  if (localLastUserCreatedAt < pendingRunStartedAt) {
+    return false;
+  }
+
+  return options.incomingMessages.length < options.currentMessages.length;
 }

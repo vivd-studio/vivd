@@ -9,6 +9,11 @@ export const STUDIO_OPENCODE_CONFIG_OVERRIDES: JsonObject = {
   tools: {
     question: false,
   },
+  // Prevent recursive tool-invocation loops in Studio agent sessions.
+  permission: {
+    doom_loop: "deny",
+    external_directory: "deny",
+  },
 };
 
 function isPlainObject(value: unknown): value is JsonObject {

@@ -4,17 +4,22 @@ import { z } from "zod";
 import { router, orgAdminProcedure, orgProcedure, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import {
+  contactFormRecipientVerification,
   organization,
   organizationMember,
+  pluginEntitlement,
+  projectPluginInstance,
   projectMember,
   projectMeta,
+  publishedSite,
   session as sessionTable,
   user as userTable,
 } from "../db/schema";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { auth } from "../auth";
 import { domainService } from "../services/publish/DomainService";
 import { organizationIdSchema } from "../lib/organizationIdentifiers";
+import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 
@@ -22,6 +27,30 @@ function getGlobalUserRoleForMemberRole(
   _role: z.infer<typeof memberRoleSchema>,
 ): "user" {
   return "user";
+}
+
+type PluginInstanceStatus = "enabled" | "disabled" | "not_installed";
+type PluginIssueSeverity = "warning" | "info";
+
+type PluginIssue = {
+  code:
+    | "contact_no_recipients"
+    | "contact_pending_recipients"
+    | "contact_turnstile_not_ready";
+  severity: PluginIssueSeverity;
+  message: string;
+};
+
+function toPluginInstanceStatus(raw: string | null | undefined): PluginInstanceStatus {
+  if (!raw) return "not_installed";
+  if (raw === "enabled") return "enabled";
+  return "disabled";
+}
+
+function getConfiguredRecipientCount(configJson: unknown): number {
+  const parsed = contactFormPluginConfigSchema.safeParse(configJson ?? {});
+  if (!parsed.success) return 0;
+  return parsed.data.recipientEmails.length;
 }
 
 export const organizationRouter = router({
@@ -202,6 +231,219 @@ export const organizationRouter = router({
     }
 
     return { organization: org };
+  }),
+
+  pluginsOverview: orgAdminProcedure.query(async ({ ctx }) => {
+    const organizationId = ctx.organizationId!;
+    const projects = await db.query.projectMeta.findMany({
+      where: eq(projectMeta.organizationId, organizationId),
+      columns: {
+        slug: true,
+        title: true,
+        updatedAt: true,
+      },
+      orderBy: (table, { desc, asc: ascending }) => [desc(table.updatedAt), ascending(table.slug)],
+    });
+
+    if (projects.length === 0) {
+      return { rows: [] };
+    }
+
+    const projectSlugs = projects.map((project) => project.slug);
+
+    const [pluginInstances, pendingRecipientRows, entitlementRows, publishedRows] =
+      await Promise.all([
+        db.query.projectPluginInstance.findMany({
+          where: and(
+            eq(projectPluginInstance.organizationId, organizationId),
+            inArray(projectPluginInstance.projectSlug, projectSlugs),
+            inArray(projectPluginInstance.pluginId, ["contact_form", "analytics"]),
+          ),
+          columns: {
+            projectSlug: true,
+            pluginId: true,
+            status: true,
+            configJson: true,
+          },
+        }),
+        db
+          .select({
+            projectSlug: contactFormRecipientVerification.projectSlug,
+            count: sql<number>`count(*)`,
+          })
+          .from(contactFormRecipientVerification)
+          .where(
+            and(
+              eq(contactFormRecipientVerification.organizationId, organizationId),
+              inArray(contactFormRecipientVerification.projectSlug, projectSlugs),
+              eq(contactFormRecipientVerification.status, "pending"),
+            ),
+          )
+          .groupBy(contactFormRecipientVerification.projectSlug),
+        db.query.pluginEntitlement.findMany({
+          where: and(
+            eq(pluginEntitlement.organizationId, organizationId),
+            eq(pluginEntitlement.pluginId, "contact_form"),
+          ),
+          columns: {
+            scope: true,
+            projectSlug: true,
+            state: true,
+            turnstileEnabled: true,
+            turnstileSiteKey: true,
+            turnstileSecretKey: true,
+          },
+        }),
+        db.query.publishedSite.findMany({
+          where: and(
+            eq(publishedSite.organizationId, organizationId),
+            inArray(publishedSite.projectSlug, projectSlugs),
+          ),
+          columns: {
+            projectSlug: true,
+            domain: true,
+            publishedAt: true,
+          },
+        }),
+      ]);
+
+    const contactByProjectSlug = new Map<
+      string,
+      {
+        status: string;
+        configJson: unknown;
+      }
+    >();
+    const analyticsByProjectSlug = new Map<string, { status: string }>();
+    for (const pluginInstance of pluginInstances) {
+      if (pluginInstance.pluginId === "contact_form") {
+        contactByProjectSlug.set(pluginInstance.projectSlug, {
+          status: pluginInstance.status,
+          configJson: pluginInstance.configJson,
+        });
+        continue;
+      }
+      if (pluginInstance.pluginId === "analytics") {
+        analyticsByProjectSlug.set(pluginInstance.projectSlug, {
+          status: pluginInstance.status,
+        });
+      }
+    }
+
+    const pendingRecipientsByProjectSlug = new Map<string, number>(
+      pendingRecipientRows.map((row) => [row.projectSlug, Number(row.count) || 0]),
+    );
+
+    type ContactEntitlementSummary = {
+      state: string;
+      turnstileEnabled: boolean;
+      turnstileSiteKey: string | null;
+      turnstileSecretKey: string | null;
+    };
+
+    const contactEntitlementByProjectSlug = new Map<string, ContactEntitlementSummary>();
+    let organizationContactEntitlement: ContactEntitlementSummary | null = null;
+    for (const row of entitlementRows) {
+      const normalized = {
+        state: row.state,
+        turnstileEnabled: row.turnstileEnabled ?? false,
+        turnstileSiteKey: row.turnstileSiteKey ?? null,
+        turnstileSecretKey: row.turnstileSecretKey ?? null,
+      } satisfies ContactEntitlementSummary;
+      if (row.scope === "project" && row.projectSlug) {
+        contactEntitlementByProjectSlug.set(row.projectSlug, normalized);
+      } else if (row.scope === "organization") {
+        organizationContactEntitlement = normalized;
+      }
+    }
+
+    const deployedByProjectSlug = new Map<
+      string,
+      { domain: string; publishedAt: Date }
+    >();
+    for (const row of publishedRows) {
+      const existing = deployedByProjectSlug.get(row.projectSlug);
+      if (!existing || row.publishedAt > existing.publishedAt) {
+        deployedByProjectSlug.set(row.projectSlug, {
+          domain: row.domain,
+          publishedAt: row.publishedAt,
+        });
+      }
+    }
+
+    const rows = projects.map((project) => {
+      const projectSlug = project.slug;
+      const contact = contactByProjectSlug.get(projectSlug);
+      const analytics = analyticsByProjectSlug.get(projectSlug);
+      const contactStatus = toPluginInstanceStatus(contact?.status ?? null);
+      const analyticsStatus = toPluginInstanceStatus(analytics?.status ?? null);
+      const configuredRecipientCount = contact
+        ? getConfiguredRecipientCount(contact.configJson)
+        : 0;
+      const pendingRecipientCount =
+        pendingRecipientsByProjectSlug.get(projectSlug) ?? 0;
+      const effectiveEntitlement =
+        contactEntitlementByProjectSlug.get(projectSlug) ??
+        organizationContactEntitlement;
+      const turnstileEnabled =
+        effectiveEntitlement?.state === "enabled" &&
+        effectiveEntitlement.turnstileEnabled;
+      const turnstileReady =
+        turnstileEnabled &&
+        !!effectiveEntitlement?.turnstileSiteKey &&
+        !!effectiveEntitlement?.turnstileSecretKey;
+
+      const issues: PluginIssue[] = [];
+      if (contactStatus === "enabled" && configuredRecipientCount === 0) {
+        issues.push({
+          code: "contact_no_recipients",
+          severity: "warning",
+          message: "Contact Form is enabled but has no verified recipients configured.",
+        });
+      }
+      if (contactStatus === "enabled" && pendingRecipientCount > 0) {
+        const noun = pendingRecipientCount === 1 ? "recipient" : "recipients";
+        issues.push({
+          code: "contact_pending_recipients",
+          severity: "info",
+          message: `${pendingRecipientCount} ${noun} pending verification.`,
+        });
+      }
+      if (contactStatus === "enabled" && turnstileEnabled && !turnstileReady) {
+        issues.push({
+          code: "contact_turnstile_not_ready",
+          severity: "warning",
+          message: "Turnstile is enabled but credentials are not ready yet.",
+        });
+      }
+
+      return {
+        projectSlug,
+        projectTitle: project.title,
+        updatedAt: project.updatedAt,
+        deployedDomain: deployedByProjectSlug.get(projectSlug)?.domain ?? null,
+        contactForm: {
+          status: contactStatus,
+          configuredRecipientCount,
+          pendingRecipientCount,
+          turnstileEnabled,
+          turnstileReady,
+        },
+        analytics: {
+          status: analyticsStatus,
+        },
+        issues,
+      };
+    });
+
+    return {
+      rows: rows.sort((left, right) => {
+        if (right.issues.length !== left.issues.length) {
+          return right.issues.length - left.issues.length;
+        }
+        return right.updatedAt.getTime() - left.updatedAt.getTime();
+      }),
+    };
   }),
 
   listMembers: orgAdminProcedure.query(async ({ ctx }) => {

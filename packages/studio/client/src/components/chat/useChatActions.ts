@@ -37,6 +37,7 @@ type UseChatActionsArgs = {
   setIsWaiting: Dispatch<SetStateAction<boolean>>;
   setStreamingParts: Dispatch<SetStateAction<any[]>>;
   setSessionError: Dispatch<SetStateAction<SessionError | null>>;
+  clearPendingRunState?: () => void;
 };
 
 export function useChatActions({
@@ -55,6 +56,7 @@ export function useChatActions({
   setIsWaiting,
   setStreamingParts,
   setSessionError,
+  clearPendingRunState,
 }: UseChatActionsArgs) {
   const confirmResolverRef = useRef<((result: boolean) => void) | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
@@ -115,6 +117,7 @@ export function useChatActions({
       setIsStreaming(false);
       setIsWaiting(false);
       setStreamingParts([]);
+      clearPendingRunState?.();
     },
   });
 
@@ -268,6 +271,7 @@ export function useChatActions({
       setIsWaiting(false);
       setStreamingParts([]);
       isWaitingForAgent.current = false;
+      clearPendingRunState?.();
       refetchMessages();
     },
   });

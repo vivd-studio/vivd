@@ -244,6 +244,18 @@ describe("AppSidebar search", () => {
     ).toBeInTheDocument();
   });
 
+  it("indexes the organization plugins overview route for org admins", () => {
+    renderSidebar();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+      target: { value: "organization plugins" },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /^Plugins$/i }),
+    ).toBeInTheDocument();
+  });
+
   it("respects role/host gating for super admin search entries", () => {
     const firstRender = renderSidebar();
 

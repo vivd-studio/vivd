@@ -407,7 +407,9 @@ type OrganizationNavSectionProps = {
   isOrgOwner: boolean;
   isCollapsed: boolean;
   isActive: (url: string, end?: boolean) => boolean;
-  isOrgTabActive: (tab: "members" | "usage" | "maintenance" | "settings") => boolean;
+  isOrgTabActive: (
+    tab: "members" | "usage" | "maintenance" | "plugins" | "settings",
+  ) => boolean;
   navigate: (to: string) => void;
 };
 
@@ -467,6 +469,14 @@ function OrganizationNavSection({
                 <Link to={`${ROUTES.ORG}?tab=maintenance`}>
                   <Wrench className="size-4" />
                   <span>Maintenance</span>
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild isActive={isOrgTabActive("plugins")}>
+                <Link to={`${ROUTES.ORG}?tab=plugins`}>
+                  <Plug className="size-4" />
+                  <span>Plugins</span>
                 </Link>
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
@@ -697,7 +707,7 @@ export function AppSidebar() {
   );
 
   const isOrgTabActive = React.useCallback(
-    (tab: "members" | "usage" | "maintenance" | "settings") => {
+    (tab: "members" | "usage" | "maintenance" | "plugins" | "settings") => {
       if (!isActive(ROUTES.ORG, true)) return false;
       return (searchParams.get("tab") ?? "members") === tab;
     },
@@ -824,6 +834,14 @@ export function AppSidebar() {
           to: `${ROUTES.ORG}?tab=maintenance`,
           keywords: ["operations", "migration"],
           isActive: isOrgTabActive("maintenance"),
+        },
+        {
+          id: "organization:plugins",
+          label: "Plugins",
+          section: "Organization",
+          to: `${ROUTES.ORG}?tab=plugins`,
+          keywords: ["integrations", "contact form", "analytics"],
+          isActive: isOrgTabActive("plugins"),
         },
       );
       if (isOrgOwner) {

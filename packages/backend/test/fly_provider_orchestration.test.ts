@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FlyStudioMachineProvider } from "../src/services/studioMachines/fly/provider";
 import type {
   StudioMachineStartArgs,
@@ -59,6 +59,22 @@ function studioMachine(options: {
 }
 
 describe("FlyStudioMachineProvider orchestration", () => {
+  it("stopIdleMachines swallows list-machines failures", async () => {
+    const provider = new FlyStudioMachineProvider();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    (provider as any).apiClient.listMachines = async () => {
+      throw new Error("fetch failed");
+    };
+
+    await expect((provider as any).stopIdleMachines()).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[FlyMachines] Idle cleanup failed: fetch failed"),
+    );
+
+    warnSpy.mockRestore();
+  });
+
   it("deduplicates concurrent ensureRunning calls for the same studio key", async () => {
     const provider = new FlyStudioMachineProvider();
     const result: StudioMachineStartResult = {
