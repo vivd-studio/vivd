@@ -62,6 +62,8 @@ function ensureAsciiDomain(value: string): boolean {
   return /^[\x00-\x7F]+$/.test(value);
 }
 
+const DEFAULT_PUBLIC_PLUGIN_API_HOST = "api.vivd.studio";
+
 export function normalizeHostname(input: string): string {
   const trimmed = input.trim().toLowerCase();
   if (!trimmed) return "";
@@ -99,6 +101,13 @@ export function validateOrganizationSlug(slug: string): { valid: boolean; error?
 }
 
 export class DomainService {
+  getPublicPluginApiHost(): string {
+    const configured =
+      this.getEnvHostname(process.env.VIVD_PUBLIC_PLUGIN_API_HOST) ??
+      this.getEnvHostname(DEFAULT_PUBLIC_PLUGIN_API_HOST);
+    return configured || DEFAULT_PUBLIC_PLUGIN_API_HOST;
+  }
+
   normalizeHost(value: string): string {
     return normalizeHostname(value);
   }
@@ -405,12 +414,29 @@ export class DomainService {
       return { valid: false, normalized, error: "Invalid domain format" };
     }
 
-    const reserved = new Set(["127.0.0.1", "0.0.0.0"]);
-    if (reserved.has(normalized)) {
+    const ipReserved = new Set(["127.0.0.1", "0.0.0.0"]);
+    if (ipReserved.has(normalized)) {
       return {
         valid: false,
         normalized,
         error: "IP addresses are not supported, use a domain name",
+      };
+    }
+
+    const publicPluginApiHost = this.getPublicPluginApiHost();
+    if (normalized === publicPluginApiHost) {
+      return {
+        valid: false,
+        normalized,
+        error: `Domain "${normalized}" is reserved for the public plugin API host`,
+      };
+    }
+
+    if (normalized === "api.localhost") {
+      return {
+        valid: false,
+        normalized,
+        error: `Domain "${normalized}" is reserved for local public plugin API routing`,
       };
     }
 
