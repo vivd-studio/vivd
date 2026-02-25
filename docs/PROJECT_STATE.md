@@ -18,6 +18,7 @@
 
 ## Latest Progress (Top 9)
 
+- 2026-02-25: fixed organization-header normalization for backend context + preview runtime to support real DB organization IDs (including underscores/mixed case) instead of slug-only coercion; this prevents internal preview/token flows (including thumbnail capture and Studio machine calls) from dropping valid org IDs and returning false `404 Not found`.
 - 2026-02-25: added anti-loop safeguards for the Studio interrupted-run continue CTA: a synchronous click lock now prevents duplicate `continue` submissions from rapid double-clicks, and the CTA is suppressed while the latest user message is already `continue` (until a new agent response arrives), avoiding immediate re-show/re-submit loops.
 - 2026-02-25: refined Studio interrupted-run chat UX so the `Done` divider is now hidden whenever the `Agent interrupted, click to continue` CTA is displayed, preventing mixed terminal cues for incomplete runs.
 - 2026-02-25: added a local publish fallback script (`scripts/push-images.sh`) that builds and pushes the same GHCR image/tag set as the release workflow (`vivd-studio`, `vivd-server`, `vivd-ui`, `vivd-caddy` with `vX.Y.Z`, `X.Y.Z`, and `latest`) so releases can continue when GitHub-hosted Actions runs are blocked.

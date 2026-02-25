@@ -95,9 +95,13 @@ function isHttpsRequest(req: express.Request): boolean {
 
 function normalizeRequestedOrganizationId(input: string | null): string | null {
   if (!input) return null;
-  const normalized = input.trim().toLowerCase();
+  const normalized = input.trim();
   if (!normalized) return null;
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(normalized)) return null;
+  if (normalized.length > 128) return null;
+  // Accept DB-backed organization IDs (which may include "_" or mixed case),
+  // while still blocking control chars, whitespace and path separators.
+  if (/[\u0000-\u001f\u007f]/.test(normalized)) return null;
+  if (/[\s/\\]/.test(normalized)) return null;
   return normalized;
 }
 
