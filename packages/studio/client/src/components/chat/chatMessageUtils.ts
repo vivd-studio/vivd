@@ -168,7 +168,12 @@ export function shouldSuggestInterruptedContinue(options: {
   isThinking: boolean;
   isLoading: boolean;
 }): boolean {
-  if (options.sessionStatus !== "done") {
+  const isTerminalStatus =
+    options.sessionStatus == null ||
+    options.sessionStatus === "done" ||
+    options.sessionStatus === "idle";
+
+  if (!isTerminalStatus) {
     return false;
   }
 

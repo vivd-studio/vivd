@@ -195,6 +195,17 @@ describe("chatMessageUtils", () => {
     expect(shouldSuggest).toBe(true);
   });
 
+  it("suggests a continue nudge when session is idle without final agent response", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "idle",
+      messages: [{ role: "user", content: "Do the task" }],
+      isThinking: false,
+      isLoading: false,
+    });
+
+    expect(shouldSuggest).toBe(true);
+  });
+
   it("does not suggest continue once a final agent response exists", () => {
     const shouldSuggest = shouldSuggestInterruptedContinue({
       sessionStatus: "done",
@@ -202,6 +213,17 @@ describe("chatMessageUtils", () => {
         { role: "user", content: "Do the task" },
         { role: "agent", content: "Done." },
       ],
+      isThinking: false,
+      isLoading: false,
+    });
+
+    expect(shouldSuggest).toBe(false);
+  });
+
+  it("does not suggest continue when session is still active", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "busy",
+      messages: [{ role: "user", content: "Do the task" }],
       isThinking: false,
       isLoading: false,
     });
