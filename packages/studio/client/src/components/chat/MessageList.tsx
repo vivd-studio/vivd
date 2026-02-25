@@ -1113,8 +1113,8 @@ function AgentActivityRow({
         onClick={() => setIsOpen(!isOpen)}
         className="group w-full text-left hover:text-foreground transition-colors text-xs font-medium py-0.5 px-1"
       >
-        <span className={`flex items-center gap-1 ${toneClass}`}>
-          <span className="min-w-0 flex-1">{label}</span>
+        <span className={`inline-flex max-w-full items-center gap-1 ${toneClass}`}>
+          <span className="min-w-0">{label}</span>
           <span className="inline-flex shrink-0 items-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150">
             {isOpen ? (
               <ChevronDown className="w-3 h-3" />
