@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import { Settings2, Trash2, Loader2, Globe, AlertTriangle } from "lucide-react";
 import {
   AlertDialog,
@@ -160,9 +161,10 @@ export function VersionManagementPanel({
                     const isPublished = version.version === publishedVersion;
 
                     return (
-                      <div
+                      <InteractiveSurface
+                        variant="choice"
                         key={version.version}
-                        className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors"
+                        className="rounded-lg p-4 hover:bg-accent/30"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -204,7 +206,7 @@ export function VersionManagementPanel({
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      </div>
+                      </InteractiveSurface>
                     );
                   })}
               </div>

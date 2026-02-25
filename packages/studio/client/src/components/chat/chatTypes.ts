@@ -136,6 +136,7 @@ export interface ChatContextValue {
   selectedModel: ModelTier | null;
   setSelectedModel: (model: ModelTier | null) => void;
   handleSend: () => void;
+  handleContinueSession: () => void;
   handleNewSession: () => void;
   handleDeleteSession: (e: MouseEvent, sessionId: string) => void;
   handleRevert: (messageId: string) => void;

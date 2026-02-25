@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InteractiveSurfaceButton } from "@/components/ui/interactive-surface";
 import {
   Collapsible,
   CollapsibleContent,
@@ -27,6 +28,7 @@ import {
   CHECKLIST_STATUS_CONFIG,
   PREVIEW_CHECKLIST_ITEMS,
 } from "./constants";
+import { cn } from "@/lib/utils";
 
 interface PrePublishChecklistProps {
   dialogOpen: boolean;
@@ -108,12 +110,13 @@ export function PrePublishChecklist({
   return (
     <Collapsible open={checklistOpen} onOpenChange={setChecklistOpen}>
       <CollapsibleTrigger asChild>
-        <button
-          className={`flex items-center justify-between w-full p-3 rounded-lg border transition-colors text-left ${
-            !checklist
-              ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 hover:bg-amber-100/50 dark:hover:bg-amber-900/30"
-              : "bg-muted/30 hover:bg-muted/50"
-          }`}
+        <InteractiveSurfaceButton
+          variant="choice"
+          className={cn(
+            "flex w-full items-center justify-between rounded-lg p-3 text-left",
+            !checklist &&
+              "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 hover:bg-amber-100/50 dark:hover:bg-amber-900/30",
+          )}
         >
           <div className="flex items-center gap-2">
             <ClipboardCheck
@@ -140,7 +143,7 @@ export function PrePublishChecklist({
               checklistOpen ? "rotate-180" : ""
             }`}
           />
-        </button>
+        </InteractiveSurfaceButton>
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-2 space-y-2">

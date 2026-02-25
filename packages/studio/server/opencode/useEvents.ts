@@ -370,6 +370,14 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
               if (status?.type === "busy") {
                 hasObservedSessionActivity = true;
                 hasTerminalSessionError = false;
+              } else if (status?.type === "done") {
+                if (hasTerminalSessionError) {
+                  continue;
+                }
+                if (!hasObservedSessionActivity) {
+                  continue;
+                }
+                callbacks.onIdle?.();
               } else if (status?.type === "idle") {
                 if (hasTerminalSessionError) {
                   continue;

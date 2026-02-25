@@ -28,6 +28,7 @@ export interface AgentEvent extends AgentEventInput {
 export type SessionStatus =
   | { type: "idle" }
   | { type: "busy" }
+  | { type: "done" }
   | { type: "retry"; attempt?: number; message?: string; next?: number };
 
 export type AgentEventData =

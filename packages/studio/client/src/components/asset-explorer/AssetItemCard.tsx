@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import { Download, MessageSquarePlus, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
 import { formatSize, getFileIconComponent, buildImageUrl } from "./utils";
@@ -140,9 +141,10 @@ export function AssetItemCard({
 
   // Folder or non-image file
   const cardContent = (
-    <div
+    <InteractiveSurface
+      variant="choice"
       onClick={onClick}
-      className="relative group p-3 rounded-lg border hover:bg-muted/50 cursor-pointer transition-colors"
+      className="relative group cursor-pointer rounded-lg p-3"
     >
       <div className="flex flex-col items-center gap-2">
         <div className="w-16 h-16 flex items-center justify-center">
@@ -180,7 +182,7 @@ export function AssetItemCard({
           <Trash2 className="h-3 w-3" />
         </Button>
       </div>
-    </div>
+    </InteractiveSurface>
   );
 
   // Wrap files with context menu, folders don't need it

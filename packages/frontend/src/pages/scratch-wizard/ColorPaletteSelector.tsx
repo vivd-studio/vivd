@@ -6,6 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { InteractiveSurfaceButton } from "@/components/ui/interactive-surface";
+import { cn } from "@/lib/utils";
 import { useScratchWizard } from "./ScratchWizardContext";
 import { STYLE_PRESETS } from "./types";
 
@@ -34,51 +36,51 @@ function SiteThemeToggle({
 }) {
   return (
     <div className="flex gap-2">
-      <button
-        type="button"
+      <InteractiveSurfaceButton
+        variant="choice"
         disabled={disabled}
         onClick={() => onChange(null)}
-        className={`flex-1 p-2.5 rounded-lg border transition-all duration-200 ${
-          theme === null
-            ? "border-primary bg-primary/10"
-            : "border-border hover:bg-muted/50"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        className={cn("flex-1 rounded-lg p-2.5", {
+          "border-primary bg-primary/10 hover:border-primary hover:bg-primary/10":
+            theme === null,
+          "opacity-50 cursor-not-allowed": disabled,
+        })}
       >
         <div className="flex items-center justify-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm">Auto</span>
         </div>
-      </button>
-      <button
-        type="button"
+      </InteractiveSurfaceButton>
+      <InteractiveSurfaceButton
+        variant="choice"
         disabled={disabled}
         onClick={() => onChange("dark")}
-        className={`flex-1 p-2.5 rounded-lg border transition-all duration-200 ${
-          theme === "dark"
-            ? "border-primary bg-primary/10"
-            : "border-border hover:bg-muted/50"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        className={cn("flex-1 rounded-lg p-2.5", {
+          "border-primary bg-primary/10 hover:border-primary hover:bg-primary/10":
+            theme === "dark",
+          "opacity-50 cursor-not-allowed": disabled,
+        })}
       >
         <div className="flex items-center justify-center gap-2">
           <Moon className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm">Dark</span>
         </div>
-      </button>
-      <button
-        type="button"
+      </InteractiveSurfaceButton>
+      <InteractiveSurfaceButton
+        variant="choice"
         disabled={disabled}
         onClick={() => onChange("light")}
-        className={`flex-1 p-2.5 rounded-lg border transition-all duration-200 ${
-          theme === "light"
-            ? "border-primary bg-primary/10"
-            : "border-border hover:bg-muted/50"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        className={cn("flex-1 rounded-lg p-2.5", {
+          "border-primary bg-primary/10 hover:border-primary hover:bg-primary/10":
+            theme === "light",
+          "opacity-50 cursor-not-allowed": disabled,
+        })}
       >
         <div className="flex items-center justify-center gap-2">
           <Sun className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm">Light</span>
         </div>
-      </button>
+      </InteractiveSurfaceButton>
     </div>
   );
 }
@@ -95,36 +97,36 @@ function ColorModeToggle({
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <button
-          type="button"
+        <InteractiveSurfaceButton
+          variant="choice"
           disabled={disabled}
           onClick={() => onChange(false)}
-          className={`flex-1 p-2.5 rounded-lg border transition-all duration-200 ${
-            !isStrict
-              ? "border-primary bg-primary/10"
-              : "border-border hover:bg-muted/50"
-          } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={cn("flex-1 rounded-lg p-2.5", {
+            "border-primary bg-primary/10 hover:border-primary hover:bg-primary/10":
+              !isStrict,
+            "opacity-50 cursor-not-allowed": disabled,
+          })}
         >
           <div className="flex items-center justify-center gap-2">
             <Wand2 className="h-4 w-4 text-primary" />
             <span className="font-medium text-sm">Inspiration</span>
           </div>
-        </button>
-        <button
-          type="button"
+        </InteractiveSurfaceButton>
+        <InteractiveSurfaceButton
+          variant="choice"
           disabled={disabled}
           onClick={() => onChange(true)}
-          className={`flex-1 p-2.5 rounded-lg border transition-all duration-200 ${
-            isStrict
-              ? "border-primary bg-primary/10"
-              : "border-border hover:bg-muted/50"
-          } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={cn("flex-1 rounded-lg p-2.5", {
+            "border-primary bg-primary/10 hover:border-primary hover:bg-primary/10":
+              isStrict,
+            "opacity-50 cursor-not-allowed": disabled,
+          })}
         >
           <div className="flex items-center justify-center gap-2">
             <Lock className="h-4 w-4 text-primary" />
             <span className="font-medium text-sm">Strict</span>
           </div>
-        </button>
+        </InteractiveSurfaceButton>
       </div>
       <div className="text-xs text-muted-foreground">
         {isStrict

@@ -30,6 +30,7 @@ import {
   mergeLiveParts,
   type ChatTimelineItem,
 } from "./chatTimelineBuilder";
+import { shouldSuggestInterruptedContinue } from "./chatMessageUtils";
 
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 80;
 
@@ -45,8 +46,10 @@ export function MessageList() {
     isReverted,
     streamingParts,
     setInput,
+    handleContinueSession,
     sessionError,
     clearSessionError,
+    sessionDebugState,
     usageLimitStatus,
     isUsageBlocked,
   } = useChatContext();
@@ -361,6 +364,12 @@ export function MessageList() {
   }, [timeline.items, isRunInProgress]);
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
+  const shouldShowInterruptedContinue = shouldSuggestInterruptedContinue({
+    sessionStatus: sessionDebugState.sessionStatus,
+    messages,
+    isThinking,
+    isLoading,
+  });
 
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
@@ -520,6 +529,18 @@ export function MessageList() {
               <Undo2 className="w-4 h-4 mr-2" />
               Restore reverted changes
             </Button>
+          </div>
+        )}
+
+        {shouldShowInterruptedContinue && (
+          <div className="flex justify-center py-1">
+            <button
+              type="button"
+              onClick={handleContinueSession}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Agent interrupted, click to continue
+            </button>
           </div>
         )}
 

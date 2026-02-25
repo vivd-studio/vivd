@@ -388,7 +388,18 @@ export function ChatProvider({
   useEffect(() => {
     if (!currentSessionStatus) return;
 
-    if (currentSessionStatus.type === "idle") {
+    if ((currentSessionStatus as any).type === "done") {
+      if (isStreaming || isWaiting || isWaitingForAgent.current) {
+        debugLog(
+          "[ChatContext] Session status is done - clearing waiting/streaming state",
+        );
+        setIsStreaming(false);
+        setIsWaiting(false);
+        isWaitingForAgent.current = false;
+        setStreamingParts([]);
+        refetchMessages();
+      }
+    } else if (currentSessionStatus.type === "idle") {
       // If we just sent a message (isWaitingForAgent.current is true), don't reset
       // The session status may still be "idle" from the previous task - wait for it to update
       if (isWaitingForAgent.current) {
@@ -576,6 +587,27 @@ export function ChatProvider({
     });
   };
 
+  const handleContinueSession = useCallback(() => {
+    if (
+      !selectedSessionId ||
+      isStreaming ||
+      runTaskMutation.isPending ||
+      isSending ||
+      isUsageBlocked
+    ) {
+      return;
+    }
+
+    sendTask("continue", selectedSessionId);
+  }, [
+    selectedSessionId,
+    isStreaming,
+    runTaskMutation.isPending,
+    isSending,
+    isUsageBlocked,
+    sendTask,
+  ]);
+
   const handleNewSession = () => {
     autoSelectLockedRef.current = true;
     pendingSessionIdRef.current = null;
@@ -646,6 +678,7 @@ export function ChatProvider({
     selectedModel,
     setSelectedModel,
     handleSend,
+    handleContinueSession,
     handleNewSession,
     handleDeleteSession,
     handleRevert,

@@ -69,10 +69,10 @@ export function FileDropzone({
         </Badge>
       </div>
       <label
-        className={`flex cursor-pointer items-center justify-center rounded-xl border border-dashed p-4 transition-all duration-200 ${
+        className={`flex cursor-pointer items-center justify-center rounded-xl p-4 ${
           isDragging
             ? "border-primary bg-primary/10"
-            : "border-border hover:border-primary/50 hover:bg-muted/50"
+            : "vivd-surface-choice-dashed"
         }`}
         onDragEnter={onDragEnter}
         onDragLeave={onDragLeave}

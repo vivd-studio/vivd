@@ -718,6 +718,30 @@
   --sidebar-ring: hsl(152 85% 48%);
 }
 
+/* Mono theme sidebar */
+[data-color-theme="mono"] {
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(0 0% 12%);
+  --sidebar-primary: hsl(0 0% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(0 0% 92%);
+  --sidebar-accent-foreground: hsl(0 0% 10%);
+  --sidebar-border: hsl(0 0% 84%);
+  --sidebar-ring: hsl(0 0% 20%);
+}
+
+[data-color-theme="mono"].dark,
+.dark[data-color-theme="mono"] {
+  --sidebar: hsl(0 0% 7%);
+  --sidebar-foreground: hsl(0 0% 96%);
+  --sidebar-primary: hsl(0 0% 96%);
+  --sidebar-primary-foreground: hsl(0 0% 6%);
+  --sidebar-accent: hsl(0 0% 12%);
+  --sidebar-accent-foreground: hsl(0 0% 98%);
+  --sidebar-border: hsl(0 0% 15%);
+  --sidebar-ring: hsl(0 0% 92%);
+}
+
 /* Ocean theme sidebar */
 [data-color-theme="ocean"] {
   --sidebar: hsl(210 40% 96%);
@@ -751,6 +775,55 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer components {
+  .vivd-surface-field {
+    border: 1px solid hsl(var(--border) / 0.9);
+    background: hsl(var(--card));
+    transition:
+      border-color 180ms ease,
+      background-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .vivd-surface-field:focus-within {
+    border-color: hsl(var(--ring));
+  }
+
+  .vivd-surface-choice {
+    border: 1px solid hsl(var(--border) / 0.9);
+    background: hsl(var(--card));
+    transition:
+      border-color 180ms ease,
+      background-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .vivd-surface-choice:hover {
+    border-color: hsl(var(--primary) / 0.5);
+    background: hsl(var(--muted) / 0.55);
+  }
+
+  .vivd-surface-choice:focus-visible {
+    outline: none;
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 1px hsl(var(--ring) / 0.25);
+  }
+
+  .vivd-surface-choice-dashed {
+    border: 1px dashed hsl(var(--border));
+    background: hsl(var(--card));
+    transition:
+      border-color 180ms ease,
+      background-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .vivd-surface-choice-dashed:hover {
+    border-color: hsl(var(--primary) / 0.5);
+    background: hsl(var(--muted) / 0.55);
+  }
 }
 
 @layer base {

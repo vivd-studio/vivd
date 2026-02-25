@@ -428,4 +428,35 @@ describe("useEvents", () => {
     );
     expect(onIdle).not.toHaveBeenCalled();
   });
+
+  it("treats session.status done as terminal completion", async () => {
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-done",
+          status: { type: "busy" },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-done",
+          status: { type: "done" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-done",
+      onIdle,
+    });
+    await start();
+    await flushEventLoop();
+    stop();
+
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
 });

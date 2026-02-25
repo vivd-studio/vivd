@@ -7,6 +7,7 @@ import { importProjectZip } from "@/lib/import-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form } from "@/components/ui/form";
+import { InteractiveSurfaceButton } from "@/components/ui/interactive-surface";
 import {
   Dialog,
   DialogContent,
@@ -221,12 +222,13 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
           {/* Choice step */}
           {step === "choice" && (
             <div className="space-y-3">
-              <button
+              <InteractiveSurfaceButton
+                variant="choice"
                 onClick={() => {
                   setIsOpen(false);
                   navigate(ROUTES.NEW_SCRATCH);
                 }}
-                className="w-full p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 text-left group"
+                className="w-full rounded-lg p-4 text-left group"
               >
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
@@ -240,11 +242,12 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
                     </div>
                   </div>
                 </div>
-              </button>
+              </InteractiveSurfaceButton>
 
-              <button
+              <InteractiveSurfaceButton
+                variant="choice"
                 onClick={() => setStep("url")}
-                className="w-full p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 text-left group"
+                className="w-full rounded-lg p-4 text-left group"
               >
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
@@ -259,11 +262,12 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
                     </div>
                   </div>
                 </div>
-              </button>
+              </InteractiveSurfaceButton>
 
-              <button
+              <InteractiveSurfaceButton
+                variant="choice"
                 onClick={() => setStep("import")}
-                className="w-full p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/50 transition-all duration-200 text-left group"
+                className="w-full rounded-lg p-4 text-left group"
               >
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
@@ -276,7 +280,7 @@ export function ProjectWizard({ onGenerationStarted }: ProjectWizardProps) {
                     </div>
                   </div>
                 </div>
-              </button>
+              </InteractiveSurfaceButton>
             </div>
           )}
 

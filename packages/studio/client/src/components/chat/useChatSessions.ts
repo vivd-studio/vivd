@@ -100,7 +100,7 @@ export function useChatSessions({
 
     const activeSessions = sessions.filter((session) => {
       const status = sessionStatuses?.[session.id];
-      return status && status.type !== "idle";
+      return status?.type === "busy" || status?.type === "retry";
     });
 
     if (activeSessions.length === 0) {

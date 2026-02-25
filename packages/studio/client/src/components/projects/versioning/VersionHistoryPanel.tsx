@@ -11,6 +11,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  InteractiveSurface,
+  InteractiveSurfaceButton,
+} from "@/components/ui/interactive-surface";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -581,9 +585,9 @@ export function VersionHistoryPanel({
 
               <Collapsible open={gitHubSyncOpen} onOpenChange={setGitHubSyncOpen}>
                 <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-2 rounded-md border bg-muted/30 px-2 py-2 text-left hover:bg-muted/50 transition-colors"
+                  <InteractiveSurfaceButton
+                    variant="choice"
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left"
                   >
                     <div className="min-w-0">
                       {gitHubSyncStatus?.repoFullName ? (
@@ -605,7 +609,7 @@ export function VersionHistoryPanel({
                         gitHubSyncOpen ? "rotate-180" : ""
                       }`}
                     />
-                  </button>
+                  </InteractiveSurfaceButton>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2">
                   <div className="text-xs text-muted-foreground space-y-1">
@@ -858,7 +862,10 @@ export function VersionHistoryPanel({
                           )}
                         </div>
 
-                        <div className="p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                        <InteractiveSurface
+                          variant="choice"
+                          className="rounded-lg p-3 hover:bg-accent/50"
+                        >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
@@ -922,7 +929,7 @@ export function VersionHistoryPanel({
                               </Button>
                             )}
                           </div>
-                        </div>
+                        </InteractiveSurface>
                       </div>
                     );
                   })}

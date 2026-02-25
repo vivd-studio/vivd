@@ -138,3 +138,47 @@ export function shouldRecoverFromMissedStreamEvents(
     serverHasAgentResponse && (localEndsWithUser || fetchedMessageCountHigher)
   );
 }
+
+export function hasFinalAgentResponse(messages: Message[]): boolean {
+  if (messages.length === 0) {
+    return false;
+  }
+
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage.role !== "agent") {
+    return false;
+  }
+
+  if (lastMessage.content.trim().length > 0) {
+    return true;
+  }
+
+  return (lastMessage.parts ?? []).some((part: any) => {
+    if (part?.type !== "text") {
+      return false;
+    }
+    const text = typeof part?.text === "string" ? part.text : "";
+    return text.trim().length > 0;
+  });
+}
+
+export function shouldSuggestInterruptedContinue(options: {
+  sessionStatus: string | null | undefined;
+  messages: Message[];
+  isThinking: boolean;
+  isLoading: boolean;
+}): boolean {
+  if (options.sessionStatus !== "done") {
+    return false;
+  }
+
+  if (options.isThinking || options.isLoading) {
+    return false;
+  }
+
+  if (options.messages.length === 0) {
+    return false;
+  }
+
+  return !hasFinalAgentResponse(options.messages);
+}

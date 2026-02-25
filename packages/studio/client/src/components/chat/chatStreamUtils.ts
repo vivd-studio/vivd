@@ -7,13 +7,20 @@ const TOOL_TARGET_INPUT_KEYS = [
   "path",
   "filePath",
   "filepath",
+  "file_path",
   "filename",
   "file",
+  "fileName",
+  "name",
+  "target_file",
   "target",
   "targetPath",
+  "target_path",
   "source",
   "sourcePath",
+  "source_path",
   "sourceFile",
+  "source_file",
 ] as const;
 
 export function normalizeToolStatus(
@@ -156,6 +163,19 @@ export function getToolActivityLabelParts(part: any): ToolActivityLabelParts {
   if (toolName === "edit") {
     if (status === "running") {
       return { action: "Editing", target: `${target ?? "file"}...` };
+    }
+    if (status === "error") {
+      return { action: "Failed editing", target: target ?? "file" };
+    }
+    return { action: "Edited", target: target ?? "file" };
+  }
+
+  if (toolName === "write") {
+    if (status === "running") {
+      if (target) {
+        return { action: "Editing", target: `${target}...` };
+      }
+      return { action: "Editing" };
     }
     if (status === "error") {
       return { action: "Failed editing", target: target ?? "file" };

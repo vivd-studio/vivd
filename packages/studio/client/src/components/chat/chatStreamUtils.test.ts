@@ -82,6 +82,46 @@ describe("chatStreamUtils reasoning sanitization", () => {
     ).toBe("Failed editing schema.ts");
   });
 
+  it("formats write tool labels as editing states", () => {
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "write",
+        status: "running",
+        input: { file_path: "/workspace/index.html" },
+      }),
+    ).toBe("Editing index.html...");
+
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "write",
+        status: "completed",
+        input: { file_path: "/workspace/index.html" },
+      }),
+    ).toBe("Edited index.html");
+  });
+
+  it("uses editing wording for write tool even without filename", () => {
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "write",
+        status: "running",
+        input: { content: "<html>..." },
+      }),
+    ).toBe("Editing");
+
+    expect(
+      getToolActivityLabel({
+        type: "tool",
+        tool: "write",
+        status: "completed",
+        input: { content: "<html>..." },
+      }),
+    ).toBe("Edited file");
+  });
+
   it("formats bash tool labels as user-friendly actions", () => {
     expect(
       getToolActivityLabel({

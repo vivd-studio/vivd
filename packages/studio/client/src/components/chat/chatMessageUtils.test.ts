@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateUsageFromSessionMessages,
+  hasFinalAgentResponse,
   mapSessionMessagesToChatMessages,
   shouldRecoverFromMissedStreamEvents,
+  shouldSuggestInterruptedContinue,
 } from "./chatMessageUtils";
 
 describe("chatMessageUtils", () => {
@@ -164,5 +166,46 @@ describe("chatMessageUtils", () => {
     );
 
     expect(shouldRecover).toBe(false);
+  });
+
+  it("detects when the final response is still missing from the agent", () => {
+    expect(
+      hasFinalAgentResponse([
+        { role: "user", content: "Please continue" },
+        { role: "agent", content: "" },
+      ]),
+    ).toBe(false);
+
+    expect(
+      hasFinalAgentResponse([
+        { role: "user", content: "Please continue" },
+        { role: "agent", content: "Sure, here is the result." },
+      ]),
+    ).toBe(true);
+  });
+
+  it("suggests a continue nudge when session is done without final agent response", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "done",
+      messages: [{ role: "user", content: "Do the task" }],
+      isThinking: false,
+      isLoading: false,
+    });
+
+    expect(shouldSuggest).toBe(true);
+  });
+
+  it("does not suggest continue once a final agent response exists", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinue({
+      sessionStatus: "done",
+      messages: [
+        { role: "user", content: "Do the task" },
+        { role: "agent", content: "Done." },
+      ],
+      isThinking: false,
+      isLoading: false,
+    });
+
+    expect(shouldSuggest).toBe(false);
   });
 });

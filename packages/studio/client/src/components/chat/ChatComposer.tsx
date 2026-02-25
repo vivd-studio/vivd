@@ -11,6 +11,7 @@ import { SelectedElementPill, AttachedFilePill } from "./SelectedElementPill";
 import { ImagePreviewPill } from "./ImagePreviewPill";
 import { ModelSelector } from "./ModelSelector";
 import { useChatContext } from "./ChatContext";
+import { InteractiveSurface } from "@/components/ui/interactive-surface";
 
 import { cn } from "@/lib/utils";
 
@@ -247,14 +248,12 @@ export function ChatComposer({ className }: ChatComposerProps) {
       )}
 
       {/* Main input container - single shared surface for textarea + action row */}
-      <div
-        className={`rounded-xl border bg-card overflow-hidden transition-[border-color,box-shadow,background-color] shadow-sm ${
-          isDragOver
-            ? "border-primary border-dashed shadow-[0_0_0_1px_hsl(var(--ring)/0.35)]"
-            : isUsageBlocked
-              ? "border-destructive/55"
-              : "border-border/90 focus-within:border-[hsl(var(--ring))]"
-        }`}
+      <InteractiveSurface
+        variant="field"
+        className={cn("rounded-xl overflow-hidden shadow-sm", {
+          "border-primary border-dashed bg-primary/5": isDragOver,
+          "border-destructive/55": !isDragOver && isUsageBlocked,
+        })}
       >
         {/* Textarea - inside container with proper padding */}
         <textarea
@@ -371,7 +370,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
             </Button>
           </div>
         </div>
-      </div>
+      </InteractiveSurface>
     </div>
   );
 }
