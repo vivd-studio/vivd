@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
@@ -6,6 +6,7 @@ import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
+import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { Loader2 } from "lucide-react";
 
@@ -145,27 +146,43 @@ export default function StudioFullscreen() {
     studioUrlQuery.data,
   ]);
 
-  useEffect(() => {
-    if (!projectSlug || !baseUrl) return;
+  const ensureStudioRunning = useCallback(async () => {
+    if (!projectSlug) {
+      return {
+        success: false as const,
+        error: "Missing project slug",
+      };
+    }
+    return startStudio.mutateAsync({ slug: projectSlug, version });
+  }, [projectSlug, startStudio, version]);
 
-    const heartbeat = () => {
+  const handleStudioRecovered = useCallback(
+    (next: { url: string; accessToken: string | null }) => {
+      setStudioReady(false);
+      setStudioLoadTimedOut(false);
+      setStudioLoadErrored(false);
+      setStudioUrlOverride(next.url);
+      setStudioAccessTokenOverride(next.accessToken);
+      setStudioReloadNonce((n) => n + 1);
+      if (!projectSlug) return;
+      void utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
+    },
+    [projectSlug, utils.project.getStudioUrl, version],
+  );
+
+  const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
+    enabled: Boolean(projectSlug && baseUrl && !hardRestartStudio.isPending),
+    studioBaseUrl: baseUrl,
+    touchStudio: () => {
+      if (!projectSlug) return;
       touchStudio.mutate({ slug: projectSlug, version });
-      const healthUrl = new URL("/health", baseUrl).toString();
-      void fetch(healthUrl, {
-        method: "GET",
-        mode: "cors",
-        cache: "no-store",
-      }).catch(() => {
-        // Keepalive is best-effort.
-      });
-    };
-
-    heartbeat();
-    const interval = window.setInterval(heartbeat, 30_000);
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [baseUrl, projectSlug, touchStudio.mutate, version]);
+    },
+    ensureStudioRunning,
+    onRecovered: handleStudioRecovered,
+    onRecoveryError: (message) => {
+      console.warn("[StudioFullscreen] Failed to wake studio runtime:", message);
+    },
+  });
 
   const syncThemeToStudio = () => {
     const targetWindow = studioIframeRef.current?.contentWindow;
@@ -321,6 +338,12 @@ export default function StudioFullscreen() {
         allow="fullscreen; clipboard-write"
         allowFullScreen
       />
+
+      {isStudioRecovering ? (
+        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
+          Reconnecting studio machine...
+        </div>
+      ) : null}
 
       {!studioReady ? (
         <div className="absolute inset-0 z-10 bg-background">

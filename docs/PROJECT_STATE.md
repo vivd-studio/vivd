@@ -18,6 +18,11 @@
 
 ## Latest Progress (Top 9)
 
+- 2026-03-17: hardened the frontend Studio runtime guard before commit: `useStudioRuntimeGuard` now ignores stale in-flight probes/recoveries when the target studio changes, avoids rerender-driven immediate-probe loops by decoupling internal effects from callback identity churn, adds focused regression tests for both behaviors, and is now also wired into `ProjectFullscreen` so assigned-project/single-project fullscreen flows recover suspended studios the same way as the other embed routes.
+- 2026-03-17: documented a clean-slate Studio chat replacement plan in `docs/opencode-chat-refactor-plan.md`; the plan explicitly favors a full OpenCode-aligned refactor over further patching of the current chat internals, keeps the Vivd React shell/composer UX, replaces the run-scoped server bridge and chat-local heuristic state model with a persistent canonical event/store architecture, and defines concrete module boundaries, migration phases, parity targets (`question`, permission, diff/review), and post-cutover deletion targets so future upstream implementation reuse stays straightforward.
+- 2026-03-17: documented a focused OpenCode chat/web-client integration review in `docs/opencode-chat-sync-analysis.md`, comparing Vivd's current Studio chat bridge against upstream OpenCode's normalized event/store model; the note now also captures concrete feature-parity gaps (`question`, permission, diff/review, session docks) and recommends keeping Vivd's custom chat UI while aligning transport/state/component boundaries as closely as practical with upstream OpenCode to ease future implementation reuse.
+- 2026-03-17: documented the local upstream OpenCode reference checkout in `AGENTS.md` (`vendor/opencode`) and added a concise note on the web split (`packages/web` docs, `packages/app` browser UI, `packages/opencode/src/cli/cmd/web.ts` entrypoint) to speed up Studio/OpenCode integration work.
+- 2026-02-26: added proactive Studio runtime suspension detection/recovery in control-plane embeds by introducing shared frontend liveness guard `useStudioRuntimeGuard` (focus/visibility probes + interval health checks + consecutive-failure threshold + cooldowned `startStudio` wake-up), and wired it into both embedded and fullscreen Studio pages so suspended machines are auto-woken and iframe sessions auto-reloaded before users continue editing/chatting.
 - 2026-02-25: hardened production Caddy reload consistency by adding a Caddy container entrypoint sync (`caddy/entrypoint.sh`) that refreshes `/etc/caddy_shared/Caddyfile` from `/etc/caddy/Caddyfile` on startup; this prevents stale named-volume Caddyfiles from dropping public plugin API routing (`/plugins/*`) during backend-triggered Caddy admin reloads.
 - 2026-02-25: reserved public plugin API hosts from publish-domain registration in `DomainService.validateDomainForRegistry` (configured `VIVD_PUBLIC_PLUGIN_API_HOST`, default `api.vivd.studio`, plus `api.localhost`) so tenant/publish domain claims cannot shadow dedicated plugin runtime routing.
 - 2026-02-25: added explicit production Caddy command in `docker-compose.prod.yml` (`caddy run --config /etc/caddy/Caddyfile --adapter caddyfile`) to prevent startup regressions when custom image entrypoints change; this keeps prod boot deterministic during image rollouts.
@@ -94,14 +99,15 @@
 
 ## Active Priorities
 
-1. Fix known failing Fly integration: `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts`.
-2. Implement reversible project archiving per `docs/project-archive-plan.md`.
-3. Execute SSE migration Phase 1 per `docs/sse-polling-plan.md`.
-4. Implement superadmin project-transfer flow per `docs/superadmin-project-transfer-plan.md`.
-5. Implement app-login landing + post-login tenant redirect per `docs/app-login-landing-plan.md`.
-6. Validate lifecycle sync hardening in real Fly runs (including larger OpenCode payloads).
-7. Add Phase 4 E2E smoke coverage for critical cross-service flows.
-8. Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
+1. Execute the clean OpenCode-aligned Studio chat refactor plan in `docs/opencode-chat-refactor-plan.md`.
+2. Fix known failing Fly integration: `packages/backend/test/integration/fly_opencode_rehydrate_revert.test.ts`.
+3. Implement reversible project archiving per `docs/project-archive-plan.md`.
+4. Execute SSE migration Phase 1 per `docs/sse-polling-plan.md`.
+5. Implement superadmin project-transfer flow per `docs/superadmin-project-transfer-plan.md`.
+6. Implement app-login landing + post-login tenant redirect per `docs/app-login-landing-plan.md`.
+7. Validate lifecycle sync hardening in real Fly runs (including larger OpenCode payloads).
+8. Add Phase 4 E2E smoke coverage for critical cross-service flows.
+9. Finish object-storage source-of-truth migration in backend (remove remaining local-FS assumptions).
 
 ## Open Decisions
 
