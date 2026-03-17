@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess, execSync, spawnSync } from "node:child_process";
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2";
 import os from "node:os";
 import * as path from "node:path";
 import fs from "node:fs";

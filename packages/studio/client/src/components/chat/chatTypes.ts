@@ -1,4 +1,8 @@
 import type { MouseEvent } from "react";
+import type {
+  OpenCodeQuestionAnswer,
+  OpenCodeQuestionRequest,
+} from "@/features/opencodeChat";
 
 export interface Session {
   id: string;
@@ -118,6 +122,7 @@ export interface ChatContextValue {
   selectorModeAvailable: boolean;
   isReverted: boolean;
   isLoading: boolean;
+  activeQuestionRequest: OpenCodeQuestionRequest | null;
   sessionDebugState: SessionDebugState;
   sessionError: SessionError | null;
   clearSessionError: () => void;
@@ -126,7 +131,16 @@ export interface ChatContextValue {
   availableModels: ModelTier[];
   selectedModel: ModelTier | null;
   setSelectedModel: (model: ModelTier | null) => void;
+  initialGenerationRequested: boolean;
+  initialGenerationStarting: boolean;
+  initialGenerationFailed: string | null;
+  retryInitialGeneration: () => void;
   handleSend: () => void;
+  handleReplyQuestion: (
+    requestId: string,
+    answers: OpenCodeQuestionAnswer[],
+  ) => Promise<void>;
+  handleRejectQuestion: (requestId: string) => Promise<void>;
   handleContinueSession: () => void;
   handleNewSession: () => void;
   handleDeleteSession: (e: MouseEvent, sessionId: string) => void;

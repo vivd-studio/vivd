@@ -36,6 +36,7 @@ export default function StudioFullscreen() {
     [location.search],
   );
   const versionOverrideRaw = urlParams.get("version");
+  const initialGenerationRequested = urlParams.get("initialGeneration") === "1";
   const versionOverride = versionOverrideRaw
     ? Number.parseInt(versionOverrideRaw, 10)
     : NaN;
@@ -43,6 +44,7 @@ export default function StudioFullscreen() {
     Number.isFinite(versionOverride) && versionOverride > 0
       ? versionOverride
       : currentVersion;
+  const initialGenerationBootstrapKeyRef = useRef<string | null>(null);
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -147,6 +149,16 @@ export default function StudioFullscreen() {
     studioUrlQuery.data,
   ]);
 
+  useEffect(() => {
+    initialGenerationBootstrapKeyRef.current = null;
+  }, [
+    baseUrl,
+    initialGenerationRequested,
+    projectSlug,
+    studioReloadNonce,
+    version,
+  ]);
+
   const ensureStudioRunning = useCallback(async () => {
     if (!projectSlug) {
       return {
@@ -194,6 +206,34 @@ export default function StudioFullscreen() {
     );
   };
 
+  const sendInitialGenerationBootstrap = useCallback(() => {
+    if (!initialGenerationRequested) return;
+
+    const targetWindow = studioIframeRef.current?.contentWindow;
+    if (!targetWindow) return;
+
+    const key = `${projectSlug || ""}:${version}:${baseUrl || ""}:${studioReloadNonce}`;
+    if (initialGenerationBootstrapKeyRef.current === key) {
+      return;
+    }
+
+    initialGenerationBootstrapKeyRef.current = key;
+    targetWindow.postMessage(
+      {
+        type: "vivd:host:start-initial-generation",
+        projectSlug,
+        version,
+      },
+      "*",
+    );
+  }, [
+    initialGenerationRequested,
+    projectSlug,
+    baseUrl,
+    studioReloadNonce,
+    version,
+  ]);
+
   useEffect(() => {
     syncThemeToStudio();
   }, [theme, colorTheme]);
@@ -207,10 +247,16 @@ export default function StudioFullscreen() {
       if (type === "vivd:studio:ready") {
         setStudioReady(true);
         syncThemeToStudio();
+        sendInitialGenerationBootstrap();
         return;
       }
       if (type === "vivd:studio:close" || type === "vivd:studio:exitFullscreen") {
-        navigate(`${ROUTES.PROJECT(projectSlug!)}?view=studio&version=${version}`);
+        const params = new URLSearchParams({
+          view: "studio",
+          version: String(version),
+          ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+        });
+        navigate(`${ROUTES.PROJECT(projectSlug!)}?${params.toString()}`);
         return;
       }
       if (type === "vivd:studio:navigate") {
@@ -241,7 +287,9 @@ export default function StudioFullscreen() {
     return () => window.removeEventListener("message", onMessage);
   }, [
     navigate,
+    initialGenerationRequested,
     projectSlug,
+    sendInitialGenerationBootstrap,
     setColorTheme,
     setTheme,
     version,
@@ -254,11 +302,19 @@ export default function StudioFullscreen() {
     url.searchParams.set("fullscreen", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(version));
+    if (initialGenerationRequested) {
+      url.searchParams.set("initialGeneration", "1");
+    }
     url.searchParams.set("hostOrigin", window.location.origin);
+    const returnToParams = new URLSearchParams({
+      view: "studio",
+      version: String(version),
+      ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+    });
     url.searchParams.set(
       "returnTo",
       new URL(
-        `${ROUTES.PROJECT(projectSlug || "")}?view=studio&version=${version}`,
+        `${ROUTES.PROJECT(projectSlug || "")}?${returnToParams.toString()}`,
         window.location.origin,
       ).toString(),
     );
@@ -269,7 +325,7 @@ export default function StudioFullscreen() {
       url.hash = hashParams.toString();
     }
     return url.toString();
-  }, [baseUrl, projectSlug, studioAccessToken, version]);
+  }, [baseUrl, initialGenerationRequested, projectSlug, studioAccessToken, version]);
 
   useEffect(() => {
     if (!studioIframeSrc) {

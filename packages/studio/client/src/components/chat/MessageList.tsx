@@ -7,6 +7,7 @@ import {
   Undo2,
   AlertTriangle,
   AlertCircle,
+  Loader2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -31,6 +32,10 @@ import {
   sanitizeThoughtText,
   normalizeToolStatus,
 } from "./chatStreamUtils";
+import {
+  buildSessionErrorNotice,
+  type SessionErrorNoticeContent,
+} from "./sessionErrorNotice";
 
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 80;
 
@@ -46,17 +51,23 @@ export function MessageList() {
     isReverted,
     setInput,
     handleContinueSession,
+    activeQuestionRequest,
     sessionError,
     clearSessionError,
     sessionDebugState,
     usageLimitStatus,
     isUsageBlocked,
+    initialGenerationRequested,
+    initialGenerationStarting,
+    initialGenerationFailed,
+    retryInitialGeneration,
   } = useChatContext();
   const opencodeChat = useOpencodeChat();
   const selectedMessages = opencodeChat.selectedMessages;
 
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
   const [showRevertNotice, setShowRevertNotice] = useState(false);
+  const [sessionErrorNow, setSessionErrorNow] = useState(() => Date.now());
   const [workedOpenRunIds, setWorkedOpenRunIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -207,6 +218,22 @@ export function MessageList() {
     }
   }, [selectedMessages, isRunInProgress]);
 
+  useEffect(() => {
+    if (
+      sessionError?.type !== "retry" ||
+      typeof sessionError.nextRetryAt !== "number"
+    ) {
+      return;
+    }
+
+    setSessionErrorNow(Date.now());
+    const timer = window.setInterval(() => {
+      setSessionErrorNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [sessionError?.type, sessionError?.nextRetryAt]);
+
   const timeline = useMemo(
     () =>
       buildCanonicalTimelineModel({
@@ -216,6 +243,14 @@ export function MessageList() {
         isWaiting,
       }),
     [selectedMessages, opencodeChat.sessionStatus, isRunInProgress, isWaiting],
+  );
+
+  const sessionErrorNotice = useMemo(
+    () =>
+      sessionError
+        ? buildSessionErrorNotice(sessionError, sessionErrorNow)
+        : null,
+    [sessionError, sessionErrorNow],
   );
 
   useEffect(() => {
@@ -310,12 +345,14 @@ export function MessageList() {
   }, [timeline.items, isRunInProgress]);
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
-  const shouldShowInterruptedContinue = shouldSuggestInterruptedContinueFromRecords({
-    sessionStatus: sessionDebugState.sessionStatus,
-    messages: selectedMessages,
-    isThinking,
-    isLoading,
-  });
+  const shouldShowInterruptedContinue =
+    !activeQuestionRequest &&
+    shouldSuggestInterruptedContinueFromRecords({
+      sessionStatus: sessionDebugState.sessionStatus,
+      messages: selectedMessages,
+      isThinking,
+      isLoading,
+    });
 
   return (
     <ScrollArea className="flex-1" ref={scrollRef}>
@@ -347,7 +384,13 @@ export function MessageList() {
               <LoadingSpinner message="Loading session..." />
             </div>
           ) : (
-            <EmptyStatePrompt onSuggestionClick={onSuggestionClick} />
+            <EmptyStatePrompt
+              onSuggestionClick={onSuggestionClick}
+              initialGenerationRequested={initialGenerationRequested}
+              initialGenerationStarting={initialGenerationStarting}
+              initialGenerationFailed={initialGenerationFailed}
+              onRetryInitialGeneration={retryInitialGeneration}
+            />
           ))}
 
         {timeline.items.map((item) =>
@@ -431,37 +474,11 @@ export function MessageList() {
             </div>
           )}
 
-        {sessionError && (
-          <div className="flex justify-center py-2">
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
-              <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm text-destructive">
-                  {sessionError.type === "retry" ||
-                  sessionError.type === "provider_limit" ||
-                  sessionError.type === "stream"
-                    ? "Temporary Issue"
-                    : "Session Error"}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1 break-words">
-                  {sessionError.message}
-                </p>
-                {sessionError.attempt && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Attempt #{sessionError.attempt}
-                  </p>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0 h-6 w-6 p-0"
-                onClick={clearSessionError}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+        {sessionErrorNotice && (
+          <SessionStatusNotice
+            notice={sessionErrorNotice}
+            onDismiss={clearSessionError}
+          />
         )}
 
         {isReverted && (
@@ -493,6 +510,7 @@ export function MessageList() {
         {!shouldShowInterruptedContinue &&
           selectedMessages.length > 0 &&
           timeline.items[timeline.items.length - 1]?.kind === "agent" &&
+          !activeQuestionRequest &&
           !isThinking &&
           !isLoading && (
             <SessionDivider label="Done" className="mb-0" />
@@ -667,6 +685,61 @@ function AgentMessageRow({
           isStreaming={item.runInProgress}
         />
       )}
+    </div>
+  );
+}
+
+function SessionStatusNotice({
+  notice,
+  onDismiss,
+}: {
+  notice: SessionErrorNoticeContent;
+  onDismiss: () => void;
+}) {
+  const accentClass =
+    notice.tone === "warning" ? "before:bg-amber-500/80" : "before:bg-destructive/80";
+  const iconClass =
+    notice.tone === "warning"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-destructive";
+
+  return (
+    <div className="flex flex-col gap-1 w-full items-start chat-row-enter">
+      <div
+        className={`relative w-full max-w-lg overflow-hidden rounded-md border border-border/50 bg-muted/20 pl-4 pr-2 py-2 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:rounded-full ${accentClass}`}
+      >
+        <div className="flex items-start gap-2">
+          <div className={`mt-0.5 shrink-0 ${iconClass}`}>
+            {notice.showSpinner ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : notice.tone === "warning" ? (
+              <AlertCircle className="h-3.5 w-3.5" />
+            ) : (
+              <AlertTriangle className="h-3.5 w-3.5" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium leading-5 text-foreground break-words">
+              {notice.title}
+            </p>
+            {notice.detail && (
+              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground break-words">
+                {notice.detail}
+              </p>
+            )}
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 shrink-0 p-0 text-muted-foreground/70 hover:text-foreground"
+            onClick={onDismiss}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

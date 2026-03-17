@@ -9,6 +9,10 @@ describe("DomainService organization slug validation", () => {
     expect(RESERVED_ORG_SLUG_LABELS).toContain("api");
   });
 
+  it("keeps docs slug reserved", () => {
+    expect(RESERVED_ORG_SLUG_LABELS).toContain("docs");
+  });
+
   it("rejects every reserved slug label", () => {
     for (const label of RESERVED_ORG_SLUG_LABELS) {
       expect(validateOrganizationSlug(label)).toEqual({

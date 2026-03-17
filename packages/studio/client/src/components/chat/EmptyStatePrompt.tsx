@@ -1,8 +1,13 @@
-import { Sparkles, Palette, Type } from "lucide-react";
-import { ChatComposer } from "./ChatComposer";
+import { Loader2, Palette, Sparkles, Type } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChatInputRegion } from "./ChatInputRegion";
 
 interface EmptyStatePromptProps {
   onSuggestionClick?: (suggestion: string) => void;
+  initialGenerationRequested?: boolean;
+  initialGenerationStarting?: boolean;
+  initialGenerationFailed?: string | null;
+  onRetryInitialGeneration?: () => void;
 }
 
 const suggestions = [
@@ -11,7 +16,13 @@ const suggestions = [
   { icon: Sparkles, text: "Make the design more modern" },
 ];
 
-export function EmptyStatePrompt({ onSuggestionClick }: EmptyStatePromptProps) {
+export function EmptyStatePrompt({
+  onSuggestionClick,
+  initialGenerationRequested = false,
+  initialGenerationStarting = false,
+  initialGenerationFailed = null,
+  onRetryInitialGeneration,
+}: EmptyStatePromptProps) {
   return (
     <div className="flex flex-col items-center text-center py-8 h-full">
       {/* Header */}
@@ -22,9 +33,34 @@ export function EmptyStatePrompt({ onSuggestionClick }: EmptyStatePromptProps) {
         <h3 className="text-lg font-semibold mb-2">Where should we begin?</h3>
       </div>
 
+      {initialGenerationRequested ? (
+        <div className="mb-6 flex w-full max-w-md flex-col items-center gap-3 px-6">
+          {initialGenerationStarting ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Starting initial site generation...
+            </div>
+          ) : null}
+          {initialGenerationFailed ? (
+            <div className="flex w-full flex-col items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3">
+              <div className="text-sm text-destructive">
+                Initial generation did not start: {initialGenerationFailed}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetryInitialGeneration}
+              >
+                Retry initial generation
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Unified Chat Composer */}
       <div className="w-full mb-8">
-        <ChatComposer className="p-0" />
+        <ChatInputRegion composerClassName="p-0" />
       </div>
 
       {/* Subtle suggestions - no background, just text */}

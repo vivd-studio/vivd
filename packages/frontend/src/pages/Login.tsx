@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { ROUTES } from "@/app/router/paths"
+import { getDocsUrl } from "@/lib/docsUrl"
 
 const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -22,6 +23,7 @@ export default function Login() {
     const [searchParams] = useSearchParams()
     const wasReset = searchParams.get("reset") === "success"
     const wasVerified = searchParams.get("verified") === "1"
+    const docsUrl = getDocsUrl("/")
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: {
@@ -107,6 +109,13 @@ export default function Login() {
                             <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
                                 {form.formState.isSubmitting ? "Logging in..." : "Login"}
                             </Button>
+
+                            <p className="text-center text-xs text-muted-foreground">
+                                New to Vivd?{" "}
+                                <a href={docsUrl} className="underline underline-offset-4 hover:text-foreground">
+                                    Read the product docs
+                                </a>
+                            </p>
                         </form>
                     </Form>
                 </CardContent>

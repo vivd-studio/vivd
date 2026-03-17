@@ -17,6 +17,17 @@
 # Import all dynamically-generated site configs
 import /etc/caddy/sites.d/*.caddy
 
+# Public docs host
+http://{$VIVD_DOCS_HOST:docs.vivd.studio} {
+    handle /health {
+        respond "OK" 200
+    }
+
+    handle {
+        reverse_proxy docs:80
+    }
+}
+
 # Public plugin API host – use http:// because TLS is terminated by Traefik,
 # so Caddy receives these requests on port 80.
 http://{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}, http://api.localhost {

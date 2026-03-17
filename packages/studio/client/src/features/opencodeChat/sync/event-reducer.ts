@@ -4,6 +4,7 @@ import type {
   OpenCodeChatState,
   OpenCodeMessage,
   OpenCodePart,
+  OpenCodeQuestionRequest,
   OpenCodeSession,
   OpenCodeSessionMessageRecord,
   OpenCodeSessionStatus,
@@ -59,6 +60,12 @@ function sortMessageIds(
 
 function sortParts(parts: OpenCodePart[]): OpenCodePart[] {
   return [...parts].sort((left, right) => compareStrings(left.id, right.id));
+}
+
+function sortQuestionRequests(
+  questions: OpenCodeQuestionRequest[],
+): OpenCodeQuestionRequest[] {
+  return [...questions].sort((left, right) => compareStrings(left.id, right.id));
 }
 
 function upsertSession(
@@ -148,6 +155,52 @@ function upsertPart(
       ...state.partsByMessageId,
       [part.messageID]: nextParts,
     },
+  };
+}
+
+function upsertQuestionRequest(
+  state: OpenCodeChatState,
+  question: OpenCodeQuestionRequest,
+): OpenCodeChatState {
+  const currentQuestions = state.questionRequestsBySessionId[question.sessionID] ?? [];
+  const nextQuestions = currentQuestions.some((current) => current.id === question.id)
+    ? currentQuestions.map((current) =>
+        current.id === question.id ? { ...current, ...question } : current,
+      )
+    : sortQuestionRequests([...currentQuestions, question]);
+
+  return {
+    ...state,
+    questionRequestsBySessionId: {
+      ...state.questionRequestsBySessionId,
+      [question.sessionID]: nextQuestions,
+    },
+  };
+}
+
+function removeQuestionRequest(
+  state: OpenCodeChatState,
+  sessionId: string,
+  requestId: string,
+): OpenCodeChatState {
+  const currentQuestions = state.questionRequestsBySessionId[sessionId] ?? [];
+  if (currentQuestions.length === 0) return state;
+
+  const nextQuestions = currentQuestions.filter((question) => question.id !== requestId);
+  if (nextQuestions.length === currentQuestions.length) {
+    return state;
+  }
+
+  const questionRequestsBySessionId = { ...state.questionRequestsBySessionId };
+  if (nextQuestions.length === 0) {
+    delete questionRequestsBySessionId[sessionId];
+  } else {
+    questionRequestsBySessionId[sessionId] = nextQuestions;
+  }
+
+  return {
+    ...state,
+    questionRequestsBySessionId,
   };
 }
 
@@ -256,10 +309,13 @@ function applyCanonicalEvent(
       delete sessionsById[session.id];
       const sessionStatusById = { ...nextState.sessionStatusById };
       delete sessionStatusById[session.id];
+      const questionRequestsBySessionId = { ...nextState.questionRequestsBySessionId };
+      delete questionRequestsBySessionId[session.id];
       return {
         ...nextState,
         sessionsById,
         sessionStatusById,
+        questionRequestsBySessionId,
         sessionOrder: sortSessionIds(sessionsById),
       };
     }
@@ -325,6 +381,22 @@ function applyCanonicalEvent(
         field: props.field,
         delta: props.delta,
       });
+    }
+
+    case "question.asked": {
+      const question = (event.properties ?? {}) as OpenCodeQuestionRequest;
+      if (!question?.id || !question.sessionID) return nextState;
+      return upsertQuestionRequest(nextState, question);
+    }
+
+    case "question.replied":
+    case "question.rejected": {
+      const props = (event.properties ?? {}) as {
+        sessionID?: string;
+        requestID?: string;
+      };
+      if (!props.sessionID || !props.requestID) return nextState;
+      return removeQuestionRequest(nextState, props.sessionID, props.requestID);
     }
 
     default:

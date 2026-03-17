@@ -13,6 +13,13 @@ describe("openCodeChatReducer", () => {
       statuses: {
         "sess-1": { type: "busy" },
       },
+      questions: [
+        {
+          id: "que-1",
+          sessionID: "sess-1",
+          questions: [],
+        },
+      ],
       messages: [
         {
           info: {
@@ -46,6 +53,8 @@ describe("openCodeChatReducer", () => {
     expect(selectMessagesForSession(next, "sess-1")[0]?.parts[0]?.text).toBe(
       "hello",
     );
+    expect(next.questionRequestsBySessionId["sess-1"]?.map((request) => request.id))
+      .toEqual(["que-1"]);
   });
 
   it("applies canonical message and part events into the normalized store", () => {
@@ -199,6 +208,7 @@ describe("openCodeChatReducer", () => {
       payload: {
         sessions: [],
         statuses: {},
+        questions: [],
         messages: [
           {
             info: {
@@ -232,5 +242,35 @@ describe("openCodeChatReducer", () => {
     });
 
     expect(selectMessagesForSession(removed, "sess-1")).toEqual([]);
+  });
+
+  it("tracks question request lifecycle events", () => {
+    const asked = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "event.received",
+      payload: {
+        type: "question.asked",
+        properties: {
+          id: "que-2",
+          sessionID: "sess-1",
+          questions: [{ header: "A", question: "Pick one", options: [] }],
+        },
+      },
+    });
+
+    expect(asked.questionRequestsBySessionId["sess-1"]?.map((request) => request.id))
+      .toEqual(["que-2"]);
+
+    const replied = openCodeChatReducer(asked, {
+      type: "event.received",
+      payload: {
+        type: "question.replied",
+        properties: {
+          sessionID: "sess-1",
+          requestID: "que-2",
+        },
+      },
+    });
+
+    expect(replied.questionRequestsBySessionId["sess-1"]).toBeUndefined();
   });
 });

@@ -15,6 +15,7 @@ import {
   unrevertSession,
 } from "../opencode/index.js";
 import { validateModelSelection } from "../opencode/modelConfig.js";
+import { initialGenerationService } from "../services/initialGeneration/InitialGenerationService.js";
 import {
   CHECKLIST_PROMPT,
   CHECKLIST_ITEMS,
@@ -276,6 +277,34 @@ export const agentRouter = router({
       );
 
       return { success: true, sessionId: result.sessionId, version: input.version ?? 1 };
+    }),
+
+  startInitialGeneration: publicProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+        model: z
+          .object({
+            provider: z.string(),
+            modelId: z.string(),
+          })
+          .optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const directory = getWorkspaceDir(ctx);
+
+      const validatedModel = input.model
+        ? validateModelSelection(input.model) ?? input.model
+        : undefined;
+
+      return await initialGenerationService.startInitialGeneration({
+        projectSlug: input.projectSlug,
+        version: input.version ?? 1,
+        workspaceDir: directory,
+        model: validatedModel,
+      });
     }),
 
   listSessions: publicProcedure

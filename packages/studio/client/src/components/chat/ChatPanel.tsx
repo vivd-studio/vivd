@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
-import { ChatComposer } from "./ChatComposer";
+import { ChatInputRegion } from "./ChatInputRegion";
 import { OpencodeChatProvider } from "@/features/opencodeChat";
 import {
   ChatProvider,
@@ -165,7 +165,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
 
       <MessageList />
 
-      {messageCount > 0 && <ChatComposer />}
+      {messageCount > 0 && <ChatInputRegion />}
 
       {/* Debug display for session state (admin only) */}
       <SessionDebugDisplay debug={sessionDebugState} />

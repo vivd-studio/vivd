@@ -14,6 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { scratchSchema, type ScratchValues, type StylePreset } from "./types";
 
 type SiteTheme = "dark" | "light" | null;
@@ -168,6 +169,7 @@ async function uploadFilesBatched(
 export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
+  const { config } = useAppConfig();
 
   // Set document title
   useEffect(() => {
@@ -383,9 +385,28 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
         // Step 3: Start generation
         setUploadPhase("starting");
-        await startGeneration({ slug, version });
+        const generationResult = await startGeneration({ slug, version });
 
         setUploadPhase("generating");
+
+        if (
+          "studioHandoff" in generationResult &&
+          generationResult.studioHandoff?.mode === "studio_astro"
+        ) {
+          utils.project.list.invalidate();
+
+          const params = new URLSearchParams({
+            version: String(version),
+            initialGeneration: "1",
+          });
+
+          const destination = config.singleProjectMode
+            ? `${ROUTES.PROJECT_STUDIO_FULLSCREEN(slug)}?${params.toString()}`
+            : `${ROUTES.PROJECT(slug)}?view=studio&${params.toString()}`;
+
+          navigate(destination);
+          return;
+        }
       } catch (error) {
         setUploadPhase("idle");
         console.error("Scratch generation error:", error);
@@ -403,6 +424,8 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       referenceUrls,
       createDraft,
       startGeneration,
+      config.singleProjectMode,
+      navigate,
       utils.project.list,
     ],
   );
@@ -426,6 +449,8 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     if (status === "uploading_assets") return 35;
     if (status === "capturing_references") return 50;
     if (status === "analyzing_images") return 60;
+    if (status === "starting_studio") return 70;
+    if (status === "generating_initial_site") return 85;
     if (status === "generating_html") return 75;
     if (status === "completed") return 100;
     if (status === "failed") return 100;

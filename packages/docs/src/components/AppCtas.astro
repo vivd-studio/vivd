@@ -1,0 +1,71 @@
+---
+const {
+  title = "Open Vivd",
+  description = "Jump into the control plane, log in, or create your first workspace.",
+} = Astro.props;
+
+const fallbackBaseUrl = "https://app.vivd.studio/vivd-studio";
+const fallbackLoginUrl = `${fallbackBaseUrl}/login`;
+const fallbackSignupUrl = `${fallbackBaseUrl}/signup`;
+---
+
+<section class="app-ctas">
+  <div class="app-ctas-copy">
+    <p class="eyebrow">Try it</p>
+    <h2>{title}</h2>
+    <p>{description}</p>
+  </div>
+  <div class="app-ctas-links">
+    <a class="button-primary" data-app-link="login" href={fallbackLoginUrl}>Log in</a>
+    <a class="button-secondary" data-app-link="signup" href={fallbackSignupUrl}>Create account</a>
+    <a class="button-tertiary" data-app-link="studio" href={fallbackBaseUrl}>Open Studio</a>
+  </div>
+</section>
+
+<script is:inline>
+  const inferScheme = (host) => {
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local") ||
+      host.endsWith(".nip.io")
+    ) {
+      return "http";
+    }
+
+    return "https";
+  };
+
+  const buildAppOrigin = (host) => {
+    if (!host || host === "localhost" || host.endsWith(".localhost")) {
+      return "http://localhost";
+    }
+
+    if (host.startsWith("docs.")) {
+      return `${inferScheme(host)}://app.${host.slice("docs.".length)}`;
+    }
+
+    const firstDot = host.indexOf(".");
+    if (firstDot === -1) {
+      return "https://app.vivd.studio";
+    }
+
+    return `${inferScheme(host)}://app.${host.slice(firstDot + 1)}`;
+  };
+
+  const appBaseUrl = `${buildAppOrigin(window.location.hostname)}/vivd-studio`;
+  const targets = {
+    login: `${appBaseUrl}/login`,
+    signup: `${appBaseUrl}/signup`,
+    studio: appBaseUrl,
+  };
+
+  document.querySelectorAll("[data-app-link]").forEach((node) => {
+    const key = node.getAttribute("data-app-link");
+    const href = key ? targets[key] : null;
+    if (href) {
+      node.setAttribute("href", href);
+    }
+  });
+</script>

@@ -57,6 +57,8 @@ export function ChatProvider({
   onTaskComplete,
 }: ChatProviderProps) {
   const previewContext = useOptionalPreview();
+  const initialGenerationRequested =
+    previewContext?.initialGenerationRequested ?? false;
 
   const selectorMode = previewContext?.selectorMode ?? false;
   const setSelectorMode = previewContext?.setSelectorMode;
@@ -79,6 +81,10 @@ export function ChatProvider({
   });
 
   const [input, setInput] = useState("");
+  const [initialGenerationStarting, setInitialGenerationStarting] = useState(false);
+  const [initialGenerationFailed, setInitialGenerationFailed] = useState<string | null>(
+    null,
+  );
   const {
     confirmDialog,
     requestConfirm,
@@ -146,6 +152,7 @@ export function ChatProvider({
     sessionStatusType,
     isSessionHydrating,
     isReverted,
+    activeQuestionRequest,
     usage,
     sessionError,
     clearSessionError,
@@ -159,7 +166,10 @@ export function ChatProvider({
     lastEventTime,
     lastEventType,
     lastEventId,
+    refetchSessions,
     sendTask,
+    replyQuestion,
+    rejectQuestion,
     deleteSession,
     revertToMessage,
     unrevertSession,
@@ -175,6 +185,9 @@ export function ChatProvider({
       : null,
     onTaskComplete,
   });
+
+  const startInitialGenerationMutation =
+    trpc.agent.startInitialGeneration.useMutation();
 
   useEffect(() => {
     if (selectedElement && clearSelectedElement) {
@@ -200,6 +213,46 @@ export function ChatProvider({
 
     clearPending();
 
+    if (pending.kind === "initialGeneration") {
+      void (async () => {
+        if (
+          activeQuestionRequest ||
+          isThinking ||
+          runTaskPending ||
+          isSending ||
+          initialGenerationStarting
+        ) {
+          return;
+        }
+
+        try {
+          setInitialGenerationStarting(true);
+          setInitialGenerationFailed(null);
+          clearSessionError();
+
+          const result = await startInitialGenerationMutation.mutateAsync({
+            projectSlug,
+            version,
+            model: selectedModel
+              ? {
+                  provider: selectedModel.provider,
+                  modelId: selectedModel.modelId,
+                }
+              : undefined,
+          });
+
+          setSelectedSessionId(result.sessionId);
+          void refetchSessions();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setInitialGenerationFailed(message);
+        } finally {
+          setInitialGenerationStarting(false);
+        }
+      })();
+      return;
+    }
+
     const { message: pendingMessage, startNewSession } = pending;
     const targetSessionId = startNewSession ? null : selectedSessionId;
 
@@ -213,11 +266,71 @@ export function ChatProvider({
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
-    selectedSessionId,
+    activeQuestionRequest,
     clearSessionError,
+    initialGenerationStarting,
+    isSending,
+    isThinking,
+    projectSlug,
+    refetchSessions,
+    runTaskPending,
+    selectedModel,
+    selectedSessionId,
     sendTask,
     setSelectedSessionId,
+    startInitialGenerationMutation,
+    version,
   ]);
+
+  const retryInitialGeneration = useCallback(() => {
+    if (initialGenerationStarting) return;
+
+    previewContext?.clearPendingChatMessage?.();
+    previewContext?.setChatOpen(true);
+    setInitialGenerationFailed(null);
+
+    void (async () => {
+      try {
+        setInitialGenerationStarting(true);
+        clearSessionError();
+
+        const result = await startInitialGenerationMutation.mutateAsync({
+          projectSlug,
+          version,
+          model: selectedModel
+            ? {
+                provider: selectedModel.provider,
+                modelId: selectedModel.modelId,
+              }
+            : undefined,
+        });
+
+        setSelectedSessionId(result.sessionId);
+        void refetchSessions();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setInitialGenerationFailed(message);
+      } finally {
+        setInitialGenerationStarting(false);
+      }
+    })();
+  }, [
+    clearSessionError,
+    initialGenerationStarting,
+    previewContext,
+    projectSlug,
+    refetchSessions,
+    selectedModel,
+    setSelectedSessionId,
+    startInitialGenerationMutation,
+    version,
+  ]);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      setInitialGenerationFailed(null);
+    }
+  }, [selectedSessionId]);
 
   const handleSend = async () => {
     if (
@@ -225,6 +338,7 @@ export function ChatProvider({
         !attachedElement &&
         attachedImages.length === 0 &&
         attachedFiles.length === 0) ||
+      activeQuestionRequest ||
       isThinking ||
       runTaskPending ||
       isSending
@@ -248,6 +362,7 @@ export function ChatProvider({
   const handleContinueSession = useCallback(() => {
     if (
       !selectedSessionId ||
+      activeQuestionRequest ||
       isThinking ||
       runTaskPending ||
       isSending ||
@@ -259,12 +374,27 @@ export function ChatProvider({
     sendTask("continue", selectedSessionId);
   }, [
     selectedSessionId,
+    activeQuestionRequest,
     isThinking,
     runTaskPending,
     isSending,
     isUsageBlocked,
     sendTask,
   ]);
+
+  const handleReplyQuestion = useCallback(
+    async (requestId: string, answers: string[][]) => {
+      await replyQuestion(requestId, answers);
+    },
+    [replyQuestion],
+  );
+
+  const handleRejectQuestion = useCallback(
+    async (requestId: string) => {
+      await rejectQuestion(requestId);
+    },
+    [rejectQuestion],
+  );
 
   const handleNewSession = useCallback(() => {
     setSelectedSessionId(null);
@@ -362,7 +492,8 @@ export function ChatProvider({
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,
     isReverted,
-    isLoading: runTaskPending || isSending,
+    isLoading: runTaskPending || isSending || initialGenerationStarting,
+    activeQuestionRequest,
     sessionDebugState,
     sessionError,
     clearSessionError,
@@ -371,7 +502,13 @@ export function ChatProvider({
     availableModels,
     selectedModel,
     setSelectedModel,
+    initialGenerationRequested,
+    initialGenerationStarting,
+    initialGenerationFailed,
+    retryInitialGeneration,
     handleSend,
+    handleReplyQuestion,
+    handleRejectQuestion,
     handleContinueSession,
     handleNewSession,
     handleDeleteSession,

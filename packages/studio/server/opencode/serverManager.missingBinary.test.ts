@@ -4,7 +4,7 @@ const { createOpencodeClientMock } = vi.hoisted(() => ({
   createOpencodeClientMock: vi.fn(),
 }));
 
-vi.mock("@opencode-ai/sdk", () => ({
+vi.mock("@opencode-ai/sdk/v2", () => ({
   createOpencodeClient: createOpencodeClientMock,
 }));
 

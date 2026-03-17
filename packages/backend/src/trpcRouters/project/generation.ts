@@ -17,7 +17,7 @@ import {
 } from "../../generator/versionUtils";
 import { createGenerationContext } from "../../generator/core/context";
 import { runScratchFlow } from "../../generator/flows/scratchFlow";
-import { validateConfig } from "../../generator/config";
+import { OPENROUTER_API_KEY, validateConfig } from "../../generator/config";
 import fs from "fs";
 import path from "path";
 import { publishService } from "../../services/publish/PublishService";
@@ -36,6 +36,14 @@ import {
 import { getObjectDownloadUrl } from "../../services/storage/ObjectStorageService";
 import { thumbnailService } from "../../services/project/ThumbnailService";
 import { alignProjectArtifactKeyToSlug } from "../../services/project/slugRename";
+import { analyzeImages } from "../../generator/image_analyzer";
+import { scraperClient } from "../../generator/scraper-client";
+import {
+  applyScratchAstroStarter,
+  createScratchInitialGenerationManifest,
+  getScratchCreationMode,
+  writeInitialGenerationManifest,
+} from "../../generator/initialGeneration";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -105,6 +113,59 @@ async function syncArtifactsAfterGeneration(options: {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[Thumbnail] Post-sync generation failed: ${msg}`);
   }
+}
+
+async function syncSourceArtifactForStudioStart(options: {
+  versionDir: string;
+  organizationId: string;
+  slug: string;
+  version: number;
+}): Promise<void> {
+  const projectConfig = detectProjectType(options.versionDir);
+  const commitHash = await gitService.getCurrentCommit(options.versionDir);
+
+  await uploadProjectSourceToBucket({
+    organizationId: options.organizationId,
+    versionDir: options.versionDir,
+    slug: options.slug,
+    version: options.version,
+    meta: {
+      status: "ready",
+      framework: projectConfig.framework,
+      commitHash: commitHash ?? undefined,
+      completedAt: new Date().toISOString(),
+    },
+  });
+}
+
+async function prepareScratchStudioGeneration(options: {
+  organizationId: string;
+  slug: string;
+  versionDir: string;
+  referenceUrls?: string[];
+}): Promise<void> {
+  const normalizedReferenceUrls = normalizeReferenceUrls(options.referenceUrls);
+
+  if (normalizedReferenceUrls?.length) {
+    await scraperClient.captureScreenshots(
+      normalizedReferenceUrls,
+      options.versionDir,
+      4,
+    );
+  }
+
+  if (OPENROUTER_API_KEY) {
+    await analyzeImages(options.versionDir, {
+      flowId: "scratch",
+      organizationId: options.organizationId,
+      projectSlug: options.slug,
+    });
+    return;
+  }
+
+  console.warn(
+    `[ScratchStudio] Skipping image analysis for ${options.slug} because OPENROUTER_API_KEY is not configured.`,
+  );
 }
 
 function normalizeReferenceUrls(urls?: string[]): string[] | undefined {
@@ -378,13 +439,16 @@ export const projectGenerationProcedures = {
     )
     .mutation(async ({ ctx, input }) => {
       const organizationId = ctx.organizationId!;
+      const scratchCreationMode = getScratchCreationMode();
       // Check usage limits early to prevent disk spam
       await limitsService.assertNotBlocked(organizationId);
 
       // Enforce single project mode limit
       await checkSingleProjectModeLimit(organizationId);
 
-      validateConfig();
+      if (scratchCreationMode === "legacy_html") {
+        validateConfig();
+      }
       const normalizedReferenceUrls = normalizeReferenceUrls(input.referenceUrls);
 
       // Create context with "uploading_assets" status
@@ -396,6 +460,12 @@ export const projectGenerationProcedures = {
         allowSlugSuffix: true,
         initialStatus: "uploading_assets",
       });
+
+      if (scratchCreationMode === "studio_astro") {
+        applyScratchAstroStarter({
+          versionDir: generationCtx.outputDir,
+        });
+      }
 
       // Create images and references directories for uploads
       const imagesDir = path.join(generationCtx.outputDir, "images");
@@ -452,6 +522,22 @@ export const projectGenerationProcedures = {
         }),
       );
 
+      if (scratchCreationMode === "studio_astro") {
+        writeInitialGenerationManifest(
+          generationCtx.outputDir,
+          createScratchInitialGenerationManifest({
+            title: input.title,
+            description: input.description,
+            businessType: input.businessType,
+            stylePreset: input.stylePreset,
+            stylePalette: input.stylePalette,
+            styleMode: input.styleMode,
+            siteTheme: input.siteTheme,
+            referenceUrls: normalizedReferenceUrls,
+          }),
+        );
+      }
+
       return {
         status: "uploading_assets",
         slug: generationCtx.slug,
@@ -473,6 +559,7 @@ export const projectGenerationProcedures = {
     .mutation(async ({ ctx, input }) => {
       const organizationId = ctx.organizationId!;
       const { slug, version } = input;
+      const scratchCreationMode = getScratchCreationMode();
 
       // Re-check usage limits (this is the paid step)
       await limitsService.assertNotBlocked(organizationId);
@@ -492,6 +579,72 @@ export const projectGenerationProcedures = {
       }
 
       const draftMeta = JSON.parse(fs.readFileSync(draftMetaPath, "utf-8"));
+
+      if (scratchCreationMode === "studio_astro") {
+        const generationCtx = await createGenerationContext({
+          organizationId,
+          source: "scratch",
+          title: draftMeta.title,
+          description: draftMeta.description,
+          slug,
+          version,
+          allowSlugSuffix: false,
+          initialStatus: "pending",
+        });
+
+        try {
+          if (Array.isArray(draftMeta.referenceUrls) && draftMeta.referenceUrls.length > 0) {
+            generationCtx.updateStatus("capturing_references");
+          }
+          await prepareScratchStudioGeneration({
+            organizationId,
+            slug,
+            versionDir,
+            referenceUrls: draftMeta.referenceUrls,
+          });
+
+          writeInitialGenerationManifest(
+            versionDir,
+            {
+              ...createScratchInitialGenerationManifest({
+                title: draftMeta.title,
+                description: draftMeta.description,
+                businessType: draftMeta.businessType,
+                stylePreset: draftMeta.stylePreset,
+                stylePalette: draftMeta.stylePalette,
+                styleMode: draftMeta.styleMode,
+                siteTheme: draftMeta.siteTheme,
+                referenceUrls: draftMeta.referenceUrls,
+              }),
+              state: "starting_studio",
+            },
+          );
+
+          generationCtx.updateStatus("starting_studio");
+          await syncSourceArtifactForStudioStart({
+            versionDir,
+            organizationId,
+            slug,
+            version,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          generationCtx.updateStatus("failed", message);
+          throw error;
+        }
+
+        return {
+          status: "starting_studio",
+          slug,
+          version,
+          message: "Studio handoff ready.",
+          studioHandoff: {
+            mode: "studio_astro" as const,
+            initialGeneration: true,
+          },
+        };
+      }
 
       // Create a generation context pointing to existing version
       const generationCtx = await createGenerationContext({

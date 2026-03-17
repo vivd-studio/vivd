@@ -60,12 +60,14 @@ fi
 
 build_and_push() {
   local image_name="$1"
-  local dockerfile="$2"
-  local target="${3:-}"
+  local context="$2"
+  local dockerfile="$3"
+  local target="${4:-}"
   local repo="${IMAGE_PREFIX}/${image_name}"
 
   echo
   echo "==> Building and pushing ${repo}"
+  echo "    context: ${context}"
   echo "    tags: ${VERSION}, ${VERSION_NO_V}, latest"
 
   local cmd=(
@@ -82,21 +84,25 @@ build_and_push() {
     cmd+=(--target "$target")
   fi
 
-  cmd+=(.)
+  cmd+=("$context")
   "${cmd[@]}"
 }
 
 echo "Publishing images to ${IMAGE_PREFIX} for tag ${VERSION}"
 echo "Make sure you are logged in: docker login ghcr.io"
 
-build_and_push "vivd-studio" "packages/studio/Dockerfile" "prod"
-build_and_push "vivd-server" "packages/backend/Dockerfile" "prod"
-build_and_push "vivd-ui" "packages/frontend/Dockerfile" "prod"
-build_and_push "vivd-caddy" "caddy/Dockerfile"
+build_and_push "vivd-studio" "." "packages/studio/Dockerfile" "prod"
+build_and_push "vivd-server" "." "packages/backend/Dockerfile" "prod"
+build_and_push "vivd-ui" "." "packages/frontend/Dockerfile" "prod"
+build_and_push "vivd-docs" "." "packages/docs/Dockerfile" "prod"
+build_and_push "vivd-scraper" "packages/scraper" "packages/scraper/Dockerfile"
+build_and_push "vivd-caddy" "." "caddy/Dockerfile"
 
 echo
 echo "Done. Pushed tags for:"
 echo "- ${IMAGE_PREFIX}/vivd-studio:${VERSION}, ${VERSION_NO_V}, latest"
 echo "- ${IMAGE_PREFIX}/vivd-server:${VERSION}, ${VERSION_NO_V}, latest"
 echo "- ${IMAGE_PREFIX}/vivd-ui:${VERSION}, ${VERSION_NO_V}, latest"
+echo "- ${IMAGE_PREFIX}/vivd-docs:${VERSION}, ${VERSION_NO_V}, latest"
+echo "- ${IMAGE_PREFIX}/vivd-scraper:${VERSION}, ${VERSION_NO_V}, latest"
 echo "- ${IMAGE_PREFIX}/vivd-caddy:${VERSION}, ${VERSION_NO_V}, latest"

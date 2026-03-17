@@ -386,6 +386,14 @@ export function ProjectCard({
       statusLabel = "Analyzing Images";
       statusColor = "default";
       break;
+    case "starting_studio":
+      statusLabel = "Starting Studio";
+      statusColor = "default";
+      break;
+    case "generating_initial_site":
+      statusLabel = "Generating Initial Site";
+      statusColor = "default";
+      break;
     case "creating_hero":
       statusLabel = "Creating Hero Image";
       statusColor = "default";

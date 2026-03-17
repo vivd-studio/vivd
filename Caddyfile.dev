@@ -17,6 +17,17 @@
 # Import all dynamically-generated site configs
 import /etc/caddy/sites.d/*.caddy
 
+# Public docs host (HTTP in local dev)
+http://{$VIVD_DOCS_HOST:docs.localhost} {
+    handle /health {
+        respond "OK" 200
+    }
+
+    handle {
+        reverse_proxy docs:4321
+    }
+}
+
 # Public plugin API host (HTTP in local dev)
 http://api.localhost {
     handle /plugins/* {

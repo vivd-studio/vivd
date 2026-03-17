@@ -92,6 +92,8 @@ export const PROCESSING_STATUSES = [
   "creating_hero",
   "generating_html",
   "pending",
+  "starting_studio",
+  "generating_initial_site",
 ];
 
 // How long (in minutes) before a processing project is considered stale

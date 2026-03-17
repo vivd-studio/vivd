@@ -13,6 +13,7 @@ const {
   getSessionTokenMock,
   getStudioIdMock,
   getConnectedOrganizationIdMock,
+  startInitialGenerationServiceMock,
 } = vi.hoisted(() => ({
   runTaskMock: vi.fn(),
   listSessionsMock: vi.fn(),
@@ -26,6 +27,7 @@ const {
   getSessionTokenMock: vi.fn(),
   getStudioIdMock: vi.fn(),
   getConnectedOrganizationIdMock: vi.fn(),
+  startInitialGenerationServiceMock: vi.fn(),
 }));
 
 vi.mock("../opencode/index.js", () => ({
@@ -47,6 +49,15 @@ vi.mock("../opencode/index.js", () => ({
 vi.mock("../opencode/modelConfig.js", () => ({
   validateModelSelection: validateModelSelectionMock,
 }));
+
+vi.mock(
+  "../services/initialGeneration/InitialGenerationService.js",
+  () => ({
+    initialGenerationService: {
+      startInitialGeneration: startInitialGenerationServiceMock,
+    },
+  }),
+);
 
 vi.mock("@vivd/shared", () => ({
   getBackendUrl: getBackendUrlMock,
@@ -82,6 +93,7 @@ describe("agent router", () => {
     getSessionTokenMock.mockReset();
     getStudioIdMock.mockReset();
     getConnectedOrganizationIdMock.mockReset();
+    startInitialGenerationServiceMock.mockReset();
     vi.unstubAllGlobals();
 
     runTaskMock.mockResolvedValue({ sessionId: "sess-1" });
@@ -98,6 +110,11 @@ describe("agent router", () => {
     getSessionTokenMock.mockReturnValue("");
     getStudioIdMock.mockReturnValue("");
     getConnectedOrganizationIdMock.mockReturnValue(undefined);
+    startInitialGenerationServiceMock.mockResolvedValue({
+      sessionId: "sess-initial",
+      reused: false,
+      status: "generating_initial_site",
+    });
   });
 
   it("returns available models from the opencode layer", async () => {
@@ -187,6 +204,32 @@ describe("agent router", () => {
       { id: "sess-1", title: "Session 1" },
       { id: "sess-2", title: "Session 2" },
     ]);
+  });
+
+  it("starts initial generation with the validated model selection", async () => {
+    validateModelSelectionMock.mockReturnValueOnce({
+      provider: "openai",
+      modelId: "gpt-5.4",
+    });
+    const caller = agentRouter.createCaller(makeContext());
+
+    const result = await caller.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 3,
+      model: { provider: "openai", modelId: "gpt-5.4-preview" },
+    });
+
+    expect(startInitialGenerationServiceMock).toHaveBeenCalledWith({
+      projectSlug: "site-1",
+      version: 3,
+      workspaceDir: "/tmp/workspace",
+      model: { provider: "openai", modelId: "gpt-5.4" },
+    });
+    expect(result).toEqual({
+      sessionId: "sess-initial",
+      reused: false,
+      status: "generating_initial_site",
+    });
   });
 
   it("deletes a session via opencode and returns success", async () => {

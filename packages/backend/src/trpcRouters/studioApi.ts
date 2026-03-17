@@ -287,6 +287,35 @@ export const studioApiRouter = router({
     }),
 
   /**
+   * Allow connected Studio runtimes to update the initial scratch-generation status
+   * as the OpenCode session progresses.
+   */
+  updateInitialGenerationStatus: projectMemberProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        status: z.enum([
+          "generating_initial_site",
+          "completed",
+          "failed",
+        ]),
+        errorMessage: z.string().trim().min(1).max(5000).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await projectMetaService.updateVersionStatus({
+        organizationId: ctx.organizationId!,
+        slug: input.slug,
+        version: input.version,
+        status: input.status,
+        errorMessage: input.status === "failed" ? input.errorMessage : undefined,
+      });
+      return { success: true };
+    }),
+
+  /**
    * Request thumbnail regeneration for a project version.
    * Studio instances call this after snapshot/build artifacts have been synced so
    * the control plane can refresh project card thumbnails from the bucket-backed preview.

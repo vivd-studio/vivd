@@ -15,13 +15,19 @@ export {
   buildDerivedSessionError,
   deriveChatActivityState,
   selectMostRecentActiveSessionId,
+  selectMostRecentAttentionSessionId,
 } from "./runtime";
+export { sessionQuestionRequest } from "./questions/requestTree";
 export type {
   CanonicalChatEvent,
   OpenCodeChatBootstrap,
   OpenCodeChatState,
   OpenCodeMessage,
   OpenCodePart,
+  OpenCodeQuestionAnswer,
+  OpenCodeQuestionInfo,
+  OpenCodeQuestionOption,
+  OpenCodeQuestionRequest,
   OpenCodeSession,
   OpenCodeSessionMessageRecord,
   OpenCodeSessionStatus,

@@ -60,8 +60,12 @@ ${formatEnabledPluginsFromEnv()}
    - Vivd supports first-party plugins such as Contact Form and Analytics.
    - Prefer plugin-backed solutions over custom implementations for those features.
    - If the needed plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.
-4. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
-5. **Clarify questions**: Do not assume anything or make changes when the user asks a question.
+4. **AGENTS.md is living memory**:
+   - Treat the project-root \`AGENTS.md\` file as living project memory.
+   - Update it proactively when project-specific information becomes important, especially where content lives and how to add, remove, or edit it.
+   - Remove outdated entries so the file stays relevant to the current project.
+5. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
+6. **Clarify questions**: Do not assume anything or make changes when the user asks a question.
 
 ## Git Policy
 

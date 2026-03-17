@@ -7,8 +7,9 @@ import { sanitizeSessionError } from "./sync/errorPolicy";
 import {
   buildDerivedSessionError,
   deriveChatActivityState,
-  selectMostRecentActiveSessionId,
+  selectMostRecentAttentionSessionId,
 } from "./runtime";
+import { sessionQuestionRequest } from "./questions/requestTree";
 import type { SanitizedSessionError } from "./sync/errorPolicy";
 
 type ControllerModel = {
@@ -32,6 +33,7 @@ export function useOpencodeChatController({
   const opencodeChat = useOpencodeChat();
   const providerSetSelectedSessionId = opencodeChat.setSelectedSessionId;
   const sessionStatusById = opencodeChat.state.sessionStatusById;
+  const questionRequestsBySessionId = opencodeChat.questionRequestsBySessionId;
   const connection = opencodeChat.state.connection;
   const [localSessionError, setLocalSessionError] =
     useState<SanitizedSessionError | null>(null);
@@ -67,6 +69,24 @@ export function useOpencodeChatController({
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [sessions, selectedSessionId],
+  );
+  const attentionSessionId = useMemo(
+    () =>
+      selectMostRecentAttentionSessionId({
+        sessions,
+        sessionStatusById,
+        questionRequestsBySessionId,
+      }),
+    [questionRequestsBySessionId, sessionStatusById, sessions],
+  );
+  const activeQuestionRequest = useMemo(
+    () =>
+      sessionQuestionRequest(
+        sessions,
+        questionRequestsBySessionId,
+        selectedSessionId ?? attentionSessionId,
+      ) ?? null,
+    [attentionSessionId, questionRequestsBySessionId, selectedSessionId, sessions],
   );
   const isReverted = Boolean(selectedSession?.revert);
   const usage = useMemo(
@@ -136,6 +156,22 @@ export function useOpencodeChatController({
       );
     },
   });
+  const replyQuestionMutation = trpc.agentChat.replyQuestion.useMutation({
+    onSuccess: () => {
+      refetchSessions();
+    },
+    onError: (error) => {
+      toast.error("Question reply failed", { description: error.message });
+    },
+  });
+  const rejectQuestionMutation = trpc.agentChat.rejectQuestion.useMutation({
+    onSuccess: () => {
+      refetchSessions();
+    },
+    onError: (error) => {
+      toast.error("Question rejection failed", { description: error.message });
+    },
+  });
 
   const sendTask = useCallback(
     (
@@ -143,6 +179,12 @@ export function useOpencodeChatController({
       targetSessionId: string | null,
       options?: { onSettled?: () => void },
     ) => {
+      if (activeQuestionRequest) {
+        toast.info("Answer the pending question first");
+        options?.onSettled?.();
+        return;
+      }
+
       const optimisticMessageId = opencodeChat.addOptimisticUserMessage({
         content: task,
         sessionId: targetSessionId,
@@ -191,6 +233,7 @@ export function useOpencodeChatController({
       selectedSessionId,
       setSelectedSessionId,
       refetchSessions,
+      activeQuestionRequest,
     ],
   );
 
@@ -246,10 +289,34 @@ export function useOpencodeChatController({
     });
   }, [abortSessionMutation, projectSlug, selectedSessionId, version]);
 
+  const replyQuestion = useCallback(
+    async (requestId: string, answers: string[][]) => {
+      await replyQuestionMutation.mutateAsync({
+        projectSlug,
+        version,
+        requestId,
+        answers,
+      });
+    },
+    [projectSlug, replyQuestionMutation, version],
+  );
+
+  const rejectQuestion = useCallback(
+    async (requestId: string) => {
+      await rejectQuestionMutation.mutateAsync({
+        projectSlug,
+        version,
+        requestId,
+      });
+    },
+    [projectSlug, rejectQuestionMutation, version],
+  );
+
   const derivedSessionError = useMemo(
     () =>
       buildDerivedSessionError({
         selectedSessionId,
+        messages: selectedMessages,
         sessionMessagesIsError,
         sessionMessagesError,
         sessionStatus: currentSessionStatus,
@@ -258,6 +325,7 @@ export function useOpencodeChatController({
       }),
     [
       selectedSessionId,
+      selectedMessages,
       sessionMessagesIsError,
       sessionMessagesError,
       currentSessionStatus,
@@ -307,17 +375,17 @@ export function useOpencodeChatController({
       return;
     }
 
-    const activeSessionId = selectMostRecentActiveSessionId({
-      sessions,
-      sessionStatusById,
-    });
-    if (!activeSessionId) {
+    if (!attentionSessionId) {
       return;
     }
 
     hasAutoSelectedRunningSessionRef.current = true;
-    providerSetSelectedSessionId(activeSessionId);
-  }, [providerSetSelectedSessionId, selectedSessionId, sessionStatusById, sessions]);
+    providerSetSelectedSessionId(attentionSessionId);
+  }, [
+    attentionSessionId,
+    providerSetSelectedSessionId,
+    selectedSessionId,
+  ]);
 
   useEffect(() => {
     providerSetSelectedSessionId(null);
@@ -368,6 +436,7 @@ export function useOpencodeChatController({
     isSessionHydrating,
     isReverted,
     usage,
+    activeQuestionRequest,
     sessionError,
     clearSessionError,
     runTaskPending: runTaskMutation.isPending,
@@ -384,6 +453,8 @@ export function useOpencodeChatController({
     refetchMessages,
     refetchSessions,
     sendTask,
+    replyQuestion,
+    rejectQuestion,
     deleteSession,
     revertToMessage,
     unrevertSession,

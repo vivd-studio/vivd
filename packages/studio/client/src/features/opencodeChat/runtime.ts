@@ -1,5 +1,6 @@
 import type {
   OpenCodeConnectionState,
+  OpenCodeQuestionRequest,
   OpenCodeSession,
   OpenCodeSessionMessageRecord,
   OpenCodeSessionStatus,
@@ -15,6 +16,7 @@ type DeriveChatActivityStateArgs = {
 
 type BuildDerivedSessionErrorArgs = {
   selectedSessionId: string | null;
+  messages: OpenCodeSessionMessageRecord[];
   sessionMessagesIsError: boolean;
   sessionMessagesError: unknown;
   sessionStatus: OpenCodeSessionStatus | null;
@@ -33,6 +35,12 @@ export function isActiveSessionStatus(
   return status?.type === "busy" || status?.type === "retry";
 }
 
+export function isTerminalSessionStatusType(
+  type: string | null | undefined,
+): boolean {
+  return type === "idle" || type === "done" || type === "error";
+}
+
 export function getLastMessageRole(
   messages: OpenCodeSessionMessageRecord[],
 ): "agent" | "user" | null {
@@ -46,6 +54,17 @@ export function getLastMessageRole(
   return null;
 }
 
+export function hasPendingAssistantMessage(
+  messages: OpenCodeSessionMessageRecord[],
+): boolean {
+  return messages.some((message) => {
+    return (
+      message.info?.role === "assistant" &&
+      typeof message.info?.time?.completed !== "number"
+    );
+  });
+}
+
 export function deriveChatActivityState({
   messages,
   sessionStatus,
@@ -54,15 +73,17 @@ export function deriveChatActivityState({
 }: DeriveChatActivityStateArgs) {
   const sessionActive = isActiveSessionStatus(sessionStatus);
   const lastMessageRole = getLastMessageRole(messages);
-  const isStreaming = sessionActive && lastMessageRole === "agent";
+  const hasPendingAssistant = hasPendingAssistantMessage(messages);
+  const isStreaming = hasPendingAssistant;
   const isWaiting =
     hasOptimisticUserMessage ||
     isSubmitting ||
-    (sessionActive && lastMessageRole !== "agent");
+    (!hasPendingAssistant && sessionActive);
   const isThinking = isStreaming || isWaiting;
 
   return {
     lastMessageRole,
+    hasPendingAssistant,
     isSessionStatusActive: sessionActive,
     isStreaming,
     isWaiting,
@@ -72,6 +93,7 @@ export function deriveChatActivityState({
 
 export function buildDerivedSessionError({
   selectedSessionId,
+  messages,
   sessionMessagesIsError,
   sessionMessagesError,
   sessionStatus,
@@ -107,7 +129,11 @@ export function buildDerivedSessionError({
     };
   }
 
-  if (selectedSessionId && connectionState === "error" && isActiveSessionStatus(sessionStatus)) {
+  if (
+    selectedSessionId &&
+    connectionState === "error" &&
+    (isActiveSessionStatus(sessionStatus) || hasPendingAssistantMessage(messages))
+  ) {
     return {
       key: `stream:${selectedSessionId}:${connectionMessage ?? ""}`,
       error: sanitizeSessionError({
@@ -140,4 +166,30 @@ export function selectMostRecentActiveSessionId(args: {
       ? session
       : latest;
   }, activeSessions[0]).id;
+}
+
+export function selectMostRecentAttentionSessionId(args: {
+  sessions: OpenCodeSession[];
+  sessionStatusById: Record<string, OpenCodeSessionStatus>;
+  questionRequestsBySessionId: Record<string, OpenCodeQuestionRequest[]>;
+}): string | null {
+  const sessionsNeedingAttention = args.sessions.filter((session) => {
+    if (isActiveSessionStatus(args.sessionStatusById[session.id] ?? null)) {
+      return true;
+    }
+    return (args.questionRequestsBySessionId[session.id]?.length ?? 0) > 0;
+  });
+
+  if (sessionsNeedingAttention.length === 0) {
+    return null;
+  }
+
+  const getSessionTimestamp = (session: OpenCodeSession) =>
+    session.time?.updated ?? session.time?.created ?? 0;
+
+  return sessionsNeedingAttention.reduce((latest, session) => {
+    return getSessionTimestamp(session) > getSessionTimestamp(latest)
+      ? session
+      : latest;
+  }, sessionsNeedingAttention[0]).id;
 }

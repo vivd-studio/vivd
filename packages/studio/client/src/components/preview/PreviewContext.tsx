@@ -109,7 +109,12 @@ interface PreviewContextValue {
   handleClose: () => void;
 
   // Cross-component chat messaging
-  pendingChatMessage: { message: string; startNewSession?: boolean } | null;
+  initialGenerationRequested: boolean;
+  pendingChatMessage: {
+    kind?: "task" | "initialGeneration";
+    message: string;
+    startNewSession?: boolean;
+  } | null;
   sendChatMessage: (
     message: string,
     options?: { startNewSession?: boolean },
@@ -262,6 +267,7 @@ export function PreviewProvider({
   const [selectedElement, setSelectedElement] =
     useState<SelectedElement | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<{
+    kind?: "task" | "initialGeneration";
     message: string;
     startNewSession?: boolean;
   } | null>(null);
@@ -276,6 +282,9 @@ export function PreviewProvider({
   >(null);
   const mobileContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const initialGenerationRequested =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("initialGeneration") === "1";
 
   const utils = trpc.useUtils();
 
@@ -1149,6 +1158,7 @@ export function PreviewProvider({
     (message: string, options?: { startNewSession?: boolean }) => {
       setChatOpen(true);
       setPendingChatMessage({
+        kind: "task",
         message,
         startNewSession: options?.startNewSession,
       });
@@ -1163,7 +1173,14 @@ export function PreviewProvider({
   // Listen for element selection from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "vivd-element-selected") {
+      if (event.data?.type === "vivd:host:start-initial-generation") {
+        setChatOpen(true);
+        setPendingChatMessage({
+          kind: "initialGeneration",
+          message: "",
+          startNewSession: true,
+        });
+      } else if (event.data?.type === "vivd-element-selected") {
         const {
           description,
           selector,
@@ -1316,6 +1333,7 @@ export function PreviewProvider({
     isSaving,
 
     // Cross-component chat messaging
+    initialGenerationRequested,
     pendingChatMessage,
     sendChatMessage,
     clearPendingChatMessage,

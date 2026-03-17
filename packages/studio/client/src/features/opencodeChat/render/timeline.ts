@@ -2,6 +2,10 @@ import {
   normalizeMessagePart,
   normalizeToolStatus,
 } from "../../../components/chat/chatStreamUtils";
+import {
+  hasPendingAssistantMessage,
+  isTerminalSessionStatusType,
+} from "../runtime";
 import type {
   OpenCodeSessionMessageRecord,
   OpenCodeSessionStatus,
@@ -62,8 +66,6 @@ type BuildCanonicalTimelineModelArgs = {
   isWaiting: boolean;
 };
 
-const TERMINAL_SESSION_STATUS_TYPES = new Set(["idle", "done", "error"]);
-
 function extractRenderableParts(parts: RenderableChatPart[]): RenderableChatPart[] {
   return parts.filter((part) =>
     part?.type === "reasoning" || part?.type === "tool" || part?.type === "text",
@@ -107,9 +109,9 @@ function hasInterleavedActionAndText(parts: RenderableChatPart[]): boolean {
 
 function finalizeInterruptedToolParts(
   parts: RenderableChatPart[],
-  sessionStatusType?: string | null,
+  shouldFinalize: boolean,
 ): RenderableChatPart[] {
-  if (!TERMINAL_SESSION_STATUS_TYPES.has(sessionStatusType ?? "")) {
+  if (!shouldFinalize) {
     return parts;
   }
 
@@ -142,15 +144,22 @@ function finalizeInterruptedToolParts(
 
 function normalizeRecordToRenderableMessage(
   record: OpenCodeSessionMessageRecord,
-  sessionStatusType?: string | null,
+  options?: {
+    sessionStatusType?: string | null;
+    finalizeInterruptedTools?: boolean;
+  },
 ): RenderableChatMessage {
   const role = record.info?.role === "assistant" ? "agent" : "user";
-  const normalizedParts = finalizeInterruptedToolParts(
-    extractRenderableParts(
-      (record.parts ?? []).map(normalizeMessagePart).filter(Boolean),
-    ),
-    role === "agent" ? sessionStatusType : undefined,
+  const renderableParts = extractRenderableParts(
+    (record.parts ?? []).map(normalizeMessagePart).filter(Boolean),
   );
+  const normalizedParts =
+    role === "agent"
+      ? finalizeInterruptedToolParts(
+          renderableParts,
+          Boolean(options?.finalizeInterruptedTools),
+        )
+      : renderableParts;
   const content = normalizedParts
     .filter((part) => part?.type === "text")
     .map((part) => (typeof part?.text === "string" ? part.text : ""))
@@ -167,6 +176,22 @@ function normalizeRecordToRenderableMessage(
     ...(createdAt != null ? { createdAt } : {}),
     ...(completedAt != null ? { completedAt } : {}),
   };
+}
+
+function normalizeRecordsToRenderableMessages(
+  messages: OpenCodeSessionMessageRecord[],
+  sessionStatusType?: string | null,
+): RenderableChatMessage[] {
+  const finalizeInterruptedTools =
+    isTerminalSessionStatusType(sessionStatusType) &&
+    !hasPendingAssistantMessage(messages);
+
+  return messages.map((record) =>
+    normalizeRecordToRenderableMessage(record, {
+      sessionStatusType,
+      finalizeInterruptedTools,
+    }),
+  );
 }
 
 function createTimelineTurns(
@@ -295,8 +320,9 @@ export function buildCanonicalTimelineModel({
   isThinking,
   isWaiting,
 }: BuildCanonicalTimelineModelArgs): CanonicalTimelineModel {
-  const renderableMessages = messages.map((record) =>
-    normalizeRecordToRenderableMessage(record, sessionStatus?.type),
+  const renderableMessages = normalizeRecordsToRenderableMessages(
+    messages,
+    sessionStatus?.type,
   );
   const turns = createTimelineTurns(renderableMessages);
 
@@ -370,8 +396,9 @@ export function hasFinalAgentResponseFromRecords(
     return false;
   }
 
-  const renderableMessages = messages.map((record) =>
-    normalizeRecordToRenderableMessage(record, sessionStatus?.type),
+  const renderableMessages = normalizeRecordsToRenderableMessages(
+    messages,
+    sessionStatus?.type,
   );
   const turns = createTimelineTurns(renderableMessages);
 
@@ -398,8 +425,7 @@ export function shouldSuggestInterruptedContinueFromRecords(options: {
   now?: number;
   minAgeMs?: number;
 }): boolean {
-  const isTerminalStatus =
-    options.sessionStatus === "done" || options.sessionStatus === "idle";
+  const isTerminalStatus = isTerminalSessionStatusType(options.sessionStatus);
 
   if (!isTerminalStatus) {
     return false;
@@ -413,8 +439,13 @@ export function shouldSuggestInterruptedContinueFromRecords(options: {
     return false;
   }
 
-  const renderableMessages = options.messages.map((record) =>
-    normalizeRecordToRenderableMessage(record, options.sessionStatus),
+  if (hasPendingAssistantMessage(options.messages)) {
+    return false;
+  }
+
+  const renderableMessages = normalizeRecordsToRenderableMessages(
+    options.messages,
+    options.sessionStatus,
   );
   const lastUserMessage = [...renderableMessages]
     .reverse()

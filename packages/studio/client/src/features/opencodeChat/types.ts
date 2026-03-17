@@ -46,6 +46,34 @@ export interface OpenCodePart {
   [key: string]: unknown;
 }
 
+export interface OpenCodeQuestionOption {
+  label: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface OpenCodeQuestionInfo {
+  question: string;
+  header: string;
+  options: OpenCodeQuestionOption[];
+  multiple?: boolean;
+  custom?: boolean;
+  [key: string]: unknown;
+}
+
+export type OpenCodeQuestionAnswer = string[];
+
+export interface OpenCodeQuestionRequest {
+  id: string;
+  sessionID: string;
+  questions: OpenCodeQuestionInfo[];
+  tool?: {
+    messageID: string;
+    callID: string;
+  };
+  [key: string]: unknown;
+}
+
 export interface CanonicalChatEvent {
   eventId?: string;
   type: string;
@@ -70,6 +98,7 @@ export interface OpenCodeChatBootstrap {
   sessions: OpenCodeSession[];
   statuses: Record<string, OpenCodeSessionStatus>;
   messages: OpenCodeSessionMessageRecord[];
+  questions: OpenCodeQuestionRequest[];
 }
 
 export interface OpenCodeChatSessionViewMessage extends OpenCodeMessage {
@@ -87,6 +116,7 @@ export interface OpenCodeChatState {
   messagesBySessionId: Record<string, string[]>;
   partsByMessageId: Record<string, OpenCodePart[]>;
   sessionStatusById: Record<string, OpenCodeSessionStatus>;
+  questionRequestsBySessionId: Record<string, OpenCodeQuestionRequest[]>;
   lastEventId: string | null;
   lastEventType: string | null;
   lastEventTime: number | null;
@@ -116,6 +146,7 @@ export const OPEN_CODE_CHAT_INITIAL_STATE: OpenCodeChatState = {
   messagesBySessionId: {},
   partsByMessageId: {},
   sessionStatusById: {},
+  questionRequestsBySessionId: {},
   lastEventId: null,
   lastEventType: null,
   lastEventTime: null,

@@ -257,7 +257,10 @@ describe("opencode index session behavior", () => {
   it("marks session idle and emits completion when abort succeeds", async () => {
     await expect(abortSession("sess-9", "/workspace/project")).resolves.toBe(true);
 
-    expect(sessionAbortMock).toHaveBeenCalledWith({ path: { id: "sess-9" } });
+    expect(sessionAbortMock).toHaveBeenCalledWith({
+      sessionID: "sess-9",
+      directory: "/workspace/project/",
+    });
     expect(finishSessionRunsMock).toHaveBeenCalledWith("sess-9");
     expect(setSessionStatusMock).toHaveBeenCalledWith("sess-9", { type: "idle" });
     expect(emitSessionEventMock).toHaveBeenCalledWith(
@@ -277,10 +280,10 @@ describe("opencode index session behavior", () => {
 
     expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.objectContaining({
-          system: "system prompt",
-          tools: { vivd_publish_checklist: true },
-        }),
+        sessionID: "sess-new",
+        directory: "/workspace/project/",
+        system: "system prompt",
+        tools: { vivd_publish_checklist: true },
       }),
     );
   });
@@ -291,11 +294,11 @@ describe("opencode index session behavior", () => {
     expect(getSystemPromptForSessionStartMock).not.toHaveBeenCalled();
     expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.not.objectContaining({
-          system: expect.any(String),
-        }),
+        sessionID: "sess-existing",
+        directory: "/workspace/project/",
       }),
     );
+    expect(sessionPromptAsyncMock.mock.calls[0]?.[0]).not.toHaveProperty("system");
   });
 
   it("emits session.error and rejects when promptAsync fails", async () => {

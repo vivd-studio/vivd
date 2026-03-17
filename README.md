@@ -6,7 +6,7 @@
 
 An AI-powered website builder that turns conversations into live, hosted websites.
 
-[Getting Started](#getting-started) · [Features](#features) · [Tech Stack](#tech-stack) · [Self-Hosting](#self-hosting)
+[Getting Started](#getting-started) · [Features](#features) · [Tech Stack](#tech-stack) · [Self-Hosting](#self-hosting) · [Product Docs](packages/docs/README.md)
 
 </div>
 
@@ -19,6 +19,8 @@ An AI-powered website builder that turns conversations into live, hosted website
 vivd is a website builder where AI is the interface. Instead of dragging and dropping or writing code, you simply describe what you want — and it happens. The AI agent analyzes your existing content, understands your brand, and builds pages using modern web technologies.
 
 Perfect for photographers, agencies, freelancers, and small businesses who want professional websites without the learning curve.
+
+Public product docs now live in `packages/docs`, while the repo-root `docs/` directory remains internal planning and architecture material.
 
 ## Features
 
@@ -62,6 +64,7 @@ Manage multiple websites from a single dashboard. Switch between projects instan
 vivd/
 ├── packages/
 │   ├── backend/     # Express API + AI agent integration
+│   ├── docs/        # Public product docs site
 │   ├── frontend/    # React web application
 │   ├── scraper/     # Puppeteer web scraping service
 │   ├── shared/      # Shared types and utilities
@@ -102,6 +105,8 @@ npm run dev
 ```
 
 The app will be available at `http://localhost:5173`
+
+With the Docker stack running, the public docs site is available at `http://docs.localhost`.
 
 ## Local CI Run
 
@@ -148,6 +153,7 @@ docker compose up -d
 Services included:
 - **Frontend** — React application
 - **Backend** — API server with AI agent
+- **Docs** — Public product documentation site
 - **Scraper** — Web scraping service
 - **Database** — PostgreSQL
 - **Caddy** — Reverse proxy with automatic HTTPS
@@ -162,6 +168,7 @@ Key environment variables:
 | `OPENROUTER_API_KEY` | API key for AI model access |
 | `BETTER_AUTH_SECRET` | Secret for authentication |
 | `PUBLIC_URL` | Your public-facing URL |
+| `SCRAPER_URL` | Optional external scraper override; Docker Compose defaults to the internal `http://scraper:3001` service |
 
 See `.env.example` for the full list.
 

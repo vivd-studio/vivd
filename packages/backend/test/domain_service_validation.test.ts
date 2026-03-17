@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { DomainService } from "../src/services/publish/DomainService";
 
 const originalPublicPluginApiHost = process.env.VIVD_PUBLIC_PLUGIN_API_HOST;
+const originalDocsHost = process.env.VIVD_DOCS_HOST;
 
 function restoreEnvVar(name: string, value: string | undefined): void {
   if (typeof value === "string") {
@@ -16,6 +17,7 @@ describe("DomainService.validateDomainForRegistry", () => {
 
   afterEach(() => {
     restoreEnvVar("VIVD_PUBLIC_PLUGIN_API_HOST", originalPublicPluginApiHost);
+    restoreEnvVar("VIVD_DOCS_HOST", originalDocsHost);
   });
 
   it("rejects the default public plugin API host", () => {
@@ -39,5 +41,21 @@ describe("DomainService.validateDomainForRegistry", () => {
 
     const result = service.validateDomainForRegistry("felixpahlke.de");
     expect(result.valid).toBe(true);
+  });
+
+  it("rejects the configured docs host", () => {
+    process.env.VIVD_DOCS_HOST = "docs.customer-example.test";
+
+    const result = service.validateDomainForRegistry("docs.customer-example.test");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("public docs host");
+  });
+
+  it("rejects the local docs host", () => {
+    delete process.env.VIVD_DOCS_HOST;
+
+    const result = service.validateDomainForRegistry("docs.localhost");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("public docs");
   });
 });

@@ -10,7 +10,7 @@ describe("OpenCode config policy", () => {
     vi.restoreAllMocks();
   });
 
-  it("enforces question tool disablement and restricted permissions by default", () => {
+  it("enforces question tool enablement and restricted permissions by default", () => {
     const config = JSON.parse(buildStudioOpencodeConfigContent(undefined));
     expect(config).toEqual(STUDIO_OPENCODE_CONFIG_OVERRIDES);
   });
@@ -30,7 +30,7 @@ describe("OpenCode config policy", () => {
       plugin: [{ source: "demo-plugin" }],
       tools: {
         imagen_generate: true,
-        question: false,
+        question: true,
       },
       permission: {
         bash: "ask",
@@ -40,13 +40,13 @@ describe("OpenCode config policy", () => {
     });
   });
 
-  it("overrides question=true from incoming config", () => {
+  it("keeps question enabled even if incoming config tries to disable it", () => {
     const config = JSON.parse(
-      buildStudioOpencodeConfigContent(JSON.stringify({ tools: { question: true } })),
+      buildStudioOpencodeConfigContent(JSON.stringify({ tools: { question: false } })),
     );
 
     expect(config).toEqual({
-      tools: { question: false },
+      tools: { question: true },
       permission: {
         doom_loop: "deny",
         external_directory: "deny",
@@ -73,7 +73,7 @@ describe("OpenCode config policy", () => {
         external_directory: "deny",
         webfetch: "ask",
       },
-      tools: { question: false },
+      tools: { question: true },
     });
   });
 
@@ -98,7 +98,7 @@ describe("OpenCode config policy", () => {
     expect(merged).toEqual({
       tools: {
         another_tool: true,
-        question: false,
+        question: true,
       },
       command: { publish: false },
       permission: {
@@ -122,7 +122,7 @@ describe("OpenCode config policy", () => {
     expect(config).toEqual({
       tools: {
         keep_tool: true,
-        question: false,
+        question: true,
         vivd_plugins_catalog: true,
         vivd_plugins_contact_info: false,
       },

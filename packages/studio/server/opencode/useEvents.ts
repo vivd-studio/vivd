@@ -1,4 +1,4 @@
-import { OpencodeClient } from "@opencode-ai/sdk";
+import { OpencodeClient } from "@opencode-ai/sdk/v2";
 
 export interface ToolCall {
   tool: string;

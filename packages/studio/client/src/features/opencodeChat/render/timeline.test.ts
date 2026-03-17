@@ -260,6 +260,40 @@ describe("canonical timeline builder", () => {
     expect(secondAgentRow.responseParts.map((part) => part.id)).toEqual(["text-2"]);
   });
 
+  it("keeps a pending assistant run active even if the session status already looks terminal", () => {
+    const timeline = buildCanonicalTimelineModel({
+      messages: [
+        createRecord({
+          id: "u1",
+          role: "user",
+          createdAt: BASE_TIME + 10_000,
+          parts: [{ id: "text-u1", type: "text", text: "Do the task" }],
+        }),
+        createRecord({
+          id: "a1",
+          role: "assistant",
+          parentID: "u1",
+          createdAt: BASE_TIME + 11_000,
+          parts: [{ id: "tool-a1", type: "tool", tool: "read", status: "running" }],
+        }),
+      ],
+      sessionStatus: { type: "done" },
+      isThinking: true,
+      isWaiting: false,
+    });
+
+    const agentRow = timeline.items.find((item) => item.kind === "agent");
+    if (agentRow?.kind !== "agent") {
+      throw new Error("Expected active agent row");
+    }
+
+    expect(agentRow.runInProgress).toBe(true);
+    expect(agentRow.showWorkedSection).toBe(false);
+    expect(agentRow.orderedParts).toMatchObject([
+      { id: "tool-a1", type: "tool", status: "running" },
+    ]);
+  });
+
   it("does not suggest continue when a final answer exists in an earlier assistant message of the latest turn", () => {
     const shouldSuggest = shouldSuggestInterruptedContinueFromRecords({
       sessionStatus: "done",
@@ -285,6 +319,32 @@ describe("canonical timeline builder", () => {
           createdAt: BASE_TIME + 12_000,
           completedAt: BASE_TIME + 12_000,
           parts: [{ id: "reason-a2", type: "reasoning", text: "late tail" }],
+        }),
+      ],
+      isThinking: false,
+      isLoading: false,
+      now: BASE_TIME + 30_000,
+    });
+
+    expect(shouldSuggest).toBe(false);
+  });
+
+  it("does not suggest continue while a pending assistant message still exists", () => {
+    const shouldSuggest = shouldSuggestInterruptedContinueFromRecords({
+      sessionStatus: "done",
+      messages: [
+        createRecord({
+          id: "u1",
+          role: "user",
+          createdAt: BASE_TIME + 10_000,
+          parts: [{ id: "text-u1", type: "text", text: "Do the task" }],
+        }),
+        createRecord({
+          id: "a1",
+          role: "assistant",
+          parentID: "u1",
+          createdAt: BASE_TIME + 11_000,
+          parts: [{ id: "tool-a1", type: "tool", tool: "read", status: "running" }],
         }),
       ],
       isThinking: false,

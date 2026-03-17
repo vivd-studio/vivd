@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
+  BookOpen,
   Building2,
   Check,
   ChevronDown,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
+import { buildDocsUrl } from "@/lib/docsUrl";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { getProjectLastModified } from "@/lib/project-utils";
 import { useAppConfig } from "@/lib/AppConfigContext";
@@ -785,6 +787,12 @@ export function AppSidebar() {
     );
   };
 
+  const docsUrl = buildDocsUrl({
+    currentHost: window.location.host,
+    controlPlaneHost: config.controlPlaneHost,
+    pathname: "/",
+  });
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -857,6 +865,18 @@ export function AppSidebar() {
                 isOrgTabActive={isOrgTabActive}
                 navigate={navigate}
               />
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="Docs"
+                >
+                  <a href={docsUrl} target="_blank" rel="noreferrer">
+                    <BookOpen />
+                    <span>Docs</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
 
               <SidebarMenuItem>
                 <SidebarMenuButton

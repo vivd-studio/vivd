@@ -5,9 +5,8 @@ export interface BuildStudioOpencodeConfigOptions {
 }
 
 export const STUDIO_OPENCODE_CONFIG_OVERRIDES: JsonObject = {
-  // Frontend does not support interactive question prompts yet.
   tools: {
-    question: false,
+    question: true,
   },
   // Prevent recursive tool-invocation loops in Studio agent sessions.
   permission: {

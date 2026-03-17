@@ -10,6 +10,7 @@ import * as z from "zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { trpc } from "@/lib/trpc"
 import { ROUTES } from "@/app/router/paths"
+import { getDocsUrl } from "@/lib/docsUrl"
 
 const signupSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -22,6 +23,7 @@ type SignupFormValues = z.infer<typeof signupSchema>
 export default function Signup() {
     const utils = trpc.useUtils()
     const navigate = useNavigate()
+    const docsUrl = getDocsUrl("/")
     const form = useForm<SignupFormValues>({
         resolver: zodResolver(signupSchema),
         defaultValues: {
@@ -107,6 +109,13 @@ export default function Signup() {
                             <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
                                 {form.formState.isSubmitting ? "Creating Account..." : "Create Admin Account"}
                             </Button>
+
+                            <p className="text-center text-xs text-muted-foreground">
+                                Need product guidance first?{" "}
+                                <a href={docsUrl} className="underline underline-offset-4 hover:text-foreground">
+                                    Read the docs
+                                </a>
+                            </p>
                         </form>
                     </Form>
                 </CardContent>

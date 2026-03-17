@@ -95,11 +95,14 @@ export default function EmbeddedStudio() {
   const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const resumeStudio = urlParams.get("view") === "studio";
   const versionOverrideRaw = urlParams.get("version");
+  const initialGenerationRequested = urlParams.get("initialGeneration") === "1";
   const versionOverride = versionOverrideRaw
     ? Number.parseInt(versionOverrideRaw, 10)
     : NaN;
   const studioVersion =
     Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
+  const shouldResumeStudio = resumeStudio || initialGenerationRequested;
+  const initialGenerationBootstrapKeyRef = useRef<string | null>(null);
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -215,10 +218,10 @@ export default function EmbeddedStudio() {
 
   // If we navigated back from fullscreen with `?view=studio`, prefer showing the running studio.
   useEffect(() => {
-    if (resumeStudio) {
+    if (shouldResumeStudio) {
       setEditRequested(false);
     }
-  }, [resumeStudio]);
+  }, [shouldResumeStudio]);
 
   // Set document title to project name
   useEffect(() => {
@@ -239,6 +242,30 @@ export default function EmbeddedStudio() {
     setStudioAccessTokenOverride(null);
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
   };
+
+  useEffect(() => {
+    if (!initialGenerationRequested || !projectSlug || !project) return;
+    if (studioUrlQuery.data?.status === "running") return;
+    if (editRequested || startStudio.isPending || startStudio.data) return;
+    if (hardRestartStudio.isPending || isRenamePending) return;
+
+    setEditRequested(true);
+    setStudioUrlOverride(null);
+    setStudioAccessTokenOverride(null);
+    startStudio.mutate({ slug: projectSlug, version: studioVersion });
+  }, [
+    editRequested,
+    hardRestartStudio.isPending,
+    initialGenerationRequested,
+    isRenamePending,
+    project,
+    projectSlug,
+    startStudio,
+    startStudio.data,
+    startStudio.isPending,
+    studioUrlQuery.data?.status,
+    studioVersion,
+  ]);
 
   const handleHardRestart = async (requestedVersion?: number) => {
     if (!projectSlug || !project) return;
@@ -313,6 +340,16 @@ export default function EmbeddedStudio() {
     studioUrlQuery.data,
   ]);
 
+  useEffect(() => {
+    initialGenerationBootstrapKeyRef.current = null;
+  }, [
+    initialGenerationRequested,
+    projectSlug,
+    studioBaseUrl,
+    studioReloadNonce,
+    studioVersion,
+  ]);
+
   const ensureStudioRunning = useCallback(async () => {
     if (!projectSlug) {
       return {
@@ -363,6 +400,34 @@ export default function EmbeddedStudio() {
     );
   };
 
+  const sendInitialGenerationBootstrap = useCallback(() => {
+    if (!initialGenerationRequested) return;
+
+    const targetWindow = studioIframeRef.current?.contentWindow;
+    if (!targetWindow) return;
+
+    const key = `${projectSlug || ""}:${studioVersion}:${studioBaseUrl || ""}:${studioReloadNonce}`;
+    if (initialGenerationBootstrapKeyRef.current === key) {
+      return;
+    }
+
+    initialGenerationBootstrapKeyRef.current = key;
+    targetWindow.postMessage(
+      {
+        type: "vivd:host:start-initial-generation",
+        projectSlug,
+        version: studioVersion,
+      },
+      "*",
+    );
+  }, [
+    initialGenerationRequested,
+    projectSlug,
+    studioBaseUrl,
+    studioReloadNonce,
+    studioVersion,
+  ]);
+
   useEffect(() => {
     syncThemeToStudio();
   }, [theme, colorTheme]);
@@ -375,13 +440,18 @@ export default function EmbeddedStudio() {
       if (event.data?.type === "vivd:studio:ready") {
         setStudioReady(true);
         syncThemeToStudio();
+        sendInitialGenerationBootstrap();
         return;
       }
       if (event.data?.type === "vivd:studio:close") {
         navigate(ROUTES.DASHBOARD);
       }
       if (event.data?.type === "vivd:studio:fullscreen") {
-        navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${studioVersion}`);
+        const params = new URLSearchParams({
+          version: String(studioVersion),
+          ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+        });
+        navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`);
       }
       if (event.data?.type === "vivd:studio:navigate") {
         const path = event.data?.path;
@@ -413,7 +483,9 @@ export default function EmbeddedStudio() {
     };
   }, [
     navigate,
+    initialGenerationRequested,
     projectSlug,
+    sendInitialGenerationBootstrap,
     setColorTheme,
     setTheme,
     studioVersion,
@@ -428,13 +500,21 @@ export default function EmbeddedStudio() {
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
     url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
+    if (initialGenerationRequested) {
+      url.searchParams.set("initialGeneration", "1");
+    }
     // Origin of the host app – used by the studio to construct shareable preview URLs.
     url.searchParams.set("hostOrigin", window.location.origin);
     // Used by the "fullscreen/open in new tab" studio view to navigate back.
+    const returnToParams = new URLSearchParams({
+      view: "studio",
+      version: String(studioVersion),
+      ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+    });
     url.searchParams.set(
       "returnTo",
       new URL(
-        `${ROUTES.PROJECT(projectSlug || "")}?view=studio&version=${studioVersion}`,
+        `${ROUTES.PROJECT(projectSlug || "")}?${returnToParams.toString()}`,
         window.location.origin,
       ).toString(),
     );
@@ -445,7 +525,14 @@ export default function EmbeddedStudio() {
       url.hash = hashParams.toString();
     }
     return url.toString();
-  }, [projectSlug, publicPreviewEnabled, studioAccessToken, studioBaseUrl, studioVersion]);
+  }, [
+    initialGenerationRequested,
+    projectSlug,
+    publicPreviewEnabled,
+    studioAccessToken,
+    studioBaseUrl,
+    studioVersion,
+  ]);
 
   useEffect(() => {
     if (!studioIframeSrc) {

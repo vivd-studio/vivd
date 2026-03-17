@@ -26,6 +26,7 @@ import type {
   CanonicalChatEvent,
   OpenCodeOptimisticUserMessage,
   OpenCodeChatState,
+  OpenCodeQuestionRequest,
   OpenCodeSession,
   OpenCodeSessionMessageRecord,
   OpenCodeSessionStatus,
@@ -35,6 +36,7 @@ import { OPEN_CODE_CHAT_INITIAL_STATE } from "./types";
 type OpencodeChatContextValue = {
   state: OpenCodeChatState;
   sessions: OpenCodeSession[];
+  questionRequestsBySessionId: Record<string, OpenCodeQuestionRequest[]>;
   selectedSessionId: string | null;
   setSelectedSessionId: (sessionId: string | null) => void;
   sessionStatus: OpenCodeSessionStatus | null;
@@ -277,6 +279,7 @@ export function OpencodeChatProvider({
     return {
       state,
       sessions: selectSessions(state),
+      questionRequestsBySessionId: state.questionRequestsBySessionId,
       selectedSessionId,
       setSelectedSessionId,
       sessionStatus: selectSessionStatus(state, selectedSessionId),

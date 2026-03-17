@@ -9,6 +9,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - docs
   backend:
     build:
       target: dev
@@ -57,7 +58,7 @@ services:
       postgres:
         condition: service_healthy
       scraper:
-        condition: service_started
+        condition: service_healthy
 
   frontend:
     build:
@@ -89,6 +90,34 @@ services:
           path: ./packages/theme/package.json
         - action: rebuild
           path: ./packages/backend/package.json
+
+  docs:
+    build:
+      context: .
+      dockerfile: packages/docs/Dockerfile
+      target: dev
+    command: npm run dev
+    environment:
+      - VIVD_DOCS_SITE_URL=${VIVD_DOCS_SITE_URL:-http://docs.localhost}
+    networks:
+      - vivd-network
+    develop:
+      watch:
+        - action: sync
+          path: ./packages/docs
+          target: /app/packages/docs
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/theme
+          target: /app/packages/theme
+          ignore:
+            - node_modules/
+        - action: rebuild
+          path: ./packages/docs/package.json
+        - action: rebuild
+          path: ./packages/theme/package.json
 
   studio:
     build:
@@ -140,18 +169,7 @@ services:
       - "5432:5432"
 
   scraper:
-    build:
-      context: ./packages/scraper
-    environment:
-      - PORT=3001
-      - MAX_BROWSERS=2
-      - SCRAPER_API_KEY=${SCRAPER_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      # Residential proxy config (optional - set in .env to enable)
-      - PROXY_HOST=${PROXY_HOST:-}
-      - PROXY_PORT=${PROXY_PORT:-823}
-      - PROXY_USERNAME=${PROXY_USERNAME:-}
-      - PROXY_PASSWORD=${PROXY_PASSWORD:-}
+    command: npm run dev
     networks:
       - vivd-network
     platform: linux/amd64

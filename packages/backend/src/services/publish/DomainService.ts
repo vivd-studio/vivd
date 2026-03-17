@@ -8,6 +8,7 @@ export const RESERVED_ORG_SLUG_LABELS = [
   "app",
   "www",
   "api",
+  "docs",
   "admin",
   "root",
   "default",
@@ -63,6 +64,7 @@ function ensureAsciiDomain(value: string): boolean {
 }
 
 const DEFAULT_PUBLIC_PLUGIN_API_HOST = "api.vivd.studio";
+const DEFAULT_DOCS_HOST = "docs.vivd.studio";
 
 export function normalizeHostname(input: string): string {
   const trimmed = input.trim().toLowerCase();
@@ -106,6 +108,12 @@ export class DomainService {
       this.getEnvHostname(process.env.VIVD_PUBLIC_PLUGIN_API_HOST) ??
       this.getEnvHostname(DEFAULT_PUBLIC_PLUGIN_API_HOST);
     return configured || DEFAULT_PUBLIC_PLUGIN_API_HOST;
+  }
+
+  getDocsHost(): string {
+    const configured =
+      this.getEnvHostname(process.env.VIVD_DOCS_HOST) ?? this.getEnvHostname(DEFAULT_DOCS_HOST);
+    return configured || DEFAULT_DOCS_HOST;
   }
 
   normalizeHost(value: string): string {
@@ -437,6 +445,23 @@ export class DomainService {
         valid: false,
         normalized,
         error: `Domain "${normalized}" is reserved for local public plugin API routing`,
+      };
+    }
+
+    const docsHost = this.getDocsHost();
+    if (normalized === docsHost) {
+      return {
+        valid: false,
+        normalized,
+        error: `Domain "${normalized}" is reserved for the public docs host`,
+      };
+    }
+
+    if (normalized === "docs.localhost") {
+      return {
+        valid: false,
+        normalized,
+        error: `Domain "${normalized}" is reserved for local public docs routing`,
       };
     }
 

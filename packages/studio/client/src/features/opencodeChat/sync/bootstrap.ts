@@ -1,10 +1,36 @@
 import type {
   OpenCodeChatBootstrap,
+  OpenCodeQuestionRequest,
   OpenCodeChatState,
   OpenCodeSessionMessageRecord,
 } from "../types";
 import { OPEN_CODE_CHAT_INITIAL_STATE } from "../types";
 import { upsertSessionMessagesIntoState } from "./event-reducer";
+
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function groupQuestionRequestsBySession(
+  questions: OpenCodeQuestionRequest[],
+): Record<string, OpenCodeQuestionRequest[]> {
+  const grouped: Record<string, OpenCodeQuestionRequest[]> = {};
+
+  for (const question of questions) {
+    if (!question?.id || !question.sessionID) continue;
+    const current = grouped[question.sessionID] ?? [];
+    current.push(question);
+    grouped[question.sessionID] = current;
+  }
+
+  for (const sessionId of Object.keys(grouped)) {
+    grouped[sessionId] = [...grouped[sessionId]].sort((left, right) =>
+      compareStrings(left.id, right.id),
+    );
+  }
+
+  return grouped;
+}
 
 export function createStateFromBootstrap(
   bootstrap: OpenCodeChatBootstrap,
@@ -17,6 +43,9 @@ export function createStateFromBootstrap(
     ),
     sessionOrder: bootstrap.sessions.map((session) => session.id),
     sessionStatusById: { ...bootstrap.statuses },
+    questionRequestsBySessionId: groupQuestionRequestsBySession(
+      bootstrap.questions,
+    ),
     messagesById: {},
     messagesBySessionId: {},
     partsByMessageId: {},

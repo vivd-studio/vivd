@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -20,6 +20,8 @@ const {
   useSessionMock,
   useThemeMock,
   useSidebarMock,
+  useStudioRuntimeGuardMock,
+  resolveStudioRuntimeUrlMock,
 } = vi.hoisted(() => ({
   useParamsMock: vi.fn(),
   useLocationMock: vi.fn(),
@@ -39,6 +41,8 @@ const {
   useSessionMock: vi.fn(),
   useThemeMock: vi.fn(),
   useSidebarMock: vi.fn(),
+  useStudioRuntimeGuardMock: vi.fn(),
+  resolveStudioRuntimeUrlMock: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -102,11 +106,20 @@ vi.mock("@/components/common/StudioStartupLoading", () => ({
   StudioStartupLoading: () => <div data-testid="studio-startup-loading" />,
 }));
 
+vi.mock("@/hooks/useStudioRuntimeGuard", () => ({
+  useStudioRuntimeGuard: useStudioRuntimeGuardMock,
+}));
+
+vi.mock("@/lib/studioRuntimeUrl", () => ({
+  resolveStudioRuntimeUrl: resolveStudioRuntimeUrlMock,
+}));
+
 vi.mock("@/lib/brand", () => ({
   formatDocumentTitle: vi.fn((title?: string) => (title ? `${title} - Vivd` : "Vivd")),
 }));
 
 import EmbeddedStudio from "./EmbeddedStudio";
+import { MemoryRouter } from "react-router-dom";
 
 function makeProject(slug = "site-1") {
   return {
@@ -117,6 +130,14 @@ function makeProject(slug = "site-1") {
     versions: [{ version: 1, status: "completed" }],
     thumbnailUrl: null,
   };
+}
+
+function renderEmbeddedStudio() {
+  return render(
+    <MemoryRouter>
+      <EmbeddedStudio />
+    </MemoryRouter>,
+  );
 }
 
 describe("EmbeddedStudio", () => {
@@ -139,6 +160,8 @@ describe("EmbeddedStudio", () => {
     useSessionMock.mockReset();
     useThemeMock.mockReset();
     useSidebarMock.mockReset();
+    useStudioRuntimeGuardMock.mockReset();
+    resolveStudioRuntimeUrlMock.mockReset();
 
     useParamsMock.mockReturnValue({ projectSlug: "site-1" });
     useLocationMock.mockReturnValue({ search: "" });
@@ -206,6 +229,10 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
     });
+    useStudioRuntimeGuardMock.mockReturnValue({
+      isRecovering: false,
+    });
+    resolveStudioRuntimeUrlMock.mockImplementation((url: string) => url);
 
     projectListUseQueryMock.mockReturnValue({
       data: { projects: [makeProject()] },
@@ -221,7 +248,7 @@ describe("EmbeddedStudio", () => {
       error: null,
     });
 
-    render(<EmbeddedStudio />);
+    renderEmbeddedStudio();
 
     expect(screen.getByText("Loading project...")).toBeInTheDocument();
   });
@@ -233,7 +260,7 @@ describe("EmbeddedStudio", () => {
       error: new Error("boom"),
     });
 
-    render(<EmbeddedStudio />);
+    renderEmbeddedStudio();
 
     expect(screen.getByText("Error loading project: boom")).toBeInTheDocument();
   });
@@ -245,8 +272,83 @@ describe("EmbeddedStudio", () => {
       error: null,
     });
 
-    render(<EmbeddedStudio />);
+    renderEmbeddedStudio();
 
     expect(screen.getByText("Project not found")).toBeInTheDocument();
+  });
+
+  it("auto-starts studio when initial generation is requested and no runtime is active", () => {
+    const startStudioMutate = vi.fn();
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1&initialGeneration=1",
+    });
+    startStudioUseMutationMock.mockReturnValueOnce({
+      mutate: startStudioMutate,
+      isPending: false,
+      data: null,
+      error: null,
+      reset: vi.fn(),
+    });
+    getStudioUrlUseQueryMock.mockReturnValueOnce({
+      data: { status: "stopped" },
+    });
+
+    renderEmbeddedStudio();
+
+    expect(startStudioMutate).toHaveBeenCalledWith({
+      slug: "site-1",
+      version: 1,
+    });
+  });
+
+  it("posts the initial-generation bootstrap message once after studio is ready", () => {
+    const postMessage = vi.fn();
+    const contentWindowMock = { postMessage };
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1&initialGeneration=1",
+    });
+    getStudioUrlUseQueryMock.mockReturnValueOnce({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        accessToken: null,
+      },
+    });
+
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+      configurable: true,
+      get() {
+        return contentWindowMock;
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    screen.getByTitle("Vivd Studio - site-1");
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:ready" },
+          source: contentWindowMock as unknown as MessageEventSource,
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:ready" },
+          source: contentWindowMock as unknown as MessageEventSource,
+        }),
+      );
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "vivd:host:start-initial-generation" }),
+      "*",
+    );
+    expect(
+      postMessage.mock.calls.filter(
+        ([message]) =>
+          message?.type === "vivd:host:start-initial-generation",
+      ),
+    ).toHaveLength(1);
   });
 });

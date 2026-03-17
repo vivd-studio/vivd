@@ -428,4 +428,11 @@ describe("AppSidebar search", () => {
       screen.getByRole("dialog", { name: "Search navigation" }),
     ).toBeInTheDocument();
   });
+
+  it("shows a persistent docs link derived from the current host", () => {
+    renderSidebar();
+
+    const docsLink = screen.getByRole("link", { name: "Docs" });
+    expect(docsLink).toHaveAttribute("href", "http://docs.localhost/");
+  });
 });

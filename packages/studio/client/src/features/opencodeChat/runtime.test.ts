@@ -3,6 +3,7 @@ import {
   buildDerivedSessionError,
   deriveChatActivityState,
   selectMostRecentActiveSessionId,
+  selectMostRecentAttentionSessionId,
 } from "./runtime";
 import type { OpenCodeSessionMessageRecord, OpenCodeSessionStatus } from "./types";
 
@@ -24,13 +25,13 @@ function createMessage(
 }
 
 describe("opencodeChat runtime", () => {
-  it("derives streaming from active assistant output", () => {
+  it("derives streaming from pending assistant output even if the session status already looks terminal", () => {
     const state = deriveChatActivityState({
       messages: [
         createMessage({ id: "u1", role: "user" }),
         createMessage({ id: "a1", role: "assistant" }),
       ],
-      sessionStatus: { type: "busy" },
+      sessionStatus: { type: "done" },
       hasOptimisticUserMessage: false,
       isSubmitting: false,
     });
@@ -56,9 +57,28 @@ describe("opencodeChat runtime", () => {
   it("derives a safe stream error when the canonical connection fails during an active session", () => {
     const error = buildDerivedSessionError({
       selectedSessionId: "sess-1",
+      messages: [],
       sessionMessagesIsError: false,
       sessionMessagesError: null,
       sessionStatus: { type: "busy" },
+      connectionState: "error",
+      connectionMessage: "socket gone",
+    });
+
+    expect(error?.error.type).toBe("stream");
+    expect(error?.error.message).toContain("Live updates were interrupted");
+  });
+
+  it("derives a safe stream error when a pending assistant message exists after the session status has already gone terminal", () => {
+    const error = buildDerivedSessionError({
+      selectedSessionId: "sess-1",
+      messages: [
+        createMessage({ id: "u1", role: "user" }),
+        createMessage({ id: "a1", role: "assistant" }),
+      ],
+      sessionMessagesIsError: false,
+      sessionMessagesError: null,
+      sessionStatus: { type: "done" },
       connectionState: "error",
       connectionMessage: "socket gone",
     });
@@ -84,5 +104,23 @@ describe("opencodeChat runtime", () => {
     });
 
     expect(selected).toBe("sess-3");
+  });
+
+  it("selects the most recent session needing attention when a question is pending", () => {
+    const selected = selectMostRecentAttentionSessionId({
+      sessions: [
+        { id: "sess-1", time: { updated: 10 } },
+        { id: "sess-2", time: { updated: 20 } },
+      ],
+      sessionStatusById: {
+        "sess-1": { type: "done" },
+        "sess-2": { type: "idle" },
+      },
+      questionRequestsBySessionId: {
+        "sess-2": [{ id: "que-1", sessionID: "sess-2", questions: [] }],
+      },
+    });
+
+    expect(selected).toBe("sess-2");
   });
 });

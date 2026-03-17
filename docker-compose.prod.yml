@@ -13,8 +13,10 @@ services:
       - published_sites:/srv/published:ro
     environment:
       - VIVD_PUBLIC_PLUGIN_API_HOST=${VIVD_PUBLIC_PLUGIN_API_HOST:-api.vivd.studio}
+      - VIVD_DOCS_HOST=${VIVD_DOCS_HOST:-docs.vivd.studio}
     depends_on:
       - backend
+      - docs
     networks:
       - vivd-network
 
@@ -112,6 +114,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      scraper:
+        condition: service_healthy
     networks:
       - vivd-network
 
@@ -123,6 +127,37 @@ services:
       - VITE_APP_ENV=${VITE_APP_ENV}
     depends_on:
       - backend
+    networks:
+      - vivd-network
+
+  docs:
+    image: ghcr.io/vivd-studio/vivd-docs:latest
+    pull_policy: always
+    restart: unless-stopped
+    networks:
+      - vivd-network
+
+  scraper:
+    image: ghcr.io/vivd-studio/vivd-scraper:latest
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+      - MAX_BROWSERS=${MAX_BROWSERS:-2}
+      - MAX_CONCURRENT_SCRAPES=${MAX_CONCURRENT_SCRAPES:-2}
+      - SCRAPER_API_KEY=${SCRAPER_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      # Residential proxy config (optional - set in .env to enable)
+      - PROXY_HOST=${PROXY_HOST:-}
+      - PROXY_PORT=${PROXY_PORT:-823}
+      - PROXY_USERNAME=${PROXY_USERNAME:-}
+      - PROXY_PASSWORD=${PROXY_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - vivd-network
 
