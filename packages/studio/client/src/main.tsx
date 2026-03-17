@@ -8,26 +8,11 @@ import {
   VIVD_STUDIO_TOKEN_HEADER,
   withVivdStudioTokenQuery,
 } from "@/lib/studioAuth";
+import { resolveTrpcRequestTimeoutMs } from "@/lib/trpcTimeouts";
 import { ThemeProvider } from "@/components/theme";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { App } from "@/App";
 import "./index.css";
-
-const TRPC_REQUEST_TIMEOUT_MS = 15_000;
-const LONG_RUNNING_TRPC_REQUEST_TIMEOUT_MS = 3 * 60_000;
-const LONG_RUNNING_TRPC_PROCEDURES = new Set([
-  "agent.runPrePublishChecklist",
-  "agent.fixChecklistItem",
-]);
-
-function resolveTrpcRequestTimeoutMs(url: string): number {
-  for (const procedure of LONG_RUNNING_TRPC_PROCEDURES) {
-    if (url.includes(procedure)) {
-      return LONG_RUNNING_TRPC_REQUEST_TIMEOUT_MS;
-    }
-  }
-  return TRPC_REQUEST_TIMEOUT_MS;
-}
 
 function Root() {
   const studioToken = getVivdStudioToken();

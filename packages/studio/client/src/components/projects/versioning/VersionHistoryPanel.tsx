@@ -46,6 +46,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
+import { isLikelyTrpcTimeoutError } from "@/lib/trpcTimeouts";
 import { POLLING_BACKGROUND } from "@/app/config/polling";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -216,6 +217,20 @@ export function VersionHistoryPanel({
       onRefresh?.();
     },
     onError: (error) => {
+      if (isLikelyTrpcTimeoutError(error)) {
+        toast.error(
+          "GitHub pull request timed out in the browser. It may still complete. Refreshing status...",
+        );
+        void Promise.all([
+          utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+          utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+          utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+          utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+          refetchGitHubSyncStatus(),
+        ]);
+        onRefresh?.();
+        return;
+      }
       toast.error(`GitHub pull failed: ${error.message}`);
     },
   });
@@ -237,6 +252,21 @@ export function VersionHistoryPanel({
       onRefresh?.();
     },
     onError: (error) => {
+      if (isLikelyTrpcTimeoutError(error)) {
+        setShowForceSyncConfirm(false);
+        toast.error(
+          "GitHub force sync request timed out in the browser. It may still complete. Refreshing status...",
+        );
+        void Promise.all([
+          utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+          utils.project.gitHasChanges.invalidate({ slug: projectSlug, version }),
+          utils.project.gitWorkingCommit.invalidate({ slug: projectSlug, version }),
+          utils.project.gitHubSyncStatus.invalidate({ slug: projectSlug, version }),
+          refetchGitHubSyncStatus(),
+        ]);
+        onRefresh?.();
+        return;
+      }
       toast.error(`GitHub force sync failed: ${error.message}`);
     },
   });

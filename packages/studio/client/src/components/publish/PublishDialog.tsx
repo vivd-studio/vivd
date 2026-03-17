@@ -38,6 +38,7 @@ import {
   Globe,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { isLikelyTrpcTimeoutError } from "@/lib/trpcTimeouts";
 import { toast } from "sonner";
 import { PrePublishChecklist } from "./PrePublishChecklist";
 import { usePrePublishChecklist } from "./usePrePublishChecklist";
@@ -246,6 +247,19 @@ export function PublishDialog({
       onOpenChange(false);
     },
     onError: (error) => {
+      if (isLikelyTrpcTimeoutError(error)) {
+        const timeoutMessage =
+          "Publish request timed out in the browser. It may still complete. Checking status...";
+        setPublishError(timeoutMessage);
+        toast.error(timeoutMessage);
+        void Promise.all([
+          utils.project.publishStatus.invalidate({ slug: projectSlug }),
+          utils.project.publishState.invalidate({ slug: projectSlug, version }),
+          utils.project.publishChecklist.invalidate({ slug: projectSlug, version }),
+        ]);
+        return;
+      }
+
       const message = error.message || "Failed to publish";
       setPublishError(message);
       toast.error(error.message || "Failed to publish");
@@ -503,9 +517,6 @@ export function PublishDialog({
       }
     };
 
-    const sleep = (ms: number) =>
-      new Promise<void>((resolve) => setTimeout(resolve, ms));
-
     const handleConnectedPublish = async () => {
       setPublishError(null);
 
@@ -527,12 +538,7 @@ export function PublishDialog({
       }
 
       try {
-        const latestStateResult = await Promise.race([
-          publishStateQuery.refetch(),
-          sleep(15_000).then(() => {
-            throw new Error("refetch_timeout");
-          }),
-        ]);
+        const latestStateResult = await publishStateQuery.refetch();
         const latestState = latestStateResult.data;
         if (!latestState) {
           toast.error("Publishing status is still loading. Please wait a little while.");
@@ -600,8 +606,8 @@ export function PublishDialog({
           expectedCommitHash: targetCommitHash,
         });
       } catch (err) {
-        if (err instanceof Error && err.message === "refetch_timeout") {
-          setPublishError("Publishing status is taking longer than expected. We'll keep checking automatically.");
+        if (isLikelyTrpcTimeoutError(err)) {
+          // publishMutation.onError already handles timeout copy + status refresh.
           return;
         }
         // publishMutation already surfaces errors via its onError handler.
