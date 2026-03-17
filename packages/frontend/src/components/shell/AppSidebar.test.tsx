@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ const {
   getMyOrganizationUseQueryMock,
   listMyOrganizationsUseQueryMock,
   setActiveOrganizationUseMutationMock,
+  scrollIntoViewMock,
 } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
   signOutMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   getMyOrganizationUseQueryMock: vi.fn(),
   listMyOrganizationsUseQueryMock: vi.fn(),
   setActiveOrganizationUseMutationMock: vi.fn(),
+  scrollIntoViewMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-client", () => ({
@@ -63,6 +65,7 @@ vi.mock("@/lib/trpc", () => ({
 import { ROUTES } from "@/app/router";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { NavigationSearchProvider } from "./NavigationSearch";
 
 function renderSidebar({
   path = ROUTES.DASHBOARD,
@@ -72,12 +75,25 @@ function renderSidebar({
   sidebarOpen?: boolean;
 } = {}) {
   return render(
-    <SidebarProvider open={sidebarOpen}>
-      <MemoryRouter initialEntries={[path]}>
-        <AppSidebar />
-      </MemoryRouter>
-    </SidebarProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <SidebarProvider open={sidebarOpen}>
+        <NavigationSearchProvider>
+          <AppSidebar />
+        </NavigationSearchProvider>
+      </SidebarProvider>
+    </MemoryRouter>,
   );
+}
+
+function openSearchDialog() {
+  fireEvent.click(screen.getByRole("button", { name: "Open search" }));
+  return screen.getByRole("dialog", { name: "Search navigation" });
+}
+
+function getSelectedResults(dialog: HTMLElement) {
+  return within(dialog).getAllByRole("button").filter((button) => {
+    return button.getAttribute("data-selected") === "true";
+  });
 }
 
 describe("AppSidebar search", () => {
@@ -91,6 +107,7 @@ describe("AppSidebar search", () => {
     getMyOrganizationUseQueryMock.mockReset();
     listMyOrganizationsUseQueryMock.mockReset();
     setActiveOrganizationUseMutationMock.mockReset();
+    scrollIntoViewMock.mockReset();
 
     signOutMock.mockResolvedValue(undefined);
 
@@ -111,6 +128,11 @@ describe("AppSidebar search", () => {
         removeEventListener: vi.fn(),
         dispatchEvent: vi.fn(),
       })),
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      writable: true,
+      value: scrollIntoViewMock,
     });
 
     useSessionMock.mockReturnValue({
@@ -224,45 +246,51 @@ describe("AppSidebar search", () => {
 
     expect(screen.queryByText("Zeta Project")).toBeNull();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    const dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "zeta" },
     });
 
-    expect(screen.getByText(/Search results/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Zeta Project$/i })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Search results/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Zeta Project" }),
+    ).toBeInTheDocument();
   });
 
   it("indexes app-wide destinations such as project plugins routes", () => {
     renderSidebar();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    const dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "plugins zeta" },
     });
 
     expect(
-      screen.getByRole("button", { name: /Plugins: Zeta Project/i }),
+      within(dialog).getByRole("button", { name: /Plugins: Zeta Project/i }),
     ).toBeInTheDocument();
   });
 
   it("indexes the organization plugins overview route for org admins", () => {
     renderSidebar();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    const dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "organization plugins" },
     });
 
     expect(
-      screen.getByRole("button", { name: /^Plugins$/i }),
+      within(dialog).getByRole("button", { name: /^Plugins$/i }),
     ).toBeInTheDocument();
   });
 
   it("respects role/host gating for super admin search entries", () => {
     const firstRender = renderSidebar();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    let dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "machines" },
     });
-    expect(screen.getByText("No sidebar items found.")).toBeInTheDocument();
+    expect(within(dialog).getByText(/No results found/i)).toBeInTheDocument();
     firstRender.unmount();
 
     useSessionMock.mockReturnValue({
@@ -286,50 +314,118 @@ describe("AppSidebar search", () => {
     });
 
     renderSidebar();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "machines" },
     });
-    expect(screen.getByRole("button", { name: /Machines/i })).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: /Machines/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the email destination in super admin navigation", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: true,
+        controlPlaneHost: null,
+        isSuperAdminHost: true,
+      },
+    });
+
+    renderSidebar({ path: `${ROUTES.SUPERADMIN_BASE}?section=email` });
+
+    expect(screen.getByRole("link", { name: /^Email$/i })).toBeInTheDocument();
   });
 
   it("clears the search query after selecting a search result", () => {
     renderSidebar();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+    let dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
       target: { value: "settings" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Settings/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Settings$/i }));
 
-    expect(screen.queryByText(/Search results/i)).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Search navigation" })).toBeNull();
+
+    dialog = openSearchDialog();
     expect(
-      (screen.getByRole("textbox", { name: "Search" }) as HTMLInputElement)
-        .value,
+      (within(dialog).getByRole("textbox", { name: "Search" }) as HTMLInputElement).value,
     ).toBe("");
   });
 
-  it("does not persist the search border after entering text", () => {
+  it("opens the search dialog with the keyboard shortcut", () => {
     renderSidebar();
 
-    const searchInput = screen.getByRole("textbox", { name: "Search" });
-    const classTokens = searchInput.className.split(/\s+/);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
 
-    expect(classTokens).toContain(
-      "focus-visible:shadow-[0_0_0_1px_hsl(var(--primary))]",
-    );
-
-    fireEvent.change(searchInput, {
-      target: { value: "settings" },
-    });
-
-    expect(searchInput.className.split(/\s+/)).not.toContain(
-      "shadow-[0_0_0_1px_hsl(var(--primary))]",
-    );
+    expect(
+      screen.getByRole("dialog", { name: "Search navigation" }),
+    ).toBeInTheDocument();
   });
 
-  it("hides the search input while the sidebar is collapsed", () => {
+  it("scrolls the active result into view during keyboard navigation", () => {
+    renderSidebar();
+
+    const dialog = openSearchDialog();
+    const searchInput = within(dialog).getByRole("textbox", { name: "Search" });
+
+    fireEvent.change(searchInput, {
+      target: { value: "project" },
+    });
+
+    const callsBeforeArrowing = scrollIntoViewMock.mock.calls.length;
+    fireEvent.keyDown(searchInput, { key: "ArrowDown" });
+
+    expect(scrollIntoViewMock.mock.calls.length).toBeGreaterThan(callsBeforeArrowing);
+  });
+
+  it("does not let stationary hover override keyboard selection", () => {
+    renderSidebar();
+
+    const dialog = openSearchDialog();
+    const searchInput = within(dialog).getByRole("textbox", { name: "Search" });
+
+    fireEvent.change(searchInput, {
+      target: { value: "plug" },
+    });
+
+    fireEvent.keyDown(searchInput, { key: "ArrowDown" });
+
+    const selectedAfterKeyboard = getSelectedResults(dialog);
+    expect(selectedAfterKeyboard).toHaveLength(1);
+
+    const differentResult = within(dialog).getByRole("button", {
+      name: "Plugins: Gamma Project",
+    });
+
+    fireEvent.mouseEnter(differentResult);
+    expect(getSelectedResults(dialog)[0]).toBe(selectedAfterKeyboard[0]);
+
+    fireEvent.mouseMove(differentResult);
+    expect(getSelectedResults(dialog)).toEqual([differentResult]);
+  });
+
+  it("keeps search available while the sidebar is collapsed", () => {
     renderSidebar({ sidebarOpen: false });
 
-    expect(screen.queryByRole("textbox", { name: "Search" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open search" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Search navigation" }),
+    ).toBeInTheDocument();
   });
 });

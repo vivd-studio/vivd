@@ -1,5 +1,5 @@
 interface ResolveStudioMainBackendUrlInput {
-  providerKind: "local" | "fly";
+  providerKind: "local" | "fly" | "docker";
   requestHost?: string | null;
   backendUrlEnv?: string | null;
   domainEnv?: string | null;
@@ -64,7 +64,7 @@ function pickFallbackOrigin(input: ResolveStudioMainBackendUrlInput): string {
 /**
  * Resolve the backend URL used by studio machines for connected-mode callbacks.
  *
- * For remote/Fly machines, prefer the host that initiated the studio start so
+ * For remote/Fly/Docker machines, prefer the host that initiated the studio start so
  * backend context stays aligned with tenant-host routing.
  */
 export function resolveStudioMainBackendUrl(

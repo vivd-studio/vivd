@@ -1,44 +1,22 @@
 import {
   createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
   useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
-import {
-  POLLING_INFREQUENT,
-} from "@/app/config/polling";
+import { POLLING_INFREQUENT } from "@/app/config/polling";
 import { useOptionalPreview } from "../preview/PreviewContext";
-import {
-  markEventAsProcessed,
-  type EventDedupState,
-} from "./chatStreamUtils";
 import type {
   ChatContextValue,
-  Message,
   ModelTier,
   SessionDebugState,
-  SessionError,
-  UsageData,
 } from "./chatTypes";
-import {
-  calculateUsageFromSessionMessages,
-  mapSessionMessagesToChatMessages,
-  shouldDeferSessionHydrationWhilePendingRun,
-  shouldHoldWaitingForStaleTerminalStatus,
-  shouldRecoverFromMissedStreamEvents,
-} from "./chatMessageUtils";
 import { useChatAttachments } from "./useChatAttachments";
-import { useChatSessions } from "./useChatSessions";
-import { useChatActions } from "./useChatActions";
-import { sanitizeSessionError } from "./chatErrorPolicy";
-import {
-  handleSessionEvent,
-  handleSessionStreamError,
-} from "./chatEventHandlers";
+import { useConfirmDialog } from "./useConfirmDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useOpencodeChatController } from "@/features/opencodeChat";
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
@@ -60,10 +39,6 @@ export function useChatContext() {
   return context;
 }
 
-/**
- * Returns the ChatContext value if inside a ChatProvider, or null otherwise.
- * Use this when a component may or may not be rendered within a ChatProvider.
- */
 export function useOptionalChatContext() {
   return useContext(ChatContext);
 }
@@ -81,14 +56,6 @@ export function ChatProvider({
   version,
   onTaskComplete,
 }: ChatProviderProps) {
-  const debugEnabled = import.meta.env.VITE_DEBUG_CHAT === "true";
-  const debugLog = (...args: unknown[]) => {
-    if (debugEnabled) {
-      console.log(...args);
-    }
-  };
-
-  // Access PreviewContext for element selection (may not be available outside preview page)
   const previewContext = useOptionalPreview();
 
   const selectorMode = previewContext?.selectorMode ?? false;
@@ -111,107 +78,30 @@ export function ChatProvider({
     version,
   });
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  // Ref to access current messages in effects without adding to dependency array
-  const messagesRef = useRef<Message[]>([]);
-  messagesRef.current = messages;
   const [input, setInput] = useState("");
-  // Track if we're in the process of sending (includes image upload phase)
-  const [isSending, setIsSending] = useState(false);
-  const pendingSessionIdRef = useRef<string | null>(null);
-  const continueClickLockRef = useRef(false);
-  const autoSelectLockedRef = useRef(false);
-  const hasAutoSelectedRunningSessionRef = useRef(false);
-
-  // Real-time streaming state from SSE subscription
-  const [isStreaming, setIsStreaming] = useState(false);
-  // Unified streaming parts state to support interleaved thoughts/tools/text
-  const [streamingParts, setStreamingParts] = useState<any[]>([]);
-
-  // Track if we're waiting for agent response
-  const isWaitingForAgent = useRef(false);
-  const [isWaiting, setIsWaiting] = useState(false);
-  const hasPendingAgentRun = isWaitingForAgent.current;
-  const pendingRunStartedAtRef = useRef<number | null>(null);
-
-  const markPendingRunStart = useCallback(() => {
-    pendingRunStartedAtRef.current = Date.now();
-  }, []);
-
-  const clearPendingRunStart = useCallback(() => {
-    pendingRunStartedAtRef.current = null;
-  }, []);
-
   const {
-    sessions,
-    sessionsLoading,
-    selectedSessionId,
-    setSelectedSessionId,
-    selectSession,
-    isSessionHydrating,
-    setIsSessionHydrating,
-    sessionMessages,
-    sessionMessagesIsError,
-    sessionMessagesError,
-    refetchMessages,
-    refetchSessions,
-    currentSessionStatus,
-    shouldSubscribeToSessionEvents,
-  } = useChatSessions({
-    projectSlug,
-    version,
-    isActive: isWaiting || isStreaming || hasPendingAgentRun,
-    autoSelectLockedRef,
-    hasAutoSelectedRunningSessionRef,
+    confirmDialog,
+    requestConfirm,
+    resolveConfirm,
+    cancelConfirmIfPending,
+  } = useConfirmDialog();
+
+  const { data: usageLimitStatus } = trpc.usage.status.useQuery(undefined, {
+    refetchInterval: POLLING_INFREQUENT,
+    staleTime: 10000,
   });
 
-  // Derive isReverted from session data instead of local state
-  const selectedSession = sessions.find((s) => s.id === selectedSessionId);
-  const isReverted = Boolean(selectedSession?.revert);
-
-  // Debug tracking for SSE connection status
-  const [sseConnected, setSseConnected] = useState(false);
-  const [lastEventTime, setLastEventTime] = useState<string | null>(null);
-  const [lastEventType, setLastEventType] = useState<string | null>(null);
-  const [usage, setUsage] = useState<UsageData | null>(null);
-
-  // Track last processed event ID per session for resumable SSE streams
-  // This prevents replay of old events (like session.completed) on reconnect
-  const lastEventIdBySession = useRef<Map<string, string>>(new Map());
-  const processedEventIdsBySession = useRef<Map<string, EventDedupState>>(
-    new Map(),
-  );
-  const EVENT_ID_DEDUPE_WINDOW = 500;
-
-  // Session error state (for quota limits, API errors, etc.)
-  const [sessionError, setSessionError] = useState<SessionError | null>(null);
-  const clearSessionError = () => setSessionError(null);
-
-  // Poll usage limits - refetch infrequently or manually after session completes
-  const { data: usageLimitStatus, refetch: refetchUsageStatus } =
-    trpc.usage.status.useQuery(undefined, {
-      refetchInterval: POLLING_INFREQUENT,
-      staleTime: 10000,
-    });
-
-  // Derive if usage is blocked
   const isUsageBlocked = usageLimitStatus?.blocked ?? false;
 
-  // Fetch available models for model selector
   const { data: availableModelsData } = trpc.agent.getAvailableModels.useQuery(
     undefined,
     {
-      staleTime: 60000, // Cache for 1 minute
+      staleTime: 60000,
     },
   );
   const availableModels = (availableModelsData ?? []) as ModelTier[];
+  const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(null);
 
-  // Selected model state - load from localStorage or auto-select first model
-  const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(
-    null,
-  );
-
-  // Wrapper to save to localStorage when model changes
   const setSelectedModel = useCallback((model: ModelTier | null) => {
     setSelectedModelState(model);
     if (model) {
@@ -222,121 +112,70 @@ export function ChatProvider({
     }
   }, []);
 
-  const buildRunTaskPayload = useCallback(
-    (task: string, sessionId?: string | null) => ({
-      projectSlug,
-      task,
-      ...(sessionId ? { sessionId } : {}),
-      version,
-      model: selectedModel
-        ? {
-            provider: selectedModel.provider,
-            modelId: selectedModel.modelId,
-          }
-        : undefined,
-    }),
-    [projectSlug, version, selectedModel],
-  );
-
-  // Load saved model preference or auto-select first model when models become available
   useEffect(() => {
-    if (availableModels.length === 0) return;
-    if (selectedModel) return;
+    if (availableModels.length === 0 || selectedModel) {
+      return;
+    }
 
-    // Try to load saved preference from localStorage
     const savedModel = localStorage.getItem("vivd-selected-model");
     if (savedModel) {
       try {
         const { provider, modelId } = JSON.parse(savedModel);
         const matchingModel = availableModels.find(
-          (m) => m.provider === provider && m.modelId === modelId,
+          (model) =>
+            model.provider === provider && model.modelId === modelId,
         );
         if (matchingModel) {
           setSelectedModelState(matchingModel);
           return;
         }
       } catch {
-        // Invalid saved value, fall through to default
+        // Ignore invalid local preference.
       }
     }
 
-    // Fall back to first available model
     setSelectedModelState(availableModels[0]);
   }, [availableModels, selectedModel]);
 
   const {
-    runTaskMutation,
+    sessions,
+    sessionsLoading,
+    selectedSessionId,
+    setSelectedSessionId,
+    selectedMessages,
+    sessionStatusType,
+    isSessionHydrating,
+    isReverted,
+    usage,
+    sessionError,
+    clearSessionError,
+    runTaskPending,
+    isSending,
+    setIsSending,
+    isStreaming,
+    isWaiting,
+    isThinking,
+    connection,
+    lastEventTime,
+    lastEventType,
+    lastEventId,
     sendTask,
-    confirmDialog,
-    resolveConfirm,
-    cancelConfirmIfPending,
-    handleDeleteSession,
-    handleRevert,
-    handleUnrevert,
-    handleStopGeneration,
-  } = useChatActions({
+    deleteSession,
+    revertToMessage,
+    unrevertSession,
+    stopGeneration,
+  } = useOpencodeChatController({
     projectSlug,
     version,
+    selectedModel: selectedModel
+      ? {
+          provider: selectedModel.provider,
+          modelId: selectedModel.modelId,
+        }
+      : null,
     onTaskComplete,
-    selectedSessionId,
-    setSelectedSessionId: selectSession,
-    setPendingSessionId: (sessionId) => {
-      pendingSessionIdRef.current = sessionId;
-    },
-    refetchMessages,
-    refetchSessions,
-    isWaitingForAgent,
-    buildRunTaskPayload,
-    setMessages,
-    setIsStreaming,
-    setIsWaiting,
-    setStreamingParts,
-    setSessionError,
-    clearPendingRunState: clearPendingRunStart,
   });
 
-  useEffect(() => {
-    setSelectedSessionId(null);
-    setMessages([]);
-    setIsStreaming(false);
-    setStreamingParts([]);
-    setIsSessionHydrating(false);
-    clearPendingRunStart();
-    lastEventIdBySession.current.clear();
-    processedEventIdsBySession.current.clear();
-    autoSelectLockedRef.current = false;
-    hasAutoSelectedRunningSessionRef.current = false;
-  }, [projectSlug, clearPendingRunStart]);
-
-  useEffect(() => {
-    const isPendingSession = pendingSessionIdRef.current === selectedSessionId;
-    continueClickLockRef.current = false;
-
-    setStreamingParts([]);
-    setIsStreaming(false);
-    setSessionError(null);
-    setSseConnected(false);
-    setLastEventTime(null);
-    setLastEventType(null);
-    setUsage(null);
-
-    if (isPendingSession) {
-      pendingSessionIdRef.current = null;
-      setIsSessionHydrating(false);
-      if (isWaitingForAgent.current) {
-        setIsWaiting(true);
-      }
-      return;
-    }
-
-    setMessages([]);
-    setIsWaiting(false);
-    isWaitingForAgent.current = false;
-    clearPendingRunStart();
-    setIsSessionHydrating(Boolean(selectedSessionId));
-  }, [selectedSessionId, clearPendingRunStart]);
-
-  // Handle element selection - attach element and clear from context
   useEffect(() => {
     if (selectedElement && clearSelectedElement) {
       setAttachedElement({
@@ -349,314 +188,36 @@ export function ChatProvider({
       });
       clearSelectedElement();
     }
-  }, [selectedElement, clearSelectedElement]);
+  }, [selectedElement, clearSelectedElement, setAttachedElement]);
 
-  // Handle pending chat messages from PreviewContext (e.g., from "Fix This" button in PublishDialog)
   useEffect(() => {
     const pending = previewContext?.pendingChatMessage;
     const clearPending = previewContext?.clearPendingChatMessage;
 
-    if (pending && clearPending) {
-      // Clear immediately to prevent re-triggering
-      clearPending();
-
-      const { message: pendingMessage, startNewSession } = pending;
-      const targetSessionId = startNewSession ? null : selectedSessionId;
-
-      // If startNewSession is requested, clear the current session first
-      if (startNewSession) {
-        autoSelectLockedRef.current = true;
-        pendingSessionIdRef.current = null;
-        setSelectedSessionId(null);
-        setMessages([]);
-        setIsStreaming(false);
-        setIsWaiting(false);
-        setStreamingParts([]);
-        setSessionError(null);
-        clearPendingRunStart();
-      }
-
-      setInput("");
-      debugLog("[Vivd] Sending pending prompt:", pendingMessage);
-      markPendingRunStart();
-      sendTask(pendingMessage, targetSessionId);
+    if (!pending || !clearPending) {
+      return;
     }
+
+    clearPending();
+
+    const { message: pendingMessage, startNewSession } = pending;
+    const targetSessionId = startNewSession ? null : selectedSessionId;
+
+    if (startNewSession) {
+      setSelectedSessionId(null);
+      clearSessionError();
+    }
+
+    setInput("");
+    sendTask(pendingMessage, targetSessionId);
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
     selectedSessionId,
-    markPendingRunStart,
-    clearPendingRunStart,
+    clearSessionError,
     sendTask,
+    setSelectedSessionId,
   ]);
-
-  useEffect(() => {
-    if (!selectedSessionId) return;
-    if (!sessionMessagesIsError) return;
-
-    setIsSessionHydrating(false);
-    setSessionError(
-      sanitizeSessionError({
-        type: "load",
-        message:
-          (sessionMessagesError as any)?.message || "Failed to load session",
-      }),
-    );
-  }, [selectedSessionId, sessionMessagesIsError, sessionMessagesError]);
-
-  // Sync local streaming state with the polled session status (source of truth)
-  // This handles cases where SSE events were missed (reconnection, session switch, page refresh)
-  useEffect(() => {
-    if (!currentSessionStatus) return;
-
-    const lastUserMessageAt = (() => {
-      for (let i = messagesRef.current.length - 1; i >= 0; i -= 1) {
-        const message = messagesRef.current[i];
-        if (message?.role === "user") {
-          return message.createdAt;
-        }
-      }
-      return undefined;
-    })();
-
-    const shouldHoldTerminalStateReset = shouldHoldWaitingForStaleTerminalStatus({
-      sessionStatus: currentSessionStatus.type,
-      isWaitingForAgent: isWaitingForAgent.current,
-      lastUserMessageAt,
-      pendingRunStartedAt: pendingRunStartedAtRef.current,
-    });
-
-    if ((currentSessionStatus as any).type === "done") {
-      if (shouldHoldTerminalStateReset) {
-        if (!isWaiting) {
-          setIsWaiting(true);
-        }
-        return;
-      }
-
-      if (isStreaming || isWaiting || isWaitingForAgent.current) {
-        debugLog(
-          "[ChatContext] Session status is done - clearing waiting/streaming state",
-        );
-        setIsStreaming(false);
-        setIsWaiting(false);
-        isWaitingForAgent.current = false;
-        clearPendingRunStart();
-        setStreamingParts([]);
-        refetchMessages();
-      }
-    } else if (currentSessionStatus.type === "idle") {
-      // If we just sent a message, allow a short grace window because polled
-      // terminal status can lag behind the new run's busy transition.
-      if (shouldHoldTerminalStateReset) {
-        if (!isWaiting) {
-          setIsWaiting(true);
-        }
-        return;
-      }
-
-      // Only reset if we're NOT actively waiting for a response
-      if (isStreaming || isWaiting) {
-        debugLog(
-          "[ChatContext] Session status is idle but was streaming/waiting - resetting state",
-        );
-        setIsStreaming(false);
-        setIsWaiting(false);
-        isWaitingForAgent.current = false;
-        clearPendingRunStart();
-        setStreamingParts([]);
-        refetchMessages();
-      }
-    } else if (currentSessionStatus.type === "busy") {
-      clearPendingRunStart();
-      // Session is active - ensure we're in streaming state
-      if (!isStreaming && !isWaiting) {
-        debugLog(
-          "[ChatContext] Session status is busy but idle locally - marking waiting state",
-        );
-        setIsWaiting(true);
-      }
-    } else if (currentSessionStatus.type === "retry") {
-      // Session is in retry state (quota error, etc.)
-      debugLog("[ChatContext] Session status is retry:", currentSessionStatus);
-      setSessionError(
-        sanitizeSessionError({
-          type: "retry",
-          message: currentSessionStatus.message || "Session retrying",
-          attempt: currentSessionStatus.attempt,
-          nextRetryAt: currentSessionStatus.next,
-        }),
-      );
-      setIsStreaming(false);
-      setIsWaiting(false);
-      isWaitingForAgent.current = false;
-      clearPendingRunStart();
-    } else if ((currentSessionStatus as any).type === "error") {
-      debugLog("[ChatContext] Session status is error:", currentSessionStatus);
-      setSessionError(
-        sanitizeSessionError({
-          type: "task",
-          message: (currentSessionStatus as any).message || "Session failed",
-          attempt: (currentSessionStatus as any).attempt,
-          nextRetryAt: (currentSessionStatus as any).next,
-        }),
-      );
-      setIsStreaming(false);
-      setIsWaiting(false);
-      isWaitingForAgent.current = false;
-      clearPendingRunStart();
-    }
-  }, [
-    currentSessionStatus,
-    isStreaming,
-    isWaiting,
-    refetchMessages,
-    clearPendingRunStart,
-  ]);
-
-  const isPendingRunAcknowledgementEvent = (eventKind: string) =>
-    eventKind === "thinking.started" ||
-    eventKind === "reasoning.delta" ||
-    eventKind === "message.delta" ||
-    eventKind === "tool.started" ||
-    eventKind === "tool.completed" ||
-    eventKind === "tool.error" ||
-    eventKind === "session.completed" ||
-    eventKind === "session.error";
-
-  // SSE subscription for real-time events
-  trpc.agent.sessionEvents.useSubscription(
-    {
-      sessionId: selectedSessionId ?? "",
-      // Pass last processed event ID to resume from where we left off on reconnect
-      // This prevents replay of old events (like session.completed) causing UI glitches
-      lastEventId: selectedSessionId
-        ? lastEventIdBySession.current.get(selectedSessionId)
-        : undefined,
-    },
-    {
-      enabled: shouldSubscribeToSessionEvents,
-      onStarted: () => {
-        debugLog("[ChatContext] SSE subscription started");
-        setSseConnected(true);
-      },
-      onData: (trackedEvent) => {
-        // Track and dedupe event IDs to avoid duplicate UI rendering on replay.
-        if (selectedSessionId && trackedEvent.id) {
-          const isNewEvent = markEventAsProcessed(
-            processedEventIdsBySession.current,
-            selectedSessionId,
-            trackedEvent.id,
-            EVENT_ID_DEDUPE_WINDOW,
-          );
-          if (!isNewEvent) {
-            return;
-          }
-
-          // Keep pointer for resumable streams.
-          lastEventIdBySession.current.set(selectedSessionId, trackedEvent.id);
-        }
-
-        const event = trackedEvent.data;
-        const innerData = event.data as { kind: string; [key: string]: unknown };
-        if (isPendingRunAcknowledgementEvent(innerData.kind)) {
-          clearPendingRunStart();
-        }
-
-        // Track debug info
-        setLastEventTime(new Date().toISOString());
-        setLastEventType(innerData.kind);
-
-        handleSessionEvent({
-          eventData: innerData,
-          setStreamingParts,
-          setIsStreaming,
-          setIsWaiting,
-          isWaitingForAgent,
-          setSessionError,
-          refetchMessages,
-          refetchUsageStatus,
-          setUsage,
-          onTaskComplete,
-        });
-      },
-      onError: (err) => {
-        console.error("[SessionEvents] Subscription error:", err);
-        handleSessionStreamError({
-          error: err,
-          setSseConnected,
-          setIsStreaming,
-          setIsWaiting,
-          isWaitingForAgent,
-          setSessionError,
-          refetchMessages,
-          refetchSessions,
-        });
-        clearPendingRunStart();
-      },
-    },
-  );
-
-  useEffect(() => {
-    if (sessionMessages && selectedSessionId) {
-      setIsSessionHydrating(false);
-      const mappedMessages = mapSessionMessagesToChatMessages(sessionMessages, {
-        sessionStatusType: currentSessionStatus?.type,
-      });
-
-      const shouldDeferHydration = shouldDeferSessionHydrationWhilePendingRun({
-        isWaitingForAgent: isWaitingForAgent.current,
-        pendingRunStartedAt: pendingRunStartedAtRef.current,
-        currentMessages: messagesRef.current,
-        incomingMessages: mappedMessages,
-      });
-
-      if (!shouldDeferHydration) {
-        setMessages(mappedMessages);
-      } else {
-        debugLog(
-          "[ChatContext] Deferring stale hydration while pending run awaits acknowledgement",
-        );
-      }
-
-      const calculatedUsage = calculateUsageFromSessionMessages(sessionMessages);
-      if (calculatedUsage) {
-        setUsage(calculatedUsage);
-      }
-
-      // Recovery: If we're waiting/streaming but the fetched messages include a
-      // NEWER agent response than what's in our current messages, we likely missed
-      // the SSE event. Only apply recovery if we sent a user message that the server
-      // has now responded to.
-      if (
-        (isWaiting || isStreaming) &&
-        shouldRecoverFromMissedStreamEvents(mappedMessages, messagesRef.current)
-      ) {
-        debugLog(
-          "[ChatContext] Recovery: Task completed but state was stuck. Resetting.",
-        );
-        setIsStreaming(false);
-        setIsWaiting(false);
-        isWaitingForAgent.current = false;
-        clearPendingRunStart();
-        setStreamingParts([]);
-        onTaskComplete?.();
-      }
-    }
-  }, [
-    sessionMessages,
-    selectedSessionId,
-    currentSessionStatus?.type,
-    clearPendingRunStart,
-  ]);
-
-  const sessionStatusType = currentSessionStatus?.type;
-  const isSessionStatusActive =
-    sessionStatusType === "busy" || sessionStatusType === "retry";
-
-  // Keep run UI active while waiting locally, awaiting completion, or server reports active status.
-  const isThinking =
-    isStreaming || isWaiting || isWaitingForAgent.current || isSessionStatusActive;
 
   const handleSend = async () => {
     if (
@@ -664,22 +225,21 @@ export function ChatProvider({
         !attachedElement &&
         attachedImages.length === 0 &&
         attachedFiles.length === 0) ||
-      isStreaming ||
-      runTaskMutation.isPending ||
+      isThinking ||
+      runTaskPending ||
       isSending
-    )
+    ) {
       return;
+    }
 
-    // Set sending state immediately to prevent duplicate submissions
     setIsSending(true);
 
     const task = await buildTaskWithAttachments(input);
 
     setInput("");
     setAttachedElement(null);
+    clearSessionError();
 
-    debugLog("[Vivd] Sending prompt:", task);
-    markPendingRunStart();
     sendTask(task, selectedSessionId, {
       onSettled: () => setIsSending(false),
     });
@@ -688,63 +248,91 @@ export function ChatProvider({
   const handleContinueSession = useCallback(() => {
     if (
       !selectedSessionId ||
-      continueClickLockRef.current ||
-      isStreaming ||
-      runTaskMutation.isPending ||
+      isThinking ||
+      runTaskPending ||
       isSending ||
       isUsageBlocked
     ) {
       return;
     }
 
-    continueClickLockRef.current = true;
-    markPendingRunStart();
-    sendTask("continue", selectedSessionId, {
-      onSettled: () => {
-        continueClickLockRef.current = false;
-      },
-    });
+    sendTask("continue", selectedSessionId);
   }, [
     selectedSessionId,
-    isStreaming,
-    runTaskMutation.isPending,
+    isThinking,
+    runTaskPending,
     isSending,
     isUsageBlocked,
-    markPendingRunStart,
     sendTask,
   ]);
 
-  const handleNewSession = () => {
-    autoSelectLockedRef.current = true;
-    pendingSessionIdRef.current = null;
+  const handleNewSession = useCallback(() => {
     setSelectedSessionId(null);
-    setMessages([]);
-    // Clear streaming state to prevent previous session data from appearing
-    setIsStreaming(false);
-    setIsWaiting(false);
-    isWaitingForAgent.current = false;
-    clearPendingRunStart();
-    setStreamingParts([]);
-    // Clear any error from previous session
-    setSessionError(null);
-  };
+    setInput("");
+    clearSessionError();
+  }, [clearSessionError, setSelectedSessionId]);
 
-  // Build debug state object
+  const handleDeleteSession = useCallback(
+    async (e: MouseEvent, sessionId: string) => {
+      e.stopPropagation();
+      const ok = await requestConfirm({
+        title: "Delete this session?",
+        description: "This will permanently delete the session and its messages.",
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+        destructive: true,
+      });
+      if (!ok) return;
+      await deleteSession(sessionId);
+    },
+    [deleteSession, requestConfirm],
+  );
+
+  const handleRevert = useCallback(
+    async (messageId: string) => {
+      if (!selectedSessionId) return;
+      const ok = await requestConfirm({
+        title: "Revert changes from this task?",
+        description: "This will undo file changes made by the agent.",
+        confirmLabel: "Revert",
+        cancelLabel: "Cancel",
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        await revertToMessage(messageId);
+      } catch {
+        // Handled by mutation onError.
+      }
+    },
+    [requestConfirm, revertToMessage, selectedSessionId],
+  );
+
+  const handleUnrevert = useCallback(async () => {
+    try {
+      await unrevertSession();
+    } catch {
+      // Handled by mutation onError.
+    }
+  }, [unrevertSession]);
+
+  const handleStopGeneration = useCallback(() => {
+    stopGeneration();
+  }, [stopGeneration]);
+
   const sessionDebugState: SessionDebugState = {
     selectedSessionId,
     isStreaming,
     isWaiting,
     isThinking,
-    streamingPartsCount: streamingParts.length,
-    messagesCount: messages.length,
-    sseConnected,
-    lastEventTime,
+    streamingPartsCount: 0,
+    messagesCount: selectedMessages.length,
+    sseConnected: connection.state === "connected",
+    lastEventTime: lastEventTime ? new Date(lastEventTime).toISOString() : null,
     lastEventType,
-    lastEventId: selectedSessionId
-      ? (lastEventIdBySession.current.get(selectedSessionId) ?? null)
-      : null,
+    lastEventId,
     sessionError,
-    sessionStatus: currentSessionStatus?.type ?? null,
+    sessionStatus: sessionStatusType,
     usage,
   };
 
@@ -754,13 +342,12 @@ export function ChatProvider({
     sessions,
     sessionsLoading,
     selectedSessionId,
-    setSelectedSessionId: selectSession,
+    setSelectedSessionId,
     isSessionHydrating,
-    messages,
+    messageCount: selectedMessages.length,
     isStreaming,
     isWaiting,
     isThinking,
-    streamingParts,
     input,
     setInput,
     attachedElement,
@@ -775,7 +362,7 @@ export function ChatProvider({
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,
     isReverted,
-    isLoading: runTaskMutation.isPending || isSending,
+    isLoading: runTaskPending || isSending,
     sessionDebugState,
     sessionError,
     clearSessionError,

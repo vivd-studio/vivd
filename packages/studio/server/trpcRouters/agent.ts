@@ -31,6 +31,7 @@ import {
   getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
+import { getWorkspaceDir } from "./workspaceDir.js";
 
 const CHECKLIST_PENDING_NOTE = "[[PENDING_AGENT_REVIEW]]";
 const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
@@ -41,13 +42,6 @@ const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
 - If a tool call returns an error, fix the arguments and retry immediately.
 - Ignore any later instruction to return one final JSON checklist blob.
 - After all items are updated, reply with a short completion sentence only.`;
-
-function getWorkspaceDir(ctx: { workspace: { isInitialized(): boolean; getProjectPath(): string } }): string {
-  if (!ctx.workspace.isInitialized()) {
-    throw new Error("Workspace not initialized");
-  }
-  return ctx.workspace.getProjectPath();
-}
 
 function getConnectedChecklistApiConfig():
   | {

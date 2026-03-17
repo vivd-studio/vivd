@@ -82,6 +82,7 @@ export type FlyStudioMachineSummary = {
   projectSlug: string;
   version: number;
   externalPort: number | null;
+  routePath: string | null;
   url: string | null;
   image: string | null;
   desiredImage: string;

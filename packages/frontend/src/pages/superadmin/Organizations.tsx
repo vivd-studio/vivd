@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { OrganizationsTab } from "@/components/admin";
 
 export default function SuperAdminOrganizations() {
+  const [tab, setTab] = useState("usage");
+
   return (
     <div className="space-y-8">
       <div>
@@ -9,8 +12,11 @@ export default function SuperAdminOrganizations() {
           Provision organizations, members, and per-org limits.
         </p>
       </div>
-      <OrganizationsTab />
+      <OrganizationsTab
+        selectedOrgId=""
+        activeTab={tab}
+        onTabChange={setTab}
+      />
     </div>
   );
 }
-

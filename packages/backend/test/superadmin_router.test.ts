@@ -6,6 +6,7 @@ const {
   getDesiredImageMock,
   invalidateDesiredImageCacheMock,
   reconcileStudioMachinesMock,
+  destroyStudioMachineMock,
   getSystemSettingValueMock,
   setSystemSettingValueMock,
   listStudioImagesFromGhcrMock,
@@ -39,6 +40,7 @@ const {
     getDesiredImageMock,
     invalidateDesiredImageCacheMock,
     reconcileStudioMachinesMock,
+    destroyStudioMachineMock,
     getSystemSettingValueMock: vi.fn(),
     setSystemSettingValueMock: vi.fn(),
     listStudioImagesFromGhcrMock: vi.fn(),
@@ -216,12 +218,14 @@ function makeEntitlement(overrides: Record<string, unknown> = {}) {
 
 describe("superadmin router", () => {
   const originalFlyStudioImage = process.env.FLY_STUDIO_IMAGE;
+  const originalDockerStudioImage = process.env.DOCKER_STUDIO_IMAGE;
 
   beforeEach(() => {
     listStudioMachinesMock.mockReset();
     getDesiredImageMock.mockReset();
     invalidateDesiredImageCacheMock.mockReset();
     reconcileStudioMachinesMock.mockReset();
+    destroyStudioMachineMock.mockReset();
     getSystemSettingValueMock.mockReset();
     setSystemSettingValueMock.mockReset();
     listStudioImagesFromGhcrMock.mockReset();
@@ -280,6 +284,7 @@ describe("superadmin router", () => {
     getDefaultTemplateMock.mockReturnValue("default template");
 
     delete process.env.FLY_STUDIO_IMAGE;
+    delete process.env.DOCKER_STUDIO_IMAGE;
   });
 
   afterEach(() => {
@@ -288,9 +293,15 @@ describe("superadmin router", () => {
     } else {
       delete process.env.FLY_STUDIO_IMAGE;
     }
+
+    if (typeof originalDockerStudioImage === "string") {
+      process.env.DOCKER_STUDIO_IMAGE = originalDockerStudioImage;
+    } else {
+      delete process.env.DOCKER_STUDIO_IMAGE;
+    }
   });
 
-  it("returns unsupported machine image options when provider is not fly", async () => {
+  it("returns unsupported machine image options when provider is not managed", async () => {
     (studioMachineProviderMock as any).kind = "local";
     const caller = superAdminRouter.createCaller(makeContext());
 
@@ -317,6 +328,27 @@ describe("superadmin router", () => {
       machines: [],
       error: "fly unavailable",
     });
+  });
+
+  it("supports docker image overrides via docker env vars", async () => {
+    (studioMachineProviderMock as any).kind = "docker";
+    process.env.DOCKER_STUDIO_IMAGE = "ghcr.io/vivd-studio/vivd-studio:docker-manual";
+    getSystemSettingValueMock.mockResolvedValueOnce("dev-0.3.34");
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.getStudioMachineImageOptions();
+
+    expect(result).toMatchObject({
+      provider: "docker",
+      supported: true,
+      selectionMode: "env",
+      envOverrideVarName: "DOCKER_STUDIO_IMAGE",
+      envOverrideImage: "ghcr.io/vivd-studio/vivd-studio:docker-manual",
+      desiredImage: "ghcr.io/vivd-studio/vivd-studio:docker-manual",
+      desiredImageSource: "env",
+      overrideTag: "dev-0.3.34",
+    });
+    expect(getDesiredImageMock).not.toHaveBeenCalled();
   });
 
   it("prefers env override image and surfaces GHCR errors", async () => {
@@ -447,6 +479,19 @@ describe("superadmin router", () => {
       result: {
         desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
       },
+    });
+  });
+
+  it("destroys managed studio machines for docker provider", async () => {
+    (studioMachineProviderMock as any).kind = "docker";
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.destroyStudioMachine({ machineId: "container-1" });
+
+    expect(destroyStudioMachineMock).toHaveBeenCalledWith("container-1");
+    expect(result).toEqual({
+      provider: "docker",
+      destroyed: true,
     });
   });
 

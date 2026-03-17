@@ -33,7 +33,7 @@ import {
 
 type StudioMachine =
   RouterOutputs["superadmin"]["listStudioMachines"]["machines"][number];
-type SortKey = "identity" | "state" | "age" | "image" | "fly";
+type SortKey = "identity" | "state" | "age" | "image" | "machine";
 type SortDirection = "asc" | "desc";
 
 function formatDate(value: string | null): string {
@@ -138,7 +138,8 @@ export function MachinesTab() {
       if (!data.reconciled || !("result" in data)) {
         toast.error("Reconcile skipped", {
           description:
-            ("error" in data && data.error) || "Not running on Fly provider",
+            ("error" in data && data.error) ||
+            "Studio machine provider does not support reconciliation",
         });
         return;
       }
@@ -162,12 +163,13 @@ export function MachinesTab() {
       if (!data.destroyed) {
         toast.error("Destroy skipped", {
           description:
-            ("error" in data && data.error) || "Not running on Fly provider",
+            ("error" in data && data.error) ||
+            "Studio machine provider does not support machine destruction",
         });
         return;
       }
 
-      toast.success("Machine destroyed", {
+      toast.success(`${machineLabel} destroyed`, {
         description: variables.machineId,
       });
       await utils.superadmin.listStudioMachines.invalidate();
@@ -185,6 +187,7 @@ export function MachinesTab() {
 
   const machines = useMemo(() => machinesQuery.data?.machines ?? [], [machinesQuery.data?.machines]);
   const provider = machinesQuery.data?.provider ?? "unknown";
+  const machineLabel = provider === "docker" ? "Container" : "Machine";
   const effectiveDesiredImage = machines[0]?.desiredImage || null;
   const desiredImage =
     effectiveDesiredImage ||
@@ -231,7 +234,7 @@ export function MachinesTab() {
         if (compare === 0) {
           compare = (left.image || "").localeCompare(right.image || "");
         }
-      } else if (sortKey === "fly") {
+      } else if (sortKey === "machine") {
         compare = (left.id || "").localeCompare(right.id || "");
       }
 
@@ -422,10 +425,13 @@ export function MachinesTab() {
                       Failed to fetch tags: {imageOptions.error}
                     </span>
                   ) : null}
-                  {imageOptions.selectionMode === "env" && imageOptions.envOverrideImage ? (
+                  {imageOptions.selectionMode === "env" &&
+                  imageOptions.envOverrideImage &&
+                  imageOptions.envOverrideVarName ? (
                     <span>
                       {" "}
-                      Selector is locked because <code>FLY_STUDIO_IMAGE</code> is set.
+                      Selector is locked because{" "}
+                      <code>{imageOptions.envOverrideVarName}</code> is set.
                     </span>
                   ) : null}
                 </div>
@@ -459,7 +465,7 @@ export function MachinesTab() {
             </div>
           ) : machines.length === 0 ? (
             <div className="text-sm text-muted-foreground">
-              No studio machines found (or provider is not Fly).
+              No studio machines found.
             </div>
           ) : (
             <div className="rounded-lg border bg-card overflow-auto">
@@ -511,10 +517,10 @@ export function MachinesTab() {
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 hover:text-foreground"
-                        onClick={() => toggleSort("fly")}
+                        onClick={() => toggleSort("machine")}
                       >
-                        Fly
-                        {sortIconFor("fly")}
+                        {machineLabel}
+                        {sortIconFor("machine")}
                       </button>
                     </th>
                     <th className="px-3 py-2 font-medium">Actions</th>
@@ -554,7 +560,14 @@ export function MachinesTab() {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="font-mono text-xs">{m.region || "unknown"}</div>
+                        <div className="font-mono text-xs">
+                          {m.region || (m.routePath ? "single-host" : "unknown")}
+                        </div>
+                        {m.routePath ? (
+                          <div className="font-mono text-[11px] text-muted-foreground mt-1 break-all">
+                            {m.routePath}
+                          </div>
+                        ) : null}
                         <div className="text-[11px] text-muted-foreground mt-1">
                           {formatMachineSizing(m)}
                         </div>
@@ -609,15 +622,19 @@ export function MachinesTab() {
       <AlertDialog open={confirmReconcileOpen} onOpenChange={setConfirmReconcileOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reconcile Fly studio machines?</AlertDialogTitle>
+            <AlertDialogTitle>Reconcile studio machines?</AlertDialogTitle>
             <AlertDialogDescription>
               This runs the same backend reconciler logic:
               <br />
-              - reconcile non-running machine drift (image/services/guest/token)
+              - reconcile non-running machine drift (image/resources/access token)
               <br />
-              - warm reconciled machines (update config → start → wait for /health → suspend)
+              - warm reconciled machines (recreate → start → wait for /health → stop)
               <br />- destroy machines not visited for the configured max inactivity window
-              <br />- note: Fly machine region is immutable; destroy/recreate to move regions
+              {provider === "fly" ? (
+                <>
+                  <br />- note: Fly machine region is immutable; destroy/recreate to move regions
+                </>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -644,9 +661,9 @@ export function MachinesTab() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Destroy Fly studio machine?</AlertDialogTitle>
+            <AlertDialogTitle>Destroy studio machine?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will stop the machine first (to allow sync), then destroy it.
+              This will stop the runtime first (to allow sync), then destroy it.
               {destroyCandidate ? (
                 <>
                   <br />
@@ -672,7 +689,9 @@ export function MachinesTab() {
                 destroyMutation.mutate({ machineId: destroyCandidate.id });
               }}
             >
-              {destroyMutation.isPending ? "Destroying..." : "Destroy machine"}
+              {destroyMutation.isPending
+                ? "Destroying..."
+                : `Destroy ${machineLabel.toLowerCase()}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

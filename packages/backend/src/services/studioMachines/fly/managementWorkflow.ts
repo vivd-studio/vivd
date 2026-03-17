@@ -51,6 +51,7 @@ export async function listStudioMachinesWorkflow(deps: {
       projectSlug: identity.projectSlug,
       version: identity.version,
       externalPort: port,
+      routePath: null,
       url: port ? deps.getPublicUrlForPort(port) : null,
       image,
       desiredImage,

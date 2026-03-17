@@ -29,3 +29,19 @@ export function SettingsPageShell({
     </div>
   );
 }
+
+/**
+ * Constrains form/settings content to a comfortable reading width.
+ * Use inside tab content or card bodies — keeps tab bars and page headers full-width.
+ */
+export function FormContent({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("max-w-2xl space-y-6", className)}>{children}</div>
+  );
+}

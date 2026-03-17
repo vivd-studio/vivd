@@ -7,6 +7,7 @@ import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { Loader2 } from "lucide-react";
 
@@ -248,7 +249,7 @@ export default function StudioFullscreen() {
 
   const studioIframeSrc = useMemo(() => {
     if (!baseUrl) return null;
-    const url = new URL("/vivd-studio", baseUrl);
+    const url = new URL(resolveStudioRuntimeUrl(baseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
     url.searchParams.set("fullscreen", "1");
     url.searchParams.set("projectSlug", projectSlug || "");

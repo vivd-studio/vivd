@@ -1,5 +1,11 @@
-import { normalizeErrorMessage } from "./chatStreamUtils";
-import type { SessionError } from "./chatTypes";
+import { normalizeErrorMessage } from "../../../components/chat/chatStreamUtils";
+
+export type SanitizedSessionError = {
+  type: string;
+  message: string;
+  attempt?: number;
+  nextRetryAt?: number;
+};
 
 const PROVIDER_CAPACITY_PATTERN =
   /requires more credits|can only afford|insufficient credits|openrouter\.ai\/settings\/credits|max tokens/i;
@@ -9,9 +15,10 @@ export function sanitizeSessionError(input: {
   message?: unknown;
   attempt?: number;
   nextRetryAt?: number;
-}): SessionError {
+}): SanitizedSessionError {
   const rawMessage =
-    normalizeErrorMessage(input.message) || "Something went wrong while running this task.";
+    normalizeErrorMessage(input.message) ||
+    "Something went wrong while running this task.";
 
   if (input.type === "load") {
     return {

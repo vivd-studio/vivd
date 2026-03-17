@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { FormContent } from "@/components/settings/SettingsPageShell";
 
 type MaintenanceAction =
   | "migrateProcessFiles"
@@ -191,6 +192,7 @@ export function MaintenanceTab() {
 
   return (
     <>
+      <FormContent className="max-w-3xl">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -523,6 +525,7 @@ export function MaintenanceTab() {
           </div>
         </CardContent>
       </Card>
+      </FormContent>
 
       <AlertDialog
         open={confirmAction !== null}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 
 type EnsureStudioRunningResult =
   | {
@@ -95,7 +96,7 @@ export function useStudioRuntimeGuard({
     }, mergedTiming.healthTimeoutMs);
 
     try {
-      const response = await fetch(new URL("/health", studioBaseUrl).toString(), {
+      const response = await fetch(resolveStudioRuntimeUrl(studioBaseUrl, "health"), {
         method: "GET",
         mode: "cors",
         cache: "no-store",

@@ -4,6 +4,7 @@ import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
 import { ChatComposer } from "./ChatComposer";
+import { OpencodeChatProvider } from "@/features/opencodeChat";
 import {
   ChatProvider,
   useChatContext,
@@ -125,7 +126,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     setSelectedSessionId,
     handleDeleteSession,
     handleNewSession,
-    messages,
+    messageCount,
     sessionDebugState,
     setSelectorMode,
   } = useChatContext();
@@ -164,7 +165,7 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
 
       <MessageList />
 
-      {messages.length > 0 && <ChatComposer />}
+      {messageCount > 0 && <ChatComposer />}
 
       {/* Debug display for session state (admin only) */}
       <SessionDebugDisplay debug={sessionDebugState} />
@@ -180,13 +181,15 @@ export function ChatPanel({
   onClose,
 }: ChatPanelProps) {
   return (
-    <ChatProvider
-      projectSlug={projectSlug}
-      version={version}
-      onTaskComplete={onTaskComplete}
-    >
-      <ChatPanelContent onClose={onClose} />
-    </ChatProvider>
+    <OpencodeChatProvider projectSlug={projectSlug} version={version}>
+      <ChatProvider
+        projectSlug={projectSlug}
+        version={version}
+        onTaskComplete={onTaskComplete}
+      >
+        <ChatPanelContent onClose={onClose} />
+      </ChatProvider>
+    </OpencodeChatProvider>
   );
 }
 

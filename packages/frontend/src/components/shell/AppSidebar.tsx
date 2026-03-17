@@ -10,6 +10,7 @@ import {
   FolderKanban,
   LayoutGrid,
   LogOut,
+  Mail,
   Plug,
   Server,
   Search,
@@ -49,7 +50,6 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarInput,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -59,26 +59,16 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  NAVIGATION_SEARCH_SHORTCUT_LABEL,
+  useNavigationSearch,
+} from "./navigationSearchContext";
 
 type SidebarProject = RouterOutputs["project"]["list"]["projects"][number];
 type SwitcherOrganization =
   RouterOutputs["organization"]["listMyOrganizations"]["organizations"][number];
-type SidebarSearchItem = {
-  id: string;
-  label: string;
-  section: "Projects" | "Organization" | "Platform" | "Super Admin";
-  to: string;
-  keywords: string[];
-  isActive: boolean;
-};
 
 const ORG_SWITCH_QUERY_KEY = "__vivd_switch_org";
-const SIDEBAR_SEARCH_SECTION_ORDER: SidebarSearchItem["section"][] = [
-  "Platform",
-  "Projects",
-  "Organization",
-  "Super Admin",
-];
 
 function inferSchemeForHost(host: string): "http" | "https" {
   if (
@@ -157,50 +147,6 @@ function formatOrgRole(role: string): string {
     default:
       return role;
   }
-}
-
-function normalizeSidebarSearchValue(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function getSidebarSearchScore(
-  item: SidebarSearchItem,
-  normalizedQuery: string,
-): number | null {
-  const queryTerms = normalizedQuery.split(/\s+/).filter(Boolean);
-  if (queryTerms.length === 0) return null;
-
-  let totalScore = 0;
-  for (const term of queryTerms) {
-    let bestTermScore = scoreMatch(item.label, term, 0);
-    const sectionScore = scoreMatch(item.section, term, 500);
-    if (sectionScore !== null && (bestTermScore === null || sectionScore < bestTermScore)) {
-      bestTermScore = sectionScore;
-    }
-
-    for (const keyword of item.keywords) {
-      const matchIndex = normalizeSidebarSearchValue(keyword).indexOf(term);
-      if (matchIndex === -1) continue;
-      const score = (matchIndex === 0 ? 200 : 300) + matchIndex;
-      if (bestTermScore === null || score < bestTermScore) {
-        bestTermScore = score;
-      }
-    }
-
-    if (bestTermScore === null) {
-      return null;
-    }
-    totalScore += bestTermScore;
-  }
-
-  return totalScore;
-}
-
-function scoreMatch(value: string, normalizedQuery: string, baseScore: number): number | null {
-  const normalizedValue = normalizeSidebarSearchValue(value);
-  const matchIndex = normalizedValue.indexOf(normalizedQuery);
-  if (matchIndex === -1) return null;
-  return baseScore + (matchIndex === 0 ? 0 : 100) + matchIndex;
 }
 
 function OrganizationSwitcher({
@@ -500,7 +446,7 @@ function OrganizationNavSection({
 type SuperAdminNavSectionProps = {
   showSuperAdmin: boolean;
   isSuperAdminTabActive: (
-    tab: "orgs" | "users" | "maintenance" | "machines" | "plugins",
+    tab: "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
   ) => boolean;
 };
 
@@ -524,7 +470,7 @@ function SuperAdminNavSection({
               tooltip="Organizations"
               isActive={isSuperAdminTabActive("orgs")}
             >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=orgs`}>
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=org`}>
                 <Building2 />
                 <span>Organizations</span>
               </Link>
@@ -536,7 +482,7 @@ function SuperAdminNavSection({
               tooltip="System Users"
               isActive={isSuperAdminTabActive("users")}
             >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=users`}>
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=users`}>
                 <Users />
                 <span>System Users</span>
               </Link>
@@ -548,7 +494,7 @@ function SuperAdminNavSection({
               tooltip="Maintenance"
               isActive={isSuperAdminTabActive("maintenance")}
             >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=maintenance`}>
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=maintenance`}>
                 <Wrench />
                 <span>Maintenance</span>
               </Link>
@@ -560,7 +506,7 @@ function SuperAdminNavSection({
               tooltip="Machines"
               isActive={isSuperAdminTabActive("machines")}
             >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=machines`}>
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=machines`}>
                 <Server />
                 <span>Machines</span>
               </Link>
@@ -572,9 +518,21 @@ function SuperAdminNavSection({
               tooltip="Plugins"
               isActive={isSuperAdminTabActive("plugins")}
             >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?tab=plugins`}>
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=plugins`}>
                 <Plug />
                 <span>Plugins</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Email"
+              isActive={isSuperAdminTabActive("email")}
+            >
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=email`}>
+                <Mail />
+                <span>Email</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -661,16 +619,15 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
+  const { openSearch } = useNavigationSearch();
 
   const isCollapsed = state === "collapsed";
   const [showAllProjects, setShowAllProjects] = React.useState(false);
-  const [sidebarSearchQuery, setSidebarSearchQuery] = React.useState("");
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,
   });
   const isOrgAdmin = !!membership?.isOrganizationAdmin;
-  const isClientEditor = membership?.organizationRole === "client_editor";
   const isOrgOwner =
     membership?.organizationRole === "owner" ||
     session?.user?.role === "super_admin";
@@ -715,278 +672,16 @@ export function AppSidebar() {
   );
 
   const isSuperAdminTabActive = React.useCallback(
-    (tab: "orgs" | "users" | "maintenance" | "machines" | "plugins") => {
+    (
+      tab: "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
+    ) => {
       if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
-      return (searchParams.get("tab") ?? "orgs") === tab;
+      const section = searchParams.get("section") ?? "org";
+      if (tab === "orgs") return section === "org";
+      return section === tab;
     },
     [isActive, searchParams],
   );
-
-  const sidebarSearchItems = React.useMemo(() => {
-    const items: SidebarSearchItem[] = [
-      {
-        id: "platform:projects",
-        label: "Projects",
-        section: "Platform",
-        to: ROUTES.DASHBOARD,
-        keywords: ["dashboard", "websites"],
-        isActive:
-          isActive(ROUTES.DASHBOARD, true) ||
-          isActive(`${ROUTES.STUDIO_BASE}/projects`),
-      },
-      {
-        id: "projects:all",
-        label: "All projects",
-        section: "Projects",
-        to: ROUTES.DASHBOARD,
-        keywords: ["all", "dashboard", "overview"],
-        isActive: isActive(ROUTES.DASHBOARD, true),
-      },
-      {
-        id: "platform:settings",
-        label: "Settings",
-        section: "Platform",
-        to: ROUTES.SETTINGS,
-        keywords: ["account", "profile", "preferences", "password", "security"],
-        isActive: isActive(ROUTES.SETTINGS),
-      },
-    ];
-
-    if (!isClientEditor) {
-      items.push({
-        id: "platform:new-project",
-        label: "New project",
-        section: "Platform",
-        to: ROUTES.NEW_SCRATCH,
-        keywords: ["create", "generate", "scratch", "website"],
-        isActive: isActive(ROUTES.NEW_SCRATCH, true),
-      });
-    }
-
-    for (const project of recentProjects) {
-      const projectLabel = project.title || project.slug;
-      items.push({
-        id: `project:${project.slug}`,
-        label: projectLabel,
-        section: "Projects",
-        to: ROUTES.PROJECT(project.slug),
-        keywords: [project.slug, project.title ?? "", "project", "studio", "editor"],
-        isActive: isActive(ROUTES.PROJECT(project.slug), true),
-      });
-      items.push(
-        {
-          id: `project:plugins:${project.slug}`,
-          label: `Plugins: ${projectLabel}`,
-          section: "Projects",
-          to: ROUTES.PROJECT_PLUGINS(project.slug),
-          keywords: [project.slug, projectLabel, "plugins", "integrations", "forms", "analytics"],
-          isActive: isActive(ROUTES.PROJECT_PLUGINS(project.slug), true),
-        },
-        {
-          id: `project:analytics:${project.slug}`,
-          label: `Analytics: ${projectLabel}`,
-          section: "Projects",
-          to: ROUTES.PROJECT_ANALYTICS(project.slug),
-          keywords: [project.slug, projectLabel, "analytics", "traffic", "metrics"],
-          isActive: isActive(ROUTES.PROJECT_ANALYTICS(project.slug), true),
-        },
-        {
-          id: `project:preview:${project.slug}`,
-          label: `Preview: ${projectLabel}`,
-          section: "Projects",
-          to: ROUTES.PROJECT_FULLSCREEN(project.slug),
-          keywords: [project.slug, projectLabel, "preview", "fullscreen"],
-          isActive: isActive(ROUTES.PROJECT_FULLSCREEN(project.slug), true),
-        },
-      );
-    }
-
-    if (isOrgAdmin) {
-      items.push(
-        {
-          id: "platform:organization",
-          label: "Organization",
-          section: "Platform",
-          to: `${ROUTES.ORG}?tab=members`,
-          keywords: ["members", "team", "admin"],
-          isActive: isActive(ROUTES.ORG),
-        },
-        {
-          id: "organization:members",
-          label: "Members",
-          section: "Organization",
-          to: `${ROUTES.ORG}?tab=members`,
-          keywords: ["team", "users"],
-          isActive: isOrgTabActive("members"),
-        },
-        {
-          id: "organization:usage",
-          label: "Usage",
-          section: "Organization",
-          to: `${ROUTES.ORG}?tab=usage`,
-          keywords: ["limits", "quota", "credits"],
-          isActive: isOrgTabActive("usage"),
-        },
-        {
-          id: "organization:maintenance",
-          label: "Maintenance",
-          section: "Organization",
-          to: `${ROUTES.ORG}?tab=maintenance`,
-          keywords: ["operations", "migration"],
-          isActive: isOrgTabActive("maintenance"),
-        },
-        {
-          id: "organization:plugins",
-          label: "Plugins",
-          section: "Organization",
-          to: `${ROUTES.ORG}?tab=plugins`,
-          keywords: ["integrations", "contact form", "analytics"],
-          isActive: isOrgTabActive("plugins"),
-        },
-      );
-      if (isOrgOwner) {
-        items.push({
-          id: "organization:settings",
-          label: "General",
-          section: "Organization",
-          to: `${ROUTES.ORG}?tab=settings`,
-          keywords: ["settings", "owner"],
-          isActive: isOrgTabActive("settings"),
-        });
-      }
-    }
-
-    if (showSuperAdmin) {
-      items.push(
-        {
-          id: "platform:superadmin",
-          label: "Super Admin",
-          section: "Platform",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=orgs`,
-          keywords: ["admin", "operators", "system"],
-          isActive: isActive(ROUTES.SUPERADMIN_BASE),
-        },
-        {
-          id: "superadmin:orgs",
-          label: "Organizations",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=orgs`,
-          keywords: ["tenants", "superadmin"],
-          isActive: isSuperAdminTabActive("orgs"),
-        },
-        {
-          id: "superadmin:users",
-          label: "System Users",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=users`,
-          keywords: ["members", "accounts", "superadmin"],
-          isActive: isSuperAdminTabActive("users"),
-        },
-        {
-          id: "superadmin:maintenance",
-          label: "Maintenance",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=maintenance`,
-          keywords: ["operations", "superadmin"],
-          isActive: isSuperAdminTabActive("maintenance"),
-        },
-        {
-          id: "superadmin:machines",
-          label: "Machines",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=machines`,
-          keywords: ["fly", "instances", "superadmin"],
-          isActive: isSuperAdminTabActive("machines"),
-        },
-        {
-          id: "superadmin:plugins",
-          label: "Plugins",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=plugins`,
-          keywords: ["entitlements", "superadmin"],
-          isActive: isSuperAdminTabActive("plugins"),
-        },
-        {
-          id: "superadmin:email",
-          label: "Email",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?tab=email`,
-          keywords: ["deliverability", "suppression", "complaints", "superadmin"],
-          isActive:
-            isActive(ROUTES.SUPERADMIN_BASE, true) &&
-            (searchParams.get("tab") ?? "orgs") === "email",
-        },
-      );
-    }
-
-    return items;
-  }, [
-    isActive,
-    isClientEditor,
-    isOrgAdmin,
-    isOrgOwner,
-    isOrgTabActive,
-    isSuperAdminTabActive,
-    recentProjects,
-    searchParams,
-    showSuperAdmin,
-  ]);
-
-  const normalizedSidebarSearchQuery = normalizeSidebarSearchValue(sidebarSearchQuery);
-  const isSidebarSearchActive = normalizedSidebarSearchQuery.length > 0;
-
-  const sidebarSearchResults = React.useMemo(() => {
-    if (!isSidebarSearchActive) return [];
-
-    return sidebarSearchItems
-      .map((item) => ({
-        item,
-        score: getSidebarSearchScore(item, normalizedSidebarSearchQuery),
-      }))
-      .filter(
-        (
-          entry,
-        ): entry is {
-          item: SidebarSearchItem;
-          score: number;
-        } => entry.score !== null,
-      )
-      .sort((a, b) => {
-        if (a.score !== b.score) return a.score - b.score;
-        if (a.item.section !== b.item.section) {
-          return a.item.section.localeCompare(b.item.section);
-        }
-        return a.item.label.localeCompare(b.item.label);
-      })
-      .map(({ item }) => item);
-  }, [
-    isSidebarSearchActive,
-    normalizedSidebarSearchQuery,
-    sidebarSearchItems,
-  ]);
-
-  const groupedSidebarSearchResults = React.useMemo(() => {
-    if (!isSidebarSearchActive) return [];
-
-    const grouped = new Map<SidebarSearchItem["section"], SidebarSearchItem[]>();
-    for (const item of sidebarSearchResults) {
-      const existing = grouped.get(item.section) ?? [];
-      existing.push(item);
-      grouped.set(item.section, existing);
-    }
-
-    return SIDEBAR_SEARCH_SECTION_ORDER.flatMap((section) => {
-      const items = grouped.get(section) ?? [];
-      if (items.length === 0) return [];
-      return [{ section, items }];
-    });
-  }, [isSidebarSearchActive, sidebarSearchResults]);
-
-  React.useEffect(() => {
-    if (isCollapsed) {
-      setSidebarSearchQuery("");
-    }
-  }, [isCollapsed]);
 
   React.useEffect(() => {
     const switchOrg = searchParams.get(ORG_SWITCH_QUERY_KEY);
@@ -1090,11 +785,6 @@ export function AppSidebar() {
     );
   };
 
-  const handleSidebarSearchResultSelect = (to: string) => {
-    setSidebarSearchQuery("");
-    navigate(to);
-  };
-
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -1108,112 +798,86 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {!isCollapsed && (
-          <SidebarGroup className="pb-0">
-            <SidebarGroupContent>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
-                <SidebarInput
-                  aria-label="Search"
-                  placeholder="Search"
-                  value={sidebarSearchQuery}
-                  onChange={(event) => setSidebarSearchQuery(event.target.value)}
-                  className={cn(
-                    "pl-8 border-0 bg-transparent placeholder:text-muted-foreground/70 shadow-none transition-colors",
-                    "focus-visible:ring-0 focus-visible:bg-background/90 focus-visible:shadow-[0_0_0_1px_hsl(var(--primary))]",
-                    sidebarSearchQuery.trim()
-                      ? "bg-background/85"
-                      : "hover:bg-sidebar-accent/30",
-                  )}
-                />
-              </div>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        <SidebarGroup className="pb-0">
+          <SidebarGroupContent>
+            {isCollapsed ? (
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    type="button"
+                    tooltip="Search"
+                    aria-label="Open search"
+                    onClick={openSearch}
+                  >
+                    <Search />
+                    <span>Search</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            ) : (
+              <button
+                type="button"
+                aria-label="Open search"
+                onClick={openSearch}
+                className={cn(
+                  "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-sm transition-colors",
+                  "bg-transparent text-muted-foreground hover:bg-sidebar-accent/30 hover:text-foreground",
+                  "focus-visible:outline-none focus-visible:bg-background/90 focus-visible:text-foreground focus-visible:shadow-[0_0_0_1px_hsl(var(--primary))]",
+                )}
+              >
+                <Search className="size-4 text-muted-foreground/80" />
+                <span>Search</span>
+                <span className="ml-auto text-[11px] font-medium text-muted-foreground/70">
+                  {NAVIGATION_SEARCH_SHORTCUT_LABEL}
+                </span>
+              </button>
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        {isSidebarSearchActive ? (
-          <SidebarGroup>
-            <SidebarGroupLabel>
-              Search results ({sidebarSearchResults.length})
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              {sidebarSearchResults.length === 0 ? (
-                <p className="px-2 py-2 text-sm text-muted-foreground">
-                  No sidebar items found.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {groupedSidebarSearchResults.map((group) => (
-                    <div key={group.section}>
-                      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-                        {group.section}
-                      </p>
-                      <SidebarMenu>
-                        {group.items.map((item) => (
-                          <SidebarMenuItem key={item.id}>
-                            <SidebarMenuButton
-                              isActive={item.isActive}
-                              onClick={() => handleSidebarSearchResultSelect(item.to)}
-                              className="h-8"
-                            >
-                              <span className="truncate">{item.label}</span>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        ))}
-                      </SidebarMenu>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ) : (
-          <>
-            <SidebarGroup>
-              <SidebarGroupLabel>Platform</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <ProjectsNavSection
-                    isCollapsed={isCollapsed}
-                    showAllProjects={showAllProjects}
-                    setShowAllProjects={setShowAllProjects}
-                    recentProjects={recentProjects}
-                    isActive={isActive}
-                    locationPathname={location.pathname}
-                    navigate={navigate}
-                  />
+        <SidebarGroup>
+          <SidebarGroupLabel>Platform</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <ProjectsNavSection
+                isCollapsed={isCollapsed}
+                showAllProjects={showAllProjects}
+                setShowAllProjects={setShowAllProjects}
+                recentProjects={recentProjects}
+                isActive={isActive}
+                locationPathname={location.pathname}
+                navigate={navigate}
+              />
 
-                  <OrganizationNavSection
-                    isOrgAdmin={isOrgAdmin}
-                    isOrgOwner={isOrgOwner}
-                    isCollapsed={isCollapsed}
-                    isActive={isActive}
-                    isOrgTabActive={isOrgTabActive}
-                    navigate={navigate}
-                  />
+              <OrganizationNavSection
+                isOrgAdmin={isOrgAdmin}
+                isOrgOwner={isOrgOwner}
+                isCollapsed={isCollapsed}
+                isActive={isActive}
+                isOrgTabActive={isOrgTabActive}
+                navigate={navigate}
+              />
 
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive(ROUTES.SETTINGS)}
-                      tooltip="Settings"
-                    >
-                      <Link to={ROUTES.SETTINGS}>
-                        <Settings />
-                        <span>Settings</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive(ROUTES.SETTINGS)}
+                  tooltip="Settings"
+                >
+                  <Link to={ROUTES.SETTINGS}>
+                    <Settings />
+                    <span>Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-            <SuperAdminNavSection
-              showSuperAdmin={showSuperAdmin}
-              isSuperAdminTabActive={isSuperAdminTabActive}
-            />
-          </>
-        )}
+        <SuperAdminNavSection
+          showSuperAdmin={showSuperAdmin}
+          isSuperAdminTabActive={isSuperAdminTabActive}
+        />
       </SidebarContent>
 
       <SidebarFooter>

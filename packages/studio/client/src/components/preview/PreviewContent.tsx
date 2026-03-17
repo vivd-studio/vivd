@@ -8,6 +8,7 @@ import {
 } from "react";
 import { trpc } from "@/lib/trpc";
 import { ChatProvider } from "../chat/ChatContext";
+import { OpencodeChatProvider } from "@/features/opencodeChat";
 import { ResizeHandle } from "@/components/common/ResizeHandle";
 import { usePreview } from "./PreviewContext";
 import { StudioToolbar } from "./toolbar";
@@ -619,14 +620,20 @@ export function PreviewContent() {
 
       {/* Wrap with ChatProvider when project context is available */}
       {projectSlug && version !== undefined ? (
-        <ChatProvider
-          key={`${projectSlug}-${version}`}
+        <OpencodeChatProvider
+          key={`opencode-chat-${projectSlug}-${version}`}
           projectSlug={projectSlug}
           version={version}
-          onTaskComplete={handleTaskComplete}
         >
-          {mainContent}
-        </ChatProvider>
+          <ChatProvider
+            key={`${projectSlug}-${version}`}
+            projectSlug={projectSlug}
+            version={version}
+            onTaskComplete={handleTaskComplete}
+          >
+            {mainContent}
+          </ChatProvider>
+        </OpencodeChatProvider>
       ) : (
         mainContent
       )}

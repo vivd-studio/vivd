@@ -80,6 +80,7 @@ function makeMachine(overrides: Record<string, unknown> = {}) {
     memoryMb: 1024,
     region: "ams",
     externalPort: 443,
+    routePath: null,
     url: "https://studio.example.com",
     ...overrides,
   };
@@ -196,9 +197,7 @@ describe("MachinesTab", () => {
 
     render(<MachinesTab />);
 
-    expect(
-      screen.getByText("No studio machines found (or provider is not Fly)."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No studio machines found.")).toBeInTheDocument();
   });
 
   it("runs reconcile mutation after confirmation", () => {
@@ -208,5 +207,30 @@ describe("MachinesTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run reconcile" }));
 
     expect(reconcileMutateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders Docker route paths with provider-neutral labels", () => {
+    listStudioMachinesUseQueryMock.mockReturnValueOnce({
+      data: {
+        provider: "docker",
+        machines: [
+          makeMachine({
+            id: "container-1",
+            region: null,
+            externalPort: null,
+            routePath: "/_studio/site-1-v1",
+          }),
+        ],
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<MachinesTab />);
+
+    expect(screen.getByRole("button", { name: "Container" })).toBeInTheDocument();
+    expect(screen.getByText("/_studio/site-1-v1")).toBeInTheDocument();
+    expect(screen.getByText("single-host")).toBeInTheDocument();
   });
 });

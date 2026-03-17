@@ -14,13 +14,12 @@ import {
 } from "../project/ProjectArtifactStateService";
 import type { PublishArtifactKind } from "../project/ProjectArtifactStateService";
 import { domainService } from "./DomainService";
+import { reloadCaddyConfig } from "../system/CaddyAdminService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
 // Directory where Caddy site configs are stored
 const CADDY_SITES_DIR = process.env.CADDY_SITES_DIR || "/etc/caddy/sites.d";
-// Caddy admin API URL for reloading config
-const CADDY_ADMIN_URL = process.env.CADDY_ADMIN_URL || "http://caddy:2019";
 const REDIRECTS_MANIFEST_FILENAME = "redirects.json";
 const REDIRECT_STATUS_CODES = new Set([301, 302, 307, 308]);
 
@@ -818,10 +817,13 @@ ${blocks.join("\n\n")}
 ${domainSpec} {
 ${redirectRulesBlock}
     # Matcher to exclude vivd-studio paths
-    @notVivdStudio not path /vivd-studio /vivd-studio/*
+    @notVivdStudio not path /vivd-studio /vivd-studio/* /_studio /_studio/*
+
+    # Active studio runtime routes
+    import /etc/caddy/runtime.d/*.caddy
 
     # Serve published site only for non-studio paths
-	    handle @notVivdStudio {
+    handle @notVivdStudio {
 	        root * ${publishedPath}
 	        try_files {path} {path}.html {path}/index.html
 	        file_server {
@@ -860,68 +862,8 @@ ${errorHandlerBlock}
     }
   }
 
-  /**
-   * Trigger Caddy to reload its configuration by posting the Caddyfile.
-   *
-   * The Caddyfile must be accessible to this container at /etc/caddy/Caddyfile.
-   * In local dev, this is mounted from ./Caddyfile.
-   * In production, a shared volume or copy of the Caddyfile must be available.
-   */
   private async reloadCaddy(): Promise<void> {
-    try {
-      // Read the Caddyfile content - Caddy will process imports
-      // Try multiple paths: local dev mount vs production shared volume
-      const caddyfilePaths = [
-        "/etc/caddy/Caddyfile", // Local dev (mounted from host)
-        "/etc/caddy_shared/Caddyfile", // Production (shared volume from Caddy container)
-      ];
-
-      let caddyfileContent: string | null = null;
-
-      for (const caddyfilePath of caddyfilePaths) {
-        try {
-          caddyfileContent = fs.readFileSync(caddyfilePath, "utf-8");
-          console.log(`Found Caddyfile at ${caddyfilePath}`);
-          break;
-        } catch {
-          // Try next path
-        }
-      }
-
-      if (!caddyfileContent) {
-        // Caddyfile not found - this is a configuration issue
-        console.warn(
-          "Caddyfile not found at any expected location - Caddy reload skipped. " +
-            "Ensure the Caddyfile is mounted or shared with the backend container."
-        );
-        return;
-      }
-
-      // Use Caddy's admin API with Caddyfile content
-      // The Content-Type: text/caddyfile tells Caddy to adapt the Caddyfile to JSON
-      const response = await fetch(`${CADDY_ADMIN_URL}/load`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/caddyfile",
-        },
-        body: caddyfileContent,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `Caddy reload failed with status ${response.status}: ${errorText}`
-        );
-      } else {
-        console.log("Caddy configuration reloaded successfully");
-      }
-    } catch (error) {
-      // In development, Caddy might not be running
-      console.warn(
-        "Could not reload Caddy (this is normal in development):",
-        error
-      );
-    }
+    await reloadCaddyConfig();
   }
 }
 

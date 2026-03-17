@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormContent } from "@/components/settings/SettingsPageShell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,6 +76,7 @@ export function TenantMaintenanceTab() {
 
   return (
     <>
+      <FormContent>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -126,6 +128,7 @@ export function TenantMaintenanceTab() {
           </div>
         </CardContent>
       </Card>
+      </FormContent>
 
       <AlertDialog open={!!confirmConfig} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>

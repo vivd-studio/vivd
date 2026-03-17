@@ -4,6 +4,7 @@ import { LoadingSpinner } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
+import { FormContent } from "@/components/settings/SettingsPageShell";
 
 export function OrgSettings() {
   const utils = trpc.useUtils();
@@ -36,7 +37,7 @@ export function OrgSettings() {
   }
 
   return (
-    <div className="space-y-4">
+    <FormContent>
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <div>
           <div className="text-sm font-medium">Organization name</div>
@@ -45,7 +46,7 @@ export function OrgSettings() {
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1 max-w-sm">
+          <div className="flex-1">
             <Input
               placeholder={org.slug}
               value={name}
@@ -60,6 +61,6 @@ export function OrgSettings() {
           </Button>
         </div>
       </div>
-    </div>
+    </FormContent>
   );
 }

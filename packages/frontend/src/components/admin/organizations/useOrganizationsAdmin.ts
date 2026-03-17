@@ -5,7 +5,6 @@ import type {
   EditableOrganizationRole,
   LimitsForm,
   MemberEdits,
-  OrgForm,
   UserForm,
 } from "./types";
 import { DEFAULT_LIMITS } from "./types";
@@ -20,8 +19,6 @@ const EMPTY_LIMITS_FORM: LimitsForm = {
   maxProjects: "",
 };
 
-const EMPTY_ORG_FORM: OrgForm = { slug: "", name: "" };
-
 const EMPTY_USER_FORM: UserForm = {
   email: "",
   name: "",
@@ -30,25 +27,20 @@ const EMPTY_USER_FORM: UserForm = {
   projectSlug: "",
 };
 
-export function useOrganizationsAdmin() {
+export function useOrganizationsAdmin(
+  selectedOrgId: string,
+  onOrgDeleted?: (fallbackId: string) => void,
+) {
   const utils = trpc.useUtils();
 
   const { data, isLoading, error } = trpc.superadmin.listOrganizations.useQuery();
   const organizations = data?.organizations ?? [];
 
-  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
-  const [orgForm, setOrgForm] = useState<OrgForm>(EMPTY_ORG_FORM);
   const [userForm, setUserForm] = useState<UserForm>(EMPTY_USER_FORM);
   const [limitsForm, setLimitsForm] = useState<LimitsForm>(EMPTY_LIMITS_FORM);
   const [githubPrefixForm, setGithubPrefixForm] = useState<string>("");
   const [orgNameForm, setOrgNameForm] = useState<string>("");
   const [memberEdits, setMemberEdits] = useState<MemberEdits>({});
-
-  useEffect(() => {
-    if (!selectedOrgId && organizations.length > 0) {
-      setSelectedOrgId(organizations[0]!.id);
-    }
-  }, [organizations, selectedOrgId]);
 
   const selectedOrg = useMemo(
     () => organizations.find((org) => org.id === selectedOrgId) ?? null,
@@ -114,9 +106,7 @@ export function useOrganizationsAdmin() {
 
   const createOrg = trpc.superadmin.createOrganization.useMutation({
     onSuccess: async (result, variables) => {
-      setOrgForm(EMPTY_ORG_FORM);
       await utils.superadmin.listOrganizations.invalidate();
-      setSelectedOrgId(result.organizationId);
       toast.success("Organization created", {
         description: variables
           ? `"${variables.name}" (${variables.slug}) is ready.`
@@ -208,7 +198,7 @@ export function useOrganizationsAdmin() {
     onSuccess: async () => {
       await utils.superadmin.listOrganizations.invalidate();
       const remaining = organizations.filter((o) => o.id !== selectedOrgId);
-      setSelectedOrgId(remaining[0]?.id ?? "");
+      onOrgDeleted?.(remaining[0]?.id ?? "");
       toast.success("Organization deleted");
     },
     onError: (err) => {
@@ -293,9 +283,6 @@ export function useOrganizationsAdmin() {
     organizations,
     selectedOrg,
     selectedOrgId,
-    setSelectedOrgId,
-    orgForm,
-    setOrgForm,
     createOrg,
     userForm,
     setUserForm,
@@ -321,6 +308,7 @@ export function useOrganizationsAdmin() {
     usageLoading: usageQuery.isLoading,
     usageError: usageQuery.error,
     projects: projectsQuery.data?.projects ?? [],
+    projectsLoading: projectsQuery.isLoading,
     domains: domainsQuery.data?.domains ?? [],
     domainsLoading: domainsQuery.isLoading,
     domainsError: domainsQuery.error,

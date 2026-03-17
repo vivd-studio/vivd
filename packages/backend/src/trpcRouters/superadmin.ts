@@ -15,6 +15,7 @@ import { limitsService } from "../services/usage/LimitsService";
 import { usageService } from "../services/usage/UsageService";
 import { domainService, validateOrganizationSlug } from "../services/publish/DomainService";
 import { studioMachineProvider } from "../services/studioMachines";
+import { isManagedStudioMachineProvider } from "../services/studioMachines/types";
 import { pluginEntitlementService } from "../services/plugins/PluginEntitlementService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
 import { contactFormTurnstileService } from "../services/plugins/contactForm/turnstile";
@@ -27,7 +28,6 @@ import {
   SYSTEM_SETTING_KEYS,
 } from "../services/system/SystemSettingsService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
-import type { FlyStudioMachineProvider } from "../services/studioMachines/fly";
 import {
   listStudioImagesFromGhcr,
   normalizeGhcrRepository,
@@ -101,8 +101,37 @@ const authCreateUserResponseSchema = z
   })
   .passthrough();
 
-function normalizeStudioImageRepoConfigured(): string {
-  const configured = process.env.FLY_STUDIO_IMAGE_REPO?.trim();
+function managedStudioImageProviderKind(): "fly" | "docker" | null {
+  if (!isManagedStudioMachineProvider(studioMachineProvider)) return null;
+  return studioMachineProvider.kind === "docker" ? "docker" : "fly";
+}
+
+function getStudioImageEnvConfig(provider: "fly" | "docker"): {
+  repositoryEnvVar: "FLY_STUDIO_IMAGE_REPO" | "DOCKER_STUDIO_IMAGE_REPO";
+  imageEnvVar: "FLY_STUDIO_IMAGE" | "DOCKER_STUDIO_IMAGE";
+  repository: string;
+  envOverrideImage: string | null;
+} {
+  const repositoryEnvVar =
+    provider === "docker" ? "DOCKER_STUDIO_IMAGE_REPO" : "FLY_STUDIO_IMAGE_REPO";
+  const imageEnvVar =
+    provider === "docker" ? "DOCKER_STUDIO_IMAGE" : "FLY_STUDIO_IMAGE";
+
+  const configuredRepository = process.env[repositoryEnvVar]?.trim();
+  const repository = configuredRepository || "ghcr.io/vivd-studio/vivd-studio";
+  const envOverrideRaw = process.env[imageEnvVar]?.trim();
+
+  return {
+    repositoryEnvVar,
+    imageEnvVar,
+    repository,
+    envOverrideImage:
+      envOverrideRaw && envOverrideRaw.length > 0 ? envOverrideRaw : null,
+  };
+}
+
+function normalizeStudioImageRepoConfigured(provider: "fly" | "docker"): string {
+  const configured = getStudioImageEnvConfig(provider).repository;
   if (configured) return configured;
   return "ghcr.io/vivd-studio/vivd-studio";
 }
@@ -119,7 +148,7 @@ const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 export const superAdminRouter = router({
   listStudioMachines: superAdminProcedure.query(async () => {
-    if (studioMachineProvider.kind !== "fly") {
+    if (!isManagedStudioMachineProvider(studioMachineProvider)) {
       return {
         provider: studioMachineProvider.kind,
         machines: [],
@@ -127,8 +156,7 @@ export const superAdminRouter = router({
     }
 
     try {
-      const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
-      const machines = await flyProvider.listStudioMachines();
+      const machines = await studioMachineProvider.listStudioMachines();
       return {
         provider: studioMachineProvider.kind,
         machines,
@@ -145,13 +173,14 @@ export const superAdminRouter = router({
 
   getStudioMachineImageOptions: superAdminProcedure.query(async () => {
     const provider = studioMachineProvider.kind;
-    if (provider !== "fly") {
+    if (!isManagedStudioMachineProvider(studioMachineProvider)) {
       return {
         provider,
         supported: false,
         selectionMode: "unsupported" as const,
         repository: null as string | null,
         imageBase: null as string | null,
+        envOverrideVarName: null as string | null,
         envOverrideImage: null as string | null,
         overrideTag: null as string | null,
         desiredImage: null as string | null,
@@ -161,11 +190,11 @@ export const superAdminRouter = router({
       };
     }
 
-    const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
-    const repository = normalizeStudioImageRepoConfigured();
-    const envOverrideImageRaw = process.env.FLY_STUDIO_IMAGE?.trim();
-    const envOverrideImage =
-      envOverrideImageRaw && envOverrideImageRaw.length > 0 ? envOverrideImageRaw : null;
+    const managedProvider = studioMachineProvider;
+    const imageProvider = managedStudioImageProviderKind() || "fly";
+    const repository = normalizeStudioImageRepoConfigured(imageProvider);
+    const imageEnvConfig = getStudioImageEnvConfig(imageProvider);
+    const envOverrideImage = imageEnvConfig.envOverrideImage;
 
     let overrideTag: string | null = null;
     try {
@@ -207,7 +236,7 @@ export const superAdminRouter = router({
       envOverrideImage ||
       (overrideTag
         ? `${imageBase ?? fallbackImageBase}:${overrideTag}`
-        : await flyProvider.getDesiredImage());
+        : await managedProvider.getDesiredImage());
     const desiredImageSource = envOverrideImage
       ? ("env" as const)
       : overrideTag
@@ -228,6 +257,7 @@ export const superAdminRouter = router({
       selectionMode,
       repository,
       imageBase: imageBase ?? fallbackImageBase,
+      envOverrideVarName: imageEnvConfig.imageEnvVar,
       envOverrideImage,
       overrideTag,
       desiredImage,
@@ -251,23 +281,23 @@ export const superAdminRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      if (studioMachineProvider.kind !== "fly") {
+      if (!isManagedStudioMachineProvider(studioMachineProvider)) {
         return {
           provider: studioMachineProvider.kind,
           updated: false,
-          error: "Studio machine provider is not Fly",
+          error: "Studio machine provider does not support image management",
         };
       }
 
-      const envOverrideImageRaw = process.env.FLY_STUDIO_IMAGE?.trim();
-      const envOverrideImage =
-        envOverrideImageRaw && envOverrideImageRaw.length > 0 ? envOverrideImageRaw : null;
+      const imageProvider = managedStudioImageProviderKind() || "fly";
+      const imageEnvConfig = getStudioImageEnvConfig(imageProvider);
+      const envOverrideImage = imageEnvConfig.envOverrideImage;
       if (envOverrideImage) {
         return {
           provider: studioMachineProvider.kind,
           updated: false,
           error:
-            "FLY_STUDIO_IMAGE is set in the backend environment; clear it to use the image selector.",
+            `${imageEnvConfig.imageEnvVar} is set in the backend environment; clear it to use the image selector.`,
         };
       }
 
@@ -276,11 +306,10 @@ export const superAdminRouter = router({
         SYSTEM_SETTING_KEYS.studioMachineImageTagOverride,
         tag,
       );
-      const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
-      flyProvider.invalidateDesiredImageCache();
+      studioMachineProvider.invalidateDesiredImageCache();
       if (!tag) {
         try {
-          await flyProvider.getDesiredImage({ forceRefresh: true });
+          await studioMachineProvider.getDesiredImage({ forceRefresh: true });
         } catch (err) {
           console.warn(
             `[SuperAdmin] Failed to refresh desired studio image after resetting override: ${
@@ -324,16 +353,15 @@ export const superAdminRouter = router({
     }),
 
   reconcileStudioMachines: superAdminProcedure.mutation(async () => {
-    if (studioMachineProvider.kind !== "fly") {
+    if (!isManagedStudioMachineProvider(studioMachineProvider)) {
       return {
         provider: studioMachineProvider.kind,
         reconciled: false,
-        error: "Studio machine provider is not Fly",
+        error: "Studio machine provider does not support reconciliation",
       };
     }
 
-    const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
-    const result = await flyProvider.reconcileStudioMachines({
+    const result = await studioMachineProvider.reconcileStudioMachines({
       forceRefreshDesiredImage: true,
     });
     return {
@@ -350,16 +378,15 @@ export const superAdminRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      if (studioMachineProvider.kind !== "fly") {
+      if (!isManagedStudioMachineProvider(studioMachineProvider)) {
         return {
           provider: studioMachineProvider.kind,
           destroyed: false,
-          error: "Studio machine provider is not Fly",
+          error: "Studio machine provider does not support machine destruction",
         };
       }
 
-      const flyProvider = studioMachineProvider as FlyStudioMachineProvider;
-      await flyProvider.destroyStudioMachine(input.machineId);
+      await studioMachineProvider.destroyStudioMachine(input.machineId);
       return {
         provider: studioMachineProvider.kind,
         destroyed: true,

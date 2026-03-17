@@ -46,6 +46,9 @@ http://{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}, http://api.localhost {
         reverse_proxy frontend:80
     }
 
+    # Active studio runtime routes
+    import /etc/caddy/runtime.d/*.caddy
+
     # Health check endpoint
     handle /health {
         respond "OK" 200

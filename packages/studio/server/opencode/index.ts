@@ -20,6 +20,7 @@ import { usageReporter } from "../services/reporting/UsageReporter.js";
 import { agentLeaseReporter } from "../services/reporting/AgentLeaseReporter.js";
 import { requestBucketSyncAfterAgentTask } from "../services/sync/AgentTaskSyncService.js";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService.js";
+import { workspaceEventPump } from "./events/workspaceEventPump.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel } from "./modelConfig.js";
@@ -89,6 +90,7 @@ export async function runTask(
   );
 
   const { client, directory } = await serverManager.getClientAndDirectory(cwd);
+  await workspaceEventPump.retainTemporarily(directory);
 
   const currentSessionId = await getOrCreateSession(client, directory, sessionId);
   const isNewSession = !sessionId;

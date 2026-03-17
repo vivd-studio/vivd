@@ -9,6 +9,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
       - caddy_sites:/etc/caddy/sites.d
+      - caddy_runtime_routes:/etc/caddy/runtime.d:ro
       - published_sites:/srv/published:ro
       - ./packages/backend/static:/srv/default:ro
     environment:
@@ -46,6 +47,7 @@ services:
       - VIVD_PUBLIC_PLUGIN_API_BASE_URL=${VIVD_PUBLIC_PLUGIN_API_BASE_URL:-}
       - PUBLISHED_DIR=/srv/published
       - CADDY_SITES_DIR=/etc/caddy/sites.d
+      - CADDY_RUNTIME_ROUTES_DIR=/etc/caddy/runtime.d
       - CADDY_ADMIN_URL=http://caddy:2019
       - SCRAPER_URL=${SCRAPER_URL:-http://scraper:3001}
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
@@ -77,6 +79,18 @@ services:
       - FLY_STUDIO_CPU_KIND=${FLY_STUDIO_CPU_KIND:-shared}
       - FLY_STUDIO_CPUS=${FLY_STUDIO_CPUS:-1}
       - FLY_STUDIO_MEMORY_MB=${FLY_STUDIO_MEMORY_MB:-1024}
+      # Single-host Docker studio machines (when STUDIO_MACHINE_PROVIDER=docker)
+      - DOCKER_STUDIO_SOCKET_PATH=${DOCKER_STUDIO_SOCKET_PATH:-/var/run/docker.sock}
+      - DOCKER_STUDIO_API_BASE_URL=${DOCKER_STUDIO_API_BASE_URL:-}
+      - DOCKER_STUDIO_API_VERSION=${DOCKER_STUDIO_API_VERSION:-}
+      - DOCKER_STUDIO_NETWORK=${DOCKER_STUDIO_NETWORK:-vivd-network}
+      - DOCKER_STUDIO_ROUTE_PREFIX=${DOCKER_STUDIO_ROUTE_PREFIX:-/_studio}
+      - DOCKER_STUDIO_PUBLIC_BASE_URL=${DOCKER_STUDIO_PUBLIC_BASE_URL:-}
+      - DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL=${DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL:-http://caddy}
+      - DOCKER_STUDIO_IMAGE_REPO=${DOCKER_STUDIO_IMAGE_REPO:-}
+      - DOCKER_STUDIO_IMAGE=${DOCKER_STUDIO_IMAGE:-}
+      - DOCKER_STUDIO_CPUS=${DOCKER_STUDIO_CPUS:-1}
+      - DOCKER_STUDIO_MEMORY_MB=${DOCKER_STUDIO_MEMORY_MB:-1024}
       # GitHub sync
       - GITHUB_SYNC_ENABLED=${GITHUB_SYNC_ENABLED:-false}
       - GITHUB_SYNC_STRICT=${GITHUB_SYNC_STRICT:-false}
@@ -94,7 +108,9 @@ services:
       - opencode_data:/root/.local/share/opencode/storage
       - published_sites:/srv/published
       - caddy_sites:/etc/caddy/sites.d
+      - caddy_runtime_routes:/etc/caddy/runtime.d
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,4 +155,5 @@ volumes:
   caddy_data:
   caddy_config:
   caddy_sites:
+  caddy_runtime_routes:
   published_sites:

@@ -1,10 +1,22 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Copy,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Card,
   CardContent,
@@ -24,8 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 
 type SnippetKind = "html" | "astro";
 type ContactFormFieldType = "text" | "email" | "textarea";
@@ -117,6 +128,35 @@ function SectionCard({
   );
 }
 
+function CollapsibleSection({
+  title,
+  description,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  description?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Collapsible defaultOpen={defaultOpen} className="rounded-lg border bg-card">
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 text-left group">
+        <div>
+          <h3 className="text-sm font-medium">{title}</h3>
+          {description ? (
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=closed]:-rotate-90" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+        <div className="border-t px-4 pb-4 pt-3 space-y-4">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function SnippetCard({
   title,
   snippet,
@@ -127,22 +167,18 @@ function SnippetCard({
   onCopy: () => void;
 }) {
   return (
-    <Card>
-      <CardHeader className="py-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm">{title}</CardTitle>
-          <Button variant="outline" size="sm" onClick={onCopy}>
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            Copy
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
-          {snippet}
-        </pre>
-      </CardContent>
-    </Card>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-medium">{title}</h4>
+        <Button variant="outline" size="sm" onClick={onCopy}>
+          <Copy className="mr-1.5 h-3.5 w-3.5" />
+          Copy
+        </Button>
+      </div>
+      <pre className="max-h-64 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-words">
+        {snippet}
+      </pre>
+    </div>
   );
 }
 
@@ -439,8 +475,10 @@ export default function ProjectPlugins() {
         </div>
       }
     >
+      <FormContent className="max-w-3xl">
+      {/* ── Contact Form ── */}
       <Card>
-        <CardHeader className="space-y-4">
+        <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{contactCatalogEntry?.name || "Contact Form"}</CardTitle>
@@ -449,15 +487,13 @@ export default function ProjectPlugins() {
                   "Collect visitor inquiries and store submissions in Vivd."}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={pluginEnabled ? "default" : "secondary"}>
-                {pluginEnabled ? "Enabled" : "Disabled"}
-              </Badge>
-            </div>
+            <Badge variant={pluginEnabled ? "default" : "secondary"}>
+              {pluginEnabled ? "Enabled" : "Disabled"}
+            </Badge>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {catalogQuery.error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               Failed to load plugin catalog: {catalogQuery.error.message}
@@ -471,447 +507,350 @@ export default function ProjectPlugins() {
 
           {!pluginEnabled ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              Contact Form access is managed in Super Admin → Plugins. Request
-              flow is not available yet, so ask a super-admin to enable access
-              for this project there, or write to support@vivd.studio.
-            </div>
-          ) : null}
-
-          {pluginEnabled && contactInfo && recipientEmails.length === 0 ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              Contact Form is enabled, but no recipient email is configured yet.
+              Contact Form access is managed in Super Admin. Ask a super-admin
+              to enable access for this project, or write to support@vivd.studio.
             </div>
           ) : null}
 
           {pluginEnabled ? (
-            <div className="space-y-6">
-              <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="w-full justify-start">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="configuration">Configuration</TabsTrigger>
-                  <TabsTrigger value="fields">Fields</TabsTrigger>
-                  <TabsTrigger value="snippets">Snippets</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="overview" className="mt-6 max-w-4xl space-y-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <SectionCard
-                      title="Submit endpoint"
-                      description="Public endpoint your form submits to."
-                    >
-                      <code className="text-xs break-all">
-                        {contactInfo?.usage?.submitEndpoint || "Unavailable"}
-                      </code>
-                    </SectionCard>
-
-                    <SectionCard
-                      title="Public token"
-                      description="Hidden form token identifying this plugin instance."
-                    >
-                      <code className="text-xs break-all">
-                        {contactInfo?.publicToken || "Unavailable"}
-                      </code>
-                    </SectionCard>
-                  </div>
-
-                  <SectionCard
-                    title="Current behavior"
-                    description="How host validation and redirects are resolved at runtime."
-                  >
-                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                      <li>
-                        Source hosts are validated from the configured allowlist or
-                        auto-detected first-party hosts.
-                      </li>
-                      <li>
-                        Redirect hosts use configured redirect allowlist, then
-                        effective source hosts as fallback.
-                      </li>
-                      <li>
-                        Redirects are disabled when no effective hosts are available.
-                      </li>
-                    </ul>
-                  </SectionCard>
-                </TabsContent>
-
-                <TabsContent value="configuration" className="mt-6 max-w-4xl space-y-4">
-                  <SectionCard
-                    title="Recipient emails"
-                    description="Only verified recipients receive contact form emails. Add from org emails or enter a custom address."
-                  >
-                    <div className="max-w-2xl space-y-4">
-                      <div className="space-y-2">
-                        <Label>Verified recipients (required)</Label>
-                        {recipientEmails.length > 0 ? (
-                          <div className="space-y-2">
-                            {recipientEmails.map((email) => (
-                              <div
-                                key={email}
-                                className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2"
-                              >
-                                <div className="flex items-center gap-2 text-sm">
-                                  <code className="text-xs">{email}</code>
-                                  <Badge variant="default">Verified</Badge>
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleRemoveRecipient(email)}
-                                >
-                                  <Trash2 className="mr-1 h-4 w-4" />
-                                  Remove
-                                </Button>
-                              </div>
-                            ))}
+            <>
+              {/* ── Recipients (primary section) ── */}
+              <SectionCard
+                title="Recipients"
+                description="Who receives contact form submissions. Only verified email addresses will get notifications."
+              >
+                <div className="space-y-4">
+                  {recipientEmails.length > 0 ? (
+                    <div className="space-y-2">
+                      {recipientEmails.map((email) => (
+                        <div
+                          key={email}
+                          className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <span>{email}</span>
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                              Verified
+                            </Badge>
                           </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            No verified recipients yet.
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-                        <Label>Add recipient</Label>
-                        <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-                          <Select
-                            value={selectedRecipientOption || undefined}
-                            onValueChange={setSelectedRecipientOption}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select organization email" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {recipientOptions.length > 0 ? (
-                                recipientOptions.map((option) => (
-                                  <SelectItem
-                                    key={option.email}
-                                    value={option.email}
-                                    disabled={option.isVerified || option.isPending}
-                                  >
-                                    {option.email}
-                                    {option.isVerified
-                                      ? " (Verified)"
-                                      : option.isPending
-                                        ? " (Pending)"
-                                        : ""}
-                                  </SelectItem>
-                                ))
-                              ) : (
-                                <SelectItem value="__none" disabled>
-                                  No organization emails available
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
                           <Button
                             type="button"
-                            onClick={handleAddSelectedRecipient}
-                            disabled={requestRecipientVerificationMutation.isPending}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveRecipient(email)}
                           >
-                            {requestRecipientVerificationMutation.isPending ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Adding...
-                              </>
-                            ) : (
-                              "Add"
-                            )}
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="contact-custom-recipient-email">
-                            Or add custom email
-                          </Label>
-                          <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-                            <Input
-                              id="contact-custom-recipient-email"
-                              value={customRecipientEmail}
-                              onChange={(event) =>
-                                setCustomRecipientEmail(event.target.value)
-                              }
-                              placeholder="team@example.com"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleAddCustomRecipient}
-                              disabled={requestRecipientVerificationMutation.isPending}
-                            >
-                              {requestRecipientVerificationMutation.isPending ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Adding...
-                                </>
-                              ) : (
-                                "Add custom"
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {pendingRecipients.length > 0 ? (
-                        <div className="space-y-2">
-                          <Label>Pending verifications</Label>
-                          <div className="space-y-2">
-                            {pendingRecipients.map((entry) => (
-                              <div
-                                key={entry.email}
-                                className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2"
-                              >
-                                <div className="flex items-center gap-2 text-sm">
-                                  <code className="text-xs">{entry.email}</code>
-                                  <Badge variant="secondary">Pending</Badge>
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleRequestRecipientVerification(entry.email)}
-                                  disabled={requestRecipientVerificationMutation.isPending}
-                                >
-                                  Resend
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard
-                    title="Allowed source hosts"
-                    description="Optional. Leave empty to use auto mode based on first-party hosts."
-                  >
-                    <div className="space-y-3">
-                      <div className="max-w-2xl space-y-2">
-                        <Label htmlFor="contact-source-hosts">
-                          Allowed source hosts (optional)
-                        </Label>
-                        <Textarea
-                          id="contact-source-hosts"
-                          value={sourceHostsInput}
-                          onChange={(event) => setSourceHostsInput(event.target.value)}
-                          placeholder={"mydomain.com\nwww.mydomain.com"}
-                          rows={3}
-                        />
-                      </div>
-
-                      <div className="max-w-2xl rounded-md border bg-muted/20 px-3 py-2">
-                        <p className="mb-1 text-xs font-medium">
-                          Auto-detected hosts (read-only fallback)
-                        </p>
-                        {inferredAutoSourceHosts.length > 0 ? (
-                          <code className="text-xs whitespace-pre-wrap break-words">
-                            {inferredAutoSourceHosts.join("\n")}
-                          </code>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            No inferred hosts yet (usually before first publish).
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard
-                    title="Allowed redirect hosts"
-                    description="Optional. Used to validate `_redirect` host after successful submit."
-                  >
-                    <div className="max-w-2xl space-y-2">
-                      <Label htmlFor="contact-redirect-hosts">
-                        Allowed redirect hosts (optional)
-                      </Label>
-                      <Textarea
-                        id="contact-redirect-hosts"
-                        value={redirectHostsInput}
-                        onChange={(event) => setRedirectHostsInput(event.target.value)}
-                        placeholder="mydomain.com"
-                        rows={3}
-                      />
-                    </div>
-                  </SectionCard>
-                </TabsContent>
-
-                <TabsContent value="fields" className="mt-6 max-w-4xl space-y-4">
-                  <SectionCard
-                    title="Form fields"
-                    description="Default fields are Name, Email, and Message. Customize labels, required status, and field types."
-                    action={
-                      <Button variant="outline" size="sm" onClick={addFormField}>
-                        <Plus className="mr-1 h-4 w-4" />
-                        Add field
-                      </Button>
-                    }
-                  >
-                    <div className="space-y-3">
-                      {formFieldsInput.map((field, index) => (
-                        <div
-                          key={`form-field-${index}`}
-                          className="rounded-lg border bg-card p-4 space-y-4"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="text-sm font-medium">
-                              Field {index + 1}
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeFormField(index)}
-                              disabled={formFieldsInput.length <= 1}
-                            >
-                              <Trash2 className="mr-1 h-4 w-4" />
-                              Remove
-                            </Button>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div className="space-y-1">
-                              <Label htmlFor={`contact-field-key-${index}`}>Field key</Label>
-                              <Input
-                                id={`contact-field-key-${index}`}
-                                value={field.key}
-                                onChange={(event) =>
-                                  updateFormField(index, { key: event.target.value })
-                                }
-                                placeholder="name"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor={`contact-field-label-${index}`}>Label</Label>
-                              <Input
-                                id={`contact-field-label-${index}`}
-                                value={field.label}
-                                onChange={(event) =>
-                                  updateFormField(index, { label: event.target.value })
-                                }
-                                placeholder="Name"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <div className="space-y-1">
-                              <Label>Type</Label>
-                              <Select
-                                value={field.type}
-                                onValueChange={(value) =>
-                                  updateFormField(index, {
-                                    type: value as ContactFormFieldType,
-                                    rows: value === "textarea" ? field.rows ?? 5 : undefined,
-                                  })
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="text">Text</SelectItem>
-                                  <SelectItem value="email">Email</SelectItem>
-                                  <SelectItem value="textarea">Textarea</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor={`contact-field-placeholder-${index}`}>
-                                Placeholder (optional)
-                              </Label>
-                              <Input
-                                id={`contact-field-placeholder-${index}`}
-                                value={field.placeholder}
-                                onChange={(event) =>
-                                  updateFormField(index, { placeholder: event.target.value })
-                                }
-                                placeholder="Optional placeholder"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor={`contact-field-rows-${index}`}>
-                                Rows (textarea)
-                              </Label>
-                              <Input
-                                id={`contact-field-rows-${index}`}
-                                type="number"
-                                min={2}
-                                max={12}
-                                disabled={field.type !== "textarea"}
-                                value={field.type === "textarea" ? String(field.rows ?? 5) : ""}
-                                onChange={(event) =>
-                                  updateFormField(index, {
-                                    rows:
-                                      field.type === "textarea"
-                                        ? Number(event.target.value || "5")
-                                        : undefined,
-                                  })
-                                }
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                              id={`contact-field-required-${index}`}
-                              checked={field.required}
-                              onCheckedChange={(checked) =>
-                                updateFormField(index, { required: checked === true })
-                              }
-                            />
-                            <Label
-                              htmlFor={`contact-field-required-${index}`}
-                              className="font-normal"
-                            >
-                              Required
-                            </Label>
-                          </div>
                         </div>
                       ))}
                     </div>
-                  </SectionCard>
-                </TabsContent>
+                  ) : (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-300">
+                      Add an email address to start receiving form submissions.
+                    </div>
+                  )}
 
-                <TabsContent value="snippets" className="mt-6 max-w-4xl space-y-4">
-                  <SectionCard
-                    title="Embed snippets"
-                    description="Insert one of these snippets into your site contact section."
-                  >
-                    {snippets ? (
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <SnippetCard
-                          title="HTML snippet"
-                          snippet={snippets.html}
-                          onCopy={() => void handleCopy(snippets.html, "html")}
-                        />
-                        <SnippetCard
-                          title="Astro snippet"
-                          snippet={snippets.astro}
-                          onCopy={() => void handleCopy(snippets.astro, "astro")}
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Snippets are available after the plugin is enabled.
-                      </p>
-                    )}
-                  </SectionCard>
-
-                  {contactInfo?.instructions?.length ? (
-                    <SectionCard
-                      title="Implementation notes"
-                      description="Runtime and validation details for production usage."
-                    >
-                      <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                        {contactInfo.instructions.map((line, index) => (
-                          <li key={`${index}-${line}`}>{line}</li>
-                        ))}
-                      </ul>
-                    </SectionCard>
+                  {pendingRecipients.length > 0 ? (
+                    <div className="space-y-2">
+                      {pendingRecipients.map((entry) => (
+                        <div
+                          key={entry.email}
+                          className="flex items-center justify-between rounded-md border border-dashed px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>{entry.email}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              Pending
+                            </Badge>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRequestRecipientVerification(entry.email)}
+                            disabled={requestRecipientVerificationMutation.isPending}
+                          >
+                            Resend
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   ) : null}
-                </TabsContent>
-              </Tabs>
-              <div className="flex justify-end border-t pt-4">
+
+                  <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      Add recipient
+                    </Label>
+                    {recipientOptions.length > 0 ? (
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Select
+                          value={selectedRecipientOption || undefined}
+                          onValueChange={setSelectedRecipientOption}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select organization email" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {recipientOptions.map((option) => (
+                              <SelectItem
+                                key={option.email}
+                                value={option.email}
+                                disabled={option.isVerified || option.isPending}
+                              >
+                                {option.email}
+                                {option.isVerified
+                                  ? " (Verified)"
+                                  : option.isPending
+                                    ? " (Pending)"
+                                    : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          onClick={handleAddSelectedRecipient}
+                          disabled={requestRecipientVerificationMutation.isPending}
+                        >
+                          {requestRecipientVerificationMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Add"
+                          )}
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <Input
+                        value={customRecipientEmail}
+                        onChange={(event) =>
+                          setCustomRecipientEmail(event.target.value)
+                        }
+                        placeholder="team@example.com"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAddCustomRecipient}
+                        disabled={requestRecipientVerificationMutation.isPending}
+                      >
+                        {requestRecipientVerificationMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Add"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* ── Form Fields (collapsible) ── */}
+              <CollapsibleSection
+                title="Form Fields"
+                description="Customize which fields appear on your contact form."
+              >
+                <div className="space-y-3">
+                  {formFieldsInput.map((field, index) => (
+                    <div
+                      key={`form-field-${index}`}
+                      className="rounded-lg border bg-card p-3 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium">
+                          {field.label || `Field ${index + 1}`}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeFormField(index)}
+                          disabled={formFieldsInput.length <= 1}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label htmlFor={`contact-field-key-${index}`} className="text-xs">
+                            Field key
+                          </Label>
+                          <Input
+                            id={`contact-field-key-${index}`}
+                            value={field.key}
+                            onChange={(event) =>
+                              updateFormField(index, { key: event.target.value })
+                            }
+                            placeholder="name"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor={`contact-field-label-${index}`} className="text-xs">
+                            Label
+                          </Label>
+                          <Input
+                            id={`contact-field-label-${index}`}
+                            value={field.label}
+                            onChange={(event) =>
+                              updateFormField(index, { label: event.target.value })
+                            }
+                            placeholder="Name"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Type</Label>
+                          <Select
+                            value={field.type}
+                            onValueChange={(value) =>
+                              updateFormField(index, {
+                                type: value as ContactFormFieldType,
+                                rows: value === "textarea" ? field.rows ?? 5 : undefined,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                              <SelectItem value="textarea">Textarea</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor={`contact-field-placeholder-${index}`} className="text-xs">
+                            Placeholder
+                          </Label>
+                          <Input
+                            id={`contact-field-placeholder-${index}`}
+                            value={field.placeholder}
+                            onChange={(event) =>
+                              updateFormField(index, { placeholder: event.target.value })
+                            }
+                            placeholder="Optional"
+                          />
+                        </div>
+                        {field.type === "textarea" ? (
+                          <div className="space-y-1">
+                            <Label htmlFor={`contact-field-rows-${index}`} className="text-xs">
+                              Rows
+                            </Label>
+                            <Input
+                              id={`contact-field-rows-${index}`}
+                              type="number"
+                              min={2}
+                              max={12}
+                              value={String(field.rows ?? 5)}
+                              onChange={(event) =>
+                                updateFormField(index, {
+                                  rows: Number(event.target.value || "5"),
+                                })
+                              }
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          id={`contact-field-required-${index}`}
+                          checked={field.required}
+                          onCheckedChange={(checked) =>
+                            updateFormField(index, { required: checked === true })
+                          }
+                        />
+                        <Label
+                          htmlFor={`contact-field-required-${index}`}
+                          className="font-normal text-xs"
+                        >
+                          Required
+                        </Label>
+                      </div>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={addFormField}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add field
+                  </Button>
+                </div>
+              </CollapsibleSection>
+
+              {/* ── Advanced: Host Allowlists (collapsible) ── */}
+              <CollapsibleSection
+                title="Advanced Settings"
+                description="Source hosts, redirect allowlists, and other security settings."
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="contact-source-hosts" className="text-xs font-medium">
+                      Allowed source hosts
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to automatically use your project's domains.
+                    </p>
+                    <Textarea
+                      id="contact-source-hosts"
+                      value={sourceHostsInput}
+                      onChange={(event) => setSourceHostsInput(event.target.value)}
+                      placeholder={"mydomain.com\nwww.mydomain.com"}
+                      rows={3}
+                    />
+                    {inferredAutoSourceHosts.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Auto-detected: {inferredAutoSourceHosts.join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="contact-redirect-hosts" className="text-xs font-medium">
+                      Allowed redirect hosts
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Validates the redirect URL after successful form submission.
+                    </p>
+                    <Textarea
+                      id="contact-redirect-hosts"
+                      value={redirectHostsInput}
+                      onChange={(event) => setRedirectHostsInput(event.target.value)}
+                      placeholder="mydomain.com"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              </CollapsibleSection>
+
+              {/* ── Embed Snippets (collapsible) ── */}
+              <CollapsibleSection
+                title="Embed Snippets"
+                description="Copy a snippet to add the contact form to your website."
+              >
+                {snippets ? (
+                  <div className="space-y-4">
+                    <SnippetCard
+                      title="HTML"
+                      snippet={snippets.html}
+                      onCopy={() => void handleCopy(snippets.html, "html")}
+                    />
+                    <SnippetCard
+                      title="Astro"
+                      snippet={snippets.astro}
+                      onCopy={() => void handleCopy(snippets.astro, "astro")}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Snippets are available after the plugin is enabled.
+                  </p>
+                )}
+              </CollapsibleSection>
+
+              {/* ── Save ── */}
+              <div className="flex justify-end pt-2">
                 <Button
                   onClick={handleSaveConfig}
                   disabled={updateContactConfigMutation.isPending}
@@ -926,27 +865,26 @@ export default function ProjectPlugins() {
                   )}
                 </Button>
               </div>
-            </div>
+            </>
           ) : null}
         </CardContent>
       </Card>
 
+      {/* ── Analytics ── */}
       <Card>
-        <CardHeader className="space-y-4">
+        <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{analyticsCatalogEntry?.name || "Analytics"}</CardTitle>
               <CardDescription>
                 {analyticsCatalogEntry?.description ||
-                  "Website traffic analytics for pageviews, visitors, sessions, and sources."}
+                  "Track page traffic and visitor behavior for your project."}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               {analyticsEnabled ? (
                 <Button asChild size="sm" variant="outline">
-                  <Link to={analyticsPath}>
-                    Open analytics dashboard
-                  </Link>
+                  <Link to={analyticsPath}>Open dashboard</Link>
                 </Button>
               ) : null}
               <Badge variant={analyticsEnabled ? "default" : "secondary"}>
@@ -955,7 +893,7 @@ export default function ProjectPlugins() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           {analyticsInfoQuery.error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               Failed to load Analytics plugin info: {analyticsInfoQuery.error.message}
@@ -963,19 +901,18 @@ export default function ProjectPlugins() {
           ) : null}
 
           {!analyticsEnabled ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              Analytics access is managed in Super Admin → Plugins. Ask a super-admin
+            <p className="text-sm text-muted-foreground">
+              Analytics access is managed in Super Admin. Ask a super-admin
               to enable Analytics for this project.
-            </div>
-          ) : null}
-
-          {analyticsEnabled ? (
+            </p>
+          ) : (
             <p className="text-sm text-muted-foreground">
               Analytics reporting is available on the dedicated Analytics page.
             </p>
-          ) : null}
+          )}
         </CardContent>
       </Card>
+      </FormContent>
     </SettingsPageShell>
   );
 }

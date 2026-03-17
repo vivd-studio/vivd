@@ -6,6 +6,7 @@ import { assetsRouter } from "../trpcRouters/assets.js";
 import { healthRouter } from "../trpcRouters/health.js";
 import { projectRouter } from "../trpcRouters/project.js";
 import { agentRouter } from "../trpcRouters/agent.js";
+import { agentChatRouter } from "../trpcRouters/agentChat.js";
 import { usageRouter } from "../trpcRouters/usage.js";
 
 export const appRouter = router({
@@ -16,6 +17,7 @@ export const appRouter = router({
   health: healthRouter,
   project: projectRouter,
   agent: agentRouter,
+  agentChat: agentChatRouter,
   usage: usageRouter,
 });
 

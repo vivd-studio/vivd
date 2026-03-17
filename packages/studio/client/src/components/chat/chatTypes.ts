@@ -1,13 +1,5 @@
 import type { MouseEvent } from "react";
 
-export interface Message {
-  id?: string;
-  role: "user" | "agent";
-  content: string;
-  parts?: any[];
-  createdAt?: number;
-}
-
 export interface Session {
   id: string;
   title?: string;
@@ -107,11 +99,10 @@ export interface ChatContextValue {
   selectedSessionId: string | null;
   setSelectedSessionId: (id: string | null) => void;
   isSessionHydrating: boolean;
-  messages: Message[];
+  messageCount: number;
   isStreaming: boolean;
   isWaiting: boolean;
   isThinking: boolean;
-  streamingParts: any[];
   input: string;
   setInput: (value: string) => void;
   attachedElement: AttachedElement | null;

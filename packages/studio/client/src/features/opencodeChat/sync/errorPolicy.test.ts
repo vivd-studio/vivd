@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeSessionError } from "./chatErrorPolicy";
+import { sanitizeSessionError } from "./errorPolicy";
 
-describe("chatErrorPolicy", () => {
+describe("opencodeChat errorPolicy", () => {
   it("redacts upstream provider credit errors", () => {
     const error = sanitizeSessionError({
       type: "task",
@@ -29,7 +29,7 @@ describe("chatErrorPolicy", () => {
   it("falls back to a generic safe task error", () => {
     const error = sanitizeSessionError({
       type: "task",
-      message: "Failed to prompt session: {\"debug\":\"internal stack\"}",
+      message: 'Failed to prompt session: {"debug":"internal stack"}',
     });
 
     expect(error.type).toBe("task");

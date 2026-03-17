@@ -21,7 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { ROUTES } from "@/app/router/paths";
@@ -191,17 +191,18 @@ export default function Settings() {
         </TabsList>
 
         <TabsContent value="profile" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile</CardTitle>
-              <CardDescription>Update your personal information and email.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...profileForm}>
-                <form
-                  onSubmit={profileForm.handleSubmit(handleUpdateProfile)}
-                  className="max-w-xl space-y-4"
-                >
+          <FormContent>
+            <Card>
+              <CardHeader>
+                <CardTitle>Profile</CardTitle>
+                <CardDescription>Update your personal information and email.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...profileForm}>
+                  <form
+                    onSubmit={profileForm.handleSubmit(handleUpdateProfile)}
+                    className="space-y-4"
+                  >
                   <FormField
                     control={profileForm.control}
                     name="name"
@@ -271,22 +272,24 @@ export default function Settings() {
                   </Button>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </FormContent>
         </TabsContent>
 
         <TabsContent value="password" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Password</CardTitle>
-              <CardDescription>Change your password.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...passwordForm}>
-                <form
-                  onSubmit={passwordForm.handleSubmit(handleUpdatePassword)}
-                  className="max-w-xl space-y-4"
-                >
+          <FormContent>
+            <Card>
+              <CardHeader>
+                <CardTitle>Password</CardTitle>
+                <CardDescription>Change your password.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...passwordForm}>
+                  <form
+                    onSubmit={passwordForm.handleSubmit(handleUpdatePassword)}
+                    className="space-y-4"
+                  >
                   <FormField
                     control={passwordForm.control}
                     name="currentPassword"
@@ -336,8 +339,9 @@ export default function Settings() {
                   </Button>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </FormContent>
         </TabsContent>
       </Tabs>
     </SettingsPageShell>

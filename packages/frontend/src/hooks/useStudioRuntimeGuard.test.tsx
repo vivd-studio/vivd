@@ -218,4 +218,33 @@ describe("useStudioRuntimeGuard", () => {
     expect(ensureStudioRunningB).not.toHaveBeenCalled();
     expect(onRecoveredB).not.toHaveBeenCalled();
   });
+
+  it("keeps path-prefixed runtime URLs when probing health", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GuardHarness
+        enabled
+        studioBaseUrl="https://app.example.com/_studio/route-1/"
+        touchStudio={vi.fn()}
+        ensureStudioRunning={vi.fn()}
+        onRecovered={vi.fn()}
+        timing={timing}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://app.example.com/_studio/route-1/health",
+      expect.objectContaining({
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+      }),
+    );
+  });
 });

@@ -282,7 +282,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           path="superadmin/users"
           element={
             <RequireSuperAdmin>
-              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=users`} replace />
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?section=users`} replace />
             </RequireSuperAdmin>
           }
         />
@@ -290,7 +290,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           path="superadmin/orgs"
           element={
             <RequireSuperAdmin>
-              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=orgs`} replace />
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?section=org`} replace />
             </RequireSuperAdmin>
           }
         />
@@ -298,7 +298,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           path="superadmin/maintenance"
           element={
             <RequireSuperAdmin>
-              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=maintenance`} replace />
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?section=maintenance`} replace />
             </RequireSuperAdmin>
           }
         />
@@ -306,7 +306,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           path="superadmin/machines"
           element={
             <RequireSuperAdmin>
-              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?tab=machines`} replace />
+              <Navigate to={`${ROUTES.SUPERADMIN_BASE}?section=machines`} replace />
             </RequireSuperAdmin>
           }
         />

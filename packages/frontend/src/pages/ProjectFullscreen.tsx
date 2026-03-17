@@ -30,6 +30,7 @@ import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
 import {
   BarChart3,
@@ -407,7 +408,7 @@ export default function ProjectFullscreen() {
 
   const studioIframeSrc = useMemo(() => {
     if (!studioBaseUrl) return null;
-    const url = new URL("/vivd-studio", studioBaseUrl);
+    const url = new URL(resolveStudioRuntimeUrl(studioBaseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(version));

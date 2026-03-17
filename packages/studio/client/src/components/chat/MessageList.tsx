@@ -12,6 +12,12 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useOpencodeChat } from "@/features/opencodeChat";
+import {
+  buildCanonicalTimelineModel,
+  shouldSuggestInterruptedContinueFromRecords,
+  type CanonicalTimelineItem,
+} from "@/features/opencodeChat/render/timeline";
 import { EmptyStatePrompt } from "./EmptyStatePrompt";
 import {
   ElementRefPill,
@@ -25,18 +31,11 @@ import {
   sanitizeThoughtText,
   normalizeToolStatus,
 } from "./chatStreamUtils";
-import {
-  buildChatTimelineModel,
-  mergeLiveParts,
-  type ChatTimelineItem,
-} from "./chatTimelineBuilder";
-import { shouldSuggestInterruptedContinue } from "./chatMessageUtils";
 
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 80;
 
 export function MessageList() {
   const {
-    messages,
     selectedSessionId,
     isThinking,
     isWaiting,
@@ -45,7 +44,6 @@ export function MessageList() {
     handleRevert,
     handleUnrevert,
     isReverted,
-    streamingParts,
     setInput,
     handleContinueSession,
     sessionError,
@@ -54,10 +52,11 @@ export function MessageList() {
     usageLimitStatus,
     isUsageBlocked,
   } = useChatContext();
+  const opencodeChat = useOpencodeChat();
+  const selectedMessages = opencodeChat.selectedMessages;
 
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
   const [showRevertNotice, setShowRevertNotice] = useState(false);
-  const [liveParts, setLiveParts] = useState<any[]>([]);
   const [workedOpenRunIds, setWorkedOpenRunIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -67,8 +66,6 @@ export function MessageList() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const partOrderRef = useRef<Map<string, number>>(new Map());
-  const nextPartOrderRef = useRef(0);
   const runStatusRef = useRef<Map<string, "in-progress" | "completed" | "other">>(
     new Map(),
   );
@@ -157,15 +154,12 @@ export function MessageList() {
   );
 
   useEffect(() => {
-    partOrderRef.current.clear();
-    nextPartOrderRef.current = 0;
     runStatusRef.current.clear();
     runSeenInProgressRef.current.clear();
     workedCollapseTimersRef.current.forEach((timerId) => {
       window.clearTimeout(timerId);
     });
     workedCollapseTimersRef.current.clear();
-    setLiveParts([]);
     setWorkedOpenRunIds(new Set());
     setWorkedAutoCollapsedRunIds(new Set());
   }, [selectedSessionId]);
@@ -207,87 +201,21 @@ export function MessageList() {
   }, []);
 
   useEffect(() => {
-    if (
-      messages.length > 0 ||
-      isRunInProgress ||
-      (streamingParts && streamingParts.length > 0)
-    ) {
+    if (selectedMessages.length > 0 || isRunInProgress) {
       if (!stickToBottomRef.current) return;
       scheduleScrollToBottom(isRunInProgress ? "smooth" : "auto");
     }
-  }, [messages, isRunInProgress, streamingParts]);
-
-  useEffect(() => {
-    if (!streamingParts || streamingParts.length === 0) return;
-    for (const part of streamingParts) {
-      const partId = part?.id;
-      if (!partId || partOrderRef.current.has(partId)) continue;
-      partOrderRef.current.set(partId, nextPartOrderRef.current);
-      nextPartOrderRef.current += 1;
-    }
-  }, [streamingParts]);
-
-  useEffect(() => {
-    for (const message of messages) {
-      if (!message.parts || message.parts.length === 0) continue;
-      for (const part of message.parts) {
-        const partId = part?.id;
-        if (!partId || partOrderRef.current.has(partId)) continue;
-        partOrderRef.current.set(partId, nextPartOrderRef.current);
-        nextPartOrderRef.current += 1;
-      }
-    }
-  }, [messages]);
-
-  const orderPartsBySeenSequence = (parts: any[] | undefined): any[] => {
-    if (!parts || parts.length < 2) return parts ?? [];
-
-    return [...parts].sort((a, b) => {
-      const aId = typeof a?.id === "string" ? a.id : undefined;
-      const bId = typeof b?.id === "string" ? b.id : undefined;
-      const aOrder =
-        aId && partOrderRef.current.has(aId)
-          ? partOrderRef.current.get(aId)!
-          : Number.MAX_SAFE_INTEGER;
-      const bOrder =
-        bId && partOrderRef.current.has(bId)
-          ? partOrderRef.current.get(bId)!
-          : Number.MAX_SAFE_INTEGER;
-      return aOrder - bOrder;
-    });
-  };
-
-  useEffect(() => {
-    if (!isRunInProgress) {
-      if (liveParts.length > 0) {
-        setLiveParts([]);
-      }
-      return;
-    }
-
-    const incomingParts = orderPartsBySeenSequence(streamingParts).filter(
-      (part: any) =>
-        part?.type === "reasoning" || part?.type === "tool" || part?.type === "text",
-    );
-    if (incomingParts.length === 0) return;
-
-    setLiveParts((prev) => mergeLiveParts(prev, incomingParts));
-  }, [streamingParts, isRunInProgress, liveParts.length]);
-
-  const orderedLiveParts = useMemo(
-    () => orderPartsBySeenSequence(liveParts),
-    [liveParts],
-  );
+  }, [selectedMessages, isRunInProgress]);
 
   const timeline = useMemo(
     () =>
-      buildChatTimelineModel({
-        messages,
-        liveParts: orderedLiveParts,
-        isWorking: isRunInProgress,
+      buildCanonicalTimelineModel({
+        messages: selectedMessages,
+        sessionStatus: opencodeChat.sessionStatus,
+        isThinking: isRunInProgress,
         isWaiting,
       }),
-    [messages, orderedLiveParts, isRunInProgress, isWaiting],
+    [selectedMessages, opencodeChat.sessionStatus, isRunInProgress, isWaiting],
   );
 
   useEffect(() => {
@@ -330,6 +258,9 @@ export function MessageList() {
       const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
       let changed = next.size !== prev.size;
       for (const runId of newlyCompletedRunIds) {
+        if (workedAutoCollapsedRunIdsRef.current.has(runId)) {
+          continue;
+        }
         if (!next.has(runId)) {
           next.add(runId);
           changed = true;
@@ -379,9 +310,9 @@ export function MessageList() {
   }, [timeline.items, isRunInProgress]);
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
-  const shouldShowInterruptedContinue = shouldSuggestInterruptedContinue({
+  const shouldShowInterruptedContinue = shouldSuggestInterruptedContinueFromRecords({
     sessionStatus: sessionDebugState.sessionStatus,
-    messages,
+    messages: selectedMessages,
     isThinking,
     isLoading,
   });
@@ -410,7 +341,7 @@ export function MessageList() {
           </div>
         )}
 
-        {messages.length === 0 &&
+        {selectedMessages.length === 0 &&
           (isSessionHydrating ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <LoadingSpinner message="Loading session..." />
@@ -430,11 +361,7 @@ export function MessageList() {
             <AgentMessageRow
               key={item.key}
               item={item}
-              orderedParts={
-                item.runInProgress
-                  ? orderPartsBySeenSequence(item.orderedParts)
-                  : item.orderedParts
-              }
+              orderedParts={item.orderedParts}
               workedOpen={workedOpenRunIds.has(item.runId)}
               onToggleWorked={() =>
                 setWorkedOpenRunIds((prev) => {
@@ -564,8 +491,8 @@ export function MessageList() {
         )}
 
         {!shouldShowInterruptedContinue &&
-          messages.length > 0 &&
-          messages[messages.length - 1].role === "agent" &&
+          selectedMessages.length > 0 &&
+          timeline.items[timeline.items.length - 1]?.kind === "agent" &&
           !isThinking &&
           !isLoading && (
             <SessionDivider label="Done" className="mb-0" />
@@ -581,7 +508,7 @@ function UserMessageRow({
   message,
   onRevert,
 }: {
-  message: Extract<ChatTimelineItem, { kind: "user" }>["message"];
+  message: Extract<CanonicalTimelineItem, { kind: "user" }>["message"];
   onRevert: (messageId: string) => void;
 }) {
   const { cleanMessage, internalTags } = parseVivdInternalTags(message.content);
@@ -659,7 +586,7 @@ function AgentMessageRow({
   workedOpen,
   onToggleWorked,
 }: {
-  item: Extract<ChatTimelineItem, { kind: "agent" }>;
+  item: Extract<CanonicalTimelineItem, { kind: "agent" }>;
   orderedParts: any[];
   workedOpen: boolean;
   onToggleWorked: () => void;
