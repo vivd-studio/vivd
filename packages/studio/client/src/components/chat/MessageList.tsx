@@ -55,6 +55,23 @@ type PendingAnchorRequest = {
   behavior: ScrollBehavior;
 };
 
+type UseActiveTurnAnchorArgs = {
+  selectedSessionId: string | null;
+  latestUserMessageId: string | null;
+  isSessionHydrating: boolean;
+  timelineItemCount: number;
+  showEmptyState: boolean;
+  isThinking: boolean;
+  isLoading: boolean;
+};
+
+type UseWorkedSectionStateArgs = {
+  selectedSessionId: string | null;
+  timelineItems: CanonicalTimelineItem[];
+  latestUserMessageId: string | null;
+  isRunInProgress: boolean;
+};
+
 export function MessageList() {
   const {
     selectedSessionId,
@@ -84,99 +101,8 @@ export function MessageList() {
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
   const [showRevertNotice, setShowRevertNotice] = useState(false);
   const [sessionErrorNow, setSessionErrorNow] = useState(() => Date.now());
-  const [activeTurnLayout, setActiveTurnLayout] = useState<ActiveTurnLayout | null>(
-    null,
-  );
-  const [pendingAnchorRequest, setPendingAnchorRequest] =
-    useState<PendingAnchorRequest | null>(null);
-  const [showTopFade, setShowTopFade] = useState(false);
-  const [showBottomFade, setShowBottomFade] = useState(false);
-  const [workedOpenRunIds, setWorkedOpenRunIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [workedAutoCollapsedRunIds, setWorkedAutoCollapsedRunIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const transcriptContentRef = useRef<HTMLDivElement>(null);
-  const runStatusRef = useRef<Map<string, "in-progress" | "completed" | "other">>(
-    new Map(),
-  );
-  const runSeenInProgressRef = useRef<Set<string>>(new Set());
-  const workedCollapseTimersRef = useRef<Map<string, number>>(new Map());
-  const workedAutoCollapsedRunIdsRef = useRef<Set<string>>(new Set());
-  const userMessageRefs = useRef(new Map<string, HTMLDivElement>());
-  const userMessageRowRefs = useRef(new Map<string, HTMLDivElement>());
-  const lastAnchoredUserMessageIdRef = useRef<string | null>(null);
-  const pendingHydrationAnchorRef = useRef(true);
-  const WORKED_AUTO_COLLAPSE_DELAY_MS = 1200;
-  const CHAT_ANCHOR_TOP_INSET_PX = 40;
-  const ACTIVE_TURN_BODY_GAP_PX = 8;
 
   const isRunInProgress = isThinking || isLoading;
-
-  const getScrollViewport = (): HTMLDivElement | null => scrollRef.current;
-
-  const getTranscriptBottomPaddingPx = useCallback(() => {
-    const transcriptContent = transcriptContentRef.current;
-    if (transcriptContent) {
-      const paddingBottom = Number.parseFloat(
-        window.getComputedStyle(transcriptContent).paddingBottom || "0",
-      );
-      if (Number.isFinite(paddingBottom) && paddingBottom > 0) {
-        return paddingBottom;
-      }
-    }
-
-    return window.innerWidth >= 768 ? 80 : 64;
-  }, []);
-
-  const setUserMessageRef = useCallback(
-    (messageId: string, node: HTMLDivElement | null) => {
-      if (!messageId) return;
-      if (node) {
-        userMessageRefs.current.set(messageId, node);
-      } else {
-        userMessageRefs.current.delete(messageId);
-      }
-    },
-    [],
-  );
-
-  const setUserMessageRowRef = useCallback(
-    (messageId: string, node: HTMLDivElement | null) => {
-      if (!messageId) return;
-      if (node) {
-        userMessageRowRefs.current.set(messageId, node);
-      } else {
-        userMessageRowRefs.current.delete(messageId);
-      }
-    },
-    [],
-  );
-
-  const syncScrollFades = useCallback(() => {
-    const viewport = getScrollViewport();
-    if (!viewport) {
-      setShowTopFade(false);
-      setShowBottomFade(false);
-      return;
-    }
-
-    const nextTopFade = viewport.scrollTop > 6;
-    const nextBottomFade =
-      viewport.scrollTop + viewport.clientHeight < viewport.scrollHeight - 6;
-
-    setShowTopFade((prev) => (prev === nextTopFade ? prev : nextTopFade));
-    setShowBottomFade((prev) =>
-      prev === nextBottomFade ? prev : nextBottomFade,
-    );
-  }, []);
-
-  useEffect(() => {
-    workedAutoCollapsedRunIdsRef.current = workedAutoCollapsedRunIds;
-  }, [workedAutoCollapsedRunIds]);
 
   useEffect(() => {
     try {
@@ -189,30 +115,6 @@ export function MessageList() {
       // Ignore storage access issues.
     }
   }, []);
-
-  useEffect(() => {
-    return () => {
-      workedCollapseTimersRef.current.forEach((timerId) => {
-        window.clearTimeout(timerId);
-      });
-      workedCollapseTimersRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    runStatusRef.current.clear();
-    runSeenInProgressRef.current.clear();
-    workedCollapseTimersRef.current.forEach((timerId) => {
-      window.clearTimeout(timerId);
-    });
-    workedCollapseTimersRef.current.clear();
-    setWorkedOpenRunIds(new Set());
-    setWorkedAutoCollapsedRunIds(new Set());
-    pendingHydrationAnchorRef.current = true;
-    lastAnchoredUserMessageIdRef.current = null;
-    setActiveTurnLayout(null);
-    setPendingAnchorRequest(null);
-  }, [selectedSessionId]);
 
   useEffect(() => {
     if (
@@ -248,327 +150,38 @@ export function MessageList() {
         : null,
     [sessionError, sessionErrorNow],
   );
-
-  const latestUserMessageId = useMemo(() => {
-    for (let index = timeline.items.length - 1; index >= 0; index -= 1) {
-      const item = timeline.items[index];
-      if (item?.kind === "user" && item.message.id) {
-        return item.message.id;
-      }
-    }
-    return null;
-  }, [timeline.items]);
-  const latestUserItemIndex = useMemo(() => {
-    for (let index = timeline.items.length - 1; index >= 0; index -= 1) {
-      const item = timeline.items[index];
-      if (item?.kind === "user" && item.message.id) {
-        return index;
-      }
-    }
-    return -1;
-  }, [timeline.items]);
   const showEmptyState = selectedMessages.length === 0 && !isSessionHydrating;
+  const {
+    latestUserMessageId,
+    historicalItems,
+    activeTurnUserItem,
+    activeTurnAgentItems,
+  } = useMemo(() => splitTimelineAtLatestUser(timeline.items), [timeline.items]);
 
-  const historicalItems =
-    latestUserItemIndex >= 0
-      ? timeline.items.slice(0, latestUserItemIndex)
-      : timeline.items;
-  const activeTurnUserItem =
-    latestUserItemIndex >= 0 && timeline.items[latestUserItemIndex]?.kind === "user"
-      ? (timeline.items[latestUserItemIndex] as Extract<
-          CanonicalTimelineItem,
-          { kind: "user" }
-        >)
-      : null;
-  const activeTurnAgentItems = activeTurnUserItem
-    ? timeline.items.slice(latestUserItemIndex + 1)
-    : [];
-
-  useEffect(() => {
-    if (isSessionHydrating || !latestUserMessageId) {
-      return;
-    }
-
-    const shouldAnchor =
-      pendingHydrationAnchorRef.current ||
-      lastAnchoredUserMessageIdRef.current !== latestUserMessageId;
-
-    if (!shouldAnchor) return;
-
-    const scrollBehavior: ScrollBehavior = pendingHydrationAnchorRef.current
-      ? "auto"
-      : "smooth";
-    pendingHydrationAnchorRef.current = false;
-    setActiveTurnLayout({
-      messageId: latestUserMessageId,
-      bodyMinHeight: 0,
-    });
-    setPendingAnchorRequest({
-      messageId: latestUserMessageId,
-      behavior: scrollBehavior,
-    });
-  }, [isSessionHydrating, latestUserMessageId]);
-
-  useEffect(() => {
-    if (!latestUserMessageId) {
-      setActiveTurnLayout(null);
-      setPendingAnchorRequest(null);
-    }
-  }, [latestUserMessageId]);
-
-  const computeActiveTurnBodyMinHeight = useCallback((messageId: string) => {
-    const viewport = getScrollViewport();
-    const anchorNode = userMessageRefs.current.get(messageId);
-    const rowNode = userMessageRowRefs.current.get(messageId);
-
-    if (!viewport || !anchorNode || !rowNode) {
-      return null;
-    }
-
-    const anchorRect = anchorNode.getBoundingClientRect();
-    const rowRect = rowNode.getBoundingClientRect();
-    const contentBelowAnchorBeforeBody =
-      rowRect.bottom - anchorRect.top + ACTIVE_TURN_BODY_GAP_PX;
-    const transcriptBottomPaddingPx = getTranscriptBottomPaddingPx();
-
-    return Math.max(
-      0,
-      Math.ceil(
-        viewport.clientHeight -
-          CHAT_ANCHOR_TOP_INSET_PX -
-          contentBelowAnchorBeforeBody -
-          transcriptBottomPaddingPx,
-      ),
-    );
-  }, [getTranscriptBottomPaddingPx]);
-
-  useLayoutEffect(() => {
-    if (!pendingAnchorRequest || isSessionHydrating) {
-      return;
-    }
-
-    const nextBodyMinHeight = computeActiveTurnBodyMinHeight(
-      pendingAnchorRequest.messageId,
-    );
-    if (nextBodyMinHeight == null) {
-      return;
-    }
-
-    if (
-      activeTurnLayout?.messageId !== pendingAnchorRequest.messageId ||
-      activeTurnLayout.bodyMinHeight !== nextBodyMinHeight
-    ) {
-      setActiveTurnLayout({
-        messageId: pendingAnchorRequest.messageId,
-        bodyMinHeight: nextBodyMinHeight,
-      });
-      return;
-    }
-
-    const viewport = getScrollViewport();
-    if (!viewport) {
-      return;
-    }
-
-    viewport.scrollTo({
-      top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
-      behavior: pendingAnchorRequest.behavior,
-    });
-    syncScrollFades();
-    lastAnchoredUserMessageIdRef.current = pendingAnchorRequest.messageId;
-    setPendingAnchorRequest(null);
-  }, [
+  const {
+    scrollViewportRef,
+    transcriptContentRef,
+    showTopFade,
+    showBottomFade,
     activeTurnLayout,
-    computeActiveTurnBodyMinHeight,
+    registerUserAnchor,
+    registerUserRow,
+  } = useActiveTurnAnchor({
+    selectedSessionId,
+    latestUserMessageId,
     isSessionHydrating,
-    pendingAnchorRequest,
-    syncScrollFades,
-  ]);
-
-  useEffect(() => {
-    const viewport = getScrollViewport();
-    if (!viewport) return;
-
-    const handleScroll = () => {
-      window.requestAnimationFrame(syncScrollFades);
-    };
-
-    syncScrollFades();
-    viewport.addEventListener("scroll", handleScroll, { passive: true });
-
-    const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(syncScrollFades);
-    });
-    resizeObserver.observe(viewport);
-
-    const viewportContent = viewport.firstElementChild;
-    if (viewportContent instanceof HTMLElement) {
-      resizeObserver.observe(viewportContent);
-    }
-
-    return () => {
-      viewport.removeEventListener("scroll", handleScroll);
-      resizeObserver.disconnect();
-    };
-  }, [selectedSessionId, syncScrollFades]);
-
-  useEffect(() => {
-    if (!latestUserMessageId) {
-      return;
-    }
-
-    const viewport = getScrollViewport();
-    const anchorNode = userMessageRefs.current.get(latestUserMessageId);
-    const rowNode = userMessageRowRefs.current.get(latestUserMessageId);
-
-    if (!viewport || !anchorNode || !rowNode) {
-      return;
-    }
-
-    const syncActiveTurnLayout = () => {
-      const nextBodyMinHeight = computeActiveTurnBodyMinHeight(latestUserMessageId);
-      if (nextBodyMinHeight == null) return;
-
-      setActiveTurnLayout((prev) => {
-        if (
-          prev?.messageId === latestUserMessageId &&
-          prev.bodyMinHeight === nextBodyMinHeight
-        ) {
-          return prev;
-        }
-        return {
-          messageId: latestUserMessageId,
-          bodyMinHeight: nextBodyMinHeight,
-        };
-      });
-    };
-
-    syncActiveTurnLayout();
-
-    const resizeObserver = new ResizeObserver(() => {
-      syncActiveTurnLayout();
-    });
-    resizeObserver.observe(viewport);
-    resizeObserver.observe(anchorNode);
-    resizeObserver.observe(rowNode);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [computeActiveTurnBodyMinHeight, latestUserMessageId, selectedSessionId]);
-
-  useEffect(() => {
-    window.requestAnimationFrame(syncScrollFades);
-  }, [
-    timeline.items.length,
+    timelineItemCount: timeline.items.length,
     showEmptyState,
-    activeTurnLayout?.bodyMinHeight,
     isThinking,
     isLoading,
-    syncScrollFades,
-  ]);
+  });
 
-  useEffect(() => {
-    const nextStatusMap = new Map<string, "in-progress" | "completed" | "other">();
-    const newlyCompletedRunIds: string[] = [];
-    const shouldFreezeWorkedAutoCollapse =
-      Boolean(latestUserMessageId) && isRunInProgress;
-
-    for (const item of timeline.items) {
-      if (item.kind !== "agent") continue;
-      const nextStatus: "in-progress" | "completed" | "other" = item.runInProgress
-        ? "in-progress"
-        : item.showWorkedSection
-          ? "completed"
-          : "other";
-
-      nextStatusMap.set(item.runId, nextStatus);
-      const previousStatus = runStatusRef.current.get(item.runId);
-
-      if (nextStatus === "in-progress") {
-        runSeenInProgressRef.current.add(item.runId);
-      }
-
-      const hasBeenActive = runSeenInProgressRef.current.has(item.runId);
-      if (
-        nextStatus === "completed" &&
-        previousStatus !== "completed" &&
-        hasBeenActive
-      ) {
-        newlyCompletedRunIds.push(item.runId);
-      }
-    }
-
-    runStatusRef.current = nextStatusMap;
-
-    const activeRunIds = new Set(nextStatusMap.keys());
-    runSeenInProgressRef.current = new Set(
-      [...runSeenInProgressRef.current].filter((runId) => activeRunIds.has(runId)),
-    );
-
-    setWorkedOpenRunIds((prev) => {
-      const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
-      let changed = next.size !== prev.size;
-      for (const runId of newlyCompletedRunIds) {
-        if (workedAutoCollapsedRunIdsRef.current.has(runId)) {
-          continue;
-        }
-        if (!next.has(runId)) {
-          next.add(runId);
-          changed = true;
-        }
-      }
-
-      return changed ? next : prev;
-    });
-
-    setWorkedAutoCollapsedRunIds((prev) => {
-      const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
-      return next.size === prev.size ? prev : next;
-    });
-
-    workedCollapseTimersRef.current.forEach((timerId, runId) => {
-      if (shouldFreezeWorkedAutoCollapse) {
-        window.clearTimeout(timerId);
-        workedCollapseTimersRef.current.delete(runId);
-        return;
-      }
-      if (activeRunIds.has(runId)) return;
-      window.clearTimeout(timerId);
-      workedCollapseTimersRef.current.delete(runId);
-    });
-
-    if (shouldFreezeWorkedAutoCollapse) {
-      return;
-    }
-
-    for (const runId of newlyCompletedRunIds) {
-      if (
-        workedCollapseTimersRef.current.has(runId) ||
-        workedAutoCollapsedRunIdsRef.current.has(runId)
-      ) {
-        continue;
-      }
-
-      const timerId = window.setTimeout(() => {
-        workedCollapseTimersRef.current.delete(runId);
-        setWorkedOpenRunIds((prev) => {
-          if (!prev.has(runId)) return prev;
-          const next = new Set(prev);
-          next.delete(runId);
-          return next;
-        });
-        setWorkedAutoCollapsedRunIds((prev) => {
-          if (prev.has(runId)) return prev;
-          const next = new Set(prev);
-          next.add(runId);
-          return next;
-        });
-      }, WORKED_AUTO_COLLAPSE_DELAY_MS);
-
-      workedCollapseTimersRef.current.set(runId, timerId);
-    }
-  }, [timeline.items, isRunInProgress, latestUserMessageId]);
+  const { workedOpenRunIds, toggleWorkedOpen } = useWorkedSectionState({
+    selectedSessionId,
+    timelineItems: timeline.items,
+    latestUserMessageId,
+    isRunInProgress,
+  });
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
   const shouldShowInterruptedContinue =
@@ -590,9 +203,8 @@ export function MessageList() {
         key={item.key}
         message={item.message}
         onRevert={handleRevert}
-        registerAnchor={setUserMessageRef}
-        registerRow={setUserMessageRowRef}
-        anchorTopInsetPx={CHAT_ANCHOR_TOP_INSET_PX}
+        registerAnchor={registerUserAnchor}
+        registerRow={registerUserRow}
       />
     ) : (
       <AgentMessageRow
@@ -600,17 +212,7 @@ export function MessageList() {
         item={item}
         orderedParts={item.orderedParts}
         workedOpen={workedOpenRunIds.has(item.runId)}
-        onToggleWorked={() =>
-          setWorkedOpenRunIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(item.runId)) {
-              next.delete(item.runId);
-            } else {
-              next.add(item.runId);
-            }
-            return next;
-          })
-        }
+        onToggleWorked={() => toggleWorkedOpen(item.runId)}
       />
     );
 
@@ -714,8 +316,8 @@ export function MessageList() {
   return (
     <div className="relative flex-1 overflow-hidden">
       <div
-        ref={scrollRef}
-        data-radix-scroll-area-viewport=""
+        ref={scrollViewportRef}
+        data-chat-scroll-viewport=""
         className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
       >
         <div
@@ -772,9 +374,8 @@ export function MessageList() {
               key={activeTurnUserItem.key}
               message={activeTurnUserItem.message}
               onRevert={handleRevert}
-              registerAnchor={setUserMessageRef}
-              registerRow={setUserMessageRowRef}
-              anchorTopInsetPx={CHAT_ANCHOR_TOP_INSET_PX}
+              registerAnchor={registerUserAnchor}
+              registerRow={registerUserRow}
             />
             <div
               data-chat-active-turn-body={activeTurnUserItem.message.id}
@@ -806,18 +407,516 @@ export function MessageList() {
   );
 }
 
+function splitTimelineAtLatestUser(items: CanonicalTimelineItem[]) {
+  let latestUserItemIndex = -1;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.kind === "user" && item.message.id) {
+      latestUserItemIndex = index;
+      break;
+    }
+  }
+
+  const latestUserMessageId =
+    latestUserItemIndex >= 0 && items[latestUserItemIndex]?.kind === "user"
+      ? items[latestUserItemIndex].message.id
+      : null;
+  const historicalItems =
+    latestUserItemIndex >= 0 ? items.slice(0, latestUserItemIndex) : items;
+  const activeTurnUserItem =
+    latestUserItemIndex >= 0 && items[latestUserItemIndex]?.kind === "user"
+      ? (items[latestUserItemIndex] as Extract<
+          CanonicalTimelineItem,
+          { kind: "user" }
+        >)
+      : null;
+  const activeTurnAgentItems = activeTurnUserItem
+    ? items.slice(latestUserItemIndex + 1)
+    : [];
+
+  return {
+    latestUserMessageId,
+    historicalItems,
+    activeTurnUserItem,
+    activeTurnAgentItems,
+  };
+}
+
+function useActiveTurnAnchor({
+  selectedSessionId,
+  latestUserMessageId,
+  isSessionHydrating,
+  timelineItemCount,
+  showEmptyState,
+  isThinking,
+  isLoading,
+}: UseActiveTurnAnchorArgs) {
+  const [activeTurnLayout, setActiveTurnLayout] = useState<ActiveTurnLayout | null>(
+    null,
+  );
+  const [pendingAnchorRequest, setPendingAnchorRequest] =
+    useState<PendingAnchorRequest | null>(null);
+  const [showTopFade, setShowTopFade] = useState(false);
+  const [showBottomFade, setShowBottomFade] = useState(false);
+
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const transcriptContentRef = useRef<HTMLDivElement>(null);
+  const userMessageRefs = useRef(new Map<string, HTMLDivElement>());
+  const userMessageRowRefs = useRef(new Map<string, HTMLDivElement>());
+  const lastAnchoredUserMessageIdRef = useRef<string | null>(null);
+  const pendingHydrationAnchorRef = useRef(true);
+
+  const CHAT_ANCHOR_TOP_INSET_PX = 40;
+  const ACTIVE_TURN_BODY_GAP_PX = 8;
+
+  const getScrollViewport = useCallback(
+    (): HTMLDivElement | null => scrollViewportRef.current,
+    [],
+  );
+
+  const getTranscriptBottomPaddingPx = useCallback(() => {
+    const transcriptContent = transcriptContentRef.current;
+    if (transcriptContent) {
+      const paddingBottom = Number.parseFloat(
+        window.getComputedStyle(transcriptContent).paddingBottom || "0",
+      );
+      if (Number.isFinite(paddingBottom) && paddingBottom > 0) {
+        return paddingBottom;
+      }
+    }
+
+    return window.innerWidth >= 768 ? 80 : 64;
+  }, []);
+
+  const registerUserAnchor = useCallback(
+    (messageId: string, node: HTMLDivElement | null) => {
+      if (!messageId) return;
+      if (node) {
+        userMessageRefs.current.set(messageId, node);
+      } else {
+        userMessageRefs.current.delete(messageId);
+      }
+    },
+    [],
+  );
+
+  const registerUserRow = useCallback(
+    (messageId: string, node: HTMLDivElement | null) => {
+      if (!messageId) return;
+      if (node) {
+        userMessageRowRefs.current.set(messageId, node);
+      } else {
+        userMessageRowRefs.current.delete(messageId);
+      }
+    },
+    [],
+  );
+
+  const syncScrollFades = useCallback(() => {
+    const viewport = getScrollViewport();
+    if (!viewport) {
+      setShowTopFade(false);
+      setShowBottomFade(false);
+      return;
+    }
+
+    const nextTopFade = viewport.scrollTop > 6;
+    const nextBottomFade =
+      viewport.scrollTop + viewport.clientHeight < viewport.scrollHeight - 6;
+
+    setShowTopFade((prev) => (prev === nextTopFade ? prev : nextTopFade));
+    setShowBottomFade((prev) =>
+      prev === nextBottomFade ? prev : nextBottomFade,
+    );
+  }, [getScrollViewport]);
+
+  const computeActiveTurnBodyMinHeight = useCallback(
+    (messageId: string) => {
+      const viewport = getScrollViewport();
+      const anchorNode = userMessageRefs.current.get(messageId);
+      const rowNode = userMessageRowRefs.current.get(messageId);
+
+      if (!viewport || !anchorNode || !rowNode) {
+        return null;
+      }
+
+      const anchorRect = anchorNode.getBoundingClientRect();
+      const rowRect = rowNode.getBoundingClientRect();
+      const contentBelowAnchorBeforeBody =
+        rowRect.bottom - anchorRect.top + ACTIVE_TURN_BODY_GAP_PX;
+      const transcriptBottomPaddingPx = getTranscriptBottomPaddingPx();
+
+      return Math.max(
+        0,
+        Math.ceil(
+          viewport.clientHeight -
+            CHAT_ANCHOR_TOP_INSET_PX -
+            contentBelowAnchorBeforeBody -
+            transcriptBottomPaddingPx,
+        ),
+      );
+    },
+    [getScrollViewport, getTranscriptBottomPaddingPx],
+  );
+
+  useEffect(() => {
+    pendingHydrationAnchorRef.current = true;
+    lastAnchoredUserMessageIdRef.current = null;
+    setActiveTurnLayout(null);
+    setPendingAnchorRequest(null);
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (isSessionHydrating || !latestUserMessageId) {
+      return;
+    }
+
+    const shouldAnchor =
+      pendingHydrationAnchorRef.current ||
+      lastAnchoredUserMessageIdRef.current !== latestUserMessageId;
+
+    if (!shouldAnchor) return;
+
+    const scrollBehavior: ScrollBehavior = pendingHydrationAnchorRef.current
+      ? "auto"
+      : "smooth";
+    pendingHydrationAnchorRef.current = false;
+    setActiveTurnLayout({
+      messageId: latestUserMessageId,
+      bodyMinHeight: 0,
+    });
+    setPendingAnchorRequest({
+      messageId: latestUserMessageId,
+      behavior: scrollBehavior,
+    });
+  }, [isSessionHydrating, latestUserMessageId]);
+
+  useEffect(() => {
+    if (!latestUserMessageId) {
+      setActiveTurnLayout(null);
+      setPendingAnchorRequest(null);
+    }
+  }, [latestUserMessageId]);
+
+  useLayoutEffect(() => {
+    if (!pendingAnchorRequest || isSessionHydrating) {
+      return;
+    }
+
+    const nextBodyMinHeight = computeActiveTurnBodyMinHeight(
+      pendingAnchorRequest.messageId,
+    );
+    if (nextBodyMinHeight == null) {
+      return;
+    }
+
+    if (
+      activeTurnLayout?.messageId !== pendingAnchorRequest.messageId ||
+      activeTurnLayout.bodyMinHeight !== nextBodyMinHeight
+    ) {
+      setActiveTurnLayout({
+        messageId: pendingAnchorRequest.messageId,
+        bodyMinHeight: nextBodyMinHeight,
+      });
+      return;
+    }
+
+    const viewport = getScrollViewport();
+    if (!viewport) {
+      return;
+    }
+
+    viewport.scrollTo({
+      top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
+      behavior: pendingAnchorRequest.behavior,
+    });
+    syncScrollFades();
+    lastAnchoredUserMessageIdRef.current = pendingAnchorRequest.messageId;
+    setPendingAnchorRequest(null);
+  }, [
+    activeTurnLayout,
+    computeActiveTurnBodyMinHeight,
+    getScrollViewport,
+    isSessionHydrating,
+    pendingAnchorRequest,
+    syncScrollFades,
+  ]);
+
+  useEffect(() => {
+    const viewport = getScrollViewport();
+    if (!viewport) return;
+
+    const handleScroll = () => {
+      window.requestAnimationFrame(syncScrollFades);
+    };
+
+    syncScrollFades();
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+
+    const resizeObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(syncScrollFades);
+    });
+    resizeObserver.observe(viewport);
+
+    const viewportContent = viewport.firstElementChild;
+    if (viewportContent instanceof HTMLElement) {
+      resizeObserver.observe(viewportContent);
+    }
+
+    return () => {
+      viewport.removeEventListener("scroll", handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [getScrollViewport, selectedSessionId, syncScrollFades]);
+
+  useEffect(() => {
+    if (!latestUserMessageId) {
+      return;
+    }
+
+    const viewport = getScrollViewport();
+    const anchorNode = userMessageRefs.current.get(latestUserMessageId);
+    const rowNode = userMessageRowRefs.current.get(latestUserMessageId);
+
+    if (!viewport || !anchorNode || !rowNode) {
+      return;
+    }
+
+    const syncActiveTurnLayout = () => {
+      const nextBodyMinHeight =
+        computeActiveTurnBodyMinHeight(latestUserMessageId);
+      if (nextBodyMinHeight == null) return;
+
+      setActiveTurnLayout((prev) => {
+        if (
+          prev?.messageId === latestUserMessageId &&
+          prev.bodyMinHeight === nextBodyMinHeight
+        ) {
+          return prev;
+        }
+        return {
+          messageId: latestUserMessageId,
+          bodyMinHeight: nextBodyMinHeight,
+        };
+      });
+    };
+
+    syncActiveTurnLayout();
+
+    const resizeObserver = new ResizeObserver(() => {
+      syncActiveTurnLayout();
+    });
+    resizeObserver.observe(viewport);
+    resizeObserver.observe(anchorNode);
+    resizeObserver.observe(rowNode);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [
+    computeActiveTurnBodyMinHeight,
+    getScrollViewport,
+    latestUserMessageId,
+    selectedSessionId,
+  ]);
+
+  useEffect(() => {
+    window.requestAnimationFrame(syncScrollFades);
+  }, [
+    activeTurnLayout?.bodyMinHeight,
+    isLoading,
+    isThinking,
+    showEmptyState,
+    syncScrollFades,
+    timelineItemCount,
+  ]);
+
+  return {
+    scrollViewportRef,
+    transcriptContentRef,
+    showTopFade,
+    showBottomFade,
+    activeTurnLayout,
+    registerUserAnchor,
+    registerUserRow,
+  };
+}
+
+function useWorkedSectionState({
+  selectedSessionId,
+  timelineItems,
+  latestUserMessageId,
+  isRunInProgress,
+}: UseWorkedSectionStateArgs) {
+  const [workedOpenRunIds, setWorkedOpenRunIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [workedAutoCollapsedRunIds, setWorkedAutoCollapsedRunIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const runStatusRef = useRef<Map<string, "in-progress" | "completed" | "other">>(
+    new Map(),
+  );
+  const runSeenInProgressRef = useRef<Set<string>>(new Set());
+  const workedCollapseTimersRef = useRef<Map<string, number>>(new Map());
+  const workedAutoCollapsedRunIdsRef = useRef<Set<string>>(new Set());
+  const WORKED_AUTO_COLLAPSE_DELAY_MS = 1200;
+
+  useEffect(() => {
+    workedAutoCollapsedRunIdsRef.current = workedAutoCollapsedRunIds;
+  }, [workedAutoCollapsedRunIds]);
+
+  useEffect(() => {
+    return () => {
+      workedCollapseTimersRef.current.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      workedCollapseTimersRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    runStatusRef.current.clear();
+    runSeenInProgressRef.current.clear();
+    workedCollapseTimersRef.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    workedCollapseTimersRef.current.clear();
+    setWorkedOpenRunIds(new Set());
+    setWorkedAutoCollapsedRunIds(new Set());
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    const nextStatusMap = new Map<string, "in-progress" | "completed" | "other">();
+    const newlyCompletedRunIds: string[] = [];
+    const shouldFreezeWorkedAutoCollapse =
+      Boolean(latestUserMessageId) && isRunInProgress;
+
+    for (const item of timelineItems) {
+      if (item.kind !== "agent") continue;
+      const nextStatus: "in-progress" | "completed" | "other" = item.runInProgress
+        ? "in-progress"
+        : item.showWorkedSection
+          ? "completed"
+          : "other";
+
+      nextStatusMap.set(item.runId, nextStatus);
+      const previousStatus = runStatusRef.current.get(item.runId);
+
+      if (nextStatus === "in-progress") {
+        runSeenInProgressRef.current.add(item.runId);
+      }
+
+      const hasBeenActive = runSeenInProgressRef.current.has(item.runId);
+      if (
+        nextStatus === "completed" &&
+        previousStatus !== "completed" &&
+        hasBeenActive
+      ) {
+        newlyCompletedRunIds.push(item.runId);
+      }
+    }
+
+    runStatusRef.current = nextStatusMap;
+
+    const activeRunIds = new Set(nextStatusMap.keys());
+    runSeenInProgressRef.current = new Set(
+      [...runSeenInProgressRef.current].filter((runId) => activeRunIds.has(runId)),
+    );
+
+    setWorkedOpenRunIds((prev) => {
+      const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
+      let changed = next.size !== prev.size;
+      for (const runId of newlyCompletedRunIds) {
+        if (workedAutoCollapsedRunIdsRef.current.has(runId)) {
+          continue;
+        }
+        if (!next.has(runId)) {
+          next.add(runId);
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+
+    setWorkedAutoCollapsedRunIds((prev) => {
+      const next = new Set([...prev].filter((runId) => activeRunIds.has(runId)));
+      return next.size === prev.size ? prev : next;
+    });
+
+    workedCollapseTimersRef.current.forEach((timerId, runId) => {
+      if (shouldFreezeWorkedAutoCollapse) {
+        window.clearTimeout(timerId);
+        workedCollapseTimersRef.current.delete(runId);
+        return;
+      }
+      if (activeRunIds.has(runId)) return;
+      window.clearTimeout(timerId);
+      workedCollapseTimersRef.current.delete(runId);
+    });
+
+    if (shouldFreezeWorkedAutoCollapse) {
+      return;
+    }
+
+    for (const runId of newlyCompletedRunIds) {
+      if (
+        workedCollapseTimersRef.current.has(runId) ||
+        workedAutoCollapsedRunIdsRef.current.has(runId)
+      ) {
+        continue;
+      }
+
+      const timerId = window.setTimeout(() => {
+        workedCollapseTimersRef.current.delete(runId);
+        setWorkedOpenRunIds((prev) => {
+          if (!prev.has(runId)) return prev;
+          const next = new Set(prev);
+          next.delete(runId);
+          return next;
+        });
+        setWorkedAutoCollapsedRunIds((prev) => {
+          if (prev.has(runId)) return prev;
+          const next = new Set(prev);
+          next.add(runId);
+          return next;
+        });
+      }, WORKED_AUTO_COLLAPSE_DELAY_MS);
+
+      workedCollapseTimersRef.current.set(runId, timerId);
+    }
+  }, [timelineItems, isRunInProgress, latestUserMessageId]);
+
+  const toggleWorkedOpen = useCallback((runId: string) => {
+    setWorkedOpenRunIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) {
+        next.delete(runId);
+      } else {
+        next.add(runId);
+      }
+      return next;
+    });
+  }, []);
+
+  return {
+    workedOpenRunIds,
+    toggleWorkedOpen,
+  };
+}
+
 function UserMessageRow({
   message,
   onRevert,
   registerAnchor,
   registerRow,
-  anchorTopInsetPx,
 }: {
   message: Extract<CanonicalTimelineItem, { kind: "user" }>["message"];
   onRevert: (messageId: string) => void;
   registerAnchor: (messageId: string, node: HTMLDivElement | null) => void;
   registerRow: (messageId: string, node: HTMLDivElement | null) => void;
-  anchorTopInsetPx: number;
 }) {
   const { cleanMessage, internalTags } = parseVivdInternalTags(message.content);
   const imageTags = internalTags.filter((tag) => tag.type === "dropped-file");
@@ -852,7 +951,6 @@ function UserMessageRow({
         ref={(node) => registerAnchor(message.id, node)}
         data-chat-user-anchor-id={message.id}
         className="max-w-[90%] min-w-0"
-        style={{ scrollMarginTop: `${anchorTopInsetPx}px` }}
       >
         <div
           className="overflow-x-hidden rounded-[18px] bg-muted/40 px-3.5 py-1.5 text-foreground text-sm leading-[1.45] dark:bg-muted/10"

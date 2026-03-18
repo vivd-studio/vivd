@@ -47,6 +47,7 @@ const chatState = vi.hoisted(() => ({
 }));
 
 const scrollToMock = vi.fn();
+const CHAT_ANCHOR_TOP_INSET_PX = 40;
 const anchorTopById = vi.hoisted(() => ({
   "user-1": 120,
   "user-2": 280,
@@ -130,57 +131,11 @@ describe("MessageList latest-user anchoring", () => {
       },
     });
 
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: function ({
-        behavior,
-      }: {
-        behavior?: ScrollBehavior;
-      } = {}) {
-        const element = this as HTMLElement;
-        const viewport =
-          element.closest<HTMLElement>("[data-radix-scroll-area-viewport]") ??
-          document.querySelector<HTMLElement>(
-            "[data-radix-scroll-area-viewport]",
-          );
-
-        const targetId =
-          element.dataset.chatUserAnchorId ??
-          element.getAttribute("data-chat-user-anchor-id");
-        const scrollMarginTop = Number.parseFloat(
-          (element as HTMLElement).style.scrollMarginTop || "0",
-        );
-        const top = targetId
-          ? Math.max(0, (anchorTopById[targetId] ?? 0) - scrollMarginTop)
-          : 0;
-
-        if (viewport) {
-          viewport.scrollTop = top;
-        }
-
-        scrollToMock({
-          top,
-          behavior: behavior ?? "auto",
-        });
-      },
-    });
-
-    Object.defineProperty(HTMLElement.prototype, "offsetTop", {
-      configurable: true,
-      get() {
-        const element = this as HTMLElement;
-        if (element.dataset.chatUserAnchorId) {
-          return anchorTopById[element.dataset.chatUserAnchorId] ?? 0;
-        }
-        return 0;
-      },
-    });
-
     Object.defineProperty(HTMLElement.prototype, "clientHeight", {
       configurable: true,
       get() {
         const element = this as HTMLElement;
-        if (element.getAttribute("data-radix-scroll-area-viewport") !== null) {
+        if (element.getAttribute("data-chat-scroll-viewport") !== null) {
           return 400;
         }
         return 0;
@@ -191,24 +146,20 @@ describe("MessageList latest-user anchoring", () => {
       configurable: true,
       get() {
         const element = this as HTMLElement;
-        if (element.getAttribute("data-radix-scroll-area-viewport") !== null) {
+        if (element.getAttribute("data-chat-scroll-viewport") !== null) {
           const activeTurnBody = element.querySelector<HTMLElement>(
             "[data-chat-active-turn-body]",
           );
           const activeMessageId = activeTurnBody?.dataset.chatActiveTurnBody;
-          const anchorNode = activeMessageId
-            ? element.querySelector<HTMLElement>(
-                `[data-chat-user-anchor-id='${activeMessageId}']`,
-              )
-            : null;
-          const scrollMarginTop = Number.parseFloat(
-            anchorNode?.style.scrollMarginTop || "0",
-          );
 
           if (activeMessageId) {
             return (
               400 +
-              Math.max(0, (anchorTopById[activeMessageId] ?? 0) - scrollMarginTop)
+              Math.max(
+                0,
+                (anchorTopById[activeMessageId] ?? 0) -
+                  CHAT_ANCHOR_TOP_INSET_PX,
+              )
             );
           }
 
@@ -223,10 +174,8 @@ describe("MessageList latest-user anchoring", () => {
       value: function () {
         const element = this as HTMLElement;
         const viewport =
-          element.closest<HTMLElement>("[data-radix-scroll-area-viewport]") ??
-          document.querySelector<HTMLElement>(
-            "[data-radix-scroll-area-viewport]",
-          );
+          element.closest<HTMLElement>("[data-chat-scroll-viewport]") ??
+          document.querySelector<HTMLElement>("[data-chat-scroll-viewport]");
         const viewportTop = 20;
         const currentScrollTop = viewport?.scrollTop ?? 0;
 
@@ -267,7 +216,7 @@ describe("MessageList latest-user anchoring", () => {
             },
           };
         }
-        if (element.getAttribute("data-radix-scroll-area-viewport") !== null) {
+        if (element.getAttribute("data-chat-scroll-viewport") !== null) {
           return {
             top: 20,
             left: 0,
