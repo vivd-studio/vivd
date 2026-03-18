@@ -189,7 +189,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
   return (
     <div
       className={cn(
-        "px-3 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0 mt-auto transition-colors",
+        "mt-auto px-2 pb-2 pt-0 transition-colors md:px-2.5 md:pb-2.5 md:pt-0",
         isDragOver ? "bg-primary/5" : "",
         className,
       )}
@@ -257,7 +257,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         {/* Textarea - inside container with proper padding */}
         <textarea
           ref={textareaRef}
-          className="flex min-h-[56px] max-h-[200px] w-full !bg-transparent px-4 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+          className="flex min-h-[56px] max-h-[200px] w-full resize-none !bg-transparent px-3.5 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           placeholder={
             isUsageBlocked
               ? "Usage limit reached. Please wait for the limit to reset."
@@ -276,7 +276,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
         />
 
         {/* Action bar at the bottom - no separator */}
-        <div className="flex items-center justify-between gap-2 px-3 pb-2 bg-transparent">
+        <div className="flex items-center justify-between gap-2 bg-transparent px-2.5 pb-2">
           {/* Left side: Plus circle button + Element selector */}
           <div className="flex items-center gap-1">
             {/* Plus button - circle with dropdown */}

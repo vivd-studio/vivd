@@ -10,7 +10,7 @@ interface MobileFrameProps {
 export function MobileFrame({ device, scale, children }: MobileFrameProps) {
   return (
     <div
-      className="relative bg-background rounded-3xl shadow-2xl border-8 border-gray-800 overflow-hidden transition-transform duration-200"
+      className="relative overflow-hidden rounded-[30px] transition-transform duration-200"
       style={{
         width: device.width,
         height: device.height,

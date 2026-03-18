@@ -22,7 +22,24 @@ import {
 } from "@/app/config/polling";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useImageDropZone } from "./useImageDropZone";
-import { DEVICE_PRESETS, type DevicePreset } from "./types";
+import {
+  DEVICE_PRESETS,
+  TABLET_PRESET,
+  type DevicePreset,
+  type PreviewMode,
+  type ViewportMode,
+} from "./types";
+import {
+  ASSETS_OPEN_STORAGE_KEY,
+  CHAT_OPEN_STORAGE_KEY,
+  VIEWPORT_MODE_STORAGE_KEY,
+  buildPreviewUrl,
+  getInitialPanelOpenState,
+  getInitialViewportMode,
+  getPreviewPathFromUrl,
+  getPreviewRootUrl,
+  normalizePreviewPathInput,
+} from "./navigation";
 import {
   collectVivdTextPatchesFromDocument,
   getI18nKeyForEditableElement,
@@ -47,8 +64,6 @@ interface SelectedElement {
   astroSourceLoc?: string | null;
 }
 
-export type PanelLayoutMode = "assets-left" | "agent-left";
-
 interface PreviewContextValue {
   // Props
   url: string | null;
@@ -63,12 +78,14 @@ interface PreviewContextValue {
   setChatOpen: (open: boolean) => void;
   assetsOpen: boolean;
   setAssetsOpen: (open: boolean) => void;
-  panelLayoutMode: PanelLayoutMode;
-  setPanelLayoutMode: (mode: PanelLayoutMode) => void;
+  pluginsOpen: boolean;
+  setPluginsOpen: (open: boolean) => void;
+  sessionHistoryOpen: boolean;
+  setSessionHistoryOpen: (open: boolean) => void;
   refreshKey: number;
   selectedVersion: number;
-  mobileView: boolean;
-  setMobileView: (mobile: boolean) => void;
+  viewportMode: ViewportMode;
+  setViewportMode: (mode: ViewportMode) => void;
   selectedDevice: DevicePreset;
   setSelectedDevice: (device: DevicePreset) => void;
   mobileScale: number;
@@ -76,6 +93,7 @@ interface PreviewContextValue {
   iframeLoading: boolean;
   isPreviewLoading: boolean;
   hasUnsavedChanges: boolean;
+  currentPreviewPath: string;
 
   // Element Selector
   selectorMode: boolean;
@@ -99,13 +117,14 @@ interface PreviewContextValue {
   hasMultipleVersions: boolean;
   enabledPlugins: string[];
   analyticsAvailable: boolean;
-  assetPanelSide: "left" | "right";
-  chatPanelSide: "left" | "right";
+  previewMode: PreviewMode;
 
   // Handlers
   handleVersionSelect: (version: number) => void;
   handleCopy: () => void;
   handleRefresh: () => void;
+  navigatePreviewPath: (path: string) => void;
+  handlePreviewLocationChange: (href: string) => void;
   handleTaskComplete: () => void;
   toggleEditMode: () => void;
   handleSave: () => void;
@@ -194,35 +213,73 @@ export function PreviewProvider({
   embedded = false,
 }: PreviewProviderProps) {
   const [copied, setCopied] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [assetsOpen, setAssetsOpen] = useState(false);
-  const [panelLayoutMode, setPanelLayoutMode] = useState<PanelLayoutMode>(
-    () => {
-      if (typeof window === "undefined") return "assets-left";
-      const stored = window.localStorage.getItem("previewModal.panelLayoutMode");
-      return stored === "agent-left" || stored === "assets-left"
-        ? stored
-        : "assets-left";
-    },
+  const initialPanelState =
+    typeof window === "undefined"
+      ? { chatOpen: true, assetsOpen: false }
+      : getInitialPanelOpenState(window.localStorage);
+  const [chatOpenState, setChatOpenState] = useState(initialPanelState.chatOpen);
+  const [assetsOpenState, setAssetsOpenState] = useState(
+    initialPanelState.assetsOpen,
   );
+  const [pluginsOpenState, setPluginsOpenState] = useState(false);
+  const [sessionHistoryOpenState, setSessionHistoryOpenState] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
   const iframeLoadingDelayTimerRef = useRef<number | null>(null);
   const [selectedVersion, setSelectedVersion] = useState(version || 1);
-  const [mobileView, setMobileView] = useState(false);
+  const [viewportMode, setViewportModeState] = useState<ViewportMode>(() => {
+    if (typeof window === "undefined") return "desktop";
+    return getInitialViewportMode(window.localStorage);
+  });
   const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(
     DEVICE_PRESETS[0],
   );
   const [mobileScale, setMobileScale] = useState(1);
   const [editMode, setEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const assetPanelSide = panelLayoutMode === "assets-left" ? "left" : "right";
-  const chatPanelSide = panelLayoutMode === "assets-left" ? "right" : "left";
+  const [currentPreviewPath, setCurrentPreviewPath] = useState("/");
+  const [iframePreviewPath, setIframePreviewPath] = useState("/");
+
+  const setChatOpen = useCallback((open: boolean) => {
+    setChatOpenState(open);
+    if (!open) {
+      setSessionHistoryOpenState(false);
+    }
+  }, []);
+
+  const setAssetsOpen = useCallback((open: boolean) => {
+    setAssetsOpenState(open);
+  }, []);
+
+  const setPluginsOpen = useCallback((open: boolean) => {
+    setPluginsOpenState(open);
+  }, []);
+
+  const setSessionHistoryOpen = useCallback((open: boolean) => {
+    if (open) {
+      setChatOpenState(true);
+    }
+    setSessionHistoryOpenState(open);
+  }, []);
+
+  const setViewportMode = useCallback((mode: ViewportMode) => {
+    setViewportModeState(mode);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem("previewModal.panelLayoutMode", panelLayoutMode);
-  }, [panelLayoutMode]);
+    window.localStorage.setItem(CHAT_OPEN_STORAGE_KEY, String(chatOpenState));
+  }, [chatOpenState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(ASSETS_OPEN_STORAGE_KEY, String(assetsOpenState));
+  }, [assetsOpenState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(VIEWPORT_MODE_STORAGE_KEY, viewportMode);
+  }, [viewportMode]);
 
   const clearIframeLoadingDelayTimer = useCallback(() => {
     if (iframeLoadingDelayTimerRef.current === null) return;
@@ -434,11 +491,12 @@ export function PreviewProvider({
 
   // Calculate scale to fit phone in container
   const calculateScale = useCallback(() => {
-    if (!mobileContainerRef.current || !mobileView) return;
+    if (!mobileContainerRef.current || viewportMode === "desktop") return;
 
     const container = mobileContainerRef.current;
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
+    const activeFrame = viewportMode === "tablet" ? TABLET_PRESET : selectedDevice;
 
     // Add padding (40px on each side)
     const padding = 80;
@@ -446,8 +504,8 @@ export function PreviewProvider({
     const availableHeight = containerHeight - padding;
 
     // Device dimensions include the border (8px on each side)
-    const deviceTotalWidth = selectedDevice.width + 16;
-    const deviceTotalHeight = selectedDevice.height + 16;
+    const deviceTotalWidth = activeFrame.width + 16;
+    const deviceTotalHeight = activeFrame.height + 16;
 
     // Calculate scale to fit both dimensions
     const scaleX = availableWidth / deviceTotalWidth;
@@ -455,7 +513,7 @@ export function PreviewProvider({
     const scale = Math.min(scaleX, scaleY, 1); // Never scale up
 
     setMobileScale(scale);
-  }, [mobileView, selectedDevice]);
+  }, [viewportMode, selectedDevice]);
 
   // Recalculate scale when container size changes or device changes
   useEffect(() => {
@@ -670,6 +728,7 @@ export function PreviewProvider({
     }
     clearPendingPatches();
     // Refresh iframe to show new version
+    setIframePreviewPath(currentPreviewPath);
     beginIframeLoading();
     setRefreshKey((prev) => prev + 1);
   };
@@ -1041,7 +1100,7 @@ export function PreviewProvider({
     defaultWidth: 320,
     minWidth: 250,
     maxWidth: 500,
-    side: assetPanelSide,
+    side: "left",
   });
 
   const chatPanel = useResizablePanel({
@@ -1049,7 +1108,7 @@ export function PreviewProvider({
     defaultWidth: 400,
     minWidth: 320,
     maxWidth: 600,
-    side: chatPanelSide,
+    side: "left",
   });
 
   // Build version-aware URL - use dynamic URL from previewInfo if available
@@ -1064,7 +1123,41 @@ export function PreviewProvider({
         : url?.startsWith("http") || url?.startsWith("/vivd-studio/api")
           ? resolveStudioRuntimePath(url)
           : resolveStudioRuntimePath(`/vivd-studio/api${url}`);
-  const fullUrl = baseUrl || "";
+  const previewRootUrl = getPreviewRootUrl(baseUrl || "", previewMode);
+  const fullUrl = previewRootUrl
+    ? buildPreviewUrl(previewRootUrl, iframePreviewPath)
+    : "";
+
+  const navigatePreviewPath = useCallback(
+    (path: string) => {
+      const normalized = normalizePreviewPathInput(path);
+      setCurrentPreviewPath(normalized);
+      setIframePreviewPath(normalized);
+      if (normalized === currentPreviewPath) {
+        beginIframeLoading();
+        setRefreshKey((prev) => prev + 1);
+        return;
+      }
+
+      beginIframeLoading();
+    },
+    [beginIframeLoading, currentPreviewPath],
+  );
+
+  const handlePreviewLocationChange = useCallback(
+    (href: string) => {
+      if (!previewRootUrl) return;
+      const nextPath = getPreviewPathFromUrl(href, previewRootUrl);
+      setCurrentPreviewPath((prev) => (prev === nextPath ? prev : nextPath));
+    },
+    [previewRootUrl],
+  );
+
+  useEffect(() => {
+    setCurrentPreviewPath("/");
+    setIframePreviewPath("/");
+    setPluginsOpenState(false);
+  }, [projectSlug]);
 
   const getShareablePreviewOrigin = () => {
     const params = new URLSearchParams(window.location.search);
@@ -1128,11 +1221,13 @@ export function PreviewProvider({
 
   const handleTaskComplete = () => {
     // Refresh the iframe
+    setIframePreviewPath(currentPreviewPath);
     setRefreshKey((prev) => prev + 1);
     beginIframeLoading();
   };
 
   const handleRefresh = () => {
+    setIframePreviewPath(currentPreviewPath);
     beginIframeLoading();
     setRefreshKey((prev) => prev + 1);
     // Invalidate to restart dev server if it was shut down
@@ -1293,16 +1388,18 @@ export function PreviewProvider({
 
     // State
     copied,
-    chatOpen,
+    chatOpen: chatOpenState,
     setChatOpen,
-    assetsOpen,
+    assetsOpen: assetsOpenState,
     setAssetsOpen,
-    panelLayoutMode,
-    setPanelLayoutMode,
+    pluginsOpen: pluginsOpenState,
+    setPluginsOpen,
+    sessionHistoryOpen: sessionHistoryOpenState,
+    setSessionHistoryOpen,
     refreshKey,
     selectedVersion,
-    mobileView,
-    setMobileView,
+    viewportMode,
+    setViewportMode,
     selectedDevice,
     setSelectedDevice,
     mobileScale,
@@ -1310,6 +1407,7 @@ export function PreviewProvider({
     iframeLoading,
     isPreviewLoading,
     hasUnsavedChanges,
+    currentPreviewPath,
 
     // Element Selector
     selectorMode,
@@ -1333,13 +1431,13 @@ export function PreviewProvider({
     hasMultipleVersions,
     enabledPlugins,
     analyticsAvailable,
-    assetPanelSide,
-    chatPanelSide,
 
     // Handlers
     handleVersionSelect,
     handleCopy,
     handleRefresh,
+    navigatePreviewPath,
+    handlePreviewLocationChange,
     handleTaskComplete,
     toggleEditMode,
     handleSave,

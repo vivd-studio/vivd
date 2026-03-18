@@ -1,0 +1,10 @@
+{
+  "name": "astro-expressive-code",
+  "version": "0.41.7-vivd-shim",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./components": "./components.js",
+    "./hast": "./hast.js"
+  }
+}

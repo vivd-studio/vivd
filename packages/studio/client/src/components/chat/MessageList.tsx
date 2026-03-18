@@ -1,4 +1,3 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/common";
 import {
@@ -10,10 +9,19 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useOpencodeChat } from "@/features/opencodeChat";
+import { cn } from "@/lib/utils";
 import {
   buildCanonicalTimelineModel,
   shouldSuggestInterruptedContinueFromRecords,
@@ -37,7 +45,15 @@ import {
   type SessionErrorNoticeContent,
 } from "./sessionErrorNotice";
 
-const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 80;
+type ActiveTurnLayout = {
+  messageId: string;
+  bodyMinHeight: number;
+};
+
+type PendingAnchorRequest = {
+  messageId: string;
+  behavior: ScrollBehavior;
+};
 
 export function MessageList() {
   const {
@@ -68,6 +84,13 @@ export function MessageList() {
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
   const [showRevertNotice, setShowRevertNotice] = useState(false);
   const [sessionErrorNow, setSessionErrorNow] = useState(() => Date.now());
+  const [activeTurnLayout, setActiveTurnLayout] = useState<ActiveTurnLayout | null>(
+    null,
+  );
+  const [pendingAnchorRequest, setPendingAnchorRequest] =
+    useState<PendingAnchorRequest | null>(null);
+  const [showTopFade, setShowTopFade] = useState(false);
+  const [showBottomFade, setShowBottomFade] = useState(false);
   const [workedOpenRunIds, setWorkedOpenRunIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -75,62 +98,81 @@ export function MessageList() {
     () => new Set(),
   );
 
-  const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const transcriptContentRef = useRef<HTMLDivElement>(null);
   const runStatusRef = useRef<Map<string, "in-progress" | "completed" | "other">>(
     new Map(),
   );
   const runSeenInProgressRef = useRef<Set<string>>(new Set());
   const workedCollapseTimersRef = useRef<Map<string, number>>(new Map());
   const workedAutoCollapsedRunIdsRef = useRef<Set<string>>(new Set());
-  const stickToBottomRef = useRef(true);
-  const isProgrammaticScrollRef = useRef(false);
-  const autoScrollFrameRef = useRef<number | null>(null);
-  const autoScrollReleaseRef = useRef<number | null>(null);
-  const pendingScrollBehaviorRef = useRef<ScrollBehavior>("auto");
+  const userMessageRefs = useRef(new Map<string, HTMLDivElement>());
+  const userMessageRowRefs = useRef(new Map<string, HTMLDivElement>());
+  const lastAnchoredUserMessageIdRef = useRef<string | null>(null);
+  const pendingHydrationAnchorRef = useRef(true);
   const WORKED_AUTO_COLLAPSE_DELAY_MS = 1200;
+  const CHAT_ANCHOR_TOP_INSET_PX = 40;
+  const ACTIVE_TURN_BODY_GAP_PX = 8;
 
   const isRunInProgress = isThinking || isLoading;
 
-  const getScrollViewport = (): HTMLDivElement | null =>
-    scrollRef.current?.querySelector<HTMLDivElement>(
-      "[data-radix-scroll-area-viewport]",
-    ) ?? null;
+  const getScrollViewport = (): HTMLDivElement | null => scrollRef.current;
 
-  const scheduleScrollToBottom = (behavior: ScrollBehavior) => {
-    pendingScrollBehaviorRef.current =
-      behavior === "smooth" || pendingScrollBehaviorRef.current === "smooth"
-        ? "smooth"
-        : "auto";
-
-    if (autoScrollFrameRef.current != null) return;
-
-    autoScrollFrameRef.current = window.requestAnimationFrame(() => {
-      autoScrollFrameRef.current = null;
-      const viewport = getScrollViewport();
-      if (!viewport) return;
-
-      isProgrammaticScrollRef.current = true;
-      viewport.scrollTo({
-        top: viewport.scrollHeight,
-        behavior: pendingScrollBehaviorRef.current,
-      });
-      pendingScrollBehaviorRef.current = "auto";
-
-      if (autoScrollReleaseRef.current != null) {
-        window.clearTimeout(autoScrollReleaseRef.current);
+  const getTranscriptBottomPaddingPx = useCallback(() => {
+    const transcriptContent = transcriptContentRef.current;
+    if (transcriptContent) {
+      const paddingBottom = Number.parseFloat(
+        window.getComputedStyle(transcriptContent).paddingBottom || "0",
+      );
+      if (Number.isFinite(paddingBottom) && paddingBottom > 0) {
+        return paddingBottom;
       }
-      autoScrollReleaseRef.current = window.setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-        autoScrollReleaseRef.current = null;
+    }
 
-        const distanceFromBottom =
-          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-        stickToBottomRef.current =
-          distanceFromBottom <= CHAT_SCROLL_BOTTOM_THRESHOLD_PX;
-      }, 220);
-    });
-  };
+    return window.innerWidth >= 768 ? 80 : 64;
+  }, []);
+
+  const setUserMessageRef = useCallback(
+    (messageId: string, node: HTMLDivElement | null) => {
+      if (!messageId) return;
+      if (node) {
+        userMessageRefs.current.set(messageId, node);
+      } else {
+        userMessageRefs.current.delete(messageId);
+      }
+    },
+    [],
+  );
+
+  const setUserMessageRowRef = useCallback(
+    (messageId: string, node: HTMLDivElement | null) => {
+      if (!messageId) return;
+      if (node) {
+        userMessageRowRefs.current.set(messageId, node);
+      } else {
+        userMessageRowRefs.current.delete(messageId);
+      }
+    },
+    [],
+  );
+
+  const syncScrollFades = useCallback(() => {
+    const viewport = getScrollViewport();
+    if (!viewport) {
+      setShowTopFade(false);
+      setShowBottomFade(false);
+      return;
+    }
+
+    const nextTopFade = viewport.scrollTop > 6;
+    const nextBottomFade =
+      viewport.scrollTop + viewport.clientHeight < viewport.scrollHeight - 6;
+
+    setShowTopFade((prev) => (prev === nextTopFade ? prev : nextTopFade));
+    setShowBottomFade((prev) =>
+      prev === nextBottomFade ? prev : nextBottomFade,
+    );
+  }, []);
 
   useEffect(() => {
     workedAutoCollapsedRunIdsRef.current = workedAutoCollapsedRunIds;
@@ -148,21 +190,14 @@ export function MessageList() {
     }
   }, []);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       workedCollapseTimersRef.current.forEach((timerId) => {
         window.clearTimeout(timerId);
       });
       workedCollapseTimersRef.current.clear();
-      if (autoScrollFrameRef.current != null) {
-        window.cancelAnimationFrame(autoScrollFrameRef.current);
-      }
-      if (autoScrollReleaseRef.current != null) {
-        window.clearTimeout(autoScrollReleaseRef.current);
-      }
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
     runStatusRef.current.clear();
@@ -173,50 +208,11 @@ export function MessageList() {
     workedCollapseTimersRef.current.clear();
     setWorkedOpenRunIds(new Set());
     setWorkedAutoCollapsedRunIds(new Set());
+    pendingHydrationAnchorRef.current = true;
+    lastAnchoredUserMessageIdRef.current = null;
+    setActiveTurnLayout(null);
+    setPendingAnchorRequest(null);
   }, [selectedSessionId]);
-
-  useEffect(() => {
-    let frameId: number | null = null;
-    let viewport: HTMLDivElement | null = null;
-    let handleScroll: (() => void) | null = null;
-
-    const bindViewport = () => {
-      viewport = getScrollViewport();
-      if (!viewport) {
-        frameId = window.requestAnimationFrame(bindViewport);
-        return;
-      }
-
-      handleScroll = () => {
-        if (isProgrammaticScrollRef.current || !viewport) return;
-        const distanceFromBottom =
-          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-        stickToBottomRef.current =
-          distanceFromBottom <= CHAT_SCROLL_BOTTOM_THRESHOLD_PX;
-      };
-
-      handleScroll();
-      viewport.addEventListener("scroll", handleScroll, { passive: true });
-    };
-
-    bindViewport();
-
-    return () => {
-      if (frameId != null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      if (viewport && handleScroll) {
-        viewport.removeEventListener("scroll", handleScroll);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (selectedMessages.length > 0 || isRunInProgress) {
-      if (!stickToBottomRef.current) return;
-      scheduleScrollToBottom(isRunInProgress ? "smooth" : "auto");
-    }
-  }, [selectedMessages, isRunInProgress]);
 
   useEffect(() => {
     if (
@@ -253,9 +249,230 @@ export function MessageList() {
     [sessionError, sessionErrorNow],
   );
 
+  const latestUserMessageId = useMemo(() => {
+    for (let index = timeline.items.length - 1; index >= 0; index -= 1) {
+      const item = timeline.items[index];
+      if (item?.kind === "user" && item.message.id) {
+        return item.message.id;
+      }
+    }
+    return null;
+  }, [timeline.items]);
+  const latestUserItemIndex = useMemo(() => {
+    for (let index = timeline.items.length - 1; index >= 0; index -= 1) {
+      const item = timeline.items[index];
+      if (item?.kind === "user" && item.message.id) {
+        return index;
+      }
+    }
+    return -1;
+  }, [timeline.items]);
+  const showEmptyState = selectedMessages.length === 0 && !isSessionHydrating;
+
+  const historicalItems =
+    latestUserItemIndex >= 0
+      ? timeline.items.slice(0, latestUserItemIndex)
+      : timeline.items;
+  const activeTurnUserItem =
+    latestUserItemIndex >= 0 && timeline.items[latestUserItemIndex]?.kind === "user"
+      ? (timeline.items[latestUserItemIndex] as Extract<
+          CanonicalTimelineItem,
+          { kind: "user" }
+        >)
+      : null;
+  const activeTurnAgentItems = activeTurnUserItem
+    ? timeline.items.slice(latestUserItemIndex + 1)
+    : [];
+
+  useEffect(() => {
+    if (isSessionHydrating || !latestUserMessageId) {
+      return;
+    }
+
+    const shouldAnchor =
+      pendingHydrationAnchorRef.current ||
+      lastAnchoredUserMessageIdRef.current !== latestUserMessageId;
+
+    if (!shouldAnchor) return;
+
+    const scrollBehavior: ScrollBehavior = pendingHydrationAnchorRef.current
+      ? "auto"
+      : "smooth";
+    pendingHydrationAnchorRef.current = false;
+    setActiveTurnLayout({
+      messageId: latestUserMessageId,
+      bodyMinHeight: 0,
+    });
+    setPendingAnchorRequest({
+      messageId: latestUserMessageId,
+      behavior: scrollBehavior,
+    });
+  }, [isSessionHydrating, latestUserMessageId]);
+
+  useEffect(() => {
+    if (!latestUserMessageId) {
+      setActiveTurnLayout(null);
+      setPendingAnchorRequest(null);
+    }
+  }, [latestUserMessageId]);
+
+  const computeActiveTurnBodyMinHeight = useCallback((messageId: string) => {
+    const viewport = getScrollViewport();
+    const anchorNode = userMessageRefs.current.get(messageId);
+    const rowNode = userMessageRowRefs.current.get(messageId);
+
+    if (!viewport || !anchorNode || !rowNode) {
+      return null;
+    }
+
+    const anchorRect = anchorNode.getBoundingClientRect();
+    const rowRect = rowNode.getBoundingClientRect();
+    const contentBelowAnchorBeforeBody =
+      rowRect.bottom - anchorRect.top + ACTIVE_TURN_BODY_GAP_PX;
+    const transcriptBottomPaddingPx = getTranscriptBottomPaddingPx();
+
+    return Math.max(
+      0,
+      Math.ceil(
+        viewport.clientHeight -
+          CHAT_ANCHOR_TOP_INSET_PX -
+          contentBelowAnchorBeforeBody -
+          transcriptBottomPaddingPx,
+      ),
+    );
+  }, [getTranscriptBottomPaddingPx]);
+
+  useLayoutEffect(() => {
+    if (!pendingAnchorRequest || isSessionHydrating) {
+      return;
+    }
+
+    const nextBodyMinHeight = computeActiveTurnBodyMinHeight(
+      pendingAnchorRequest.messageId,
+    );
+    if (nextBodyMinHeight == null) {
+      return;
+    }
+
+    if (
+      activeTurnLayout?.messageId !== pendingAnchorRequest.messageId ||
+      activeTurnLayout.bodyMinHeight !== nextBodyMinHeight
+    ) {
+      setActiveTurnLayout({
+        messageId: pendingAnchorRequest.messageId,
+        bodyMinHeight: nextBodyMinHeight,
+      });
+      return;
+    }
+
+    const viewport = getScrollViewport();
+    if (!viewport) {
+      return;
+    }
+
+    viewport.scrollTo({
+      top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
+      behavior: pendingAnchorRequest.behavior,
+    });
+    syncScrollFades();
+    lastAnchoredUserMessageIdRef.current = pendingAnchorRequest.messageId;
+    setPendingAnchorRequest(null);
+  }, [
+    activeTurnLayout,
+    computeActiveTurnBodyMinHeight,
+    isSessionHydrating,
+    pendingAnchorRequest,
+    syncScrollFades,
+  ]);
+
+  useEffect(() => {
+    const viewport = getScrollViewport();
+    if (!viewport) return;
+
+    const handleScroll = () => {
+      window.requestAnimationFrame(syncScrollFades);
+    };
+
+    syncScrollFades();
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+
+    const resizeObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(syncScrollFades);
+    });
+    resizeObserver.observe(viewport);
+
+    const viewportContent = viewport.firstElementChild;
+    if (viewportContent instanceof HTMLElement) {
+      resizeObserver.observe(viewportContent);
+    }
+
+    return () => {
+      viewport.removeEventListener("scroll", handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [selectedSessionId, syncScrollFades]);
+
+  useEffect(() => {
+    if (!latestUserMessageId) {
+      return;
+    }
+
+    const viewport = getScrollViewport();
+    const anchorNode = userMessageRefs.current.get(latestUserMessageId);
+    const rowNode = userMessageRowRefs.current.get(latestUserMessageId);
+
+    if (!viewport || !anchorNode || !rowNode) {
+      return;
+    }
+
+    const syncActiveTurnLayout = () => {
+      const nextBodyMinHeight = computeActiveTurnBodyMinHeight(latestUserMessageId);
+      if (nextBodyMinHeight == null) return;
+
+      setActiveTurnLayout((prev) => {
+        if (
+          prev?.messageId === latestUserMessageId &&
+          prev.bodyMinHeight === nextBodyMinHeight
+        ) {
+          return prev;
+        }
+        return {
+          messageId: latestUserMessageId,
+          bodyMinHeight: nextBodyMinHeight,
+        };
+      });
+    };
+
+    syncActiveTurnLayout();
+
+    const resizeObserver = new ResizeObserver(() => {
+      syncActiveTurnLayout();
+    });
+    resizeObserver.observe(viewport);
+    resizeObserver.observe(anchorNode);
+    resizeObserver.observe(rowNode);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [computeActiveTurnBodyMinHeight, latestUserMessageId, selectedSessionId]);
+
+  useEffect(() => {
+    window.requestAnimationFrame(syncScrollFades);
+  }, [
+    timeline.items.length,
+    showEmptyState,
+    activeTurnLayout?.bodyMinHeight,
+    isThinking,
+    isLoading,
+    syncScrollFades,
+  ]);
+
   useEffect(() => {
     const nextStatusMap = new Map<string, "in-progress" | "completed" | "other">();
     const newlyCompletedRunIds: string[] = [];
+    const shouldFreezeWorkedAutoCollapse =
+      Boolean(latestUserMessageId) && isRunInProgress;
 
     for (const item of timeline.items) {
       if (item.kind !== "agent") continue;
@@ -311,10 +528,19 @@ export function MessageList() {
     });
 
     workedCollapseTimersRef.current.forEach((timerId, runId) => {
+      if (shouldFreezeWorkedAutoCollapse) {
+        window.clearTimeout(timerId);
+        workedCollapseTimersRef.current.delete(runId);
+        return;
+      }
       if (activeRunIds.has(runId)) return;
       window.clearTimeout(timerId);
       workedCollapseTimersRef.current.delete(runId);
     });
+
+    if (shouldFreezeWorkedAutoCollapse) {
+      return;
+    }
 
     for (const runId of newlyCompletedRunIds) {
       if (
@@ -342,7 +568,7 @@ export function MessageList() {
 
       workedCollapseTimersRef.current.set(runId, timerId);
     }
-  }, [timeline.items, isRunInProgress]);
+  }, [timeline.items, isRunInProgress, latestUserMessageId]);
 
   const onSuggestionClick = (suggestion: string) => setInput(suggestion);
   const shouldShowInterruptedContinue =
@@ -353,10 +579,155 @@ export function MessageList() {
       isThinking,
       isLoading,
     });
+  const activeTurnBodyMinHeight =
+    activeTurnUserItem && activeTurnLayout?.messageId === activeTurnUserItem.message.id
+      ? activeTurnLayout.bodyMinHeight
+      : 0;
+
+  const renderTimelineItem = (item: CanonicalTimelineItem) =>
+    item.kind === "user" ? (
+      <UserMessageRow
+        key={item.key}
+        message={item.message}
+        onRevert={handleRevert}
+        registerAnchor={setUserMessageRef}
+        registerRow={setUserMessageRowRef}
+        anchorTopInsetPx={CHAT_ANCHOR_TOP_INSET_PX}
+      />
+    ) : (
+      <AgentMessageRow
+        key={item.key}
+        item={item}
+        orderedParts={item.orderedParts}
+        workedOpen={workedOpenRunIds.has(item.runId)}
+        onToggleWorked={() =>
+          setWorkedOpenRunIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(item.runId)) {
+              next.delete(item.runId);
+            } else {
+              next.add(item.runId);
+            }
+            return next;
+          })
+        }
+      />
+    );
+
+  const tailContent = (
+    <>
+      {isUsageBlocked && usageLimitStatus && (
+        <div className="flex justify-center py-2">
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm text-destructive">
+                Usage Limit Reached
+              </div>
+              {usageLimitStatus.warnings.map((warning, i) => (
+                <p
+                  key={i}
+                  className="text-xs text-muted-foreground mt-1 break-words"
+                >
+                  {warning}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isUsageBlocked &&
+        usageLimitStatus?.warnings &&
+        usageLimitStatus.warnings.length > 0 &&
+        !dismissedWarnings && (
+          <div className="flex justify-center py-2">
+            <div className="flex items-start gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 max-w-[90%] w-full">
+              <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm text-yellow-700 dark:text-yellow-500">
+                  Approaching Usage Limit
+                </div>
+                {usageLimitStatus.warnings.map((warning, i) => (
+                  <p
+                    key={i}
+                    className="text-xs text-muted-foreground mt-1 break-words"
+                  >
+                    {warning}
+                  </p>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 h-6 w-6 p-0"
+                onClick={() => setDismissedWarnings(true)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+      {sessionErrorNotice && (
+        <SessionStatusNotice
+          notice={sessionErrorNotice}
+          onDismiss={clearSessionError}
+        />
+      )}
+
+      {isReverted && (
+        <div className="flex justify-center py-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUnrevert}
+            className="text-sm"
+          >
+            <Undo2 className="w-4 h-4 mr-2" />
+            Restore reverted changes
+          </Button>
+        </div>
+      )}
+
+      {shouldShowInterruptedContinue && (
+        <div className="flex justify-center py-1">
+          <button
+            type="button"
+            onClick={handleContinueSession}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Agent interrupted, click to continue
+          </button>
+        </div>
+      )}
+
+      {!shouldShowInterruptedContinue &&
+        selectedMessages.length > 0 &&
+        timeline.items[timeline.items.length - 1]?.kind === "agent" &&
+        !activeQuestionRequest &&
+        !isThinking &&
+        !isLoading && <SessionDivider label="Done" className="mb-0" />}
+    </>
+  );
 
   return (
-    <ScrollArea className="flex-1" ref={scrollRef}>
-      <div className="flex flex-col gap-2 px-4 pt-4 pb-16 md:px-6 md:pt-5 md:pb-20">
+    <div className="relative flex-1 overflow-hidden">
+      <div
+        ref={scrollRef}
+        data-radix-scroll-area-viewport=""
+        className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      >
+        <div
+          ref={transcriptContentRef}
+          data-chat-transcript-content=""
+          className={cn(
+            "flex flex-col gap-2 [overflow-anchor:none]",
+            showEmptyState
+              ? "px-0 pt-4 pb-10 md:px-0 md:pt-4 md:pb-12"
+              : "px-4 pt-4 pb-16 md:px-6 md:pt-5 md:pb-20",
+          )}
+        >
         {showRevertNotice && (
           <div className="flex justify-center">
             <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 max-w-[90%] w-full">
@@ -393,141 +764,60 @@ export function MessageList() {
             />
           ))}
 
-        {timeline.items.map((item) =>
-          item.kind === "user" ? (
+        {historicalItems.map(renderTimelineItem)}
+
+        {activeTurnUserItem ? (
+          <div className="flex flex-col gap-2">
             <UserMessageRow
-              key={item.key}
-              message={item.message}
+              key={activeTurnUserItem.key}
+              message={activeTurnUserItem.message}
               onRevert={handleRevert}
+              registerAnchor={setUserMessageRef}
+              registerRow={setUserMessageRowRef}
+              anchorTopInsetPx={CHAT_ANCHOR_TOP_INSET_PX}
             />
-          ) : (
-            <AgentMessageRow
-              key={item.key}
-              item={item}
-              orderedParts={item.orderedParts}
-              workedOpen={workedOpenRunIds.has(item.runId)}
-              onToggleWorked={() =>
-                setWorkedOpenRunIds((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(item.runId)) {
-                    next.delete(item.runId);
-                  } else {
-                    next.add(item.runId);
-                  }
-                  return next;
-                })
+            <div
+              data-chat-active-turn-body={activeTurnUserItem.message.id}
+              className="flex min-h-0 flex-col gap-2"
+              style={
+                activeTurnBodyMinHeight > 0
+                  ? { minHeight: `${activeTurnBodyMinHeight}px` }
+                  : undefined
               }
-            />
-          ),
-        )}
-
-        {isUsageBlocked && usageLimitStatus && (
-          <div className="flex justify-center py-2">
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 max-w-[90%] w-full">
-              <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm text-destructive">
-                  Usage Limit Reached
-                </div>
-                {usageLimitStatus.warnings.map((warning, i) => (
-                  <p
-                    key={i}
-                    className="text-xs text-muted-foreground mt-1 break-words"
-                  >
-                    {warning}
-                  </p>
-                ))}
-              </div>
+            >
+              {activeTurnAgentItems.map(renderTimelineItem)}
+              {tailContent}
+              <div aria-hidden="true" className="flex-1" />
             </div>
           </div>
+        ) : (
+          tailContent
         )}
 
-        {!isUsageBlocked &&
-          usageLimitStatus?.warnings &&
-          usageLimitStatus.warnings.length > 0 &&
-          !dismissedWarnings && (
-            <div className="flex justify-center py-2">
-              <div className="flex items-start gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 max-w-[90%] w-full">
-                <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-yellow-700 dark:text-yellow-500">
-                    Approaching Usage Limit
-                  </div>
-                  {usageLimitStatus.warnings.map((warning, i) => (
-                    <p
-                      key={i}
-                      className="text-xs text-muted-foreground mt-1 break-words"
-                    >
-                      {warning}
-                    </p>
-                  ))}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 h-6 w-6 p-0"
-                  onClick={() => setDismissedWarnings(true)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-        {sessionErrorNotice && (
-          <SessionStatusNotice
-            notice={sessionErrorNotice}
-            onDismiss={clearSessionError}
-          />
-        )}
-
-        {isReverted && (
-          <div className="flex justify-center py-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUnrevert}
-              className="text-sm"
-            >
-              <Undo2 className="w-4 h-4 mr-2" />
-              Restore reverted changes
-            </Button>
-          </div>
-        )}
-
-        {shouldShowInterruptedContinue && (
-          <div className="flex justify-center py-1">
-            <button
-              type="button"
-              onClick={handleContinueSession}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Agent interrupted, click to continue
-            </button>
-          </div>
-        )}
-
-        {!shouldShowInterruptedContinue &&
-          selectedMessages.length > 0 &&
-          timeline.items[timeline.items.length - 1]?.kind === "agent" &&
-          !activeQuestionRequest &&
-          !isThinking &&
-          !isLoading && (
-            <SessionDivider label="Done" className="mb-0" />
-          )}
-
-        <div ref={bottomRef} className="h-px" />
+        </div>
       </div>
-    </ScrollArea>
+      {showTopFade ? (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-background via-background/84 to-transparent" />
+      ) : null}
+      {showBottomFade ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-background via-background/88 to-transparent" />
+      ) : null}
+    </div>
   );
 }
 
 function UserMessageRow({
   message,
   onRevert,
+  registerAnchor,
+  registerRow,
+  anchorTopInsetPx,
 }: {
   message: Extract<CanonicalTimelineItem, { kind: "user" }>["message"];
   onRevert: (messageId: string) => void;
+  registerAnchor: (messageId: string, node: HTMLDivElement | null) => void;
+  registerRow: (messageId: string, node: HTMLDivElement | null) => void;
+  anchorTopInsetPx: number;
 }) {
   const { cleanMessage, internalTags } = parseVivdInternalTags(message.content);
   const imageTags = internalTags.filter((tag) => tag.type === "dropped-file");
@@ -537,7 +827,11 @@ function UserMessageRow({
     Boolean(elementTag?.selector) || Boolean(elementTag?.["source-file"]);
 
   return (
-    <div className="flex flex-col gap-1 items-end chat-row-enter">
+    <div
+      ref={(node) => registerRow(message.id, node)}
+      data-chat-user-row-id={message.id}
+      className="flex flex-col gap-1 items-end chat-row-enter"
+    >
       <div className="h-6 flex items-center justify-end">
         {message.id ? (
           <Button
@@ -554,8 +848,16 @@ function UserMessageRow({
         )}
       </div>
 
-      <div className="max-w-[90%] min-w-0">
-        <div className="rounded-lg px-4 pt-2 pb-2.5 overflow-x-hidden bg-muted dark:bg-muted/20 text-foreground text-sm leading-relaxed">
+      <div
+        ref={(node) => registerAnchor(message.id, node)}
+        data-chat-user-anchor-id={message.id}
+        className="max-w-[90%] min-w-0"
+        style={{ scrollMarginTop: `${anchorTopInsetPx}px` }}
+      >
+        <div
+          className="overflow-x-hidden rounded-[18px] bg-muted/40 px-3.5 py-1.5 text-foreground text-sm leading-[1.45] dark:bg-muted/10"
+          data-chat-user-message-id={message.id}
+        >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={getChatMarkdownComponents({ compactParagraphs: true })}
@@ -564,7 +866,7 @@ function UserMessageRow({
           </ReactMarkdown>
 
           {(imageTags.length > 0 || fileTags.length > 0 || hasElementRef) && (
-            <div className="mt-1.5 pt-1.5 border-t border-foreground/10 flex flex-wrap gap-1">
+            <div className="mt-1.5 flex flex-wrap gap-1">
               {imageTags.map((tag, idx) => (
                 <DroppedImagePill
                   key={`img-${idx}`}

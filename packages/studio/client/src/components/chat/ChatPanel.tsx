@@ -10,6 +10,7 @@ import {
   useChatContext,
   type SessionDebugState,
 } from "./ChatContext";
+import { useOptionalPreview } from "../preview/PreviewContext";
 
 interface ChatPanelProps {
   projectSlug: string;
@@ -119,6 +120,7 @@ function SessionDebugDisplay({ debug }: { debug: SessionDebugState }) {
 
 // Inner component that uses the context
 function ChatPanelContent({ onClose }: { onClose?: () => void }) {
+  const previewContext = useOptionalPreview();
   const {
     sessions,
     sessionsLoading,
@@ -130,45 +132,66 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     sessionDebugState,
     setSelectorMode,
   } = useChatContext();
+  const sessionHistoryOpen = previewContext?.sessionHistoryOpen ?? false;
+  const setSessionHistoryOpen =
+    previewContext?.setSessionHistoryOpen ?? (() => undefined);
 
   // Wrap onClose to also exit selector mode
   const handleClose = () => {
     if (setSelectorMode) {
       setSelectorMode(false);
     }
+    setSessionHistoryOpen(false);
     onClose?.();
   };
 
+  const handleNewSessionClick = () => {
+    handleNewSession();
+    setSessionHistoryOpen(false);
+  };
+
+  const handleSelectSession = (sessionId: string | null) => {
+    setSelectedSessionId(sessionId);
+    setSessionHistoryOpen(false);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="px-3 py-3 md:px-6 md:py-4 border-b flex justify-between items-center bg-background z-10">
-        <div className="flex flex-col gap-2 w-full">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Agent Chat</h2>
-            {onClose && (
-              <Button variant="ghost" size="icon" onClick={handleClose}>
-                <span className="sr-only">Close</span>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+    <div className="relative flex h-full flex-col bg-background">
+      {onClose ? (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end p-3 md:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClose}
+            className="pointer-events-auto h-9 w-9 rounded-full bg-background shadow-sm"
+          >
+            <span className="sr-only">Close</span>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
+
+      {sessionHistoryOpen ? (
+        <div className="flex min-h-0 flex-1 flex-col px-3 py-3 md:px-4">
           <SessionList
             sessions={sessions}
             sessionsLoading={sessionsLoading}
             selectedSessionId={selectedSessionId}
-            onSelectSession={setSelectedSessionId}
+            onSelectSession={handleSelectSession}
             onDeleteSession={handleDeleteSession}
-            onNewSession={handleNewSession}
+            onNewSession={handleNewSessionClick}
           />
         </div>
-      </div>
+      ) : (
+        <>
+          <MessageList />
 
-      <MessageList />
+          {messageCount > 0 && <ChatInputRegion />}
 
-      {messageCount > 0 && <ChatInputRegion />}
-
-      {/* Debug display for session state (admin only) */}
-      <SessionDebugDisplay debug={sessionDebugState} />
+          {/* Debug display for session state (admin only) */}
+          <SessionDebugDisplay debug={sessionDebugState} />
+        </>
+      )}
     </div>
   );
 }

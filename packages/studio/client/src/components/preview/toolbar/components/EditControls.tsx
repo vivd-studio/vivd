@@ -1,102 +1,72 @@
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Edit3, FolderOpen, MessageSquare } from "lucide-react";
-import type { PanelLayoutMode } from "../../PreviewContext";
+import { Edit3 } from "lucide-react";
 
 interface EditControlsProps {
   projectSlug: string | undefined;
-  assetsOpen: boolean;
-  setAssetsOpen: (value: boolean) => void;
-  chatOpen: boolean;
-  setChatOpen: (value: boolean) => void;
-  panelLayoutMode: PanelLayoutMode;
-  canUseAgent: boolean;
   editMode: boolean;
   hasUnsavedChanges: boolean;
   toggleEditMode: () => void;
+  expandLabel?: boolean;
 }
 
 export function EditControls({
   projectSlug,
-  assetsOpen,
-  setAssetsOpen,
-  chatOpen,
-  setChatOpen,
-  panelLayoutMode,
-  canUseAgent,
   editMode,
   hasUnsavedChanges,
   toggleEditMode,
+  expandLabel = true,
 }: EditControlsProps) {
   if (!projectSlug) return null;
 
-  const showAgentInLeadingSlot =
-    panelLayoutMode === "agent-left" && canUseAgent;
-
   return (
-    <div className="hidden md:flex items-center gap-1">
-      {showAgentInLeadingSlot ? (
-        <Button
-          variant={chatOpen ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setChatOpen(!chatOpen)}
-          className={`h-8 ${
-            !chatOpen
-              ? "border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400"
-              : ""
-          }`}
-        >
-          <MessageSquare className="w-4 h-4 mr-1.5" />
-          <span className="hidden lg:inline">Agent</span>
-        </Button>
-      ) : (
-        <Button
-          variant={assetsOpen ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setAssetsOpen(!assetsOpen)}
-          className={`h-8 ${
-            !assetsOpen
-              ? "border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
-              : ""
-          }`}
-        >
-          <FolderOpen className="w-4 h-4 mr-1.5" />
-          <span className="hidden lg:inline">Assets</span>
-        </Button>
-      )}
-
-      {/* Edit button */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span>
-            <Button
-              variant={editMode ? "secondary" : "outline"}
-              size="sm"
-              onClick={toggleEditMode}
-              disabled={hasUnsavedChanges && !editMode}
-              className={`h-8 ${
-                !editMode && !hasUnsavedChanges
-                  ? "border-blue-500/50 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                  : ""
-              }`}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleEditMode}
+            disabled={hasUnsavedChanges && !editMode}
+            className={cn(
+              "h-8 justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
+              editMode && expandLabel
+                ? "w-[104px] bg-primary/10 text-primary shadow-sm"
+                : "w-8 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            )}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <Edit3 className="h-4 w-4 shrink-0" />
+            </span>
+            <span
+              aria-hidden="true"
+              className={cn(
+                "overflow-hidden whitespace-nowrap text-[13px] font-medium transition-[max-width,opacity,padding] duration-200 ease-out",
+                editMode && expandLabel
+                  ? "max-w-24 pl-0.5 pr-2.5 opacity-100"
+                  : "max-w-0 pl-0 pr-0 opacity-0",
+              )}
             >
-              <Edit3 className="w-4 h-4 mr-1.5" />
-              <span className="hidden lg:inline">
-                {editMode ? "Editing..." : "Edit Text"}
-              </span>
-            </Button>
-          </span>
-        </TooltipTrigger>
-        {hasUnsavedChanges && !editMode && (
-          <TooltipContent>
-            Save or discard image changes first
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </div>
+              Edit text
+            </span>
+            <span className="sr-only">
+              {editMode ? "Editing text" : "Edit text"}
+            </span>
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {hasUnsavedChanges && !editMode
+          ? "Save or discard image changes first"
+          : editMode
+            ? "Editing text"
+            : "Edit text"}
+      </TooltipContent>
+    </Tooltip>
   );
 }

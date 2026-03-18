@@ -10,7 +10,8 @@
   "dependencies": {
     "@astrojs/starlight": "^0.38.1",
     "@vivd/theme": "file:../theme",
-    "astro": "^6.0.5"
+    "astro": "^6.0.5",
+    "astro-expressive-code": "file:./shims/astro-expressive-code"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

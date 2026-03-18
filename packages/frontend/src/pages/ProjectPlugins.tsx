@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
   ChevronDown,
   Copy,
@@ -184,7 +184,12 @@ function SnippetCard({
 
 export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
+  const location = useLocation();
   const utils = trpc.useUtils();
+  const isEmbedded = useMemo(
+    () => new URLSearchParams(location.search).get("embedded") === "1",
+    [location.search],
+  );
 
   const slug = projectSlug || "";
   const catalogQuery = trpc.plugins.catalog.useQuery(
@@ -450,16 +455,20 @@ export default function ProjectPlugins() {
   const analyticsPath =
     ROUTES.PROJECT_ANALYTICS?.(projectSlug) ??
     `/vivd-studio/projects/${projectSlug}/analytics`;
+  const analyticsLink = isEmbedded ? `${analyticsPath}?embedded=1` : analyticsPath;
 
   return (
     <SettingsPageShell
       title="Plugins"
       description={`Configure runtime plugins for ${projectSlug}.`}
+      className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link to={ROUTES.PROJECT(projectSlug)}>Back to project</Link>
-          </Button>
+          {!isEmbedded ? (
+            <Button variant="outline" asChild>
+              <Link to={ROUTES.PROJECT(projectSlug)}>Back to project</Link>
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             onClick={handleRefresh}
@@ -475,7 +484,7 @@ export default function ProjectPlugins() {
         </div>
       }
     >
-      <FormContent className="max-w-3xl">
+      <FormContent className={isEmbedded ? "mx-auto max-w-3xl" : "max-w-3xl"}>
       {/* ── Contact Form ── */}
       <Card>
         <CardHeader>
@@ -884,7 +893,7 @@ export default function ProjectPlugins() {
             <div className="flex items-center gap-2">
               {analyticsEnabled ? (
                 <Button asChild size="sm" variant="outline">
-                  <Link to={analyticsPath}>Open dashboard</Link>
+                  <Link to={analyticsLink}>Open dashboard</Link>
                 </Button>
               ) : null}
               <Badge variant={analyticsEnabled ? "default" : "secondary"}>

@@ -26,7 +26,7 @@ export function EmptyStatePrompt({
   return (
     <div className="flex flex-col items-center text-center py-8 h-full">
       {/* Header */}
-      <div className="mb-6 px-6">
+      <div className="mb-6 px-4">
         <div className="w-12 h-12 rounded-full bg-linear-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-3 mx-auto">
           <Sparkles className="w-6 h-6 text-amber-500" />
         </div>
@@ -59,12 +59,12 @@ export function EmptyStatePrompt({
       ) : null}
 
       {/* Unified Chat Composer */}
-      <div className="w-full mb-8">
-        <ChatInputRegion composerClassName="p-0" />
+      <div className="mb-8 w-full">
+        <ChatInputRegion composerClassName="pb-0" />
       </div>
 
       {/* Subtle suggestions - no background, just text */}
-      <div className="w-full max-w-md px-6">
+      <div className="w-full max-w-md px-4">
         <p className="text-xs text-muted-foreground/60 mb-4">Or try:</p>
         <div className="flex flex-col gap-1">
           {suggestions.map((suggestion, idx) => (

@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { ELEMENT_SELECTOR_SCRIPT } from "../chat/ElementSelector";
+import { buildCacheBustedPreviewUrl } from "./navigation";
 
 interface PreviewIframeProps {
   src: string;
@@ -8,6 +9,7 @@ interface PreviewIframeProps {
   isMobile?: boolean;
   onLoad?: () => void;
   onNavigateStart?: () => void;
+  onLocationChange?: (href: string) => void;
   selectorMode?: boolean;
 }
 
@@ -66,14 +68,19 @@ const injectScrollbarStyles = (
       style.id = "vivd-scrollbar-styles";
       style.textContent = isMobile
         ? `
+          html,
+          body {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+            scrollbar-gutter: auto;
+          }
           /* Hide scrollbar for Chrome, Safari and Opera */
+          html::-webkit-scrollbar,
+          body::-webkit-scrollbar,
           ::-webkit-scrollbar {
             display: none;
-          }
-          /* Hide scrollbar for IE, Edge and Firefox */
-          body {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
+            width: 0;
+            height: 0;
           }
         `
         : `
@@ -412,6 +419,56 @@ const installPreviewNavigationStartListener = (
   }
 };
 
+const installPreviewLocationChangeListener = (
+  iframe: HTMLIFrameElement,
+  onLocationChange?: (href: string) => void,
+) => {
+  if (!onLocationChange) return;
+
+  try {
+    const win = iframe.contentWindow as any;
+    if (!win) return;
+
+    const notify = () => {
+      try {
+        const href = String(win.location?.href || "");
+        if (href) onLocationChange(href);
+      } catch {
+        // Cross-origin iframe or blocked access.
+      }
+    };
+
+    if (!win.__vivdPreviewLocationSyncInstalled) {
+      win.__vivdPreviewLocationSyncInstalled = true;
+      const defer =
+        typeof queueMicrotask === "function"
+          ? queueMicrotask
+          : (fn: () => void) => void Promise.resolve().then(fn);
+
+      const wrapHistoryMethod = (method: "pushState" | "replaceState") => {
+        const original = win.history?.[method];
+        if (typeof original !== "function") return;
+
+        win.history[method] = function (...args: any[]) {
+          const result = original.apply(this, args);
+          defer(notify);
+          return result;
+        };
+      };
+
+      wrapHistoryMethod("pushState");
+      wrapHistoryMethod("replaceState");
+      win.addEventListener("popstate", notify);
+      win.addEventListener("hashchange", notify);
+      win.addEventListener("pageshow", notify);
+    }
+
+    notify();
+  } catch (err) {
+    console.warn("Could not install preview location sync listener", err);
+  }
+};
+
 const installPreviewPdfDownloadInterceptor = (iframe: HTMLIFrameElement) => {
   try {
     const doc = iframe.contentDocument as any;
@@ -480,6 +537,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       isMobile = false,
       onLoad,
       onNavigateStart,
+      onLocationChange,
       selectorMode = false,
     },
     ref
@@ -499,7 +557,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
     }, [refreshKey]);
 
     const cacheBustedSrc = src
-      ? `${src}${src.includes("?") ? "&" : "?"}_vivd=${refreshKey}_${internalRefreshKey}`
+      ? buildCacheBustedPreviewUrl(src, `${refreshKey}_${internalRefreshKey}`)
       : src;
 
     const handleLoad = (e: SyntheticEvent<HTMLIFrameElement>) => {
@@ -538,22 +596,28 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       retryCountRef.current = 0;
 
       installPreviewNavigationStartListener(iframe, onNavigateStart);
+      installPreviewLocationChangeListener(iframe, onLocationChange);
       installPreviewPdfDownloadInterceptor(iframe);
+      injectScrollbarStyles(iframe, isMobile);
 
       // Some previewed sites ship strict CSP which blocks inline script/style injection.
-      // Only inject editor helpers when we actually need them (selector mode).
+      // Only inject selector-specific helpers when we actually need them.
       if (selectorMode) {
-        injectScrollbarStyles(iframe, isMobile);
         injectHighlightListener(iframe);
       }
       onLoad?.();
     };
 
+    useEffect(() => {
+      if (ref && typeof ref !== "function" && ref.current) {
+        injectScrollbarStyles(ref.current, isMobile);
+      }
+    }, [isMobile, ref]);
+
     // Inject selector script when selectorMode becomes active
     useEffect(() => {
       if (!selectorMode) return;
       if (ref && typeof ref !== "function" && ref.current) {
-        injectScrollbarStyles(ref.current, isMobile);
         injectHighlightListener(ref.current);
         injectSelectorScript(ref.current);
       }

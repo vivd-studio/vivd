@@ -15,6 +15,7 @@ import { StudioToolbar } from "./toolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
+import { TABLET_PRESET } from "./types";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2, AlertCircle } from "lucide-react";
 import { isTextFile } from "../asset-explorer/utils";
@@ -57,6 +58,11 @@ const PdfViewerPanel = lazy(() =>
     default: module.PdfViewerPanel,
   })),
 );
+const PluginSettingsPanel = lazy(() =>
+  import("./PluginSettingsPanel").then((module) => ({
+    default: module.PluginSettingsPanel,
+  })),
+);
 const AIEditDialog = lazy(() =>
   import("../asset-explorer/AIEditDialog").then((module) => ({
     default: module.AIEditDialog,
@@ -82,7 +88,7 @@ export function PreviewContent() {
   const {
     projectSlug,
     version,
-    mobileView,
+    viewportMode,
     selectedDevice,
     mobileScale,
     mobileContainerRef,
@@ -91,12 +97,12 @@ export function PreviewContent() {
     fullUrl,
     assetsOpen,
     setAssetsOpen,
+    pluginsOpen,
     chatOpen,
     setChatOpen,
     handleTaskComplete,
     handleRefresh,
-    assetPanelSide,
-    chatPanelSide,
+    handlePreviewLocationChange,
     assetPanel,
     chatPanel,
     iframeLoading,
@@ -349,27 +355,26 @@ export function PreviewContent() {
     if (!viewingImagePath) return null;
     return navigableFiles[currentFileIndex] || null;
   }, [navigableFiles, currentFileIndex, viewingImagePath]);
+  const framedViewport = viewportMode !== "desktop";
+  const activeFrame = viewportMode === "tablet" ? TABLET_PRESET : selectedDevice;
 
   const assetPanelContent =
     projectSlug && version !== undefined && assetsOpen ? (
       <div
-        className={`absolute inset-0 z-30 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:min-w-0 ${
-          assetPanelSide === "left" ? "md:border-r" : "md:border-l"
-        }`}
+        className="absolute inset-0 z-30 max-md:!w-full md:relative md:inset-auto md:z-20 md:h-full md:min-w-0 md:flex-none"
         style={{ width: assetPanel.width }}
       >
-        <DeferredPanel>
-          <AssetExplorer
-            projectSlug={projectSlug}
-            version={selectedVersion}
-            onClose={() => setAssetsOpen(false)}
-          />
-        </DeferredPanel>
-        <div className="hidden md:block">
-          <ResizeHandle
-            side={assetPanelSide}
-            onMouseDown={assetPanel.handleMouseDown}
-          />
+        <div className="relative flex h-full flex-col overflow-hidden bg-background md:border-r md:border-border/40">
+          <DeferredPanel>
+            <AssetExplorer
+              projectSlug={projectSlug}
+              version={selectedVersion}
+              onClose={() => setAssetsOpen(false)}
+            />
+          </DeferredPanel>
+          <div className="hidden md:block">
+            <ResizeHandle side="left" onMouseDown={assetPanel.handleMouseDown} />
+          </div>
         </div>
       </div>
     ) : null;
@@ -377,170 +382,195 @@ export function PreviewContent() {
   const chatPanelContent =
     projectSlug && chatOpen ? (
       <div
-        className={`absolute inset-0 z-40 max-md:!w-full bg-background flex flex-col shadow-xl overflow-hidden md:relative md:inset-auto md:z-20 md:min-w-0 ${
-          chatPanelSide === "left" ? "md:border-r" : "md:border-l"
-        }`}
+        className="absolute inset-0 z-40 max-md:!w-full md:relative md:inset-auto md:z-20 md:min-w-0"
         style={{ width: chatPanel.width }}
       >
-        <div className="hidden md:block">
-          <ResizeHandle side={chatPanelSide} onMouseDown={chatPanel.handleMouseDown} />
+        <div className="relative flex h-full flex-col overflow-hidden bg-background shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
+          <div className="hidden md:block">
+            <ResizeHandle side="left" onMouseDown={chatPanel.handleMouseDown} />
+          </div>
+          <DeferredPanel>
+            <ChatPanelContent onClose={() => setChatOpen(false)} />
+          </DeferredPanel>
         </div>
-        <DeferredPanel>
-          <ChatPanelContent onClose={() => setChatOpen(false)} />
-        </DeferredPanel>
       </div>
     ) : null;
 
   // Inner content that needs ChatProvider context
   const mainContent = (
     <div className="flex flex-1 min-h-0 relative">
-      {assetPanelSide === "left" ? assetPanelContent : null}
-      {chatPanelSide === "left" ? chatPanelContent : null}
+      {chatPanelContent}
 
       <div
         ref={mobileContainerRef}
-        className={`flex-1 relative bg-muted/20 ${
-          mobileView ? "flex items-center justify-center overflow-hidden" : ""
+        className={`flex-1 min-w-0 relative bg-background px-1 pb-1 pt-0 md:pb-1.5 md:pr-1.5 md:pt-0 ${
+          chatOpen ? "md:pl-0" : "md:pl-1.5"
+        } ${
+          framedViewport ? "flex items-center justify-center overflow-hidden" : ""
         }`}
       >
-        {/* Loading/Error Overlay */}
         <div
-          className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
-            isLoading || isDevServerError
-              ? "opacity-100"
-              : "opacity-0 pointer-events-none"
+          className={`relative flex h-full w-full overflow-hidden rounded-[10px] border border-border/60 bg-background shadow-[0_10px_24px_rgba(15,23,42,0.04)] ${
+            framedViewport ? "bg-muted/20" : ""
           }`}
         >
-          {isDevServerError ? (
-            <div className="flex flex-col items-center gap-3 max-w-md text-center px-4">
-              <AlertCircle className="h-8 w-8 text-destructive" />
-              <span className="text-sm font-medium text-destructive">
-                Dev server failed to start
-              </span>
-              {devServerError && (
-                <span className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded max-h-32 overflow-auto">
-                  {devServerError}
-                </span>
-              )}
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                <Button
-                  size="sm"
-                  onClick={() => triggerDevServerRestart()}
-                  disabled={!projectSlug || restartDevServerMutation.isPending}
-                >
-                  Restart dev server
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => triggerDevServerRestart({ clean: true })}
-                  disabled={!projectSlug || restartDevServerMutation.isPending}
-                >
-                  Clean reinstall
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="text-sm text-muted-foreground">
-                {getLoadingMessage()}
-              </span>
-            </div>
-          )}
-        </div>
+          {assetPanelContent}
 
-        {/* Iframe container - only rendered when dev server is ready */}
-        {isDevServerReady && (
           <div
-            className={`transition-opacity duration-150 ${
-              iframeLoading ? "opacity-0" : "opacity-100"
-            } ${mobileView ? "" : "w-full h-full"}`}
+            className={`relative min-w-0 flex-1 ${
+              framedViewport
+                ? "flex items-center justify-center overflow-hidden"
+                : ""
+            }`}
           >
-            {mobileView ? (
-              <MobileFrame device={selectedDevice} scale={mobileScale}>
+          {/* Loading/Error Overlay */}
+          <div
+            className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
+              isLoading || isDevServerError
+                ? "opacity-100"
+                : "opacity-0 pointer-events-none"
+            }`}
+          >
+            {isDevServerError ? (
+              <div className="flex flex-col items-center gap-3 max-w-md text-center px-4">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <span className="text-sm font-medium text-destructive">
+                  Dev server failed to start
+                </span>
+                {devServerError && (
+                  <span className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded max-h-32 overflow-auto">
+                    {devServerError}
+                  </span>
+                )}
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => triggerDevServerRestart()}
+                    disabled={!projectSlug || restartDevServerMutation.isPending}
+                  >
+                    Restart dev server
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => triggerDevServerRestart({ clean: true })}
+                    disabled={!projectSlug || restartDevServerMutation.isPending}
+                  >
+                    Clean reinstall
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">
+                  {getLoadingMessage()}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Iframe container - only rendered when dev server is ready */}
+          {isDevServerReady && (
+            <div
+              className={`h-full transition-opacity duration-150 ${
+                iframeLoading ? "opacity-0" : "opacity-100"
+              } ${framedViewport ? "flex items-center justify-center overflow-hidden p-5" : "w-full"}`}
+            >
+              {framedViewport ? (
+                <MobileFrame device={activeFrame} scale={mobileScale}>
+                  <PreviewIframe
+                    ref={iframeRef}
+                    src={fullUrl}
+                    refreshKey={refreshKey}
+                    isMobile={viewportMode === "mobile"}
+                    onNavigateStart={onIframeNavigateStart}
+                    onLoad={onIframeLoad}
+                    onLocationChange={handlePreviewLocationChange}
+                    selectorMode={selectorMode}
+                  />
+                </MobileFrame>
+              ) : (
                 <PreviewIframe
                   ref={iframeRef}
                   src={fullUrl}
                   refreshKey={refreshKey}
-                  isMobile={true}
+                  isMobile={false}
                   onNavigateStart={onIframeNavigateStart}
                   onLoad={onIframeLoad}
+                  onLocationChange={handlePreviewLocationChange}
                   selectorMode={selectorMode}
                 />
-              </MobileFrame>
-            ) : (
-              <PreviewIframe
-                ref={iframeRef}
-                src={fullUrl}
-                refreshKey={refreshKey}
-                isMobile={false}
-                onNavigateStart={onIframeNavigateStart}
-                onLoad={onIframeLoad}
-                selectorMode={selectorMode}
+              )}
+            </div>
+          )}
+
+          <UnsavedChangesBar />
+
+          {projectSlug && pluginsOpen && (
+            <DeferredPanel>
+              <PluginSettingsPanel projectSlug={projectSlug} />
+            </DeferredPanel>
+          )}
+
+          {/* Text Editor - overlay on top of iframe to preserve iframe state */}
+          {projectSlug && editingTextFile && (
+            <DeferredPanel>
+              <TextEditorPanel
+                projectSlug={projectSlug}
+                version={selectedVersion}
+                filePath={editingTextFile}
+                onClose={() => setEditingTextFile(null)}
               />
-            )}
+            </DeferredPanel>
+          )}
+
+          {/* Image Viewer - overlay on top of iframe similar to text editor */}
+          {projectSlug && viewingImagePath && (
+            <DeferredPanel>
+              <ImageViewerPanel
+                projectSlug={projectSlug}
+                version={selectedVersion}
+                filePath={viewingImagePath}
+                onClose={() => setViewingImagePath(null)}
+                onNavigatePrevious={handleNavigatePrevious}
+                onNavigateNext={handleNavigateNext}
+                canNavigatePrevious={canNavigatePrevious}
+                canNavigateNext={canNavigateNext}
+                onAiEdit={
+                  canUseAiImages && currentAsset
+                    ? () => setEditingAsset(currentAsset)
+                    : undefined
+                }
+                onDelete={
+                  currentAsset
+                    ? () => setPendingDeleteAsset(currentAsset)
+                    : undefined
+                }
+              />
+            </DeferredPanel>
+          )}
+
+          {/* PDF Viewer - overlay on top of iframe similar to text editor */}
+          {projectSlug && viewingPdfPath && (
+            <DeferredPanel>
+              <PdfViewerPanel
+                projectSlug={projectSlug}
+                version={selectedVersion}
+                filePath={viewingPdfPath}
+                onClose={() => setViewingPdfPath(null)}
+                onDelete={() =>
+                  setPendingDeleteAsset({
+                    type: "file",
+                    name: viewingPdfPath.split("/").pop() || viewingPdfPath,
+                    path: viewingPdfPath,
+                  })
+                }
+              />
+            </DeferredPanel>
+          )}
           </div>
-        )}
-
-        <UnsavedChangesBar />
-
-        {/* Text Editor - overlay on top of iframe to preserve iframe state */}
-        {projectSlug && editingTextFile && (
-          <DeferredPanel>
-            <TextEditorPanel
-              projectSlug={projectSlug}
-              version={selectedVersion}
-              filePath={editingTextFile}
-              onClose={() => setEditingTextFile(null)}
-            />
-          </DeferredPanel>
-        )}
-
-        {/* Image Viewer - overlay on top of iframe similar to text editor */}
-        {projectSlug && viewingImagePath && (
-          <DeferredPanel>
-            <ImageViewerPanel
-              projectSlug={projectSlug}
-              version={selectedVersion}
-              filePath={viewingImagePath}
-              onClose={() => setViewingImagePath(null)}
-              onNavigatePrevious={handleNavigatePrevious}
-              onNavigateNext={handleNavigateNext}
-              canNavigatePrevious={canNavigatePrevious}
-              canNavigateNext={canNavigateNext}
-              onAiEdit={
-                canUseAiImages && currentAsset
-                  ? () => setEditingAsset(currentAsset)
-                  : undefined
-              }
-              onDelete={
-                currentAsset
-                  ? () => setPendingDeleteAsset(currentAsset)
-                  : undefined
-              }
-            />
-          </DeferredPanel>
-        )}
-
-        {/* PDF Viewer - overlay on top of iframe similar to text editor */}
-        {projectSlug && viewingPdfPath && (
-          <DeferredPanel>
-            <PdfViewerPanel
-              projectSlug={projectSlug}
-              version={selectedVersion}
-              filePath={viewingPdfPath}
-              onClose={() => setViewingPdfPath(null)}
-              onDelete={() =>
-                setPendingDeleteAsset({
-                  type: "file",
-                  name: viewingPdfPath.split("/").pop() || viewingPdfPath,
-                  path: viewingPdfPath,
-                })
-              }
-            />
-          </DeferredPanel>
-        )}
+        </div>
       </div>
 
       {/* Shared Dialogs */}
@@ -605,8 +635,6 @@ export function PreviewContent() {
         </>
       )}
 
-      {assetPanelSide === "right" ? assetPanelContent : null}
-      {chatPanelSide === "right" ? chatPanelContent : null}
     </div>
   );
 

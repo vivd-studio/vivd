@@ -32,6 +32,7 @@ import {
   Rocket,
   RefreshCw,
   Smartphone,
+  TabletSmartphone,
   Sun,
   Trash2,
 } from "lucide-react";
@@ -47,13 +48,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { DEVICE_PRESETS } from "../../types";
-import type { DevicePreset } from "../../types";
-import type { PanelLayoutMode } from "../../PreviewContext";
+import type { DevicePreset, ViewportMode } from "../../types";
+import {
+  buildProjectStudioPath,
+  getHostAppOrigin,
+  openEmbeddedStudioPath,
+} from "../hostNavigation";
 
 interface MobileActionsMenuProps {
   // View state
-  mobileView: boolean;
-  setMobileView: (value: boolean) => void;
+  viewportMode: ViewportMode;
+  setViewportMode: (mode: ViewportMode) => void;
   selectedDevice: DevicePreset;
   setSelectedDevice: (device: DevicePreset) => void;
 
@@ -64,14 +69,18 @@ interface MobileActionsMenuProps {
   fullUrl: string;
   copied: boolean;
   publicPreviewEnabled: boolean;
+  currentPreviewPath: string;
+  navigatePreviewPath: (path: string) => void;
 
   // Edit state
   assetsOpen: boolean;
   setAssetsOpen: (value: boolean) => void;
+  pluginsOpen: boolean;
+  setPluginsOpen: (value: boolean) => void;
   chatOpen: boolean;
   setChatOpen: (value: boolean) => void;
-  panelLayoutMode: PanelLayoutMode;
-  setPanelLayoutMode: (mode: PanelLayoutMode) => void;
+  sessionHistoryOpen: boolean;
+  setSessionHistoryOpen: (value: boolean) => void;
   editMode: boolean;
   hasUnsavedChanges: boolean;
   toggleEditMode: () => void;
@@ -123,8 +132,8 @@ interface MobileActionsMenuProps {
 }
 
 export function MobileActionsMenu({
-  mobileView,
-  setMobileView,
+  viewportMode,
+  setViewportMode,
   selectedDevice,
   setSelectedDevice,
   projectSlug,
@@ -133,12 +142,16 @@ export function MobileActionsMenu({
   fullUrl,
   copied,
   publicPreviewEnabled,
+  currentPreviewPath,
+  navigatePreviewPath,
   assetsOpen,
   setAssetsOpen,
+  pluginsOpen,
+  setPluginsOpen,
   chatOpen,
   setChatOpen,
-  panelLayoutMode,
-  setPanelLayoutMode,
+  sessionHistoryOpen,
+  setSessionHistoryOpen,
   editMode,
   hasUnsavedChanges,
   toggleEditMode,
@@ -170,37 +183,6 @@ export function MobileActionsMenu({
 }: MobileActionsMenuProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
-  const getHostAppOrigin = () => {
-    const params = new URLSearchParams(window.location.search);
-
-    const hostOrigin = params.get("hostOrigin");
-    if (hostOrigin) {
-      try {
-        return new URL(hostOrigin).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    const returnTo = params.get("returnTo");
-    if (returnTo) {
-      try {
-        return new URL(returnTo).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    if (document.referrer) {
-      try {
-        return new URL(document.referrer).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    return window.location.origin;
-  };
 
   const handleDownloadZip = () => {
     if (!projectSlug) return;
@@ -211,32 +193,15 @@ export function MobileActionsMenu({
 
   const handleOpenPlugins = () => {
     if (!projectSlug) return;
-    const pluginsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/plugins`;
-    if (embedded) {
-      window.parent?.postMessage(
-        { type: "vivd:studio:navigate", path: pluginsPath },
-        "*",
-      );
-      return;
-    }
-    const origin = getHostAppOrigin();
-    const url = new URL(pluginsPath, origin).toString();
-    window.open(url, "_blank", "noopener,noreferrer");
+    setPluginsOpen(!pluginsOpen);
   };
 
   const handleOpenAnalytics = () => {
     if (!projectSlug) return;
-    const analyticsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/analytics`;
-    if (embedded) {
-      window.parent?.postMessage(
-        { type: "vivd:studio:navigate", path: analyticsPath },
-        "*",
-      );
-      return;
-    }
-    const origin = getHostAppOrigin();
-    const url = new URL(analyticsPath, origin).toString();
-    window.open(url, "_blank", "noopener,noreferrer");
+    openEmbeddedStudioPath(
+      buildProjectStudioPath(projectSlug, "analytics"),
+      embedded,
+    );
   };
 
   return (
@@ -250,18 +215,23 @@ export function MobileActionsMenu({
       <DropdownMenuContent align="end" className="w-56">
         {/* View Controls Group */}
         <DropdownMenuLabel>View</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => setMobileView(false)}>
+        <DropdownMenuItem onClick={() => setViewportMode("desktop")}>
           <Monitor className="w-4 h-4 mr-2" />
           Desktop View
-          {!mobileView && <Check className="w-4 h-4 ml-auto" />}
+          {viewportMode === "desktop" && <Check className="w-4 h-4 ml-auto" />}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setMobileView(true)}>
+        <DropdownMenuItem onClick={() => setViewportMode("tablet")}>
+          <TabletSmartphone className="w-4 h-4 mr-2" />
+          Tablet View
+          {viewportMode === "tablet" && <Check className="w-4 h-4 ml-auto" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setViewportMode("mobile")}>
           <Smartphone className="w-4 h-4 mr-2" />
           Mobile View
-          {mobileView && <Check className="w-4 h-4 ml-auto" />}
+          {viewportMode === "mobile" && <Check className="w-4 h-4 ml-auto" />}
         </DropdownMenuItem>
 
-        {mobileView && (
+        {viewportMode === "mobile" && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <Smartphone className="w-4 h-4 mr-2" />
@@ -292,6 +262,11 @@ export function MobileActionsMenu({
           </DropdownMenuSub>
         )}
 
+        <DropdownMenuItem onClick={() => navigatePreviewPath(currentPreviewPath)}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh current route
+        </DropdownMenuItem>
+
         <DropdownMenuSeparator />
 
         {/* Panels Group */}
@@ -303,27 +278,35 @@ export function MobileActionsMenu({
               {assetsOpen ? "Hide Assets" : "Show Assets"}
             </DropdownMenuItem>
             {canUseAgent && (
-              <DropdownMenuItem onClick={() => setChatOpen(!chatOpen)}>
+              <DropdownMenuItem
+                onClick={() => {
+                  if (chatOpen && !sessionHistoryOpen) {
+                    setChatOpen(false);
+                    return;
+                  }
+                  setChatOpen(true);
+                  setSessionHistoryOpen(false);
+                }}
+              >
                 <MessageSquare className="w-4 h-4 mr-2" />
-                {chatOpen ? "Hide Agent" : "Show Agent"}
+                {chatOpen && !sessionHistoryOpen ? "Hide Agent" : "Show Agent"}
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => setPanelLayoutMode("assets-left")}>
-              <Check
-                className={`w-4 h-4 mr-2 ${
-                  panelLayoutMode === "assets-left" ? "opacity-100" : "opacity-0"
-                }`}
-              />
-              Assets left, Agent right
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setPanelLayoutMode("agent-left")}>
-              <Check
-                className={`w-4 h-4 mr-2 ${
-                  panelLayoutMode === "agent-left" ? "opacity-100" : "opacity-0"
-                }`}
-              />
-              Agent left, Assets right
-            </DropdownMenuItem>
+            {canUseAgent ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  if (chatOpen && sessionHistoryOpen) {
+                    setChatOpen(false);
+                    return;
+                  }
+                  setChatOpen(true);
+                  setSessionHistoryOpen(true);
+                }}
+              >
+                <History className="w-4 h-4 mr-2" />
+                {sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               onClick={toggleEditMode}
               disabled={hasUnsavedChanges && !editMode}
@@ -425,7 +408,7 @@ export function MobileActionsMenu({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenPlugins}>
               <Plug className="w-4 h-4 mr-2" />
-              Plugins
+              {pluginsOpen ? "Hide Plugins" : "Plugins"}
             </DropdownMenuItem>
             {analyticsAvailable ? (
               <DropdownMenuItem onClick={handleOpenAnalytics}>

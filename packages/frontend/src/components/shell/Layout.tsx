@@ -29,6 +29,9 @@ export function Layout() {
   const { isPending } = authClient.useSession();
   const location = useLocation();
   const pageInfo = getPageInfo(location.pathname);
+  const isEmbeddedProjectPanel =
+    new URLSearchParams(location.search).get("embedded") === "1" &&
+    (pageInfo.isProjectPluginsPage || pageInfo.isProjectAnalyticsPage);
   const showNewProjectButton =
     pageInfo.title === "Projects" && !pageInfo.isProjectPage;
 
@@ -37,7 +40,7 @@ export function Layout() {
 
   useEffect(() => {
     const mainElement = mainRef.current;
-    if (!mainElement || pageInfo.isProjectPage) return;
+    if (!mainElement || pageInfo.isProjectPage || isEmbeddedProjectPanel) return;
 
     const handleScroll = () => {
       setIsScrolled(mainElement.scrollTop > 0);
@@ -48,12 +51,12 @@ export function Layout() {
     handleScroll();
 
     return () => mainElement.removeEventListener("scroll", handleScroll);
-  }, [pageInfo.isProjectPage]);
+  }, [isEmbeddedProjectPanel, pageInfo.isProjectPage]);
 
   // Reset scroll state when navigating
   useEffect(() => {
     setIsScrolled(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   if (isPending)
     return <CenteredLoading fullScreen />;
@@ -61,10 +64,10 @@ export function Layout() {
   return (
     <SidebarProvider>
       <NavigationSearchProvider>
-        <AppSidebar />
+        {!isEmbeddedProjectPanel ? <AppSidebar /> : null}
         <div className="flex flex-1 flex-col min-h-0 h-svh overflow-hidden">
           {/* For project pages, EmbeddedStudioToolbar handles the header */}
-          {!pageInfo.isProjectPage && (
+          {!pageInfo.isProjectPage && !isEmbeddedProjectPanel && (
             <header
               className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 px-4 bg-background border-b transition-[border-color] duration-150"
               style={{ borderColor: isScrolled ? 'hsl(var(--border))' : 'transparent' }}
@@ -136,7 +139,13 @@ export function Layout() {
           )}
           <main
             ref={mainRef}
-            className={`flex-1 min-h-0 overflow-auto ${pageInfo.isProjectPage ? "overflow-hidden" : "px-6 py-4"}`}
+            className={`flex-1 min-h-0 ${
+              pageInfo.isProjectPage
+                ? "overflow-hidden"
+                : isEmbeddedProjectPanel
+                  ? "overflow-auto"
+                  : "overflow-auto px-6 py-4"
+            }`}
           >
             <Outlet />
           </main>

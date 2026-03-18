@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { BarChart3, RefreshCw } from "lucide-react";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
@@ -125,8 +125,13 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 
 export default function ProjectAnalytics() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
+  const location = useLocation();
   const slug = projectSlug || "";
   const [rangeDays, setRangeDays] = useState<AnalyticsRange>(30);
+  const isEmbedded = useMemo(
+    () => new URLSearchParams(location.search).get("embedded") === "1",
+    [location.search],
+  );
 
   const analyticsInfoQuery = trpc.plugins.analyticsInfo.useQuery(
     { slug },
@@ -210,11 +215,14 @@ export default function ProjectAnalytics() {
     <SettingsPageShell
       title="Analytics"
       description={`Business analytics dashboard for ${projectSlug}.`}
+      className={isEmbedded ? "mx-auto w-full max-w-6xl px-4 py-4 sm:px-6" : undefined}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link to={ROUTES.PROJECT(projectSlug)}>Back to project</Link>
-          </Button>
+          {!isEmbedded ? (
+            <Button variant="outline" asChild>
+              <Link to={ROUTES.PROJECT(projectSlug)}>Back to project</Link>
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             onClick={handleRefresh}

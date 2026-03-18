@@ -15,6 +15,7 @@ export default defineConfig({
         "Public product documentation for creating, editing, publishing, and operating websites in Vivd.",
       favicon: "/docs-brand-mark.svg",
       customCss: ["./src/styles/custom.css"],
+      expressiveCode: false,
       components: {
         SiteTitle: "./src/components/SiteTitle.astro",
       },

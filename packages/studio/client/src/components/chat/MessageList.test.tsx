@@ -1,0 +1,402 @@
+import "@testing-library/jest-dom/vitest";
+import { render, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MessageList } from "./MessageList";
+
+const timelineState = vi.hoisted(() => ({
+  items: [
+    {
+      key: "user-1",
+      kind: "user",
+      message: {
+        id: "user-1",
+        content: "First prompt",
+        createdAt: Date.UTC(2026, 2, 18, 10, 59),
+      },
+    },
+  ] as any[],
+}));
+
+const opencodeState = vi.hoisted(() => ({
+  selectedMessages: [{ info: { id: "user-1" }, parts: [] }] as any[],
+}));
+
+const chatState = vi.hoisted(() => ({
+  selectedSessionId: "session-1",
+  isThinking: false,
+  isWaiting: false,
+  isLoading: false,
+  isSessionHydrating: false,
+  handleRevert: vi.fn(),
+  handleUnrevert: vi.fn(),
+  isReverted: false,
+  setInput: vi.fn(),
+  handleContinueSession: vi.fn(),
+  activeQuestionRequest: null,
+  sessionError: null,
+  clearSessionError: vi.fn(),
+  sessionDebugState: {
+    sessionStatus: { type: "done" },
+  },
+  usageLimitStatus: null,
+  isUsageBlocked: false,
+  initialGenerationRequested: false,
+  initialGenerationStarting: false,
+  initialGenerationFailed: null,
+  retryInitialGeneration: vi.fn(),
+}));
+
+const scrollToMock = vi.fn();
+const anchorTopById = vi.hoisted(() => ({
+  "user-1": 120,
+  "user-2": 280,
+} as Record<string, number>));
+const resizeObserverCallbacks = vi.hoisted(() => [] as ResizeObserverCallback[]);
+
+vi.mock("@/features/opencodeChat", () => ({
+  useOpencodeChat: () => ({
+    selectedMessages: opencodeState.selectedMessages,
+    sessionStatus: { type: "done" },
+  }),
+}));
+
+vi.mock("@/features/opencodeChat/render/timeline", () => ({
+  buildCanonicalTimelineModel: () => ({ items: timelineState.items }),
+  shouldSuggestInterruptedContinueFromRecords: () => false,
+}));
+
+vi.mock("./ChatContext", () => ({
+  useChatContext: () => chatState,
+}));
+
+describe("MessageList latest-user anchoring", () => {
+  beforeEach(() => {
+    scrollToMock.mockReset();
+    timelineState.items = [
+      {
+        key: "user-1",
+        kind: "user",
+        message: {
+          id: "user-1",
+          content: "First prompt",
+          createdAt: Date.UTC(2026, 2, 18, 10, 59),
+        },
+      },
+    ];
+    opencodeState.selectedMessages = [{ info: { id: "user-1" }, parts: [] }];
+    chatState.isSessionHydrating = false;
+    anchorTopById["user-1"] = 120;
+    anchorTopById["user-2"] = 280;
+    resizeObserverCallbacks.length = 0;
+
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+    });
+
+    Object.defineProperty(window, "cancelAnimationFrame", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: class {
+        private callback: ResizeObserverCallback;
+        constructor(callback: ResizeObserverCallback) {
+          this.callback = callback;
+          resizeObserverCallbacks.push(callback);
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: function ({
+        top,
+        behavior,
+      }: {
+        top: number;
+        behavior: ScrollBehavior;
+      }) {
+        (this as HTMLElement).scrollTop = top;
+        scrollToMock({ top, behavior });
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: function ({
+        behavior,
+      }: {
+        behavior?: ScrollBehavior;
+      } = {}) {
+        const element = this as HTMLElement;
+        const viewport =
+          element.closest<HTMLElement>("[data-radix-scroll-area-viewport]") ??
+          document.querySelector<HTMLElement>(
+            "[data-radix-scroll-area-viewport]",
+          );
+
+        const targetId =
+          element.dataset.chatUserAnchorId ??
+          element.getAttribute("data-chat-user-anchor-id");
+        const scrollMarginTop = Number.parseFloat(
+          (element as HTMLElement).style.scrollMarginTop || "0",
+        );
+        const top = targetId
+          ? Math.max(0, (anchorTopById[targetId] ?? 0) - scrollMarginTop)
+          : 0;
+
+        if (viewport) {
+          viewport.scrollTop = top;
+        }
+
+        scrollToMock({
+          top,
+          behavior: behavior ?? "auto",
+        });
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "offsetTop", {
+      configurable: true,
+      get() {
+        const element = this as HTMLElement;
+        if (element.dataset.chatUserAnchorId) {
+          return anchorTopById[element.dataset.chatUserAnchorId] ?? 0;
+        }
+        return 0;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get() {
+        const element = this as HTMLElement;
+        if (element.getAttribute("data-radix-scroll-area-viewport") !== null) {
+          return 400;
+        }
+        return 0;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        const element = this as HTMLElement;
+        if (element.getAttribute("data-radix-scroll-area-viewport") !== null) {
+          const activeTurnBody = element.querySelector<HTMLElement>(
+            "[data-chat-active-turn-body]",
+          );
+          const activeMessageId = activeTurnBody?.dataset.chatActiveTurnBody;
+          const anchorNode = activeMessageId
+            ? element.querySelector<HTMLElement>(
+                `[data-chat-user-anchor-id='${activeMessageId}']`,
+              )
+            : null;
+          const scrollMarginTop = Number.parseFloat(
+            anchorNode?.style.scrollMarginTop || "0",
+          );
+
+          if (activeMessageId) {
+            return (
+              400 +
+              Math.max(0, (anchorTopById[activeMessageId] ?? 0) - scrollMarginTop)
+            );
+          }
+
+          return 520;
+        }
+        return 0;
+      },
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "getBoundingClientRect", {
+      configurable: true,
+      value: function () {
+        const element = this as HTMLElement;
+        const viewport =
+          element.closest<HTMLElement>("[data-radix-scroll-area-viewport]") ??
+          document.querySelector<HTMLElement>(
+            "[data-radix-scroll-area-viewport]",
+          );
+        const viewportTop = 20;
+        const currentScrollTop = viewport?.scrollTop ?? 0;
+
+        if (
+          element.dataset.chatUserAnchorId ||
+          element.dataset.chatUserMessageId
+        ) {
+          const messageId =
+            element.dataset.chatUserAnchorId ?? element.dataset.chatUserMessageId;
+          const top = anchorTopById[messageId ?? ""] ?? 0;
+          return {
+            top: viewportTop + top - currentScrollTop,
+            left: 0,
+            bottom: viewportTop + top + 40 - currentScrollTop,
+            right: 240,
+            width: 240,
+            height: 40,
+            x: 0,
+            y: viewportTop + top - currentScrollTop,
+            toJSON() {
+              return {};
+            },
+          };
+        }
+        if (element.dataset.chatUserRowId) {
+          const top = anchorTopById[element.dataset.chatUserRowId] ?? 0;
+          return {
+            top: viewportTop + top - 24 - currentScrollTop,
+            left: 0,
+            bottom: viewportTop + top + 52 - currentScrollTop,
+            right: 260,
+            width: 260,
+            height: 76,
+            x: 0,
+            y: viewportTop + top - 24 - currentScrollTop,
+            toJSON() {
+              return {};
+            },
+          };
+        }
+        if (element.getAttribute("data-radix-scroll-area-viewport") !== null) {
+          return {
+            top: 20,
+            left: 0,
+            bottom: 420,
+            right: 320,
+            width: 320,
+            height: 400,
+            x: 0,
+            y: 20,
+            toJSON() {
+              return {};
+            },
+          };
+        }
+
+        return {
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON() {
+            return {};
+          },
+        };
+      },
+    });
+  });
+
+  it("anchors the latest user message to the top on session load", async () => {
+    render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({
+        top: 80,
+        behavior: "auto",
+      });
+    });
+
+    const activeTurnBody = document.querySelector<HTMLElement>(
+      "[data-chat-active-turn-body='user-1']",
+    );
+    expect(activeTurnBody?.style.minHeight).toBe("220px");
+  });
+
+  it("does not re-anchor on follow-up renders until a new latest user message appears", async () => {
+    const { rerender } = render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    opencodeState.selectedMessages = [
+      { info: { id: "user-1" }, parts: [] },
+      { info: { id: "agent-1" }, parts: [] },
+    ];
+    rerender(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    timelineState.items = [
+      ...timelineState.items,
+      {
+        key: "user-2",
+        kind: "user",
+        message: {
+          id: "user-2",
+          content: "Second prompt",
+          createdAt: Date.UTC(2026, 2, 18, 11, 5),
+        },
+      },
+    ];
+    opencodeState.selectedMessages = [
+      ...opencodeState.selectedMessages,
+      { info: { id: "user-2" }, parts: [] },
+    ];
+    rerender(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(2);
+      expect(scrollToMock).toHaveBeenLastCalledWith({
+        top: 240,
+        behavior: "smooth",
+      });
+    });
+
+    const activeTurnBody = document.querySelector<HTMLElement>(
+      "[data-chat-active-turn-body='user-2']",
+    );
+    expect(activeTurnBody?.style.minHeight).toBe("220px");
+  });
+
+  it("does not issue another scroll while the active turn layout updates", async () => {
+    const { rerender } = render(<MessageList />);
+
+    timelineState.items = [
+      ...timelineState.items,
+      {
+        key: "user-2",
+        kind: "user",
+        message: {
+          id: "user-2",
+          content: "Second prompt",
+          createdAt: Date.UTC(2026, 2, 18, 11, 5),
+        },
+      },
+    ];
+    opencodeState.selectedMessages = [
+      ...opencodeState.selectedMessages,
+      { info: { id: "user-2" }, parts: [] },
+    ];
+    rerender(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenLastCalledWith({
+        top: 240,
+        behavior: "smooth",
+      });
+    });
+
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(2);
+    });
+  });
+});

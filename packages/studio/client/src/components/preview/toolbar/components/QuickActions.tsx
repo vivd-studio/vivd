@@ -24,7 +24,6 @@ import {
   Loader2,
   MoreHorizontal,
   Plug,
-  RefreshCw,
   Rocket,
   RotateCcw,
   Trash2,
@@ -40,7 +39,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
-import type { PanelLayoutMode } from "../../PreviewContext";
+import {
+  buildProjectStudioPath,
+  getHostAppOrigin,
+  openEmbeddedStudioPath,
+} from "../hostNavigation";
 
 interface QuickActionsProps {
   projectSlug: string | undefined;
@@ -51,15 +54,10 @@ interface QuickActionsProps {
   copied: boolean;
   publicPreviewEnabled: boolean;
   handleCopy: () => void;
-  handleRefresh: () => void;
   handleRestartDevServer?: (options?: { clean?: boolean }) => void;
   isRestartingDevServer?: boolean;
   devServerRestartKind?: "restart" | "clean" | null;
-  panelLayoutMode: PanelLayoutMode;
-  setPanelLayoutMode: (mode: PanelLayoutMode) => void;
-  historyPanelOpen: boolean;
   setHistoryPanelOpen: (value: boolean) => void;
-  publishDialogOpen: boolean;
   setPublishDialogOpen: (value: boolean) => void;
   hasGitChanges: boolean;
   isPublished: boolean;
@@ -72,6 +70,8 @@ interface QuickActionsProps {
   gradientId?: string;
   embedded?: boolean;
   onHardRestart?: () => void;
+  pluginsOpen: boolean;
+  setPluginsOpen: (value: boolean) => void;
 
   // Connected-mode actions
   isConnectedMode?: boolean;
@@ -92,13 +92,9 @@ export function QuickActions({
   copied,
   publicPreviewEnabled,
   handleCopy,
-  handleRefresh,
   handleRestartDevServer,
   isRestartingDevServer,
   devServerRestartKind,
-  panelLayoutMode,
-  setPanelLayoutMode,
-  historyPanelOpen,
   setHistoryPanelOpen,
   setPublishDialogOpen,
   hasGitChanges,
@@ -108,6 +104,8 @@ export function QuickActions({
   gradientId = "favicon-gradient",
   embedded,
   onHardRestart,
+  pluginsOpen,
+  setPluginsOpen,
   isConnectedMode,
   handleTogglePreviewUrl,
   isTogglingPreviewUrl,
@@ -118,46 +116,6 @@ export function QuickActions({
 }: QuickActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
-  const getHostAppOrigin = () => {
-    const params = new URLSearchParams(window.location.search);
-
-    const hostOrigin = params.get("hostOrigin");
-    if (hostOrigin) {
-      try {
-        return new URL(hostOrigin).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    const returnTo = params.get("returnTo");
-    if (returnTo) {
-      try {
-        return new URL(returnTo).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    if (document.referrer) {
-      try {
-        return new URL(document.referrer).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    return window.location.origin;
-  };
-
-  const openHostPath = (path: string) => {
-    const origin = getHostAppOrigin();
-    const url = new URL(path, origin).toString();
-    const nextWindow = window.open(url, "_blank", "noopener,noreferrer");
-    if (!nextWindow) {
-      window.location.assign(url);
-    }
-  };
 
   const handleDownloadZip = () => {
     if (!projectSlug) return;
@@ -168,64 +126,19 @@ export function QuickActions({
 
   const handleOpenPlugins = () => {
     if (!projectSlug) return;
-    const pluginsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/plugins`;
-    if (embedded) {
-      window.parent?.postMessage(
-        { type: "vivd:studio:navigate", path: pluginsPath },
-        "*",
-      );
-      return;
-    }
-    openHostPath(pluginsPath);
+    setPluginsOpen(!pluginsOpen);
   };
 
   const handleOpenAnalytics = () => {
     if (!projectSlug) return;
-    const analyticsPath = `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/analytics`;
-    if (embedded) {
-      window.parent?.postMessage(
-        { type: "vivd:studio:navigate", path: analyticsPath },
-        "*",
-      );
-      return;
-    }
-    openHostPath(analyticsPath);
+    openEmbeddedStudioPath(
+      buildProjectStudioPath(projectSlug, "analytics"),
+      embedded,
+    );
   };
 
   return (
     <>
-      {/* Refresh button */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            className="hidden sm:flex h-8 w-8 p-0"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Refresh Preview</TooltipContent>
-      </Tooltip>
-
-      {/* Plugins button */}
-      {projectSlug && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenPlugins}
-              className="hidden sm:flex h-8 w-8 p-0"
-            >
-              <Plug className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Plugins</TooltipContent>
-        </Tooltip>
-      )}
-
       {/* Analytics button */}
       {projectSlug && analyticsAvailable && (
         <Tooltip>
@@ -243,30 +156,6 @@ export function QuickActions({
         </Tooltip>
       )}
 
-      {/* History/Snapshots button */}
-      {projectSlug && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={historyPanelOpen ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setHistoryPanelOpen(true)}
-              className="hidden sm:flex h-8 w-8 p-0 relative"
-            >
-              <History className="w-4 h-4" />
-              {hasGitChanges && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-amber-500 rounded-full" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {hasGitChanges
-              ? "Snapshots (pending changes)"
-              : "Snapshots & History"}
-          </TooltipContent>
-        </Tooltip>
-      )}
-
       {/* Publish Button */}
       {projectSlug && (
         <Tooltip>
@@ -275,7 +164,7 @@ export function QuickActions({
               variant="ghost"
               size="sm"
               onClick={() => setPublishDialogOpen(true)}
-              className="hidden sm:flex h-8 w-8 p-0"
+              className="hidden h-8 items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground hover:text-foreground sm:inline-flex"
             >
               <Rocket
                 className="w-4 h-4"
@@ -283,6 +172,7 @@ export function QuickActions({
                   stroke: `url(#${gradientId})`,
                 }}
               />
+              <span>Publish</span>
               <svg width="0" height="0" className="absolute">
                 <defs>
                   <linearGradient
@@ -343,29 +233,6 @@ export function QuickActions({
           </DropdownMenuItem>
           {projectSlug && (
             <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setPanelLayoutMode("assets-left")}
-              >
-                <Check
-                  className={`w-4 h-4 mr-2 ${
-                    panelLayoutMode === "assets-left" ? "opacity-100" : "opacity-0"
-                  }`}
-                />
-                Assets left, Agent right
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setPanelLayoutMode("agent-left")}>
-                <Check
-                  className={`w-4 h-4 mr-2 ${
-                    panelLayoutMode === "agent-left" ? "opacity-100" : "opacity-0"
-                  }`}
-                />
-                Agent left, Assets right
-              </DropdownMenuItem>
-            </>
-          )}
-          {projectSlug && (
-            <>
               <DropdownMenuItem onClick={handleDownloadZip}>
                 <Download className="w-4 h-4 mr-2" />
                 Download as ZIP
@@ -380,7 +247,7 @@ export function QuickActions({
               )}
               <DropdownMenuItem onClick={handleOpenPlugins}>
                 <Plug className="w-4 h-4 mr-2" />
-                Plugins
+                {pluginsOpen ? "Hide Plugins" : "Plugins"}
               </DropdownMenuItem>
               {analyticsAvailable ? (
                 <DropdownMenuItem onClick={handleOpenAnalytics}>
@@ -388,6 +255,13 @@ export function QuickActions({
                   Analytics
                 </DropdownMenuItem>
               ) : null}
+              <DropdownMenuItem onClick={() => setHistoryPanelOpen(true)}>
+                <History className="w-4 h-4 mr-2" />
+                Snapshots & History
+                {hasGitChanges ? (
+                  <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" />
+                ) : null}
+              </DropdownMenuItem>
             </>
           )}
           {previewMode === "devserver" && projectSlug && handleRestartDevServer && (
