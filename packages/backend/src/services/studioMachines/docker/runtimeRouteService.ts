@@ -42,7 +42,9 @@ export class DockerRuntimeRouteService {
 @${matcher} path ${routePath} ${routePath}/*
 handle @${matcher} {
     uri strip_prefix ${routePath}
-    reverse_proxy ${options.containerName}:${options.targetPort}
+    reverse_proxy ${options.containerName}:${options.targetPort} {
+        header_up X-Forwarded-Prefix ${routePath}
+    }
 }
 `;
 

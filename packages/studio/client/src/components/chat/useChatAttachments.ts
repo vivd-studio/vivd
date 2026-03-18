@@ -1,5 +1,9 @@
 import { useCallback, useState } from "react";
-import { getVivdStudioToken, VIVD_STUDIO_TOKEN_HEADER } from "@/lib/studioAuth";
+import {
+  getVivdStudioToken,
+  resolveStudioRuntimePath,
+  VIVD_STUDIO_TOKEN_HEADER,
+} from "@/lib/studioAuth";
 import { formatMessageWithSelector } from "./SelectedElementPill";
 import type { AttachedElement, AttachedFile, AttachedImage } from "./chatTypes";
 
@@ -75,7 +79,9 @@ export function useChatAttachments({
             }
 
             const response = await fetch(
-              `/vivd-studio/api/upload-dropped-file/${projectSlug}/${version}`,
+              resolveStudioRuntimePath(
+                `/vivd-studio/api/upload-dropped-file/${projectSlug}/${version}`,
+              ),
               {
                 method: "POST",
                 body: formData,

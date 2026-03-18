@@ -1,5 +1,7 @@
 @import "@vivd/theme/theme.css";
-:root {
+
+:root,
+:root[data-theme="dark"] {
   --sl-color-accent-low: #eaf6ed;
   --sl-color-accent: #1f7a4d;
   --sl-color-accent-high: #12472d;
@@ -11,12 +13,33 @@
   --sl-color-gray-5: #3c382d;
   --sl-color-gray-6: #28251f;
   --sl-color-black: #12120f;
+  --sl-color-bg-nav: #11130f;
   --sl-font: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   --sl-font-mono: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
 }
 
+:root[data-theme="light"] {
+  --sl-color-accent-low: #eaf6ed;
+  --sl-color-accent: #1f7a4d;
+  --sl-color-accent-high: #12472d;
+  --sl-color-white: #1a1813;
+  --sl-color-gray-1: #28251f;
+  --sl-color-gray-2: #3c382d;
+  --sl-color-gray-3: #6f6857;
+  --sl-color-gray-4: #938c7a;
+  --sl-color-gray-5: #cfc7b5;
+  --sl-color-gray-6: #ebe7db;
+  --sl-color-gray-7: #f5f1e6;
+  --sl-color-black: #f8f6ef;
+  --sl-color-bg-nav: #faf8f1;
+}
+
 html {
   scroll-behavior: smooth;
+}
+
+:root {
+  --sl-content-width: 58rem;
 }
 
 body {
@@ -31,6 +54,51 @@ body {
     radial-gradient(circle at top right, rgba(74, 214, 134, 0.15), transparent 28rem),
     radial-gradient(circle at bottom left, rgba(200, 162, 57, 0.12), transparent 24rem),
     linear-gradient(180deg, #11130f 0%, #181a15 100%);
+}
+
+header.header {
+  border-bottom-color: color-mix(in srgb, var(--sl-color-gray-5) 28%, transparent);
+  background-color: var(--sl-color-bg-nav);
+}
+
+.hero {
+  margin-bottom: 1.5rem;
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+  border: 1px solid color-mix(in srgb, var(--sl-color-accent) 16%, var(--sl-color-gray-5));
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at top left, rgba(31, 122, 77, 0.1), transparent 20rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(245, 241, 230, 0.92));
+  box-shadow: 0 18px 50px rgba(18, 18, 15, 0.08);
+}
+
+[data-theme="dark"] .hero {
+  background:
+    radial-gradient(circle at top left, rgba(74, 214, 134, 0.14), transparent 18rem),
+    linear-gradient(135deg, rgba(24, 26, 21, 0.92), rgba(18, 18, 15, 0.94));
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+}
+
+.hero .tagline {
+  max-width: 44rem;
+}
+
+.sl-link-card,
+.card {
+  border-radius: 1rem;
+  box-shadow: 0 12px 28px rgba(18, 18, 15, 0.06);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.sl-link-card:hover,
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(18, 18, 15, 0.1);
+  border-color: color-mix(in srgb, var(--sl-color-accent) 28%, var(--sl-color-gray-4));
 }
 
 .hero img,
@@ -120,7 +188,7 @@ body {
 
 .button-secondary {
   background: rgba(255, 255, 255, 0.8);
-  color: var(--sl-color-black);
+  color: var(--sl-color-white);
   border: 1px solid color-mix(in srgb, var(--sl-color-accent) 24%, var(--sl-color-gray-2));
 }
 
@@ -146,4 +214,8 @@ body {
 
 .sl-markdown-content :is(h2, h3) {
   scroll-margin-top: 5rem;
+}
+
+.sl-markdown-content :is(h2, h3) + p {
+  max-width: 46rem;
 }

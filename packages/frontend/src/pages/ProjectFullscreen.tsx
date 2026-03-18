@@ -30,6 +30,7 @@ import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
 import {
@@ -356,6 +357,22 @@ export default function ProjectFullscreen() {
     );
   };
 
+  const markStudioReady = useCallback(() => {
+    setStudioReady(true);
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+  }, []);
+
+  const handleStudioIframeLoad = useCallback(() => {
+    syncThemeToStudio();
+
+    if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
+      return;
+    }
+
+    markStudioReady();
+  }, [markStudioReady, syncThemeToStudio]);
+
   useEffect(() => {
     syncThemeToStudio();
   }, [theme, colorTheme]);
@@ -366,7 +383,7 @@ export default function ProjectFullscreen() {
       if (!studioWindow || event.source !== studioWindow) return;
       const type = event.data?.type;
       if (type === "vivd:studio:ready") {
-        setStudioReady(true);
+        markStudioReady();
         syncThemeToStudio();
         return;
       }
@@ -386,7 +403,7 @@ export default function ProjectFullscreen() {
         }
       }
       if (type === "vivd:studio:theme") {
-        setStudioReady(true);
+        markStudioReady();
         const nextTheme = event.data?.theme;
         const nextColorTheme = event.data?.colorTheme;
         if (isTheme(nextTheme)) setTheme(nextTheme);
@@ -404,7 +421,7 @@ export default function ProjectFullscreen() {
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, projectSlug, setColorTheme, setTheme, version]);
+  }, [markStudioReady, navigate, projectSlug, setColorTheme, setTheme, version]);
 
   const studioIframeSrc = useMemo(() => {
     if (!studioBaseUrl) return null;
@@ -761,7 +778,7 @@ export default function ProjectFullscreen() {
           <div className="relative h-full w-full">
             <iframe
               ref={studioIframeRef}
-              onLoad={syncThemeToStudio}
+              onLoad={handleStudioIframeLoad}
               onError={() => setStudioLoadErrored(true)}
               key={`${projectSlug}-${version}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
               src={studioIframeSrc}

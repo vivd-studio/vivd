@@ -443,6 +443,39 @@ export class PublishService {
     };
   }
 
+  async syncGeneratedCaddyConfigs(): Promise<number> {
+    const records = await db.select().from(publishedSite);
+    if (records.length === 0) return 0;
+
+    for (const record of records) {
+      const publishedPath = path.join(
+        PUBLISHED_DIR,
+        record.organizationId,
+        record.projectSlug,
+      );
+
+      let redirectRules: ProjectRedirectRule[] = [];
+      try {
+        redirectRules = this.readRedirectRulesFromDirectory(publishedPath);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[Publish] Failed to reload redirects for ${record.domain} from ${publishedPath}: ${message}`,
+        );
+      }
+
+      await this.generateCaddyConfig(
+        record.domain,
+        record.organizationId,
+        record.projectSlug,
+        redirectRules,
+      );
+    }
+
+    await this.reloadCaddy();
+    return records.length;
+  }
+
   /**
    * Copy directory recursively, excluding git files
    */

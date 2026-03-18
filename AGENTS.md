@@ -13,11 +13,13 @@ When plans change or work is completed, update `docs/PROJECT_STATE.md` in the sa
 Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock.json`).
 
 - `packages/backend`: control-plane backend (Express + tRPC, Better Auth, Drizzle migrations, publish/domain orchestration, studio machine orchestration).
+- `packages/docs`: public product docs site (Astro/Starlight).
 - `packages/frontend`: control-plane React UI.
 - `packages/studio`: isolated studio runtime (server + client) for workspace edits and agent operations.
 - `packages/scraper`: dedicated Express + Puppeteer scraping service.
 - `packages/shared`: shared config/types used across services.
 - `packages/theme`: shared CSS variables/theme tokens.
+- If a change affects user-facing behavior, consider updating `packages/docs` or suggesting the right docs section.
 
 ## Ownership Boundaries (Important)
 

@@ -19,6 +19,7 @@ import { createContactRecipientVerificationRouter } from "./httpRoutes/plugins/c
 import { startContactSubmissionRetentionJob } from "./services/plugins/contactForm/retention";
 import { startContactFormTurnstileSyncJob } from "./services/plugins/contactForm/turnstile";
 import { createProjectRuntimeRouter } from "./httpRoutes/projectRuntime";
+import { publishService } from "./services/publish/PublishService";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -173,6 +174,17 @@ app.listen(PORT, async () => {
     console.log("[DomainService] Domain registry backfill complete");
   } catch (error) {
     console.error("[DomainService] Failed to backfill domain registry:", error);
+  }
+
+  try {
+    const syncedConfigCount = await publishService.syncGeneratedCaddyConfigs();
+    if (syncedConfigCount > 0) {
+      console.log(
+        `[Publish] Regenerated ${syncedConfigCount} Caddy site config${syncedConfigCount === 1 ? "" : "s"} from the current template`,
+      );
+    }
+  } catch (error) {
+    console.error("[Publish] Failed to regenerate Caddy site configs:", error);
   }
 
   console.log(`Server running on port ${PORT}`);

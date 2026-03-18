@@ -1,0 +1,64 @@
+---
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+const [brand, ...rest] = siteTitle.split(" ");
+const section = rest.join(" ");
+---
+
+<a href={siteTitleHref} class="site-title sl-flex" aria-label={siteTitle}>
+  <span class="site-title-badge" aria-hidden="true">
+    <img src="/docs-brand-mark.svg" alt="" />
+  </span>
+  <span class="site-title-text" translate="no">
+    <span class="site-title-brand">{brand}</span>
+    {section && <span class="site-title-section">{section}</span>}
+  </span>
+</a>
+
+<style>
+  .site-title {
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+    color: var(--sl-color-white);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .site-title-badge {
+    display: inline-flex;
+    width: 1.95rem;
+    height: 1.95rem;
+    flex-shrink: 0;
+  }
+
+  .site-title-badge img {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .site-title-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.38rem;
+    min-width: 0;
+  }
+
+  .site-title-brand {
+    overflow: hidden;
+    font-size: 1.08rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    text-overflow: ellipsis;
+  }
+
+  .site-title-section {
+    color: var(--sl-color-gray-4);
+    font-size: 0.94rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  :global([data-theme="dark"]) .site-title-section {
+    color: var(--sl-color-gray-3);
+  }
+  </style>

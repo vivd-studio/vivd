@@ -40,6 +40,7 @@ import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
 import {
@@ -400,6 +401,12 @@ export default function EmbeddedStudio() {
     );
   };
 
+  const markStudioReady = useCallback(() => {
+    setStudioReady(true);
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+  }, []);
+
   const sendInitialGenerationBootstrap = useCallback(() => {
     if (!initialGenerationRequested) return;
 
@@ -428,6 +435,17 @@ export default function EmbeddedStudio() {
     studioVersion,
   ]);
 
+  const handleStudioIframeLoad = useCallback(() => {
+    syncThemeToStudio();
+
+    if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
+      return;
+    }
+
+    markStudioReady();
+    sendInitialGenerationBootstrap();
+  }, [markStudioReady, sendInitialGenerationBootstrap, syncThemeToStudio]);
+
   useEffect(() => {
     syncThemeToStudio();
   }, [theme, colorTheme]);
@@ -438,7 +456,7 @@ export default function EmbeddedStudio() {
       const studioWindow = studioIframeRef.current?.contentWindow;
       if (!studioWindow || event.source !== studioWindow) return;
       if (event.data?.type === "vivd:studio:ready") {
-        setStudioReady(true);
+        markStudioReady();
         syncThemeToStudio();
         sendInitialGenerationBootstrap();
         return;
@@ -460,7 +478,7 @@ export default function EmbeddedStudio() {
         }
       }
       if (event.data?.type === "vivd:studio:theme") {
-        setStudioReady(true);
+        markStudioReady();
         const nextTheme = event.data?.theme;
         const nextColorTheme = event.data?.colorTheme;
 
@@ -484,6 +502,7 @@ export default function EmbeddedStudio() {
   }, [
     navigate,
     initialGenerationRequested,
+    markStudioReady,
     projectSlug,
     sendInitialGenerationBootstrap,
     setColorTheme,
@@ -892,7 +911,7 @@ export default function EmbeddedStudio() {
           <div className="relative h-full w-full">
             <iframe
               ref={studioIframeRef}
-              onLoad={syncThemeToStudio}
+              onLoad={handleStudioIframeLoad}
               onError={() => setStudioLoadErrored(true)}
               key={`${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
               src={studioIframeSrc}

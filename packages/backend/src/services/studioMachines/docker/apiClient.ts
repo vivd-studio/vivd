@@ -6,6 +6,7 @@ import type {
   DockerContainerCreateConfig,
   DockerContainerCreateResponse,
   DockerContainerInfo,
+  DockerNetworkSummary,
   DockerContainerSummary,
 } from "./types";
 
@@ -144,18 +145,58 @@ export class DockerApiClient {
     );
   }
 
+  async listNetworks(): Promise<DockerNetworkSummary[]> {
+    return await this.dockerRequest<DockerNetworkSummary[]>(
+      "GET",
+      "/networks",
+    );
+  }
+
   async createContainer(options: {
     name: string;
     config: DockerContainerCreateConfig;
+    platform?: string;
   }): Promise<DockerContainerCreateResponse> {
     return await this.dockerRequest<DockerContainerCreateResponse>(
       "POST",
       "/containers/create",
       {
-        query: { name: options.name },
+        query: { name: options.name, platform: options.platform },
         body: options.config,
       },
     );
+  }
+
+  async pullImage(
+    imageRef: string,
+    options?: { platform?: string },
+  ): Promise<void> {
+    const trimmed = imageRef.trim();
+    if (!trimmed) {
+      throw new Error("[DockerMachines] Cannot pull an empty image reference");
+    }
+
+    const digestIndex = trimmed.indexOf("@");
+    if (digestIndex >= 0) {
+      await this.dockerRequest<void>("POST", "/images/create", {
+        query: { fromImage: trimmed, platform: options?.platform },
+      });
+      return;
+    }
+
+    const lastSlash = trimmed.lastIndexOf("/");
+    const lastColon = trimmed.lastIndexOf(":");
+    const hasExplicitTag = lastColon > lastSlash;
+    const fromImage = hasExplicitTag ? trimmed.slice(0, lastColon) : trimmed;
+    const tag = hasExplicitTag ? trimmed.slice(lastColon + 1) : undefined;
+
+    await this.dockerRequest<void>("POST", "/images/create", {
+      query: {
+        fromImage,
+        tag,
+        platform: options?.platform,
+      },
+    });
   }
 
   async startContainer(containerId: string): Promise<void> {

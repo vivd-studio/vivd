@@ -20,6 +20,7 @@ import type {
   DockerContainerCreateConfig,
   DockerContainerInfo,
   DockerContainerStateStatus,
+  DockerNetworkSummary,
   DockerContainerSummary,
 } from "./types";
 import { sleep } from "../fly/utils";
@@ -34,6 +35,8 @@ type ContainerReconcileNeeds = {
   image: boolean;
   resources: boolean;
   accessToken: boolean;
+  network: boolean;
+  mainBackendUrl: boolean;
 };
 
 const STUDIO_INTERNAL_PORT = 3100;
@@ -53,13 +56,17 @@ function parseEnvList(values: string[] | undefined): Record<string, string> {
 function isContainerInfo(
   container: DockerContainerSummary | DockerContainerInfo,
 ): container is DockerContainerInfo {
-  return "Config" in container || "HostConfig" in container || "Name" in container;
+  return "Config" in container || "Name" in container;
 }
 
 function getContainerLabels(
   container: DockerContainerSummary | DockerContainerInfo,
 ): Record<string, string> {
-  return (isContainerInfo(container) ? container.Config?.Labels : container.Labels) || {};
+  return (
+    (isContainerInfo(container)
+      ? container.Config?.Labels || (container as DockerContainerSummary).Labels
+      : container.Labels) || {}
+  );
 }
 
 function getContainerEnv(
@@ -192,6 +199,8 @@ function resolveContainerReconcileState(options: {
   desiredAccessToken?: string | null;
   desiredNanoCpus: number;
   desiredMemoryBytes: number;
+  desiredNetworkName: string;
+  desiredMainBackendUrl?: string | null;
   generateStudioAccessToken: () => string;
 }): { accessToken: string; needs: ContainerReconcileNeeds } {
   const currentToken = getContainerAccessToken(options.container);
@@ -200,8 +209,11 @@ function resolveContainerReconcileState(options: {
     currentToken || desiredToken || options.generateStudioAccessToken();
 
   const currentImage = getContainerConfiguredImage(options.container, options.desiredImage);
+  const currentEnv = getContainerEnv(options.container);
   const currentNanoCpus = options.container.HostConfig?.NanoCpus || 0;
   const currentMemory = options.container.HostConfig?.Memory || 0;
+  const currentNetworkMode = trimToken(options.container.HostConfig?.NetworkMode) || "";
+  const currentMainBackendUrl = trimToken(currentEnv.MAIN_BACKEND_URL) || null;
 
   return {
     accessToken,
@@ -211,12 +223,50 @@ function resolveContainerReconcileState(options: {
         currentNanoCpus !== options.desiredNanoCpus ||
         currentMemory !== options.desiredMemoryBytes,
       accessToken: currentToken !== accessToken,
+      network: currentNetworkMode !== options.desiredNetworkName,
+      mainBackendUrl:
+        !!options.desiredMainBackendUrl &&
+        currentMainBackendUrl !== options.desiredMainBackendUrl,
     },
   };
 }
 
 function hasContainerDrift(needs: ContainerReconcileNeeds): boolean {
-  return needs.image || needs.resources || needs.accessToken;
+  return (
+    needs.image ||
+    needs.resources ||
+    needs.accessToken ||
+    needs.network ||
+    needs.mainBackendUrl
+  );
+}
+
+function isMissingImageError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("no such image");
+}
+
+function isMissingNativeManifestError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("no matching manifest");
+}
+
+function isContainerNameConflictError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("container name") ||
+    (normalized.includes("conflict") && normalized.includes("already in use"))
+  );
+}
+
+function isContainerNetworkingSetupError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("failed to set up container networking") ||
+    (normalized.includes("network") && normalized.includes("not found"))
+  );
 }
 
 function getContainerCreatedAt(container: DockerContainerInfo): string | null {
@@ -301,6 +351,7 @@ function createContainerSpec(options: {
   routeId: string;
   env: Record<string, string>;
   config: DockerProviderConfig;
+  networkName: string;
 }): DockerContainerCreateConfig {
   const labels: Record<string, string> = {
     vivd_managed: "true",
@@ -323,7 +374,7 @@ function createContainerSpec(options: {
       [`${STUDIO_INTERNAL_PORT}/tcp`]: {},
     },
     HostConfig: {
-      NetworkMode: options.config.network,
+      NetworkMode: options.networkName,
       NanoCpus: options.config.nanoCpus,
       Memory: options.config.memoryBytes,
     },
@@ -397,6 +448,10 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     this.lastActivityByStudioKey.set(studioKey, Date.now());
   }
 
+  private resolveManagedMainBackendUrl(raw: string | null | undefined): string | null {
+    return trimToken(raw) ? this.config.internalMainBackendUrl : null;
+  }
+
   private buildStudioEnv(
     args: StudioMachineStartArgs & { studioId: string; accessToken: string },
   ): Record<string, string> {
@@ -426,6 +481,14 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       process.env.DOCKER_STUDIO_OPENCODE_DATA_HOME
     ) {
       env.VIVD_OPENCODE_DATA_HOME = process.env.DOCKER_STUDIO_OPENCODE_DATA_HOME;
+    }
+
+    // Docker-managed studio containers must call back into the control plane over
+    // the compose network, not via the user-facing host that initiated the start.
+    if (env.MAIN_BACKEND_URL) {
+      env.MAIN_BACKEND_URL =
+        this.resolveManagedMainBackendUrl(env.MAIN_BACKEND_URL) ||
+        env.MAIN_BACKEND_URL;
     }
 
     const passthrough = (
@@ -508,6 +571,66 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     );
   }
 
+  private resolveNetworkNameFromList(networks: DockerNetworkSummary[]): string {
+    const configured = this.config.network;
+    const normalizedConfigured = configured.trim();
+    if (!normalizedConfigured) return configured;
+
+    const exactMatch = networks.find(
+      (network) => network.Name?.trim() === normalizedConfigured,
+    );
+    if (exactMatch?.Name) return exactMatch.Name;
+
+    const suffixMatches = networks.filter((network) => {
+      const name = network.Name?.trim();
+      return !!name && name.endsWith(`_${normalizedConfigured}`);
+    });
+    if (suffixMatches.length === 1 && suffixMatches[0]?.Name) {
+      const resolved = suffixMatches[0].Name;
+      console.warn(
+        `[DockerMachines] Resolved configured network ${normalizedConfigured} to existing Docker network ${resolved}`,
+      );
+      return resolved;
+    }
+
+    return configured;
+  }
+
+  private async resolveContainerNetworkName(): Promise<string> {
+    try {
+      const networks = await this.apiClient.listNetworks();
+      return this.resolveNetworkNameFromList(networks);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[DockerMachines] Failed to resolve Docker network ${this.config.network}: ${message}`,
+      );
+      return this.config.network;
+    }
+  }
+
+  private async ensureImageAvailableForCreate(
+    desiredImage: string,
+  ): Promise<string | null> {
+    try {
+      await this.apiClient.pullImage(desiredImage);
+      return null;
+    } catch (error) {
+      if (!isMissingNativeManifestError(error)) throw error;
+
+      const fallbackPlatform = this.config.fallbackPlatform;
+      if (!fallbackPlatform) throw error;
+
+      console.warn(
+        `[DockerMachines] Native manifest unavailable for ${desiredImage}; retrying pull with fallback platform ${fallbackPlatform}`,
+      );
+      await this.apiClient.pullImage(desiredImage, {
+        platform: fallbackPlatform,
+      });
+      return fallbackPlatform;
+    }
+  }
+
   private async createFreshContainer(options: {
     args: StudioMachineStartArgs;
     desiredImage: string;
@@ -527,6 +650,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       options.args.projectSlug,
       options.args.version,
     );
+    const networkName = await this.resolveContainerNetworkName();
     const env = this.buildStudioEnv({
       ...options.args,
       studioId,
@@ -540,22 +664,42 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       routeId,
       env,
       config: this.config,
+      networkName,
     });
+    const containerName = this.config.containerNameFor(
+      options.args.organizationId,
+      options.args.projectSlug,
+      options.args.version,
+    );
 
     try {
-      const created = await this.apiClient.createContainer({
-        name: this.config.containerNameFor(
-          options.args.organizationId,
-          options.args.projectSlug,
-          options.args.version,
-        ),
-        config: spec,
-      });
+      let platform: string | undefined;
+      let created;
+      try {
+        created = await this.apiClient.createContainer({
+          name: containerName,
+          config: spec,
+          platform,
+        });
+      } catch (error) {
+        if (!isMissingImageError(error)) throw error;
+        platform = (await this.ensureImageAvailableForCreate(options.desiredImage)) || undefined;
+        created = await this.apiClient.createContainer({
+          name: containerName,
+          config: spec,
+          platform,
+        });
+      }
       return await this.inspectContainer(created.Id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.toLowerCase().includes("container name")) {
+      if (!isContainerNameConflictError(error)) {
         throw error;
+      }
+
+      try {
+        return await this.inspectContainer(containerName);
+      } catch {
+        // Fall through to identity-based lookup.
       }
 
       const existing = findContainer(
@@ -589,6 +733,8 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     args: StudioMachineStartArgs,
     container: DockerContainerInfo,
     accessToken: string,
+    desiredImage: string,
+    allowNetworkRecovery = true,
   ): Promise<StudioMachineStartResult> {
     const studioKey = this.config.key(
       args.organizationId,
@@ -607,7 +753,27 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     });
 
     if (!isRunningContainer(container)) {
-      await this.apiClient.startContainer(container.Id);
+      try {
+        await this.apiClient.startContainer(container.Id);
+      } catch (error) {
+        if (!allowNetworkRecovery || !isContainerNetworkingSetupError(error)) {
+          throw error;
+        }
+
+        const recreated = await this.recreateContainer({
+          existing: container,
+          args,
+          desiredImage,
+          preferredAccessToken: accessToken,
+        });
+        return await this.ensureContainerRunning(
+          args,
+          recreated,
+          accessToken,
+          desiredImage,
+          false,
+        );
+      }
     }
 
     await this.waitForReady({
@@ -719,20 +885,31 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           `[DockerMachines] Missing studio access token after creating container ${created.Id}`,
         );
       }
-      return await this.ensureContainerRunning(args, created, accessToken);
+      return await this.ensureContainerRunning(
+        args,
+        created,
+        accessToken,
+        desiredImage,
+      );
     }
 
     let inspected = await this.inspectContainer(existing.Id);
+    const desiredNetworkName = await this.resolveContainerNetworkName();
+    const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
+      args.env.MAIN_BACKEND_URL,
+    );
     let reconcileState = resolveContainerReconcileState({
       container: inspected,
       desiredImage,
       desiredNanoCpus: this.config.nanoCpus,
       desiredMemoryBytes: this.config.memoryBytes,
+      desiredNetworkName,
+      desiredMainBackendUrl,
       generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
     });
 
     if (isRunningContainer(inspected)) {
-      if (reconcileState.needs.accessToken) {
+      if (reconcileState.needs.accessToken || reconcileState.needs.mainBackendUrl) {
         inspected = await this.recreateContainer({
           existing: inspected,
           args,
@@ -744,12 +921,19 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           desiredImage,
           desiredNanoCpus: this.config.nanoCpus,
           desiredMemoryBytes: this.config.memoryBytes,
+          desiredNetworkName,
+          desiredMainBackendUrl,
           desiredAccessToken: reconcileState.accessToken,
           generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
         });
       }
 
-      return await this.ensureContainerRunning(args, inspected, reconcileState.accessToken);
+      return await this.ensureContainerRunning(
+        args,
+        inspected,
+        reconcileState.accessToken,
+        desiredImage,
+      );
     }
 
     if (!isStoppedContainer(inspected) || hasContainerDrift(reconcileState.needs)) {
@@ -764,12 +948,19 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         desiredImage,
         desiredNanoCpus: this.config.nanoCpus,
         desiredMemoryBytes: this.config.memoryBytes,
+        desiredNetworkName,
+        desiredMainBackendUrl,
         desiredAccessToken: reconcileState.accessToken,
         generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
       });
     }
 
-    return await this.ensureContainerRunning(args, inspected, reconcileState.accessToken);
+    return await this.ensureContainerRunning(
+      args,
+      inspected,
+      reconcileState.accessToken,
+      desiredImage,
+    );
   }
 
   async restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
@@ -827,7 +1018,12 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         `[DockerMachines] Missing studio access token after restarting container ${container.Id}`,
       );
     }
-    return await this.ensureContainerRunning(args, container, accessToken);
+    return await this.ensureContainerRunning(
+      args,
+      container,
+      accessToken,
+      desiredImage,
+    );
   }
 
   touch(organizationId: string, projectSlug: string, version: number): void {
@@ -983,6 +1179,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       forceRefresh: options.forceRefreshDesiredImage,
     });
     const containers = await this.apiClient.listContainers();
+    const desiredNetworkName = await this.resolveContainerNetworkName();
     const now = Date.now();
     const dryRun = this.config.reconcilerDryRun;
 
@@ -1046,6 +1243,10 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         desiredImage,
         desiredNanoCpus: this.config.nanoCpus,
         desiredMemoryBytes: this.config.memoryBytes,
+        desiredNetworkName,
+        desiredMainBackendUrl: this.resolveManagedMainBackendUrl(
+          getContainerEnv(inspected).MAIN_BACKEND_URL,
+        ),
         generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
       });
       if (!hasContainerDrift(reconcileState.needs)) continue;
@@ -1085,6 +1286,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           },
           recreated,
           accessToken,
+          desiredImage,
         );
         await this.stop(identity.organizationId, identity.projectSlug, identity.version);
         result.warmedOutdatedImages++;

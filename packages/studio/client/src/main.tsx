@@ -5,6 +5,7 @@ import { httpBatchLink, httpSubscriptionLink, splitLink } from "@trpc/client";
 import { trpc } from "@/lib/trpc";
 import {
   getVivdStudioToken,
+  resolveStudioRuntimePath,
   VIVD_STUDIO_TOKEN_HEADER,
   withVivdStudioTokenQuery,
 } from "@/lib/studioAuth";
@@ -36,10 +37,13 @@ function Root() {
         splitLink({
           condition: (op) => op.type === "subscription",
           true: httpSubscriptionLink({
-            url: withVivdStudioTokenQuery("/vivd-studio/api/trpc", studioToken),
+            url: withVivdStudioTokenQuery(
+              resolveStudioRuntimePath("/vivd-studio/api/trpc"),
+              studioToken,
+            ),
           }),
           false: httpBatchLink({
-            url: "/vivd-studio/api/trpc",
+            url: resolveStudioRuntimePath("/vivd-studio/api/trpc"),
             fetch(url, options) {
               const headers = new Headers(options?.headers);
               if (studioToken) {

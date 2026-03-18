@@ -185,10 +185,11 @@ const injectSelectorScript = (iframe: HTMLIFrameElement) => {
 const inferVivdBasePathFromPathname = (pathname: string): string | undefined => {
   if (!pathname.startsWith("/")) return undefined;
 
-  if (pathname.startsWith("/preview")) return "/preview";
+  const previewMatch = pathname.match(/^(.*\/preview)(?:\/|$)/);
+  if (previewMatch) return previewMatch[1];
 
   const studioMatch = pathname.match(
-    /^(\/vivd-studio\/api\/(?:preview|devpreview)\/[^/]+\/v[^/]+)(?:\/|$)/,
+    /^(.*\/vivd-studio\/api\/(?:preview|devpreview)\/[^/]+\/v[^/]+)(?:\/|$)/,
   );
   if (studioMatch) return studioMatch[1];
 

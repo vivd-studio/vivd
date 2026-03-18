@@ -13,8 +13,30 @@ export default defineConfig({
       title: "Vivd Docs",
       description:
         "Public product documentation for creating, editing, publishing, and operating websites in Vivd.",
-      favicon: "/favicon.svg",
+      favicon: "/docs-brand-mark.svg",
       customCss: ["./src/styles/custom.css"],
+      components: {
+        SiteTitle: "./src/components/SiteTitle.astro",
+      },
+      sidebar: [
+        { slug: "index", label: "Overview" },
+        { slug: "getting-started" },
+        { slug: "import-existing-website" },
+        { slug: "create-from-scratch" },
+        { slug: "edit-in-studio" },
+        { slug: "publish-your-site" },
+        {
+          label: "Plugins",
+          items: [
+            { slug: "plugins", label: "Overview" },
+            { slug: "plugins/contact-form" },
+            { slug: "plugins/analytics" },
+          ],
+        },
+        { slug: "teams-and-access" },
+        { slug: "troubleshooting" },
+        { slug: "faq-glossary" },
+      ],
       social: [
         {
           icon: "github",

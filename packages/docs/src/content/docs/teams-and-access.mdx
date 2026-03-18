@@ -3,6 +3,8 @@ title: Teams and Access
 description: Organize work across agency admins, team members, and client editors.
 ---
 
+import { Aside, CardGrid, Card } from "@astrojs/starlight/components";
+
 Vivd is built for projects that may involve internal staff and customer-side collaborators.
 
 ## Main access model
@@ -11,10 +13,35 @@ Vivd is built for projects that may involve internal staff and customer-side col
 - Team members work across the organization according to their role.
 - Client editors can be limited to a specific project and a narrower editing scope.
 
-## Practical pattern
+## Role model at a glance
 
-- Agency or internal team members manage project setup, generation, plugins, and publishing.
-- Client-facing collaborators review content, request updates, and make lighter content changes where appropriate.
+<CardGrid>
+  <Card title="Agency lead or org admin">
+    <ul>
+      <li>Owns project setup, access decisions, plugins, and publish readiness.</li>
+      <li>Best fit for domain, launch, and customer handoff decisions.</li>
+    </ul>
+  </Card>
+  <Card title="Internal teammate or collaborator">
+    <ul>
+      <li>Helps with generation, Studio iteration, content review, and operational follow-up.</li>
+      <li>Best fit for day-to-day production work inside the organization.</li>
+    </ul>
+  </Card>
+  <Card title="Client editor">
+    <ul>
+      <li>Reviews project content and makes narrower edits where appropriate.</li>
+      <li>Best fit for customer-side review without full organization control.</li>
+    </ul>
+  </Card>
+</CardGrid>
+
+## Recommended handoff flow
+
+1. Keep project setup and launch preparation with the internal or agency team first.
+2. Add customer-side collaborators only after the project, plugins, and publish direction are clear.
+3. Confirm the correct organization and project before asking a client to review.
+4. Re-check access again before launch so reviewers can see the right project but cannot change the wrong things.
 
 ## When to review access
 
@@ -27,3 +54,7 @@ Vivd is built for projects that may involve internal staff and customer-side col
 - Keep project responsibility clear.
 - Grant the narrowest access that still lets someone do their job.
 - Re-check access after project transfers or staffing changes.
+
+<Aside type="caution" title="Before giving customer access">
+  Confirm the intended organization, project, and publish path first. Most access confusion comes from people landing in the wrong workspace rather than from a broken permission model.
+</Aside>

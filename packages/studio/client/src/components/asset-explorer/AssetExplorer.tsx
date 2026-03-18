@@ -17,7 +17,11 @@ import { FileTreeView } from "./FileTreeView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
-import { getVivdStudioToken, VIVD_STUDIO_TOKEN_HEADER } from "@/lib/studioAuth";
+import {
+  getVivdStudioToken,
+  resolveStudioRuntimePath,
+  VIVD_STUDIO_TOKEN_HEADER,
+} from "@/lib/studioAuth";
 
 interface AssetExplorerProps {
   projectSlug: string;
@@ -198,7 +202,9 @@ export function AssetExplorer({
       if (token) headers.set(VIVD_STUDIO_TOKEN_HEADER, token);
 
       const response = await fetch(
-        `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(currentPath)}`,
+        resolveStudioRuntimePath(
+          `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(currentPath)}`,
+        ),
         {
           method: "POST",
           body: formData,

@@ -1,25 +1,58 @@
 ---
 title: Vivd Docs
 description: Public product documentation for Vivd users, agencies, and customers.
+tableOfContents: false
+hero:
+  title: Vivd Docs
+  tagline: Product docs for creating, refining, publishing, and operating websites in Vivd.
+  actions:
+    - text: Import an existing site
+      link: /import-existing-website/
+      variant: primary
+    - text: Start from scratch
+      link: /create-from-scratch/
+      variant: secondary
+    - text: Troubleshooting
+      link: /troubleshooting/
+      variant: minimal
 ---
 
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import AppCtas from "../../components/AppCtas.astro";
 import DocShot from "../../components/DocShot.astro";
 
-Vivd turns the website-building flow into a single workspace:
+## Choose the right path
 
-- Create a project from an existing website or from scratch.
-- Refine the result in Studio with AI-assisted edits and direct changes.
-- Publish to a live domain when the project is ready.
-- Keep plugins, analytics, and customer access in the same platform.
+<CardGrid>
+  <LinkCard
+    title="Import an Existing Website"
+    href="/import-existing-website/"
+    description="Fastest route when you already have a live site and want a first draft to refine."
+  />
+  <LinkCard
+    title="Create from Scratch"
+    href="/create-from-scratch/"
+    description="Best route when you are starting from business information, goals, assets, and references."
+  />
+  <LinkCard
+    title="Edit in Studio"
+    href="/edit-in-studio/"
+    description="Learn when to use AI chat, direct text editing, and asset replacement."
+  />
+  <LinkCard
+    title="Publish Your Site"
+    href="/publish-your-site/"
+    description="Understand draft versus live, the publish checklist, and what needs a republish."
+  />
+</CardGrid>
 
 <DocShot
-  src="/screenshots/leonord_desktop_full-app_darkmode.webp"
-  alt="Vivd project workspace with preview, assets, and Studio controls."
-  caption="The control plane keeps your projects, previews, plugins, and publishing flow in one place."
+  src="/screenshots/docs/workspace-overview_lightmode.webp"
+  alt="Vivd workspace showing the asset library, site preview, and agent chat in one view."
+  caption="The workspace keeps your preview, assets, and guided edits together instead of spreading the flow across separate tools."
 />
 
-## Start with the shortest path
+## Fastest route to a first live site
 
 If you want your first live result quickly, use this order:
 
@@ -29,7 +62,32 @@ If you want your first live result quickly, use this order:
 
 If you are building a brand-new site instead, start with [Create from Scratch](/create-from-scratch/).
 
-## What this docs site covers
+## Browse by task
+
+<CardGrid>
+  <LinkCard
+    title="Plugins"
+    href="/plugins/"
+    description="Set up Contact Form and Analytics before the final launch pass."
+  />
+  <LinkCard
+    title="Teams and Access"
+    href="/teams-and-access/"
+    description="Decide who should own setup, publishing, and customer-facing review."
+  />
+  <LinkCard
+    title="Troubleshooting"
+    href="/troubleshooting/"
+    description="Use symptom-based checks for import, publish, access, form, and analytics issues."
+  />
+  <LinkCard
+    title="FAQ and Glossary"
+    href="/faq-glossary/"
+    description="Get quick answers to common product terms and expectations."
+  />
+</CardGrid>
+
+<Aside type="note" title="What this docs site covers">
 
 - Product workflows for creating, editing, publishing, and operating sites in Vivd.
 - Plugin setup for Contact Form and Analytics.
@@ -37,5 +95,6 @@ If you are building a brand-new site instead, start with [Create from Scratch](/
 - Practical troubleshooting for common issues.
 
 This docs site intentionally does **not** cover internal architecture, Fly machine internals, contributor workflows, or self-hosting runbooks.
+</Aside>
 
 <AppCtas />

@@ -3,29 +3,45 @@ title: Plugins Overview
 description: Understand the product plugins that extend a Vivd project beyond the visual site itself.
 ---
 
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import DocShot from "../../components/DocShot.astro";
 
 Plugins let a Vivd project do more than render pages. In the current product surface, the main plugin workflows are Contact Form and Analytics.
 
 <DocShot
-  src="/screenshots/hendrik-noack_desktop_full-app_darkmode.webp"
-  alt="Vivd dashboard showing a project that can be extended with plugins."
-  caption="Plugin setup lives alongside the rest of the project so launch-critical configuration stays in one place."
+  src="/screenshots/docs/workspace-overview_lightmode.webp"
+  alt="Vivd project workspace with project assets, preview, and agent context visible."
+  caption="Plugin work belongs in the same project workspace as the rest of your launch review so nothing critical gets handled out of band."
 />
 
-## When to configure plugins
+<Aside type="tip" title="When to do plugin setup">
+  Configure plugins before the final publish pass, not after launch day. That keeps form delivery, analytics expectations, and handoff steps inside the same review cycle.
+</Aside>
 
-- Set them up before the final publish pass.
-- Revisit them whenever you change how leads, traffic tracking, or project ownership should work.
+## Choose the plugin guide
 
-## Available guides
+<CardGrid>
+  <LinkCard
+    title="Contact Form"
+    href="/plugins/contact-form/"
+    description="Turn site inquiries into managed submissions with the right recipients, defaults, and launch checks."
+  />
+  <LinkCard
+    title="Analytics"
+    href="/plugins/analytics/"
+    description="Track traffic and interpret project activity without leaving the Vivd product surface."
+  />
+</CardGrid>
 
-- [Contact Form](/plugins/contact-form/) explains activation, recipient setup, and embedding expectations.
-- [Analytics](/plugins/analytics/) explains how to enable tracking and interpret the dashboard.
-
-## Recommended workflow
+## Recommended launch workflow
 
 1. Finish the main site structure in Studio.
 2. Configure the plugins that matter for launch.
 3. Test the form flow and analytics expectations.
 4. Run through the publish checklist.
+
+## Re-check plugins when
+
+- The customer-side reviewer changes and recipients or owners need updating.
+- The project domain changes and you want a fresh launch review.
+- The site gains new lead flows or the traffic expectations change after launch.

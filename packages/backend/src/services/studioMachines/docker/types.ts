@@ -61,6 +61,11 @@ export type DockerContainerCreateResponse = {
   Warnings?: string[];
 };
 
+export type DockerNetworkSummary = {
+  Id?: string;
+  Name?: string;
+};
+
 export type DockerApiError = {
   message?: string;
 };

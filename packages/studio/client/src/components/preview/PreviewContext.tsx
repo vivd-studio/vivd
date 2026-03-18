@@ -10,7 +10,11 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
+import {
+  getVivdStudioToken,
+  resolveStudioRuntimePath,
+  withVivdStudioTokenQuery,
+} from "@/lib/studioAuth";
 import {
   POLLING_BACKGROUND,
   POLLING_DEV_SERVER_STARTING,
@@ -387,9 +391,15 @@ export function PreviewProvider({
       if (!projectSlug) return normalized;
 
       const prefixes = [
-        `/vivd-studio/api/devpreview/${projectSlug}/v${selectedVersion}`,
-        `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}`,
-        `/vivd-studio/api/projects/${projectSlug}/v${selectedVersion}`,
+        resolveStudioRuntimePath(
+          `/vivd-studio/api/devpreview/${projectSlug}/v${selectedVersion}`,
+        ),
+        resolveStudioRuntimePath(
+          `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}`,
+        ),
+        resolveStudioRuntimePath(
+          `/vivd-studio/api/projects/${projectSlug}/v${selectedVersion}`,
+        ),
       ];
 
       for (const prefix of prefixes) {
@@ -570,7 +580,7 @@ export function PreviewProvider({
         const blob = new Blob([payload], { type: "application/json" });
         navigator.sendBeacon(
           withVivdStudioTokenQuery(
-            "/vivd-studio/api/cleanup/preview-leave",
+            resolveStudioRuntimePath("/vivd-studio/api/cleanup/preview-leave"),
             getVivdStudioToken(),
           ),
           blob,
@@ -977,9 +987,13 @@ export function PreviewProvider({
       if (!pathname) return "index.html";
 
       const bases = [
-        `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}`,
-        `/vivd-studio/api/projects/${projectSlug}/v${selectedVersion}`,
-        "/preview",
+        resolveStudioRuntimePath(
+          `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}`,
+        ),
+        resolveStudioRuntimePath(
+          `/vivd-studio/api/projects/${projectSlug}/v${selectedVersion}`,
+        ),
+        resolveStudioRuntimePath("/preview"),
       ];
 
       let relative = pathname;
@@ -1040,14 +1054,16 @@ export function PreviewProvider({
 
   // Build version-aware URL - use dynamic URL from previewInfo if available
   const baseUrl = previewInfo?.url
-    ? previewInfo.url
+    ? resolveStudioRuntimePath(previewInfo.url)
     : isPreviewLoading
       ? ""
       : projectSlug
-        ? `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/index.html`
+        ? resolveStudioRuntimePath(
+            `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/index.html`,
+          )
         : url?.startsWith("http") || url?.startsWith("/vivd-studio/api")
-          ? url
-          : `/vivd-studio/api${url}`;
+          ? resolveStudioRuntimePath(url)
+          : resolveStudioRuntimePath(`/vivd-studio/api${url}`);
   const fullUrl = baseUrl || "";
 
   const getShareablePreviewOrigin = () => {
@@ -1257,7 +1273,7 @@ export function PreviewProvider({
       const blob = new Blob([payload], { type: "application/json" });
       navigator.sendBeacon(
         withVivdStudioTokenQuery(
-          "/vivd-studio/api/cleanup/preview-leave",
+          resolveStudioRuntimePath("/vivd-studio/api/cleanup/preview-leave"),
           getVivdStudioToken(),
         ),
         blob,

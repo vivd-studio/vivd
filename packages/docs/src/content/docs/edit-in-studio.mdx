@@ -3,31 +3,50 @@ title: Edit in Studio
 description: Refine your project with AI-assisted edits, direct changes, and managed assets.
 ---
 
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import DocShot from "../../components/DocShot.astro";
 
 Studio is where you take a generated draft and turn it into a launch-ready site.
 
 <DocShot
-  src="/screenshots/leonord_desktop_editing-mode_darkmode.webp"
-  alt="Vivd Studio editing mode with preview and editing tools."
-  caption="Studio combines AI-guided changes with direct editing and asset management."
+  src="/screenshots/docs/studio-editing_darkmode.webp"
+  alt="Vivd Studio text-editing mode with the preview canvas, selected text regions, and agent panel."
+  caption="Studio combines guided edits, direct text selection, and project context in a single editing pass."
 />
 
-## What Studio is best at
+## Choose the right editing mode
 
-- Large structural changes through the AI chat.
-- Element-level refinement when you want to target a specific section.
-- Direct text edits for fast corrections.
-- Asset replacement and organization without leaving the project.
+<CardGrid>
+  <LinkCard
+    title="Use AI chat for structural work"
+    href="#a-strong-first-editing-session"
+    description="Best for layout shifts, style direction, section rewrites, and broad copy changes."
+  />
+  <LinkCard
+    title="Use direct editing for precise fixes"
+    href="#a-strong-first-editing-session"
+    description="Best for wording corrections, quick copy tweaks, and finishing details after the layout is right."
+  />
+  <LinkCard
+    title="Use the asset panel for visual upgrades"
+    href="#if-the-draft-still-feels-generic"
+    description="Replace weak images early so later polish decisions are based on real content."
+  />
+  <LinkCard
+    title="Use publish only when the draft is ready"
+    href="#what-stays-in-draft-until-you-publish"
+    description="Studio changes stay in the working version until you explicitly republish."
+  />
+</CardGrid>
 
-## Typical editing loop
+## A strong first editing session
 
 1. Open the project in Studio.
-2. Review the page visually from top to bottom.
-3. Use the chat for larger layout, copy, or style changes.
-4. Use direct text editing for precise wording fixes.
+2. Review the page from top to bottom and identify the 3 most obvious problems first.
+3. Use the chat for larger layout, copy, or style changes before making tiny refinements.
+4. Switch to direct text editing once the structure is mostly right.
 5. Replace or upload assets where the draft still feels generic.
-6. Preview again and repeat until the project is ready to publish.
+6. Run one final pass focused on CTAs, contact details, and mobile readability.
 
 <DocShot
   src="/screenshots/raumquadrat_desktop_assets-thumbnails_lightmode.webp"
@@ -35,20 +54,37 @@ Studio is where you take a generated draft and turn it into a launch-ready site.
   caption="The asset panel helps you keep project files and replacement imagery organized."
 />
 
-## Draft versus live
+## What stays in draft until you publish
 
-- **Draft / Studio** is your working version.
-- **Live** is what visitors see on the published domain.
+- **Draft / Studio** is your working version inside Vivd.
+- **Live site** is what visitors see on the published domain.
+- Layout, copy, image, and plugin changes remain in draft until you publish again.
 
 Changes in Studio do not affect the live site until you publish again.
 
-## Good habits
+<Aside type="tip" title="A useful rule of thumb">
+  If a change affects what a visitor should see on the real domain, assume it needs a publish pass before it is actually live.
+</Aside>
 
-- Make one focused pass for layout and one for copy.
-- Replace weak placeholder images before polishing smaller details.
-- Re-check forms, calls to action, and legal/contact information before publishing.
+## If the draft still feels generic
+
+- Replace placeholder imagery before spending time on micro-polish.
+- Tighten the project description, references, or direction if the initial generation was too vague.
+- Revisit [Import an Existing Website](/import-existing-website/) if the source site was strong but the first pass missed obvious sections.
+- Revisit [Create from Scratch](/create-from-scratch/) if the first prompt did not include enough business, audience, or visual direction.
+- Configure [Plugins Overview](/plugins/) before the final publish pass if the project needs forms or analytics.
 
 ## Next steps
 
-- Configure the project plugins you need in [Plugins Overview](/plugins/).
-- When the project looks right, continue with [Publish Your Site](/publish-your-site/).
+<CardGrid>
+  <LinkCard
+    title="Configure plugins"
+    href="/plugins/"
+    description="Set up Contact Form and Analytics before launch if the project depends on them."
+  />
+  <LinkCard
+    title="Publish the latest draft"
+    href="/publish-your-site/"
+    description="Use the publish guide once the Studio draft matches the result you want visitors to see."
+  />
+</CardGrid>

@@ -26,6 +26,15 @@ function normalizeOrigin(raw: string): string {
   return `${scheme}://${trimmed}`.replace(/\/+$/, "");
 }
 
+function normalizeMainBackendUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, "");
+  return new URL("/vivd-studio", `http://${trimmed.replace(/^\/+/, "")}/`)
+    .toString()
+    .replace(/\/$/, "");
+}
+
 function normalizePathPrefix(value: string | undefined, fallback: string): string {
   const raw = (value || "").trim() || fallback;
   const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
@@ -34,6 +43,18 @@ function normalizePathPrefix(value: string | undefined, fallback: string): strin
 
 function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
+}
+
+function normalizeDockerApiVersion(value: string | undefined): string {
+  const trimmed = value?.trim() || "";
+  if (!trimmed) return "";
+  return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
+}
+
+function normalizeDockerPlatform(value: string | undefined): string | null {
+  const trimmed = value?.trim() || "";
+  if (!trimmed) return null;
+  return trimmed;
 }
 
 export class DockerProviderConfig {
@@ -81,7 +102,20 @@ export class DockerProviderConfig {
   }
 
   get apiVersion(): string {
-    return process.env.DOCKER_STUDIO_API_VERSION?.trim() || "v1.43";
+    return (
+      normalizeDockerApiVersion(process.env.DOCKER_STUDIO_API_VERSION) ||
+      normalizeDockerApiVersion(process.env.DOCKER_API_VERSION) ||
+      "v1.44"
+    );
+  }
+
+  get fallbackPlatform(): string | null {
+    const configured = normalizeDockerPlatform(
+      process.env.DOCKER_STUDIO_FALLBACK_PLATFORM,
+    );
+    if (configured) return configured;
+    if (process.env.DOCKER_STUDIO_FALLBACK_PLATFORM !== undefined) return null;
+    return "linux/amd64";
   }
 
   get studioImageRepository(): string {
@@ -115,6 +149,12 @@ export class DockerProviderConfig {
     const explicit = process.env.DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL?.trim();
     if (explicit) return normalizeOrigin(explicit);
     return "http://caddy";
+  }
+
+  get internalMainBackendUrl(): string {
+    const explicit = process.env.DOCKER_STUDIO_MAIN_BACKEND_URL?.trim();
+    if (explicit) return normalizeMainBackendUrl(explicit);
+    return "http://backend:3000/vivd-studio";
   }
 
   get routePrefix(): string {

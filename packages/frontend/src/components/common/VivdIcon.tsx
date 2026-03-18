@@ -5,7 +5,12 @@ type VivdIconProps = React.SVGProps<SVGSVGElement> & {
   title?: string;
 };
 
-export function VivdIcon({ className, title = "vivd", ...props }: VivdIconProps) {
+export function VivdIcon({
+  className,
+  title = "vivd",
+  strokeWidth = 10,
+  ...props
+}: VivdIconProps) {
   const iconId = React.useId().replace(/:/g, "");
   const gradientId = `vivd-icon-gradient-${iconId}`;
 
@@ -26,7 +31,7 @@ export function VivdIcon({ className, title = "vivd", ...props }: VivdIconProps)
       <path
         d="M25 30 L50 75 L75 30"
         stroke={`url(#${gradientId})`}
-        strokeWidth="10"
+        strokeWidth={strokeWidth}
         fill="none"
         strokeLinecap="round"
         strokeLinejoin="round"

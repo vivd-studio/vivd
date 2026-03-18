@@ -7,6 +7,7 @@ import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { Loader2 } from "lucide-react";
@@ -206,6 +207,12 @@ export default function StudioFullscreen() {
     );
   };
 
+  const markStudioReady = useCallback(() => {
+    setStudioReady(true);
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+  }, []);
+
   const sendInitialGenerationBootstrap = useCallback(() => {
     if (!initialGenerationRequested) return;
 
@@ -234,6 +241,17 @@ export default function StudioFullscreen() {
     version,
   ]);
 
+  const handleStudioIframeLoad = useCallback(() => {
+    syncThemeToStudio();
+
+    if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
+      return;
+    }
+
+    markStudioReady();
+    sendInitialGenerationBootstrap();
+  }, [markStudioReady, sendInitialGenerationBootstrap, syncThemeToStudio]);
+
   useEffect(() => {
     syncThemeToStudio();
   }, [theme, colorTheme]);
@@ -245,7 +263,7 @@ export default function StudioFullscreen() {
       if (!studioWindow || event.source !== studioWindow) return;
       const type = event.data?.type;
       if (type === "vivd:studio:ready") {
-        setStudioReady(true);
+        markStudioReady();
         syncThemeToStudio();
         sendInitialGenerationBootstrap();
         return;
@@ -267,7 +285,7 @@ export default function StudioFullscreen() {
         }
       }
       if (type === "vivd:studio:theme") {
-        setStudioReady(true);
+        markStudioReady();
         const nextTheme = event.data?.theme;
         const nextColorTheme = event.data?.colorTheme;
 
@@ -288,6 +306,7 @@ export default function StudioFullscreen() {
   }, [
     navigate,
     initialGenerationRequested,
+    markStudioReady,
     projectSlug,
     sendInitialGenerationBootstrap,
     setColorTheme,
@@ -386,7 +405,7 @@ export default function StudioFullscreen() {
     <div className="relative h-dvh w-screen bg-background">
       <iframe
         ref={studioIframeRef}
-        onLoad={syncThemeToStudio}
+        onLoad={handleStudioIframeLoad}
         onError={() => setStudioLoadErrored(true)}
         key={`${projectSlug}-${version}-${baseUrl ?? ""}-${studioReloadNonce}`}
         src={studioIframeSrc}

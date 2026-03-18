@@ -1,6 +1,13 @@
 import * as fs from "fs";
 
 const CADDY_ADMIN_URL = process.env.CADDY_ADMIN_URL || "http://caddy:2019";
+const CADDY_ADMIN_ORIGIN = (() => {
+  try {
+    return new URL(CADDY_ADMIN_URL).origin;
+  } catch {
+    return null;
+  }
+})();
 
 /**
  * Trigger Caddy to reload its configuration by posting the Caddyfile.
@@ -40,6 +47,7 @@ export async function reloadCaddyConfig(): Promise<void> {
       method: "POST",
       headers: {
         "Content-Type": "text/caddyfile",
+        ...(CADDY_ADMIN_ORIGIN ? { Origin: CADDY_ADMIN_ORIGIN } : {}),
       },
       body: caddyfileContent,
     });

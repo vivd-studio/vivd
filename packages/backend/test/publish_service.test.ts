@@ -37,6 +37,7 @@ import {
   PublishConflictError,
   PublishService,
 } from "../src/services/publish/PublishService";
+import { db } from "../src/db";
 
 function makeArtifactState(overrides: Record<string, unknown> = {}) {
   return {
@@ -191,5 +192,55 @@ describe("PublishService conflict behavior", () => {
     expect(firstError).toBeInstanceOf(PublishConflictError);
     expect(secondError).toBeInstanceOf(PublishConflictError);
     expect(resolvePublishableArtifactStateMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("regenerates existing site configs from the current Caddy template on startup sync", async () => {
+    const fromMock = vi.fn().mockResolvedValue([
+      {
+        id: "pub-1",
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        projectVersion: 3,
+        domain: "localhost",
+        commitHash: "commit-1",
+        publishedAt: new Date(),
+        publishedById: "user-1",
+      },
+    ]);
+    vi.spyOn(db, "select").mockReturnValue({
+      from: fromMock,
+    } as any);
+
+    const redirectRules = [
+      {
+        fromPath: "/old",
+        to: "/new",
+        statusCode: 308 as const,
+        isPrefix: false,
+      },
+    ];
+    const readRedirectRulesSpy = vi
+      .spyOn(service as any, "readRedirectRulesFromDirectory")
+      .mockReturnValue(redirectRules);
+    const generateCaddyConfigSpy = vi
+      .spyOn(service as any, "generateCaddyConfig")
+      .mockResolvedValue(undefined);
+    const reloadCaddySpy = vi
+      .spyOn(service as any, "reloadCaddy")
+      .mockResolvedValue(undefined);
+
+    const syncedCount = await service.syncGeneratedCaddyConfigs();
+
+    expect(syncedCount).toBe(1);
+    expect(readRedirectRulesSpy).toHaveBeenCalledWith(
+      "/srv/published/org-1/site-1",
+    );
+    expect(generateCaddyConfigSpy).toHaveBeenCalledWith(
+      "localhost",
+      "org-1",
+      "site-1",
+      redirectRules,
+    );
+    expect(reloadCaddySpy).toHaveBeenCalledTimes(1);
   });
 });

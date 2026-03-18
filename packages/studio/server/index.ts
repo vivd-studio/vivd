@@ -29,6 +29,7 @@ type DevPreviewProxyRequest = express.Request & {
 
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const STUDIO_AUTH_QUERY = "vivdStudioToken";
+const FORWARDED_PREFIX_HEADER = "x-forwarded-prefix";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,6 +69,14 @@ function getRequestStudioToken(req: express.Request): string | null {
   }
 
   return null;
+}
+
+function getProxyBasePath(req: express.Request): string | null {
+  const raw = req.get(FORWARDED_PREFIX_HEADER);
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("/")) return null;
+  return trimmed.replace(/\/+$/, "") || null;
 }
 
 function getSingleRouteParam(
@@ -367,6 +376,20 @@ async function writeUploadedFile(
   await fs.writeFile(fullPath, buffer);
 }
 
+async function sendStudioClientIndex(options: {
+  req: express.Request;
+  res: express.Response;
+  clientIndexPath: string;
+}): Promise<void> {
+  let html = await fs.readFile(options.clientIndexPath, "utf8");
+  const proxyBasePath = getProxyBasePath(options.req);
+  if (proxyBasePath) {
+    html = rewriteRootAssetUrlsInText(html, proxyBasePath);
+    html = injectBasePathScript(html, proxyBasePath);
+  }
+  options.res.type("html").send(html);
+}
+
 // Single proxy instance to avoid adding EventEmitter listeners per request.
 // The route handler sets `vivdDevPreviewTarget` and `vivdDevPreviewBasePath` on the request.
 const devPreviewProxy = createProxyMiddleware({
@@ -566,15 +589,37 @@ async function startServer() {
 
   // Serve bundled client in production
   const clientPath = path.join(__dirname, "client");
+  const clientIndexPath = path.join(clientPath, "index.html");
   app.get("/", (_req, res) => {
-    res.redirect(302, "/vivd-studio");
+    // Relative redirect keeps path-prefixed proxies on the same runtime route.
+    res.redirect(302, "vivd-studio");
   });
-  app.use("/vivd-studio", express.static(clientPath));
+  app.get("/vivd-studio", async (req, res) => {
+    await sendStudioClientIndex({
+      req,
+      res,
+      clientIndexPath,
+    });
+  });
+  app.get("/vivd-studio/", async (req, res) => {
+    await sendStudioClientIndex({
+      req,
+      res,
+      clientIndexPath,
+    });
+  });
+  app.use(
+    "/vivd-studio",
+    express.static(clientPath, {
+      index: false,
+      redirect: false,
+    }),
+  );
 
   // SPA fallback
   // Express 5 uses `path-to-regexp` which does not accept `"*"` as a route pattern.
   // Use a regex to match everything instead.
-  app.get(/.*/, (req, res, next) => {
+  app.get(/.*/, async (req, res, next) => {
     // Skip API routes
     if (
       req.path.startsWith("/trpc") ||
@@ -583,7 +628,11 @@ async function startServer() {
     ) {
       return next();
     }
-    res.sendFile(path.join(clientPath, "index.html"));
+    await sendStudioClientIndex({
+      req,
+      res,
+      clientIndexPath,
+    });
   });
 
   // Graceful shutdown

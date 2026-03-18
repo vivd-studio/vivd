@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { ROUTES } from "@/app/router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { VivdIcon } from "@/components/common";
 import {
   Collapsible,
   CollapsibleContent,
@@ -169,14 +170,8 @@ function OrganizationSwitcher({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div
-                className="flex aspect-square size-8 items-center justify-center rounded-lg text-white font-bold"
-                style={{
-                  background:
-                    "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--chart-2)) 100%)",
-                }}
-              >
-                v
+              <div className="flex size-8 shrink-0 items-center justify-center">
+                <VivdIcon className="size-[1.625rem]" strokeWidth={12} />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">

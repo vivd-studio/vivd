@@ -3,28 +3,87 @@ title: Troubleshooting
 description: Common issues around imports, Studio edits, publishing, and access.
 ---
 
+import { Aside } from "@astrojs/starlight/components";
+
+Use this page when a project feels wrong but you do not yet know whether the issue is in draft, Studio, plugins, publish, or access.
+
+<Aside type="note" title="Collect this first">
+  Write down the project name, the domain involved, whether the issue is in draft or live, and the exact step that failed. That usually cuts the troubleshooting time in half.
+</Aside>
+
 ## The live site does not match what I see in Studio
 
-- Confirm that the latest draft was actually published.
-- Re-check the target domain used during the publish step.
-- Verify that the project changes were made in the version you intended to ship.
+### What this usually means
+
+- The latest draft was never published.
+- The wrong domain or project version was used during publish.
+- The change exists only in Studio and has not been promoted to live yet.
+
+### Check first
+
+1. Confirm that the latest draft was actually published.
+2. Re-check the target domain used during the publish step.
+3. Verify that the project changes were made in the version you intended to ship.
+4. If the project uses plugins, confirm that the plugin configuration you expected is part of the published state.
 
 ## The imported draft feels incomplete
 
-- Re-run the import only after checking the source URL and instructions.
-- Make sure the page you imported was public and stable.
-- Use Studio to repair the structure rather than expecting the first import to be final.
+### What this usually means
+
+- The source URL did not expose enough stable content.
+- The first generation needs editorial cleanup rather than another blind retry.
+- The business direction was under-specified, so the result stayed too generic.
+
+### Check first
+
+1. Make sure the imported URL was public, stable, and representative of the site you wanted.
+2. Review whether the first pass actually captured the main pages and structure.
+3. Use Studio to repair missing structure before assuming the import fully failed.
+4. Re-run the import only after changing the source URL or improving the instruction quality.
 
 ## I published, but the launch still feels unfinished
 
-- Revisit the pre-publish checklist.
-- Check plugin configuration, especially form recipients and analytics expectations.
-- Review missing assets, CTA wording, and contact/legal details.
+### What this usually means
+
+- The site is technically live, but launch-ready details were skipped.
+- Plugin setup, contact details, or legal/copy review did not happen before publish.
+- The final polish pass in Studio was not complete.
+
+### Check first
+
+1. Revisit the pre-publish checklist.
+2. Check plugin configuration, especially form recipients and analytics expectations.
+3. Review missing assets, CTA wording, and contact/legal details.
+4. If the site structure is correct, use Studio for a focused polish pass and republish.
+
+## Form submissions or analytics do not look right
+
+### What this usually means
+
+- The plugin is not fully configured for the current project state.
+- The live launch happened before the plugin setup was verified.
+- Expectations around recipients or traffic data do not match the current configuration.
+
+### Check first
+
+1. Revisit [Plugins Overview](/plugins/).
+2. Verify the Contact Form setup and recipients if leads are missing.
+3. Verify the Analytics setup if traffic is not appearing as expected.
+4. Republish if the plugin configuration was corrected after the last launch.
 
 ## I can view the project but not work in the right place
 
-- Confirm that you are in the expected organization and project.
-- Re-check role assignment and project access if you are a client editor or collaborator.
+### What this usually means
+
+- You are in the wrong organization or project.
+- Your role is narrower than expected.
+- A handoff happened, but access was not reviewed afterward.
+
+### Check first
+
+1. Confirm that you are in the expected organization and project.
+2. Re-check role assignment and project access if you are a client editor or collaborator.
+3. Ask the project owner whether access changed during a recent handoff or launch cycle.
 
 ## When to ask for help
 
