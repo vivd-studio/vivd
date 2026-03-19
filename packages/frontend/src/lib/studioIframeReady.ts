@@ -9,6 +9,15 @@ function hasStudioAssetReference(frameDocument: Document): boolean {
   });
 }
 
+function hasMountedStudioRoot(frameDocument: Document): boolean {
+  const root = frameDocument.getElementById("root");
+  if (!root) return false;
+  if (root.childElementCount > 0) return true;
+  return Array.from(root.childNodes).some(
+    (node) => node.nodeType === 3 && Boolean(node.textContent?.trim()),
+  );
+}
+
 export function isStudioIframeShellLoaded(
   iframe: HTMLIFrameElement | null,
 ): boolean {
@@ -26,7 +35,7 @@ export function isStudioIframeShellLoaded(
       return false;
     }
 
-    return hasStudioAssetReference(frameDocument);
+    return hasMountedStudioRoot(frameDocument) || hasStudioAssetReference(frameDocument);
   } catch {
     return false;
   }

@@ -430,6 +430,162 @@ describe("AppSidebar search", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows organization choices on pinned hosts so switching can redirect", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "platform",
+        instanceAdminLabel: "Super Admin",
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        controlPlaneMode: "host_based",
+        pluginRuntime: { mode: "dedicated_host" },
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: false,
+        controlPlaneHost: "app.staging.vivd.studio",
+        isSuperAdminHost: true,
+      },
+    });
+    listMyOrganizationsUseQueryMock.mockReturnValue({
+      data: {
+        organizations: [
+          {
+            id: "org_1",
+            name: "Default",
+            status: "active",
+            role: "owner",
+            isActive: true,
+            tenantHost: "default.staging.vivd.studio",
+          },
+          {
+            id: "org_2",
+            name: "Test GmbH",
+            status: "active",
+            role: "member",
+            isActive: false,
+            tenantHost: "test.staging.vivd.studio",
+          },
+        ],
+      },
+    });
+    getMyOrganizationUseQueryMock.mockReturnValue({
+      data: {
+        organization: {
+          id: "org_1",
+          name: "Default",
+          status: "active",
+        },
+      },
+    });
+
+    renderSidebar();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Default/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(screen.getByRole("menuitem", { name: /Test GmbH/i })).toBeInTheDocument();
+    expect(
+      screen.getByText("This host is pinned; selecting another org will redirect."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show organization choices when multi-org is disabled", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        controlPlaneMode: "path_based",
+        pluginRuntime: { mode: "same_host_path" },
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: false,
+        controlPlaneHost: "localhost",
+        isSuperAdminHost: true,
+      },
+    });
+    listMyOrganizationsUseQueryMock.mockReturnValue({
+      data: {
+        organizations: [
+          {
+            id: "org_1",
+            name: "Default",
+            status: "active",
+            role: "owner",
+            isActive: true,
+            tenantHost: null,
+          },
+          {
+            id: "org_2",
+            name: "Test GmbH",
+            status: "active",
+            role: "member",
+            isActive: false,
+            tenantHost: null,
+          },
+        ],
+      },
+    });
+    getMyOrganizationUseQueryMock.mockReturnValue({
+      data: {
+        organization: {
+          id: "org_1",
+          name: "Default",
+          status: "active",
+        },
+      },
+    });
+
+    renderSidebar();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Default/i }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(screen.queryByRole("menuitem", { name: /Test GmbH/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This host is pinned; selecting another org will redirect."),
+    ).not.toBeInTheDocument();
+  });
+
   it("clears the search query after selecting a search result", () => {
     renderSidebar();
 

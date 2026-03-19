@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   useParamsMock,
@@ -141,6 +141,10 @@ function renderEmbeddedStudio() {
 }
 
 describe("EmbeddedStudio", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     window.sessionStorage.clear();
     useParamsMock.mockReset();
@@ -233,7 +237,10 @@ describe("EmbeddedStudio", () => {
     useStudioRuntimeGuardMock.mockReturnValue({
       isRecovering: false,
     });
-    resolveStudioRuntimeUrlMock.mockImplementation((url: string) => url);
+    resolveStudioRuntimeUrlMock.mockImplementation((baseUrl: string, path?: string) => {
+      if (!path) return baseUrl;
+      return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+    });
 
     projectListUseQueryMock.mockReturnValue({
       data: { projects: [makeProject()] },
@@ -535,6 +542,94 @@ describe("EmbeddedStudio", () => {
         expect.objectContaining({ type: "vivd:host:theme" }),
         "*",
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("auto-reloads the iframe when the initial studio document 503s but health becomes ready", async () => {
+    vi.useFakeTimers();
+
+    try {
+      let resolveHealthFetch: ((value: { ok: boolean }) => void) | null = null;
+      const fetchMock = vi.fn().mockImplementation(
+        () =>
+          new Promise<{ ok: boolean }>((resolve) => {
+            resolveHealthFetch = resolve;
+          }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const postMessage = vi.fn();
+      const contentWindowMock = {
+        postMessage,
+        location: { pathname: "/_studio/runtime-123/vivd-studio" },
+      };
+      const loadingDocument = document.implementation.createHTMLDocument("loading");
+      const shellDocument = document.implementation.createHTMLDocument("studio");
+      const root = shellDocument.createElement("div");
+      root.id = "root";
+      const mountedApp = shellDocument.createElement("div");
+      mountedApp.textContent = "Studio";
+      root.append(mountedApp);
+      shellDocument.body.append(root);
+      let currentDocument = loadingDocument;
+
+      getStudioUrlUseQueryMock.mockReturnValue({
+        data: {
+          status: "running",
+          url: "http://app.localhost/_studio/runtime-123",
+          accessToken: null,
+        },
+      });
+
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+        configurable: true,
+        get() {
+          return contentWindowMock;
+        },
+      });
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
+        configurable: true,
+        get() {
+          return currentDocument;
+        },
+      });
+
+      renderEmbeddedStudio();
+
+      const iframe = screen.getByTitle("Vivd Studio - site-1");
+      fireEvent.load(iframe);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(25_100);
+      });
+
+      expect(
+        screen.getByText("Studio is taking longer than usual"),
+      ).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://app.localhost/_studio/runtime-123/health",
+        expect.objectContaining({
+          method: "GET",
+          mode: "cors",
+          cache: "no-store",
+        }),
+      );
+
+      currentDocument = shellDocument;
+      await act(async () => {
+        resolveHealthFetch?.({ ok: true });
+        await Promise.resolve();
+      });
+
+      const reloadedIframe = screen.getByTitle("Vivd Studio - site-1");
+      expect(reloadedIframe).not.toBe(iframe);
+      expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
+
+      fireEvent.load(reloadedIframe);
+
+      expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

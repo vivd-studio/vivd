@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
 import { useStudioIframeReadyRetry } from "@/hooks/useStudioIframeReadyRetry";
+import { useStudioIframeTimeoutRecovery } from "@/hooks/useStudioIframeTimeoutRecovery";
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
@@ -379,6 +380,18 @@ export default function StudioFullscreen() {
   useStudioIframeReadyRetry({
     enabled: Boolean(studioIframeSrc && !studioReady),
     checkReady: tryMarkStudioReadyFromIframe,
+  });
+
+  const handleHealthyRuntimeTimeoutRecovery = useCallback(() => {
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+    setStudioReloadNonce((n) => n + 1);
+  }, []);
+
+  useStudioIframeTimeoutRecovery({
+    enabled: Boolean(studioLoadTimedOut && baseUrl && !studioReady),
+    studioBaseUrl: baseUrl,
+    onHealthyRuntimeDetected: handleHealthyRuntimeTimeoutRecovery,
   });
 
   useEffect(() => {

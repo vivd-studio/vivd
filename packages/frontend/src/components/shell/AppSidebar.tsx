@@ -132,6 +132,7 @@ type OrganizationSwitcherProps = {
     status: string;
   } | null;
   organizations: SwitcherOrganization[];
+  allowOrganizationChoices: boolean;
   canSelectOrganization: boolean;
   onSelectOrganization: (organizationId: string) => void;
   isSwitching: boolean;
@@ -155,11 +156,13 @@ function formatOrgRole(role: string): string {
 function OrganizationSwitcher({
   org,
   organizations,
+  allowOrganizationChoices,
   canSelectOrganization,
   onSelectOrganization,
   isSwitching,
 }: OrganizationSwitcherProps) {
-  const showSwitcher = organizations.length > 1 && canSelectOrganization;
+  const showSwitcher = allowOrganizationChoices && organizations.length > 1;
+  const showPinnedHint = allowOrganizationChoices && !canSelectOrganization;
 
   return (
     <SidebarMenu>
@@ -215,11 +218,11 @@ function OrganizationSwitcher({
                 )}
               </div>
             </DropdownMenuLabel>
-            {(showSwitcher || !canSelectOrganization) && <DropdownMenuSeparator />}
+            {(showSwitcher || showPinnedHint) && <DropdownMenuSeparator />}
             {showSwitcher ? (
               <>
                 <DropdownMenuLabel className="text-xs text-muted-foreground">
-                  Switch organization
+                  {canSelectOrganization ? "Switch organization" : "Open organization"}
                 </DropdownMenuLabel>
                 {organizations.map((entry) => (
                   <DropdownMenuItem
@@ -240,8 +243,16 @@ function OrganizationSwitcher({
                     </div>
                   </DropdownMenuItem>
                 ))}
+                {showPinnedHint ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                      This host is pinned; selecting another org will redirect.
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </>
-            ) : !canSelectOrganization ? (
+            ) : showPinnedHint ? (
               <DropdownMenuItem disabled className="text-xs text-muted-foreground">
                 Organization pinned to this domain
               </DropdownMenuItem>
@@ -818,6 +829,7 @@ export function AppSidebar() {
         <OrganizationSwitcher
           org={org ? { id: org.id, name: org.name, status: org.status } : null}
           organizations={organizations}
+          allowOrganizationChoices={config.capabilities.multiOrg}
           canSelectOrganization={config.canSelectOrganization}
           isSwitching={setActiveOrganizationMutation.isPending}
           onSelectOrganization={handleSelectOrganization}
