@@ -10,8 +10,9 @@ import {
   Wand2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { FileTreeNode } from "./types";
-import { getFileIconComponent } from "./utils";
+import { getFileTreeIconComponent } from "./utils";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -74,7 +75,7 @@ export function FileTreeItem({
   const [isDragOver, setIsDragOver] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { icon: Icon, className: iconClassName } = getFileIconComponent(item);
+  const fileIcon = getFileTreeIconComponent(item);
 
   const isGrayed = item.type === "folder" && GRAYED_FOLDERS.includes(item.name);
 
@@ -197,10 +198,14 @@ export function FileTreeItem({
 
   const itemContent = (
     <div
-      className={`flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-muted/50 transition-colors overflow-hidden min-w-0 ${
-        isDragOver ? "bg-primary/10 ring-1 ring-primary" : ""
-      } ${isGrayed ? "opacity-50" : ""} ${isViewing ? "bg-primary/15 ring-1 ring-primary/50" : ""}`}
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer transition-colors overflow-hidden min-w-0",
+        "hover:bg-muted/35",
+        isDragOver && "bg-muted/50 ring-1 ring-border",
+        isGrayed && "text-muted-foreground opacity-65",
+        isViewing && "bg-muted font-medium",
+      )}
+      style={{ paddingLeft: `${depth * 16 + 12}px` }}
       onClick={isRenaming ? undefined : onClick}
       draggable={item.type === "file" && !isRenaming}
       onDragStart={handleDragStart}
@@ -212,17 +217,21 @@ export function FileTreeItem({
       {item.type === "folder" ? (
         <span className="w-4 h-4 flex items-center justify-center shrink-0">
           {isExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronDown className="h-3.5 w-3.5 text-foreground/80" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronRight className="h-3.5 w-3.5 text-foreground/80" />
           )}
         </span>
       ) : (
         <span className="w-4 shrink-0" />
       )}
 
-      {/* File/folder icon */}
-      <Icon className={`${iconClassName} w-4! h-4! shrink-0`} />
+      {/* File icon */}
+      {fileIcon ? (
+        <fileIcon.icon
+          className={cn(fileIcon.className, "h-4 w-4 shrink-0")}
+        />
+      ) : null}
 
       {/* Name or rename input */}
       {isRenaming ? (
@@ -236,7 +245,13 @@ export function FileTreeItem({
           className="h-6 py-0 px-1 text-sm"
         />
       ) : (
-        <span className="text-sm truncate min-w-0" title={item.name}>
+        <span
+          className={cn(
+            "text-sm truncate min-w-0",
+            item.type === "folder" ? "font-medium" : "font-normal"
+          )}
+          title={item.name}
+        >
           {item.name}
         </span>
       )}

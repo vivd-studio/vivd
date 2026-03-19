@@ -10,6 +10,7 @@ import { LoadingSpinner } from "@/components/common";
 import { Loader2, Save, X, FileCode, WrapText, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
+import { useTheme } from "@/components/theme";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
@@ -78,6 +79,7 @@ export function TextEditorPanel({
   const [content, setContent] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const [lineWrap, setLineWrap] = useState(true);
+  const { resolvedTheme } = useTheme();
   const chatContext = useOptionalChatContext();
 
   const filename = filePath.split("/").pop() || filePath;
@@ -293,7 +295,7 @@ export function TextEditorPanel({
             onChange={handleChange}
             extensions={extensions}
             height="100%"
-            theme="dark"
+            theme={resolvedTheme}
             className="h-full text-sm"
             basicSetup={{
               lineNumbers: true,

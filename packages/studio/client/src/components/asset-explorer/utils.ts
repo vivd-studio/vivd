@@ -5,7 +5,7 @@ import {
   FileCode,
   Image as ImageIcon,
 } from "lucide-react";
-import type { AssetItem } from "./types";
+import type { AssetItem, FileTreeNode } from "./types";
 import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
 export function formatSize(bytes?: number): string {
@@ -57,6 +57,27 @@ export function getFileIconComponent(item: AssetItem) {
     return { icon: FileCode, className: "w-8 h-8 text-green-500" };
   }
   return { icon: File, className: "w-8 h-8 text-gray-500" };
+}
+
+export function getFileTreeIconComponent(item: AssetItem | FileTreeNode) {
+  if (item.type === "folder") {
+    return null;
+  }
+
+  if (item.isImage) {
+    return { icon: ImageIcon, className: "text-muted-foreground" };
+  }
+
+  if (item.mimeType?.includes("pdf")) {
+    return { icon: FileText, className: "text-muted-foreground" };
+  }
+
+  const ext = item.name.substring(item.name.lastIndexOf(".")).toLowerCase();
+  if (CODE_FILE_EXTENSIONS.includes(ext)) {
+    return { icon: FileCode, className: "text-muted-foreground" };
+  }
+
+  return { icon: File, className: "text-muted-foreground" };
 }
 
 export function buildImageUrl(
