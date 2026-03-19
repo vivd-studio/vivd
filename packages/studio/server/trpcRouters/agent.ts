@@ -14,7 +14,10 @@ import {
   runTask,
   unrevertSession,
 } from "../opencode/index.js";
-import { validateModelSelection } from "../opencode/modelConfig.js";
+import {
+  getPreferredInitialGenerationModel,
+  validateModelSelection,
+} from "../opencode/modelConfig.js";
 import { initialGenerationService } from "../services/initialGeneration/InitialGenerationService.js";
 import {
   CHECKLIST_PROMPT,
@@ -294,16 +297,17 @@ export const agentRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const directory = getWorkspaceDir(ctx);
-
-      const validatedModel = input.model
-        ? validateModelSelection(input.model) ?? input.model
-        : undefined;
+      const preferredModel = getPreferredInitialGenerationModel();
+      const fallbackModel =
+        preferredModel || !input.model
+          ? undefined
+          : validateModelSelection(input.model) ?? input.model;
 
       return await initialGenerationService.startInitialGeneration({
         projectSlug: input.projectSlug,
         version: input.version ?? 1,
         workspaceDir: directory,
-        model: validatedModel,
+        model: preferredModel ?? fallbackModel,
       });
     }),
 

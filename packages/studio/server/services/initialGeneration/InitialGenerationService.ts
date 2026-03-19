@@ -163,31 +163,34 @@ function formatListSection(title: string, items: string[]): string {
   return `${title}\n${items.map((item) => `- ${item}`).join("\n")}`;
 }
 
-function buildManifestSummary(
+function buildStyleBlock(
   manifest: ScratchInitialGenerationManifest,
-): string[] {
-  const lines = [
-    `- Title: ${manifest.title}`,
-    `- Description: ${manifest.description}`,
-  ];
+): string | null {
+  const styleLine = manifest.stylePreset
+    ? `Style preset: ${manifest.stylePreset}\n`
+    : "";
+  const paletteLine =
+    manifest.stylePreset && manifest.stylePalette?.length
+      ? `Color tokens (hex): ${manifest.stylePalette.join(", ")}\n`
+      : "";
+  const modeLine =
+    manifest.stylePreset && manifest.styleMode
+      ? `Color token usage: ${
+          manifest.styleMode === "exact"
+            ? "EXACT (please use exactly these colors)"
+            : "REFERENCE (these colors are just for inspiration and don't need to exactly match)"
+        }\n`
+      : "";
+  const themeLine = manifest.siteTheme
+    ? `Theme preference: ${manifest.siteTheme.toUpperCase()}`
+    : "";
 
-  if (manifest.businessType) {
-    lines.push(`- Business type: ${manifest.businessType}`);
-  }
-  if (manifest.stylePreset) {
-    lines.push(`- Style preset: ${manifest.stylePreset}`);
-  }
-  if (manifest.styleMode) {
-    lines.push(`- Style mode: ${manifest.styleMode}`);
-  }
-  if (manifest.stylePalette?.length) {
-    lines.push(`- Style palette: ${manifest.stylePalette.join(", ")}`);
-  }
-  if (manifest.siteTheme) {
-    lines.push(`- Site theme: ${manifest.siteTheme}`);
-  }
+  const block =
+    styleLine || themeLine
+      ? `${styleLine}${paletteLine}${modeLine}${themeLine}\n`
+      : "";
 
-  return lines;
+  return block || null;
 }
 
 export function buildInitialGenerationTask(options: {
@@ -211,48 +214,51 @@ export function buildInitialGenerationTask(options: {
   )
     .filter((file) => file !== "urls.txt")
     .map((file) => `references/${file}`);
-
-  const sections = [
-    "Create the first customer-facing website for this project from the existing Astro starter workspace.",
+  const styleBlock = buildStyleBlock(options.manifest);
+  const fallbackBusinessBrief = [
+    `Title: ${options.manifest.title}`,
+    options.manifest.businessType
+      ? `Business type: ${options.manifest.businessType}`
+      : null,
     "",
-    "Requirements",
-    "- Keep the project as Astro with the existing Tailwind setup. Do not replace the framework.",
-    "- Turn the scaffold into a polished first draft based on the project brief and available references.",
-    "- Use uploaded source assets from `images/` when relevant. If a file should be publicly served by Astro, copy or move the final chosen asset into `public/images/` and update the site code accordingly.",
-    "- Treat `references/` as working material for inspiration and reconstruction, not as public site assets by default.",
-    "- Maintain a clean structure in `src/layouts`, `src/components`, `src/styles`, and any additional content/data files you add.",
-    "- Proactively update `AGENTS.md` so it stays current for this project, especially content locations and editing instructions.",
-    "- Keep the result production-ready: responsive, accessible, and free of placeholders.",
-    "",
-    "Project brief",
-    ...buildManifestSummary(options.manifest),
-  ];
+    "Description:",
+    options.manifest.description,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const businessBriefSection = scratchBrief
+    ? `Business brief (from scratch_brief.txt):\n${scratchBrief}`
+    : `Business brief:\n${fallbackBusinessBrief}`;
 
-  if (scratchBrief) {
-    sections.push("", "scratch_brief.txt", scratchBrief);
-  }
+  return `Create a new, modern, beautiful, fully-fledged, high-converting website for the business described in the text below.
+This is a "start from scratch" project: there is no source website screenshot, but you are starting from an existing Astro starter workspace.
+You will also receive reference screenshots/images of designs the user likes. Use them as visual inspiration for layout, typography, spacing, components, and overall vibe.
+Use the existing Astro + Tailwind setup and modern website best practices (layout, typography, spacing, subtle scroll-appear animations).
+${
+  options.manifest.stylePreset
+    ? "Use the provided style preset and color tokens as direction."
+    : ""
+}${options.manifest.siteTheme ? ` Build a ${options.manifest.siteTheme} themed website.` : ""}
+Create a complete, finished version 1 of the website in this run, not just a rough first draft.
+Keep it production-ready: responsive, accessible, polished, and free of placeholder content.
+If something important is missing, you may ask the user clarifying questions using the question tool, but otherwise make reasonable assumptions and finish the site.
+Keep the project as Astro with the existing Tailwind setup. Do not replace the framework.
+Use uploaded source assets from \`images/\` when relevant. If a file should be publicly served by Astro, copy or move the final chosen asset into \`public/images/\` and update the site code accordingly.
+Treat \`references/\` as working material for inspiration and reconstruction, not as public site assets by default.
+Maintain a clean structure in \`src/layouts\`, \`src/components\`, \`src/styles\`, and any additional content/data files you add.
+Proactively update \`AGENTS.md\` so it stays current for this project, especially content locations and editing instructions.
+Preserve a buildable project state when you finish.
 
-  if (referenceUrls) {
-    sections.push("", "Reference URLs", referenceUrls);
-  }
+${styleBlock ?? ""}${referenceUrls ? `Reference URLs:\n${referenceUrls}\n\n` : ""}${
+  imageDescriptions
+    ? `.vivd/image-files-description.txt:\n${imageDescriptions}\n\n`
+    : ""
+}${formatListSection("Uploaded source assets", uploadedAssets)}
 
-  if (imageDescriptions) {
-    sections.push("", ".vivd/image-files-description.txt", imageDescriptions);
-  }
+${formatListSection("Reference files", referenceFiles)}
 
-  sections.push(
-    "",
-    formatListSection("Uploaded source assets", uploadedAssets),
-    "",
-    formatListSection("Reference files", referenceFiles),
-    "",
-    "Implementation notes",
-    "- Review the available files before editing.",
-    "- You may add new Astro components, layouts, and styles as needed.",
-    "- Preserve a buildable project state when you finish.",
-  );
-
-  return sections.join("\n");
+${businessBriefSection}
+`;
 }
 
 async function updateBackendInitialGenerationStatus(options: {

@@ -4,6 +4,7 @@ const {
   getClientAndDirectoryMock,
   sessionCreateMock,
   sessionListMock,
+  sessionDiffMock,
   sessionStatusMock,
   sessionAbortMock,
   sessionPromptAsyncMock,
@@ -18,6 +19,7 @@ const {
   getClientAndDirectoryMock: vi.fn(),
   sessionCreateMock: vi.fn(),
   sessionListMock: vi.fn(),
+  sessionDiffMock: vi.fn(),
   sessionStatusMock: vi.fn(),
   sessionAbortMock: vi.fn(),
   sessionPromptAsyncMock: vi.fn(),
@@ -83,13 +85,20 @@ vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
   },
 }));
 
-import { abortSession, getSessionsStatus, listSessions, runTask } from "./index.js";
+import {
+  abortSession,
+  getMessageDiff,
+  getSessionsStatus,
+  listSessions,
+  runTask,
+} from "./index.js";
 
 describe("opencode index session behavior", () => {
   beforeEach(() => {
     getClientAndDirectoryMock.mockReset();
     sessionCreateMock.mockReset();
     sessionListMock.mockReset();
+    sessionDiffMock.mockReset();
     sessionStatusMock.mockReset();
     sessionAbortMock.mockReset();
     sessionPromptAsyncMock.mockReset();
@@ -102,6 +111,7 @@ describe("opencode index session behavior", () => {
     finishSessionRunsMock.mockReset();
 
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
+    sessionDiffMock.mockResolvedValue({ data: [], error: undefined });
     sessionStatusMock.mockResolvedValue({ data: {}, error: undefined });
     sessionAbortMock.mockResolvedValue({ data: {}, error: undefined });
     sessionCreateMock.mockResolvedValue({ data: { id: "sess-new" }, error: undefined });
@@ -116,6 +126,7 @@ describe("opencode index session behavior", () => {
         session: {
           create: sessionCreateMock,
           list: sessionListMock,
+          diff: sessionDiffMock,
           status: sessionStatusMock,
           abort: sessionAbortMock,
           promptAsync: sessionPromptAsyncMock,
@@ -140,6 +151,44 @@ describe("opencode index session behavior", () => {
     expect(result).toEqual([
       { id: "sess-1", directory: "/workspace/project" },
       { id: "sess-2", directory: "/workspace/project/" },
+    ]);
+  });
+
+  it("loads per-message diffs with the current session and directory", async () => {
+    sessionDiffMock.mockResolvedValueOnce({
+      data: [
+        {
+          file: "src/index.html",
+          before: "<h1>Before</h1>\n",
+          after: "<h1>After</h1>\n",
+          additions: 1,
+          deletions: 1,
+          status: "modified",
+        },
+      ],
+      error: undefined,
+    });
+
+    const result = await getMessageDiff(
+      "sess-1",
+      "msg-1",
+      "/workspace/project",
+    );
+
+    expect(sessionDiffMock).toHaveBeenCalledWith({
+      sessionID: "sess-1",
+      directory: "/workspace/project/",
+      messageID: "msg-1",
+    });
+    expect(result).toEqual([
+      {
+        file: "src/index.html",
+        before: "<h1>Before</h1>\n",
+        after: "<h1>After</h1>\n",
+        additions: 1,
+        deletions: 1,
+        status: "modified",
+      },
     ]);
   });
 

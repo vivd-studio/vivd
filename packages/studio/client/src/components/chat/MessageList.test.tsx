@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageList } from "./MessageList";
 
@@ -52,6 +52,10 @@ const anchorTopById = vi.hoisted(() => ({
   "user-1": 120,
   "user-2": 280,
 } as Record<string, number>));
+const userMessageContentScrollHeightById = vi.hoisted(() => ({
+  "user-1": 80,
+  "user-2": 80,
+} as Record<string, number>));
 const resizeObserverCallbacks = vi.hoisted(() => [] as ResizeObserverCallback[]);
 
 vi.mock("@/features/opencodeChat", () => ({
@@ -88,6 +92,8 @@ describe("MessageList latest-user anchoring", () => {
     chatState.isSessionHydrating = false;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
+    userMessageContentScrollHeightById["user-1"] = 80;
+    userMessageContentScrollHeightById["user-2"] = 80;
     resizeObserverCallbacks.length = 0;
 
     Object.defineProperty(window, "requestAnimationFrame", {
@@ -146,6 +152,11 @@ describe("MessageList latest-user anchoring", () => {
       configurable: true,
       get() {
         const element = this as HTMLElement;
+        if (element.dataset.chatUserMessageContent) {
+          return userMessageContentScrollHeightById[
+            element.dataset.chatUserMessageContent
+          ] ?? 0;
+        }
         if (element.getAttribute("data-chat-scroll-viewport") !== null) {
           const activeTurnBody = element.querySelector<HTMLElement>(
             "[data-chat-active-turn-body]",
@@ -347,5 +358,47 @@ describe("MessageList latest-user anchoring", () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("does not show a long-message toggle for short user prompts", async () => {
+    render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /show more/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("collapses long user prompts and keeps attachments visible", async () => {
+    timelineState.items = [
+      {
+        key: "user-1",
+        kind: "user",
+        message: {
+          id: "user-1",
+          content:
+            'Long prompt\n\n<vivd-internal type="attached-file" filename="brief.txt" />',
+          createdAt: Date.UTC(2026, 2, 18, 10, 59),
+        },
+      },
+    ];
+    userMessageContentScrollHeightById["user-1"] = 280;
+
+    render(<MessageList />);
+
+    const toggle = await screen.findByRole("button", { name: /show more/i });
+
+    expect(screen.getByText("brief.txt")).toBeInTheDocument();
+    expect(
+      document.querySelector("[data-chat-user-message-time='user-1']"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole("button", { name: /show less/i })).toBeInTheDocument();
+    expect(screen.getByText("brief.txt")).toBeInTheDocument();
   });
 });

@@ -24,6 +24,7 @@ const COLOR_THEME_OPTIONS: ColorThemeOption[] = [
   { value: "vivd-green", label: "Vivd Green", preview: ["#10b981", "#f59e0b"] },
   { value: "vivd-sharp", label: "Vivd Sharp", preview: ["#059669", "#f59e0b"] },
   { value: "ocean", label: "Ocean", preview: ["#0ea5e9", "#14b8a6"] },
+  { value: "aurora", label: "Aurora", preview: ["#4f7cff", "#ff2b8a"] },
   { value: "mono", label: "Mono", preview: ["#fafafa", "#0b0b0b"] },
 ];
 

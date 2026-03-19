@@ -47,6 +47,15 @@ http://{$VIVD_PUBLIC_PLUGIN_API_HOST:api.vivd.studio}, http://api.localhost {
 # Default server - handles studio routes and fallback
 # Only listen on :80 - TLS is handled by external load balancer
 :80 {
+    # Same-host plugin runtime and email feedback routes
+    handle /plugins/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /email/v1/feedback/* {
+        reverse_proxy backend:3000
+    }
+
     # Vivd Studio API routes - proxy to backend
     handle /vivd-studio/api/* {
         reverse_proxy backend:3000

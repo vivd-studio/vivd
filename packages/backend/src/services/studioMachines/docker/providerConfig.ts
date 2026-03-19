@@ -249,7 +249,7 @@ export class DockerProviderConfig {
   }
 
   get memoryMb(): number {
-    return parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_MB, 1024);
+    return parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_MB, 2048);
   }
 
   get memoryBytes(): number {

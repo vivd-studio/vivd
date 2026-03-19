@@ -3,6 +3,7 @@ import dns from "node:dns/promises";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { domain as domainTable, organization, publishedSite } from "../../db/schema";
+import { installProfileService } from "../system/InstallProfileService";
 
 export const RESERVED_ORG_SLUG_LABELS = [
   "app",
@@ -103,6 +104,33 @@ export function validateOrganizationSlug(slug: string): { valid: boolean; error?
 }
 
 export class DomainService {
+  private async getResolvedRoutingSettings(requestDomain?: string | null) {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    const normalizedRequestDomain = requestDomain
+      ? this.normalizeHost(requestDomain)
+      : null;
+    const configuredPrimaryHost = this.getEnvHostname(process.env.DOMAIN);
+    const configuredControlPlaneHost = this.getEnvHostname(
+      process.env.CONTROL_PLANE_HOST,
+    );
+    const tenantBaseDomain = instancePolicy.capabilities.tenantHosts
+      ? this.getEnvHostname(process.env.TENANT_BASE_DOMAIN) ?? configuredPrimaryHost
+      : null;
+    const controlPlaneHost =
+      instancePolicy.controlPlane.mode === "path_based"
+        ? configuredPrimaryHost ??
+          configuredControlPlaneHost ??
+          normalizedRequestDomain ??
+          "localhost"
+        : configuredControlPlaneHost ?? configuredPrimaryHost ?? "localhost";
+
+    return {
+      instancePolicy,
+      controlPlaneHost,
+      tenantBaseDomain,
+    };
+  }
+
   getPublicPluginApiHost(): string {
     const configured =
       this.getEnvHostname(process.env.VIVD_PUBLIC_PLUGIN_API_HOST) ??
@@ -197,6 +225,21 @@ export class DomainService {
     return routing.controlPlaneHost;
   }
 
+  async getResolvedControlPlaneHostForRequest(
+    requestDomain: string | null,
+  ): Promise<string | null> {
+    const { controlPlaneHost } = await this.getResolvedRoutingSettings(requestDomain);
+    const preferredBaseDomain = this.inferTenantBaseDomainFromHost(requestDomain);
+    if (preferredBaseDomain === "localhost") {
+      const configured = controlPlaneHost ? this.normalizeHost(controlPlaneHost) : null;
+      if (configured && configured.endsWith(".localhost")) {
+        return configured;
+      }
+      return "localhost";
+    }
+    return controlPlaneHost;
+  }
+
   getSuperAdminHosts(): Set<string> {
     const hosts = new Set<string>();
 
@@ -243,6 +286,9 @@ export class DomainService {
     organizationSlug: string;
     createdById?: string;
   }): Promise<void> {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (!instancePolicy.capabilities.tenantHosts) return;
+
     const managedHost = this.buildManagedTenantHost(options.organizationSlug);
     if (!managedHost) return;
 
@@ -277,6 +323,9 @@ export class DomainService {
   }
 
   async ensureManagedTenantDomainsForExistingOrganizations(): Promise<void> {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (!instancePolicy.capabilities.tenantHosts) return;
+
     const config = this.getTenantRoutingConfig();
     if (!config.tenantBaseDomain) return;
 
@@ -348,16 +397,20 @@ export class DomainService {
     const requestHost = requestHostHeader ? this.normalizeHost(requestHostHeader) : null;
     const requestDomain = requestHost || null;
     const isSuperAdminHost = this.isSuperAdminHost(requestDomain);
-    const routing = this.getTenantRoutingConfig();
+    const routing = await this.getResolvedRoutingSettings(requestDomain);
 
     const domainRecord =
-      routing.enabled && requestDomain
+      requestDomain &&
+      (routing.instancePolicy.capabilities.tenantHosts ||
+        routing.instancePolicy.capabilities.customDomains)
         ? (await this.getActiveDomainRecord(requestDomain)) ?? null
         : null;
 
     const controlPlaneHost = routing.controlPlaneHost;
     const isTenantBaseDomain = Boolean(
-      requestDomain && routing.tenantBaseDomain && requestDomain === routing.tenantBaseDomain,
+      requestDomain &&
+        routing.tenantBaseDomain &&
+        requestDomain === routing.tenantBaseDomain,
     );
     const isControlPlaneHost = Boolean(
       requestDomain &&
@@ -488,6 +541,26 @@ export class DomainService {
     }
 
     const normalizedDomain = validation.normalized;
+    const routing = await this.getResolvedRoutingSettings(normalizedDomain);
+    if (!routing.instancePolicy.capabilities.customDomains) {
+      const implicitPrimaryHost = routing.controlPlaneHost
+        ? this.normalizeHost(routing.controlPlaneHost)
+        : null;
+      if (implicitPrimaryHost && normalizedDomain === implicitPrimaryHost) {
+        return {
+          enabled: true,
+          normalizedDomain,
+          usage: "publish_target",
+        };
+      }
+
+      return {
+        enabled: false,
+        normalizedDomain,
+        message: "Custom publish domains are disabled for this install",
+      };
+    }
+
     const domainRow = await db.query.domain.findFirst({
       where: eq(domainTable.domain, normalizedDomain),
       columns: {
@@ -567,6 +640,17 @@ export class DomainService {
     status?: DomainStatus;
     createdById?: string;
   }) {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (options.usage === "tenant_host" && !instancePolicy.capabilities.tenantHosts) {
+      throw new Error("Tenant hosts are disabled for this install");
+    }
+    if (
+      options.usage === "publish_target" &&
+      !instancePolicy.capabilities.customDomains
+    ) {
+      throw new Error("Custom publish domains are disabled for this install");
+    }
+
     const validation = this.validateDomainForRegistry(options.rawDomain);
     if (!validation.valid) {
       throw new Error(validation.error || "Invalid domain");
@@ -656,6 +740,14 @@ export class DomainService {
   }
 
   async setDomainUsage(domainId: string, usage: DomainUsage) {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (usage === "tenant_host" && !instancePolicy.capabilities.tenantHosts) {
+      throw new Error("Tenant hosts are disabled for this install");
+    }
+    if (usage === "publish_target" && !instancePolicy.capabilities.customDomains) {
+      throw new Error("Custom publish domains are disabled for this install");
+    }
+
     const row = await db.query.domain.findFirst({
       where: eq(domainTable.id, domainId),
       columns: {
@@ -832,6 +924,10 @@ export class DomainService {
     },
   ): Promise<Map<string, string>> {
     if (organizationIds.length === 0) return new Map();
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (!instancePolicy.capabilities.tenantHosts) {
+      return new Map();
+    }
 
     const preferredTenantBaseDomain = options?.preferredTenantBaseDomain
       ? this.normalizeHost(options.preferredTenantBaseDomain)

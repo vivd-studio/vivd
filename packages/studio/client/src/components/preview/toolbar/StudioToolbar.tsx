@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useOpencodeSessionActivity } from "@/features/opencodeChat";
 import { cn } from "@/lib/utils";
-import faviconSvg from "/favicon-transparent.svg";
 import {
   FolderOpen,
   History,
@@ -35,6 +35,8 @@ import {
   openEmbeddedStudioPath,
 } from "./hostNavigation";
 
+const faviconSvg = "/favicon-transparent.svg";
+
 /**
  * StudioToolbar - Standalone toolbar for the single-instance studio.
  * Keeps the same look/feel as the studio toolbar, but without auth/profile UI.
@@ -42,6 +44,7 @@ import {
 export function StudioToolbar() {
   const { setTheme, theme } = useTheme();
   const { canUseAgent } = usePermissions();
+  const { hasOtherActiveSessions } = useOpencodeSessionActivity();
 
   const params = new URLSearchParams(window.location.search);
   const fullscreen = params.get("fullscreen") === "1";
@@ -387,8 +390,15 @@ export function StudioToolbar() {
               style={expandableToggleStyle(sessionExpandedWidth)}
               title={chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
                 <History className="h-4 w-4" />
+                {hasOtherActiveSessions ? (
+                  <span
+                    data-testid="sessions-button-activity-indicator"
+                    className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-background"
+                    aria-hidden="true"
+                  />
+                ) : null}
               </span>
               <span
                 aria-hidden="true"
@@ -399,6 +409,9 @@ export function StudioToolbar() {
               >
                 Sessions
               </span>
+              {hasOtherActiveSessions ? (
+                <span className="sr-only">Another session is active</span>
+              ) : null}
               <span className="sr-only">
                 {chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
               </span>

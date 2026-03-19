@@ -1,4 +1,16 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { vi } from "vitest";
+
+const { resolvePolicyMock } = vi.hoisted(() => ({
+  resolvePolicyMock: vi.fn(),
+}));
+
+vi.mock("../src/services/system/InstallProfileService", () => ({
+  installProfileService: {
+    resolvePolicy: resolvePolicyMock,
+  },
+}));
+
 import {
   ContactRecipientVerificationEndpointUnavailableError,
   getContactFormSubmitEndpoint,
@@ -24,6 +36,38 @@ function restoreEnvVar(
 }
 
 describe("plugin public API helpers", () => {
+  beforeEach(() => {
+    resolvePolicyMock.mockReset();
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "platform",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: true,
+        tenantHosts: true,
+        customDomains: true,
+        orgLimitOverrides: true,
+        orgPluginEntitlements: true,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: true,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "host_based" },
+      pluginRuntime: { mode: "dedicated_host" },
+    });
+  });
+
   afterEach(() => {
     restoreEnvVar(
       "VIVD_PUBLIC_PLUGIN_API_BASE_URL",
@@ -35,21 +79,59 @@ describe("plugin public API helpers", () => {
     restoreEnvVar("BETTER_AUTH_URL", originalBetterAuthUrl);
   });
 
-  it("uses api.vivd.studio as default public base URL", () => {
+  it("uses api.vivd.studio as default public base URL", async () => {
     delete process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
 
-    expect(getPublicPluginApiBaseUrl()).toBe("https://api.vivd.studio");
-    expect(getContactFormSubmitEndpoint()).toBe(
+    await expect(getPublicPluginApiBaseUrl()).resolves.toBe("https://api.vivd.studio");
+    await expect(getContactFormSubmitEndpoint()).resolves.toBe(
       "https://api.vivd.studio/plugins/contact/v1/submit",
     );
   });
 
-  it("normalizes host override without protocol", () => {
+  it("normalizes host override without protocol", async () => {
     process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL = "api.dev.vivd.local/";
 
-    expect(getPublicPluginApiBaseUrl()).toBe("https://api.dev.vivd.local");
-    expect(getContactFormSubmitEndpoint()).toBe(
+    await expect(getPublicPluginApiBaseUrl()).resolves.toBe("https://api.dev.vivd.local");
+    await expect(getContactFormSubmitEndpoint()).resolves.toBe(
       "https://api.dev.vivd.local/plugins/contact/v1/submit",
+    );
+  });
+
+  it("uses the same host for plugin endpoints in solo mode", async () => {
+    delete process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
+    process.env.DOMAIN = "https://example.com";
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "solo",
+      singleProjectMode: true,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+
+    await expect(getPublicPluginApiBaseUrl()).resolves.toBe("https://example.com");
+    await expect(getContactFormSubmitEndpoint()).resolves.toBe(
+      "https://example.com/plugins/contact/v1/submit",
     );
   });
 

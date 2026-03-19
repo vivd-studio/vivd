@@ -1,9 +1,13 @@
 import { getPublicPluginApiBaseUrl } from "../contactForm/publicApi";
 
-export function getAnalyticsScriptEndpoint(): string {
-  return `${getPublicPluginApiBaseUrl()}/plugins/analytics/v1/script.js`;
+export async function getAnalyticsScriptEndpoint(options?: {
+  requestHost?: string | null;
+}): Promise<string> {
+  return `${await getPublicPluginApiBaseUrl(options)}/plugins/analytics/v1/script.js`;
 }
 
-export function getAnalyticsTrackEndpoint(): string {
-  return `${getPublicPluginApiBaseUrl()}/plugins/analytics/v1/track`;
+export async function getAnalyticsTrackEndpoint(options?: {
+  requestHost?: string | null;
+}): Promise<string> {
+  return `${await getPublicPluginApiBaseUrl(options)}/plugins/analytics/v1/track`;
 }

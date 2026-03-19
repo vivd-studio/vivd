@@ -2,6 +2,7 @@ import { tracked } from "@trpc/server";
 import { z } from "zod";
 import {
   getSessionContent,
+  getMessageDiff,
   getSessionsStatus,
   listQuestions,
   listSessions,
@@ -81,6 +82,20 @@ export const agentChatRouter = router({
     .query(async ({ ctx, input }) => {
       const directory = getWorkspaceDir(ctx);
       return getSessionContent(input.sessionId, directory);
+    }),
+
+  messageDiff: publicProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+        sessionId: z.string(),
+        messageId: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const directory = getWorkspaceDir(ctx);
+      return getMessageDiff(input.sessionId, input.messageId, directory);
     }),
 
   events: publicProcedure

@@ -85,10 +85,13 @@ describe("ChatPanelContent", () => {
     expect(screen.getByText("Latest Sessions")).toBeInTheDocument();
     expect(screen.getByText("Refresh hero")).toBeInTheDocument();
     expect(screen.getByText("Tune mobile layout")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /new session/i }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Message list")).not.toBeInTheDocument();
   });
 
-  it("returns from sessions mode to chat after choosing a session or starting a new one", () => {
+  it("returns from sessions mode to chat after choosing a session", () => {
     mockPreviewContext.sessionHistoryOpen = true;
 
     render(<ChatPanelContent />);
@@ -96,11 +99,6 @@ describe("ChatPanelContent", () => {
     fireEvent.click(screen.getByTitle("Tune mobile layout (session-2)"));
 
     expect(mockChatContext.setSelectedSessionId).toHaveBeenCalledWith("session-2");
-    expect(mockPreviewContext.setSessionHistoryOpen).toHaveBeenCalledWith(false);
-
-    fireEvent.click(screen.getByRole("button", { name: /new session/i }));
-
-    expect(mockChatContext.handleNewSession).toHaveBeenCalledTimes(1);
     expect(mockPreviewContext.setSessionHistoryOpen).toHaveBeenCalledWith(false);
   });
 });

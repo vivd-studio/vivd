@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDerivedSessionError,
   deriveChatActivityState,
+  selectSessionActivitySummary,
   selectMostRecentActiveSessionId,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
@@ -104,6 +105,49 @@ describe("opencodeChat runtime", () => {
     });
 
     expect(selected).toBe("sess-3");
+  });
+
+  it("builds a shared activity summary from active session statuses", () => {
+    const summary = selectSessionActivitySummary({
+      sessions: [
+        { id: "sess-1", time: { updated: 30 } },
+        { id: "sess-2", time: { updated: 20 } },
+        { id: "sess-3", time: { updated: 10 } },
+      ],
+      sessionStatusById: {
+        "sess-1": { type: "busy" },
+        "sess-2": { type: "retry", attempt: 2 },
+        "sess-3": { type: "done" },
+      },
+      selectedSessionId: "sess-1",
+    });
+
+    expect(summary.activeSessionIds).toEqual(["sess-1", "sess-2"]);
+    expect(summary.selectedSessionIsActive).toBe(true);
+    expect(summary.otherActiveSessionIds).toEqual(["sess-2"]);
+    expect(summary.otherActiveSessionCount).toBe(1);
+    expect(summary.hasAnyActiveSession).toBe(true);
+    expect(summary.hasOtherActiveSessions).toBe(true);
+  });
+
+  it("excludes the selected session from other-active state and ignores idle/done sessions", () => {
+    const summary = selectSessionActivitySummary({
+      sessions: [
+        { id: "sess-1", time: { updated: 20 } },
+        { id: "sess-2", time: { updated: 10 } },
+      ],
+      sessionStatusById: {
+        "sess-1": { type: "busy" },
+        "sess-2": { type: "idle" },
+      },
+      selectedSessionId: "sess-1",
+    });
+
+    expect(summary.activeSessionIds).toEqual(["sess-1"]);
+    expect(summary.selectedSessionIsActive).toBe(true);
+    expect(summary.otherActiveSessionIds).toEqual([]);
+    expect(summary.otherActiveSessionCount).toBe(0);
+    expect(summary.hasOtherActiveSessions).toBe(false);
   });
 
   it("selects the most recent session needing attention when a question is pending", () => {

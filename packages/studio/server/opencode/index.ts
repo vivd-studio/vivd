@@ -348,6 +348,26 @@ export async function getSessionContent(sessionId: string, directory: string) {
   return result.data || [];
 }
 
+export async function getMessageDiff(
+  sessionId: string,
+  messageId: string,
+  directory: string,
+) {
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
+  const result = await client.session.diff({
+    sessionID: sessionId,
+    directory: opencodeDir,
+    messageID: messageId,
+  });
+
+  if (result.error) {
+    throw new Error(`Failed to load session diff: ${JSON.stringify(result.error)}`);
+  }
+
+  return result.data || [];
+}
+
 export async function listQuestions(directory: string) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);

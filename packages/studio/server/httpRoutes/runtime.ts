@@ -28,10 +28,35 @@ type StudioRuntimeHttpRoutesDeps = {
   isAllowedProjectFile: (filePath: string) => boolean;
   safeJoin: (root: string, targetPath: string) => string;
   writeUploadedFile: (fullPath: string, buffer: Buffer) => Promise<void>;
+  getProxyBasePath: (req: express.Request) => string | null;
   rewriteRootAssetUrlsInText: (text: string, basePath: string) => string;
   injectBasePathScript: (html: string, basePath: string) => string;
   devPreviewProxy: express.RequestHandler;
 };
+
+export function resolveForwardedRuntimeBasePath(
+  routeBasePath: string,
+  proxyBasePath: string | null,
+): string {
+  const normalizedRouteBasePath = routeBasePath.startsWith("/")
+    ? routeBasePath
+    : `/${routeBasePath}`;
+  const trimmedRouteBasePath =
+    normalizedRouteBasePath === "/"
+      ? normalizedRouteBasePath
+      : normalizedRouteBasePath.replace(/\/+$/, "");
+
+  if (!proxyBasePath) {
+    return trimmedRouteBasePath;
+  }
+
+  const trimmedProxyBasePath = proxyBasePath.replace(/\/+$/, "");
+  if (!trimmedProxyBasePath) {
+    return trimmedRouteBasePath;
+  }
+
+  return `${trimmedProxyBasePath}${trimmedRouteBasePath}`;
+}
 
 export function registerStudioRuntimeHttpRoutes(
   deps: StudioRuntimeHttpRoutesDeps,
@@ -46,6 +71,7 @@ export function registerStudioRuntimeHttpRoutes(
     isAllowedProjectFile,
     safeJoin,
     writeUploadedFile,
+    getProxyBasePath,
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
     devPreviewProxy,
@@ -291,6 +317,10 @@ export function registerStudioRuntimeHttpRoutes(
       const projectPath = workspace.getProjectPath();
       const config = detectProjectType(projectPath);
       const basePath = "/preview";
+      const forwardedBasePath = resolveForwardedRuntimeBasePath(
+        basePath,
+        getProxyBasePath(req),
+      );
 
       if (config.mode === "devserver") {
         // Ensure dev server exists (start async if needed)
@@ -346,7 +376,7 @@ export default {};
         }
 
         (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
-        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = basePath;
+        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = forwardedBasePath;
 
         return devPreviewProxy(req, res, next);
       }
@@ -395,8 +425,8 @@ export default {};
 
       if (resolvedPath.endsWith(".html")) {
         const content = await fs.readFile(resolvedPath, "utf-8");
-        let processed = rewriteRootAssetUrlsInText(content, basePath);
-        processed = injectBasePathScript(processed, basePath);
+        let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
+        processed = injectBasePathScript(processed, forwardedBasePath);
         res.setHeader("Content-Type", "text/html");
         return res.send(processed);
       }
@@ -417,6 +447,10 @@ export default {};
 
       const { slug, version } = req.params;
       const basePath = `/vivd-studio/api/preview/${slug}/v${version}`;
+      const forwardedBasePath = resolveForwardedRuntimeBasePath(
+        basePath,
+        getProxyBasePath(req),
+      );
 
       const urlWithoutQuery = req.url.split("?")[0];
       const rawFilePath = urlWithoutQuery.startsWith("/")
@@ -460,8 +494,8 @@ export default {};
 
       if (resolvedPath.endsWith(".html")) {
         const content = await fs.readFile(resolvedPath, "utf-8");
-        let processed = rewriteRootAssetUrlsInText(content, basePath);
-        processed = injectBasePathScript(processed, basePath);
+        let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
+        processed = injectBasePathScript(processed, forwardedBasePath);
         res.setHeader("Content-Type", "text/html");
         return res.send(processed);
       }
@@ -483,6 +517,10 @@ export default {};
       const { slug, version } = req.params;
       const projectPath = workspace.getProjectPath();
       const basePath = `/vivd-studio/api/devpreview/${slug}/v${version}`;
+      const forwardedBasePath = resolveForwardedRuntimeBasePath(
+        basePath,
+        getProxyBasePath(req),
+      );
 
       const config = detectProjectType(projectPath);
       if (config.mode !== "devserver") {
@@ -538,7 +576,7 @@ export default {};
       }
 
       (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
-      (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = basePath;
+      (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = forwardedBasePath;
 
       return devPreviewProxy(req, res, next);
     } catch (err) {

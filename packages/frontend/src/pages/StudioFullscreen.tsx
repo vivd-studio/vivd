@@ -7,10 +7,21 @@ import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { useStudioIframeReadyRetry } from "@/hooks/useStudioIframeReadyRetry";
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { Loader2 } from "lucide-react";
+
+const INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX =
+  "vivd.initialGenerationBootstrapped";
+
+function getInitialGenerationBootstrapStorageKey(
+  projectSlug: string | undefined,
+  version: number,
+): string {
+  return `${INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX}:${projectSlug || "unknown"}:v${version}`;
+}
 
 /**
  * Fullscreen studio view (still embedded via iframe).
@@ -46,6 +57,10 @@ export default function StudioFullscreen() {
       ? versionOverride
       : currentVersion;
   const initialGenerationBootstrapKeyRef = useRef<string | null>(null);
+  const initialGenerationBootstrapStorageKey = useMemo(
+    () => getInitialGenerationBootstrapStorageKey(projectSlug, version),
+    [projectSlug, version],
+  );
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -150,16 +165,6 @@ export default function StudioFullscreen() {
     studioUrlQuery.data,
   ]);
 
-  useEffect(() => {
-    initialGenerationBootstrapKeyRef.current = null;
-  }, [
-    baseUrl,
-    initialGenerationRequested,
-    projectSlug,
-    studioReloadNonce,
-    version,
-  ]);
-
   const ensureStudioRunning = useCallback(async () => {
     if (!projectSlug) {
       return {
@@ -219,12 +224,26 @@ export default function StudioFullscreen() {
     const targetWindow = studioIframeRef.current?.contentWindow;
     if (!targetWindow) return;
 
-    const key = `${projectSlug || ""}:${version}:${baseUrl || ""}:${studioReloadNonce}`;
-    if (initialGenerationBootstrapKeyRef.current === key) {
+    if (
+      initialGenerationBootstrapKeyRef.current ===
+      initialGenerationBootstrapStorageKey
+    ) {
       return;
     }
 
-    initialGenerationBootstrapKeyRef.current = key;
+    try {
+      if (
+        window.sessionStorage.getItem(initialGenerationBootstrapStorageKey) ===
+        "1"
+      ) {
+        initialGenerationBootstrapKeyRef.current =
+          initialGenerationBootstrapStorageKey;
+        return;
+      }
+    } catch {
+      // Ignore storage issues and fall back to in-memory tracking.
+    }
+
     targetWindow.postMessage(
       {
         type: "vivd:host:start-initial-generation",
@@ -233,24 +252,35 @@ export default function StudioFullscreen() {
       },
       "*",
     );
+    initialGenerationBootstrapKeyRef.current =
+      initialGenerationBootstrapStorageKey;
+    try {
+      window.sessionStorage.setItem(initialGenerationBootstrapStorageKey, "1");
+    } catch {
+      // Ignore storage issues and rely on in-memory tracking.
+    }
   }, [
     initialGenerationRequested,
+    initialGenerationBootstrapStorageKey,
     projectSlug,
-    baseUrl,
-    studioReloadNonce,
     version,
   ]);
 
-  const handleStudioIframeLoad = useCallback(() => {
-    syncThemeToStudio();
-
+  const tryMarkStudioReadyFromIframe = useCallback(() => {
     if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
-      return;
+      return false;
     }
 
     markStudioReady();
+    syncThemeToStudio();
     sendInitialGenerationBootstrap();
+    return true;
   }, [markStudioReady, sendInitialGenerationBootstrap, syncThemeToStudio]);
+
+  const handleStudioIframeLoad = useCallback(() => {
+    syncThemeToStudio();
+    void tryMarkStudioReadyFromIframe();
+  }, [tryMarkStudioReadyFromIframe]);
 
   useEffect(() => {
     syncThemeToStudio();
@@ -345,6 +375,11 @@ export default function StudioFullscreen() {
     }
     return url.toString();
   }, [baseUrl, initialGenerationRequested, projectSlug, studioAccessToken, version]);
+
+  useStudioIframeReadyRetry({
+    enabled: Boolean(studioIframeSrc && !studioReady),
+    checkReady: tryMarkStudioReadyFromIframe,
+  });
 
   useEffect(() => {
     if (!studioIframeSrc) {

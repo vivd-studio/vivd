@@ -453,4 +453,23 @@ Last updated: 2026-02-22
 - `docs/old/dokploy-traefik-wildcard-setup.md`
 - `docs/PROJECT_STATE_ARCHIVE.md`
 
-Last updated: 2026-02-24
+Last updated: 2026-03-19
+
+## 2026-03-19 Trimmed From Active Project State
+
+This section preserves the development detail removed when `docs/PROJECT_STATE.md` was shortened on 2026-03-19.
+
+### Archived Workstreams
+
+- Studio chat / OpenCode refactor: the active log had expanded into many detailed entries covering the canonical renderer/runtime migration, batched subscription event handling, multi-message turn grouping, first-class `question` support, inline session-error treatment, completed-run status cleanup, reusable session-activity indicators, transcript modularization, and the new per-turn diff/review surface.
+- Scratch-to-Studio initial generation: archived details include the Astro handoff start, `.vivd/initial-generation.json` persistence, new `starting_studio` and `generating_initial_site` states, the advanced-tier initial-generation model preference, and the host-page fix that prevents replaying the initial generation prompt after a Studio restart.
+- Docker single-host parity and reliability: archived details include image auto-pull, `linux/amd64` fallback, compose-network resolution, stale-container recreate/self-heal paths, Caddy/admin reload fixes, provider identity + callback drift fixes, path-prefix serving/ready-state fixes, preview asset rewrite fixes, bounded reconcile concurrency, warm-reconcile extraction, and the move to a 2 GiB default memory baseline.
+- Studio shell/UI iteration: the trimmed log contained many focused UI entries around the Lovable-style shell, toolbar and header behavior, session/new/save/publish controls, asset explorer/editor polish, long user-message collapse, plugin settings embedding/navigation, and a series of spacing and anchoring refinements that are no longer active planning items.
+- Public docs rollout: archived details include the initial `packages/docs` workspace launch, docs and scraper image publication, branding and screenshot cleanup, navigation/content expansion, and the Starlight/Expressive Code runtime compatibility fix.
+- Self-hosting planning: the trimmed active log also included the new `docs/self-hosting-profile-split-plan.md`, which proposes `solo` and `platform` install profiles plus a clearer instance/org/project policy split.
+
+### Date Anchors
+
+- 2026-03-19: review-surface work in Studio chat, Docker reconcile/memory follow-ups, initial-generation hardening, session indicators, and additional Studio UI cleanup landed.
+- 2026-03-18: the Studio shell/layout overhaul, Docker path-prefix parity fixes, and most docs-site polish landed.
+- 2026-03-17: the canonical OpenCode chat runtime/controller migration, `question` support, scratch-to-Studio handoff start, and the first public docs workspace landed.

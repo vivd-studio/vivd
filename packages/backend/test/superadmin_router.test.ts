@@ -19,6 +19,11 @@ const {
   prepareTurnstileWidgetMock,
   deleteTurnstileWidgetMock,
   getDefaultTemplateMock,
+  resolvePolicyMock,
+  updateInstallProfileMock,
+  updateInstanceCapabilityPolicyMock,
+  updateInstancePluginDefaultsMock,
+  updateInstanceLimitDefaultsMock,
 } = vi.hoisted(() => {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
@@ -53,6 +58,11 @@ const {
     prepareTurnstileWidgetMock: vi.fn(),
     deleteTurnstileWidgetMock: vi.fn(),
     getDefaultTemplateMock: vi.fn(),
+    resolvePolicyMock: vi.fn(),
+    updateInstallProfileMock: vi.fn(),
+    updateInstanceCapabilityPolicyMock: vi.fn(),
+    updateInstancePluginDefaultsMock: vi.fn(),
+    updateInstanceLimitDefaultsMock: vi.fn(),
   };
 });
 
@@ -74,6 +84,47 @@ vi.mock("../src/services/agent/AgentInstructionsService", () => ({
     getDefaultTemplate: getDefaultTemplateMock,
   },
 }));
+
+vi.mock("../src/services/system/InstallProfileService", async () => {
+  const { z } = await import("zod");
+  return {
+    installProfileSchema: z.enum(["solo", "platform"]),
+    partialInstanceCapabilityPolicySchema: z
+      .object({
+        multiOrg: z.boolean(),
+        tenantHosts: z.boolean(),
+        customDomains: z.boolean(),
+        orgLimitOverrides: z.boolean(),
+        orgPluginEntitlements: z.boolean(),
+        projectPluginEntitlements: z.boolean(),
+        dedicatedPluginHost: z.boolean(),
+      })
+      .partial(),
+    instancePluginDefaultsSchema: z
+      .object({
+        contact_form: z.object({ enabled: z.boolean().optional() }).optional(),
+        analytics: z.object({ enabled: z.boolean().optional() }).optional(),
+      })
+      .strict(),
+    instanceLimitDefaultsSchema: z
+      .object({
+        dailyCreditLimit: z.number().nonnegative().optional(),
+        weeklyCreditLimit: z.number().nonnegative().optional(),
+        monthlyCreditLimit: z.number().nonnegative().optional(),
+        imageGenPerMonth: z.number().int().nonnegative().optional(),
+        warningThreshold: z.number().min(0.1).max(1).optional(),
+        maxProjects: z.number().int().nonnegative().optional(),
+      })
+      .strict(),
+    installProfileService: {
+      resolvePolicy: resolvePolicyMock,
+      updateInstallProfile: updateInstallProfileMock,
+      updateInstanceCapabilityPolicy: updateInstanceCapabilityPolicyMock,
+      updateInstancePluginDefaults: updateInstancePluginDefaultsMock,
+      updateInstanceLimitDefaults: updateInstanceLimitDefaultsMock,
+    },
+  };
+});
 
 vi.mock("../src/services/studioMachines/fly/ghcr", () => ({
   listStudioImagesFromGhcr: listStudioImagesFromGhcrMock,
@@ -238,6 +289,11 @@ describe("superadmin router", () => {
     prepareTurnstileWidgetMock.mockReset();
     deleteTurnstileWidgetMock.mockReset();
     getDefaultTemplateMock.mockReset();
+    resolvePolicyMock.mockReset();
+    updateInstallProfileMock.mockReset();
+    updateInstanceCapabilityPolicyMock.mockReset();
+    updateInstancePluginDefaultsMock.mockReset();
+    updateInstanceLimitDefaultsMock.mockReset();
 
     (studioMachineProviderMock as any).kind = "fly";
     listStudioMachinesMock.mockResolvedValue([]);
@@ -282,6 +338,34 @@ describe("superadmin router", () => {
       domains: ["example.com"],
     });
     getDefaultTemplateMock.mockReturnValue("default template");
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "platform",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: true,
+        tenantHosts: true,
+        customDomains: true,
+        orgLimitOverrides: true,
+        orgPluginEntitlements: true,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: true,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "host_based" },
+      pluginRuntime: { mode: "dedicated_host" },
+    });
 
     delete process.env.FLY_STUDIO_IMAGE;
     delete process.env.DOCKER_STUDIO_IMAGE;
@@ -399,7 +483,7 @@ describe("superadmin router", () => {
     expect(listStudioImagesFromGhcrMock).toHaveBeenCalledWith(
       expect.objectContaining({
         semverLimit: 12,
-        devLimit: 12,
+        devLimit: 25,
       }),
     );
   });

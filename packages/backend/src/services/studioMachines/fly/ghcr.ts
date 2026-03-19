@@ -243,7 +243,6 @@ function buildDevCandidates(tags: string[]): Array<{ tag: string; version: strin
 
   const devOtherCandidates = devTags
     .filter((tag) => !parseSemverTag(tag.slice("dev-".length)))
-    .sort((a, b) => b.localeCompare(a))
     .map((tag) => ({ tag, version: tag.slice("dev-".length) || "dev" }));
 
   return [

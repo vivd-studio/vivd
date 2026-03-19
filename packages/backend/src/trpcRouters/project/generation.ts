@@ -44,13 +44,14 @@ import {
   getScratchCreationMode,
   writeInitialGenerationManifest,
 } from "../../generator/initialGeneration";
+import { installProfileService } from "../../services/system/InstallProfileService";
 
 /**
  * Check if single project mode is enabled and a project already exists.
  * In single project mode, only one project is allowed.
  */
 async function checkSingleProjectModeLimit(organizationId: string): Promise<void> {
-  if (process.env.SINGLE_PROJECT_MODE !== "true") {
+  if (!(await installProfileService.isSingleProjectModeEnabled())) {
     return; // Not in single project mode
   }
 

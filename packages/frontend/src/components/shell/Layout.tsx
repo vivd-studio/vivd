@@ -24,16 +24,21 @@ import {
   useNavigationSearch,
 } from "./navigationSearchContext";
 import { getPageInfo } from "./pageInfo";
+import { useAppConfig } from "@/lib/AppConfigContext";
 
 export function Layout() {
   const { isPending } = authClient.useSession();
+  const { config } = useAppConfig();
   const location = useLocation();
   const pageInfo = getPageInfo(location.pathname);
+  const pageTitle = location.pathname.startsWith("/vivd-studio/superadmin")
+    ? config.instanceAdminLabel
+    : pageInfo.title;
   const isEmbeddedProjectPanel =
     new URLSearchParams(location.search).get("embedded") === "1" &&
     (pageInfo.isProjectPluginsPage || pageInfo.isProjectAnalyticsPage);
   const showNewProjectButton =
-    pageInfo.title === "Projects" && !pageInfo.isProjectPage;
+    pageTitle === "Projects" && !pageInfo.isProjectPage;
 
   const mainRef = useRef<HTMLElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -118,7 +123,7 @@ export function Layout() {
                     </>
                   ) : (
                     <BreadcrumbItem>
-                      <BreadcrumbPage>{pageInfo.title}</BreadcrumbPage>
+                      <BreadcrumbPage>{pageTitle}</BreadcrumbPage>
                     </BreadcrumbItem>
                   )}
                   {showNewProjectButton && (

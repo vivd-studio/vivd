@@ -1,5 +1,6 @@
 import type {
   OpenCodeConnectionState,
+  OpenCodeSessionActivitySummary,
   OpenCodeQuestionRequest,
   OpenCodeSession,
   OpenCodeSessionMessageRecord,
@@ -144,6 +145,35 @@ export function buildDerivedSessionError({
   }
 
   return null;
+}
+
+export function selectSessionActivitySummary(args: {
+  sessions: OpenCodeSession[];
+  sessionStatusById: Record<string, OpenCodeSessionStatus>;
+  selectedSessionId: string | null;
+}): OpenCodeSessionActivitySummary {
+  const activeSessionIds = args.sessions
+    .filter((session) =>
+      isActiveSessionStatus(args.sessionStatusById[session.id] ?? null),
+    )
+    .map((session) => session.id);
+  const selectedSessionId = args.selectedSessionId ?? null;
+  const selectedSessionIsActive = Boolean(
+    selectedSessionId && activeSessionIds.includes(selectedSessionId),
+  );
+  const otherActiveSessionIds = activeSessionIds.filter(
+    (sessionId) => sessionId !== selectedSessionId,
+  );
+
+  return {
+    selectedSessionId,
+    activeSessionIds,
+    selectedSessionIsActive,
+    otherActiveSessionIds,
+    otherActiveSessionCount: otherActiveSessionIds.length,
+    hasAnyActiveSession: activeSessionIds.length > 0,
+    hasOtherActiveSessions: otherActiveSessionIds.length > 0,
+  };
 }
 
 export function selectMostRecentActiveSessionId(args: {

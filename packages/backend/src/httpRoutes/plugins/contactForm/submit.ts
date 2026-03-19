@@ -721,7 +721,7 @@ export function createContactFormPublicRouter(
           .where(
             and(
               eq(contactFormSubmission.organizationId, pluginInstance.organizationId),
-              entitlement.scope === "organization"
+              entitlement.scope === "organization" || entitlement.scope === "instance"
                 ? undefined
                 : eq(contactFormSubmission.projectSlug, pluginInstance.projectSlug),
               gte(contactFormSubmission.createdAt, monthStart),

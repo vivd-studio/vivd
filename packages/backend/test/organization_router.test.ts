@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  resolvePolicyMock,
   findUserMock,
   findOrganizationMock,
   findOrganizationMemberMock,
@@ -21,6 +22,7 @@ const {
   inferTenantBaseDomainFromHostMock,
   ensureManagedTenantDomainForOrganizationMock,
 } = vi.hoisted(() => {
+  const resolvePolicyMock = vi.fn();
   const selectOrderByMock = vi.fn();
   const selectGroupByMock = vi.fn();
   const selectWhereMock = vi.fn(() => ({
@@ -39,6 +41,7 @@ const {
   const updateMock = vi.fn(() => ({ set: updateSetMock }));
 
   return {
+    resolvePolicyMock,
     findUserMock: vi.fn(),
     findOrganizationMock: vi.fn(),
     findOrganizationMemberMock: vi.fn(),
@@ -86,6 +89,12 @@ vi.mock("../src/services/publish/DomainService", () => ({
     getTenantHostsForOrganizations: getTenantHostsForOrganizationsMock,
     inferTenantBaseDomainFromHost: inferTenantBaseDomainFromHostMock,
     ensureManagedTenantDomainForOrganization: ensureManagedTenantDomainForOrganizationMock,
+  },
+}));
+
+vi.mock("../src/services/system/InstallProfileService", () => ({
+  installProfileService: {
+    resolvePolicy: resolvePolicyMock,
   },
 }));
 
@@ -165,6 +174,7 @@ describe("organization router", () => {
     getTenantHostsForOrganizationsMock.mockReset();
     inferTenantBaseDomainFromHostMock.mockReset();
     ensureManagedTenantDomainForOrganizationMock.mockReset();
+    resolvePolicyMock.mockReset();
 
     selectWhereMock.mockImplementation(() => ({
       orderBy: selectOrderByMock,
@@ -185,6 +195,34 @@ describe("organization router", () => {
     findPluginEntitlementManyMock.mockResolvedValue([]);
     findPublishedSiteManyMock.mockResolvedValue([]);
     selectGroupByMock.mockResolvedValue([]);
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "platform",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: true,
+        tenantHosts: true,
+        customDomains: true,
+        orgLimitOverrides: true,
+        orgPluginEntitlements: true,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: true,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "host_based" },
+      pluginRuntime: { mode: "dedicated_host" },
+    });
 
     findOrganizationMock.mockResolvedValue({
       id: "org-2",
@@ -264,6 +302,47 @@ describe("organization router", () => {
       message: "Organization selection is pinned to this domain",
     });
     expect(findOrganizationMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects active-organization selection when multi-org is disabled", async () => {
+    resolvePolicyMock.mockResolvedValueOnce({
+      installProfile: "solo",
+      singleProjectMode: true,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+    const caller = organizationRouter.createCaller(makeContext());
+
+    await expect(
+      caller.setActiveOrganization({ organizationId: "org-2" }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Organization switching is disabled for this install profile",
+    });
+    expect(findOrganizationMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
   });
 
   it("rejects selecting a suspended organization for non-super-admins", async () => {

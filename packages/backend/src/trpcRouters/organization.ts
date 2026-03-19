@@ -20,6 +20,7 @@ import { auth } from "../auth";
 import { domainService } from "../services/publish/DomainService";
 import { organizationIdSchema } from "../lib/organizationIdentifiers";
 import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
+import { installProfileService } from "../services/system/InstallProfileService";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 
@@ -112,6 +113,14 @@ export const organizationRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const instancePolicy = await installProfileService.resolvePolicy();
+      if (!instancePolicy.capabilities.multiOrg) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Organization switching is disabled for this install profile",
+        });
+      }
+
       if (!ctx.canSelectOrganization) {
         throw new TRPCError({
           code: "BAD_REQUEST",

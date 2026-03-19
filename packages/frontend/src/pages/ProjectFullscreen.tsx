@@ -30,6 +30,7 @@ import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { useStudioIframeReadyRetry } from "@/hooks/useStudioIframeReadyRetry";
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
@@ -363,15 +364,20 @@ export default function ProjectFullscreen() {
     setStudioLoadErrored(false);
   }, []);
 
-  const handleStudioIframeLoad = useCallback(() => {
-    syncThemeToStudio();
-
+  const tryMarkStudioReadyFromIframe = useCallback(() => {
     if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
-      return;
+      return false;
     }
 
     markStudioReady();
+    syncThemeToStudio();
+    return true;
   }, [markStudioReady, syncThemeToStudio]);
+
+  const handleStudioIframeLoad = useCallback(() => {
+    syncThemeToStudio();
+    void tryMarkStudioReadyFromIframe();
+  }, [tryMarkStudioReadyFromIframe]);
 
   useEffect(() => {
     syncThemeToStudio();
@@ -442,6 +448,11 @@ export default function ProjectFullscreen() {
     }
     return url.toString();
   }, [projectSlug, publicPreviewEnabled, studioAccessToken, studioBaseUrl, version]);
+
+  useStudioIframeReadyRetry({
+    enabled: Boolean(studioIframeSrc && !studioReady),
+    checkReady: tryMarkStudioReadyFromIframe,
+  });
 
   useEffect(() => {
     if (!studioIframeSrc) {
@@ -949,7 +960,7 @@ export default function ProjectFullscreen() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
               disabled={deleteProjectMutation.isPending}
               onClick={() => {
                 if (!projectSlug) return;

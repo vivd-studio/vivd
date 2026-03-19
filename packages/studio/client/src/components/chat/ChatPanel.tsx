@@ -127,7 +127,6 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     selectedSessionId,
     setSelectedSessionId,
     handleDeleteSession,
-    handleNewSession,
     messageCount,
     sessionDebugState,
     setSelectorMode,
@@ -143,11 +142,6 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
     }
     setSessionHistoryOpen(false);
     onClose?.();
-  };
-
-  const handleNewSessionClick = () => {
-    handleNewSession();
-    setSessionHistoryOpen(false);
   };
 
   const handleSelectSession = (sessionId: string | null) => {
@@ -179,7 +173,6 @@ function ChatPanelContent({ onClose }: { onClose?: () => void }) {
             selectedSessionId={selectedSessionId}
             onSelectSession={handleSelectSession}
             onDeleteSession={handleDeleteSession}
-            onNewSession={handleNewSessionClick}
           />
         </div>
       ) : (

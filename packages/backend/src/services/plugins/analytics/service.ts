@@ -241,7 +241,7 @@ class AnalyticsPluginService {
       pluginId: "analytics",
     });
 
-    return this.toPayload(row, created);
+    return await this.toPayload(row, created);
   }
 
   async getAnalyticsPlugin(options: {
@@ -259,7 +259,7 @@ class AnalyticsPluginService {
       pluginId: "analytics",
     });
     if (!existing) return null;
-    return this.toPayload(existing, false);
+    return await this.toPayload(existing, false);
   }
 
   async updateAnalyticsConfig(options: {
@@ -296,9 +296,9 @@ class AnalyticsPluginService {
       .where(eq(projectPluginInstance.id, existing.id))
       .returning();
 
-    if (updated) return this.toPayload(updated, false);
+    if (updated) return await this.toPayload(updated, false);
 
-    return this.toPayload(
+    return await this.toPayload(
       {
         ...existing,
         configJson: parsedConfig,
@@ -971,8 +971,10 @@ class AnalyticsPluginService {
     organizationId: string;
     projectSlug: string;
   }): Promise<AnalyticsPluginInfoPayload> {
-    const scriptEndpoint = getAnalyticsScriptEndpoint();
-    const trackEndpoint = getAnalyticsTrackEndpoint();
+    const [scriptEndpoint, trackEndpoint] = await Promise.all([
+      getAnalyticsScriptEndpoint(),
+      getAnalyticsTrackEndpoint(),
+    ]);
 
     const [entitlement, existing] = await Promise.all([
       pluginEntitlementService.resolveEffectiveEntitlement({
@@ -1102,11 +1104,11 @@ class AnalyticsPluginService {
     };
   }
 
-  private toPayload(
+  private async toPayload(
     row: ProjectPluginInstanceRow,
     created: boolean,
-  ): AnalyticsPluginPayload {
-    const scriptEndpoint = getAnalyticsScriptEndpoint();
+  ): Promise<AnalyticsPluginPayload> {
+    const scriptEndpoint = await getAnalyticsScriptEndpoint();
     const normalizedConfig = normalizeAnalyticsConfig(row.configJson);
     return {
       pluginId: "analytics",

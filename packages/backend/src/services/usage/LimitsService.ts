@@ -3,6 +3,7 @@ import type { LimitsConfig } from "@vivd/shared/types";
 import { db } from "../../db";
 import { organization } from "../../db/schema";
 import { eq } from "drizzle-orm";
+import { installProfileService } from "../system/InstallProfileService";
 
 // Default configuration values (in credits, where 1 credit = 1 cent)
 // Original dollar defaults halved, then multiplied by 100
@@ -118,17 +119,40 @@ function parseConfigOverrides(value: unknown): Partial<LimitsConfig> {
     return Math.min(1, Math.max(0.1, raw));
   })();
 
-  return {
-    dailyCreditLimit: pickNumber("dailyCreditLimit"),
-    weeklyCreditLimit: pickNumber("weeklyCreditLimit"),
-    monthlyCreditLimit: pickNumber("monthlyCreditLimit"),
-    imageGenPerMonth: pickInt("imageGenPerMonth"),
-    warningThreshold,
-  };
+  const overrides: Partial<LimitsConfig> = {};
+
+  const dailyCreditLimit = pickNumber("dailyCreditLimit");
+  if (dailyCreditLimit !== undefined) overrides.dailyCreditLimit = dailyCreditLimit;
+
+  const weeklyCreditLimit = pickNumber("weeklyCreditLimit");
+  if (weeklyCreditLimit !== undefined) overrides.weeklyCreditLimit = weeklyCreditLimit;
+
+  const monthlyCreditLimit = pickNumber("monthlyCreditLimit");
+  if (monthlyCreditLimit !== undefined) overrides.monthlyCreditLimit = monthlyCreditLimit;
+
+  const imageGenPerMonth = pickInt("imageGenPerMonth");
+  if (imageGenPerMonth !== undefined) overrides.imageGenPerMonth = imageGenPerMonth;
+
+  if (warningThreshold !== undefined) {
+    overrides.warningThreshold = warningThreshold;
+  }
+
+  return overrides;
 }
 
 async function getConfig(organizationId: string): Promise<LimitsConfig> {
   const envConfig = getEnvConfig();
+  const instancePolicy = await installProfileService.resolvePolicy();
+  const instanceOverrides = parseConfigOverrides(instancePolicy.limitDefaults);
+  const baseConfig = {
+    ...envConfig,
+    ...instanceOverrides,
+  };
+
+  if (!instancePolicy.capabilities.orgLimitOverrides) {
+    return baseConfig;
+  }
+
   try {
     const org = await db.query.organization.findFirst({
       where: eq(organization.id, organizationId),
@@ -136,11 +160,11 @@ async function getConfig(organizationId: string): Promise<LimitsConfig> {
     });
     const overrides = parseConfigOverrides(org?.limits);
     return {
-      ...envConfig,
+      ...baseConfig,
       ...overrides,
     };
   } catch {
-    return envConfig;
+    return baseConfig;
   }
 }
 

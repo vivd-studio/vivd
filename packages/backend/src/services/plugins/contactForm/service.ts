@@ -201,7 +201,7 @@ class ContactFormPluginService {
       pluginId: "contact_form",
     });
 
-    return this.toPayload(row, created);
+    return await this.toPayload(row, created);
   }
 
   async getContactFormPlugin(options: {
@@ -219,7 +219,7 @@ class ContactFormPluginService {
       pluginId: "contact_form",
     });
     if (!existing) return null;
-    return this.toPayload(existing, false);
+    return await this.toPayload(existing, false);
   }
 
   async updateContactFormConfig(options: {
@@ -254,9 +254,9 @@ class ContactFormPluginService {
       .where(eq(projectPluginInstance.id, row.id))
       .returning();
 
-    if (updated) return this.toPayload(updated, false);
+    if (updated) return await this.toPayload(updated, false);
 
-    return this.toPayload(
+    return await this.toPayload(
       {
         ...row,
         configJson: parsedConfig,
@@ -296,7 +296,7 @@ class ContactFormPluginService {
     organizationId: string;
     projectSlug: string;
   }): Promise<ContactFormPluginInfoPayload> {
-    const submitEndpoint = getContactFormSubmitEndpoint();
+    const submitEndpoint = await getContactFormSubmitEndpoint();
     const inferredAutoSourceHosts = await inferContactFormAutoSourceHosts({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
@@ -429,11 +429,11 @@ class ContactFormPluginService {
     };
   }
 
-  private toPayload(
+  private async toPayload(
     row: ProjectPluginInstanceRow,
     created: boolean,
-  ): ContactFormPluginPayload {
-    const submitEndpoint = getContactFormSubmitEndpoint();
+  ): Promise<ContactFormPluginPayload> {
+    const submitEndpoint = await getContactFormSubmitEndpoint();
     const normalizedConfig = normalizeContactFormConfig(row.configJson);
     return {
       pluginId: "contact_form",

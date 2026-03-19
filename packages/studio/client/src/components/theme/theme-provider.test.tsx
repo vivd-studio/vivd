@@ -48,12 +48,13 @@ function installMatchMedia(initialMatches: boolean): MatchMediaController {
 }
 
 function ThemeProbe() {
-  const { theme, resolvedTheme } = useTheme();
+  const { theme, resolvedTheme, colorTheme } = useTheme();
 
   return (
     <div>
       <span data-testid="theme">{theme}</span>
       <span data-testid="resolved-theme">{resolvedTheme}</span>
+      <span data-testid="color-theme">{colorTheme}</span>
     </div>
   );
 }
@@ -63,6 +64,8 @@ describe("ThemeProvider", () => {
     cleanup();
     localStorage.clear();
     document.documentElement.className = "";
+    document.documentElement.removeAttribute("data-color-theme");
+    window.history.replaceState({}, "", "/");
   });
 
   it("resolves system theme and reacts to system preference changes", () => {
@@ -86,5 +89,20 @@ describe("ThemeProvider", () => {
     expect(screen.getByTestId("resolved-theme")).toHaveTextContent("dark");
     expect(document.documentElement).toHaveClass("dark");
     expect(document.documentElement).not.toHaveClass("light");
+  });
+
+  it("accepts aurora as a valid color theme from the URL and applies it", () => {
+    installMatchMedia(false);
+    window.history.replaceState({}, "", "/?colorTheme=aurora");
+
+    render(
+      <ThemeProvider defaultTheme="light">
+        <ThemeProbe />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByTestId("color-theme")).toHaveTextContent("aurora");
+    expect(document.documentElement).toHaveAttribute("data-color-theme", "aurora");
+    expect(localStorage.getItem("vite-ui-color-theme")).toBe("aurora");
   });
 });

@@ -604,7 +604,7 @@ export function PreviewContent() {
                   Cancel
                 </AlertDialogCancel>
                 <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
                   disabled={deleteMutation.isPending}
                   onClick={handleConfirmDelete}
                 >
@@ -632,9 +632,6 @@ export function PreviewContent() {
         embedded ? "w-full h-dvh" : "w-screen h-dvh"
       }`}
     >
-      <StudioToolbar />
-
-      {/* Wrap with ChatProvider when project context is available */}
       {projectSlug && version !== undefined ? (
         <OpencodeChatProvider
           key={`opencode-chat-${projectSlug}-${version}`}
@@ -647,11 +644,15 @@ export function PreviewContent() {
             version={version}
             onTaskComplete={handleTaskComplete}
           >
+            <StudioToolbar />
             {mainContent}
           </ChatProvider>
         </OpencodeChatProvider>
       ) : (
-        mainContent
+        <>
+          <StudioToolbar />
+          {mainContent}
+        </>
       )}
     </div>
   );

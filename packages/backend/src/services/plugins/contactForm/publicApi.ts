@@ -1,3 +1,5 @@
+import { installProfileService } from "../../system/InstallProfileService";
+
 const DEFAULT_PUBLIC_PLUGIN_API_BASE_URL = "https://api.vivd.studio";
 const CONTACT_RECIPIENT_VERIFY_CONTROL_PLANE_PATH =
   "/vivd-studio/api/plugins/contact/v1/recipient-verify";
@@ -20,6 +22,12 @@ function normalizeBaseUrl(raw: string): string {
     : `https://${trimmed}`;
 
   return withProtocol.replace(/\/+$/, "");
+}
+
+function normalizeBaseUrlOrEmpty(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return normalizeBaseUrl(trimmed);
 }
 
 function normalizeOrigin(raw: string): string {
@@ -106,12 +114,41 @@ function getControlPlaneOrigin(options?: {
   return "";
 }
 
-export function getPublicPluginApiBaseUrl(): string {
-  return normalizeBaseUrl(process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL || "");
+export async function getPublicPluginApiBaseUrl(options?: {
+  requestHost?: string | null;
+}): Promise<string> {
+  const explicitBaseUrl = normalizeBaseUrlOrEmpty(
+    process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL || "",
+  );
+  if (explicitBaseUrl) {
+    return explicitBaseUrl;
+  }
+
+  const instancePolicy = await installProfileService.resolvePolicy();
+  if (instancePolicy.pluginRuntime.mode === "same_host_path") {
+    const preferredHost =
+      normalizeHost(options?.requestHost || "") ||
+      normalizeHost(process.env.DOMAIN || "") ||
+      normalizeHost(process.env.CONTROL_PLANE_HOST || "") ||
+      normalizeHost(process.env.BETTER_AUTH_URL || "");
+    if (preferredHost) {
+      return toHostOrigin(preferredHost);
+    }
+  }
+
+  const dedicatedHost =
+    normalizeHost(process.env.VIVD_PUBLIC_PLUGIN_API_HOST || "") || "api.vivd.studio";
+  if (dedicatedHost) {
+    return toHostOrigin(dedicatedHost);
+  }
+
+  return normalizeBaseUrl(DEFAULT_PUBLIC_PLUGIN_API_BASE_URL);
 }
 
-export function getContactFormSubmitEndpoint(): string {
-  return `${getPublicPluginApiBaseUrl()}/plugins/contact/v1/submit`;
+export async function getContactFormSubmitEndpoint(options?: {
+  requestHost?: string | null;
+}): Promise<string> {
+  return `${await getPublicPluginApiBaseUrl(options)}/plugins/contact/v1/submit`;
 }
 
 export function getContactRecipientVerificationEndpoint(options?: {
@@ -125,7 +162,10 @@ export function getContactRecipientVerificationEndpoint(options?: {
   throw new ContactRecipientVerificationEndpointUnavailableError();
 }
 
-export function getEmailFeedbackEndpoint(provider: string = "ses"): string {
+export async function getEmailFeedbackEndpoint(
+  provider: string = "ses",
+  options?: { requestHost?: string | null },
+): Promise<string> {
   const normalizedProvider = provider.trim().toLowerCase() || "ses";
-  return `${getPublicPluginApiBaseUrl()}/email/v1/feedback/${normalizedProvider}`;
+  return `${await getPublicPluginApiBaseUrl(options)}/email/v1/feedback/${normalizedProvider}`;
 }

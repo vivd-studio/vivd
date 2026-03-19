@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Clock3, Plus, X } from "lucide-react";
+import { useOpencodeSessionActivity } from "@/features/opencodeChat";
+import { Clock3, X } from "lucide-react";
 
 interface SessionListProps {
   sessions: {
@@ -12,7 +12,6 @@ interface SessionListProps {
   selectedSessionId: string | null;
   onSelectSession: (sessionId: string | null) => void;
   onDeleteSession: (e: React.MouseEvent, sessionId: string) => void;
-  onNewSession: () => void;
 }
 
 function SessionSkeleton() {
@@ -37,23 +36,15 @@ export function SessionList({
   selectedSessionId,
   onSelectSession,
   onDeleteSession,
-  onNewSession,
 }: SessionListProps) {
+  const sessionActivity = useOpencodeSessionActivity();
+
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="mb-2 flex items-center justify-between gap-2 px-1">
+      <div className="mb-2 px-1">
         <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
           Latest Sessions
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 rounded-lg px-2 text-xs"
-          onClick={onNewSession}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>New Session</span>
-        </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-2 pr-2">
@@ -73,6 +64,7 @@ export function SessionList({
             const tooltip = title ? `${title} (${session.id})` : session.id;
             const deleteLabel = title && title.length > 0 ? title : session.id;
             const active = selectedSessionId === session.id;
+            const sessionIsActive = sessionActivity.activeSessionIds.includes(session.id);
 
             return (
               <div key={session.id} className="group relative">
@@ -86,8 +78,17 @@ export function SessionList({
                       : "border-border/60 bg-background/80 hover:bg-muted/40"
                   }`}
                 >
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {label}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-medium text-foreground">
+                      {label}
+                    </span>
+                    {sessionIsActive ? (
+                      <span
+                        data-testid={`session-activity-indicator-${session.id}`}
+                        className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse"
+                        aria-hidden="true"
+                      />
+                    ) : null}
                   </span>
                   <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                     <Clock3 className="h-3 w-3" />

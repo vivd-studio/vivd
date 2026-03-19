@@ -14,12 +14,20 @@ import { normalizeOpenCodeTimestamp } from "../sync/optimisticMessages";
 
 export type RenderableChatPart = any;
 
+export type RenderableFileDiffSummary = {
+  file: string;
+  additions: number;
+  deletions: number;
+  status?: "added" | "deleted" | "modified";
+};
+
 export type RenderableChatMessage = {
   id?: string;
   parentId?: string | null;
   role: "user" | "agent";
   content: string;
   parts: RenderableChatPart[];
+  summaryDiffs?: RenderableFileDiffSummary[];
   createdAt?: number;
   completedAt?: number;
 };
@@ -44,10 +52,13 @@ export type CanonicalTimelineItem =
       kind: "agent";
       key: string;
       runId: string;
+      userMessageId?: string;
       message?: RenderableChatMessage;
+      completedAt?: number;
       orderedParts: RenderableChatPart[];
       actionParts: RenderableChatPart[];
       responseParts: RenderableChatPart[];
+      summaryDiffs: RenderableFileDiffSummary[];
       hasInterleavedParts: boolean;
       runInProgress: boolean;
       showWorkedSection: boolean;
@@ -164,6 +175,30 @@ function normalizeRecordToRenderableMessage(
     .filter((part) => part?.type === "text")
     .map((part) => (typeof part?.text === "string" ? part.text : ""))
     .join("\n");
+  const rawSummaryDiffs = Array.isArray((record.info as any)?.summary?.diffs)
+    ? ((record.info as any).summary.diffs as unknown[])
+    : [];
+  const summaryDiffs = rawSummaryDiffs
+    .map((diff): RenderableFileDiffSummary | null => {
+      if (!diff || typeof diff !== "object") {
+        return null;
+      }
+
+      const file = typeof (diff as any).file === "string" ? (diff as any).file : "";
+      if (!file) {
+        return null;
+      }
+
+      return {
+        file,
+        additions: Number((diff as any).additions) || 0,
+        deletions: Number((diff as any).deletions) || 0,
+        ...(typeof (diff as any).status === "string"
+          ? { status: (diff as any).status as "added" | "deleted" | "modified" }
+          : {}),
+      };
+    })
+    .filter((diff): diff is RenderableFileDiffSummary => Boolean(diff));
   const createdAt = normalizeOpenCodeTimestamp(record.info?.time?.created);
   const completedAt = normalizeOpenCodeTimestamp(record.info?.time?.completed);
 
@@ -173,6 +208,7 @@ function normalizeRecordToRenderableMessage(
     role,
     content,
     parts: normalizedParts,
+    ...(summaryDiffs.length > 0 ? { summaryDiffs } : {}),
     ...(createdAt != null ? { createdAt } : {}),
     ...(completedAt != null ? { completedAt } : {}),
   };
@@ -349,6 +385,7 @@ export function buildCanonicalTimelineModel({
     const actionParts = extractActionParts(orderedParts);
     const responseParts = extractResponseParts(orderedParts);
     const latestAgentMessage = getLatestAgentMessage(turn.agentMessages);
+    const turnCompletedAt = getTurnCompletedAt(turn.agentMessages);
     const shouldRenderAgentRow = turn.agentMessages.length > 0 || isActiveTurn;
 
     if (!shouldRenderAgentRow) {
@@ -366,17 +403,20 @@ export function buildCanonicalTimelineModel({
       kind: "agent",
       key: `${turn.runId}-agent`,
       runId: turn.runId,
+      userMessageId: turn.userMessage?.id,
       message: latestAgentMessage,
+      completedAt: turnCompletedAt,
       orderedParts,
       actionParts,
       responseParts,
+      summaryDiffs: turn.userMessage?.summaryDiffs ?? [],
       hasInterleavedParts,
       runInProgress,
       showWorkedSection,
       workedLabel: showWorkedSection
         ? formatWorkedLabel(
             turn.userMessage?.createdAt,
-            getTurnCompletedAt(turn.agentMessages),
+            turnCompletedAt,
           )
         : undefined,
       fallbackState: runInProgress

@@ -169,9 +169,12 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
   );
 
   const isSuperAdminTabActive = React.useCallback(
-    (tab: "orgs" | "users" | "maintenance" | "machines" | "plugins") => {
+    (
+      tab: "instance" | "orgs" | "users" | "maintenance" | "machines" | "plugins",
+    ) => {
       if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
-      const section = searchParams.get("section") ?? "org";
+      const section = searchParams.get("section") ?? "instance";
+      if (tab === "instance") return section === "instance";
       if (tab === "orgs") return section === "org";
       return section === tab;
     },
@@ -257,7 +260,7 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
       );
     }
 
-    if (isOrgAdmin) {
+    if (isOrgAdmin && config.capabilities.multiOrg) {
       items.push(
         {
           id: "platform:organization",
@@ -317,52 +320,69 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
       items.push(
         {
           id: "platform:superadmin",
-          label: "Super Admin",
+          label: config.instanceAdminLabel,
           section: "Platform",
-          to: `${ROUTES.SUPERADMIN_BASE}?section=org`,
+          to: `${ROUTES.SUPERADMIN_BASE}?section=instance`,
           keywords: ["admin", "operators", "system"],
           isActive: isActive(ROUTES.SUPERADMIN_BASE),
         },
         {
-          id: "superadmin:orgs",
-          label: "Organizations",
+          id: "superadmin:instance",
+          label: config.instanceAdminLabel === "Instance Settings" ? "General" : "Instance",
           section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?section=org`,
-          keywords: ["tenants", "superadmin"],
-          isActive: isSuperAdminTabActive("orgs"),
+          to: `${ROUTES.SUPERADMIN_BASE}?section=instance`,
+          keywords: ["instance", "profile", "capabilities", "limits"],
+          isActive: isSuperAdminTabActive("instance"),
         },
-        {
-          id: "superadmin:users",
-          label: "System Users",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?section=users`,
-          keywords: ["members", "accounts", "superadmin"],
-          isActive: isSuperAdminTabActive("users"),
-        },
-        {
-          id: "superadmin:maintenance",
-          label: "Maintenance",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?section=maintenance`,
-          keywords: ["operations", "superadmin"],
-          isActive: isSuperAdminTabActive("maintenance"),
-        },
-        {
-          id: "superadmin:machines",
-          label: "Machines",
-          section: "Super Admin",
-          to: `${ROUTES.SUPERADMIN_BASE}?section=machines`,
-          keywords: ["fly", "instances", "superadmin"],
-          isActive: isSuperAdminTabActive("machines"),
-        },
-        {
+      );
+
+      if (config.installProfile === "platform") {
+        items.push(
+          {
+            id: "superadmin:orgs",
+            label: "Organizations",
+            section: "Super Admin",
+            to: `${ROUTES.SUPERADMIN_BASE}?section=org`,
+            keywords: ["tenants", "superadmin"],
+            isActive: isSuperAdminTabActive("orgs"),
+          },
+          {
+            id: "superadmin:users",
+            label: "System Users",
+            section: "Super Admin",
+            to: `${ROUTES.SUPERADMIN_BASE}?section=users`,
+            keywords: ["members", "accounts", "superadmin"],
+            isActive: isSuperAdminTabActive("users"),
+          },
+          {
+            id: "superadmin:maintenance",
+            label: "Maintenance",
+            section: "Super Admin",
+            to: `${ROUTES.SUPERADMIN_BASE}?section=maintenance`,
+            keywords: ["operations", "superadmin"],
+            isActive: isSuperAdminTabActive("maintenance"),
+          },
+          {
+            id: "superadmin:plugins",
+            label: "Plugins",
+            section: "Super Admin",
+            to: `${ROUTES.SUPERADMIN_BASE}?section=plugins`,
+            keywords: ["entitlements", "superadmin"],
+            isActive: isSuperAdminTabActive("plugins"),
+          },
+        );
+      } else {
+        items.push({
           id: "superadmin:plugins",
           label: "Plugins",
           section: "Super Admin",
           to: `${ROUTES.SUPERADMIN_BASE}?section=plugins`,
-          keywords: ["entitlements", "superadmin"],
+          keywords: ["plugins", "instance", "contact form", "analytics"],
           isActive: isSuperAdminTabActive("plugins"),
-        },
+        });
+      }
+
+      items.push(
         {
           id: "superadmin:email",
           label: "Email",
@@ -371,7 +391,15 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
           keywords: ["deliverability", "suppression", "complaints", "superadmin"],
           isActive:
             isActive(ROUTES.SUPERADMIN_BASE, true) &&
-            (searchParams.get("section") ?? "org") === "email",
+            (searchParams.get("section") ?? "instance") === "email",
+        },
+        {
+          id: "superadmin:machines",
+          label: "Machines",
+          section: "Super Admin",
+          to: `${ROUTES.SUPERADMIN_BASE}?section=machines`,
+          keywords: ["runtime", "instances", "studio"],
+          isActive: isSuperAdminTabActive("machines"),
         },
       );
     }
@@ -380,6 +408,9 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
   }, [
     isActive,
     isClientEditor,
+    config.capabilities.multiOrg,
+    config.installProfile,
+    config.instanceAdminLabel,
     isOrgAdmin,
     isOrgOwner,
     isOrgTabActive,

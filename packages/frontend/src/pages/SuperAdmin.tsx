@@ -34,8 +34,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { useAppConfig } from "@/lib/AppConfigContext";
 
 type SuperAdminSection =
+  | "instance"
   | "org"
   | "users"
   | "maintenance"
@@ -47,6 +49,11 @@ const SECTION_META: Record<
   SuperAdminSection,
   { title: string; description: string }
 > = {
+  instance: {
+    title: "Instance",
+    description:
+      "Configure install profile, capability gates, and instance-wide defaults.",
+  },
   org: {
     title: "Organizations",
     description:
@@ -81,6 +88,7 @@ const SECTION_META: Record<
 
 function isSuperAdminSection(value: string | null): value is SuperAdminSection {
   return (
+    value === "instance" ||
     value === "org" ||
     value === "users" ||
     value === "maintenance" ||
@@ -93,6 +101,11 @@ function isSuperAdminSection(value: string | null): value is SuperAdminSection {
 const OrganizationsContent = lazy(() =>
   import("@/components/admin/organizations/OrganizationsTab").then((m) => ({
     default: m.OrganizationsTab,
+  })),
+);
+const InstanceSettingsTab = lazy(() =>
+  import("@/components/admin/instance/InstanceSettingsTab").then((m) => ({
+    default: m.InstanceSettingsTab,
   })),
 );
 const UsersTab = lazy(() =>
@@ -126,6 +139,7 @@ function ContentLoadingState() {
 }
 
 export default function SuperAdmin() {
+  const { config } = useAppConfig();
   const [searchParams, setSearchParams] = useSearchParams();
   const utils = trpc.useUtils();
 
@@ -133,10 +147,16 @@ export default function SuperAdmin() {
     trpc.superadmin.listOrganizations.useQuery();
   const organizations = orgData?.organizations ?? [];
 
+  const visibleSections: SuperAdminSection[] =
+    config.installProfile === "solo"
+      ? ["instance", "plugins", "machines", "email"]
+      : ["instance", "org", "users", "maintenance", "machines", "plugins", "email"];
+
   const rawSection = searchParams.get("section");
-  const section: SuperAdminSection = isSuperAdminSection(rawSection)
-    ? rawSection
-    : "org";
+  const section: SuperAdminSection =
+    rawSection && isSuperAdminSection(rawSection) && visibleSections.includes(rawSection)
+      ? rawSection
+      : visibleSections[0]!;
   const selectedOrgId = searchParams.get("org") ?? "";
   const orgTab = searchParams.get("tab") ?? "usage";
   const effectiveOrgId = selectedOrgId || organizations[0]?.id || "";
@@ -237,8 +257,20 @@ export default function SuperAdmin() {
   );
 
   const sectionMeta = SECTION_META[section];
+  const sectionTitle =
+    section === "instance" && config.installProfile === "solo"
+      ? config.instanceAdminLabel
+      : sectionMeta.title;
 
   const content = (() => {
+    if (section === "instance") {
+      return (
+        <Suspense fallback={<ContentLoadingState />}>
+          <InstanceSettingsTab />
+        </Suspense>
+      );
+    }
+
     if (section === "org") {
       return (
         <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
@@ -414,7 +446,7 @@ export default function SuperAdmin() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">
-            {sectionMeta.title}
+            {sectionTitle}
           </h1>
           <p className="mt-1 text-muted-foreground">{sectionMeta.description}</p>
         </div>
@@ -431,18 +463,28 @@ export default function SuperAdmin() {
 
       <Tabs value={section} onValueChange={handleSectionChange} className="w-full">
         <TabsList className="w-full justify-start">
-          <TabsTrigger value="org" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            Organizations
-          </TabsTrigger>
-          <TabsTrigger value="users" className="gap-2">
+          <TabsTrigger value="instance" className="gap-2">
             <Shield className="h-4 w-4" />
-            System Users
+            {config.installProfile === "solo" ? "General" : "Instance"}
           </TabsTrigger>
-          <TabsTrigger value="maintenance" className="gap-2">
-            <Wrench className="h-4 w-4" />
-            Maintenance
-          </TabsTrigger>
+          {config.installProfile === "platform" ? (
+            <TabsTrigger value="org" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Organizations
+            </TabsTrigger>
+          ) : null}
+          {config.installProfile === "platform" ? (
+            <TabsTrigger value="users" className="gap-2">
+              <Shield className="h-4 w-4" />
+              System Users
+            </TabsTrigger>
+          ) : null}
+          {config.installProfile === "platform" ? (
+            <TabsTrigger value="maintenance" className="gap-2">
+              <Wrench className="h-4 w-4" />
+              Maintenance
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="machines" className="gap-2">
             <Server className="h-4 w-4" />
             Machines

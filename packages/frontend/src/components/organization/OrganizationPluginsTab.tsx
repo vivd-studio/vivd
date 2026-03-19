@@ -26,8 +26,8 @@ function getPluginStatusLabel(status: "enabled" | "disabled" | "not_installed"):
 
 function getPluginStatusBadgeVariant(
   status: "enabled" | "disabled" | "not_installed",
-): "default" | "secondary" | "outline" {
-  if (status === "enabled") return "default";
+): "success" | "secondary" | "outline" {
+  if (status === "enabled") return "success";
   if (status === "disabled") return "secondary";
   return "outline";
 }
@@ -155,7 +155,7 @@ export function OrganizationPluginsTab() {
                         {row.contactForm.turnstileEnabled ? (
                           <Badge
                             variant={
-                              row.contactForm.turnstileReady ? "secondary" : "destructive"
+                              row.contactForm.turnstileReady ? "success" : "destructive"
                             }
                             className="mt-1"
                           >

@@ -3,6 +3,7 @@ import { Plug, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingSpinner } from "@/components/common";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/lib/trpc";
+import { useAppConfig } from "@/lib/AppConfigContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,8 +97,8 @@ function toTimestamp(value: Date | string | null): number {
 
 function formatStateBadgeVariant(
   state: "enabled" | "disabled" | "suspended",
-): "default" | "secondary" | "outline" {
-  if (state === "enabled") return "default";
+): "success" | "secondary" | "outline" {
+  if (state === "enabled") return "success";
   if (state === "suspended") return "secondary";
   return "outline";
 }
@@ -161,6 +162,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function PluginsTab() {
+  const { config } = useAppConfig();
   return (
     <Card>
       <CardHeader className="space-y-3">
@@ -169,13 +171,123 @@ export function PluginsTab() {
           Plugin Access
         </CardTitle>
         <CardDescription>
-          Central super-admin controls for project-level plugin entitlements.
+          {config.installProfile === "solo"
+            ? "Enable or disable plugins for the whole instance. Project-specific plugin configuration still lives on each project."
+            : "Central super-admin controls for project-level plugin entitlements."}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ProjectsPluginAccessPanel />
+        {config.installProfile === "solo" ? (
+          <InstancePluginDefaultsPanel />
+        ) : (
+          <ProjectsPluginAccessPanel />
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function InstancePluginDefaultsPanel() {
+  const utils = trpc.useUtils();
+  const settingsQuery = trpc.superadmin.getInstanceSettings.useQuery();
+  const updateSettings = trpc.superadmin.updateInstanceSettings.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.superadmin.getInstanceSettings.invalidate(),
+        utils.config.getAppConfig.invalidate(),
+      ]);
+    },
+  });
+
+  if (settingsQuery.isLoading) {
+    return <LoadingSpinner message="Loading plugin defaults..." className="justify-start" />;
+  }
+
+  if (settingsQuery.error || !settingsQuery.data) {
+    return (
+      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        Failed to load instance plugin defaults: {getErrorMessage(settingsQuery.error)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {SUPERADMIN_PLUGIN_LIST.map((plugin) => {
+        const enabled = settingsQuery.data?.pluginDefaults[plugin.id]?.enabled ?? false;
+        return (
+          <div
+            key={plugin.id}
+            className="rounded-lg border bg-muted/15 p-4 space-y-3"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium">{plugin.label}</div>
+                <div className="text-sm text-muted-foreground">{plugin.description}</div>
+              </div>
+              <Badge variant={enabled ? "success" : "secondary"}>
+                {enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={enabled ? "success" : "outline"}
+                disabled={updateSettings.isPending}
+                onClick={() =>
+                  updateSettings.mutate(
+                    {
+                      pluginDefaults: {
+                        [plugin.id]: { enabled: true },
+                      },
+                    },
+                    {
+                      onSuccess: () => {
+                        toast.success(`${plugin.label} enabled`);
+                      },
+                      onError: (error) => {
+                        toast.error(`Failed to update ${plugin.label}`, {
+                          description: error.message,
+                        });
+                      },
+                    },
+                  )
+                }
+              >
+                Enable
+              </Button>
+              <Button
+                size="sm"
+                variant={!enabled ? "secondary" : "outline"}
+                disabled={updateSettings.isPending}
+                onClick={() =>
+                  updateSettings.mutate(
+                    {
+                      pluginDefaults: {
+                        [plugin.id]: { enabled: false },
+                      },
+                    },
+                    {
+                      onSuccess: () => {
+                        toast.success(`${plugin.label} disabled`);
+                      },
+                      onError: (error) => {
+                        toast.error(`Failed to update ${plugin.label}`, {
+                          description: error.message,
+                        });
+                      },
+                    },
+                  )
+                }
+              >
+                Disable
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -562,7 +674,7 @@ function ProjectsPluginAccessPanel() {
                 <td className="px-3 py-2">
                   {project.isDeployed ? (
                     <div>
-                      <Badge>Deployed</Badge>
+                      <Badge variant="success">Deployed</Badge>
                       <div className="text-xs text-muted-foreground break-all">
                         {project.deployedDomain}
                       </div>
@@ -606,7 +718,7 @@ function ProjectsPluginAccessPanel() {
                               ) : (
                                 <Badge
                                   variant={
-                                    pluginRow.turnstileReady ? "default" : "secondary"
+                                    pluginRow.turnstileReady ? "success" : "secondary"
                                   }
                                 >
                                   {pluginRow.turnstileReady
@@ -623,7 +735,7 @@ function ProjectsPluginAccessPanel() {
                           <Button
                             size="sm"
                             variant={
-                              pluginRow.state === "enabled" ? "default" : "outline"
+                              pluginRow.state === "enabled" ? "success" : "outline"
                             }
                             disabled={upsertMutation.isPending}
                             onClick={() => void updateState(pluginRow, "enabled")}
@@ -686,6 +798,7 @@ function ProjectsPluginAccessPanel() {
                   <div className="flex min-w-[170px] flex-col gap-1">
                     <Button
                       size="sm"
+                      variant="success"
                       disabled={upsertMutation.isPending}
                       onClick={() => void setAllProjectPluginsState(project, "enabled")}
                     >

@@ -105,6 +105,16 @@ export interface OpenCodeChatSessionViewMessage extends OpenCodeMessage {
   parts: OpenCodePart[];
 }
 
+export interface OpenCodeSessionActivitySummary {
+  selectedSessionId: string | null;
+  activeSessionIds: string[];
+  selectedSessionIsActive: boolean;
+  otherActiveSessionIds: string[];
+  otherActiveSessionCount: number;
+  hasAnyActiveSession: boolean;
+  hasOtherActiveSessions: boolean;
+}
+
 export interface OpenCodeChatState {
   connection: {
     state: OpenCodeConnectionState;

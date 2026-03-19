@@ -11,8 +11,13 @@ import {
   projectPluginInstance,
 } from "../../db/schema";
 import type { PluginId } from "./registry";
+import { installProfileService } from "../system/InstallProfileService";
 
-export type PluginEntitlementScope = "organization" | "project" | "none";
+export type PluginEntitlementScope =
+  | "instance"
+  | "organization"
+  | "project"
+  | "none";
 export type PluginEntitlementState = "disabled" | "enabled" | "suspended";
 export type PluginEntitlementManagedBy =
   | "manual_superadmin"
@@ -79,7 +84,7 @@ function normalizeManagedBy(raw: string | null | undefined): PluginEntitlementMa
 }
 
 function normalizeScope(raw: string | null | undefined): PluginEntitlementScope {
-  if (raw === "organization" || raw === "project") return raw;
+  if (raw === "instance" || raw === "organization" || raw === "project") return raw;
   return "none";
 }
 
@@ -148,6 +153,33 @@ function buildEntitlementMaps(rows: PluginEntitlementRow[]) {
   return { byProject, byOrganization };
 }
 
+function toInstanceResolvedEntitlement(
+  options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: PluginId;
+  },
+  state: PluginEntitlementState,
+): ResolvedPluginEntitlement {
+  return {
+    organizationId: options.organizationId,
+    projectSlug: options.projectSlug,
+    pluginId: options.pluginId,
+    scope: "instance",
+    state,
+    managedBy: "manual_superadmin",
+    monthlyEventLimit: null,
+    hardStop: true,
+    turnstileEnabled: false,
+    turnstileWidgetId: null,
+    turnstileSiteKey: null,
+    turnstileSecretKey: null,
+    notes: "",
+    changedByUserId: null,
+    updatedAt: null,
+  };
+}
+
 class PluginEntitlementService {
   async getProjectEntitlementRow(options: {
     organizationId: string;
@@ -170,6 +202,7 @@ class PluginEntitlementService {
     projectSlug: string;
     pluginId: PluginId;
   }): Promise<ResolvedPluginEntitlement> {
+    const instancePolicy = await installProfileService.resolvePolicy();
     const rows = await db.query.pluginEntitlement.findMany({
       where: and(
         eq(pluginEntitlement.organizationId, options.organizationId),
@@ -179,16 +212,28 @@ class PluginEntitlementService {
 
     const { byProject, byOrganization } = buildEntitlementMaps(rows);
     const row =
-      byProject.get(`${options.organizationId}:${options.projectSlug}`) ??
-      byOrganization.get(options.organizationId) ??
+      (instancePolicy.capabilities.projectPluginEntitlements
+        ? byProject.get(`${options.organizationId}:${options.projectSlug}`)
+        : null) ??
+      (instancePolicy.capabilities.orgPluginEntitlements
+        ? byOrganization.get(options.organizationId)
+        : null) ??
       null;
 
-    return toResolvedEntitlement(options, row);
+    if (row) {
+      return toResolvedEntitlement(options, row);
+    }
+
+    return toInstanceResolvedEntitlement(
+      options,
+      instancePolicy.pluginDefaults[options.pluginId].state,
+    );
   }
 
   async listProjectAccess(
     options: PluginAccessListOptions,
   ): Promise<{ rows: PluginAccessListRow[]; total: number }> {
+    const instancePolicy = await installProfileService.resolvePolicy();
     const limit = Math.max(1, Math.min(500, options.limit ?? 100));
     const offset = Math.max(0, options.offset ?? 0);
     const search = options.search?.trim().toLowerCase() || "";
@@ -309,17 +354,24 @@ class PluginEntitlementService {
 
     for (const row of projectRows) {
       const entitlement =
-        byProject.get(`${row.organizationId}:${row.projectSlug}`) ??
-        byOrganization.get(row.organizationId) ??
+        (instancePolicy.capabilities.projectPluginEntitlements
+          ? byProject.get(`${row.organizationId}:${row.projectSlug}`)
+          : null) ??
+        (instancePolicy.capabilities.orgPluginEntitlements
+          ? byOrganization.get(row.organizationId)
+          : null) ??
         null;
-      const resolved = toResolvedEntitlement(
-        {
-          organizationId: row.organizationId,
-          projectSlug: row.projectSlug,
-          pluginId: options.pluginId,
-        },
-        entitlement,
-      );
+      const entitlementOptions = {
+        organizationId: row.organizationId,
+        projectSlug: row.projectSlug,
+        pluginId: options.pluginId,
+      };
+      const resolved = entitlement
+        ? toResolvedEntitlement(entitlementOptions, entitlement)
+        : toInstanceResolvedEntitlement(
+            entitlementOptions,
+            instancePolicy.pluginDefaults[options.pluginId].state,
+          );
 
       if (options.state && resolved.state !== options.state) continue;
 
@@ -396,6 +448,14 @@ class PluginEntitlementService {
     notes?: string;
     changedByUserId?: string | null;
   }): Promise<PluginEntitlementRow> {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    if (input.scope === "organization" && !instancePolicy.capabilities.orgPluginEntitlements) {
+      throw new Error("Organization-level plugin entitlements are disabled for this install");
+    }
+    if (input.scope === "project" && !instancePolicy.capabilities.projectPluginEntitlements) {
+      throw new Error("Project-level plugin entitlements are disabled for this install");
+    }
+
     const projectSlug =
       input.scope === "organization" ? "" : (input.projectSlug || "").trim();
     if (input.scope === "project" && !projectSlug) {

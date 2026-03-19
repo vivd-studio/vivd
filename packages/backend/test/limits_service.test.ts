@@ -5,6 +5,10 @@ const { getCurrentUsageMock, organizationFindFirstMock } = vi.hoisted(() => ({
   organizationFindFirstMock: vi.fn(),
 }));
 
+const { resolvePolicyMock } = vi.hoisted(() => ({
+  resolvePolicyMock: vi.fn(),
+}));
+
 vi.mock("../src/services/usage/UsageService", () => ({
   usageService: {
     getCurrentUsage: getCurrentUsageMock,
@@ -18,6 +22,12 @@ vi.mock("../src/db", () => ({
         findFirst: organizationFindFirstMock,
       },
     },
+  },
+}));
+
+vi.mock("../src/services/system/InstallProfileService", () => ({
+  installProfileService: {
+    resolvePolicy: resolvePolicyMock,
   },
 }));
 
@@ -47,7 +57,36 @@ describe("LimitsService", () => {
   beforeEach(() => {
     getCurrentUsageMock.mockReset();
     organizationFindFirstMock.mockReset();
+    resolvePolicyMock.mockReset();
     organizationFindFirstMock.mockResolvedValue({ limits: null });
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "platform",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: true,
+        tenantHosts: true,
+        customDomains: true,
+        orgLimitOverrides: true,
+        orgPluginEntitlements: true,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: true,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "disabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "host_based" },
+      pluginRuntime: { mode: "dedicated_host" },
+    });
 
     process.env.LICENSE_DAILY_CREDIT_LIMIT = "100";
     process.env.LICENSE_WEEKLY_CREDIT_LIMIT = "1000";
@@ -128,6 +167,57 @@ describe("LimitsService", () => {
     expect(result.usage.weekly.limit).toBe(120);
     expect(result.usage.monthly.limit).toBe(999);
     expect(result.usage.imageGen.limit).toBe(7);
+  });
+
+  it("uses instance defaults and ignores org overrides when disabled by profile", async () => {
+    resolvePolicyMock.mockResolvedValueOnce({
+      installProfile: "solo",
+      singleProjectMode: true,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {
+        dailyCreditLimit: 25,
+        warningThreshold: 0.5,
+      },
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+    organizationFindFirstMock.mockResolvedValueOnce({
+      limits: {
+        dailyCreditLimit: 10,
+      },
+    });
+    getCurrentUsageMock.mockResolvedValue({
+      daily: { cost: 0.13, imageCount: 0, periodStart: new Date() },
+      weekly: { cost: 0.0, imageCount: 0, periodStart: new Date() },
+      monthly: { cost: 0.0, imageCount: 0, periodStart: new Date() },
+    });
+
+    const result = await limitsService.checkLimits("org-1");
+
+    expect(result.usage.daily.limit).toBe(25);
+    expect(result.warnings.some((msg) => msg.includes("Approaching daily limit"))).toBe(
+      true,
+    );
   });
 
   it("treats zero limits as unlimited", async () => {

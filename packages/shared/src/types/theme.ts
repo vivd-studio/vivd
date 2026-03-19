@@ -7,6 +7,7 @@ export const COLOR_THEME_VALUES = [
   "vivd-green",
   "vivd-sharp",
   "ocean",
+  "aurora",
   "mono",
 ] as const;
 export type ColorTheme = (typeof COLOR_THEME_VALUES)[number];

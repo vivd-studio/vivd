@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
+import { useAppConfig } from "@/lib/AppConfigContext";
 
 type SnippetKind = "html" | "astro";
 type ContactFormFieldType = "text" | "email" | "textarea";
@@ -183,6 +184,7 @@ function SnippetCard({
 }
 
 export default function ProjectPlugins() {
+  const { config } = useAppConfig();
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const utils = trpc.useUtils();
@@ -456,6 +458,14 @@ export default function ProjectPlugins() {
     ROUTES.PROJECT_ANALYTICS?.(projectSlug) ??
     `/vivd-studio/projects/${projectSlug}/analytics`;
   const analyticsLink = isEmbedded ? `${analyticsPath}?embedded=1` : analyticsPath;
+  const contactDisabledCopy =
+    config.installProfile === "solo"
+      ? "Contact Form is disabled for this instance. Open Instance Settings -> Plugins to enable it."
+      : "Contact Form access is managed in Super Admin. Ask a super-admin to enable access for this project, or write to support@vivd.studio.";
+  const analyticsDisabledCopy =
+    config.installProfile === "solo"
+      ? "Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."
+      : "Analytics access is managed in Super Admin. Ask a super-admin to enable Analytics for this project.";
 
   return (
     <SettingsPageShell
@@ -516,8 +526,7 @@ export default function ProjectPlugins() {
 
           {!pluginEnabled ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              Contact Form access is managed in Super Admin. Ask a super-admin
-              to enable access for this project, or write to support@vivd.studio.
+              {contactDisabledCopy}
             </div>
           ) : null}
 
@@ -911,8 +920,7 @@ export default function ProjectPlugins() {
 
           {!analyticsEnabled ? (
             <p className="text-sm text-muted-foreground">
-              Analytics access is managed in Super Admin. Ask a super-admin
-              to enable Analytics for this project.
+              {analyticsDisabledCopy}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">

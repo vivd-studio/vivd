@@ -7,6 +7,7 @@ Vivd is an AI-powered website builder: generate a site, preview/edit it in Studi
 See `docs/PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
 
 When plans change or work is completed, update `docs/PROJECT_STATE.md` in the same change.
+If `docs/PROJECT_STATE.md` starts accumulating too much closed-out detail again, suggest trimming it and moving older material into `docs/PROJECT_STATE_ARCHIVE.md`.
 
 ## Core Architecture
 
@@ -56,6 +57,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 - `docker-compose.yml`: base stack.
 - `docker-compose.override.yml`: local dev overrides.
 - `docker-compose.prod.yml`: production compose variant.
+- Install profiles: default `solo` = one host (`/`, `/vivd-studio`, same-host `/plugins/*`); set `VIVD_INSTALL_PROFILE=platform` for the SaaS/multi-org host-based mode.
 - Local URLs via Caddy:
   - Studio/control-plane route: `http://localhost/vivd-studio`
   - Published-site host: `http://localhost/`

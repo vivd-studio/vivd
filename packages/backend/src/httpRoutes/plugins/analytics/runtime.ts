@@ -473,10 +473,11 @@ export function createAnalyticsPublicRouter(
     const config = configResult.success
       ? configResult.data
       : analyticsPluginConfigSchema.parse({});
+    const trackEndpoint = await getAnalyticsTrackEndpoint();
 
     const script = buildAnalyticsScript({
       token,
-      trackEndpoint: getAnalyticsTrackEndpoint(),
+      trackEndpoint,
       config,
     });
 
@@ -604,7 +605,7 @@ export function createAnalyticsPublicRouter(
           .where(
             and(
               eq(analyticsEvent.organizationId, pluginInstance.organizationId),
-              entitlement.scope === "organization"
+              entitlement.scope === "organization" || entitlement.scope === "instance"
                 ? undefined
                 : eq(analyticsEvent.projectSlug, pluginInstance.projectSlug),
               gte(analyticsEvent.createdAt, monthStart),

@@ -40,6 +40,7 @@ import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
+import { useStudioIframeReadyRetry } from "@/hooks/useStudioIframeReadyRetry";
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
@@ -57,6 +58,16 @@ import {
   Plug,
   Trash2,
 } from "lucide-react";
+
+const INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX =
+  "vivd.initialGenerationBootstrapped";
+
+function getInitialGenerationBootstrapStorageKey(
+  projectSlug: string | undefined,
+  version: number,
+): string {
+  return `${INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX}:${projectSlug || "unknown"}:v${version}`;
+}
 
 /**
  * EmbeddedStudio - Project page inside the main app shell.
@@ -104,6 +115,10 @@ export default function EmbeddedStudio() {
     Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
   const shouldResumeStudio = resumeStudio || initialGenerationRequested;
   const initialGenerationBootstrapKeyRef = useRef<string | null>(null);
+  const initialGenerationBootstrapStorageKey = useMemo(
+    () => getInitialGenerationBootstrapStorageKey(projectSlug, studioVersion),
+    [projectSlug, studioVersion],
+  );
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -341,16 +356,6 @@ export default function EmbeddedStudio() {
     studioUrlQuery.data,
   ]);
 
-  useEffect(() => {
-    initialGenerationBootstrapKeyRef.current = null;
-  }, [
-    initialGenerationRequested,
-    projectSlug,
-    studioBaseUrl,
-    studioReloadNonce,
-    studioVersion,
-  ]);
-
   const ensureStudioRunning = useCallback(async () => {
     if (!projectSlug) {
       return {
@@ -413,12 +418,26 @@ export default function EmbeddedStudio() {
     const targetWindow = studioIframeRef.current?.contentWindow;
     if (!targetWindow) return;
 
-    const key = `${projectSlug || ""}:${studioVersion}:${studioBaseUrl || ""}:${studioReloadNonce}`;
-    if (initialGenerationBootstrapKeyRef.current === key) {
+    if (
+      initialGenerationBootstrapKeyRef.current ===
+      initialGenerationBootstrapStorageKey
+    ) {
       return;
     }
 
-    initialGenerationBootstrapKeyRef.current = key;
+    try {
+      if (
+        window.sessionStorage.getItem(initialGenerationBootstrapStorageKey) ===
+        "1"
+      ) {
+        initialGenerationBootstrapKeyRef.current =
+          initialGenerationBootstrapStorageKey;
+        return;
+      }
+    } catch {
+      // Ignore storage issues and fall back to in-memory tracking.
+    }
+
     targetWindow.postMessage(
       {
         type: "vivd:host:start-initial-generation",
@@ -427,24 +446,35 @@ export default function EmbeddedStudio() {
       },
       "*",
     );
+    initialGenerationBootstrapKeyRef.current =
+      initialGenerationBootstrapStorageKey;
+    try {
+      window.sessionStorage.setItem(initialGenerationBootstrapStorageKey, "1");
+    } catch {
+      // Ignore storage issues and rely on the in-memory ref for this page lifetime.
+    }
   }, [
     initialGenerationRequested,
+    initialGenerationBootstrapStorageKey,
     projectSlug,
-    studioBaseUrl,
-    studioReloadNonce,
     studioVersion,
   ]);
 
-  const handleStudioIframeLoad = useCallback(() => {
-    syncThemeToStudio();
-
+  const tryMarkStudioReadyFromIframe = useCallback(() => {
     if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
-      return;
+      return false;
     }
 
     markStudioReady();
+    syncThemeToStudio();
     sendInitialGenerationBootstrap();
+    return true;
   }, [markStudioReady, sendInitialGenerationBootstrap, syncThemeToStudio]);
+
+  const handleStudioIframeLoad = useCallback(() => {
+    syncThemeToStudio();
+    void tryMarkStudioReadyFromIframe();
+  }, [tryMarkStudioReadyFromIframe]);
 
   useEffect(() => {
     syncThemeToStudio();
@@ -552,6 +582,11 @@ export default function EmbeddedStudio() {
     studioBaseUrl,
     studioVersion,
   ]);
+
+  useStudioIframeReadyRetry({
+    enabled: Boolean(studioIframeSrc && !studioReady),
+    checkReady: tryMarkStudioReadyFromIframe,
+  });
 
   useEffect(() => {
     if (!studioIframeSrc) {
@@ -1080,7 +1115,7 @@ export default function EmbeddedStudio() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
               disabled={deleteProjectMutation.isPending}
               onClick={() => {
                 if (!projectSlug) return;

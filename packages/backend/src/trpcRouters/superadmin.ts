@@ -27,6 +27,12 @@ import {
   setSystemSettingValue,
   SYSTEM_SETTING_KEYS,
 } from "../services/system/SystemSettingsService";
+import {
+  installProfileSchema,
+  installProfileService,
+  instancePluginDefaultsSchema,
+  partialInstanceCapabilityPolicySchema,
+} from "../services/system/InstallProfileService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
 import {
   listStudioImagesFromGhcr,
@@ -75,6 +81,17 @@ const emailDeliverabilityPolicyInputSchema = z.object({
   complaintRateThresholdPercent: z.number().min(0).max(100),
   bounceRateThresholdPercent: z.number().min(0).max(100),
 });
+
+const instanceLimitDefaultsPatchSchema = z
+  .object({
+    dailyCreditLimit: z.number().nonnegative().nullable().optional(),
+    weeklyCreditLimit: z.number().nonnegative().nullable().optional(),
+    monthlyCreditLimit: z.number().nonnegative().nullable().optional(),
+    imageGenPerMonth: z.number().int().nonnegative().nullable().optional(),
+    warningThreshold: z.number().min(0.1).max(1).nullable().optional(),
+    maxProjects: z.number().int().nonnegative().nullable().optional(),
+  })
+  .strict();
 
 function getGlobalUserRoleForOrganizationRole(
   _role: z.infer<typeof organizationRoleSchema>,
@@ -147,6 +164,75 @@ function fallbackStudioImageBase(repo: string): string {
 const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 export const superAdminRouter = router({
+  getInstanceSettings: superAdminProcedure.query(async () => {
+    const policy = await installProfileService.resolvePolicy();
+    return {
+      installProfile: policy.installProfile,
+      singleProjectMode: policy.singleProjectMode,
+      instanceAdminLabel:
+        policy.installProfile === "solo" ? "Instance Settings" : "Super Admin",
+      capabilities: policy.capabilities,
+      pluginDefaults: Object.fromEntries(
+        PLUGIN_IDS.map((pluginId) => [
+          pluginId,
+          {
+            enabled: policy.pluginDefaults[pluginId].state === "enabled",
+          },
+        ]),
+      ),
+      limitDefaults: policy.limitDefaults,
+      controlPlane: policy.controlPlane,
+      pluginRuntime: policy.pluginRuntime,
+    };
+  }),
+
+  updateInstanceSettings: superAdminProcedure
+    .input(
+      z
+        .object({
+          installProfile: installProfileSchema.optional(),
+          capabilities: partialInstanceCapabilityPolicySchema.optional(),
+          pluginDefaults: instancePluginDefaultsSchema.optional(),
+          limitDefaults: instanceLimitDefaultsPatchSchema.optional(),
+        })
+        .strict(),
+    )
+    .mutation(async ({ input }) => {
+      if (input.installProfile) {
+        await installProfileService.updateInstallProfile(input.installProfile);
+      }
+      if (input.capabilities) {
+        await installProfileService.updateInstanceCapabilityPolicy(input.capabilities);
+      }
+      if (input.pluginDefaults) {
+        await installProfileService.updateInstancePluginDefaults(input.pluginDefaults);
+      }
+      if (input.limitDefaults) {
+        await installProfileService.updateInstanceLimitDefaults(input.limitDefaults);
+      }
+
+      const policy = await installProfileService.resolvePolicy();
+      return {
+        success: true,
+        installProfile: policy.installProfile,
+        singleProjectMode: policy.singleProjectMode,
+        instanceAdminLabel:
+          policy.installProfile === "solo" ? "Instance Settings" : "Super Admin",
+        capabilities: policy.capabilities,
+        pluginDefaults: Object.fromEntries(
+          PLUGIN_IDS.map((pluginId) => [
+            pluginId,
+            {
+              enabled: policy.pluginDefaults[pluginId].state === "enabled",
+            },
+          ]),
+        ),
+        limitDefaults: policy.limitDefaults,
+        controlPlane: policy.controlPlane,
+        pluginRuntime: policy.pluginRuntime,
+      };
+    }),
+
   listStudioMachines: superAdminProcedure.query(async () => {
     if (!isManagedStudioMachineProvider(studioMachineProvider)) {
       return {
@@ -223,7 +309,7 @@ export const superAdminRouter = router({
         repository,
         timeoutMs: 10_000,
         semverLimit: 12,
-        devLimit: 12,
+        devLimit: 25,
       });
       imageBase = listed.imageBase;
       images = listed.images;
@@ -656,11 +742,15 @@ export const superAdminRouter = router({
 
   emailDeliverabilityOverview: superAdminProcedure.query(async () => {
     const overview = await emailDeliverabilityService.getOverview();
+    const [sesEndpoint, resendEndpoint] = await Promise.all([
+      getEmailFeedbackEndpoint("ses"),
+      getEmailFeedbackEndpoint("resend"),
+    ]);
     return {
       ...overview,
       webhookEndpoints: {
-        ses: getEmailFeedbackEndpoint("ses"),
-        resend: getEmailFeedbackEndpoint("resend"),
+        ses: sesEndpoint,
+        resend: resendEndpoint,
       },
     };
   }),
@@ -669,11 +759,15 @@ export const superAdminRouter = router({
     .input(emailDeliverabilityPolicyInputSchema)
     .mutation(async ({ input }) => {
       const overview = await emailDeliverabilityService.updatePolicy(input);
+      const [sesEndpoint, resendEndpoint] = await Promise.all([
+        getEmailFeedbackEndpoint("ses"),
+        getEmailFeedbackEndpoint("resend"),
+      ]);
       return {
         ...overview,
         webhookEndpoints: {
-          ses: getEmailFeedbackEndpoint("ses"),
-          resend: getEmailFeedbackEndpoint("resend"),
+          ses: sesEndpoint,
+          resend: resendEndpoint,
         },
       };
     }),
@@ -688,11 +782,15 @@ export const superAdminRouter = router({
       const overview = await emailDeliverabilityService.unsuppressRecipient({
         email: input.email,
       });
+      const [sesEndpoint, resendEndpoint] = await Promise.all([
+        getEmailFeedbackEndpoint("ses"),
+        getEmailFeedbackEndpoint("resend"),
+      ]);
       return {
         ...overview,
         webhookEndpoints: {
-          ses: getEmailFeedbackEndpoint("ses"),
-          resend: getEmailFeedbackEndpoint("resend"),
+          ses: sesEndpoint,
+          resend: resendEndpoint,
         },
       };
     }),
@@ -704,6 +802,7 @@ export const superAdminRouter = router({
       }),
     )
     .query(async ({ input }) => {
+      const instancePolicy = await installProfileService.resolvePolicy();
       const [limits, currentUsage, projectCountRow, org] = await Promise.all([
         limitsService.checkLimits(input.organizationId),
         usageService.getCurrentUsage(input.organizationId),
@@ -719,8 +818,9 @@ export const superAdminRouter = router({
         }),
       ]);
 
-      const maxProjectsRaw = (org?.limits as { maxProjects?: unknown } | null | undefined)
-        ?.maxProjects;
+      const maxProjectsRaw = instancePolicy.capabilities.orgLimitOverrides
+        ? (org?.limits as { maxProjects?: unknown } | null | undefined)?.maxProjects
+        : instancePolicy.limitDefaults.maxProjects;
       const maxProjects =
         typeof maxProjectsRaw === "number" && Number.isFinite(maxProjectsRaw) && maxProjectsRaw > 0
           ? Math.floor(maxProjectsRaw)
@@ -753,13 +853,7 @@ export const superAdminRouter = router({
         slug: input.slug,
         name: input.name,
         status: "active",
-        limits: {
-          dailyCreditLimit: 1000,
-          weeklyCreditLimit: 2500,
-          monthlyCreditLimit: 5000,
-          imageGenPerMonth: 25,
-          warningThreshold: 0.8,
-        },
+        limits: {},
         githubRepoPrefix: input.slug,
       });
 

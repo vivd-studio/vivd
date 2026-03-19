@@ -150,6 +150,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
+The default self-hosted profile is now `solo`: one primary host, the public site on `/`, Studio on `/vivd-studio`, and public plugin routes on the same host under `/plugins/*`.
+
+If you want the current SaaS-style host-based behavior instead, set:
+
+```bash
+VIVD_INSTALL_PROFILE=platform
+```
+
+In `platform`, you should also configure the host-based routing envs explicitly, such as `CONTROL_PLANE_HOST`, `TENANT_BASE_DOMAIN`, and any dedicated plugin host/base URL you want to use.
+
 Services included:
 - **Frontend** — React application
 - **Backend** — API server with AI agent
@@ -167,6 +177,7 @@ Key environment variables:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `OPENROUTER_API_KEY` | API key for AI model access |
 | `BETTER_AUTH_SECRET` | Secret for authentication |
+| `VIVD_INSTALL_PROFILE` | Install profile: leave unset for default `solo`, or set `platform` for the SaaS-style multi-org host-based mode |
 | `PUBLIC_URL` | Your public-facing URL |
 | `SCRAPER_URL` | Optional external scraper override; Docker Compose defaults to the internal `http://scraper:3001` service |
 

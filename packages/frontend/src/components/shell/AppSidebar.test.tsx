@@ -149,6 +149,19 @@ describe("AppSidebar search", () => {
     useAppConfigMock.mockReturnValue({
       isLoading: false,
       config: {
+        installProfile: "platform",
+        instanceAdminLabel: "Super Admin",
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        controlPlaneMode: "host_based",
+        pluginRuntime: { mode: "dedicated_host" },
         hasHostOrganizationAccess: true,
         canSelectOrganization: true,
         controlPlaneHost: null,
@@ -306,6 +319,19 @@ describe("AppSidebar search", () => {
     useAppConfigMock.mockReturnValue({
       isLoading: false,
       config: {
+        installProfile: "platform",
+        instanceAdminLabel: "Super Admin",
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        controlPlaneMode: "host_based",
+        pluginRuntime: { mode: "dedicated_host" },
         hasHostOrganizationAccess: true,
         canSelectOrganization: true,
         controlPlaneHost: null,
@@ -337,6 +363,19 @@ describe("AppSidebar search", () => {
     useAppConfigMock.mockReturnValue({
       isLoading: false,
       config: {
+        installProfile: "platform",
+        instanceAdminLabel: "Super Admin",
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        controlPlaneMode: "host_based",
+        pluginRuntime: { mode: "dedicated_host" },
         hasHostOrganizationAccess: true,
         canSelectOrganization: true,
         controlPlaneHost: null,
@@ -347,6 +386,48 @@ describe("AppSidebar search", () => {
     renderSidebar({ path: `${ROUTES.SUPERADMIN_BASE}?section=email` });
 
     expect(screen.getByRole("link", { name: /^Email$/i })).toBeInTheDocument();
+  });
+
+  it("shows instance-first navigation in solo profile", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        controlPlaneMode: "path_based",
+        pluginRuntime: { mode: "same_host_path" },
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: false,
+        controlPlaneHost: "localhost",
+        isSuperAdminHost: true,
+      },
+    });
+
+    renderSidebar({ path: `${ROUTES.SUPERADMIN_BASE}?section=instance` });
+
+    expect(screen.getByRole("link", { name: /^General$/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /^Organizations$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("clears the search query after selecting a search result", () => {

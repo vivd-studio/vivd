@@ -9,6 +9,7 @@ import {
   projectVersion,
 } from "../../db/schema";
 import type { PrePublishChecklist } from "../../types/checklistTypes";
+import { installProfileService } from "../system/InstallProfileService";
 
 export type ProjectMetaRow = typeof projectMeta.$inferSelect;
 export type ProjectVersionRow = typeof projectVersion.$inferSelect;
@@ -123,6 +124,9 @@ class ProjectMetaService {
   }
 
   async createProjectVersion(input: CreateProjectVersionInput): Promise<void> {
+    const instancePolicy = await installProfileService.resolvePolicy();
+    const instanceMaxProjects = parseMaxProjectsLimit(instancePolicy.limitDefaults);
+
     await db.transaction(async (tx) => {
       const existingProject = await tx.query.projectMeta.findFirst({
         where: and(
@@ -141,7 +145,10 @@ class ProjectMetaService {
           .where(eq(organization.id, input.organizationId))
           .for("update");
 
-        const maxProjects = parseMaxProjectsLimit(orgRows[0]?.limits);
+        const orgMaxProjects = instancePolicy.capabilities.orgLimitOverrides
+          ? parseMaxProjectsLimit(orgRows[0]?.limits)
+          : null;
+        const maxProjects = orgMaxProjects ?? instanceMaxProjects;
         if (maxProjects !== null) {
           const rows = await tx
             .select({

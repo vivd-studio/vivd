@@ -181,7 +181,8 @@ describe("InitialGenerationService", () => {
       manifest: readManifest(tmpDir) as any,
     });
 
-    expect(task).toContain("Create the first customer-facing website");
+    expect(task).toContain("Create a complete, finished version 1");
+    expect(task).toContain("you may ask the user clarifying questions");
     expect(task).toContain("scratch_brief.txt");
     expect(task).toContain("images/logo.png");
     expect(task).toContain("https://example.com");

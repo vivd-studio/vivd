@@ -108,6 +108,26 @@ describe("GHCR studio image readiness", () => {
     expect(result.images.map((image) => image.tag)).toEqual(["0.4.2", "dev-foo"]);
   });
 
+  it("keeps non-semver dev tags in registry order", async () => {
+    installGhcrMock({
+      tags: ["0.4.2", "dev-bbbd9c0", "dev-aaa1111"],
+      readyTags: ["0.4.2", "dev-bbbd9c0", "dev-aaa1111"],
+    });
+
+    const result = await listStudioImagesFromGhcr({
+      repository: "ghcr.io/vivd-studio/vivd-studio",
+      timeoutMs: 5_000,
+      semverLimit: 10,
+      devLimit: 10,
+    });
+
+    expect(result.images.map((image) => image.tag)).toEqual([
+      "0.4.2",
+      "dev-bbbd9c0",
+      "dev-aaa1111",
+    ]);
+  });
+
   it("picks latest ready semver tag, skipping unfinished newest tag", async () => {
     installGhcrMock({
       tags: ["0.5.0", "0.4.9"],

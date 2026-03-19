@@ -433,7 +433,7 @@ export function PublishSiteDialog({
             </div>
 
             {publishStatus?.isPublished ? (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/10 dark:text-emerald-300">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     Published at{" "}
@@ -442,7 +442,7 @@ export function PublishSiteDialog({
                   </div>
                   {publishStatus.url ? (
                     <a
-                      className="inline-flex items-center gap-1 text-emerald-900 hover:underline"
+                      className="inline-flex items-center gap-1 text-emerald-900 hover:underline dark:text-emerald-200"
                       href={publishStatus.url}
                       target="_blank"
                       rel="noreferrer"
@@ -564,7 +564,7 @@ export function PublishSiteDialog({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
               onClick={() => unpublishMutation.mutate({ slug })}
             >
               Unpublish

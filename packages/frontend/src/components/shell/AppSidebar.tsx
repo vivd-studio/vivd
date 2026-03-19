@@ -159,7 +159,7 @@ function OrganizationSwitcher({
   onSelectOrganization,
   isSwitching,
 }: OrganizationSwitcherProps) {
-  const showSwitcher = organizations.length > 1;
+  const showSwitcher = organizations.length > 1 && canSelectOrganization;
 
   return (
     <SidebarMenu>
@@ -443,13 +443,17 @@ function OrganizationNavSection({
 type SuperAdminNavSectionProps = {
   showSuperAdmin: boolean;
   isSuperAdminTabActive: (
-    tab: "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
+    tab: "instance" | "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
   ) => boolean;
+  instanceAdminLabel: string;
+  showPlatformOnlyEntries: boolean;
 };
 
 function SuperAdminNavSection({
   showSuperAdmin,
   isSuperAdminTabActive,
+  instanceAdminLabel,
+  showPlatformOnlyEntries,
 }: SuperAdminNavSectionProps) {
   if (!showSuperAdmin) return null;
 
@@ -457,46 +461,64 @@ function SuperAdminNavSection({
     <SidebarGroup className="mt-auto border-t border-dashed border-sidebar-border pt-2 opacity-70 hover:opacity-100 transition-opacity">
       <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
         <Shield className="size-3 mr-1" />
-        Super Admin
+        {instanceAdminLabel}
       </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              tooltip="Organizations"
-              isActive={isSuperAdminTabActive("orgs")}
+              tooltip={instanceAdminLabel}
+              isActive={isSuperAdminTabActive("instance")}
             >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=org`}>
-                <Building2 />
-                <span>Organizations</span>
+              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=instance`}>
+                <Shield />
+                <span>{instanceAdminLabel === "Instance Settings" ? "General" : "Instance"}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="System Users"
-              isActive={isSuperAdminTabActive("users")}
-            >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=users`}>
-                <Users />
-                <span>System Users</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Maintenance"
-              isActive={isSuperAdminTabActive("maintenance")}
-            >
-              <Link to={`${ROUTES.SUPERADMIN_BASE}?section=maintenance`}>
-                <Wrench />
-                <span>Maintenance</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {showPlatformOnlyEntries ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Organizations"
+                isActive={isSuperAdminTabActive("orgs")}
+              >
+                <Link to={`${ROUTES.SUPERADMIN_BASE}?section=org`}>
+                  <Building2 />
+                  <span>Organizations</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+          {showPlatformOnlyEntries ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="System Users"
+                isActive={isSuperAdminTabActive("users")}
+              >
+                <Link to={`${ROUTES.SUPERADMIN_BASE}?section=users`}>
+                  <Users />
+                  <span>System Users</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+          {showPlatformOnlyEntries ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Maintenance"
+                isActive={isSuperAdminTabActive("maintenance")}
+              >
+                <Link to={`${ROUTES.SUPERADMIN_BASE}?section=maintenance`}>
+                  <Wrench />
+                  <span>Maintenance</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -628,6 +650,7 @@ export function AppSidebar() {
   const isOrgOwner =
     membership?.organizationRole === "owner" ||
     session?.user?.role === "super_admin";
+  const showOrganizationAdmin = isOrgAdmin && config.capabilities.multiOrg;
 
   const { data: orgData } = trpc.organization.getMyOrganization.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,
@@ -670,10 +693,11 @@ export function AppSidebar() {
 
   const isSuperAdminTabActive = React.useCallback(
     (
-      tab: "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
+      tab: "instance" | "orgs" | "users" | "maintenance" | "machines" | "plugins" | "email",
     ) => {
       if (!isActive(ROUTES.SUPERADMIN_BASE, true)) return false;
-      const section = searchParams.get("section") ?? "org";
+      const section = searchParams.get("section") ?? "instance";
+      if (tab === "instance") return section === "instance";
       if (tab === "orgs") return section === "org";
       return section === tab;
     },
@@ -853,7 +877,7 @@ export function AppSidebar() {
               />
 
               <OrganizationNavSection
-                isOrgAdmin={isOrgAdmin}
+                isOrgAdmin={showOrganizationAdmin}
                 isOrgOwner={isOrgOwner}
                 isCollapsed={isCollapsed}
                 isActive={isActive}
@@ -892,6 +916,8 @@ export function AppSidebar() {
         <SuperAdminNavSection
           showSuperAdmin={showSuperAdmin}
           isSuperAdminTabActive={isSuperAdminTabActive}
+          instanceAdminLabel={config.instanceAdminLabel}
+          showPlatformOnlyEntries={config.installProfile === "platform"}
         />
       </SidebarContent>
 

@@ -63,3 +63,21 @@ describe("DockerProviderConfig.apiVersion", () => {
     );
   });
 });
+
+describe("DockerProviderConfig.memoryMb", () => {
+  const originalDockerStudioMemoryMb = process.env.DOCKER_STUDIO_MEMORY_MB;
+
+  afterEach(() => {
+    if (typeof originalDockerStudioMemoryMb === "string") {
+      process.env.DOCKER_STUDIO_MEMORY_MB = originalDockerStudioMemoryMb;
+    } else {
+      delete process.env.DOCKER_STUDIO_MEMORY_MB;
+    }
+  });
+
+  it("defaults Docker-managed studio memory to 2048 MiB", () => {
+    delete process.env.DOCKER_STUDIO_MEMORY_MB;
+
+    expect(new DockerProviderConfig().memoryMb).toBe(2048);
+  });
+});

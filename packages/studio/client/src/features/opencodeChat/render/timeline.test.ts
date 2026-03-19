@@ -258,6 +258,7 @@ describe("canonical timeline builder", () => {
       "reason-2",
     ]);
     expect(secondAgentRow.responseParts.map((part) => part.id)).toEqual(["text-2"]);
+    expect(secondAgentRow.completedAt).toBe(BASE_TIME + 5000);
   });
 
   it("keeps a pending assistant run active even if the session status already looks terminal", () => {

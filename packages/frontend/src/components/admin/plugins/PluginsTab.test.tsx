@@ -9,6 +9,7 @@ const {
   listAccessInvalidateMock,
   toastSuccessMock,
   toastErrorMock,
+  useAppConfigMock,
 } = vi.hoisted(() => ({
   useUtilsMock: vi.fn(),
   listAccessUseQueryMock: vi.fn(),
@@ -17,6 +18,11 @@ const {
   listAccessInvalidateMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
+  useAppConfigMock: vi.fn(),
+}));
+
+vi.mock("@/lib/AppConfigContext", () => ({
+  useAppConfig: useAppConfigMock,
 }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -51,15 +57,28 @@ describe("PluginsTab", () => {
     listAccessInvalidateMock.mockReset();
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
+    useAppConfigMock.mockReset();
 
     listAccessInvalidateMock.mockResolvedValue(undefined);
     upsertEntitlementMutateAsyncMock.mockResolvedValue({});
 
     useUtilsMock.mockReturnValue({
+      config: {
+        getAppConfig: {
+          invalidate: vi.fn().mockResolvedValue(undefined),
+        },
+      },
       superadmin: {
         pluginsListAccess: {
           invalidate: listAccessInvalidateMock,
         },
+      },
+    });
+
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "platform",
       },
     });
 

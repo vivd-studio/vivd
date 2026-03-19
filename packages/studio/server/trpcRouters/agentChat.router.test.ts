@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   listSessionsMock,
   getSessionContentMock,
+  getMessageDiffMock,
   getSessionsStatusMock,
   listQuestionsMock,
   replyQuestionMock,
@@ -10,6 +11,7 @@ const {
 } = vi.hoisted(() => ({
   listSessionsMock: vi.fn(),
   getSessionContentMock: vi.fn(),
+  getMessageDiffMock: vi.fn(),
   getSessionsStatusMock: vi.fn(),
   listQuestionsMock: vi.fn(),
   replyQuestionMock: vi.fn(),
@@ -18,6 +20,7 @@ const {
 
 vi.mock("../opencode/index.js", () => ({
   getSessionContent: getSessionContentMock,
+  getMessageDiff: getMessageDiffMock,
   getSessionsStatus: getSessionsStatusMock,
   listQuestions: listQuestionsMock,
   listSessions: listSessionsMock,
@@ -53,12 +56,14 @@ describe("agentChat router", () => {
   beforeEach(() => {
     listSessionsMock.mockReset();
     getSessionContentMock.mockReset();
+    getMessageDiffMock.mockReset();
     getSessionsStatusMock.mockReset();
     listQuestionsMock.mockReset();
     replyQuestionMock.mockReset();
     rejectQuestionMock.mockReset();
     listSessionsMock.mockResolvedValue([]);
     getSessionContentMock.mockResolvedValue([]);
+    getMessageDiffMock.mockResolvedValue([]);
     getSessionsStatusMock.mockResolvedValue({});
     listQuestionsMock.mockResolvedValue([]);
     replyQuestionMock.mockResolvedValue(true);
@@ -132,6 +137,43 @@ describe("agentChat router", () => {
 
     expect(rejectQuestionMock).toHaveBeenCalledWith("que-1", "/tmp/workspace");
     expect(result).toBe(true);
+  });
+
+  it("loads per-message diffs in the workspace", async () => {
+    getMessageDiffMock.mockResolvedValueOnce([
+      {
+        file: "src/index.html",
+        before: "<h1>Before</h1>\n",
+        after: "<h1>After</h1>\n",
+        additions: 1,
+        deletions: 1,
+        status: "modified",
+      },
+    ]);
+
+    const caller = agentChatRouter.createCaller(makeContext());
+    const result = await caller.messageDiff({
+      projectSlug: "site-1",
+      version: 1,
+      sessionId: "sess-1",
+      messageId: "msg-1",
+    });
+
+    expect(getMessageDiffMock).toHaveBeenCalledWith(
+      "sess-1",
+      "msg-1",
+      "/tmp/workspace",
+    );
+    expect(result).toEqual([
+      {
+        file: "src/index.html",
+        before: "<h1>Before</h1>\n",
+        after: "<h1>After</h1>\n",
+        additions: 1,
+        deletions: 1,
+        status: "modified",
+      },
+    ]);
   });
 
   it("rejects calls when the workspace is not initialized", async () => {

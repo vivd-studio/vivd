@@ -8,6 +8,26 @@ import { trpc } from "@/lib/trpc";
 export interface AppConfig {
   /** When true, the app operates with a single project and bypasses the project list */
   singleProjectMode: boolean;
+  /** Active install profile. */
+  installProfile: "solo" | "platform";
+  /** Profile-aware label for the instance admin surface. */
+  instanceAdminLabel: string;
+  /** Instance capability flags resolved by the backend. */
+  capabilities: {
+    multiOrg: boolean;
+    tenantHosts: boolean;
+    customDomains: boolean;
+    orgLimitOverrides: boolean;
+    orgPluginEntitlements: boolean;
+    projectPluginEntitlements: boolean;
+    dedicatedPluginHost: boolean;
+  };
+  /** Control-plane routing topology. */
+  controlPlaneMode: "path_based" | "host_based";
+  /** Public plugin runtime topology. */
+  pluginRuntime: {
+    mode: "same_host_path" | "dedicated_host";
+  };
   /** Whether the current host is allowed to show super-admin UI. */
   isSuperAdminHost: boolean;
   /** Host classification from backend routing context. */
@@ -33,6 +53,21 @@ interface AppConfigContextValue {
 
 const defaultConfig: AppConfig = {
   singleProjectMode: false,
+  installProfile: "platform",
+  instanceAdminLabel: "Super Admin",
+  capabilities: {
+    multiOrg: true,
+    tenantHosts: true,
+    customDomains: true,
+    orgLimitOverrides: true,
+    orgPluginEntitlements: true,
+    projectPluginEntitlements: true,
+    dedicatedPluginHost: true,
+  },
+  controlPlaneMode: "host_based",
+  pluginRuntime: {
+    mode: "dedicated_host",
+  },
   isSuperAdminHost: false,
   hostKind: "unknown",
   canSelectOrganization: false,

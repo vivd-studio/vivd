@@ -39,6 +39,28 @@ type ContainerReconcileNeeds = {
   mainBackendUrl: boolean;
 };
 
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  const concurrency = Math.max(1, Math.floor(limit));
+  let index = 0;
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = index++;
+        if (i >= items.length) return;
+        await worker(items[i]!);
+      }
+    },
+  );
+
+  await Promise.all(runners);
+}
+
 const STUDIO_INTERNAL_PORT = 3100;
 const DEFAULT_ENV_PASSTHROUGH =
   "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL,OPENCODE_MODELS,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,VIVD_S3_OPENCODE_STORAGE_URI,VIVD_S3_SYNC_INTERVAL_SECONDS,VIVD_SYNC_TRIGGER_FILE,VIVD_SYNC_PAUSE_FILE,VIVD_SYNC_PAUSE_MAX_AGE_SECONDS,VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS,VIVD_SHUTDOWN_CHILD_WAIT_SECONDS,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME";
@@ -1155,6 +1177,76 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     );
   }
 
+  private async warmReconcileContainer(options: {
+    container: DockerContainerInfo;
+    identity: StudioIdentity;
+    desiredImage: string;
+    desiredNetworkName: string;
+  }): Promise<void> {
+    const state = containerStateStatus(options.container);
+    if (state === "dead" || state === "removing") return;
+
+    const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
+      getContainerEnv(options.container).MAIN_BACKEND_URL,
+    );
+    const reconcileState = resolveContainerReconcileState({
+      container: options.container,
+      desiredImage: options.desiredImage,
+      desiredNanoCpus: this.config.nanoCpus,
+      desiredMemoryBytes: this.config.memoryBytes,
+      desiredNetworkName: options.desiredNetworkName,
+      desiredMainBackendUrl,
+      generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+    });
+
+    if (!hasContainerDrift(reconcileState.needs)) return;
+    if (isRunningContainer(options.container)) {
+      throw new Error(
+        `[DockerMachines] Refusing to warm reconcile running container ${options.container.Id} (state=${state})`,
+      );
+    }
+    if (!isStoppedContainer(options.container)) {
+      throw new Error(
+        `[DockerMachines] Cannot warm reconcile container ${options.container.Id}; expected stopped state but got state=${state}`,
+      );
+    }
+
+    const recreated = await this.recreateContainer({
+      existing: options.container,
+      args: {
+        organizationId: options.identity.organizationId,
+        projectSlug: options.identity.projectSlug,
+        version: options.identity.version,
+        env: {},
+      },
+      desiredImage: options.desiredImage,
+      preferredAccessToken: reconcileState.accessToken,
+    });
+    const accessToken = getContainerAccessToken(recreated);
+    if (!accessToken) {
+      throw new Error(
+        `[DockerMachines] Missing access token after warm reconcile for ${options.container.Id}`,
+      );
+    }
+
+    await this.ensureContainerRunning(
+      {
+        organizationId: options.identity.organizationId,
+        projectSlug: options.identity.projectSlug,
+        version: options.identity.version,
+        env: {},
+      },
+      recreated,
+      accessToken,
+      options.desiredImage,
+    );
+    await this.stop(
+      options.identity.organizationId,
+      options.identity.projectSlug,
+      options.identity.version,
+    );
+  }
+
   async reconcileStudioMachines(options?: {
     forceRefreshDesiredImage?: boolean;
   }): Promise<StudioMachineReconcileResult> {
@@ -1203,102 +1295,84 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       studioContainers.map(({ identity }) => identity),
     );
 
-    for (const { container, identity } of studioContainers) {
-      const studioKey = this.config.key(
-        identity.organizationId,
-        identity.projectSlug,
-        identity.version,
-      );
-      const lastVisitedAtMs = lastVisitedAtMsByStudioKey.get(studioKey) ?? null;
-      const inspected = await this.inspectContainer(container.Id);
-      const createdAtMs = getContainerCreatedAt(inspected)
-        ? Date.parse(getContainerCreatedAt(inspected)!)
-        : Number.NaN;
-      const inactivityMs = lastVisitedAtMs !== null ? now - lastVisitedAtMs : null;
-      const createdAgeMs = Number.isFinite(createdAtMs) ? now - createdAtMs : null;
-      const shouldGc =
-        (inactivityMs !== null && inactivityMs >= this.config.maxMachineInactivityMs) ||
-        (lastVisitedAtMs === null &&
-          createdAgeMs !== null &&
-          createdAgeMs >= this.config.maxMachineInactivityMs);
+    await mapLimit(
+      studioContainers,
+      this.config.reconcilerConcurrency,
+      async ({ container, identity }) => {
+        const studioKey = this.config.key(
+          identity.organizationId,
+          identity.projectSlug,
+          identity.version,
+        );
+        const lastVisitedAtMs = lastVisitedAtMsByStudioKey.get(studioKey) ?? null;
+        const inspected = await this.inspectContainer(container.Id);
+        const createdAtMs = getContainerCreatedAt(inspected)
+          ? Date.parse(getContainerCreatedAt(inspected)!)
+          : Number.NaN;
+        const inactivityMs = lastVisitedAtMs !== null ? now - lastVisitedAtMs : null;
+        const createdAgeMs = Number.isFinite(createdAtMs) ? now - createdAtMs : null;
+        const shouldGc =
+          (inactivityMs !== null && inactivityMs >= this.config.maxMachineInactivityMs) ||
+          (lastVisitedAtMs === null &&
+            createdAgeMs !== null &&
+            createdAgeMs >= this.config.maxMachineInactivityMs);
 
-      if (shouldGc) {
-        if (dryRun) continue;
+        if (shouldGc) {
+          if (dryRun) return;
+          try {
+            await this.destroyStudioMachine(container.Id);
+            result.destroyedOldMachines++;
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            result.errors.push({
+              machineId: container.Id,
+              action: "gc",
+              message,
+            });
+          }
+          return;
+        }
+
+        const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
+          getContainerEnv(inspected).MAIN_BACKEND_URL,
+        );
+        const reconcileState = resolveContainerReconcileState({
+          container: inspected,
+          desiredImage,
+          desiredNanoCpus: this.config.nanoCpus,
+          desiredMemoryBytes: this.config.memoryBytes,
+          desiredNetworkName,
+          desiredMainBackendUrl,
+          generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+        });
+        if (!hasContainerDrift(reconcileState.needs)) return;
+
+        if (isRunningContainer(inspected)) {
+          result.skippedRunningMachines++;
+          return;
+        }
+
+        if (!this.config.warmOutdatedImages) return;
+        if (dryRun) return;
+
         try {
-          await this.destroyStudioMachine(container.Id);
-          result.destroyedOldMachines++;
+          await this.warmReconcileContainer({
+            container: inspected,
+            identity,
+            desiredImage,
+            desiredNetworkName,
+          });
+          result.warmedOutdatedImages++;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           result.errors.push({
             machineId: container.Id,
-            action: "gc",
+            action: "warm_reconciled_machine",
             message,
           });
         }
-        continue;
-      }
-
-      const reconcileState = resolveContainerReconcileState({
-        container: inspected,
-        desiredImage,
-        desiredNanoCpus: this.config.nanoCpus,
-        desiredMemoryBytes: this.config.memoryBytes,
-        desiredNetworkName,
-        desiredMainBackendUrl: this.resolveManagedMainBackendUrl(
-          getContainerEnv(inspected).MAIN_BACKEND_URL,
-        ),
-        generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-      });
-      if (!hasContainerDrift(reconcileState.needs)) continue;
-
-      if (isRunningContainer(inspected)) {
-        result.skippedRunningMachines++;
-        continue;
-      }
-
-      if (!this.config.warmOutdatedImages) continue;
-      if (dryRun) continue;
-
-      try {
-        const recreated = await this.recreateContainer({
-          existing: inspected,
-          args: {
-            organizationId: identity.organizationId,
-            projectSlug: identity.projectSlug,
-            version: identity.version,
-            env: {},
-          },
-          desiredImage,
-          preferredAccessToken: reconcileState.accessToken,
-        });
-        const accessToken = getContainerAccessToken(recreated);
-        if (!accessToken) {
-          throw new Error(
-            `[DockerMachines] Missing access token after warm reconcile for ${container.Id}`,
-          );
-        }
-        await this.ensureContainerRunning(
-          {
-            organizationId: identity.organizationId,
-            projectSlug: identity.projectSlug,
-            version: identity.version,
-            env: {},
-          },
-          recreated,
-          accessToken,
-          desiredImage,
-        );
-        await this.stop(identity.organizationId, identity.projectSlug, identity.version);
-        result.warmedOutdatedImages++;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        result.errors.push({
-          machineId: container.Id,
-          action: "warm_reconciled_machine",
-          message,
-        });
-      }
-    }
+      },
+    );
 
     return result;
   }
