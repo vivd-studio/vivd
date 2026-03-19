@@ -402,6 +402,24 @@ export function ChatProvider({
     clearSessionError();
   }, [clearSessionError, setSelectedSessionId]);
 
+  useEffect(() => {
+    const pendingNewSessionRequestId =
+      previewContext?.pendingNewSessionRequestId;
+    const clearPendingNewSessionRequest =
+      previewContext?.clearPendingNewSessionRequest;
+
+    if (!pendingNewSessionRequestId || !clearPendingNewSessionRequest) {
+      return;
+    }
+
+    handleNewSession();
+    clearPendingNewSessionRequest();
+  }, [
+    handleNewSession,
+    previewContext?.pendingNewSessionRequestId,
+    previewContext?.clearPendingNewSessionRequest,
+  ]);
+
   const handleDeleteSession = useCallback(
     async (e: MouseEvent, sessionId: string) => {
       e.stopPropagation();

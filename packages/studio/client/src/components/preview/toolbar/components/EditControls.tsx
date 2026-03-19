@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +13,7 @@ interface EditControlsProps {
   editMode: boolean;
   hasUnsavedChanges: boolean;
   toggleEditMode: () => void;
+  expandedWidth?: number;
   expandLabel?: boolean;
 }
 
@@ -20,6 +22,7 @@ export function EditControls({
   editMode,
   hasUnsavedChanges,
   toggleEditMode,
+  expandedWidth = 104,
   expandLabel = true,
 }: EditControlsProps) {
   if (!projectSlug) return null;
@@ -33,11 +36,22 @@ export function EditControls({
             size="sm"
             onClick={toggleEditMode}
             disabled={hasUnsavedChanges && !editMode}
+            style={
+              {
+                ["--toolbar-expanded-width" as const]: `${expandedWidth}px`,
+              } as CSSProperties
+            }
             className={cn(
-              "h-8 justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
+              "group relative z-20 h-8 w-8 justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
+              editMode
+                ? "bg-background text-primary shadow-sm ring-1 ring-primary/20"
+                : "text-muted-foreground hover:bg-background hover:text-foreground hover:shadow-sm hover:ring-1 hover:ring-border/60",
               editMode && expandLabel
-                ? "w-[104px] bg-primary/10 text-primary shadow-sm"
-                : "w-8 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                ? "w-[var(--toolbar-expanded-width)]"
+                : undefined,
+              !editMode && expandLabel
+                ? "hover:w-[var(--toolbar-expanded-width)]"
+                : undefined,
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center">
@@ -50,6 +64,9 @@ export function EditControls({
                 editMode && expandLabel
                   ? "max-w-24 pl-0.5 pr-2.5 opacity-100"
                   : "max-w-0 pl-0 pr-0 opacity-0",
+                !editMode && expandLabel
+                  ? "group-hover:max-w-24 group-hover:pl-0.5 group-hover:pr-2.5 group-hover:opacity-100"
+                  : undefined,
               )}
             >
               Edit text

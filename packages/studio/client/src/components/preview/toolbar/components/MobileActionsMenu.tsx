@@ -31,6 +31,7 @@ import {
   Plug,
   Rocket,
   RefreshCw,
+  Save,
   Smartphone,
   TabletSmartphone,
   Sun,
@@ -75,8 +76,6 @@ interface MobileActionsMenuProps {
   // Edit state
   assetsOpen: boolean;
   setAssetsOpen: (value: boolean) => void;
-  pluginsOpen: boolean;
-  setPluginsOpen: (value: boolean) => void;
   chatOpen: boolean;
   setChatOpen: (value: boolean) => void;
   sessionHistoryOpen: boolean;
@@ -146,8 +145,6 @@ export function MobileActionsMenu({
   navigatePreviewPath,
   assetsOpen,
   setAssetsOpen,
-  pluginsOpen,
-  setPluginsOpen,
   chatOpen,
   setChatOpen,
   sessionHistoryOpen,
@@ -193,7 +190,10 @@ export function MobileActionsMenu({
 
   const handleOpenPlugins = () => {
     if (!projectSlug) return;
-    setPluginsOpen(!pluginsOpen);
+    openEmbeddedStudioPath(
+      buildProjectStudioPath(projectSlug, "plugins"),
+      embedded,
+    );
   };
 
   const handleOpenAnalytics = () => {
@@ -400,7 +400,7 @@ export function MobileActionsMenu({
                   : "Create a git tag"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setHistoryPanelOpen(true)}>
-              <History className="w-4 h-4 mr-2" />
+              <Save className="w-4 h-4 mr-2" />
               Snapshots & History
               {hasGitChanges && (
                 <span className="ml-auto h-2 w-2 bg-amber-500 rounded-full" />
@@ -408,7 +408,7 @@ export function MobileActionsMenu({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenPlugins}>
               <Plug className="w-4 h-4 mr-2" />
-              {pluginsOpen ? "Hide Plugins" : "Plugins"}
+              Plugins
             </DropdownMenuItem>
             {analyticsAvailable ? (
               <DropdownMenuItem onClick={handleOpenAnalytics}>

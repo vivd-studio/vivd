@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Minimize2,
   PanelLeft,
+  Plus,
   Plug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,10 @@ import {
   QuickActions,
   ToolbarDialogs,
 } from "./components";
+import {
+  buildProjectStudioPath,
+  openEmbeddedStudioPath,
+} from "./hostNavigation";
 
 /**
  * StudioToolbar - Standalone toolbar for the single-instance studio.
@@ -59,11 +64,10 @@ export function StudioToolbar() {
     setSelectedDevice,
     assetsOpen,
     setAssetsOpen,
-    pluginsOpen,
-    setPluginsOpen,
     chatOpen,
     chatPanel,
     setChatOpen,
+    requestNewSession,
     sessionHistoryOpen,
     setSessionHistoryOpen,
     editMode,
@@ -152,7 +156,6 @@ export function StudioToolbar() {
     projectSlug,
     canUseAgent,
     assetsOpen,
-    pluginsOpen,
     chatOpen,
     sessionHistoryOpen,
     editMode,
@@ -193,29 +196,62 @@ export function StudioToolbar() {
     setSessionHistoryOpen(true);
   };
 
-  const handleTogglePlugins = () => {
-    setPluginsOpen(!pluginsOpen);
+  const handleStartNewSession = () => {
+    requestNewSession();
   };
 
-  const expandableToggleClass = (active: boolean, expandedWidth: string) =>
+  const handleOpenPlugins = () => {
+    if (!projectSlug) return;
+    openEmbeddedStudioPath(
+      buildProjectStudioPath(projectSlug, "plugins"),
+      embedded,
+    );
+  };
+
+  const expandableToggleClass = (
+    active: boolean,
+    expanded: boolean,
+    hoverable: boolean = true,
+  ) =>
     cn(
-      "h-8 justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
+      "group relative z-20 h-8 w-8 justify-start gap-0 overflow-hidden rounded-lg px-0 transition-[width,background-color,color,box-shadow] duration-200 ease-out",
       active
-        ? `${expandedWidth} bg-primary/10 text-primary shadow-sm`
-        : "w-8 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+        ? "bg-background text-primary shadow-sm ring-1 ring-primary/20"
+        : "text-muted-foreground hover:bg-background hover:text-foreground hover:shadow-sm hover:ring-1 hover:ring-border/60",
+      expanded ? "w-[var(--toolbar-expanded-width)]" : undefined,
+      !expanded && hoverable ? "hover:w-[var(--toolbar-expanded-width)]" : undefined,
     );
 
-  const expandableToggleLabelClass = (active: boolean) =>
+  const expandableToggleLabelClass = (
+    active: boolean,
+    hoverable: boolean = true,
+  ) =>
     cn(
       "overflow-hidden whitespace-nowrap text-[13px] font-medium transition-[max-width,opacity,padding] duration-200 ease-out",
-      active ? "max-w-24 pl-0.5 pr-2.5 opacity-100" : "max-w-0 pl-0 pr-0 opacity-0",
+      active
+        ? "max-w-24 pl-0.5 pr-2.5 opacity-100"
+        : "max-w-0 pl-0 pr-0 opacity-0",
+      !active && hoverable
+        ? "group-hover:max-w-24 group-hover:pl-0.5 group-hover:pr-2.5 group-hover:opacity-100"
+        : undefined,
     );
+
+  const expandableToggleStyle = (expandedWidth: number): CSSProperties =>
+    ({
+      ["--toolbar-expanded-width" as const]: `${expandedWidth}px`,
+    }) as CSSProperties;
 
   const headerHorizontalPadding = 16;
   const collapsedPreviewInset = 6;
+  const compactControlWidth = 32;
+  const toolbarControlGap = 4;
   const sessionExpandedWidth = 94;
   const explorerExpandedWidth = 96;
+  const editExpandedWidth = 104;
   const pluginExpandedWidth = 88;
+  const newSessionExpandedWidth = 68;
+  const newSessionControlWidth = canUseAgent ? compactControlWidth : 0;
+  const newSessionControlGap = canUseAgent ? toolbarControlGap : 0;
   const sessionToggleGap = canUseAgent ? 4 : 0;
   const shouldReserveSessionSlot = chatOpen;
   const workspaceLeadingEdge = chatOpen
@@ -234,17 +270,42 @@ export function StudioToolbar() {
     previewWorkspaceWidth >= 280 && chatOpen && sessionHistoryOpen;
   const shouldExpandExplorerLabel =
     !shouldCollapseRightSideLabels && assetsOpen;
-  const shouldExpandPluginsLabel =
-    !shouldCollapseRightSideLabels && pluginsOpen;
-  const sessionToggleWidth =
-    canUseAgent && shouldReserveSessionSlot ? sessionExpandedWidth : 0;
+  const hoverableWorkspaceLabels = !shouldCollapseRightSideLabels;
+  const newSessionReservedWidth =
+    canUseAgent && hoverableWorkspaceLabels
+      ? newSessionExpandedWidth
+      : newSessionControlWidth;
+  const sessionGroupWidth =
+    newSessionReservedWidth +
+    newSessionControlGap +
+    (shouldReserveSessionSlot ? sessionExpandedWidth : compactControlWidth);
+  const explorerControlWidth = compactControlWidth;
+  const editControlWidth = compactControlWidth;
+  const pluginControlWidth = compactControlWidth;
+  const hoverExpansionAllowance = hoverableWorkspaceLabels
+    ? Math.max(
+        explorerExpandedWidth - compactControlWidth,
+        editExpandedWidth - compactControlWidth,
+        pluginExpandedWidth - compactControlWidth,
+      )
+    : 0;
+  const workspaceControlCount = canUseAgent ? 5 : 3;
+  const reservedWorkspaceControlsWidth =
+    (canUseAgent
+      ? sessionGroupWidth + compactControlWidth
+      : 0) +
+    explorerControlWidth +
+    editControlWidth +
+    pluginControlWidth +
+    toolbarControlGap * Math.max(0, workspaceControlCount - 1) +
+    hoverExpansionAllowance;
   const workspaceControlStart = chatOpen
-    ? chatPanel.width - (sessionToggleWidth + sessionToggleGap + 16)
+    ? chatPanel.width - (sessionGroupWidth + sessionToggleGap + 16)
     : leadingChromeWidth + headerHorizontalPadding + 12;
   const workspaceControlsOffset = workspaceControlStart - workspaceLeadingEdge;
   const workspaceBarLeftClearance = Math.max(
     0,
-    workspaceControlsWidth + workspaceControlsOffset + 12,
+    reservedWorkspaceControlsWidth + workspaceControlsOffset + 12,
   );
   const maxLeadingWidth = chatOpen
     ? Math.max(148, workspaceControlStart - headerHorizontalPadding - 12)
@@ -284,31 +345,65 @@ export function StudioToolbar() {
       {canUseAgent ? (
         <div
           className="flex justify-end transition-[width] duration-200 ease-out"
-          style={{ width: shouldReserveSessionSlot ? sessionExpandedWidth : 32 }}
+          style={{ width: sessionGroupWidth }}
         >
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleToggleSessionHistory}
-            className={expandableToggleClass(
-              shouldExpandSessionLabel,
-              `w-[${sessionExpandedWidth}px]`,
-            )}
-            title={chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-              <History className="h-4 w-4" />
-            </span>
-            <span
-              aria-hidden="true"
-              className={expandableToggleLabelClass(shouldExpandSessionLabel)}
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStartNewSession}
+              className={expandableToggleClass(
+                false,
+                false,
+                hoverableWorkspaceLabels,
+              )}
+              style={expandableToggleStyle(newSessionExpandedWidth)}
+              title="New session"
             >
-              Sessions
-            </span>
-            <span className="sr-only">
-              {chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
-            </span>
-          </Button>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                <Plus className="h-4 w-4" />
+              </span>
+              <span
+                aria-hidden="true"
+                className={expandableToggleLabelClass(
+                  false,
+                  hoverableWorkspaceLabels,
+                )}
+              >
+                New
+              </span>
+              <span className="sr-only">New session</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleToggleSessionHistory}
+              className={expandableToggleClass(
+                sessionHistoryOpen,
+                shouldExpandSessionLabel,
+                shouldReserveSessionSlot,
+              )}
+              style={expandableToggleStyle(sessionExpandedWidth)}
+              title={chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                <History className="h-4 w-4" />
+              </span>
+              <span
+                aria-hidden="true"
+                className={expandableToggleLabelClass(
+                  shouldExpandSessionLabel,
+                  shouldReserveSessionSlot,
+                )}
+              >
+                Sessions
+              </span>
+              <span className="sr-only">
+                {chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
+              </span>
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -336,9 +431,11 @@ export function StudioToolbar() {
         size="sm"
         onClick={() => setAssetsOpen(!assetsOpen)}
         className={expandableToggleClass(
+          assetsOpen,
           shouldExpandExplorerLabel,
-          `w-[${explorerExpandedWidth}px]`,
+          hoverableWorkspaceLabels,
         )}
+        style={expandableToggleStyle(explorerExpandedWidth)}
         title={assetsOpen ? "Hide explorer" : "Show explorer"}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center">
@@ -346,7 +443,10 @@ export function StudioToolbar() {
         </span>
         <span
           aria-hidden="true"
-          className={expandableToggleLabelClass(shouldExpandExplorerLabel)}
+          className={expandableToggleLabelClass(
+            shouldExpandExplorerLabel,
+            !shouldCollapseRightSideLabels,
+          )}
         >
           Explorer
         </span>
@@ -360,31 +460,35 @@ export function StudioToolbar() {
         editMode={editMode}
         hasUnsavedChanges={hasUnsavedChanges}
         toggleEditMode={toggleEditMode}
+        expandedWidth={editExpandedWidth}
         expandLabel={!shouldCollapseRightSideLabels}
       />
 
       <Button
         variant="ghost"
         size="sm"
-        onClick={handleTogglePlugins}
+        onClick={handleOpenPlugins}
         className={expandableToggleClass(
-          shouldExpandPluginsLabel,
-          `w-[${pluginExpandedWidth}px]`,
+          false,
+          false,
+          hoverableWorkspaceLabels,
         )}
-        title={pluginsOpen ? "Hide plugins" : "Show plugins"}
+        style={expandableToggleStyle(pluginExpandedWidth)}
+        title="Open plugins"
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center">
           <Plug className="h-4 w-4" />
         </span>
         <span
           aria-hidden="true"
-          className={expandableToggleLabelClass(shouldExpandPluginsLabel)}
+          className={expandableToggleLabelClass(
+            false,
+            !shouldCollapseRightSideLabels,
+          )}
         >
           Plugins
         </span>
-        <span className="sr-only">
-          {pluginsOpen ? "Hide plugins" : "Show plugins"}
-        </span>
+        <span className="sr-only">Open plugins</span>
       </Button>
     </div>
   ) : null;
@@ -505,8 +609,6 @@ export function StudioToolbar() {
               analyticsAvailable={analyticsAvailable}
               embedded={embedded}
               onHardRestart={handleHardRestart}
-              pluginsOpen={pluginsOpen}
-              setPluginsOpen={setPluginsOpen}
               isConnectedMode={isConnectedMode}
               handleTogglePreviewUrl={handleTogglePreviewUrl}
               isTogglingPreviewUrl={isTogglingPreviewUrl}
@@ -535,8 +637,6 @@ export function StudioToolbar() {
               navigatePreviewPath={navigatePreviewPath}
               assetsOpen={assetsOpen}
               setAssetsOpen={setAssetsOpen}
-              pluginsOpen={pluginsOpen}
-              setPluginsOpen={setPluginsOpen}
               chatOpen={chatOpen}
               setChatOpen={setChatOpen}
               sessionHistoryOpen={sessionHistoryOpen}

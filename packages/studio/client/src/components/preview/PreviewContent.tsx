@@ -58,11 +58,6 @@ const PdfViewerPanel = lazy(() =>
     default: module.PdfViewerPanel,
   })),
 );
-const PluginSettingsPanel = lazy(() =>
-  import("./PluginSettingsPanel").then((module) => ({
-    default: module.PluginSettingsPanel,
-  })),
-);
 const AIEditDialog = lazy(() =>
   import("../asset-explorer/AIEditDialog").then((module) => ({
     default: module.AIEditDialog,
@@ -97,7 +92,6 @@ export function PreviewContent() {
     fullUrl,
     assetsOpen,
     setAssetsOpen,
-    pluginsOpen,
     chatOpen,
     setChatOpen,
     handleTaskComplete,
@@ -506,12 +500,6 @@ export function PreviewContent() {
           )}
 
           <UnsavedChangesBar />
-
-          {projectSlug && pluginsOpen && (
-            <DeferredPanel>
-              <PluginSettingsPanel projectSlug={projectSlug} />
-            </DeferredPanel>
-          )}
 
           {/* Text Editor - overlay on top of iframe to preserve iframe state */}
           {projectSlug && editingTextFile && (

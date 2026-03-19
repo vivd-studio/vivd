@@ -78,8 +78,6 @@ interface PreviewContextValue {
   setChatOpen: (open: boolean) => void;
   assetsOpen: boolean;
   setAssetsOpen: (open: boolean) => void;
-  pluginsOpen: boolean;
-  setPluginsOpen: (open: boolean) => void;
   sessionHistoryOpen: boolean;
   setSessionHistoryOpen: (open: boolean) => void;
   refreshKey: number;
@@ -138,11 +136,14 @@ interface PreviewContextValue {
     message: string;
     startNewSession?: boolean;
   } | null;
+  pendingNewSessionRequestId: number | null;
   sendChatMessage: (
     message: string,
     options?: { startNewSession?: boolean },
   ) => void;
   clearPendingChatMessage: () => void;
+  requestNewSession: () => void;
+  clearPendingNewSessionRequest: () => void;
 
   // Status
   isSaving: boolean;
@@ -221,7 +222,6 @@ export function PreviewProvider({
   const [assetsOpenState, setAssetsOpenState] = useState(
     initialPanelState.assetsOpen,
   );
-  const [pluginsOpenState, setPluginsOpenState] = useState(false);
   const [sessionHistoryOpenState, setSessionHistoryOpenState] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
@@ -249,10 +249,6 @@ export function PreviewProvider({
 
   const setAssetsOpen = useCallback((open: boolean) => {
     setAssetsOpenState(open);
-  }, []);
-
-  const setPluginsOpen = useCallback((open: boolean) => {
-    setPluginsOpenState(open);
   }, []);
 
   const setSessionHistoryOpen = useCallback((open: boolean) => {
@@ -332,6 +328,9 @@ export function PreviewProvider({
     message: string;
     startNewSession?: boolean;
   } | null>(null);
+  const [pendingNewSessionRequestId, setPendingNewSessionRequestId] = useState<
+    number | null
+  >(null);
   const [editingTextFile, setEditingTextFile] = useState<string | null>(null);
   const [viewingImagePath, setViewingImagePath] = useState<string | null>(null);
   const [viewingPdfPath, setViewingPdfPath] = useState<string | null>(null);
@@ -1156,7 +1155,6 @@ export function PreviewProvider({
   useEffect(() => {
     setCurrentPreviewPath("/");
     setIframePreviewPath("/");
-    setPluginsOpenState(false);
   }, [projectSlug]);
 
   const getShareablePreviewOrigin = () => {
@@ -1281,6 +1279,16 @@ export function PreviewProvider({
     setPendingChatMessage(null);
   }, []);
 
+  const requestNewSession = useCallback(() => {
+    setChatOpen(true);
+    setSessionHistoryOpenState(false);
+    setPendingNewSessionRequestId(Date.now());
+  }, [setChatOpen]);
+
+  const clearPendingNewSessionRequest = useCallback(() => {
+    setPendingNewSessionRequestId(null);
+  }, []);
+
   // Listen for element selection from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -1392,8 +1400,6 @@ export function PreviewProvider({
     setChatOpen,
     assetsOpen: assetsOpenState,
     setAssetsOpen,
-    pluginsOpen: pluginsOpenState,
-    setPluginsOpen,
     sessionHistoryOpen: sessionHistoryOpenState,
     setSessionHistoryOpen,
     refreshKey,
@@ -1449,8 +1455,11 @@ export function PreviewProvider({
     // Cross-component chat messaging
     initialGenerationRequested,
     pendingChatMessage,
+    pendingNewSessionRequestId,
     sendChatMessage,
     clearPendingChatMessage,
+    requestNewSession,
+    clearPendingNewSessionRequest,
 
     // Text Editor in preview area
     editingTextFile,
