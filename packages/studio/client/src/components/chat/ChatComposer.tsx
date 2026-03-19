@@ -189,7 +189,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
   return (
     <div
       className={cn(
-        "mt-auto pb-3 pl-3.5 pr-3 pt-0 transition-colors md:pb-3.5 md:pl-4 md:pr-3.5 md:pt-0",
+        "mt-auto pb-3 pl-[15px] pr-3 pt-0 transition-colors md:pb-3.5 md:pl-[17px] md:pr-3.5 md:pt-0",
         isDragOver ? "bg-primary/5" : "",
         className,
       )}

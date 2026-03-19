@@ -19,6 +19,7 @@
 
 ## Latest Progress
 
+- 2026-03-19: nudged the Studio chat composer left inset slightly in `packages/studio/client`: the shared chat input dock now sits 1px farther from the left edge in both the empty state and normal chat mode, which better balances the composer card against the right gutter without changing the rest of its spacing.
 - 2026-03-19: tightened the Studio chat composer bottom spacing in `packages/studio/client` without lowering the dock itself: the outer dock inset stays in its earlier position, while the composer action row now uses a slightly smaller bottom padding so the input card loses some of its extra lower whitespace.
 - 2026-03-19: tightened the Studio desktop quick-actions chrome in `packages/studio/client`: the right-side desktop action buttons now use a slightly shorter 30px control height so `Analytics`, `Snapshots`, `Publish`, and the overflow trigger read a touch less tall without changing their hover-expand behavior.
 - 2026-03-19: refined the Studio desktop right-side toolbar actions in `packages/studio/client`: the persistent `Snapshots` and `Publish` affordances now collapse back to icon-only buttons and reveal their labels only on hover, matching the behavior of the other hover-expanding desktop toolbar controls without reintroducing browser-bar overlap.
