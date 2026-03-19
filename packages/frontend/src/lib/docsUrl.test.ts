@@ -28,4 +28,23 @@ describe("buildDocsUrl", () => {
       }),
     ).toBe("http://docs.127.0.0.1.nip.io/");
   });
+
+  it("falls back to the public docs host on custom domains", () => {
+    expect(
+      buildDocsUrl({
+        currentHost: "studio.customer-example.com",
+        pathname: "/self-hosting/",
+      }),
+    ).toBe("https://docs.vivd.studio/self-hosting/");
+  });
+
+  it("uses an explicit public docs base URL override when provided", () => {
+    expect(
+      buildDocsUrl({
+        publicDocsBaseUrl: "https://docs.vivd.studio",
+        currentHost: "solo.customer-example.com",
+        pathname: "/",
+      }),
+    ).toBe("https://docs.vivd.studio/");
+  });
 });

@@ -1,22 +1,18 @@
 services:
   caddy:
-    image: ghcr.io/vivd-studio/vivd-caddy:latest
-    pull_policy: always
-    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    image: caddy:2-alpine
     restart: unless-stopped
+    ports:
+      - "80:80"
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d:ro
-      - caddy_caddyfile:/etc/caddy_shared
       - published_sites:/srv/published:ro
-    environment:
-      - VIVD_PUBLIC_PLUGIN_API_HOST=${VIVD_PUBLIC_PLUGIN_API_HOST:-api.vivd.studio}
-      - VIVD_DOCS_HOST=${VIVD_DOCS_HOST:-docs.vivd.studio}
     depends_on:
       - backend
-      - docs
     networks:
       - vivd-network
 
@@ -29,25 +25,23 @@ services:
       - PORT=3000
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
       - VERTEX_LOCATION=${VERTEX_LOCATION:-}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
       - GOOGLE_APPLICATION_CREDENTIALS_JSON=${GOOGLE_APPLICATION_CREDENTIALS_JSON:-}
       - VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH=${VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH:-}
-      - OPENCODE_MODEL=${OPENCODE_MODEL}
+      - OPENCODE_MODEL=${OPENCODE_MODEL:-}
       - OPENCODE_MODELS=${OPENCODE_MODELS:-}
       - DOMAIN=${DOMAIN}
-      - VIVD_INSTALL_PROFILE=${VIVD_INSTALL_PROFILE:-}
-      - VIVD_INSTANCE_CAPABILITY_POLICY=${VIVD_INSTANCE_CAPABILITY_POLICY:-}
-      - VIVD_INSTANCE_PLUGIN_DEFAULTS=${VIVD_INSTANCE_PLUGIN_DEFAULTS:-}
-      - VIVD_INSTANCE_LIMIT_DEFAULTS=${VIVD_INSTANCE_LIMIT_DEFAULTS:-}
-      - VIVD_PUBLIC_DOCS_BASE_URL=${VIVD_PUBLIC_DOCS_BASE_URL:-}
-      - TRUSTED_DOMAINS=${TRUSTED_DOMAINS:-}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - VIVD_INSTALL_PROFILE=${VIVD_INSTALL_PROFILE:-solo}
+      - VIVD_PUBLIC_DOCS_BASE_URL=${VIVD_PUBLIC_DOCS_BASE_URL:-https://docs.vivd.studio}
+      - TRUSTED_DOMAINS=${TRUSTED_DOMAINS}
       - TENANT_BASE_DOMAIN=${TENANT_BASE_DOMAIN:-}
-      - TENANT_DOMAIN_ROUTING_ENABLED=${TENANT_DOMAIN_ROUTING_ENABLED:-true}
-      - CONTROL_PLANE_HOST=${CONTROL_PLANE_HOST:-}
-      - SUPERADMIN_HOSTS=${SUPERADMIN_HOSTS:-}
+      - TENANT_DOMAIN_ROUTING_ENABLED=${TENANT_DOMAIN_ROUTING_ENABLED:-false}
+      - CONTROL_PLANE_HOST=${CONTROL_PLANE_HOST}
+      - SUPERADMIN_HOSTS=${SUPERADMIN_HOSTS}
       - BACKEND_URL=${BACKEND_URL:-}
       - VIVD_PUBLIC_PLUGIN_API_BASE_URL=${VIVD_PUBLIC_PLUGIN_API_BASE_URL:-}
       - PUBLISHED_DIR=/srv/published
@@ -58,33 +52,20 @@ services:
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
       - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
-      # S3/R2 object storage (studio machine project sync)
       - R2_ENDPOINT=${R2_ENDPOINT:-}
       - R2_BUCKET=${R2_BUCKET:-}
       - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
       - R2_SECRET_KEY=${R2_SECRET_KEY:-}
-      # Email delivery (Resend default, SES optional)
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - RESEND_WEBHOOK_SECRET=${RESEND_WEBHOOK_SECRET:-}
-      - VIVD_EMAIL_FROM=${VIVD_EMAIL_FROM:-noreply@mail.vivd.studio}
+      - VIVD_EMAIL_FROM=${VIVD_EMAIL_FROM:-}
       - VIVD_FROM_EMAIL=${VIVD_FROM_EMAIL:-}
       - VIVD_SES_ACCESS_KEY_ID=${VIVD_SES_ACCESS_KEY_ID:-}
       - VIVD_SES_SECRET_ACCESS_KEY=${VIVD_SES_SECRET_ACCESS_KEY:-}
-      - VIVD_SES_FROM_EMAIL=${VIVD_SES_FROM_EMAIL:-noreply@mail.vivd.studio}
-      - VIVD_SES_REGION=${VIVD_SES_REGION:-eu-central-1}
-      # Studio machines
-      - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-local}
-      - SINGLE_PROJECT_MODE=${SINGLE_PROJECT_MODE:-false}
-      # Fly.io studio machines (when STUDIO_MACHINE_PROVIDER=fly)
-      - FLY_API_TOKEN=${FLY_API_TOKEN:-}
-      - FLY_STUDIO_APP=${FLY_STUDIO_APP:-}
-      - FLY_STUDIO_IMAGE_REPO=${FLY_STUDIO_IMAGE_REPO:-}
-      - FLY_STUDIO_IMAGE=${FLY_STUDIO_IMAGE:-}
-      - FLY_STUDIO_REGION=${FLY_STUDIO_REGION:-}
-      - FLY_STUDIO_CPU_KIND=${FLY_STUDIO_CPU_KIND:-shared}
-      - FLY_STUDIO_CPUS=${FLY_STUDIO_CPUS:-1}
-      - FLY_STUDIO_MEMORY_MB=${FLY_STUDIO_MEMORY_MB:-1024}
-      # Single-host Docker studio machines (when STUDIO_MACHINE_PROVIDER=docker)
+      - VIVD_SES_FROM_EMAIL=${VIVD_SES_FROM_EMAIL:-}
+      - VIVD_SES_REGION=${VIVD_SES_REGION:-}
+      - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-docker}
+      - SINGLE_PROJECT_MODE=${SINGLE_PROJECT_MODE:-true}
       - DOCKER_STUDIO_SOCKET_PATH=${DOCKER_STUDIO_SOCKET_PATH:-/var/run/docker.sock}
       - DOCKER_STUDIO_API_BASE_URL=${DOCKER_STUDIO_API_BASE_URL:-}
       - DOCKER_STUDIO_API_VERSION=${DOCKER_STUDIO_API_VERSION:-}
@@ -96,25 +77,13 @@ services:
       - DOCKER_STUDIO_IMAGE=${DOCKER_STUDIO_IMAGE:-}
       - DOCKER_STUDIO_CPUS=${DOCKER_STUDIO_CPUS:-1}
       - DOCKER_STUDIO_MEMORY_MB=${DOCKER_STUDIO_MEMORY_MB:-2048}
-      # GitHub sync
-      - GITHUB_SYNC_ENABLED=${GITHUB_SYNC_ENABLED:-false}
-      - GITHUB_SYNC_STRICT=${GITHUB_SYNC_STRICT:-false}
-      - GITHUB_ORG=${GITHUB_ORG:-}
-      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-      - GITHUB_REPO_PREFIX=${GITHUB_REPO_PREFIX:-}
-      # Usage limits
-      - LICENSE_DAILY_CREDIT_LIMIT=${LICENSE_DAILY_CREDIT_LIMIT:-1000}
-      - LICENSE_WEEKLY_CREDIT_LIMIT=${LICENSE_WEEKLY_CREDIT_LIMIT:-2500}
-      - LICENSE_MONTHLY_CREDIT_LIMIT=${LICENSE_MONTHLY_CREDIT_LIMIT:-5000}
-      - LICENSE_IMAGE_GEN_PER_MONTH=${LICENSE_IMAGE_GEN_PER_MONTH:-25}
-      - LICENSE_WARNING_THRESHOLD=${LICENSE_WARNING_THRESHOLD:-0.8}
     volumes:
       - backend_data:/app/projects
       - opencode_data:/root/.local/share/opencode/storage
       - published_sites:/srv/published
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d
-      - caddy_caddyfile:/etc/caddy_shared:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
@@ -128,17 +97,8 @@ services:
     image: ghcr.io/vivd-studio/vivd-ui:latest
     pull_policy: always
     restart: unless-stopped
-    environment:
-      - VITE_APP_ENV=${VITE_APP_ENV}
     depends_on:
       - backend
-    networks:
-      - vivd-network
-
-  docs:
-    image: ghcr.io/vivd-studio/vivd-docs:latest
-    pull_policy: always
-    restart: unless-stopped
     networks:
       - vivd-network
 
@@ -152,7 +112,6 @@ services:
       - MAX_CONCURRENT_SCRAPES=${MAX_CONCURRENT_SCRAPES:-2}
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      # Residential proxy config (optional - set in .env to enable)
       - PROXY_HOST=${PROXY_HOST:-}
       - PROXY_PORT=${PROXY_PORT:-823}
       - PROXY_USERNAME=${PROXY_USERNAME:-}
@@ -170,11 +129,11 @@ services:
     image: postgres:17
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_DB: ${POSTGRES_DB:-vivd}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-vivd}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -183,16 +142,16 @@ services:
     networks:
       - vivd-network
 
-networks:
-  vivd-network:
-
 volumes:
-  postgres_data:
   backend_data:
   opencode_data:
+  published_sites:
   caddy_data:
   caddy_config:
   caddy_sites:
   caddy_runtime_routes:
-  caddy_caddyfile:
-  published_sites:
+  postgres_data:
+
+networks:
+  vivd-network:
+    driver: bridge

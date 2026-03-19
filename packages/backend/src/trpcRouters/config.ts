@@ -24,6 +24,7 @@ export const configRouter = router({
     const controlPlaneHost = await domainService.getResolvedControlPlaneHostForRequest(
       ctx.requestDomain,
     );
+    const publicDocsBaseUrl = process.env.VIVD_PUBLIC_DOCS_BASE_URL?.trim() || null;
 
     return {
       // Single project mode: when true, the app operates with a single project
@@ -53,6 +54,7 @@ export const configRouter = router({
         Boolean(ctx.organizationRole),
       controlPlaneHost,
       activeOrganizationTenantHost,
+      publicDocsBaseUrl,
     };
   }),
 });

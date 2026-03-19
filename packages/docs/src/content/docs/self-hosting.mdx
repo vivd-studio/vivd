@@ -1,0 +1,72 @@
+---
+title: Self-Hosting
+description: Install the solo self-hosted Vivd stack with one public host and Docker-based Studio machines.
+---
+
+Vivd ships a **solo** self-host install path for one primary host:
+
+- Public site on `/`
+- Studio on `/vivd-studio`
+- Docker-based Studio machines by default
+
+## Before you run it
+
+Have these ready:
+
+- A Linux host with Docker Engine and Docker Compose v2
+- One public host or IP you want Vivd to use
+- An `OPENROUTER_API_KEY`
+
+## Install command
+
+```bash
+curl -fsSL https://docs.vivd.studio/install.sh | bash
+```
+
+The installer prompts for:
+
+- your primary host or IP
+- your `OPENROUTER_API_KEY`
+- whether to enable single-project mode
+
+It then:
+
+- downloads the solo self-host bundle
+- writes `docker-compose.yml`, `Caddyfile`, and `.env`
+- generates fresh secrets for auth, scraper access, and Postgres
+- enables `STUDIO_MACHINE_PROVIDER=docker`
+- starts the stack with `docker compose up -d`
+
+## What gets installed
+
+The solo bundle installs:
+
+- Caddy
+- frontend
+- backend
+- scraper
+- Postgres
+
+## Result
+
+After the stack starts, open:
+
+- `https://your-host/`
+- `https://your-host/vivd-studio`
+
+If you are testing on `localhost` or another local host, use `http` instead.
+
+## Manage the install
+
+The installer writes the stack into `~/vivd` by default.
+
+```bash
+cd ~/vivd
+docker compose ps
+docker compose logs -f
+```
+
+## Notes
+
+- This installer is for the `solo` profile only.
+- The bundled Caddy setup serves HTTP on port `80`; if you terminate TLS upstream, point that edge proxy at this host.

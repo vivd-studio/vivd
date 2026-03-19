@@ -1,0 +1,46 @@
+{
+    auto_https off
+
+    admin 0.0.0.0:2019 {
+        origins http://caddy:2019 http://backend:3000 http://localhost:2019 http://127.0.0.1:2019
+    }
+}
+
+import /etc/caddy/sites.d/*.caddy
+
+:80 {
+    handle /plugins/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /email/v1/feedback/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /vivd-studio/api/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /vivd-studio* {
+        reverse_proxy frontend:80
+    }
+
+    import /etc/caddy/runtime.d/*.caddy
+
+    handle /health {
+        respond "OK" 200
+    }
+
+    handle {
+        root * /srv/published
+        try_files {path} {path}/index.html =404
+        file_server
+    }
+
+    handle_errors {
+        @404 expression {err.status_code} == 404
+        handle @404 {
+            respond "Not found" 404
+        }
+    }
+}

@@ -1,6 +1,7 @@
 {
   "name": "vivd-root",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
     "packages/*"
   ],

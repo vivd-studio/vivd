@@ -10,6 +10,7 @@ export default new Map([
 ["src/content/docs/plugins/analytics.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fplugins%2Fanalytics.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/plugins/contact-form.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fplugins%2Fcontact-form.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/publish-your-site.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fpublish-your-site.mdx&astroContentModuleFlag=true")],
+["src/content/docs/self-hosting.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fself-hosting.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/teams-and-access.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fteams-and-access.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/troubleshooting.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ftroubleshooting.mdx&astroContentModuleFlag=true")]]);
 		

@@ -22,6 +22,7 @@ export default defineConfig({
       sidebar: [
         { slug: "index", label: "Overview" },
         { slug: "getting-started" },
+        { slug: "self-hosting", label: "Self-Hosting" },
         { slug: "import-existing-website" },
         { slug: "create-from-scratch" },
         { slug: "edit-in-studio" },

@@ -818,6 +818,7 @@ export function AppSidebar() {
   };
 
   const docsUrl = buildDocsUrl({
+    publicDocsBaseUrl: config.publicDocsBaseUrl,
     currentHost: window.location.host,
     controlPlaneHost: config.controlPlaneHost,
     pathname: "/",

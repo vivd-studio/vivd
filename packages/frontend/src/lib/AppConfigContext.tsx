@@ -44,6 +44,8 @@ export interface AppConfig {
   controlPlaneHost: string | null;
   /** Active organization tenant host (if available). */
   activeOrganizationTenantHost: string | null;
+  /** Public docs base URL override for installs that do not host docs locally. */
+  publicDocsBaseUrl: string | null;
 }
 
 interface AppConfigContextValue {
@@ -76,6 +78,7 @@ const defaultConfig: AppConfig = {
   hasHostOrganizationAccess: true,
   controlPlaneHost: null,
   activeOrganizationTenantHost: null,
+  publicDocsBaseUrl: null,
 };
 
 const AppConfigContext = createContext<AppConfigContextValue>({

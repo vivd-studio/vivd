@@ -1,9 +1,9 @@
 # Self-Hosting Profile Split Plan
 
 Status: In Progress  
-Last updated: 2026-03-19
+Last updated: 2026-03-20
 
-Progress note: phases 1 through 4 are now landed in the product codebase (install-profile foundation, instance-first backend policy resolution, `solo` same-host routing, and `solo`/`platform` admin UI split). Phase 5 is partially landed: the runtime fallback and sample env now default new installs to `solo`, while migration-path follow-up remains open.
+Progress note: phases 1 through 4 are now landed in the product codebase (install-profile foundation, instance-first backend policy resolution, `solo` same-host routing, and `solo`/`platform` admin UI split). Phase 5 is now partially landed in a broader sense: new installs already default to `solo`, and the public docs workspace now hosts a solo-only self-host installer bundle plus a public self-hosting guide. The remaining open follow-up is the documented migration/upgrade path from `solo` to `platform`.
 
 ## Goal
 
@@ -399,6 +399,7 @@ This keeps the quickstart path small without removing advanced capability from t
 ### Phase 5: Installer and docs
 
 - Default new self-hosted installs to `solo`.
+- Host a solo-only self-host installer bundle and public setup guide.
 - Document advanced migration/upgrade path from `solo` to `platform`.
 
 ## Testing Plan

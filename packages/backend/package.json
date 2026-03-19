@@ -25,7 +25,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.983.0",
     "@aws-sdk/client-sesv2": "^3.995.0",
