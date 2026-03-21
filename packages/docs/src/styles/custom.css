@@ -14,6 +14,10 @@
   --sl-color-gray-6: #28251f;
   --sl-color-black: #12120f;
   --sl-color-bg-nav: #11130f;
+  --vivd-sidebar-surface: color-mix(in srgb, #12120f 74%, transparent);
+  --vivd-sidebar-surface-strong: color-mix(in srgb, #181a15 82%, transparent);
+  --vivd-sidebar-hover: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+  --vivd-sidebar-border: color-mix(in srgb, var(--sl-color-accent) 10%, var(--sl-color-gray-5));
   --sl-font: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   --sl-font-mono: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
 }
@@ -32,6 +36,10 @@
   --sl-color-gray-7: #f5f1e6;
   --sl-color-black: #f8f6ef;
   --sl-color-bg-nav: #faf8f1;
+  --vivd-sidebar-surface: color-mix(in srgb, #faf8f1 76%, transparent);
+  --vivd-sidebar-surface-strong: color-mix(in srgb, white 86%, transparent);
+  --vivd-sidebar-hover: color-mix(in srgb, var(--sl-color-accent) 8%, white);
+  --vivd-sidebar-border: color-mix(in srgb, var(--sl-color-accent) 12%, var(--sl-color-gray-5));
 }
 
 html {
@@ -59,6 +67,68 @@ body {
 header.header {
   border-bottom-color: color-mix(in srgb, var(--sl-color-gray-5) 28%, transparent);
   background-color: var(--sl-color-bg-nav);
+}
+
+.sidebar-pane {
+  background:
+    linear-gradient(180deg, var(--vivd-sidebar-surface-strong), var(--vivd-sidebar-surface));
+  backdrop-filter: blur(16px);
+}
+
+.sidebar-content :is(a, summary) {
+  border-radius: 0.75rem;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.sidebar-content a:hover,
+.sidebar-content a:focus,
+.sidebar-content summary:hover {
+  background-color: var(--vivd-sidebar-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+}
+
+.sidebar-content [aria-current="page"],
+.sidebar-content [aria-current="page"]:hover,
+.sidebar-content [aria-current="page"]:focus {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--sl-color-accent) 84%, var(--sl-color-accent-high)),
+      color-mix(in srgb, var(--sl-color-accent) 92%, var(--sl-color-accent-high))
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--sl-color-accent) 36%, transparent),
+    0 10px 24px color-mix(in srgb, var(--sl-color-accent) 24%, transparent);
+}
+
+.sidebar-content ul ul li {
+  border-inline-start-color: color-mix(
+    in srgb,
+    var(--sl-color-accent) 12%,
+    var(--sl-color-hairline-light)
+  );
+}
+
+@media (min-width: 50rem) {
+  .sidebar-pane {
+    border-inline-end-color: var(--vivd-sidebar-border);
+  }
+}
+
+@media (min-width: 72rem) {
+  .right-sidebar {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--sl-color-bg-nav) 18%, transparent),
+        transparent 30rem
+      );
+    backdrop-filter: blur(10px);
+  }
 }
 
 .hero {

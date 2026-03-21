@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { isIP } from "node:net";
 import { db } from "../../db";
 import { publishedSite } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
@@ -22,6 +23,7 @@ const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
 const CADDY_SITES_DIR = process.env.CADDY_SITES_DIR || "/etc/caddy/sites.d";
 const REDIRECTS_MANIFEST_FILENAME = "redirects.json";
 const REDIRECT_STATUS_CODES = new Set([301, 302, 307, 308]);
+type CaddyTlsMode = "managed" | "off";
 
 type ProjectRedirectRule = {
   fromPath: string;
@@ -29,6 +31,64 @@ type ProjectRedirectRule = {
   statusCode: 301 | 302 | 307 | 308;
   isPrefix: boolean;
 };
+
+function parseCaddyTlsMode(value: string | undefined): CaddyTlsMode {
+  return value?.trim().toLowerCase() === "managed" ? "managed" : "off";
+}
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+  switch (value.trim().toLowerCase()) {
+    case "1":
+    case "true":
+    case "yes":
+    case "on":
+      return true;
+    case "0":
+    case "false":
+    case "no":
+    case "off":
+      return false;
+    default:
+      return fallback;
+  }
+}
+
+function isDevelopmentLikeDomain(domain: string): boolean {
+  return (
+    domain === "localhost" ||
+    domain.endsWith(".local") ||
+    domain.endsWith(".localhost") ||
+    isIP(domain) !== 0 ||
+    !domain.includes(".")
+  );
+}
+
+export function buildPublishedSiteAddressSpec(
+  domain: string,
+  options?: {
+    isDev?: boolean;
+    caddyTlsMode?: CaddyTlsMode;
+    includeWwwAlias?: boolean;
+  },
+): string {
+  const isDev = options?.isDev ?? isDevelopmentLikeDomain(domain);
+  const caddyTlsMode = options?.caddyTlsMode ?? parseCaddyTlsMode(process.env.VIVD_CADDY_TLS_MODE);
+  const includeWwwAlias =
+    options?.includeWwwAlias ??
+    parseBooleanEnv(process.env.VIVD_PUBLISH_INCLUDE_WWW_ALIAS, true);
+
+  if (isDev) {
+    return `http://${domain}`;
+  }
+
+  const addresses = includeWwwAlias ? [domain, `www.${domain}`] : [domain];
+  if (caddyTlsMode === "managed") {
+    return addresses.join(", ");
+  }
+
+  return addresses.map((address) => `http://${address}`).join(", ");
+}
 
 export interface PublishResult {
   success: boolean;
@@ -520,13 +580,7 @@ export class PublishService {
    * Check if a domain is a development domain (no TLS needed)
    */
   isDevDomain(domain: string): boolean {
-    return (
-      domain === "localhost" ||
-      domain.endsWith(".local") ||
-      domain.endsWith(".localhost") ||
-      // Single-label domains (no dots) are typically local
-      !domain.includes(".")
-    );
+    return isDevelopmentLikeDomain(domain);
   }
 
   /**
@@ -792,14 +846,8 @@ ${blocks.join("\n\n")}
       fs.mkdirSync(CADDY_SITES_DIR, { recursive: true });
     }
 
-    // Always use http:// prefix to prevent Caddy from trying to handle TLS
-    // TLS is terminated by the external load balancer in production
     const isDev = this.isDevDomain(domain);
-    // For dev domains, no www prefix (www.localhost is invalid)
-    // For production domains, include www variant
-    const domainSpec = isDev
-      ? `http://${domain}`
-      : `http://${domain}, http://www.${domain}`;
+    const domainSpec = buildPublishedSiteAddressSpec(domain, { isDev });
 
     // Determine frontend port based on environment
     // In development (NODE_ENV=development), frontend runs Vite on 5173

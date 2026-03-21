@@ -1,0 +1,287 @@
+name: Build and Publish Self-Host ARM64 Images
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to use for images (e.g., v1.0.0)"
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/vivd-studio
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      version_no_v: ${{ steps.tag.outputs.version_no_v }}
+      build_studio: ${{ steps.changes.outputs.build_studio }}
+      build_server: ${{ steps.changes.outputs.build_server }}
+      build_ui: ${{ steps.changes.outputs.build_ui }}
+      build_scraper: ${{ steps.changes.outputs.build_scraper }}
+      any: ${{ steps.changes.outputs.any }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+
+          VERSION_NO_V="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_no_v=${VERSION_NO_V}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine changed self-host images
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT_TAG="${{ steps.tag.outputs.version }}"
+          CURRENT_SHA="$(git rev-list -n 1 "$CURRENT_TAG")"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_SHA}^" 2>/dev/null || true)"
+
+          build_studio=false
+          build_server=false
+          build_ui=false
+          build_scraper=false
+
+          mark_all_selfhost_images() {
+            build_studio=true
+            build_server=true
+            build_ui=true
+            build_scraper=true
+          }
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found. Building all self-host arm64 images."
+            mark_all_selfhost_images
+          else
+            echo "Diff range: ${PREVIOUS_TAG}..${CURRENT_SHA}"
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+              echo "Changed: $file"
+              case "$file" in
+                package.json|package-lock.json|.npmrc)
+                  build_studio=true
+                  build_server=true
+                  build_ui=true
+                  ;;
+                packages/shared/*)
+                  build_studio=true
+                  build_server=true
+                  build_ui=true
+                  ;;
+                packages/backend/*)
+                  build_server=true
+                  build_ui=true
+                  ;;
+                packages/frontend/*)
+                  build_ui=true
+                  ;;
+                packages/studio/*)
+                  build_studio=true
+                  ;;
+                packages/scraper/*)
+                  build_scraper=true
+                  ;;
+                packages/theme/*)
+                  build_studio=true
+                  build_ui=true
+                  ;;
+                docs/*|README.md|LICENSE|AGENTS.md|.gitignore|.dockerignore|Caddyfile|Caddyfile.dev|docker-compose.yml|docker-compose.override.yml|docker-compose.prod.yml|.github/*|packages/docs/*|caddy/*)
+                  ;;
+                *)
+                  echo "Unclassified path '$file' detected. Building all self-host arm64 images for safety."
+                  mark_all_selfhost_images
+                  ;;
+              esac
+            done < <(git diff --name-only "${PREVIOUS_TAG}..${CURRENT_SHA}")
+          fi
+
+          any=false
+          if [ "$build_studio" = true ] || [ "$build_server" = true ] || [ "$build_ui" = true ] || [ "$build_scraper" = true ]; then
+            any=true
+          fi
+
+          echo "build_studio=$build_studio" >> "$GITHUB_OUTPUT"
+          echo "build_server=$build_server" >> "$GITHUB_OUTPUT"
+          echo "build_ui=$build_ui" >> "$GITHUB_OUTPUT"
+          echo "build_scraper=$build_scraper" >> "$GITHUB_OUTPUT"
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Self-host arm64 image selection"
+            echo "- previous_tag: ${PREVIOUS_TAG:-<none>}"
+            echo "- build_studio: $build_studio"
+            echo "- build_server: $build_server"
+            echo "- build_ui: $build_ui"
+            echo "- build_scraper: $build_scraper"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-studio-arm64:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_studio == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push vivd-studio arm64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/studio/Dockerfile
+          target: prod
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-studio:latest-arm64
+          cache-from: type=gha,scope=studio-arm64
+          cache-to: type=gha,mode=max,scope=studio-arm64
+
+  build-server-arm64:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_server == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push vivd-server arm64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/backend/Dockerfile
+          target: prod
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version_no_v }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-server:latest-arm64
+          cache-from: type=gha,scope=server-arm64
+          cache-to: type=gha,mode=max,scope=server-arm64
+
+  build-ui-arm64:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_ui == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push vivd-ui arm64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/frontend/Dockerfile
+          target: prod
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ needs.detect-changes.outputs.version }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-ui:${{ needs.detect-changes.outputs.version_no_v }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-ui:latest-arm64
+          cache-from: type=gha,scope=ui-arm64
+          cache-to: type=gha,mode=max,scope=ui-arm64
+
+  build-scraper-arm64:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_scraper == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push vivd-scraper arm64
+        uses: docker/build-push-action@v5
+        with:
+          context: ./packages/scraper
+          file: ./packages/scraper/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-scraper:${{ needs.detect-changes.outputs.version }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-scraper:${{ needs.detect-changes.outputs.version_no_v }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-scraper:latest-arm64
+          cache-from: type=gha,scope=scraper-arm64
+          cache-to: type=gha,mode=max,scope=scraper-arm64

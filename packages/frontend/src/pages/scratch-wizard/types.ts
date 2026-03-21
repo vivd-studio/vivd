@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const scratchSchema = z.object({
-  title: z.string().min(1, "Business name is required"),
+  title: z.string().min(1, "Project name is required"),
   businessType: z.string().optional(),
   description: z
     .string()

@@ -22,4 +22,12 @@ describe("getPageInfo", () => {
       isProjectPluginsPage: true,
     });
   });
+
+  it("treats the scratch route as a non-project page with its own content shell", () => {
+    expect(getPageInfo("/vivd-studio/projects/new/scratch")).toMatchObject({
+      title: "New project",
+      isProjectPage: false,
+      isScratchWizardPage: true,
+    });
+  });
 });

@@ -131,18 +131,23 @@ function getObjectStorageConfigFromEnv(): ObjectStorageConfig | null {
   ).trim();
 
   const accessKeyId = (
+    process.env.VIVD_S3_ACCESS_KEY_ID ||
     process.env.R2_ACCESS_KEY ||
     process.env.AWS_ACCESS_KEY_ID ||
     ""
   ).trim();
   const secretAccessKey = (
+    process.env.VIVD_S3_SECRET_ACCESS_KEY ||
     process.env.R2_SECRET_KEY ||
     process.env.AWS_SECRET_ACCESS_KEY ||
     ""
   ).trim();
-  const sessionToken = (process.env.AWS_SESSION_TOKEN || "").trim() || undefined;
+  const sessionToken =
+    (process.env.VIVD_S3_SESSION_TOKEN || process.env.AWS_SESSION_TOKEN || "").trim() ||
+    undefined;
 
   const region = (
+    process.env.VIVD_S3_REGION ||
     process.env.AWS_REGION ||
     process.env.AWS_DEFAULT_REGION ||
     "auto"

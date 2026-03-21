@@ -199,18 +199,18 @@ GITHUB_TOKEN=your-token
 
 ## License
 
-vivd is source-available under the Business Source License 1.1 (BUSL-1.1)
-with a Vivd-specific Additional Use Grant.
+vivd follows a fair-code, source-available licensing model.
 
-This is a source-available license model, not an OSI-approved open-source
+The binding legal terms are the Business Source License 1.1 (BUSL-1.1) with a
+Vivd-specific Additional Use Grant. This is not an OSI-approved open-source
 license.
 
-- Free without a separate commercial license: self-hosted `solo`
-  deployments, including commercial single-tenant use and dedicated client
-  installs.
-- Separate commercial license required: `platform` / multi-tenant /
-  shared-control-plane / hosted SaaS / white-label / OEM / embedded
-  productized use.
+- Free without a separate commercial license: self-hosted `solo` deployments
+  for your own organization and other single-tenant self-use covered by the
+  Additional Use Grant.
+- Separate commercial license required: `platform`, multi-tenant,
+  shared-control-plane, hosted SaaS, agency/client-delivery, white-label, OEM,
+  embedded, and other productized commercial uses outside that grant.
 - Generated website output created with vivd is not itself the Licensed Work.
 
 See [LICENSE](LICENSE) for the binding terms and

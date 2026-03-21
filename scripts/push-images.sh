@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 IMAGE_PREFIX="${IMAGE_PREFIX:-ghcr.io/vivd-studio}"
 PLATFORM="${PLATFORM:-linux/amd64}"
+IMAGE_TAG_SUFFIX="${IMAGE_TAG_SUFFIX:-}"
 
 print_usage() {
   cat <<'EOF'
@@ -20,9 +21,11 @@ Builds and pushes all publish images with the same tag pattern as
 Environment overrides:
   IMAGE_PREFIX   GHCR image prefix (default: ghcr.io/vivd-studio)
   PLATFORM       Build platform (default: linux/amd64)
+  IMAGE_TAG_SUFFIX  Optional suffix appended to pushed tags (example: -arm64)
 
 Example:
   ./scripts/push-images.sh v0.6.18
+  PLATFORM=linux/arm64 IMAGE_TAG_SUFFIX=-arm64 ./scripts/push-images.sh v0.6.18
 EOF
 }
 
@@ -68,15 +71,15 @@ build_and_push() {
   echo
   echo "==> Building and pushing ${repo}"
   echo "    context: ${context}"
-  echo "    tags: ${VERSION}, ${VERSION_NO_V}, latest"
+  echo "    tags: ${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"
 
   local cmd=(
     docker buildx build
     --platform "$PLATFORM"
     --file "$dockerfile"
-    --tag "${repo}:${VERSION}"
-    --tag "${repo}:${VERSION_NO_V}"
-    --tag "${repo}:latest"
+    --tag "${repo}:${VERSION}${IMAGE_TAG_SUFFIX}"
+    --tag "${repo}:${VERSION_NO_V}${IMAGE_TAG_SUFFIX}"
+    --tag "${repo}:latest${IMAGE_TAG_SUFFIX}"
     --push
   )
 
@@ -100,9 +103,9 @@ build_and_push "vivd-caddy" "." "caddy/Dockerfile"
 
 echo
 echo "Done. Pushed tags for:"
-echo "- ${IMAGE_PREFIX}/vivd-studio:${VERSION}, ${VERSION_NO_V}, latest"
-echo "- ${IMAGE_PREFIX}/vivd-server:${VERSION}, ${VERSION_NO_V}, latest"
-echo "- ${IMAGE_PREFIX}/vivd-ui:${VERSION}, ${VERSION_NO_V}, latest"
-echo "- ${IMAGE_PREFIX}/vivd-docs:${VERSION}, ${VERSION_NO_V}, latest"
-echo "- ${IMAGE_PREFIX}/vivd-scraper:${VERSION}, ${VERSION_NO_V}, latest"
-echo "- ${IMAGE_PREFIX}/vivd-caddy:${VERSION}, ${VERSION_NO_V}, latest"
+echo "- ${IMAGE_PREFIX}/vivd-studio:${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"
+echo "- ${IMAGE_PREFIX}/vivd-server:${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"
+echo "- ${IMAGE_PREFIX}/vivd-ui:${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"
+echo "- ${IMAGE_PREFIX}/vivd-docs:${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"
+echo "- ${IMAGE_PREFIX}/vivd-scraper:${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"
+echo "- ${IMAGE_PREFIX}/vivd-caddy:${VERSION}${IMAGE_TAG_SUFFIX}, ${VERSION_NO_V}${IMAGE_TAG_SUFFIX}, latest${IMAGE_TAG_SUFFIX}"

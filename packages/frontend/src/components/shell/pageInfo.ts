@@ -4,9 +4,18 @@ export interface PageInfo {
   projectSlug?: string;
   isProjectPluginsPage?: boolean;
   isProjectAnalyticsPage?: boolean;
+  isScratchWizardPage?: boolean;
 }
 
 export function getPageInfo(pathname: string): PageInfo {
+  if (pathname === "/vivd-studio/projects/new/scratch") {
+    return {
+      title: "New project",
+      isProjectPage: false,
+      isScratchWizardPage: true,
+    };
+  }
+
   const projectAnalyticsMatch = pathname.match(
     /^\/vivd-studio\/projects\/([^/]+)\/analytics$/,
   );
@@ -60,5 +69,6 @@ export function getPageInfo(pathname: string): PageInfo {
     isProjectPage: false,
     isProjectPluginsPage: false,
     isProjectAnalyticsPage: false,
+    isScratchWizardPage: false,
   };
 }

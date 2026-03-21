@@ -34,6 +34,14 @@ let signedUrlStorageCache:
 const SYNC_MANIFEST_FILENAME = ".vivd-sync-manifest.json";
 const SYNC_MANIFEST_VERSION = 1;
 
+function isLocalBucketMode(env: EnvMap = process.env): boolean {
+  return (env.VIVD_BUCKET_MODE || "").trim().toLowerCase() === "local";
+}
+
+function getLocalBucketDownloadEndpoint(env: EnvMap = process.env): string {
+  return (env.VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL || "").trim();
+}
+
 type SyncManifestEntry = {
   relPath: string;
   size: number;
@@ -48,7 +56,12 @@ type SyncManifest = {
 
 function getPublicObjectBaseUrl(env: EnvMap = process.env): string | null {
   if (publicBaseUrlCache !== undefined) return publicBaseUrlCache;
-  const base = (env.VIVD_S3_PUBLIC_BASE_URL || env.R2_PUBLIC_BASE_URL || "").trim();
+  const base = (
+    env.VIVD_S3_PUBLIC_BASE_URL ||
+    env.R2_PUBLIC_BASE_URL ||
+    (isLocalBucketMode(env) ? env.VIVD_LOCAL_S3_PUBLIC_BASE_URL : "") ||
+    ""
+  ).trim();
   publicBaseUrlCache = base ? base.replace(/\/+$/, "") : null;
   return publicBaseUrlCache;
 }
@@ -57,8 +70,16 @@ function getSignedUrlStorage(env: EnvMap = process.env): { client: S3Client; buc
   if (signedUrlStorageCache !== undefined) return signedUrlStorageCache;
   try {
     const config = getObjectStorageConfigFromEnv(env);
+    const downloadEndpointUrl = (
+      env.VIVD_S3_DOWNLOAD_ENDPOINT_URL ||
+      (isLocalBucketMode(env) ? getLocalBucketDownloadEndpoint(env) : "") ||
+      ""
+    ).trim();
     signedUrlStorageCache = {
-      client: createS3Client(config),
+      client: createS3Client({
+        ...config,
+        endpointUrl: downloadEndpointUrl || config.endpointUrl,
+      }),
       bucket: config.bucket,
     };
   } catch {
@@ -96,48 +117,78 @@ export async function getObjectDownloadUrl(options: {
 }
 
 export function getObjectStorageConfigFromEnv(env: EnvMap = process.env): ObjectStorageConfig {
-  const bucket = (env.VIVD_S3_BUCKET || env.R2_BUCKET || "").trim();
+  const localBucketMode = isLocalBucketMode(env);
+  const bucketMode = (env.VIVD_BUCKET_MODE || "").trim().toLowerCase();
+  const bucket = (
+    env.VIVD_S3_BUCKET ||
+    env.R2_BUCKET ||
+    (localBucketMode ? env.VIVD_LOCAL_S3_BUCKET : "") ||
+    ""
+  ).trim();
   const endpointUrl = (
     env.VIVD_S3_ENDPOINT_URL ||
     env.R2_ENDPOINT ||
+    (localBucketMode ? env.VIVD_LOCAL_S3_ENDPOINT_URL : "") ||
     ""
   ).trim();
 
   const accessKeyId = (
+    env.VIVD_S3_ACCESS_KEY_ID ||
     env.R2_ACCESS_KEY ||
     env.AWS_ACCESS_KEY_ID ||
+    (localBucketMode ? env.VIVD_LOCAL_S3_ACCESS_KEY : "") ||
     ""
   ).trim();
   const secretAccessKey = (
+    env.VIVD_S3_SECRET_ACCESS_KEY ||
     env.R2_SECRET_KEY ||
     env.AWS_SECRET_ACCESS_KEY ||
+    (localBucketMode ? env.VIVD_LOCAL_S3_SECRET_KEY : "") ||
     ""
   ).trim();
-  const sessionToken = (env.AWS_SESSION_TOKEN || "").trim() || undefined;
+  const sessionToken =
+    (env.VIVD_S3_SESSION_TOKEN || env.AWS_SESSION_TOKEN || "").trim() || undefined;
 
   const region = (
+    env.VIVD_S3_REGION ||
     env.AWS_REGION ||
     env.AWS_DEFAULT_REGION ||
-    "auto"
+    (localBucketMode ? env.VIVD_LOCAL_S3_REGION || "us-east-1" : "auto")
   ).trim();
-
-  if (!bucket) {
-    throw new Error("Missing bucket. Set VIVD_S3_BUCKET or R2_BUCKET.");
-  }
 
   const r2Configured =
     Boolean(env.R2_BUCKET) ||
     Boolean(env.R2_ENDPOINT) ||
     Boolean(env.R2_ACCESS_KEY) ||
     Boolean(env.R2_SECRET_KEY);
+  const localConfigured =
+    localBucketMode ||
+    (!bucketMode &&
+      (Boolean(env.VIVD_LOCAL_S3_BUCKET) ||
+        Boolean(env.VIVD_LOCAL_S3_ENDPOINT_URL) ||
+        Boolean(env.VIVD_LOCAL_S3_ACCESS_KEY) ||
+        Boolean(env.VIVD_LOCAL_S3_SECRET_KEY)));
 
   if (r2Configured && !endpointUrl) {
-    throw new Error("Missing R2 endpoint. Set R2_ENDPOINT or VIVD_S3_ENDPOINT_URL.");
+    throw new Error("Missing object storage endpoint. Set VIVD_S3_ENDPOINT_URL or R2_ENDPOINT.");
+  }
+  if (localConfigured && !bucket) {
+    throw new Error(
+      "Missing local bucket name. Set VIVD_LOCAL_S3_BUCKET (or VIVD_S3_BUCKET).",
+    );
+  }
+  if (localConfigured && !endpointUrl) {
+    throw new Error(
+      "Missing local bucket endpoint. Set VIVD_LOCAL_S3_ENDPOINT_URL (or VIVD_S3_ENDPOINT_URL).",
+    );
+  }
+  if (!bucket) {
+    throw new Error("Missing bucket. Set VIVD_S3_BUCKET or R2_BUCKET.");
   }
 
   if (endpointUrl && (!accessKeyId || !secretAccessKey)) {
     throw new Error(
-      "Missing object storage credentials. Set R2_ACCESS_KEY/R2_SECRET_KEY (or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)."
+      "Missing object storage credentials. Set VIVD_S3_ACCESS_KEY_ID/VIVD_S3_SECRET_ACCESS_KEY, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, R2_ACCESS_KEY/R2_SECRET_KEY, or the local bucket credentials."
     );
   }
 

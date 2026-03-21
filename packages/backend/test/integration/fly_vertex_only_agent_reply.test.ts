@@ -16,7 +16,7 @@
  *   FLY_STUDIO_APP
  *   GOOGLE_CLOUD_PROJECT
  *   one of: GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_APPLICATION_CREDENTIALS_JSON, VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH
- *   a Google model via OPENCODE_MODEL or OPENCODE_MODELS
+ *   a Google model via OPENCODE_MODEL_STANDARD, OPENCODE_MODEL_ADVANCED, or OPENCODE_MODEL_PRO
  */
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
@@ -49,20 +49,12 @@ function isVertexModelProvider(provider: string): boolean {
 }
 
 function resolveVertexModelSelectionFromEnv(): ModelSelection | null {
-  const direct = parseModelSelection((process.env.OPENCODE_MODEL || "").trim());
-  if (direct && isVertexModelProvider(direct.provider)) {
-    return direct;
-  }
-
-  const rawModels = (process.env.OPENCODE_MODELS || "").trim();
-  if (!rawModels) return null;
-
-  for (const entry of rawModels.split(",")) {
-    const trimmed = entry.trim();
-    if (!trimmed) continue;
-    const colonIndex = trimmed.indexOf(":");
-    const modelSpec = colonIndex >= 0 ? trimmed.slice(colonIndex + 1) : trimmed;
-    const parsed = parseModelSelection(modelSpec.trim());
+  for (const envKey of [
+    "OPENCODE_MODEL_STANDARD",
+    "OPENCODE_MODEL_ADVANCED",
+    "OPENCODE_MODEL_PRO",
+  ] as const) {
+    const parsed = parseModelSelection((process.env[envKey] || "").trim());
     if (!parsed) continue;
     if (isVertexModelProvider(parsed.provider)) {
       return parsed;
@@ -235,8 +227,9 @@ function buildVertexOnlyMachineEnv(model: ModelSelection): Record<string, string
   const env: Record<string, string> = {
     OPENROUTER_API_KEY: "",
     GOOGLE_API_KEY: "",
-    OPENCODE_MODELS: "",
-    OPENCODE_MODEL: `${model.provider}/${model.modelId}`,
+    OPENCODE_MODEL_STANDARD: `${model.provider}/${model.modelId}`,
+    OPENCODE_MODEL_ADVANCED: "",
+    OPENCODE_MODEL_PRO: "",
 
     // Explicitly blank storage creds/config so this test isolates agent auth.
     R2_ENDPOINT: "",
@@ -395,7 +388,7 @@ describe.sequential("Fly Vertex-only agent reply", () => {
         expect(runtimeEnv.OPENROUTER_API_KEY || "").toBe("");
         expect(runtimeEnv.GOOGLE_API_KEY || "").toBe("");
         expect((runtimeEnv.GOOGLE_CLOUD_PROJECT || "").trim().length).toBeGreaterThan(0);
-        expect((runtimeEnv.OPENCODE_MODEL || "").trim()).toBe(
+        expect((runtimeEnv.OPENCODE_MODEL_STANDARD || "").trim()).toBe(
           `${VERTEX_MODEL_SELECTION.provider}/${VERTEX_MODEL_SELECTION.modelId}`,
         );
 
@@ -480,7 +473,9 @@ describe.sequential("Fly Vertex-only agent reply", () => {
         reasons.push("missing Vertex credentials/config");
       }
       if (!VERTEX_MODEL_SELECTION) {
-        reasons.push("missing OPENCODE_MODEL/OPENCODE_MODELS google model");
+        reasons.push(
+          "missing OPENCODE_MODEL_STANDARD/OPENCODE_MODEL_ADVANCED/OPENCODE_MODEL_PRO google model",
+        );
       }
       expect(reasons.length).toBeGreaterThan(0);
     },

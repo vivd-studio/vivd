@@ -8,14 +8,19 @@ Vivd ships a **solo** self-host install path for one primary host:
 - Public site on `/`
 - Studio on `/vivd-studio`
 - Docker-based Studio machines by default
+- Local S3-compatible project storage by default
 
 ## Before you run it
 
 Have these ready:
 
 - A Linux host with Docker Engine and Docker Compose v2
-- One public host or IP you want Vivd to use
+- One host or IP you want Vivd to use
 - An `OPENROUTER_API_KEY`
+
+If you want Vivd to manage HTTPS certificates itself, use a real public hostname that already points at your VPS and keep ports `80` and `443` open. `localhost` and raw IP installs stay on plain HTTP.
+
+Self-hosting currently expects OpenRouter for OpenCode model access so one API key can cover multiple model tiers. Direct multi-provider self-host configuration is planned later.
 
 ## Install command
 
@@ -23,19 +28,46 @@ Have these ready:
 curl -fsSL https://docs.vivd.studio/install.sh | bash
 ```
 
+Useful variations:
+
+```bash
+# Write files only, do not start containers yet
+curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --no-start
+
+# Use an upstream TLS terminator such as Dockploy or Traefik
+curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --tls-mode external
+
+# Disable single-project mode
+curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --single-project false
+```
+
 The installer prompts for:
 
 - your primary host or IP
 - your `OPENROUTER_API_KEY`
-- whether to enable single-project mode
+
+On a public hostname, it also asks for the ACME email Caddy should use for certificate management.
+
+On Apple Silicon, the installer automatically selects the arm64 self-host image tags.
+
+Optional install-time flags let you override single-project mode, image tag, and TLS handling.
 
 It then:
 
 - downloads the solo self-host bundle
 - writes `docker-compose.yml`, `Caddyfile`, and `.env`
 - generates fresh secrets for auth, scraper access, and Postgres
+- provisions a local S3-compatible bucket for project storage
+- sets `OPENCODE_MODEL_STANDARD=openrouter/google/gemini-2.5-flash`
+- sets `OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3-pro-preview`
 - enables `STUDIO_MACHINE_PROVIDER=docker`
 - starts the stack with `docker compose up -d`
+
+The bundle files are public and editable:
+
+- [docker-compose.yml](/install/docker-compose.yml)
+- [Caddyfile](/install/Caddyfile) for bundled Caddy-managed HTTPS
+- [Caddyfile.plain-http](/install/Caddyfile.plain-http) for Dockploy, Traefik, or other upstream TLS terminators
 
 ## What gets installed
 
@@ -46,6 +78,38 @@ The solo bundle installs:
 - backend
 - scraper
 - Postgres
+- MinIO
+
+## TLS handling
+
+By default:
+
+- a public hostname uses bundled Caddy-managed HTTPS
+- `localhost` and raw IP installs use plain HTTP
+
+If you want an upstream proxy to own certificates instead, run the installer with:
+
+```bash
+curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --tls-mode external
+```
+
+That keeps Vivd’s Caddy on plain HTTP and is the better fit when you deploy the bundle inside Dockploy, Traefik, or another platform that already manages TLS.
+
+If you are deploying the published Compose bundle inside another platform, treat the downloaded `docker-compose.yml` and `Caddyfile` as the intended edit points. In that setup you will usually:
+
+- switch to the plain HTTP Caddyfile
+- remove or adapt the direct `80:80` and `443:443` port bindings
+
+## Dockploy / external TLS
+
+For a Dockploy-style setup:
+
+1. Run the installer with `--tls-mode external --no-start`.
+2. Use the generated `~/vivd/docker-compose.yml`, `.env`, and plain HTTP `Caddyfile` as your deployment files.
+3. Let Dockploy expose the app publicly and manage HTTPS certificates.
+4. If Dockploy expects to own the public ports itself, remove or override the direct `80:80` and `443:443` bindings from the generated Compose file.
+
+In that mode, keep the generated public URLs and auth origin as `https://...`. The upstream proxy owns TLS, while Vivd's bundled Caddy stays on internal HTTP routing.
 
 ## Result
 
@@ -66,7 +130,67 @@ docker compose ps
 docker compose logs -f
 ```
 
+## Updating
+
+The installer is currently for fresh installs. It refuses to overwrite an existing `docker-compose.yml`, `Caddyfile`, or `.env`.
+
+For normal image updates:
+
+```bash
+cd ~/vivd
+docker compose pull
+docker compose up -d
+```
+
+If a newer release changes the published bundle files themselves, compare your current files with the latest public bundle assets and merge those changes manually:
+
+- [docker-compose.yml](/install/docker-compose.yml)
+- [Caddyfile](/install/Caddyfile)
+- [Caddyfile.plain-http](/install/Caddyfile.plain-http)
+
+## What you usually change later
+
+Most self-host installs do not need much more env work. You usually only edit `.env` later if you want:
+
+- email delivery: choose a provider such as SMTP (`VIVD_EMAIL_PROVIDER=smtp`, `VIVD_SMTP_HOST`, `VIVD_SMTP_PORT`, `VIVD_SMTP_USER`, `VIVD_SMTP_PASSWORD`) or Resend / SES, plus `VIVD_EMAIL_FROM`
+- Turnstile: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`
+- GitHub backup/sync: `GITHUB_SYNC_ENABLED`, `GITHUB_ORG`, `GITHUB_TOKEN`
+- a remote S3-compatible object store instead of the bundled local bucket
+- an optional `OPENCODE_MODEL_PRO`
+
+### SMTP example
+
+```bash
+VIVD_EMAIL_PROVIDER=smtp
+VIVD_EMAIL_FROM=noreply@example.com
+VIVD_SMTP_HOST=smtp.example.com
+VIVD_SMTP_PORT=587
+VIVD_SMTP_USER=your-smtp-user
+VIVD_SMTP_PASSWORD=your-smtp-password
+VIVD_SMTP_SECURE=false
+```
+
+If your provider gives you a single SMTP URL, you can use `VIVD_SMTP_URL=` instead of the separate host/port/user/password fields.
+
+### Remote S3-compatible storage example
+
+```bash
+VIVD_BUCKET_MODE=external
+VIVD_S3_BUCKET=vivd
+VIVD_S3_ENDPOINT_URL=https://s3.example.com
+VIVD_S3_ACCESS_KEY_ID=your-access-key
+VIVD_S3_SECRET_ACCESS_KEY=your-secret-key
+VIVD_S3_REGION=us-east-1
+```
+
+Optional additions:
+
+- `VIVD_S3_PUBLIC_BASE_URL` if objects should be read from a CDN or public asset host
+- `VIVD_S3_DOWNLOAD_ENDPOINT_URL` if signed downloads should use a different public object endpoint
+
 ## Notes
 
 - This installer is for the `solo` profile only.
-- The bundled Caddy setup serves HTTP on port `80`; if you terminate TLS upstream, point that edge proxy at this host.
+- Project storage defaults to the bundled local S3-compatible bucket. You can later switch to a remote S3-compatible bucket by updating `.env`.
+- Public-hostname installs now let bundled Caddy obtain and renew certificates directly.
+- If you terminate TLS upstream instead, use `--tls-mode external` or the published plain HTTP Caddyfile.

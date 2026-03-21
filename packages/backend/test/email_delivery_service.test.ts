@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sesSendMock, sesClientCtorMock, resendSendMock, resendCtorMock } = vi.hoisted(() => {
+const {
+  sesSendMock,
+  sesClientCtorMock,
+  resendSendMock,
+  resendCtorMock,
+  smtpSendMock,
+  smtpCreateTransportMock,
+} = vi.hoisted(() => {
   const sesSendMock = vi.fn();
   const sesClientCtorMock = vi.fn(() => ({ send: sesSendMock }));
   const resendSendMock = vi.fn();
@@ -9,7 +16,18 @@ const { sesSendMock, sesClientCtorMock, resendSendMock, resendCtorMock } = vi.ho
       send: resendSendMock,
     },
   }));
-  return { sesSendMock, sesClientCtorMock, resendSendMock, resendCtorMock };
+  const smtpSendMock = vi.fn();
+  const smtpCreateTransportMock = vi.fn(() => ({
+    sendMail: smtpSendMock,
+  }));
+  return {
+    sesSendMock,
+    sesClientCtorMock,
+    resendSendMock,
+    resendCtorMock,
+    smtpSendMock,
+    smtpCreateTransportMock,
+  };
 });
 
 vi.mock("@aws-sdk/client-sesv2", () => ({
@@ -19,6 +37,12 @@ vi.mock("@aws-sdk/client-sesv2", () => ({
 
 vi.mock("resend", () => ({
   Resend: resendCtorMock,
+}));
+
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: smtpCreateTransportMock,
+  },
 }));
 
 async function loadGetEmailDeliveryService() {
@@ -35,6 +59,15 @@ describe("EmailDeliveryService", () => {
     delete process.env.VIVD_SES_SECRET_ACCESS_KEY;
     delete process.env.VIVD_SES_REGION;
     delete process.env.VIVD_SES_FROM_EMAIL;
+    delete process.env.VIVD_SMTP_URL;
+    delete process.env.VIVD_SMTP_HOST;
+    delete process.env.VIVD_SMTP_PORT;
+    delete process.env.VIVD_SMTP_SECURE;
+    delete process.env.VIVD_SMTP_USER;
+    delete process.env.VIVD_SMTP_PASSWORD;
+    delete process.env.VIVD_SMTP_REQUIRE_TLS;
+    delete process.env.VIVD_SMTP_IGNORE_TLS;
+    delete process.env.VIVD_SMTP_FROM_EMAIL;
     delete process.env.RESEND_API_KEY;
     delete process.env.VIVD_EMAIL_FROM;
     delete process.env.VIVD_FROM_EMAIL;
@@ -47,6 +80,15 @@ describe("EmailDeliveryService", () => {
     delete process.env.VIVD_SES_SECRET_ACCESS_KEY;
     delete process.env.VIVD_SES_REGION;
     delete process.env.VIVD_SES_FROM_EMAIL;
+    delete process.env.VIVD_SMTP_URL;
+    delete process.env.VIVD_SMTP_HOST;
+    delete process.env.VIVD_SMTP_PORT;
+    delete process.env.VIVD_SMTP_SECURE;
+    delete process.env.VIVD_SMTP_USER;
+    delete process.env.VIVD_SMTP_PASSWORD;
+    delete process.env.VIVD_SMTP_REQUIRE_TLS;
+    delete process.env.VIVD_SMTP_IGNORE_TLS;
+    delete process.env.VIVD_SMTP_FROM_EMAIL;
     delete process.env.RESEND_API_KEY;
     delete process.env.VIVD_EMAIL_FROM;
     delete process.env.VIVD_FROM_EMAIL;
@@ -55,6 +97,8 @@ describe("EmailDeliveryService", () => {
     sesClientCtorMock.mockClear();
     resendSendMock.mockReset();
     resendCtorMock.mockClear();
+    smtpSendMock.mockReset();
+    smtpCreateTransportMock.mockClear();
   });
 
   it("uses noop provider by default", async () => {
@@ -129,5 +173,33 @@ describe("EmailDeliveryService", () => {
     expect(result.messageId).toBe("ses-message-1");
     expect(sesClientCtorMock).toHaveBeenCalledOnce();
     expect(sesSendMock).toHaveBeenCalledOnce();
+  });
+
+  it("supports SMTP delivery for generic self-host email setups", async () => {
+    process.env.VIVD_EMAIL_PROVIDER = "smtp";
+    process.env.VIVD_EMAIL_FROM = "noreply@mail.vivd.studio";
+    process.env.VIVD_SMTP_HOST = "smtp.example.com";
+    process.env.VIVD_SMTP_PORT = "587";
+    process.env.VIVD_SMTP_USER = "smtp-user";
+    process.env.VIVD_SMTP_PASSWORD = "smtp-pass";
+    smtpSendMock.mockResolvedValueOnce({ messageId: "smtp-message-1" });
+
+    const getEmailDeliveryService = await loadGetEmailDeliveryService();
+    const service = getEmailDeliveryService();
+
+    expect(service.providerName).toBe("smtp");
+
+    const result = await service.send({
+      to: ["hello@example.com"],
+      subject: "Contact",
+      text: "Hello",
+      replyTo: "person@example.com",
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.provider).toBe("smtp");
+    expect(result.messageId).toBe("smtp-message-1");
+    expect(smtpCreateTransportMock).toHaveBeenCalledOnce();
+    expect(smtpSendMock).toHaveBeenCalledOnce();
   });
 });

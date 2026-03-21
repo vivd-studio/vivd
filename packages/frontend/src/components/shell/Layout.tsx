@@ -1,28 +1,20 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useRef, useState, useEffect } from "react";
-import { Search } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "@/app/router";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { ModeToggle } from "@/components/theme";
-import { Separator } from "@/components/ui/separator";
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { ProjectWizard } from "@/components/projects";
-import { HeaderProfileMenu } from "./HeaderProfileMenu";
 import { CenteredLoading } from "@/components/common";
 import { NavigationSearchProvider } from "./NavigationSearch";
-import {
-  NAVIGATION_SEARCH_SHORTCUT_LABEL,
-  useNavigationSearch,
-} from "./navigationSearchContext";
+import { HeaderBreadcrumbTextLink, HostHeader } from "./HostHeader";
 import { getPageInfo } from "./pageInfo";
 import { useAppConfig } from "@/lib/AppConfigContext";
 
@@ -74,72 +66,86 @@ export function Layout() {
           {/* For project pages, EmbeddedStudioToolbar handles the header */}
           {!pageInfo.isProjectPage && !isEmbeddedProjectPanel && (
             <header
-              className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 px-4 bg-background border-b transition-[border-color] duration-150"
-              style={{ borderColor: isScrolled ? 'hsl(var(--border))' : 'transparent' }}
+              className="sticky top-0 z-10 shrink-0 border-b bg-background px-3 py-1 transition-[border-color] duration-150 md:px-4"
+              style={{ borderColor: isScrolled ? "hsl(var(--border))" : "transparent" }}
             >
-              <SidebarTrigger />
-              <Separator orientation="vertical" className="h-4" />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  {pageInfo.isProjectPluginsPage && pageInfo.projectSlug ? (
-                    <>
-                      <BreadcrumbItem>
-                        <BreadcrumbLink asChild>
-                          <Link to={ROUTES.DASHBOARD}>Projects</Link>
-                        </BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        <BreadcrumbLink asChild>
-                          <Link to={ROUTES.PROJECT(pageInfo.projectSlug)}>
-                            {pageInfo.projectSlug}
-                          </Link>
-                        </BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        <BreadcrumbPage>Plugins</BreadcrumbPage>
-                      </BreadcrumbItem>
-                    </>
-                  ) : pageInfo.isProjectAnalyticsPage && pageInfo.projectSlug ? (
-                    <>
-                      <BreadcrumbItem>
-                        <BreadcrumbLink asChild>
-                          <Link to={ROUTES.DASHBOARD}>Projects</Link>
-                        </BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        <BreadcrumbLink asChild>
-                          <Link to={ROUTES.PROJECT(pageInfo.projectSlug)}>
-                            {pageInfo.projectSlug}
-                          </Link>
-                        </BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        <BreadcrumbPage>Analytics</BreadcrumbPage>
-                      </BreadcrumbItem>
-                    </>
-                  ) : (
-                    <BreadcrumbItem>
-                      <BreadcrumbPage>{pageTitle}</BreadcrumbPage>
-                    </BreadcrumbItem>
-                  )}
-                  {showNewProjectButton && (
-                    <>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        <ProjectWizard onGenerationStarted={() => {}} />
-                      </BreadcrumbItem>
-                    </>
-                  )}
-                </BreadcrumbList>
-              </Breadcrumb>
-              <div className="flex-1" />
-              <HeaderSearchTrigger />
-              <ModeToggle />
-              <HeaderProfileMenu />
+              <HostHeader
+                leadingAccessory={<SidebarTrigger className="rounded-md" />}
+                leading={
+                  <Breadcrumb>
+                    <BreadcrumbList>
+                      {pageInfo.isProjectPluginsPage && pageInfo.projectSlug ? (
+                        <>
+                          <BreadcrumbItem>
+                            <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
+                              Projects
+                            </HeaderBreadcrumbTextLink>
+                          </BreadcrumbItem>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            <HeaderBreadcrumbTextLink
+                              to={ROUTES.PROJECT(pageInfo.projectSlug)}
+                            >
+                              {pageInfo.projectSlug}
+                            </HeaderBreadcrumbTextLink>
+                          </BreadcrumbItem>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            <BreadcrumbPage>Plugins</BreadcrumbPage>
+                          </BreadcrumbItem>
+                        </>
+                      ) : pageInfo.isProjectAnalyticsPage && pageInfo.projectSlug ? (
+                        <>
+                          <BreadcrumbItem>
+                            <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
+                              Projects
+                            </HeaderBreadcrumbTextLink>
+                          </BreadcrumbItem>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            <HeaderBreadcrumbTextLink
+                              to={ROUTES.PROJECT(pageInfo.projectSlug)}
+                            >
+                              {pageInfo.projectSlug}
+                            </HeaderBreadcrumbTextLink>
+                          </BreadcrumbItem>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            <BreadcrumbPage>Analytics</BreadcrumbPage>
+                          </BreadcrumbItem>
+                        </>
+                      ) : pageInfo.isScratchWizardPage ? (
+                        <>
+                          <BreadcrumbItem>
+                            <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
+                              Projects
+                            </HeaderBreadcrumbTextLink>
+                          </BreadcrumbItem>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            <BreadcrumbPage>New project</BreadcrumbPage>
+                          </BreadcrumbItem>
+                        </>
+                      ) : (
+                        <>
+                          <BreadcrumbItem>
+                            <BreadcrumbPage>{pageTitle}</BreadcrumbPage>
+                          </BreadcrumbItem>
+                          {showNewProjectButton ? (
+                            <>
+                              <BreadcrumbSeparator />
+                              <BreadcrumbItem>
+                                <ProjectWizard onGenerationStarted={() => {}} />
+                              </BreadcrumbItem>
+                            </>
+                          ) : null}
+                        </>
+                      )}
+                    </BreadcrumbList>
+                  </Breadcrumb>
+                }
+                showSearch
+              />
             </header>
           )}
           <main
@@ -147,9 +153,11 @@ export function Layout() {
             className={`flex-1 min-h-0 ${
               pageInfo.isProjectPage
                 ? "overflow-hidden"
-                : isEmbeddedProjectPanel
-                  ? "overflow-auto"
-                  : "overflow-auto px-6 py-4"
+                : pageInfo.isScratchWizardPage
+                  ? "overflow-hidden"
+                  : isEmbeddedProjectPanel
+                    ? "overflow-auto"
+                    : "overflow-auto px-6 py-4"
             }`}
           >
             <Outlet />
@@ -157,24 +165,5 @@ export function Layout() {
         </div>
       </NavigationSearchProvider>
     </SidebarProvider>
-  );
-}
-
-function HeaderSearchTrigger() {
-  const { openSearch } = useNavigationSearch();
-
-  return (
-    <button
-      type="button"
-      aria-label="Open search"
-      onClick={openSearch}
-      className="flex h-9 items-center gap-2 rounded-md border border-border bg-muted/20 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    >
-      <Search className="size-4" />
-      <span className="hidden sm:inline">Search</span>
-      <span className="hidden text-xs font-medium text-muted-foreground/80 md:inline">
-        {NAVIGATION_SEARCH_SHORTCUT_LABEL}
-      </span>
-    </button>
   );
 }

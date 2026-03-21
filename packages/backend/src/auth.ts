@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { admin, createAccessControl } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { isIP } from "node:net";
 import { db } from "./db";
 import { domain, organizationMember } from "./db/schema";
 import { APIError } from "better-call";
@@ -80,13 +81,28 @@ const authRevokeSessionsOnPasswordReset = readBooleanEnv(
   true,
 );
 
+function inferSchemeForHost(host: string): "http" | "https" {
+  const normalized = host.trim().toLowerCase();
+  if (
+    normalized === "localhost" ||
+    normalized.includes(".localhost") ||
+    isIP(normalized) !== 0
+  ) {
+    return "http";
+  }
+  return "https";
+}
+
 function buildAuthBaseUrl(): string | undefined {
   if (process.env.VIVD_APP_URL) {
     return process.env.VIVD_APP_URL;
   }
+  if (process.env.BETTER_AUTH_URL) {
+    return process.env.BETTER_AUTH_URL;
+  }
   if (process.env.CONTROL_PLANE_HOST) {
     const host = process.env.CONTROL_PLANE_HOST;
-    const scheme = host.startsWith("localhost") || host.includes(".localhost") ? "http" : "https";
+    const scheme = inferSchemeForHost(host);
     return `${scheme}://${host}`;
   }
   return undefined;

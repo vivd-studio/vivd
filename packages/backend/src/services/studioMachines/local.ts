@@ -486,6 +486,11 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       Boolean(options.env.VIVD_S3_OPENCODE_STORAGE_URI) ||
       Boolean(options.env.VIVD_S3_BUCKET) ||
       Boolean(options.env.R2_BUCKET) ||
+      (options.env.VIVD_BUCKET_MODE || "").trim().toLowerCase() === "local" ||
+      Boolean(options.env.VIVD_LOCAL_S3_BUCKET) ||
+      Boolean(options.env.VIVD_LOCAL_S3_ENDPOINT_URL) ||
+      Boolean(options.env.VIVD_LOCAL_S3_ACCESS_KEY) ||
+      Boolean(options.env.VIVD_LOCAL_S3_SECRET_KEY) ||
       Boolean(options.env.VIVD_S3_PREFIX) ||
       Boolean(options.env.VIVD_S3_OPENCODE_PREFIX);
 

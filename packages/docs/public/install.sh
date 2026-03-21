@@ -7,6 +7,9 @@ INSTALL_DIR="${VIVD_INSTALL_DIR:-$HOME/vivd}"
 PRIMARY_HOST_INPUT="${VIVD_DOMAIN:-}"
 OPENROUTER_API_KEY_INPUT="${OPENROUTER_API_KEY:-}"
 SINGLE_PROJECT_MODE_INPUT="${VIVD_SINGLE_PROJECT_MODE:-true}"
+SELFHOST_IMAGE_TAG_INPUT="${VIVD_SELFHOST_IMAGE_TAG:-}"
+TLS_MODE_INPUT="${VIVD_TLS_MODE:-auto}"
+ACME_EMAIL_INPUT="${VIVD_ACME_EMAIL:-}"
 AUTO_START="true"
 
 usage() {
@@ -21,6 +24,9 @@ Optional flags:
   --domain <host>            Primary host or origin, e.g. example.com
   --openrouter-api-key <key> OpenRouter API key
   --single-project <bool>    true or false (default: true)
+  --image-tag <tag>          Self-host image tag (default: latest or latest-arm64)
+  --tls-mode <mode>          auto, managed, or external (default: auto)
+  --acme-email <email>       Email used for managed HTTPS certificates
   --no-start                 Write files but do not start Docker Compose
   --help                     Show this message
 
@@ -30,6 +36,9 @@ Environment overrides:
   VIVD_DOMAIN
   OPENROUTER_API_KEY
   VIVD_SINGLE_PROJECT_MODE
+  VIVD_SELFHOST_IMAGE_TAG
+  VIVD_TLS_MODE
+  VIVD_ACME_EMAIL
 EOF
 }
 
@@ -57,6 +66,21 @@ is_local_host() {
   esac
 }
 
+is_ip_host() {
+  local host="$1"
+  if printf '%s' "$host" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+    return 0
+  fi
+  case "$host" in
+    *:*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 normalize_host() {
   local raw="$1"
   raw="${raw#http://}"
@@ -67,20 +91,64 @@ normalize_host() {
   printf '%s' "${raw%/}"
 }
 
-normalize_origin() {
-  local raw="$1"
-  if [[ "$raw" == http://* || "$raw" == https://* ]]; then
-    printf '%s' "${raw%/}"
+is_public_hostname() {
+  local host="$1"
+  ! is_local_host "$host" && ! is_ip_host "$host"
+}
+
+resolve_tls_mode() {
+  local requested
+  requested="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  local host="$2"
+
+  case "$requested" in
+    auto)
+      if is_public_hostname "$host"; then
+        printf 'managed'
+      else
+        printf 'off'
+      fi
+      ;;
+    managed)
+      is_public_hostname "$host" || fail "Managed TLS requires a public DNS hostname, not localhost or a raw IP"
+      printf 'managed'
+      ;;
+    external)
+      printf 'off'
+      ;;
+    *)
+      fail "Expected --tls-mode to be auto, managed, or external"
+      ;;
+  esac
+}
+
+resolve_primary_origin() {
+  local host="$1"
+  local tls_mode="$2"
+  local requested_tls_mode="$3"
+
+  if [ "$tls_mode" = "managed" ] && is_public_hostname "$host"; then
+    printf 'https://%s' "$host"
     return
   fi
 
-  local host
-  host="$(normalize_host "$raw")"
-  if is_local_host "$host"; then
-    printf 'http://%s' "$host"
-  else
+  if [ "$requested_tls_mode" = "external" ] && is_public_hostname "$host"; then
     printf 'https://%s' "$host"
+    return
   fi
+
+  printf 'http://%s' "$host"
+}
+
+validate_email() {
+  case "$1" in
+    *@*.*)
+      return 0
+      ;;
+    *)
+      fail "Expected a valid email address"
+      ;;
+  esac
 }
 
 prompt_if_empty() {
@@ -128,6 +196,19 @@ generate_secret() {
   od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
 }
 
+resolve_default_selfhost_image_tag() {
+  local arch
+  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+  case "$arch" in
+    arm64|aarch64)
+      printf 'latest-arm64'
+      ;;
+    *)
+      printf 'latest'
+      ;;
+  esac
+}
+
 download_file() {
   local url="$1"
   local output_path="$2"
@@ -156,6 +237,21 @@ while [ "$#" -gt 0 ]; do
       SINGLE_PROJECT_MODE_INPUT="$2"
       shift 2
       ;;
+    --image-tag)
+      [ "$#" -ge 2 ] || fail "--image-tag requires a value"
+      SELFHOST_IMAGE_TAG_INPUT="$2"
+      shift 2
+      ;;
+    --tls-mode)
+      [ "$#" -ge 2 ] || fail "--tls-mode requires a value"
+      TLS_MODE_INPUT="$2"
+      shift 2
+      ;;
+    --acme-email)
+      [ "$#" -ge 2 ] || fail "--acme-email requires a value"
+      ACME_EMAIL_INPUT="$2"
+      shift 2
+      ;;
     --no-start)
       AUTO_START="false"
       shift
@@ -179,14 +275,35 @@ prompt_if_empty PRIMARY_HOST_INPUT "Primary host or IP for this Vivd install"
 prompt_if_empty OPENROUTER_API_KEY_INPUT "OpenRouter API key" true
 
 SINGLE_PROJECT_MODE_INPUT="$(normalize_bool "$SINGLE_PROJECT_MODE_INPUT")"
+if [ -z "$SELFHOST_IMAGE_TAG_INPUT" ]; then
+  SELFHOST_IMAGE_TAG_INPUT="$(resolve_default_selfhost_image_tag)"
+fi
 
 PRIMARY_HOST="$(normalize_host "$PRIMARY_HOST_INPUT")"
 [ -n "$PRIMARY_HOST" ] || fail "Could not parse a primary host from: $PRIMARY_HOST_INPUT"
 
-PRIMARY_ORIGIN="$(normalize_origin "$PRIMARY_HOST_INPUT")"
+REQUESTED_TLS_MODE="$(printf '%s' "$TLS_MODE_INPUT" | tr '[:upper:]' '[:lower:]')"
+RESOLVED_TLS_MODE="$(resolve_tls_mode "$TLS_MODE_INPUT" "$PRIMARY_HOST")"
+if [ "$RESOLVED_TLS_MODE" = "managed" ]; then
+  prompt_if_empty ACME_EMAIL_INPUT "Email for HTTPS certificate renewal notices"
+  validate_email "$ACME_EMAIL_INPUT"
+  CADDY_ASSET="Caddyfile"
+else
+  CADDY_ASSET="Caddyfile.plain-http"
+fi
+
+PRIMARY_ORIGIN="$(resolve_primary_origin "$PRIMARY_HOST" "$RESOLVED_TLS_MODE" "$REQUESTED_TLS_MODE")"
+if [ "$REQUESTED_TLS_MODE" = "external" ]; then
+  TLS_MODE_NOTE="external"
+else
+  TLS_MODE_NOTE="$RESOLVED_TLS_MODE"
+fi
 BETTER_AUTH_SECRET_VALUE="$(generate_secret)"
 SCRAPER_API_KEY_VALUE="$(generate_secret)"
 POSTGRES_PASSWORD_VALUE="$(generate_secret)"
+LOCAL_S3_ACCESS_KEY_VALUE="vivd$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+LOCAL_S3_SECRET_KEY_VALUE="$(generate_secret)"
+LOCAL_S3_BUCKET_VALUE="vivd"
 
 mkdir -p "$INSTALL_DIR"
 
@@ -198,7 +315,8 @@ done
 
 log "Downloading solo self-host bundle from $INSTALLER_BASE_URL"
 download_file "$INSTALLER_BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
-download_file "$INSTALLER_BASE_URL/Caddyfile" "$INSTALL_DIR/Caddyfile"
+download_file "$INSTALLER_BASE_URL/$CADDY_ASSET" "$INSTALL_DIR/Caddyfile"
+log "Using self-host image tag $SELFHOST_IMAGE_TAG_INPUT"
 
 cat >"$INSTALL_DIR/.env" <<EOF
 OPENROUTER_API_KEY=$OPENROUTER_API_KEY_INPUT
@@ -212,15 +330,30 @@ DOMAIN=$PRIMARY_ORIGIN
 CONTROL_PLANE_HOST=$PRIMARY_HOST
 SUPERADMIN_HOSTS=$PRIMARY_HOST
 TRUSTED_DOMAINS=$PRIMARY_HOST
+VIVD_CADDY_PRIMARY_HOST=$PRIMARY_HOST
+VIVD_CADDY_TLS_MODE=$RESOLVED_TLS_MODE
+VIVD_CADDY_ACME_EMAIL=$ACME_EMAIL_INPUT
+VIVD_PUBLISH_INCLUDE_WWW_ALIAS=false
 SCRAPER_API_KEY=$SCRAPER_API_KEY_VALUE
 VIVD_INSTALL_PROFILE=solo
 TENANT_DOMAIN_ROUTING_ENABLED=false
 STUDIO_MACHINE_PROVIDER=docker
 SINGLE_PROJECT_MODE=$SINGLE_PROJECT_MODE_INPUT
+VIVD_BUCKET_MODE=local
+VIVD_LOCAL_S3_BUCKET=$LOCAL_S3_BUCKET_VALUE
+VIVD_LOCAL_S3_ENDPOINT_URL=http://minio:9000
+VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL=$PRIMARY_ORIGIN/_vivd_s3
+VIVD_LOCAL_S3_ACCESS_KEY=$LOCAL_S3_ACCESS_KEY_VALUE
+VIVD_LOCAL_S3_SECRET_KEY=$LOCAL_S3_SECRET_KEY_VALUE
+VIVD_LOCAL_S3_REGION=us-east-1
+OPENCODE_MODEL_STANDARD=openrouter/google/gemini-2.5-flash
+OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3-pro-preview
+VIVD_SELFHOST_IMAGE_TAG=$SELFHOST_IMAGE_TAG_INPUT
 VIVD_PUBLIC_DOCS_BASE_URL=https://docs.vivd.studio
 DOCKER_STUDIO_NETWORK=vivd-network
 DOCKER_STUDIO_ROUTE_PREFIX=/_studio
 DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL=http://caddy
+DOCKER_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:$SELFHOST_IMAGE_TAG_INPUT
 EOF
 
 log "Wrote install files to $INSTALL_DIR"
@@ -230,7 +363,9 @@ if [ "$AUTO_START" = "true" ]; then
   (
     cd "$INSTALL_DIR"
     docker compose pull
-    docker compose up -d
+    docker compose up -d postgres scraper minio
+    docker compose --profile setup run --rm minio-init
+    docker compose up -d backend frontend caddy
   )
 else
   log "Skipping startup because --no-start was set"
@@ -251,6 +386,7 @@ Management:
   docker compose logs -f
 
 Notes:
-  - This installer deploys the solo profile only.
+  - Caddy TLS mode: $TLS_MODE_NOTE
   - Studio machines run with STUDIO_MACHINE_PROVIDER=docker.
+  - Project storage uses the bundled local S3-compatible bucket by default.
 EOF

@@ -1,9 +1,23 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +35,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ModeToggle, useTheme } from "@/components/theme";
-import { HeaderProfileMenu } from "@/components/shell";
+import { useTheme } from "@/components/theme";
+import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
+import {
+  FramedHostShell,
+  HOST_VIEWPORT_INSET_CLASS,
+  FramedViewport,
+} from "@/components/common/FramedHostShell";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
@@ -521,6 +540,220 @@ export default function ProjectFullscreen() {
     selectedVersionInfo?.status === "completed" ||
     (version === project?.currentVersion && project?.status === "completed");
 
+  const renderFullscreenHeader = ({
+    actionSlot,
+    includeProjectActions = false,
+  }: {
+    actionSlot?: ReactNode;
+    includeProjectActions?: boolean;
+  }) => {
+    const projectActions = includeProjectActions ? (
+      <>
+        {!editRequested ? (
+          <Button
+            size="sm"
+            onClick={handleEdit}
+            disabled={isRenamePending}
+            className="h-8 rounded-md px-3"
+          >
+            Edit
+          </Button>
+        ) : null}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPublishDialogOpen(true)}
+          disabled={isRenamePending}
+          className="h-8 rounded-md px-3"
+        >
+          Publish
+        </Button>
+        {analyticsAvailable ? (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => analyticsPath && navigate(analyticsPath)}
+            title="Analytics"
+            disabled={isRenamePending}
+            className="h-8 w-8 rounded-md"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </Button>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-md"
+              disabled={isRenamePending}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
+            <DropdownMenuItem
+              onClick={handleCopyPreviewUrl}
+              disabled={
+                !previewIframeSrc || !publicPreviewEnabled || isRenamePending
+              }
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              {previewUrlCopied
+                ? "Copied!"
+                : publicPreviewEnabled
+                  ? "Copy preview URL"
+                  : "Preview URL disabled"}
+            </DropdownMenuItem>
+            {canManagePreview ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  if (!projectSlug) return;
+                  setPublicPreviewEnabledMutation.mutate({
+                    slug: projectSlug,
+                    enabled: !publicPreviewEnabled,
+                  });
+                }}
+                disabled={
+                  setPublicPreviewEnabledMutation.isPending || isRenamePending
+                }
+              >
+                {publicPreviewEnabled ? (
+                  <EyeOff className="mr-2 h-4 w-4" />
+                ) : (
+                  <Eye className="mr-2 h-4 w-4" />
+                )}
+                {publicPreviewEnabled
+                  ? "Disable preview URL"
+                  : "Enable preview URL"}
+              </DropdownMenuItem>
+            ) : null}
+            {project?.url ? (
+              <DropdownMenuItem
+                onClick={() => window.open(project.url, "_blank")}
+                disabled={isRenamePending}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Original website
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onClick={() => {
+                if (!projectSlug) return;
+                const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                window.open(
+                  `${baseUrl}/vivd-studio/api/download/${projectSlug}/${version}`,
+                  "_blank",
+                );
+              }}
+              disabled={!isSelectedVersionCompleted || isRenamePending}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download as ZIP
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleRegenerateThumbnail}
+              disabled={
+                !isSelectedVersionCompleted ||
+                regenerateThumbnailMutation.isPending ||
+                isRenamePending
+              }
+            >
+              {regenerateThumbnailMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Image className="mr-2 h-4 w-4" />
+              )}
+              {regenerateThumbnailMutation.isPending
+                ? "Regenerating thumbnail..."
+                : "Regenerate thumbnail"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug!))}
+              disabled={isRenamePending}
+            >
+              <Plug className="mr-2 h-4 w-4" />
+              Plugins
+            </DropdownMenuItem>
+            {analyticsAvailable ? (
+              <DropdownMenuItem
+                onClick={() => analyticsPath && navigate(analyticsPath)}
+                disabled={isRenamePending}
+              >
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Analytics
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            {canRenameProject ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  setRenameSlugInput(projectSlug ?? "");
+                  setShowRenameDialog(true);
+                }}
+                disabled={renameSlugMutation.isPending || isRenamePending}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Rename project slug
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              disabled={isRenamePending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete project
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    ) : null;
+
+    return (
+      <HostHeader
+        leading={
+          <>
+            <div className="min-w-0 truncate text-sm font-medium sm:hidden">
+              {projectSlug}
+            </div>
+            <Breadcrumb className="hidden sm:flex">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
+                    Projects
+                  </HeaderBreadcrumbTextLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </>
+        }
+        trailing={
+          <>
+            {projectActions}
+            {actionSlot}
+          </>
+        }
+        endAccessory={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-md"
+            onClick={handleClose}
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        }
+      />
+    );
+  };
+
   if (isLoading) {
     return (
       <CenteredLoading
@@ -551,347 +784,101 @@ export default function ProjectFullscreen() {
 
   if (startStudio.error) {
     return (
-      <div className="flex h-dvh w-screen flex-col bg-background">
-        <header className="px-3 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <Link
-            to={ROUTES.DASHBOARD}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Projects
-          </Link>
-          <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
-          <ModeToggle />
-          <HeaderProfileMenu />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-        <div className="flex flex-1 min-h-0 items-center justify-center">
-          <div className="text-destructive">
-            Error starting studio: {startStudio.error.message}
-          </div>
+      <FramedHostShell fullScreen header={renderFullscreenHeader({})}>
+        <div className={HOST_VIEWPORT_INSET_CLASS}>
+          <FramedViewport className="flex items-center justify-center">
+            <div className="px-6 text-center text-destructive">
+              Error starting studio: {startStudio.error.message}
+            </div>
+          </FramedViewport>
         </div>
-      </div>
+      </FramedHostShell>
     );
   }
 
   if (startStudio.data && !startStudio.data.success) {
     return (
-      <div className="flex h-dvh w-screen flex-col bg-background">
-        <header className="px-3 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <Link
-            to={ROUTES.DASHBOARD}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Projects
-          </Link>
-          <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
-          <ModeToggle />
-          <HeaderProfileMenu />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-        <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3">
-          <div className="text-destructive">
-            Failed to start studio: {startStudio.data.error || "Unknown error"}
-          </div>
-          <Button onClick={handleEdit}>Retry</Button>
+      <FramedHostShell fullScreen header={renderFullscreenHeader({})}>
+        <div className={HOST_VIEWPORT_INSET_CLASS}>
+          <FramedViewport className="flex flex-col items-center justify-center gap-3">
+            <div className="px-6 text-center text-destructive">
+              Failed to start studio: {startStudio.data.error || "Unknown error"}
+            </div>
+            <Button onClick={handleEdit} size="sm" className="h-8 rounded-md px-3">
+              Retry
+            </Button>
+          </FramedViewport>
         </div>
-      </div>
+      </FramedHostShell>
     );
   }
 
   if (editRequested && !studioIframeSrc) {
     return (
-      <div className="flex h-dvh w-screen flex-col bg-background">
-        <header className="px-3 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <Link
-            to={ROUTES.DASHBOARD}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Projects
-          </Link>
-          <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
-          <Button disabled>
-            <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
-            Booting studio…
-          </Button>
-          <ModeToggle />
-          <HeaderProfileMenu />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-        <StudioStartupLoading fullScreen />
-      </div>
+      <FramedHostShell
+        fullScreen
+        header={renderFullscreenHeader({
+          actionSlot: (
+            <Button disabled size="sm" className="h-8 rounded-md px-3">
+              <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
+              Booting studio…
+            </Button>
+          ),
+        })}
+      >
+        <div className={HOST_VIEWPORT_INSET_CLASS}>
+          <FramedViewport className="bg-background/80">
+            <StudioStartupLoading fullScreen className="h-full min-h-0" />
+          </FramedViewport>
+        </div>
+      </FramedHostShell>
     );
   }
 
-  return (
-    <div className="relative flex h-dvh w-screen flex-col bg-background">
-      {!studioIframeSrc ? (
-        <header className="px-3 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <Link
-            to={ROUTES.DASHBOARD}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Projects
-          </Link>
-          <div className="flex-1 text-sm font-medium truncate">{projectSlug}</div>
-          {!editRequested ? (
-            <Button
-              onClick={handleEdit}
-              disabled={isRenamePending}
-            >
-              Edit
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={() => setPublishDialogOpen(true)}
-            disabled={isRenamePending}
-          >
-            Publish
-          </Button>
-          {analyticsAvailable ? (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => analyticsPath && navigate(analyticsPath)}
-              title="Analytics"
-              disabled={isRenamePending}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </Button>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                disabled={isRenamePending}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
-              <DropdownMenuItem
-                onClick={handleCopyPreviewUrl}
-                disabled={!previewIframeSrc || !publicPreviewEnabled || isRenamePending}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                {previewUrlCopied
-                  ? "Copied!"
-                  : publicPreviewEnabled
-                    ? "Copy preview URL"
-                    : "Preview URL disabled"}
-              </DropdownMenuItem>
-              {canManagePreview && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (!projectSlug) return;
-                    setPublicPreviewEnabledMutation.mutate({
-                      slug: projectSlug,
-                      enabled: !publicPreviewEnabled,
-                    });
-                  }}
-                  disabled={setPublicPreviewEnabledMutation.isPending || isRenamePending}
-                >
-                  {publicPreviewEnabled ? (
-                    <EyeOff className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Eye className="h-4 w-4 mr-2" />
-                  )}
-                  {publicPreviewEnabled
-                    ? "Disable preview URL"
-                    : "Enable preview URL"}
-                </DropdownMenuItem>
-              )}
-              {project?.url && (
-                <DropdownMenuItem
-                  onClick={() => window.open(project.url, "_blank")}
-                  disabled={isRenamePending}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Original website
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onClick={() => {
-                  if (!projectSlug) return;
-                  const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-                  window.open(
-                    `${baseUrl}/vivd-studio/api/download/${projectSlug}/${version}`,
-                    "_blank",
-                  );
-                }}
-                disabled={!isSelectedVersionCompleted || isRenamePending}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download as ZIP
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleRegenerateThumbnail}
-                disabled={
-                  !isSelectedVersionCompleted ||
-                  regenerateThumbnailMutation.isPending ||
-                  isRenamePending
-                }
-              >
-                {regenerateThumbnailMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Image className="h-4 w-4 mr-2" />
-                )}
-                {regenerateThumbnailMutation.isPending
-                  ? "Regenerating thumbnail..."
-                  : "Regenerate thumbnail"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
-                disabled={isRenamePending}
-              >
-                <Plug className="h-4 w-4 mr-2" />
-                Plugins
-              </DropdownMenuItem>
-              {analyticsAvailable ? (
-                <DropdownMenuItem
-                  onClick={() => analyticsPath && navigate(analyticsPath)}
-                  disabled={isRenamePending}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Analytics
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuSeparator />
-              {canRenameProject ? (
-                <DropdownMenuItem
-                  onClick={() => {
-                    setRenameSlugInput(projectSlug ?? "");
-                    setShowRenameDialog(true);
-                  }}
-                  disabled={renameSlugMutation.isPending || isRenamePending}
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Rename project slug
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem
-                onClick={() => setShowDeleteConfirm(true)}
-                className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                disabled={isRenamePending}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <ModeToggle />
-          <HeaderProfileMenu />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} title="Close">
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-      ) : null}
-
-      <div className="flex-1 min-h-0">
-        {studioIframeSrc ? (
-          <div className="relative h-full w-full">
-            <iframe
-              ref={studioIframeRef}
-              onLoad={handleStudioIframeLoad}
-              onError={() => setStudioLoadErrored(true)}
-              key={`${projectSlug}-${version}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
-              src={studioIframeSrc}
-              title={`Vivd Studio - ${projectSlug}`}
-              className="h-full w-full border-0"
-              allow="fullscreen; clipboard-write"
-              allowFullScreen
-            />
-
-            {isStudioRecovering ? (
-              <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-                Reconnecting studio machine...
-              </div>
-            ) : null}
-
-            {!studioReady ? (
-              <div className="absolute inset-0 z-10 bg-background">
-                {studioLoadTimedOut || studioLoadErrored ? (
-                  <div className="flex h-full w-full items-center justify-center px-6">
-                    <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
-                      <div className="text-base font-semibold">
-                        Studio is taking longer than usual
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        The studio machine may still be booting or it might be
-                        unresponsive. Try reloading the iframe or doing a hard
-                        restart.
-                      </div>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => setStudioReloadNonce((n) => n + 1)}
-                        >
-                          Reload
-                        </Button>
-                        <Button
-                          onClick={() => void handleHardRestart()}
-                          disabled={hardRestartStudio.isPending}
-                        >
-                          {hardRestartStudio.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Restarting…
-                            </>
-                          ) : (
-                            "Hard restart"
-                          )}
-                        </Button>
-                      </div>
+  if (!studioIframeSrc) {
+    return (
+      <>
+        <FramedHostShell
+          fullScreen
+          header={renderFullscreenHeader({ includeProjectActions: true })}
+        >
+          <div className={HOST_VIEWPORT_INSET_CLASS}>
+            <FramedViewport>
+              {previewIframeSrc ? (
+                <iframe
+                  key={`${projectSlug}-${version}-preview`}
+                  src={previewIframeSrc}
+                  title={`Preview - ${projectSlug}`}
+                  className="h-full w-full border-0"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center p-6">
+                  <div className="flex w-full max-w-4xl flex-col gap-4">
+                    <div className="text-sm text-muted-foreground">
+                      Preview not ready yet
+                      {externalPreview?.status
+                        ? ` (${externalPreview.status})`
+                        : ""}. Click{" "}
+                      <span className="font-medium text-foreground">Edit</span>{" "}
+                      to start a studio machine.
                     </div>
+                    {thumbnailSrc ? (
+                      <div className="overflow-hidden rounded-lg border bg-muted">
+                        <img
+                          src={thumbnailSrc}
+                          alt={`Thumbnail - ${projectSlug}`}
+                          className="h-auto w-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                ) : (
-                  <StudioStartupLoading fullScreen className="h-full min-h-0" />
-                )}
-              </div>
-            ) : null}
-          </div>
-        ) : previewIframeSrc ? (
-          <iframe
-            key={`${projectSlug}-${version}-preview`}
-            src={previewIframeSrc}
-            title={`Preview - ${projectSlug}`}
-            className="h-full w-full border-0"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center p-6">
-            <div className="flex w-full max-w-4xl flex-col gap-4">
-              <div className="text-sm text-muted-foreground">
-                Preview not ready yet
-                {externalPreview?.status ? ` (${externalPreview.status})` : ""}. Click{" "}
-                <span className="font-medium text-foreground">Edit</span> to start a studio
-                machine.
-              </div>
-              {thumbnailSrc ? (
-                <div className="overflow-hidden rounded-lg border bg-muted">
-                  <img
-                    src={thumbnailSrc}
-                    alt={`Thumbnail - ${projectSlug}`}
-                    className="h-auto w-full object-contain"
-                    loading="lazy"
-                  />
                 </div>
-              ) : null}
-            </div>
+              )}
+            </FramedViewport>
           </div>
-        )}
-      </div>
+        </FramedHostShell>
 
-      {!studioIframeSrc ? (
         <PublishSiteDialog
           open={publishDialogOpen}
           onOpenChange={setPublishDialogOpen}
@@ -899,7 +886,167 @@ export default function ProjectFullscreen() {
           version={version}
           onOpenStudio={handleEdit}
         />
-      ) : null}
+
+        <AlertDialog
+          open={showRenameDialog}
+          onOpenChange={(open) => {
+            if (isRenamePending) return;
+            setShowRenameDialog(open);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Rename project slug?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Change <strong>{projectSlug}</strong> to a new URL slug. This
+                updates project references across the control plane. This can take
+                a while and project actions stay locked until it completes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+              <Input
+                value={renameSlugInput}
+                onChange={(event) => setRenameSlugInput(event.target.value)}
+                placeholder="new-project-slug"
+                autoFocus
+                disabled={isRenamePending}
+              />
+              {isRenamePending ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Renaming in progress. Please keep this page open.
+                </div>
+              ) : null}
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={renameSlugMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={
+                  renameSlugMutation.isPending ||
+                  !projectSlug ||
+                  !renameSlugInput.trim() ||
+                  renameSlugInput.trim().toLowerCase() ===
+                    projectSlug.toLowerCase()
+                }
+                onClick={() => {
+                  if (!projectSlug) return;
+                  const nextSlug = renameSlugInput.trim();
+                  renameSlugMutation.mutate({
+                    oldSlug: projectSlug,
+                    newSlug: nextSlug,
+                    confirmationText: nextSlug,
+                  });
+                }}
+              >
+                {renameSlugMutation.isPending ? "Renaming..." : "Rename slug"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete project?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete <strong>{projectSlug}</strong> and
+                all its versions. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteProjectMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
+                disabled={deleteProjectMutation.isPending}
+                onClick={() => {
+                  if (!projectSlug) return;
+                  deleteProjectMutation.mutate({
+                    slug: projectSlug,
+                    confirmationText: projectSlug,
+                  });
+                }}
+              >
+                {deleteProjectMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+  }
+
+  return (
+    <div className="relative flex h-dvh w-screen flex-col bg-background">
+      <div className="flex-1 min-h-0">
+        <div className="relative h-full w-full">
+          <iframe
+            ref={studioIframeRef}
+            onLoad={handleStudioIframeLoad}
+            onError={() => setStudioLoadErrored(true)}
+            key={`${projectSlug}-${version}-${studioBaseUrl ?? ""}-${studioReloadNonce}`}
+            src={studioIframeSrc}
+            title={`Vivd Studio - ${projectSlug}`}
+            className="h-full w-full border-0"
+            allow="fullscreen; clipboard-write"
+            allowFullScreen
+          />
+
+          {isStudioRecovering ? (
+            <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
+              Reconnecting studio machine...
+            </div>
+          ) : null}
+
+          {!studioReady ? (
+            <div className="absolute inset-0 z-10 bg-background">
+              {studioLoadTimedOut || studioLoadErrored ? (
+                <div className="flex h-full w-full items-center justify-center px-6">
+                  <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+                    <div className="text-base font-semibold">
+                      Studio is taking longer than usual
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      The studio machine may still be booting or it might be
+                      unresponsive. Try reloading the iframe or doing a hard
+                      restart.
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setStudioReloadNonce((n) => n + 1)}
+                      >
+                        Reload
+                      </Button>
+                      <Button
+                        onClick={() => void handleHardRestart()}
+                        disabled={hardRestartStudio.isPending}
+                      >
+                        {hardRestartStudio.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Restarting…
+                          </>
+                        ) : (
+                          "Hard restart"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <StudioStartupLoading fullScreen className="h-full min-h-0" />
+              )}
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       <AlertDialog
         open={showRenameDialog}

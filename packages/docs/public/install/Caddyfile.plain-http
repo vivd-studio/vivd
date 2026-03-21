@@ -1,5 +1,5 @@
 {
-    email {$VIVD_CADDY_ACME_EMAIL}
+    auto_https off
 
     admin 0.0.0.0:2019 {
         origins http://caddy:2019 http://backend:3000 http://localhost:2019 http://127.0.0.1:2019
@@ -8,7 +8,7 @@
 
 import /etc/caddy/sites.d/*.caddy
 
-{$VIVD_CADDY_PRIMARY_HOST} {
+http://{$VIVD_CADDY_PRIMARY_HOST} {
     handle_path /_vivd_s3/* {
         reverse_proxy minio:9000
     }

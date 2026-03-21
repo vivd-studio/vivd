@@ -195,9 +195,16 @@ export function SingleProjectModeLayoutGuard({
     const isSettingsRoute = location.pathname.startsWith(ROUTES.SETTINGS);
     const isSuperAdminRoute = location.pathname.startsWith(ROUTES.SUPERADMIN_BASE);
     const isOrgRoute = location.pathname.startsWith(ROUTES.ORG);
+    const isScratchRoute = location.pathname === ROUTES.NEW_SCRATCH;
 
     // Allow admin and settings pages through
-    if (isAdminRoute || isSettingsRoute || isSuperAdminRoute || isOrgRoute) {
+    if (
+      isAdminRoute ||
+      isSettingsRoute ||
+      isSuperAdminRoute ||
+      isOrgRoute ||
+      isScratchRoute
+    ) {
       return <>{children}</>;
     }
 

@@ -1,4 +1,5 @@
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
+import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
 import { Resend, type CreateEmailOptions } from "resend";
 
 export interface EmailDeliveryRequest {
@@ -23,10 +24,62 @@ export interface EmailDeliveryService {
   send(request: EmailDeliveryRequest): Promise<EmailDeliveryResult>;
 }
 
+type PreparedEmailRequest = {
+  recipients: string[];
+  fromEmail: string;
+  subject: string;
+  textBody?: string;
+  htmlBody?: string;
+  replyTo?: string;
+  metadata?: Record<string, string>;
+};
+
+const MISSING_SENDER_EMAIL_MESSAGE =
+  "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_FROM_EMAIL or VIVD_SMTP_FROM_EMAIL or VIVD_SES_FROM_EMAIL)";
+
 function normalizeRecipients(recipients: string[]): string[] {
   return recipients
     .map((recipient) => recipient.trim())
     .filter((recipient) => recipient.length > 0);
+}
+
+function prepareEmailRequest(
+  request: EmailDeliveryRequest,
+  defaultFromEmail: string | null,
+): { ok: true; value: PreparedEmailRequest } | { ok: false; error: string } {
+  const recipients = normalizeRecipients(request.to);
+  if (recipients.length === 0) {
+    return { ok: false, error: "No recipient email configured" };
+  }
+
+  const fromEmail = request.from?.trim() || defaultFromEmail;
+  if (!fromEmail) {
+    return { ok: false, error: MISSING_SENDER_EMAIL_MESSAGE };
+  }
+
+  const subject = request.subject.trim();
+  if (!subject) {
+    return { ok: false, error: "Email subject is required" };
+  }
+
+  const textBody = request.text?.trim() || undefined;
+  const htmlBody = request.html?.trim() || undefined;
+  if (!textBody && !htmlBody) {
+    return { ok: false, error: "Email body is required" };
+  }
+
+  return {
+    ok: true,
+    value: {
+      recipients,
+      fromEmail,
+      subject,
+      textBody,
+      htmlBody,
+      replyTo: request.replyTo?.trim() || undefined,
+      metadata: request.metadata,
+    },
+  };
 }
 
 class NoopEmailDeliveryService implements EmailDeliveryService {
@@ -41,6 +94,55 @@ class NoopEmailDeliveryService implements EmailDeliveryService {
   }
 }
 
+class SmtpEmailDeliveryService implements EmailDeliveryService {
+  readonly providerName = "smtp";
+  private readonly transporter: Transporter;
+  private readonly defaultFromEmail: string | null;
+
+  constructor(transporter: Transporter, defaultFromEmail: string | null) {
+    this.transporter = transporter;
+    this.defaultFromEmail = defaultFromEmail;
+  }
+
+  async send(request: EmailDeliveryRequest): Promise<EmailDeliveryResult> {
+    const prepared = prepareEmailRequest(request, this.defaultFromEmail);
+    if (!prepared.ok) {
+      return {
+        accepted: false,
+        provider: this.providerName,
+        error: prepared.error,
+      };
+    }
+
+    const { recipients, fromEmail, replyTo, subject, textBody, htmlBody } = prepared.value;
+
+    try {
+      const payload: SendMailOptions = {
+        from: fromEmail,
+        to: recipients,
+        replyTo,
+        subject,
+        ...(textBody ? { text: textBody } : {}),
+        ...(htmlBody ? { html: htmlBody } : {}),
+      };
+      const result = await this.transporter.sendMail(payload);
+
+      return {
+        accepted: true,
+        provider: this.providerName,
+        messageId: result.messageId || undefined,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        accepted: false,
+        provider: this.providerName,
+        error: message,
+      };
+    }
+  }
+}
+
 class SesEmailDeliveryService implements EmailDeliveryService {
   readonly providerName = "ses";
   private readonly client: SESv2Client;
@@ -52,43 +154,16 @@ class SesEmailDeliveryService implements EmailDeliveryService {
   }
 
   async send(request: EmailDeliveryRequest): Promise<EmailDeliveryResult> {
-    const recipients = normalizeRecipients(request.to);
-    if (recipients.length === 0) {
+    const prepared = prepareEmailRequest(request, this.defaultFromEmail);
+    if (!prepared.ok) {
       return {
         accepted: false,
         provider: this.providerName,
-        error: "No recipient email configured",
+        error: prepared.error,
       };
     }
-
-    const fromEmail = request.from?.trim() || this.defaultFromEmail;
-    if (!fromEmail) {
-      return {
-        accepted: false,
-        provider: this.providerName,
-          error:
-            "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_FROM_EMAIL or VIVD_SES_FROM_EMAIL)",
-      };
-    }
-
-    const subject = request.subject.trim();
-    if (!subject) {
-      return {
-        accepted: false,
-        provider: this.providerName,
-        error: "Email subject is required",
-      };
-    }
-
-    const textBody = request.text?.trim();
-    const htmlBody = request.html?.trim();
-    if (!textBody && !htmlBody) {
-      return {
-        accepted: false,
-        provider: this.providerName,
-        error: "Email body is required",
-      };
-    }
+    const { recipients, fromEmail, replyTo, subject, textBody, htmlBody, metadata } =
+      prepared.value;
 
     try {
       const result = await this.client.send(
@@ -97,9 +172,7 @@ class SesEmailDeliveryService implements EmailDeliveryService {
           Destination: {
             ToAddresses: recipients,
           },
-          ReplyToAddresses: request.replyTo?.trim()
-            ? [request.replyTo.trim()]
-            : undefined,
+          ReplyToAddresses: replyTo ? [replyTo] : undefined,
           Content: {
             Simple: {
               Subject: {
@@ -122,7 +195,7 @@ class SesEmailDeliveryService implements EmailDeliveryService {
               },
             },
           },
-          EmailTags: toSesTags(request.metadata),
+          EmailTags: toSesTags(metadata),
         }),
       );
 
@@ -153,47 +226,19 @@ class ResendEmailDeliveryService implements EmailDeliveryService {
   }
 
   async send(request: EmailDeliveryRequest): Promise<EmailDeliveryResult> {
-    const recipients = normalizeRecipients(request.to);
-    if (recipients.length === 0) {
+    const prepared = prepareEmailRequest(request, this.defaultFromEmail);
+    if (!prepared.ok) {
       return {
         accepted: false,
         provider: this.providerName,
-        error: "No recipient email configured",
+        error: prepared.error,
       };
     }
-
-    const fromEmail = request.from?.trim() || this.defaultFromEmail;
-    if (!fromEmail) {
-      return {
-        accepted: false,
-        provider: this.providerName,
-          error:
-            "Missing sender email (set request.from or VIVD_EMAIL_FROM or VIVD_FROM_EMAIL or VIVD_SES_FROM_EMAIL)",
-      };
-    }
-
-    const subject = request.subject.trim();
-    if (!subject) {
-      return {
-        accepted: false,
-        provider: this.providerName,
-        error: "Email subject is required",
-      };
-    }
-
-    const textBody = request.text?.trim();
-    const htmlBody = request.html?.trim();
-    if (!textBody && !htmlBody) {
-      return {
-        accepted: false,
-        provider: this.providerName,
-        error: "Email body is required",
-      };
-    }
+    const { recipients, fromEmail, replyTo, subject, textBody, htmlBody, metadata } =
+      prepared.value;
 
     try {
-      const replyTo = request.replyTo?.trim() ? request.replyTo.trim() : undefined;
-      const tags = toResendTags(request.metadata);
+      const tags = toResendTags(metadata);
       const payloadBase = {
         from: fromEmail,
         to: recipients,
@@ -295,6 +340,13 @@ function hasResendConfigurationHints(): boolean {
   return Boolean((process.env.RESEND_API_KEY || "").trim());
 }
 
+function hasSmtpConfigurationHints(): boolean {
+  return Boolean(
+    (process.env.VIVD_SMTP_URL || "").trim() ||
+      (process.env.VIVD_SMTP_HOST || "").trim(),
+  );
+}
+
 function hasSesConfigurationHints(): boolean {
   return Boolean(
     (process.env.VIVD_SES_FROM_EMAIL || "").trim() ||
@@ -312,6 +364,7 @@ function resolveEmailProvider(): string {
   if (explicit) return explicit;
   if (hasResendConfigurationHints()) return "resend";
   if (hasSesConfigurationHints()) return "ses";
+  if (hasSmtpConfigurationHints()) return "smtp";
   return "noop";
 }
 
@@ -319,9 +372,18 @@ function resolveDefaultFromEmail(): string | null {
   return (
     (process.env.VIVD_EMAIL_FROM || "").trim() ||
     (process.env.VIVD_FROM_EMAIL || "").trim() ||
+    (process.env.VIVD_SMTP_FROM_EMAIL || "").trim() ||
     (process.env.VIVD_SES_FROM_EMAIL || "").trim() ||
     null
   );
+}
+
+function readBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
 }
 
 function resolveSesRegion(): string {
@@ -340,6 +402,32 @@ function resolveSesCredentials() {
   return { accessKeyId, secretAccessKey };
 }
 
+function resolveSmtpTransport(): Transporter {
+  const url = (process.env.VIVD_SMTP_URL || "").trim();
+  if (url) {
+    return nodemailer.createTransport(url);
+  }
+
+  const host = (process.env.VIVD_SMTP_HOST || "").trim();
+  const portRaw = (process.env.VIVD_SMTP_PORT || "").trim();
+  const parsedPort = Number.parseInt(portRaw || "", 10);
+  const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 587;
+  const secure = readBooleanEnv(process.env.VIVD_SMTP_SECURE, port === 465);
+  const user = (process.env.VIVD_SMTP_USER || "").trim();
+  const password = (process.env.VIVD_SMTP_PASSWORD || "").trim();
+  const requireTls = readBooleanEnv(process.env.VIVD_SMTP_REQUIRE_TLS, false);
+  const ignoreTls = readBooleanEnv(process.env.VIVD_SMTP_IGNORE_TLS, false);
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    requireTLS: requireTls,
+    ignoreTLS: ignoreTls,
+    auth: user || password ? { user, pass: password } : undefined,
+  });
+}
+
 function buildEmailServiceCacheKey(): string {
   return [
     process.env.VIVD_EMAIL_PROVIDER || "",
@@ -347,6 +435,15 @@ function buildEmailServiceCacheKey(): string {
     process.env.RESEND_API_KEY || "",
     process.env.VIVD_EMAIL_FROM || "",
     process.env.VIVD_FROM_EMAIL || "",
+    process.env.VIVD_SMTP_URL || "",
+    process.env.VIVD_SMTP_HOST || "",
+    process.env.VIVD_SMTP_PORT || "",
+    process.env.VIVD_SMTP_SECURE || "",
+    process.env.VIVD_SMTP_USER || "",
+    process.env.VIVD_SMTP_PASSWORD || "",
+    process.env.VIVD_SMTP_REQUIRE_TLS || "",
+    process.env.VIVD_SMTP_IGNORE_TLS || "",
+    process.env.VIVD_SMTP_FROM_EMAIL || "",
     process.env.VIVD_SES_REGION || "",
     process.env.AWS_REGION || "",
     process.env.AWS_DEFAULT_REGION || "",
@@ -365,6 +462,11 @@ function createSesService(): EmailDeliveryService {
   return new SesEmailDeliveryService(client, resolveDefaultFromEmail());
 }
 
+function createSmtpService(): EmailDeliveryService {
+  const transporter = resolveSmtpTransport();
+  return new SmtpEmailDeliveryService(transporter, resolveDefaultFromEmail());
+}
+
 function createResendService(): EmailDeliveryService {
   const apiKey = (process.env.RESEND_API_KEY || "").trim() || undefined;
   const client = new Resend(apiKey);
@@ -376,6 +478,7 @@ function createEmailService(): EmailDeliveryService {
   if (provider === "noop") return noopEmailDeliveryService;
   if (provider === "resend") return createResendService();
   if (provider === "ses") return createSesService();
+  if (provider === "smtp") return createSmtpService();
 
   console.warn(
     `[EmailDeliveryService] Unsupported provider "${provider}". Falling back to noop.`,

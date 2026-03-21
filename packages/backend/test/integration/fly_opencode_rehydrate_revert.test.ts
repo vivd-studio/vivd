@@ -223,8 +223,9 @@ function buildMachineStorageEnv(options: {
     "GOOGLE_APPLICATION_CREDENTIALS",
     "GOOGLE_APPLICATION_CREDENTIALS_JSON",
     "VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH",
-    "OPENCODE_MODEL",
-    "OPENCODE_MODELS",
+    "OPENCODE_MODEL_STANDARD",
+    "OPENCODE_MODEL_ADVANCED",
+    "OPENCODE_MODEL_PRO",
   ] as const;
 
   for (const key of passthroughKeys) {

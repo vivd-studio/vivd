@@ -16,8 +16,6 @@ export const MAX_IMAGES_TO_ANALYZE = 30;
 
 export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
-export const OPENCODE_MODEL = process.env.OPENCODE_MODEL;
-
 export function validateConfig() {
   if (!OPENROUTER_API_KEY) {
     throw new Error("Please set OPENROUTER_API_KEY in your .env file.");

@@ -4,6 +4,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
+    environment:
+      - VIVD_CADDY_PRIMARY_HOST=${VIVD_CADDY_PRIMARY_HOST}
+      - VIVD_CADDY_ACME_EMAIL=${VIVD_CADDY_ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -13,11 +17,12 @@ services:
       - published_sites:/srv/published:ro
     depends_on:
       - backend
+      - minio
     networks:
       - vivd-network
 
   backend:
-    image: ghcr.io/vivd-studio/vivd-server:latest
+    image: ghcr.io/vivd-studio/vivd-server:${VIVD_SELFHOST_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -31,11 +36,14 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
       - GOOGLE_APPLICATION_CREDENTIALS_JSON=${GOOGLE_APPLICATION_CREDENTIALS_JSON:-}
       - VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH=${VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH:-}
-      - OPENCODE_MODEL=${OPENCODE_MODEL:-}
-      - OPENCODE_MODELS=${OPENCODE_MODELS:-}
+      - OPENCODE_MODEL_STANDARD=${OPENCODE_MODEL_STANDARD:-}
+      - OPENCODE_MODEL_ADVANCED=${OPENCODE_MODEL_ADVANCED:-}
+      - OPENCODE_MODEL_PRO=${OPENCODE_MODEL_PRO:-}
       - DOMAIN=${DOMAIN}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL}
       - VIVD_INSTALL_PROFILE=${VIVD_INSTALL_PROFILE:-solo}
+      - VIVD_CADDY_TLS_MODE=${VIVD_CADDY_TLS_MODE:-off}
+      - VIVD_PUBLISH_INCLUDE_WWW_ALIAS=${VIVD_PUBLISH_INCLUDE_WWW_ALIAS:-false}
       - VIVD_PUBLIC_DOCS_BASE_URL=${VIVD_PUBLIC_DOCS_BASE_URL:-https://docs.vivd.studio}
       - TRUSTED_DOMAINS=${TRUSTED_DOMAINS}
       - TENANT_BASE_DOMAIN=${TENANT_BASE_DOMAIN:-}
@@ -52,14 +60,40 @@ services:
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}
       - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+      - VIVD_BUCKET_MODE=${VIVD_BUCKET_MODE:-local}
+      - VIVD_LOCAL_S3_BUCKET=${VIVD_LOCAL_S3_BUCKET:-vivd}
+      - VIVD_LOCAL_S3_ENDPOINT_URL=${VIVD_LOCAL_S3_ENDPOINT_URL:-http://minio:9000}
+      - VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL=${VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL:-}
+      - VIVD_LOCAL_S3_ACCESS_KEY=${VIVD_LOCAL_S3_ACCESS_KEY}
+      - VIVD_LOCAL_S3_SECRET_KEY=${VIVD_LOCAL_S3_SECRET_KEY}
+      - VIVD_LOCAL_S3_REGION=${VIVD_LOCAL_S3_REGION:-us-east-1}
       - R2_ENDPOINT=${R2_ENDPOINT:-}
       - R2_BUCKET=${R2_BUCKET:-}
       - R2_ACCESS_KEY=${R2_ACCESS_KEY:-}
       - R2_SECRET_KEY=${R2_SECRET_KEY:-}
+      - VIVD_S3_BUCKET=${VIVD_S3_BUCKET:-}
+      - VIVD_S3_ENDPOINT_URL=${VIVD_S3_ENDPOINT_URL:-}
+      - VIVD_S3_ACCESS_KEY_ID=${VIVD_S3_ACCESS_KEY_ID:-}
+      - VIVD_S3_SECRET_ACCESS_KEY=${VIVD_S3_SECRET_ACCESS_KEY:-}
+      - VIVD_S3_SESSION_TOKEN=${VIVD_S3_SESSION_TOKEN:-}
+      - VIVD_S3_REGION=${VIVD_S3_REGION:-}
+      - VIVD_S3_DOWNLOAD_ENDPOINT_URL=${VIVD_S3_DOWNLOAD_ENDPOINT_URL:-}
+      - VIVD_S3_PUBLIC_BASE_URL=${VIVD_S3_PUBLIC_BASE_URL:-}
+      - VIVD_EMAIL_PROVIDER=${VIVD_EMAIL_PROVIDER:-}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - RESEND_WEBHOOK_SECRET=${RESEND_WEBHOOK_SECRET:-}
       - VIVD_EMAIL_FROM=${VIVD_EMAIL_FROM:-}
       - VIVD_FROM_EMAIL=${VIVD_FROM_EMAIL:-}
+      - VIVD_SMTP_URL=${VIVD_SMTP_URL:-}
+      - VIVD_SMTP_HOST=${VIVD_SMTP_HOST:-}
+      - VIVD_SMTP_PORT=${VIVD_SMTP_PORT:-}
+      - VIVD_SMTP_SECURE=${VIVD_SMTP_SECURE:-}
+      - VIVD_SMTP_USER=${VIVD_SMTP_USER:-}
+      - VIVD_SMTP_PASSWORD=${VIVD_SMTP_PASSWORD:-}
+      - VIVD_SMTP_REQUIRE_TLS=${VIVD_SMTP_REQUIRE_TLS:-}
+      - VIVD_SMTP_IGNORE_TLS=${VIVD_SMTP_IGNORE_TLS:-}
+      - VIVD_SMTP_FROM_EMAIL=${VIVD_SMTP_FROM_EMAIL:-}
       - VIVD_SES_ACCESS_KEY_ID=${VIVD_SES_ACCESS_KEY_ID:-}
       - VIVD_SES_SECRET_ACCESS_KEY=${VIVD_SES_SECRET_ACCESS_KEY:-}
       - VIVD_SES_FROM_EMAIL=${VIVD_SES_FROM_EMAIL:-}
@@ -90,11 +124,13 @@ services:
         condition: service_healthy
       scraper:
         condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - vivd-network
 
   frontend:
-    image: ghcr.io/vivd-studio/vivd-ui:latest
+    image: ghcr.io/vivd-studio/vivd-ui:${VIVD_SELFHOST_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     depends_on:
@@ -103,7 +139,7 @@ services:
       - vivd-network
 
   scraper:
-    image: ghcr.io/vivd-studio/vivd-scraper:latest
+    image: ghcr.io/vivd-studio/vivd-scraper:${VIVD_SELFHOST_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -142,6 +178,39 @@ services:
     networks:
       - vivd-network
 
+  minio:
+    image: ${VIVD_LOCAL_S3_IMAGE:-minio/minio:latest}
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${VIVD_LOCAL_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${VIVD_LOCAL_S3_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    networks:
+      - vivd-network
+
+  minio-init:
+    image: ${VIVD_LOCAL_S3_MC_IMAGE:-minio/mc:latest}
+    restart: "no"
+    profiles:
+      - setup
+    depends_on:
+      - minio
+    environment:
+      - VIVD_LOCAL_S3_BUCKET=${VIVD_LOCAL_S3_BUCKET:-vivd}
+      - VIVD_LOCAL_S3_ACCESS_KEY=${VIVD_LOCAL_S3_ACCESS_KEY}
+      - VIVD_LOCAL_S3_SECRET_KEY=${VIVD_LOCAL_S3_SECRET_KEY}
+    entrypoint: >
+      /bin/sh -c '
+      until mc alias set vivd http://minio:9000 "$$VIVD_LOCAL_S3_ACCESS_KEY" "$$VIVD_LOCAL_S3_SECRET_KEY" >/dev/null 2>&1; do
+        sleep 1
+      done &&
+      mc mb --ignore-existing "vivd/$$VIVD_LOCAL_S3_BUCKET"
+      '
+    networks:
+      - vivd-network
+
 volumes:
   backend_data:
   opencode_data:
@@ -151,6 +220,7 @@ volumes:
   caddy_sites:
   caddy_runtime_routes:
   postgres_data:
+  minio_data:
 
 networks:
   vivd-network:

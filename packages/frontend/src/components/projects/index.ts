@@ -5,6 +5,7 @@ export type { VersionInfo, Project } from "./listing";
 // Create
 export {
   ProjectWizard,
+  NewProjectHeaderActions,
   SingleProjectCreateView,
   SingleProjectModeHandler,
   UrlFormFields,

@@ -42,6 +42,14 @@ describe("emailDeliverabilityService", () => {
     settingsStore.clear();
     getSystemSettingValueMock.mockClear();
     setSystemSettingValueMock.mockClear();
+    delete process.env.VIVD_EMAIL_PROVIDER;
+    delete process.env.EMAIL_PROVIDER;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.VIVD_SES_FROM_EMAIL;
+    delete process.env.VIVD_SES_ACCESS_KEY_ID;
+    delete process.env.VIVD_SES_SECRET_ACCESS_KEY;
+    delete process.env.VIVD_SMTP_URL;
+    delete process.env.VIVD_SMTP_HOST;
   });
 
   it("returns empty overview by default", async () => {
@@ -114,5 +122,17 @@ describe("emailDeliverabilityService", () => {
       email: "owner@example.com",
     });
     expect(overview.suppressedRecipients).toHaveLength(0);
+  });
+
+  it("reports smtp as the configured provider without webhook support", async () => {
+    process.env.VIVD_EMAIL_PROVIDER = "smtp";
+    process.env.VIVD_SMTP_HOST = "smtp.example.com";
+
+    const service = await loadEmailDeliverabilityService();
+    const overview = await service.getOverview();
+
+    expect(overview.provider.name).toBe("smtp");
+    expect(overview.provider.webhookSecretConfigured).toBe(false);
+    expect(overview.provider.autoConfirmSubscriptionsEnabled).toBe(false);
   });
 });

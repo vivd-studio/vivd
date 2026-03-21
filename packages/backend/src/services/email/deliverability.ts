@@ -134,6 +134,13 @@ function hasResendConfigurationHints(): boolean {
   return Boolean((process.env.RESEND_API_KEY || "").trim());
 }
 
+function hasSmtpConfigurationHints(): boolean {
+  return Boolean(
+    (process.env.VIVD_SMTP_URL || "").trim() ||
+      (process.env.VIVD_SMTP_HOST || "").trim(),
+  );
+}
+
 export function resolveConfiguredEmailProviderName(): string {
   const explicit =
     (process.env.VIVD_EMAIL_PROVIDER || process.env.EMAIL_PROVIDER || "")
@@ -142,6 +149,7 @@ export function resolveConfiguredEmailProviderName(): string {
   if (explicit) return explicit;
   if (hasResendConfigurationHints()) return "resend";
   if (hasSesConfigurationHints()) return "ses";
+  if (hasSmtpConfigurationHints()) return "smtp";
   return "noop";
 }
 
@@ -160,6 +168,9 @@ export function isResendFeedbackWebhookSecretConfigured(): boolean {
 function isWebhookSecretConfiguredForProvider(providerName: string): boolean {
   if (providerName === "resend") {
     return isResendFeedbackWebhookSecretConfigured();
+  }
+  if (providerName === "smtp") {
+    return false;
   }
   return isSesFeedbackWebhookSecretConfigured();
 }

@@ -1,19 +1,20 @@
+import { useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import {
-  Image as ImageIcon,
-  Link as LinkIcon,
-  Sparkles,
-  Upload,
+  ArrowUp,
+  FolderArchive,
+  ImagePlus,
   Loader2,
 } from "lucide-react";
 import { useScratchWizard } from "./ScratchWizardContext";
-import { FileDropzone } from "./FileDropzone";
-import { ColorPaletteSelector } from "./ColorPaletteSelector";
+import { FileAttachmentList, FileDropzone } from "./FileDropzone";
+import { cn } from "@/lib/utils";
+
+const TEXTAREA_MIN_HEIGHT = 84;
+const TEXTAREA_MAX_HEIGHT = 248;
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -26,8 +27,6 @@ function formatBytes(bytes: number): string {
 export function ScratchForm() {
   const {
     form,
-    stylePreset,
-    isStyleExact,
     assets,
     setAssets,
     referenceImages,
@@ -41,10 +40,32 @@ export function ScratchForm() {
     validationError,
     submit,
   } = useScratchWizard();
+  const titleField = form.register("title");
+  const descriptionField = form.register("description");
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isDisabled = isGenerating || !!started;
+  const titleError = form.formState.errors.title?.message;
+  const descriptionError = form.formState.errors.description?.message;
 
-  // Get status label for current phase
+  const resizeDescription = useCallback((element?: HTMLTextAreaElement | null) => {
+    const textarea = element ?? descriptionRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(
+      Math.max(textarea.scrollHeight, TEXTAREA_MIN_HEIGHT),
+      TEXTAREA_MAX_HEIGHT,
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
+  }, []);
+
+  useEffect(() => {
+    resizeDescription();
+  }, [resizeDescription]);
+
   const getStatusLabel = () => {
     switch (uploadPhase) {
       case "creating":
@@ -60,7 +81,6 @@ export function ScratchForm() {
     }
   };
 
-  // Get status badge variant
   const getStatusBadge = () => {
     if (uploadPhase === "uploading") {
       return `${uploadProgress.uploadedFiles}/${uploadProgress.totalFiles} files`;
@@ -72,173 +92,154 @@ export function ScratchForm() {
   };
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-card md:flex-[4] md:border-l md:border-border">
-      <div className="p-4 sm:p-6 border-b border-border">
-        <h2 className="text-lg font-semibold">Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          The better the brief, the better the result
-        </p>
+    <form
+      onSubmit={form.handleSubmit(submit)}
+      className="w-full max-w-4xl"
+    >
+      <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+        <h1 className="max-w-3xl text-balance text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+          What should we build?
+        </h1>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <form
-          onSubmit={form.handleSubmit(submit)}
-          className="p-4 sm:p-6 space-y-6"
+      <div className="mx-auto mt-10 flex w-full max-w-[52rem] flex-col gap-4">
+        <div className="mx-auto w-full max-w-[30rem] space-y-1.5">
+          <label className="block text-center text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
+            Project name
+          </label>
+          <Input
+            {...titleField}
+            placeholder="Acme Studio"
+            disabled={isDisabled}
+            className="h-12 rounded-full border border-border/60 bg-card/68 px-5 text-center text-base text-foreground shadow-[0_24px_80px_hsl(var(--primary)/0.12)] backdrop-blur-xl placeholder:text-muted-foreground focus-visible:border-primary/24 focus-visible:bg-card/88 focus-visible:ring-primary/16"
+          />
+          {titleError ? (
+            <div className="text-center text-xs text-destructive">{titleError}</div>
+          ) : null}
+        </div>
+
+        <InteractiveSurface
+          variant="field"
+          className={cn(
+            "overflow-hidden rounded-[30px] border border-border/60 bg-card/92 text-foreground shadow-[0_36px_110px_hsl(var(--primary)/0.16)] backdrop-blur-2xl",
+            isDisabled
+              ? "opacity-90"
+              : "hover:border-primary/18",
+          )}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Business name</label>
-              <Input
-                {...form.register("title")}
-                placeholder="Acme Studio"
-                disabled={isDisabled}
-              />
-              {form.formState.errors.title?.message && (
-                <div className="text-xs text-destructive">
-                  {form.formState.errors.title.message}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Business type</label>
-              <Input
-                {...form.register("businessType")}
-                placeholder="Coffee shop, SaaS…"
-                disabled={isDisabled}
-              />
-            </div>
-          </div>
+          <textarea
+            name={descriptionField.name}
+            onBlur={descriptionField.onBlur}
+            ref={(node) => {
+              descriptionRef.current = node;
+              descriptionField.ref(node);
+            }}
+            onChange={(event) => {
+              descriptionField.onChange(event);
+              resizeDescription(event.currentTarget);
+            }}
+            rows={1}
+            placeholder="Describe the website you want to create."
+            disabled={isDisabled}
+            className="min-h-[84px] max-h-[248px] w-full resize-none overflow-y-hidden bg-transparent px-6 pt-4 text-base leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
+          />
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Description</label>
-            <Textarea
-              {...form.register("description")}
-              rows={5}
-              placeholder="What do you do? Who is it for? What's the main goal of the website?"
-              disabled={isDisabled}
-              className="resize-none"
-            />
-            {form.formState.errors.description?.message && (
-              <div className="text-xs text-destructive">
-                {form.formState.errors.description.message}
-              </div>
-            )}
-          </div>
-
-          {/* Color & Theme Settings */}
-          <ColorPaletteSelector />
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="h-4 w-4 text-muted-foreground" />
-              <label className="text-sm font-medium">Reference URLs</label>
-              <Badge variant="outline" className="text-xs font-normal">
-                optional
-              </Badge>
-            </div>
-            <Textarea
-              {...form.register("referenceUrlsText")}
-              rows={2}
-              placeholder={"https://stripe.com\nhttps://linear.app"}
-              disabled={isDisabled}
-              className="resize-none font-mono text-sm"
-            />
-            <div className="text-xs text-muted-foreground">
-              One URL per line. We'll use them as design references.
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
-              Assets
+          <div className="flex items-center justify-between gap-4 px-4 pb-4 pl-5 sm:px-5 sm:pb-4">
+            <div className="text-left text-xs leading-5 text-muted-foreground">
+              Brief, sections, tone, assets.
             </div>
 
-            <FileDropzone
-              title="Brand assets"
-              hint="Drop logos / product photos / PDFs / SVGs"
-              files={assets}
-              onAddFiles={(files) => setAssets((prev) => [...prev, ...files])}
-              onRemoveFile={(idx) =>
-                setAssets((prev) => prev.filter((_, i) => i !== idx))
-              }
-              acceptOnlyImages={false}
-            />
-
-            <FileDropzone
-              title="Design references"
-              hint="Drop screenshots of designs you like"
-              files={referenceImages}
-              onAddFiles={(files) =>
-                setReferenceImages((prev) => [...prev, ...files])
-              }
-              onRemoveFile={(idx) =>
-                setReferenceImages((prev) => prev.filter((_, i) => i !== idx))
-              }
-            />
-          </div>
-
-          {/* Validation error */}
-          {validationError && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-              {validationError}
-            </div>
-          )}
-
-          {/* Progress UI - shown during any upload/generation phase */}
-          {uploadPhase !== "idle" && (
-            <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  {uploadPhase === "uploading" ? (
-                    <Upload className="h-4 w-4 animate-pulse" />
-                  ) : (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  )}
-                  {getStatusLabel()}
-                </div>
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {getStatusBadge()}
-                </Badge>
-              </div>
-              <Progress value={progress} className="h-2" />
-              {uploadPhase === "uploading" && uploadProgress.totalBytes > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  {formatBytes(uploadProgress.uploadedBytes)} /{" "}
-                  {formatBytes(uploadProgress.totalBytes)}
-                </div>
-              )}
-              {started?.slug && (
-                <div className="text-xs text-muted-foreground">
-                  Project: <span className="font-mono">{started.slug}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="sticky bottom-0 border-t border-border pt-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))] -mx-4 sm:-mx-6 px-4 sm:px-6 bg-card">
             <Button
               type="submit"
               disabled={isDisabled}
-              className="w-full gap-2 h-12 text-base font-medium"
+              className="h-10 w-10 shrink-0 rounded-full border-0 bg-primary text-primary-foreground shadow-[0_18px_44px_hsl(var(--primary)/0.34)] hover:bg-primary/90"
             >
-              <Sparkles className="h-5 w-5" />
-              {isGenerating ? "Generating…" : "Generate Website"}
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
             </Button>
-            {stylePreset && (
-              <div className="text-center text-xs text-muted-foreground mt-3">
-                Using <span className="font-medium">{stylePreset.name}</span>{" "}
-                palette
-                <span className="mx-1">·</span>
-                <span className="font-medium">
-                  {isStyleExact ? "Strict" : "Inspiration"}
-                </span>{" "}
-                mode
-              </div>
-            )}
           </div>
-        </form>
-      </ScrollArea>
-    </div>
+        </InteractiveSurface>
+
+        {descriptionError ? (
+          <div className="text-center text-xs text-destructive">
+            {descriptionError}
+          </div>
+        ) : null}
+
+        {validationError ? (
+          <div className="rounded-[24px] border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-[0_24px_80px_hsl(var(--destructive)/0.12)] backdrop-blur-xl">
+            {validationError}
+          </div>
+        ) : null}
+
+        {uploadPhase !== "idle" ? (
+          <div className="space-y-3 rounded-[24px] border border-border/60 bg-card/64 px-4 py-4 text-foreground shadow-[0_24px_80px_hsl(var(--primary)/0.1)] backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                <span className="truncate">{getStatusLabel()}</span>
+              </div>
+              <div className="shrink-0 rounded-full border border-border/60 bg-background/50 px-2.5 py-1 text-[11px] text-muted-foreground">
+                {getStatusBadge()}
+              </div>
+            </div>
+            <Progress value={progress} className="h-1.5 bg-muted" />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {uploadPhase === "uploading" && uploadProgress.totalBytes > 0 ? (
+                <span>
+                  {formatBytes(uploadProgress.uploadedBytes)} /{" "}
+                  {formatBytes(uploadProgress.totalBytes)}
+                </span>
+              ) : null}
+              {started?.slug ? (
+                <span>
+                  Project: <span className="font-mono text-foreground/80">{started.slug}</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-2 md:items-start">
+          <FileDropzone
+            className="order-1"
+            title="Design references"
+            hint="Inspiration only"
+            files={referenceImages}
+            onAddFiles={(files) =>
+              setReferenceImages((prev) => [...prev, ...files])
+            }
+            icon={ImagePlus}
+          />
+          <FileDropzone
+            className="order-3 md:order-2"
+            title="Brand assets"
+            hint="Logos, photos, files to be used on the page"
+            files={assets}
+            onAddFiles={(files) => setAssets((prev) => [...prev, ...files])}
+            acceptOnlyImages={false}
+            icon={FolderArchive}
+          />
+          <FileAttachmentList
+            className="order-2 md:order-3"
+            files={referenceImages}
+            onRemoveFile={(idx) =>
+              setReferenceImages((prev) => prev.filter((_, i) => i !== idx))
+            }
+          />
+          <FileAttachmentList
+            className="order-4"
+            files={assets}
+            onRemoveFile={(idx) =>
+              setAssets((prev) => prev.filter((_, i) => i !== idx))
+            }
+          />
+
+        </div>
+      </div>
+    </form>
   );
 }

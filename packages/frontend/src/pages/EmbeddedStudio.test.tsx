@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,6 +97,23 @@ vi.mock("@/components/ui/sidebar", () => ({
 
 vi.mock("@/components/shell", () => ({
   HeaderProfileMenu: () => <div data-testid="profile-menu" />,
+  HostHeader: ({
+    leading,
+    trailing,
+  }: {
+    leading?: ReactNode;
+    trailing?: ReactNode;
+  }) => (
+    <div data-testid="host-header">
+      {leading}
+      {trailing}
+    </div>
+  ),
+  HeaderBreadcrumbTextLink: ({
+    children,
+  }: {
+    children?: ReactNode;
+  }) => <>{children}</>,
 }));
 
 vi.mock("@/components/projects/publish/PublishSiteDialog", () => ({

@@ -1,5 +1,12 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
@@ -7,7 +14,6 @@ import { Separator } from "@/components/ui/separator";
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -31,11 +37,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ModeToggle, useTheme } from "@/components/theme";
-import { HeaderProfileMenu } from "@/components/shell";
+import { useTheme } from "@/components/theme";
+import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
+import {
+  FramedHostShell,
+  HOST_VIEWPORT_INSET_CLASS,
+  FramedViewport,
+} from "@/components/common/FramedHostShell";
 import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { authClient } from "@/lib/auth-client";
@@ -659,6 +670,215 @@ export default function EmbeddedStudio() {
     selectedVersionInfo?.status === "completed" ||
     (studioVersion === project?.currentVersion && project?.status === "completed");
 
+  const renderEmbeddedHeader = ({
+    actionSlot,
+    includeProjectActions = false,
+  }: {
+    actionSlot?: ReactNode;
+    includeProjectActions?: boolean;
+  }) => {
+    const projectActions = includeProjectActions ? (
+      <>
+        {!editRequested ? (
+          <Button
+            size="sm"
+            onClick={handleEdit}
+            disabled={
+              startStudio.isPending ||
+              hardRestartStudio.isPending ||
+              isRenamePending
+            }
+            className="h-8 rounded-md px-3"
+          >
+            Edit
+          </Button>
+        ) : null}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPublishDialogOpen(true)}
+          disabled={isRenamePending}
+          className="h-8 rounded-md px-3"
+        >
+          Publish
+        </Button>
+        {analyticsAvailable ? (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => analyticsPath && navigate(analyticsPath)}
+            title="Analytics"
+            disabled={isRenamePending}
+            className="h-8 w-8 rounded-md"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </Button>
+        ) : null}
+        <Separator orientation="vertical" className="mx-0.5 h-4" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-md"
+              disabled={isRenamePending}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
+            <DropdownMenuItem
+              onClick={handleCopyPreviewUrl}
+              disabled={
+                !previewIframeSrc || !publicPreviewEnabled || isRenamePending
+              }
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              {publicPreviewEnabled
+                ? previewUrlCopied
+                  ? "Copied!"
+                  : "Copy preview URL"
+                : "Preview URL disabled"}
+            </DropdownMenuItem>
+            {canManagePreview ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  if (!projectSlug) return;
+                  setPublicPreviewEnabledMutation.mutate({
+                    slug: projectSlug,
+                    enabled: !publicPreviewEnabled,
+                  });
+                }}
+                disabled={
+                  setPublicPreviewEnabledMutation.isPending || isRenamePending
+                }
+              >
+                {publicPreviewEnabled ? (
+                  <EyeOff className="mr-2 h-4 w-4" />
+                ) : (
+                  <Eye className="mr-2 h-4 w-4" />
+                )}
+                {publicPreviewEnabled
+                  ? "Disable preview URL"
+                  : "Enable preview URL"}
+              </DropdownMenuItem>
+            ) : null}
+            {project?.url ? (
+              <DropdownMenuItem
+                onClick={() => window.open(project.url, "_blank")}
+                disabled={isRenamePending}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Original website
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onClick={() => {
+                if (!projectSlug) return;
+                const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+                window.open(
+                  `${baseUrl}/vivd-studio/api/download/${projectSlug}/${studioVersion}`,
+                  "_blank",
+                );
+              }}
+              disabled={!isSelectedVersionCompleted || isRenamePending}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download as ZIP
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleRegenerateThumbnail}
+              disabled={
+                !isSelectedVersionCompleted ||
+                regenerateThumbnailMutation.isPending ||
+                isRenamePending
+              }
+            >
+              {regenerateThumbnailMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Image className="mr-2 h-4 w-4" />
+              )}
+              {regenerateThumbnailMutation.isPending
+                ? "Regenerating thumbnail..."
+                : "Regenerate thumbnail"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug!))}
+              disabled={isRenamePending}
+            >
+              <Plug className="mr-2 h-4 w-4" />
+              Plugins
+            </DropdownMenuItem>
+            {analyticsAvailable ? (
+              <DropdownMenuItem
+                onClick={() => analyticsPath && navigate(analyticsPath)}
+                disabled={isRenamePending}
+              >
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Analytics
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            {canRenameProject ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  setRenameSlugInput(projectSlug ?? "");
+                  setShowRenameDialog(true);
+                }}
+                disabled={renameSlugMutation.isPending || isRenamePending}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Rename project slug
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              disabled={isRenamePending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete project
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    ) : null;
+
+    return (
+      <HostHeader
+        leadingAccessory={<SidebarTrigger className="rounded-md" />}
+        leading={
+          <>
+            <div className="min-w-0 truncate text-sm font-medium sm:hidden">
+              {projectSlug}
+            </div>
+            <Breadcrumb className="hidden sm:flex">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
+                    Projects
+                  </HeaderBreadcrumbTextLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </>
+        }
+        trailing={
+          <>
+            {projectActions}
+            {actionSlot}
+          </>
+        }
+      />
+    );
+  };
+
   if (isLoading) {
     return <CenteredLoading message="Loading project..." />;
   }
@@ -683,279 +903,61 @@ export default function EmbeddedStudio() {
 
   if (startStudio.error) {
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4 hidden sm:block" />
-          <Breadcrumb className="hidden sm:flex">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex-1" />
-          <ModeToggle />
-          <HeaderProfileMenu />
-        </header>
-        <div className="flex flex-1 min-h-0 items-center justify-center">
-          <div className="text-destructive">
-            Error starting studio: {startStudio.error.message}
-          </div>
+      <FramedHostShell className="h-full" header={renderEmbeddedHeader({})}>
+        <div className={HOST_VIEWPORT_INSET_CLASS}>
+          <FramedViewport className="flex items-center justify-center">
+            <div className="px-6 text-center text-destructive">
+              Error starting studio: {startStudio.error.message}
+            </div>
+          </FramedViewport>
         </div>
-      </div>
+      </FramedHostShell>
     );
   }
 
   if (startStudio.data && !startStudio.data.success) {
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4 hidden sm:block" />
-          <Breadcrumb className="hidden sm:flex">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex-1" />
-          <ModeToggle />
-          <HeaderProfileMenu />
-        </header>
-        <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3">
-          <div className="text-destructive">
-            Failed to start studio: {startStudio.data.error || "Unknown error"}
-          </div>
-          <Button onClick={handleEdit}>Retry</Button>
+      <FramedHostShell className="h-full" header={renderEmbeddedHeader({})}>
+        <div className={HOST_VIEWPORT_INSET_CLASS}>
+          <FramedViewport className="flex flex-col items-center justify-center gap-3">
+            <div className="px-6 text-center text-destructive">
+              Failed to start studio: {startStudio.data.error || "Unknown error"}
+            </div>
+            <Button onClick={handleEdit} size="sm" className="h-8 rounded-md px-3">
+              Retry
+            </Button>
+          </FramedViewport>
         </div>
-      </div>
+      </FramedHostShell>
     );
   }
 
   if (editRequested && !studioIframeSrc) {
     return (
-      <div className="flex h-full min-h-0 flex-col">
-        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4 hidden sm:block" />
-          <Breadcrumb className="hidden sm:flex">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex-1" />
-          <Button disabled>
-            <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
-            Booting studio…
-          </Button>
-          <ModeToggle />
-          <HeaderProfileMenu />
-        </header>
-        <StudioStartupLoading />
-      </div>
+      <FramedHostShell
+        className="h-full"
+        header={renderEmbeddedHeader({
+          actionSlot: (
+            <Button disabled size="sm" className="h-8 rounded-md px-3">
+              <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
+              Booting studio…
+            </Button>
+          ),
+        })}
+      >
+        <div className={HOST_VIEWPORT_INSET_CLASS}>
+          <FramedViewport className="bg-background/80">
+            <StudioStartupLoading className="h-full min-h-0" />
+          </FramedViewport>
+        </div>
+      </FramedHostShell>
     );
   }
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {!studioIframeSrc ? (
-        <header className="px-2 md:px-4 py-2.5 border-b flex flex-row items-center gap-2 shrink-0 bg-background">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4 hidden sm:block" />
-          <Breadcrumb className="hidden sm:flex">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link to={ROUTES.DASHBOARD}>Projects</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex-1" />
-          {!editRequested ? (
-            <Button
-              onClick={handleEdit}
-              disabled={startStudio.isPending || hardRestartStudio.isPending || isRenamePending}
-            >
-              Edit
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={() => setPublishDialogOpen(true)}
-            disabled={isRenamePending}
-          >
-            Publish
-          </Button>
-          {analyticsAvailable ? (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => analyticsPath && navigate(analyticsPath)}
-              title="Analytics"
-              disabled={isRenamePending}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </Button>
-          ) : null}
-          <Separator orientation="vertical" className="h-4 mx-0.5" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                disabled={isRenamePending}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {/* Actions should stay in sync — see PROJECT_ACTIONS in @vivd/shared */}
-              <DropdownMenuItem
-                onClick={handleCopyPreviewUrl}
-                disabled={!previewIframeSrc || !publicPreviewEnabled || isRenamePending}
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                {previewUrlCopied
-                  ? "Copied!"
-                  : publicPreviewEnabled
-                    ? "Copy preview URL"
-                    : "Preview URL disabled"}
-              </DropdownMenuItem>
-              {canManagePreview && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (!projectSlug) return;
-                    setPublicPreviewEnabledMutation.mutate({
-                      slug: projectSlug,
-                      enabled: !publicPreviewEnabled,
-                    });
-                  }}
-                  disabled={setPublicPreviewEnabledMutation.isPending || isRenamePending}
-                >
-                  {publicPreviewEnabled ? (
-                    <EyeOff className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Eye className="h-4 w-4 mr-2" />
-                  )}
-                  {publicPreviewEnabled
-                    ? "Disable preview URL"
-                    : "Enable preview URL"}
-                </DropdownMenuItem>
-              )}
-              {project?.url && (
-                <DropdownMenuItem
-                  onClick={() => window.open(project.url, "_blank")}
-                  disabled={isRenamePending}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Original website
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onClick={() => {
-                  if (!projectSlug) return;
-                  const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-                  window.open(
-                    `${baseUrl}/vivd-studio/api/download/${projectSlug}/${studioVersion}`,
-                    "_blank",
-                  );
-                }}
-                disabled={!isSelectedVersionCompleted || isRenamePending}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download as ZIP
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleRegenerateThumbnail}
-                disabled={
-                  !isSelectedVersionCompleted ||
-                  regenerateThumbnailMutation.isPending ||
-                  isRenamePending
-                }
-              >
-                {regenerateThumbnailMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Image className="h-4 w-4 mr-2" />
-                )}
-                {regenerateThumbnailMutation.isPending
-                  ? "Regenerating thumbnail..."
-                  : "Regenerate thumbnail"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => navigate(ROUTES.PROJECT_PLUGINS(projectSlug))}
-                disabled={isRenamePending}
-              >
-                <Plug className="h-4 w-4 mr-2" />
-                Plugins
-              </DropdownMenuItem>
-              {analyticsAvailable ? (
-                <DropdownMenuItem
-                  onClick={() => analyticsPath && navigate(analyticsPath)}
-                  disabled={isRenamePending}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Analytics
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuSeparator />
-              {canRenameProject ? (
-                <DropdownMenuItem
-                  onClick={() => {
-                    setRenameSlugInput(projectSlug ?? "");
-                    setShowRenameDialog(true);
-                  }}
-                  disabled={renameSlugMutation.isPending || isRenamePending}
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Rename project slug
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem
-                onClick={() => setShowDeleteConfirm(true)}
-                className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                disabled={isRenamePending}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <ModeToggle />
-          <HeaderProfileMenu />
-        </header>
-      ) : null}
-
-      <div className="flex-1 min-h-0">
-        {studioIframeSrc ? (
+      {studioIframeSrc ? (
+        <div className="flex-1 min-h-0">
           <div className="relative h-full w-full">
             <iframe
               ref={studioIframeRef}
@@ -1017,34 +1019,49 @@ export default function EmbeddedStudio() {
               </div>
             ) : null}
           </div>
-        ) : previewIframeSrc ? (
-          <iframe
-            key={`${projectSlug}-${version}-preview`}
-            src={previewIframeSrc}
-            title={`Preview - ${projectSlug}`}
-            className="h-full w-full border-0"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center p-6">
-            <div className="flex w-full max-w-4xl flex-col gap-4">
-              <div className="text-sm text-muted-foreground">
-                Preview not ready yet{externalPreview?.status ? ` (${externalPreview.status})` : ""}. Click{" "}
-                <span className="font-medium text-foreground">Edit</span> to start a studio machine.
-              </div>
-              {thumbnailSrc ? (
-                <div className="overflow-hidden rounded-lg border bg-muted">
-                  <img
-                    src={thumbnailSrc}
-                    alt={`Thumbnail - ${projectSlug}`}
-                    className="h-auto w-full object-contain"
-                    loading="lazy"
-                  />
+        </div>
+      ) : (
+        <FramedHostShell
+          className="h-full"
+          header={renderEmbeddedHeader({ includeProjectActions: true })}
+        >
+          <div className={HOST_VIEWPORT_INSET_CLASS}>
+            <FramedViewport>
+              {previewIframeSrc ? (
+                <iframe
+                  key={`${projectSlug}-${version}-preview`}
+                  src={previewIframeSrc}
+                  title={`Preview - ${projectSlug}`}
+                  className="h-full w-full border-0"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center p-6">
+                  <div className="flex w-full max-w-4xl flex-col gap-4">
+                    <div className="text-sm text-muted-foreground">
+                      Preview not ready yet
+                      {externalPreview?.status
+                        ? ` (${externalPreview.status})`
+                        : ""}. Click{" "}
+                      <span className="font-medium text-foreground">Edit</span>{" "}
+                      to start a studio machine.
+                    </div>
+                    {thumbnailSrc ? (
+                      <div className="overflow-hidden rounded-lg border bg-muted">
+                        <img
+                          src={thumbnailSrc}
+                          alt={`Thumbnail - ${projectSlug}`}
+                          className="h-auto w-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
-            </div>
+              )}
+            </FramedViewport>
           </div>
-        )}
-      </div>
+        </FramedHostShell>
+      )}
 
       {!studioIframeSrc ? (
         <PublishSiteDialog

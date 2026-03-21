@@ -407,7 +407,7 @@ async function sendPromptAsync(
   const resolvedModel = modelSelection || getDefaultModel();
   if (!resolvedModel) {
     throw new Error(
-      "No model configured. Set OPENCODE_MODELS or OPENCODE_MODEL environment variable.",
+      "No model configured. Set OPENCODE_MODEL_STANDARD and optionally OPENCODE_MODEL_ADVANCED / OPENCODE_MODEL_PRO.",
     );
   }
   const { provider: providerID, modelId: modelID } = resolvedModel;

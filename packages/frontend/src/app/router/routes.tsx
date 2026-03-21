@@ -319,6 +319,7 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           }
         />
         {/* Embedded studio view inside Layout */}
+        <Route path="projects/new/scratch" element={<ScratchWizardRoute />} />
         <Route path="projects/:projectSlug" element={<EmbeddedStudioRoute />} />
         <Route path="projects/:projectSlug/plugins" element={<ProjectPluginsRoute />} />
         <Route path="projects/:projectSlug/analytics" element={<ProjectAnalyticsRoute />} />
@@ -340,16 +341,6 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         element={
           <RequireAuth>
             <FullscreenStudioRoute />
-          </RequireAuth>
-        }
-      />
-
-      {/* Scratch wizard for new projects */}
-      <Route
-        path={ROUTES.NEW_SCRATCH}
-        element={
-          <RequireAuth>
-            <ScratchWizardRoute />
           </RequireAuth>
         }
       />

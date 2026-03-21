@@ -17,3 +17,7 @@ example-projects/
 **/scripts/**/*.png
 
 .creds/
+
+# Local upstream/reference checkouts for agent research
+/vendor/*
+!/vendor/README.md

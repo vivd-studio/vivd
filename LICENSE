@@ -9,18 +9,24 @@ Licensed Work.
 
 Additional Use Grant: You may make production use of the Licensed Work,
 including for commercial purposes and without purchasing a separate commercial
-license, only in a single-tenant deployment dedicated to (a) one business,
-organization, or corporate group under common control, or (b) one client of a
-service provider, provided in each case that the deployment is not shared
-across unrelated customers. This Additional Use Grant includes Vivd's solo
-install profile and substantially similar single-tenant deployments. It does
-not permit (i) any multi-tenant, multi-organization, or shared-control-plane
-deployment, (ii) providing the Licensed Work as a hosted or managed service to
-multiple customers or unrelated end users from a shared deployment, (iii) use
-of Vivd's platform install profile or any substantially similar host-based SaaS
-configuration, or (iv) white-label, OEM, embedded, or other productized
-commercial distribution of the Licensed Work where the value derives
-substantially from Vivd functionality for multiple unrelated customers.
+license, only in a single-tenant deployment dedicated to one business,
+organization, or corporate group under common control, for that entity's own
+internal business operations and public-facing websites that it owns or
+operates. This Additional Use Grant includes Vivd's solo install profile and
+substantially similar single-tenant deployments. Contractors and service
+providers may install, customize, support, or maintain such a deployment on
+that entity's behalf, but this Additional Use Grant does not permit using the
+Licensed Work as part of a recurring client-service offering, website-delivery
+business, managed service, or other commercial service-provider activity for
+unrelated customers, even if each customer receives a separate single-tenant
+deployment. It also does not permit (i) any multi-tenant,
+multi-organization, or shared-control-plane deployment, (ii) providing the
+Licensed Work as a hosted or managed service to multiple customers or
+unrelated end users from a shared deployment, (iii) use of Vivd's platform
+install profile or any substantially similar host-based SaaS configuration, or
+(iv) white-label, OEM, embedded, or other productized commercial distribution
+of the Licensed Work where the value derives substantially from Vivd
+functionality for multiple unrelated customers.
 
 Change Date: The fourth anniversary of the first publicly available
 distribution of each specific version of the Licensed Work.

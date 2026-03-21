@@ -28,9 +28,18 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Keep backend and studio responsibilities separated; avoid duplicating runtime patching logic across both.
 - Frontend should not depend on backend internals via ad-hoc local path aliases; prefer explicit shared contracts.
 
+## Upstream Reference Checkouts
+
+- Keep local upstream/reference repos under `vendor/`; this is the established path for agent-readable external code in this repo.
+- These checkouts are for reference, comparison, and selective borrowing. They are not workspace packages or runtime dependencies.
+- Current paths:
+  - `vendor/opencode`: upstream OpenCode reference checkout (`https://github.com/anomalyco/opencode`).
+  - `vendor/dokploy`: upstream Dokploy reference checkout (`https://github.com/Dokploy/dokploy`) for self-hosting/hosting patterns Vivd may reuse while still running directly on its own server/runtime.
+- If an upstream reference checkout is added, moved, or replaced, update this file and `docs/PROJECT_STATE.md` in the same change so the agent can rely on stable paths.
+
 ## OpenCode Studio Tools
 
-- Local upstream checkout for reference: `vendor/opencode` (upstream: `https://github.com/anomalyco/opencode`).
+- Reference checkout: `vendor/opencode` (upstream: `https://github.com/anomalyco/opencode`).
 - OpenCode web split: docs live in `vendor/opencode/packages/web`, the actual web client UI is `vendor/opencode/packages/app`, and the `opencode web` CLI entrypoint is `vendor/opencode/packages/opencode/src/cli/cmd/web.ts`.
 - Purpose: expose custom Vivd capabilities to the agent (namespace `vivd_*`).
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.

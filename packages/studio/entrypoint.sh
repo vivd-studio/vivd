@@ -83,6 +83,23 @@ if [ -z "$AWS_EC2_METADATA_DISABLED" ]; then
   export AWS_EC2_METADATA_DISABLED=true
 fi
 
+# Canonical S3-compatible credential mapping (optional).
+if [ -n "$VIVD_S3_ACCESS_KEY_ID" ] && [ -z "$AWS_ACCESS_KEY_ID" ]; then
+  export AWS_ACCESS_KEY_ID="$VIVD_S3_ACCESS_KEY_ID"
+fi
+if [ -n "$VIVD_S3_SECRET_ACCESS_KEY" ] && [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+  export AWS_SECRET_ACCESS_KEY="$VIVD_S3_SECRET_ACCESS_KEY"
+fi
+if [ -n "$VIVD_S3_SESSION_TOKEN" ] && [ -z "$AWS_SESSION_TOKEN" ]; then
+  export AWS_SESSION_TOKEN="$VIVD_S3_SESSION_TOKEN"
+fi
+if [ -n "$VIVD_S3_REGION" ] && [ -z "$AWS_DEFAULT_REGION" ]; then
+  export AWS_DEFAULT_REGION="$VIVD_S3_REGION"
+fi
+if [ -n "$VIVD_S3_REGION" ] && [ -z "$AWS_REGION" ]; then
+  export AWS_REGION="$VIVD_S3_REGION"
+fi
+
 # Cloudflare R2 convenience mapping (optional).
 if [ -n "$R2_BUCKET" ] && [ -z "$VIVD_S3_BUCKET" ]; then
   export VIVD_S3_BUCKET="$R2_BUCKET"
@@ -99,6 +116,25 @@ fi
 if [ -n "$VIVD_S3_ENDPOINT_URL" ] && [ -z "$AWS_DEFAULT_REGION" ]; then
   # R2 uses "auto" as region for AWS-compatible tooling.
   export AWS_DEFAULT_REGION=auto
+fi
+
+# Local S3-compatible bucket convenience mapping (optional).
+if [ "${VIVD_BUCKET_MODE:-}" = "local" ]; then
+  if [ -n "$VIVD_LOCAL_S3_BUCKET" ] && [ -z "$VIVD_S3_BUCKET" ]; then
+    export VIVD_S3_BUCKET="$VIVD_LOCAL_S3_BUCKET"
+  fi
+  if [ -n "$VIVD_LOCAL_S3_ENDPOINT_URL" ] && [ -z "$VIVD_S3_ENDPOINT_URL" ]; then
+    export VIVD_S3_ENDPOINT_URL="$VIVD_LOCAL_S3_ENDPOINT_URL"
+  fi
+  if [ -n "$VIVD_LOCAL_S3_ACCESS_KEY" ] && [ -z "$AWS_ACCESS_KEY_ID" ]; then
+    export AWS_ACCESS_KEY_ID="$VIVD_LOCAL_S3_ACCESS_KEY"
+  fi
+  if [ -n "$VIVD_LOCAL_S3_SECRET_KEY" ] && [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    export AWS_SECRET_ACCESS_KEY="$VIVD_LOCAL_S3_SECRET_KEY"
+  fi
+  if [ -z "$AWS_DEFAULT_REGION" ]; then
+    export AWS_DEFAULT_REGION="${VIVD_LOCAL_S3_REGION:-us-east-1}"
+  fi
 fi
 
 aws_s3_sync() {
