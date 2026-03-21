@@ -5,6 +5,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useOpencodeSessionActivity } from "@/features/opencodeChat";
 import { cn } from "@/lib/utils";
 import {
+  ChevronRight,
   FolderOpen,
   History,
   Maximize2,
@@ -311,11 +312,17 @@ export function StudioToolbar() {
     reservedWorkspaceControlsWidth + workspaceControlsOffset + 12,
   );
   const maxLeadingWidth = chatOpen
-    ? Math.max(148, workspaceControlStart - headerHorizontalPadding - 12)
+    ? Math.max(148, workspaceControlStart - headerHorizontalPadding - 8)
     : undefined;
   const shouldCompressLeadingIdentity =
     typeof maxLeadingWidth === "number" && maxLeadingWidth < 320;
-  const slugMaxWidth = shouldCompressLeadingIdentity ? 112 : 220;
+  const canFitProjectsBreadcrumb =
+    typeof maxLeadingWidth !== "number" || maxLeadingWidth >= 184;
+  const showProjectsBreadcrumb =
+    Boolean(projectSlug) &&
+    canFitProjectsBreadcrumb &&
+    previewWorkspaceWidth >= 360 &&
+    viewportWidth >= 980;
 
   const handleToggleFullscreen = () => {
     if (!embedded) return;
@@ -512,14 +519,14 @@ export function StudioToolbar() {
         <div className="flex flex-wrap items-center gap-1 px-3 py-1 md:flex-nowrap md:px-4">
           <div
             ref={leadingContentRef}
-            className="flex min-w-0 shrink items-center gap-1 overflow-hidden"
+            className="flex min-w-0 shrink items-center gap-2"
             style={maxLeadingWidth ? { maxWidth: maxLeadingWidth } : undefined}
           >
             {embedded && !fullscreen ? (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 rounded-md"
+                className="h-7 w-7 shrink-0 rounded-md"
                 onClick={() => {
                   window.parent?.postMessage(
                     { type: "vivd:studio:toggleSidebar" },
@@ -531,60 +538,72 @@ export function StudioToolbar() {
                 <span className="sr-only">Toggle Sidebar</span>
               </Button>
             ) : (
-              <div className="flex items-center">
+              <div className="flex shrink-0 items-center">
                 <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
               </div>
             )}
 
-            <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-              {projectSlug ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="min-w-0 max-w-full shrink rounded-md px-2 py-0 text-[13px] font-semibold"
-                    >
-                      <span
-                        className="truncate"
-                        style={{ maxWidth: `${slugMaxWidth}px` }}
-                        title={projectSlug}
-                      >
-                        {projectSlug}
-                      </span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={handleClose}>
-                      Back to Projects
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <span className="hidden sm:inline text-sm font-medium text-muted-foreground">
-                  Preview
-                </span>
-              )}
-              {projectSlug && (
-                <VersionSelector
-                  selectedVersion={selectedVersion}
-                  versions={versions}
-                  onSelect={handleVersionSelect}
-                  triggerVariant="secondary"
-                  triggerClassName={
-                    hasMultipleVersions
-                      ? "h-7 shrink-0 rounded-md px-1.5 py-0 text-[11px] font-normal cursor-pointer transition-colors hover:bg-secondary/80"
-                      : "h-7 shrink-0 rounded-md px-1.5 py-0 text-[11px] font-normal"
-                  }
-                  triggerTitle={
-                    hasMultipleVersions
-                      ? `Click to select from ${versions.length} versions`
-                      : undefined
-                  }
-                  align="start"
-                  label="Select Version"
-                />
-              )}
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {showProjectsBreadcrumb ? (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="shrink-0 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-4"
+                  >
+                    Projects
+                  </button>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                </div>
+              ) : null}
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                {projectSlug ? (
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-full min-w-0 justify-start overflow-hidden rounded-md px-1.5 py-0 text-sm font-medium"
+                        >
+                          <span className="truncate" title={projectSlug}>
+                            {projectSlug}
+                          </span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={handleClose}>
+                          Back to Projects
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ) : (
+                  <span className="hidden sm:inline text-sm font-medium text-muted-foreground">
+                    Preview
+                  </span>
+                )}
+                {projectSlug && (
+                  <VersionSelector
+                    selectedVersion={selectedVersion}
+                    versions={versions}
+                    onSelect={handleVersionSelect}
+                    triggerVariant="secondary"
+                    triggerClassName={
+                      hasMultipleVersions
+                        ? "h-7 shrink-0 rounded-md px-1.5 py-0 text-[11px] font-normal cursor-pointer transition-colors hover:bg-secondary/80"
+                        : "h-7 shrink-0 rounded-md px-1.5 py-0 text-[11px] font-normal"
+                    }
+                    triggerTitle={
+                      hasMultipleVersions
+                        ? `Click to select from ${versions.length} versions`
+                        : undefined
+                    }
+                    align="start"
+                    label="Select Version"
+                  />
+                )}
+              </div>
             </div>
           </div>
 

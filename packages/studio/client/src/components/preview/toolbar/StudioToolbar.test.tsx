@@ -193,4 +193,39 @@ describe("StudioToolbar", () => {
       screen.queryByTestId("sessions-button-activity-indicator"),
     ).not.toBeInTheDocument();
   });
+
+  it("shows an inline Projects breadcrumb when the toolbar has enough room", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1280,
+    });
+
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      chatOpen: true,
+      chatPanel: { width: 560 },
+    });
+
+    render(<StudioToolbar />);
+
+    expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
+  });
+
+  it("hides the inline Projects breadcrumb when the viewport gets too narrow", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 920,
+    });
+
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      chatOpen: true,
+    });
+
+    render(<StudioToolbar />);
+
+    expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
+  });
 });
