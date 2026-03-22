@@ -41,9 +41,11 @@ export function useActiveTurnAnchor({
   const userMessageRowRefs = useRef(new Map<string, HTMLDivElement>());
   const lastAnchoredUserMessageIdRef = useRef<string | null>(null);
   const pendingHydrationAnchorRef = useRef(true);
+  const pendingAnchorLayoutAdjustmentsRef = useRef(0);
 
   const CHAT_ANCHOR_TOP_INSET_PX = 40;
   const ACTIVE_TURN_BODY_GAP_PX = 8;
+  const MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS = 1;
 
   const getScrollViewport = useCallback(
     (): HTMLDivElement | null => scrollViewportRef.current,
@@ -138,6 +140,7 @@ export function useActiveTurnAnchor({
   useEffect(() => {
     pendingHydrationAnchorRef.current = true;
     lastAnchoredUserMessageIdRef.current = null;
+    pendingAnchorLayoutAdjustmentsRef.current = 0;
     setActiveTurnLayout(null);
     setPendingAnchorRequest(null);
   }, [selectedSessionId]);
@@ -157,6 +160,7 @@ export function useActiveTurnAnchor({
       ? "auto"
       : "smooth";
     pendingHydrationAnchorRef.current = false;
+    pendingAnchorLayoutAdjustmentsRef.current = 0;
     setActiveTurnLayout({
       messageId: latestUserMessageId,
       bodyMinHeight: 0,
@@ -169,6 +173,7 @@ export function useActiveTurnAnchor({
 
   useEffect(() => {
     if (!latestUserMessageId) {
+      pendingAnchorLayoutAdjustmentsRef.current = 0;
       setActiveTurnLayout(null);
       setPendingAnchorRequest(null);
     }
@@ -186,15 +191,37 @@ export function useActiveTurnAnchor({
       return;
     }
 
-    if (
-      activeTurnLayout?.messageId !== pendingAnchorRequest.messageId ||
-      activeTurnLayout.bodyMinHeight !== nextBodyMinHeight
-    ) {
-      setActiveTurnLayout({
-        messageId: pendingAnchorRequest.messageId,
-        bodyMinHeight: nextBodyMinHeight,
+    const nextLayout = {
+      messageId: pendingAnchorRequest.messageId,
+      bodyMinHeight: nextBodyMinHeight,
+    };
+    const layoutMatches =
+      activeTurnLayout?.messageId === pendingAnchorRequest.messageId &&
+      activeTurnLayout.bodyMinHeight === nextBodyMinHeight;
+
+    if (!layoutMatches) {
+      // Classic scrollbars can change the available width after overflow appears,
+      // which can change wrapped user-message height and make this measurement
+      // bounce between values. Only allow one synchronous retry here and let the
+      // ResizeObserver-based background sync settle the final min-height.
+      if (
+        pendingAnchorLayoutAdjustmentsRef.current <
+        MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS
+      ) {
+        pendingAnchorLayoutAdjustmentsRef.current += 1;
+        setActiveTurnLayout(nextLayout);
+        return;
+      }
+
+      setActiveTurnLayout((prev) => {
+        if (
+          prev?.messageId === nextLayout.messageId &&
+          prev.bodyMinHeight === nextLayout.bodyMinHeight
+        ) {
+          return prev;
+        }
+        return nextLayout;
       });
-      return;
     }
 
     const viewport = getScrollViewport();
@@ -202,6 +229,7 @@ export function useActiveTurnAnchor({
       return;
     }
 
+    pendingAnchorLayoutAdjustmentsRef.current = 0;
     viewport.scrollTo({
       top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
       behavior: pendingAnchorRequest.behavior,

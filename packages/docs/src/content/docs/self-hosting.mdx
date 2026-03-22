@@ -40,8 +40,8 @@ curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --no-start
 # Use an upstream TLS terminator such as Dockploy or Traefik
 curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --tls-mode external
 
-# Disable single-project mode
-curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --single-project false
+# Enable single-project mode
+curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --single-project true
 ```
 
 The installer prompts for:
@@ -63,8 +63,8 @@ It then:
 - generates fresh secrets for auth, scraper access, and Postgres
 - provisions a local S3-compatible bucket for project storage
 - uses that one public host as the canonical `DOMAIN` for the install
-- sets `OPENCODE_MODEL_STANDARD=openrouter/google/gemini-2.5-flash`
-- sets `OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3-pro-preview`
+- sets `OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview`
+- sets `OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview`
 - enables `STUDIO_MACHINE_PROVIDER=docker`
 - starts the stack with `docker compose up -d`
 
@@ -73,6 +73,58 @@ The bundle files are public and editable:
 - [docker-compose.yml](/install/docker-compose.yml)
 - [Caddyfile](/install/Caddyfile) for bundled Caddy-managed HTTPS
 - [Caddyfile.plain-http](/install/Caddyfile.plain-http) for Dockploy, Traefik, or other upstream TLS terminators
+
+## Docker Compose path
+
+If you want to self-host from the published Compose bundle without running `install.sh`,
+start from the same files the installer downloads:
+
+```bash
+mkdir -p ~/vivd
+cd ~/vivd
+curl -fsSLo docker-compose.yml https://docs.vivd.studio/install/docker-compose.yml
+curl -fsSLo Caddyfile https://docs.vivd.studio/install/Caddyfile
+```
+
+For an upstream TLS terminator such as Dockploy or Traefik, use the plain HTTP Caddyfile instead:
+
+```bash
+curl -fsSLo Caddyfile https://docs.vivd.studio/install/Caddyfile.plain-http
+```
+
+The published Compose file includes many optional passthrough envs for alternate storage,
+email, and routing setups. For a normal `solo` install, the important `.env` values are:
+
+```env
+DOMAIN=https://example.com
+OPENROUTER_API_KEY=sk-or-v1-...
+STUDIO_MACHINE_PROVIDER=docker
+VIVD_CADDY_TLS_MODE=managed
+OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
+OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
+```
+
+If you are not using the installer, you also need to provide the secrets and internal
+credentials that the installer would normally generate for you:
+
+```env
+BETTER_AUTH_SECRET=generate-a-long-random-secret
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=generate-a-long-random-password
+POSTGRES_DB=vivd
+SCRAPER_API_KEY=generate-a-long-random-secret
+VIVD_LOCAL_S3_ACCESS_KEY=generate-a-long-random-key
+VIVD_LOCAL_S3_SECRET_KEY=generate-a-long-random-secret
+```
+
+Then start the stack:
+
+```bash
+docker compose up -d
+```
+
+For the optional and advanced env groups behind that larger Compose file, use
+[Self-Host Config Reference](/self-host-config-reference/).
 
 ## What gets installed
 
@@ -174,6 +226,8 @@ Most self-host installs do not need much more env work. You usually only edit `.
 For the install-wide UI surface behind those choices, use [Instance Settings](/instance-settings/).
 Use [Email & Deliverability](/email-and-deliverability/) for the admin-side email
 identity and suppression/webhook workflows.
+Use [Self-Host Config Reference](/self-host-config-reference/) for the broader optional
+env surface behind the published Compose bundle.
 
 ### SMTP example
 

@@ -1,6 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Sidebar, SidebarProvider, SidebarTrigger } from "./sidebar";
+import {
+  Sidebar,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "./sidebar";
 
 const SIDEBAR_STORAGE_KEY = "sidebar_state";
 
@@ -15,6 +22,18 @@ function TestSidebar({
         <div>Navigation</div>
       </Sidebar>
       <SidebarTrigger />
+    </SidebarProvider>
+  );
+}
+
+function TestSidebarTooltip() {
+  return (
+    <SidebarProvider defaultOpen={false}>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton tooltip="Organizations">Org</SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
     </SidebarProvider>
   );
 }
@@ -70,5 +89,23 @@ describe("SidebarProvider persistence", () => {
       "data-state",
       "collapsed",
     );
+  });
+
+  it("closes collapsed sidebar tooltips when the pointer leaves the trigger", async () => {
+    render(<TestSidebarTooltip />);
+
+    const trigger = screen.getByRole("button", { name: "Org" });
+
+    fireEvent.pointerMove(trigger);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Organizations");
+
+    fireEvent.pointerLeave(trigger);
+    fireEvent.pointerMove(tooltip);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    });
   });
 });

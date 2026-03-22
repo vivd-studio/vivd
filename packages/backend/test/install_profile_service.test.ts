@@ -68,7 +68,7 @@ describe("InstallProfileService", () => {
   it("defaults fresh installs to solo when no stored or env profile is set", async () => {
     await expect(installProfileService.getInstallProfile()).resolves.toBe("solo");
 
-    await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(true);
+    await expect(installProfileService.isSingleProjectModeEnabled()).resolves.toBe(false);
   });
 
   it("uses explicit platform env when configured", async () => {

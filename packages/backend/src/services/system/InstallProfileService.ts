@@ -258,8 +258,8 @@ class InstallProfileService {
   ): Promise<boolean> {
     const envValue = parseBoolean(process.env.SINGLE_PROJECT_MODE);
     if (envValue !== null) return envValue;
-
-    return (resolvedProfile ?? (await this.getInstallProfile())) === "solo";
+    void resolvedProfile;
+    return false;
   }
 
   async updateInstallProfile(profile: InstallProfile): Promise<void> {

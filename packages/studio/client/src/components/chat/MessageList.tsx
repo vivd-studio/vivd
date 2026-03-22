@@ -281,7 +281,7 @@ export function MessageList() {
       <div
         ref={scrollViewportRef}
         data-chat-scroll-viewport=""
-        className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+        className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]"
       >
         <div
           ref={transcriptContentRef}

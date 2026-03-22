@@ -172,7 +172,6 @@ services:
     command: npm run dev
     networks:
       - vivd-network
-    platform: linux/amd64
     ports:
       - "3001:3001"
     develop:

@@ -43,7 +43,7 @@ Optimized for self-hosted quickstart.
 - Public site lives at `/`.
 - Studio lives at `/vivd-studio`.
 - Public plugin endpoints live on the same host by default (`/plugins/*`).
-- `SINGLE_PROJECT_MODE=true` by default.
+- `SINGLE_PROJECT_MODE` stays optional and off by default.
 - Most super-admin/platform concepts are hidden or collapsed into instance settings.
 - No tenant-host model is required.
 - No per-project plugin entitlement matrix is required.

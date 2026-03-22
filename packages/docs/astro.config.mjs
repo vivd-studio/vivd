@@ -43,6 +43,7 @@ export default defineConfig({
           label: "Self-Hosting & Admin",
           items: [
             { slug: "self-hosting", label: "Self-Hosting" },
+            { slug: "self-host-config-reference", label: "Self-Host Config Reference" },
             { slug: "instance-settings", label: "Instance Settings" },
             { slug: "email-and-deliverability", label: "Email & Deliverability" },
           ],

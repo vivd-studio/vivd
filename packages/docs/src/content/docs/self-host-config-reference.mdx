@@ -1,0 +1,221 @@
+---
+title: Self-Host Config Reference
+description: Optional and advanced environment variables for the solo self-hosted Vivd bundle.
+---
+
+Most self-hosted `solo` installs do not need this page.
+The normal path is still:
+
+- set `DOMAIN`
+- set `OPENROUTER_API_KEY`
+- let the installer generate the secrets and local bucket credentials
+
+This page is for the larger set of optional envs that still appear in the published
+Docker Compose bundle.
+
+## Core install
+
+These are the main envs for a normal `solo` install:
+
+```env
+DOMAIN=https://example.com
+OPENROUTER_API_KEY=sk-or-v1-...
+STUDIO_MACHINE_PROVIDER=docker
+VIVD_CADDY_TLS_MODE=managed
+OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
+OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
+```
+
+If you are not using `install.sh`, you must also provide:
+
+```env
+BETTER_AUTH_SECRET=...
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=...
+POSTGRES_DB=vivd
+SCRAPER_API_KEY=...
+VIVD_LOCAL_S3_ACCESS_KEY=...
+VIVD_LOCAL_S3_SECRET_KEY=...
+```
+
+## Network and TLS overrides
+
+These are advanced overrides. Most `solo` installs can leave them unset and use
+`DOMAIN` plus the `Instance Settings -> Network` UI later.
+
+```env
+# Force the canonical public app origin explicitly
+VIVD_APP_URL=https://example.com
+
+# Legacy auth/public-origin override
+BETTER_AUTH_URL=https://example.com
+
+# Advanced host override when admin lives on another host
+CONTROL_PLANE_HOST=app.example.com
+
+# Additional trusted or admin-only hosts
+SUPERADMIN_HOSTS=app.example.com
+TRUSTED_DOMAINS=preview.example.com
+
+# Bundled Caddy TLS controls
+VIVD_CADDY_TLS_MODE=managed     # managed | external | off
+VIVD_CADDY_ACME_EMAIL=admin@example.com
+VIVD_PUBLISH_INCLUDE_WWW_ALIAS=false
+```
+
+For the admin-side meaning of those settings, read [Instance Settings](/instance-settings/).
+
+## Email delivery
+
+Start with one provider plus `VIVD_EMAIL_FROM`.
+
+```env
+VIVD_EMAIL_PROVIDER=smtp
+VIVD_EMAIL_FROM=noreply@example.com
+```
+
+SMTP:
+
+```env
+VIVD_SMTP_HOST=smtp.example.com
+VIVD_SMTP_PORT=587
+VIVD_SMTP_USER=your-user
+VIVD_SMTP_PASSWORD=your-password
+VIVD_SMTP_SECURE=false
+```
+
+Alternative SMTP shortcut:
+
+```env
+VIVD_SMTP_URL=smtps://user:pass@smtp.example.com:465
+```
+
+Resend:
+
+```env
+VIVD_EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_xxx
+RESEND_WEBHOOK_SECRET=whsec_xxx
+```
+
+SES:
+
+```env
+VIVD_EMAIL_PROVIDER=ses
+VIVD_SES_REGION=eu-central-1
+VIVD_SES_ACCESS_KEY_ID=...
+VIVD_SES_SECRET_ACCESS_KEY=...
+VIVD_SES_FROM_EMAIL=noreply@example.com
+```
+
+Optional transactional email identity/footer bootstrap:
+
+```env
+VIVD_EMAIL_BRAND_DISPLAY_NAME=Example Studio
+VIVD_EMAIL_BRAND_SUPPORT_EMAIL=support@example.com
+VIVD_EMAIL_BRAND_WEBSITE_URL=https://example.com
+VIVD_EMAIL_BRAND_IMPRINT_URL=https://example.com/imprint
+VIVD_EMAIL_BRAND_PRIVACY_URL=https://example.com/privacy
+```
+
+For provider behavior, webhooks, and deliverability workflows, read
+[Email & Deliverability](/email-and-deliverability/).
+
+## Storage
+
+The hosted self-host bundle defaults to the bundled local S3-compatible bucket:
+
+```env
+VIVD_BUCKET_MODE=local
+VIVD_LOCAL_S3_BUCKET=vivd
+VIVD_LOCAL_S3_ENDPOINT_URL=http://minio:9000
+VIVD_LOCAL_S3_ACCESS_KEY=...
+VIVD_LOCAL_S3_SECRET_KEY=...
+VIVD_LOCAL_S3_REGION=us-east-1
+```
+
+To switch later to an external S3-compatible bucket:
+
+```env
+VIVD_BUCKET_MODE=external
+VIVD_S3_BUCKET=vivd
+VIVD_S3_ENDPOINT_URL=https://s3.example.com
+VIVD_S3_ACCESS_KEY_ID=...
+VIVD_S3_SECRET_ACCESS_KEY=...
+VIVD_S3_REGION=us-east-1
+```
+
+Optional storage extras:
+
+```env
+VIVD_S3_PUBLIC_BASE_URL=https://cdn.example.com
+VIVD_S3_DOWNLOAD_ENDPOINT_URL=https://objects.example.com
+VIVD_S3_SESSION_TOKEN=...
+```
+
+R2 compatibility aliases still work:
+
+```env
+R2_BUCKET=vivd
+R2_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+R2_ACCESS_KEY=...
+R2_SECRET_KEY=...
+```
+
+## Integrations and optional services
+
+Cloudflare Turnstile automation:
+
+```env
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+```
+
+GitHub backup/sync:
+
+```env
+GITHUB_SYNC_ENABLED=true
+GITHUB_ORG=your-github-org
+GITHUB_TOKEN=ghp_xxx
+```
+
+External scraper service:
+
+```env
+SCRAPER_URL=https://scraper.example.com
+SCRAPER_API_KEY=...
+```
+
+## Studio / model overrides
+
+Optional OpenCode model overrides:
+
+```env
+OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
+OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
+OPENCODE_MODEL_PRO=openrouter/google/gemini-3.1-pro-preview
+```
+
+Optional Vertex-based configuration:
+
+```env
+GOOGLE_CLOUD_PROJECT=your-gcp-project
+VERTEX_LOCATION=global
+GOOGLE_APPLICATION_CREDENTIALS_JSON='{"type":"service_account",...}'
+```
+
+Optional Docker Studio tuning:
+
+```env
+DOCKER_STUDIO_CPUS=1
+DOCKER_STUDIO_MEMORY_MB=2048
+DOCKER_STUDIO_NETWORK=vivd-network
+DOCKER_STUDIO_ROUTE_PREFIX=/_studio
+DOCKER_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:latest
+```
+
+## Notes
+
+- This reference is intentionally scoped to the self-hosted `solo` bundle.
+- The root `.env.example` in the repo is broader because it also covers local dev and platform/SaaS paths.
+- If an env is not mentioned here, check whether it is really needed for your install before adding it.

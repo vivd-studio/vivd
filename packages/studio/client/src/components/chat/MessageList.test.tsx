@@ -57,6 +57,7 @@ const userMessageContentScrollHeightById = vi.hoisted(() => ({
   "user-2": 80,
 } as Record<string, number>));
 const resizeObserverCallbacks = vi.hoisted(() => [] as ResizeObserverCallback[]);
+const oscillatingActiveTurnRowIds = vi.hoisted(() => new Set<string>());
 
 vi.mock("@/features/opencodeChat", () => ({
   useOpencodeChat: () => ({
@@ -95,6 +96,7 @@ describe("MessageList latest-user anchoring", () => {
     userMessageContentScrollHeightById["user-1"] = 80;
     userMessageContentScrollHeightById["user-2"] = 80;
     resizeObserverCallbacks.length = 0;
+    oscillatingActiveTurnRowIds.clear();
 
     Object.defineProperty(window, "requestAnimationFrame", {
       configurable: true,
@@ -212,14 +214,28 @@ describe("MessageList latest-user anchoring", () => {
           };
         }
         if (element.dataset.chatUserRowId) {
-          const top = anchorTopById[element.dataset.chatUserRowId] ?? 0;
+          const messageId = element.dataset.chatUserRowId;
+          const top = anchorTopById[messageId] ?? 0;
+          const activeTurnBody = messageId
+            ? document.querySelector<HTMLElement>(
+                `[data-chat-active-turn-body='${messageId}']`,
+              )
+            : null;
+          const activeTurnMinHeight = Number.parseFloat(
+            activeTurnBody?.style.minHeight || "0",
+          );
+          const rowBottomOffset =
+            messageId && oscillatingActiveTurnRowIds.has(messageId) &&
+            activeTurnMinHeight >= 220
+              ? 72
+              : 52;
           return {
             top: viewportTop + top - 24 - currentScrollTop,
             left: 0,
-            bottom: viewportTop + top + 52 - currentScrollTop,
+            bottom: viewportTop + top + rowBottomOffset - currentScrollTop,
             right: 260,
             width: 260,
-            height: 76,
+            height: rowBottomOffset + 24,
             x: 0,
             y: viewportTop + top - 24 - currentScrollTop,
             toJSON() {
@@ -358,6 +374,25 @@ describe("MessageList latest-user anchoring", () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("stops retrying the active-turn measurement when layout shifts keep changing the row height", async () => {
+    oscillatingActiveTurnRowIds.add("user-1");
+
+    render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+      expect(scrollToMock).toHaveBeenLastCalledWith({
+        top: 80,
+        behavior: "auto",
+      });
+    });
+
+    const activeTurnBody = document.querySelector<HTMLElement>(
+      "[data-chat-active-turn-body='user-1']",
+    );
+    expect(["200px", "220px"]).toContain(activeTurnBody?.style.minHeight ?? "");
   });
 
   it("does not show a long-message toggle for short user prompts", async () => {

@@ -6,7 +6,7 @@ INSTALLER_BASE_URL="${VIVD_INSTALLER_BASE_URL:-$DEFAULT_INSTALLER_BASE_URL}"
 INSTALL_DIR="${VIVD_INSTALL_DIR:-$HOME/vivd}"
 PRIMARY_HOST_INPUT="${VIVD_DOMAIN:-}"
 OPENROUTER_API_KEY_INPUT="${OPENROUTER_API_KEY:-}"
-SINGLE_PROJECT_MODE_INPUT="${VIVD_SINGLE_PROJECT_MODE:-true}"
+SINGLE_PROJECT_MODE_INPUT="${VIVD_SINGLE_PROJECT_MODE:-false}"
 SELFHOST_IMAGE_TAG_INPUT="${VIVD_SELFHOST_IMAGE_TAG:-}"
 TLS_MODE_INPUT="${VIVD_TLS_MODE:-auto}"
 ACME_EMAIL_INPUT="${VIVD_ACME_EMAIL:-}"
@@ -23,7 +23,7 @@ Optional flags:
   --install-dir <path>       Target directory (default: ~/vivd)
   --domain <host>            Primary host or origin, e.g. example.com
   --openrouter-api-key <key> OpenRouter API key
-  --single-project <bool>    true or false (default: true)
+  --single-project <bool>    true or false (default: false)
   --image-tag <tag>          Self-host image tag (default: latest or latest-arm64)
   --tls-mode <mode>          auto, managed, or external (default: auto)
   --acme-email <email>       Email used for managed HTTPS certificates
@@ -331,10 +331,8 @@ VIVD_CADDY_TLS_MODE=$RESOLVED_TLS_MODE
 VIVD_CADDY_ACME_EMAIL=$ACME_EMAIL_INPUT
 VIVD_PUBLISH_INCLUDE_WWW_ALIAS=false
 SCRAPER_API_KEY=$SCRAPER_API_KEY_VALUE
-VIVD_INSTALL_PROFILE=solo
 TENANT_DOMAIN_ROUTING_ENABLED=false
 STUDIO_MACHINE_PROVIDER=docker
-SINGLE_PROJECT_MODE=$SINGLE_PROJECT_MODE_INPUT
 VIVD_BUCKET_MODE=local
 VIVD_LOCAL_S3_BUCKET=$LOCAL_S3_BUCKET_VALUE
 VIVD_LOCAL_S3_ENDPOINT_URL=http://minio:9000
@@ -342,8 +340,8 @@ VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL=$PRIMARY_ORIGIN/_vivd_s3
 VIVD_LOCAL_S3_ACCESS_KEY=$LOCAL_S3_ACCESS_KEY_VALUE
 VIVD_LOCAL_S3_SECRET_KEY=$LOCAL_S3_SECRET_KEY_VALUE
 VIVD_LOCAL_S3_REGION=us-east-1
-OPENCODE_MODEL_STANDARD=openrouter/google/gemini-2.5-flash
-OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3-pro-preview
+OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
+OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
 VIVD_SELFHOST_IMAGE_TAG=$SELFHOST_IMAGE_TAG_INPUT
 VIVD_PUBLIC_DOCS_BASE_URL=https://docs.vivd.studio
 DOCKER_STUDIO_NETWORK=vivd-network
@@ -351,6 +349,10 @@ DOCKER_STUDIO_ROUTE_PREFIX=/_studio
 DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL=http://caddy
 DOCKER_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:$SELFHOST_IMAGE_TAG_INPUT
 EOF
+
+if [ "$SINGLE_PROJECT_MODE_INPUT" = "true" ]; then
+  printf '\nSINGLE_PROJECT_MODE=true\n' >>"$INSTALL_DIR/.env"
+fi
 
 log "Wrote install files to $INSTALL_DIR"
 
