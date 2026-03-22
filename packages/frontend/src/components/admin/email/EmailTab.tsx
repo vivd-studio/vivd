@@ -16,6 +16,60 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type BrandingState = {
+  displayName: string;
+  logoUrl: string;
+  supportEmail: string;
+  websiteUrl: string;
+  legalName: string;
+  legalAddress: string;
+  imprintUrl: string;
+  privacyUrl: string;
+  termsUrl: string;
+};
+
+function emptyBrandingState(): BrandingState {
+  return {
+    displayName: "",
+    logoUrl: "",
+    supportEmail: "",
+    websiteUrl: "",
+    legalName: "",
+    legalAddress: "",
+    imprintUrl: "",
+    privacyUrl: "",
+    termsUrl: "",
+  };
+}
+
+function toBrandingState(
+  value:
+    | Partial<{
+        displayName: string;
+        logoUrl: string;
+        supportEmail: string;
+        websiteUrl: string;
+        legalName: string;
+        legalAddress: string;
+        imprintUrl: string;
+        privacyUrl: string;
+        termsUrl: string;
+      }>
+    | undefined,
+): BrandingState {
+  return {
+    displayName: value?.displayName ?? "",
+    logoUrl: value?.logoUrl ?? "",
+    supportEmail: value?.supportEmail ?? "",
+    websiteUrl: value?.websiteUrl ?? "",
+    legalName: value?.legalName ?? "",
+    legalAddress: value?.legalAddress ?? "",
+    imprintUrl: value?.imprintUrl ?? "",
+    privacyUrl: value?.privacyUrl ?? "",
+    termsUrl: value?.termsUrl ?? "",
+  };
+}
+
 function formatDateTime(value: string | null): string {
   if (!value) return "Never";
   const date = new Date(value);
@@ -43,6 +97,7 @@ export function EmailTab() {
   const [complaintRateThresholdPercent, setComplaintRateThresholdPercent] =
     useState("0.1");
   const [bounceRateThresholdPercent, setBounceRateThresholdPercent] = useState("5");
+  const [branding, setBranding] = useState<BrandingState>(emptyBrandingState);
 
   useEffect(() => {
     if (!overview) return;
@@ -52,6 +107,7 @@ export function EmailTab() {
       String(overview.policy.complaintRateThresholdPercent),
     );
     setBounceRateThresholdPercent(String(overview.policy.bounceRateThresholdPercent));
+    setBranding(toBrandingState(overview.templateBranding));
   }, [overview]);
 
   const updatePolicyMutation =
@@ -80,6 +136,19 @@ export function EmailTab() {
       },
     });
 
+  const updateBrandingMutation =
+    trpc.superadmin.emailTemplateBrandingUpdate.useMutation({
+      onSuccess: async () => {
+        toast.success("Email identity updated");
+        await utils.superadmin.emailDeliverabilityOverview.invalidate();
+      },
+      onError: (error) => {
+        toast.error("Failed to update email identity", {
+          description: error.message,
+        });
+      },
+    });
+
   const handleSavePolicy = () => {
     const complaintThreshold = Number.parseFloat(complaintRateThresholdPercent);
     if (!Number.isFinite(complaintThreshold) || complaintThreshold < 0 || complaintThreshold > 100) {
@@ -101,8 +170,196 @@ export function EmailTab() {
     });
   };
 
+  const handleSaveBranding = () => {
+    updateBrandingMutation.mutate({
+      displayName: branding.displayName.trim() || null,
+      logoUrl: branding.logoUrl.trim() || null,
+      supportEmail: branding.supportEmail.trim() || null,
+      websiteUrl: branding.websiteUrl.trim() || null,
+      legalName: branding.legalName.trim() || null,
+      legalAddress: branding.legalAddress.trim() || null,
+      imprintUrl: branding.imprintUrl.trim() || null,
+      privacyUrl: branding.privacyUrl.trim() || null,
+      termsUrl: branding.termsUrl.trim() || null,
+    });
+  };
+
+  const usesMinimalFooter = Object.values(branding).every(
+    (value) => value.trim().length === 0,
+  );
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Email Identity</CardTitle>
+          <CardDescription>
+            Optional branding and legal footer for transactional emails. Leave fields
+            blank to keep the default email footer minimal.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+            {usesMinimalFooter
+              ? "No email identity details configured. Transactional emails will stay minimal and omit footer/legal details."
+              : "Configured values below will be used in transactional email headers and footers for this instance."}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-display-name">Display name</Label>
+              <Input
+                id="email-brand-display-name"
+                value={branding.displayName}
+                placeholder="Example Studio"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    displayName: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-logo-url">Logo URL</Label>
+              <Input
+                id="email-brand-logo-url"
+                value={branding.logoUrl}
+                placeholder="https://example.com/logo.png"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    logoUrl: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-support-email">Support email</Label>
+              <Input
+                id="email-brand-support-email"
+                value={branding.supportEmail}
+                placeholder="support@example.com"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    supportEmail: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-website-url">Website URL</Label>
+              <Input
+                id="email-brand-website-url"
+                value={branding.websiteUrl}
+                placeholder="https://example.com"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    websiteUrl: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-legal-name">Legal entity name</Label>
+              <Input
+                id="email-brand-legal-name"
+                value={branding.legalName}
+                placeholder="Example GmbH"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    legalName: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-legal-address">Postal address</Label>
+              <Input
+                id="email-brand-legal-address"
+                value={branding.legalAddress}
+                placeholder="Street 1, 12345 City"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    legalAddress: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-imprint-url">Legal notice URL</Label>
+              <Input
+                id="email-brand-imprint-url"
+                value={branding.imprintUrl}
+                placeholder="https://example.com/imprint"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    imprintUrl: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-brand-privacy-url">Privacy URL</Label>
+              <Input
+                id="email-brand-privacy-url"
+                value={branding.privacyUrl}
+                placeholder="https://example.com/privacy"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    privacyUrl: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="email-brand-terms-url">Terms URL</Label>
+              <Input
+                id="email-brand-terms-url"
+                value={branding.termsUrl}
+                placeholder="https://example.com/terms"
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    termsUrl: event.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSaveBranding}
+              disabled={updateBrandingMutation.isPending}
+            >
+              {updateBrandingMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save email identity"
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">

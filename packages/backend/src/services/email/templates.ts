@@ -1,4 +1,10 @@
+import {
+  emailTemplateBrandingService,
+  type EmailTemplateBranding,
+} from "./templateBranding";
+
 type HtmlLayoutInput = {
+  branding: EmailTemplateBranding;
   preheader: string;
   title: string;
   intro: string;
@@ -28,21 +34,6 @@ export type EmailTemplate = {
 };
 
 const DEFAULT_FALLBACK_GREETING = "there";
-
-const legalInfo = {
-  displayName: "vivd.studio",
-  owner: "Felix Pahlke",
-  street: "Dweerblöcken 4",
-  city: "22393 Hamburg",
-  email: "hello@vivd.studio",
-  website: "https://vivd.studio",
-  impressumUrl: "https://vivd.studio/impressum",
-  privacyUrl: "https://vivd.studio/datenschutz",
-  termsUrl: "https://vivd.studio/agb",
-};
-
-const VIVD_LOGO_URL = `${legalInfo.website}/images/vivd_logo_transparent.png`;
-const VIVD_LOGO_ALT = "vivd.studio logo";
 
 const BRAND_COLORS = {
   text: "#0F172A",
@@ -128,7 +119,128 @@ function formatUnknownFieldsHtml(fields: Record<string, string>): string {
     .join("");
 }
 
+function uniqueNonEmptyParts(parts: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const part of parts) {
+    const normalized = sanitizeTextLine(part || "");
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
+function resolveProductName(branding: EmailTemplateBranding): string {
+  return sanitizeTextLine(branding.displayName || "") || "vivd";
+}
+
+function renderBrandHeader(branding: EmailTemplateBranding): string {
+  if (branding.logoUrl) {
+    const logoAlt = `${resolveProductName(branding)} logo`;
+    const imageHtml = `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(
+      logoAlt,
+    )}" width="220" style="display:block;width:220px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />`;
+
+    return branding.websiteUrl
+      ? `<a href="${escapeHtml(branding.websiteUrl)}" style="display:inline-block;text-decoration:none;">${imageHtml}</a>`
+      : imageHtml;
+  }
+
+  if (branding.displayName) {
+    return `<div style="font-size:18px;line-height:1.2;font-weight:700;letter-spacing:-0.01em;color:${BRAND_COLORS.text};">${escapeHtml(
+      branding.displayName,
+    )}</div>`;
+  }
+
+  return "";
+}
+
+function renderFooterHtml(branding: EmailTemplateBranding): string {
+  const lines: string[] = [];
+  const identityParts = uniqueNonEmptyParts([
+    branding.displayName,
+    branding.legalName,
+    branding.legalAddress,
+  ]);
+
+  if (identityParts.length > 0) {
+    lines.push(
+      `<p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:${BRAND_COLORS.footerText};">${identityParts
+        .map((part) => escapeHtml(part))
+        .join(" · ")}</p>`,
+    );
+  }
+
+  const contactParts: string[] = [];
+  if (branding.supportEmail) {
+    contactParts.push(
+      `Email: <a href="mailto:${escapeHtml(
+        branding.supportEmail,
+      )}" style="color:${BRAND_COLORS.link};text-decoration:none;">${escapeHtml(
+        branding.supportEmail,
+      )}</a>`,
+    );
+  }
+  if (branding.websiteUrl) {
+    contactParts.push(
+      `Website: <a href="${escapeHtml(
+        branding.websiteUrl,
+      )}" style="color:${BRAND_COLORS.link};text-decoration:none;">${escapeHtml(
+        branding.websiteUrl,
+      )}</a>`,
+    );
+  }
+  if (contactParts.length > 0) {
+    lines.push(
+      `<p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:${BRAND_COLORS.footerText};">${contactParts.join(
+        " · ",
+      )}</p>`,
+    );
+  }
+
+  const legalLinks: string[] = [];
+  if (branding.imprintUrl) {
+    legalLinks.push(
+      `<a href="${escapeHtml(
+        branding.imprintUrl,
+      )}" style="color:${BRAND_COLORS.link};text-decoration:none;">Legal notice</a>`,
+    );
+  }
+  if (branding.privacyUrl) {
+    legalLinks.push(
+      `<a href="${escapeHtml(
+        branding.privacyUrl,
+      )}" style="color:${BRAND_COLORS.link};text-decoration:none;">Privacy</a>`,
+    );
+  }
+  if (branding.termsUrl) {
+    legalLinks.push(
+      `<a href="${escapeHtml(
+        branding.termsUrl,
+      )}" style="color:${BRAND_COLORS.link};text-decoration:none;">Terms</a>`,
+    );
+  }
+  if (legalLinks.length > 0) {
+    lines.push(
+      `<p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND_COLORS.footerText};">${legalLinks.join(
+        " · ",
+      )}</p>`,
+    );
+  }
+
+  if (lines.length === 0) return "";
+
+  return `<div style="max-width:680px;margin:16px auto 0;padding:0 8px;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">${lines.join(
+    "",
+  )}</div>`;
+}
+
 function renderHtmlLayout(input: HtmlLayoutInput): string {
+  const brandHeaderHtml = renderBrandHeader(input.branding);
+  const footerHtml = renderFooterHtml(input.branding);
   const actionHtml =
     input.actionLabel && input.actionUrl
       ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 0;"><tr><td style="border-radius:999px;background:${BRAND_COLORS.cta};"><a href="${escapeHtml(
@@ -145,14 +257,10 @@ function renderHtmlLayout(input: HtmlLayoutInput): string {
     )}</span>`,
     `<div style="max-width:680px;margin:0 auto;padding:28px 16px 22px;">`,
     `<div style="border:1px solid ${BRAND_COLORS.border};border-radius:18px;overflow:hidden;background:${BRAND_COLORS.surface};box-shadow:0 14px 36px rgba(15,23,42,0.08);">`,
-    `<div style="padding:22px 24px 18px;border-bottom:1px solid ${BRAND_COLORS.border};background:linear-gradient(120deg,#FFFFFF 0%,#F0FDF4 100%);">`,
-    `<a href="${escapeHtml(legalInfo.website)}" style="display:inline-block;text-decoration:none;">`,
-    `<img src="${escapeHtml(VIVD_LOGO_URL)}" alt="${escapeHtml(
-      VIVD_LOGO_ALT,
-    )}" width="220" style="display:block;width:220px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />`,
-    `</a>`,
-    `</div>`,
-    `<div style="padding:28px 24px 30px;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${BRAND_COLORS.text};">`,
+    brandHeaderHtml
+      ? `<div style="padding:22px 24px 18px;border-bottom:1px solid ${BRAND_COLORS.border};background:linear-gradient(120deg,#FFFFFF 0%,#F0FDF4 100%);">${brandHeaderHtml}</div>`
+      : "",
+    `<div style="padding:${brandHeaderHtml ? "28px 24px 30px" : "30px 24px"};font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${BRAND_COLORS.text};">`,
     `<h2 style="margin:0 0 12px;font-size:30px;line-height:1.16;font-weight:700;letter-spacing:-0.02em;color:${BRAND_COLORS.text};">${escapeHtml(
       input.title,
     )}</h2>`,
@@ -164,39 +272,41 @@ function renderHtmlLayout(input: HtmlLayoutInput): string {
     input.outroHtml || "",
     `</div>`,
     `</div>`,
-    `<div style="max-width:680px;margin:16px auto 0;padding:0 8px;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">`,
-    `<p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:${BRAND_COLORS.footerText};">${legalInfo.displayName} · ${legalInfo.owner} · ${legalInfo.street} · ${legalInfo.city}</p>`,
-    `<p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:${BRAND_COLORS.footerText};">E-Mail: <a href="mailto:${escapeHtml(
-      legalInfo.email,
-    )}" style="color:${BRAND_COLORS.link};text-decoration:none;">${escapeHtml(
-      legalInfo.email,
-    )}</a> · Website: <a href="${escapeHtml(
-      legalInfo.website,
-    )}" style="color:${BRAND_COLORS.link};text-decoration:none;">${escapeHtml(
-      legalInfo.website,
-    )}</a></p>`,
-    `<p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND_COLORS.footerText};">`,
-    `<a href="${escapeHtml(legalInfo.impressumUrl)}" style="color:${BRAND_COLORS.link};text-decoration:none;">Impressum</a> · `,
-    `<a href="${escapeHtml(legalInfo.privacyUrl)}" style="color:${BRAND_COLORS.link};text-decoration:none;">Datenschutz</a> · `,
-    `<a href="${escapeHtml(legalInfo.termsUrl)}" style="color:${BRAND_COLORS.link};text-decoration:none;">AGB</a>`,
-    `</p>`,
-    `</div>`,
+    footerHtml,
     `</div>`,
     `</div>`,
   ].join("");
 }
 
-function buildLegalTextFooter(): string {
-  return [
-    "---",
-    `${legalInfo.displayName} · ${legalInfo.owner}`,
-    `${legalInfo.street}, ${legalInfo.city}`,
-    `E-Mail: ${legalInfo.email}`,
-    `Website: ${legalInfo.website}`,
-    `Impressum: ${legalInfo.impressumUrl}`,
-    `Datenschutz: ${legalInfo.privacyUrl}`,
-    `AGB: ${legalInfo.termsUrl}`,
-  ].join("\n");
+function buildLegalTextFooter(branding: EmailTemplateBranding): string {
+  const lines: string[] = [];
+  const identityParts = uniqueNonEmptyParts([
+    branding.displayName,
+    branding.legalName,
+    branding.legalAddress,
+  ]);
+
+  if (identityParts.length > 0) {
+    lines.push(identityParts.join(" · "));
+  }
+  if (branding.supportEmail) {
+    lines.push(`Email: ${branding.supportEmail}`);
+  }
+  if (branding.websiteUrl) {
+    lines.push(`Website: ${branding.websiteUrl}`);
+  }
+  if (branding.imprintUrl) {
+    lines.push(`Legal notice: ${branding.imprintUrl}`);
+  }
+  if (branding.privacyUrl) {
+    lines.push(`Privacy: ${branding.privacyUrl}`);
+  }
+  if (branding.termsUrl) {
+    lines.push(`Terms: ${branding.termsUrl}`);
+  }
+
+  if (lines.length === 0) return "";
+  return ["---", ...lines].join("\n");
 }
 
 function joinNonEmptyTextBlocks(blocks: string[]): string {
@@ -222,9 +332,18 @@ export function formatDurationLabel(seconds: number): string {
   return `${days} day${days === 1 ? "" : "s"}`;
 }
 
-export function buildContactSubmissionEmail(
+async function resolveBrandingOverride(
+  brandingOverride?: EmailTemplateBranding,
+): Promise<EmailTemplateBranding> {
+  if (brandingOverride) return brandingOverride;
+  return emailTemplateBrandingService.getResolvedBranding();
+}
+
+export async function buildContactSubmissionEmail(
   input: ContactSubmissionEmailInput,
-): Pick<EmailTemplate, "text" | "html"> {
+  brandingOverride?: EmailTemplateBranding,
+): Promise<Pick<EmailTemplate, "text" | "html">> {
+  const branding = await resolveBrandingOverride(brandingOverride);
   const unknownFieldsText = formatUnknownFieldsText(input.unknownFields);
   const unknownFieldsHtml = formatUnknownFieldsHtml(input.unknownFields);
   const textBody = joinNonEmptyTextBlocks([
@@ -237,10 +356,11 @@ export function buildContactSubmissionEmail(
     }`,
     unknownFieldsText ? `Additional details:\n${unknownFieldsText}` : "",
     "Use the reply email from the form details above when responding.",
-    buildLegalTextFooter(),
+    buildLegalTextFooter(branding),
   ]);
 
   const htmlBody = renderHtmlLayout({
+    branding,
     preheader: `New contact form submission for ${input.projectSlug}`,
     title: "New message from your website",
     intro: "You received a new contact form submission.",
@@ -279,26 +399,32 @@ export function buildContactSubmissionEmail(
   };
 }
 
-export function buildVerificationEmail(input: {
+export async function buildVerificationEmail(
+  input: {
   recipientName?: string | null;
   verificationUrl: string;
   expiresInSeconds: number;
-}): EmailTemplate {
+},
+  brandingOverride?: EmailTemplateBranding,
+): Promise<EmailTemplate> {
+  const branding = await resolveBrandingOverride(brandingOverride);
+  const productName = resolveProductName(branding);
   const greetingName = toGreetingName(input.recipientName);
   const expiresLabel = formatDurationLabel(input.expiresInSeconds);
-  const subject = "Verify your email address for vivd";
+  const subject = `Verify your email address for ${productName}`;
   const text = joinNonEmptyTextBlocks([
     `Hello ${greetingName},`,
-    "Please confirm your email address to complete your vivd account setup.",
+    `Please confirm your email address to complete your ${productName} account setup.`,
     `Verify email: ${input.verificationUrl}`,
     `For your security, this link expires in ${expiresLabel}.`,
     "If you did not create this account, you can safely ignore this email.",
-    buildLegalTextFooter(),
+    buildLegalTextFooter(branding),
   ]);
   const html = renderHtmlLayout({
-    preheader: "Verify your email address for vivd",
+    branding,
+    preheader: `Verify your email address for ${productName}`,
     title: "Verify your email address",
-    intro: `Hello ${greetingName}, please confirm your email address to complete your vivd account setup.`,
+    intro: `Hello ${greetingName}, please confirm your email address to complete your ${productName} account setup.`,
     bodyHtml: `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">For your security, this link expires in <strong style="color:${BRAND_COLORS.text};">${escapeHtml(
       expiresLabel,
     )}</strong>.</p>`,
@@ -315,11 +441,15 @@ export function buildVerificationEmail(input: {
   };
 }
 
-export function buildContactRecipientVerificationEmail(input: {
-  projectSlug: string;
-  verificationUrl: string;
-  expiresInSeconds: number;
-}): EmailTemplate {
+export async function buildContactRecipientVerificationEmail(
+  input: {
+    projectSlug: string;
+    verificationUrl: string;
+    expiresInSeconds: number;
+  },
+  brandingOverride?: EmailTemplateBranding,
+): Promise<EmailTemplate> {
+  const branding = await resolveBrandingOverride(brandingOverride);
   const projectSlug = sanitizeTextLine(input.projectSlug) || "your project";
   const expiresLabel = formatDurationLabel(input.expiresInSeconds);
   const subject = `Verify contact recipient for ${projectSlug}`;
@@ -329,9 +459,10 @@ export function buildContactRecipientVerificationEmail(input: {
     `Verify recipient email: ${input.verificationUrl}`,
     `For your security, this link expires in ${expiresLabel}.`,
     "If you did not request this, you can ignore this email.",
-    buildLegalTextFooter(),
+    buildLegalTextFooter(branding),
   ]);
   const html = renderHtmlLayout({
+    branding,
     preheader: `Verify contact recipient for ${projectSlug}`,
     title: "Verify recipient email",
     intro: "Please confirm this email address for contact form notifications.",
@@ -356,26 +487,32 @@ export function buildContactRecipientVerificationEmail(input: {
   };
 }
 
-export function buildPasswordResetEmail(input: {
-  recipientName?: string | null;
-  resetUrl: string;
-  expiresInSeconds: number;
-}): EmailTemplate {
+export async function buildPasswordResetEmail(
+  input: {
+    recipientName?: string | null;
+    resetUrl: string;
+    expiresInSeconds: number;
+  },
+  brandingOverride?: EmailTemplateBranding,
+): Promise<EmailTemplate> {
+  const branding = await resolveBrandingOverride(brandingOverride);
+  const productName = resolveProductName(branding);
   const greetingName = toGreetingName(input.recipientName);
   const expiresLabel = formatDurationLabel(input.expiresInSeconds);
-  const subject = "Reset your vivd password";
+  const subject = `Reset your ${productName} password`;
   const text = joinNonEmptyTextBlocks([
     `Hello ${greetingName},`,
-    "We received a request to reset your vivd password.",
+    `We received a request to reset your ${productName} password.`,
     `Reset password: ${input.resetUrl}`,
     `For your security, this link expires in ${expiresLabel}.`,
     "If you did not request a password reset, you can ignore this email.",
-    buildLegalTextFooter(),
+    buildLegalTextFooter(branding),
   ]);
   const html = renderHtmlLayout({
-    preheader: "Reset your vivd password",
+    branding,
+    preheader: `Reset your ${productName} password`,
     title: "Reset your password",
-    intro: `Hello ${greetingName}, we received a request to reset your vivd password.`,
+    intro: `Hello ${greetingName}, we received a request to reset your ${productName} password.`,
     bodyHtml: `<p style="margin:0;font-size:14px;line-height:1.7;color:${BRAND_COLORS.muted};">For your security, this link expires in <strong style="color:${BRAND_COLORS.text};">${escapeHtml(
       expiresLabel,
     )}</strong>.</p>`,

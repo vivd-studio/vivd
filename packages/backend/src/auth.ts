@@ -238,7 +238,7 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: authResetPasswordExpiresInSeconds,
     revokeSessionsOnPasswordReset: authRevokeSessionsOnPasswordReset,
     sendResetPassword: async ({ user, url }) => {
-      const template = buildPasswordResetEmail({
+      const template = await buildPasswordResetEmail({
         recipientName: user.name,
         resetUrl: url,
         expiresInSeconds: authResetPasswordExpiresInSeconds,
@@ -261,7 +261,7 @@ export const auth = betterAuth({
     autoSignInAfterVerification: authAutoSignInAfterVerification,
     expiresIn: authEmailVerificationExpiresInSeconds,
     sendVerificationEmail: async ({ user, url }) => {
-      const template = buildVerificationEmail({
+      const template = await buildVerificationEmail({
         recipientName: user.name,
         verificationUrl: url,
         expiresInSeconds: authEmailVerificationExpiresInSeconds,

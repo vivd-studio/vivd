@@ -759,7 +759,7 @@ export function createContactFormPublicRouter(
       );
       const replyToEmail = replyToField?.value?.trim() || null;
       const submittedAtLabel = formatSubmittedAtForEmail(submittedAt);
-      const submissionEmail = buildContactSubmissionEmail({
+      const submissionEmail = await buildContactSubmissionEmail({
         projectSlug: pluginInstance.projectSlug,
         submittedAtLabel,
         replyToEmail,

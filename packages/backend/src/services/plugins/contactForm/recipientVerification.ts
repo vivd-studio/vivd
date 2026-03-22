@@ -456,7 +456,7 @@ class ContactFormRecipientVerificationService {
     const verificationUrl = `${verificationEndpoint}?token=${encodeURIComponent(
       verificationToken,
     )}`;
-    const template = buildContactRecipientVerificationEmail({
+    const template = await buildContactRecipientVerificationEmail({
       projectSlug: options.projectSlug,
       verificationUrl,
       expiresInSeconds: tokenExpirySeconds,

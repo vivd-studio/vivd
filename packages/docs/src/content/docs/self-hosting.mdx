@@ -153,6 +153,7 @@ If a newer release changes the published bundle files themselves, compare your c
 Most self-host installs do not need much more env work. You usually only edit `.env` later if you want:
 
 - email delivery: choose a provider such as SMTP (`VIVD_EMAIL_PROVIDER=smtp`, `VIVD_SMTP_HOST`, `VIVD_SMTP_PORT`, `VIVD_SMTP_USER`, `VIVD_SMTP_PASSWORD`) or Resend / SES, plus `VIVD_EMAIL_FROM`
+- transactional email identity/footer: optional fields in `Instance Settings -> Email`, or env bootstrap values like `VIVD_EMAIL_BRAND_DISPLAY_NAME`, `VIVD_EMAIL_BRAND_SUPPORT_EMAIL`, and the legal/footer URLs if you want more than the minimal default email footer
 - Turnstile: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`
 - GitHub backup/sync: `GITHUB_SYNC_ENABLED`, `GITHUB_ORG`, `GITHUB_TOKEN`
 - a remote S3-compatible object store instead of the bundled local bucket

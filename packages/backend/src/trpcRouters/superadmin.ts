@@ -21,6 +21,10 @@ import { projectPluginService } from "../services/plugins/ProjectPluginService";
 import { contactFormTurnstileService } from "../services/plugins/contactForm/turnstile";
 import { getEmailFeedbackEndpoint } from "../services/plugins/contactForm/publicApi";
 import { emailDeliverabilityService } from "../services/email/deliverability";
+import {
+  emailTemplateBrandingPatchInputSchema,
+  emailTemplateBrandingService,
+} from "../services/email/templateBranding";
 import { PLUGIN_IDS } from "../services/plugins/registry";
 import {
   getSystemSettingValue,
@@ -162,6 +166,24 @@ function fallbackStudioImageBase(repo: string): string {
 }
 
 const STUDIO_IMAGE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+
+async function buildEmailOverviewPayload() {
+  const [overview, branding, sesEndpoint, resendEndpoint] = await Promise.all([
+    emailDeliverabilityService.getOverview(),
+    emailTemplateBrandingService.getResolvedBranding(),
+    getEmailFeedbackEndpoint("ses"),
+    getEmailFeedbackEndpoint("resend"),
+  ]);
+
+  return {
+    ...overview,
+    templateBranding: branding,
+    webhookEndpoints: {
+      ses: sesEndpoint,
+      resend: resendEndpoint,
+    },
+  };
+}
 
 export const superAdminRouter = router({
   getInstanceSettings: superAdminProcedure.query(async () => {
@@ -740,36 +762,15 @@ export const superAdminRouter = router({
       };
     }),
 
-  emailDeliverabilityOverview: superAdminProcedure.query(async () => {
-    const overview = await emailDeliverabilityService.getOverview();
-    const [sesEndpoint, resendEndpoint] = await Promise.all([
-      getEmailFeedbackEndpoint("ses"),
-      getEmailFeedbackEndpoint("resend"),
-    ]);
-    return {
-      ...overview,
-      webhookEndpoints: {
-        ses: sesEndpoint,
-        resend: resendEndpoint,
-      },
-    };
-  }),
+  emailDeliverabilityOverview: superAdminProcedure.query(async () =>
+    buildEmailOverviewPayload(),
+  ),
 
   emailDeliverabilityUpdatePolicy: superAdminProcedure
     .input(emailDeliverabilityPolicyInputSchema)
     .mutation(async ({ input }) => {
-      const overview = await emailDeliverabilityService.updatePolicy(input);
-      const [sesEndpoint, resendEndpoint] = await Promise.all([
-        getEmailFeedbackEndpoint("ses"),
-        getEmailFeedbackEndpoint("resend"),
-      ]);
-      return {
-        ...overview,
-        webhookEndpoints: {
-          ses: sesEndpoint,
-          resend: resendEndpoint,
-        },
-      };
+      await emailDeliverabilityService.updatePolicy(input);
+      return buildEmailOverviewPayload();
     }),
 
   emailDeliverabilityUnsuppressRecipient: superAdminProcedure
@@ -779,20 +780,17 @@ export const superAdminRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const overview = await emailDeliverabilityService.unsuppressRecipient({
+      await emailDeliverabilityService.unsuppressRecipient({
         email: input.email,
       });
-      const [sesEndpoint, resendEndpoint] = await Promise.all([
-        getEmailFeedbackEndpoint("ses"),
-        getEmailFeedbackEndpoint("resend"),
-      ]);
-      return {
-        ...overview,
-        webhookEndpoints: {
-          ses: sesEndpoint,
-          resend: resendEndpoint,
-        },
-      };
+      return buildEmailOverviewPayload();
+    }),
+
+  emailTemplateBrandingUpdate: superAdminProcedure
+    .input(emailTemplateBrandingPatchInputSchema)
+    .mutation(async ({ input }) => {
+      await emailTemplateBrandingService.updateBranding(input);
+      return buildEmailOverviewPayload();
     }),
 
   getOrganizationUsage: superAdminProcedure
