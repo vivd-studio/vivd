@@ -1,0 +1,232 @@
+---
+title: How Vivd Works
+description: "Understand Vivd's runtime model: isolated Studio machines, OpenCode in real project workspaces, and bucket-backed persistence."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Vivd is not just a prompt-to-template generator.
+It runs an AI coding agent inside a real website workspace, then keeps preview,
+publishing, and self-hosting much simpler than a typical custom-code setup.
+
+If you want a rough mental model, Vivd is closest to:
+
+- a WordPress-like focus on getting sites live without a lot of ops work
+- a Lovable-style AI-native editing experience
+- but backed by actual project files and real development tooling
+
+## Core idea
+
+Each project has a real workspace, not a hidden internal representation.
+The AI agent works against that workspace, which is why Vivd can be much more flexible
+than a boxed-in template builder.
+
+In practice, that means Vivd can work at the same level a developer would:
+
+- edit source files
+- update layouts, components, content, and styles
+- use framework tooling
+- install dependencies when needed
+- run project-specific workflows inside the isolated runtime
+
+## Studio is more than chat
+
+Vivd Studio is not only an agent conversation view.
+It combines several ways of working on the same project workspace:
+
+- agent-driven edits through OpenCode
+- direct text selection and in-preview editing
+- an asset and file explorer for uploads, organization, and file-level changes
+- a live preview canvas tied to the current workspace state
+
+That matters because Vivd is not trying to force everything through prompts alone.
+You can mix higher-level AI changes with direct adjustments in the same environment.
+
+## Isolated Studio machines
+
+When you open Studio, Vivd does not drop every user into one shared editor process.
+It ensures an isolated Studio runtime for that project workspace context.
+
+That isolation is one of the main reasons Vivd can be both powerful and safer:
+
+- project work is separated from other projects
+- runtime state can be stopped and restarted independently
+- edits happen inside a dedicated environment instead of a global shared shell
+
+On scalable setups, these runtimes run as Fly Machines.
+On single-host/self-host setups, the same idea runs through Docker-isolated Studio machines.
+
+<Aside type="note" title="Machine, not just chat">
+  The Studio runtime is not only a chat worker. It is the environment where the project
+  files, dev server, agent session, and build/preview tasks come together.
+</Aside>
+
+## What runs inside that Studio runtime
+
+The isolated Studio environment is effectively the working machine for the project.
+It is where Vivd runs:
+
+- the real project workspace
+- the OpenCode server used by the agent
+- the project dev server when the project needs one
+- the preview-serving routes that feed the Studio UI
+
+So when you look at the page inside Studio, that preview is not a fake mockup.
+It is coming from the isolated runtime that is currently holding the workspace and
+serving the project back into the Studio shell.
+
+## OpenCode inside the workspace
+
+Vivd runs OpenCode inside the Studio runtime and wraps it with Vivd's own Studio UX and
+product-specific tools.
+
+That gives you two layers at once:
+
+- general coding power inside the real project workspace
+- Vivd-aware tools for things like plugin info, publish-checklist context, and image flows
+
+This is why the agent can feel much less constrained than a visual-only builder.
+It is operating inside the actual project environment, not inside a narrowed block editor.
+
+## Astro-first Studio workflow
+
+The newer Studio-led "start from scratch" flow works from an Astro + Tailwind starter
+workspace, and Vivd keeps that project as Astro instead of replacing it with a private
+internal format.
+
+That means the AI is shaping a real project structure with real source files.
+
+Vivd also supports generic/static projects, but the current Studio-first creation flow is
+increasingly centered on Astro workspaces because they offer a strong balance of:
+
+- modern component-based structure
+- static-site performance
+- flexible content/layout composition
+- straightforward preview and publish behavior
+
+## Bucket-backed persistence
+
+Vivd treats object storage as the durable source of truth for project artifacts.
+
+At a high level, Vivd stores:
+
+- source artifacts
+- preview artifacts
+- published artifacts
+- related OpenCode session state needed for the Studio experience
+
+When a Studio machine starts, it can hydrate the workspace from object storage.
+When work finishes or sync is triggered, it can push the latest workspace state back out.
+
+That design makes restart and reuse much more practical because the project does not only
+live on one machine's local disk.
+
+## Out-of-the-box self-hosting
+
+Vivd is opinionated about making self-hosting practical.
+The solo self-host bundle can bring the whole stack up for you, including:
+
+- Caddy
+- frontend
+- backend
+- scraper
+- Postgres
+- a local S3-compatible bucket via MinIO
+- Docker-based Studio machines
+
+So if you want everything on your own server, Vivd can provide a full working default
+without requiring separate managed storage on day one.
+
+## Local bucket or external bucket
+
+You have two main storage directions:
+
+### Bundled local S3-compatible storage
+
+This is the easiest self-host path.
+It keeps storage inside the stack with the bundled MinIO/local S3-compatible setup.
+
+Good fit for:
+
+- single-host installs
+- smaller self-host deployments
+- people who want the fewest external dependencies
+
+### External S3-compatible storage
+
+If you want a more scalable or already-standardized storage setup, Vivd can use an
+external S3-compatible bucket instead.
+
+That includes options like:
+
+- generic S3-compatible storage
+- Cloudflare R2
+- other external bucket providers exposed through S3-compatible APIs
+
+Good fit for:
+
+- larger self-host installs
+- teams that already have object-storage infrastructure
+- setups that want storage independent from the main app host
+
+## Docker or Fly
+
+Vivd supports more than one runtime path for Studio machines.
+
+### Docker provider
+
+The Docker provider is the practical single-host/self-host path.
+It keeps Studio runtimes on the same machine while still isolating them from the main app
+process.
+
+### Fly provider
+
+The Fly provider is the scalable machine path.
+It is the production-oriented model when you want Studio runtimes to scale more like
+dedicated app machines instead of sharing one host.
+
+The important point is that Vivd keeps a similar product model across both:
+
+- isolated Studio runtime
+- real project workspace
+- object-storage-backed persistence
+- managed preview/publish flow on top
+
+## Why this is powerful
+
+Vivd is flexible because it is not forcing the AI to stay inside a tiny set of allowed
+theme settings or page blocks.
+
+The agent is working in a real project with real tooling, which means it can handle work
+like:
+
+- structural redesigns
+- component and style refactors
+- Astro component edits
+- content and asset updates
+- plugin-related implementation work
+- publish-readiness cleanup
+
+That is the reason Vivd can feel much more open-ended than traditional site builders.
+
+## Why this is still easier than rolling your own
+
+Even with that flexibility, Vivd is still trying to remove the annoying platform work.
+
+It brings together:
+
+- isolated runtimes
+- project hydration/sync
+- preview and publish handling
+- domain and self-hosting workflows
+- install-time defaults that work out of the box
+
+So the goal is not "developer power at the cost of simplicity."
+The goal is developer-grade flexibility with a much easier path to getting the site live.
+
+## Related pages
+
+- Read [Getting Started](/getting-started/) for the quickest first-project path.
+- Read [Self-Hosting](/self-hosting/) for the solo install flow.
+- Read [Instance Settings](/instance-settings/) for install-wide runtime defaults.
+- Read [Domains & Publish Targets](/domains-and-publish-targets/) for domain and launch rules.

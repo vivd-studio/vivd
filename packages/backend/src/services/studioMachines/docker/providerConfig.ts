@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { instanceNetworkSettingsService } from "../../system/InstanceNetworkSettingsService";
 import {
   parseBooleanEnv,
   parseNonNegativeInt,
@@ -134,6 +135,9 @@ export class DockerProviderConfig {
 
     const authUrl = process.env.BETTER_AUTH_URL?.trim();
     if (authUrl) return normalizeOrigin(authUrl);
+
+    const networkOrigin = instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
+    if (networkOrigin) return normalizeOrigin(networkOrigin);
 
     const controlPlaneHost =
       process.env.CONTROL_PLANE_HOST?.trim() || process.env.DOMAIN?.trim();

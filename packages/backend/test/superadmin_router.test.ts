@@ -24,6 +24,11 @@ const {
   updateInstanceCapabilityPolicyMock,
   updateInstancePluginDefaultsMock,
   updateInstanceLimitDefaultsMock,
+  getResolvedNetworkSettingsMock,
+  updateStoredNetworkSettingsMock,
+  syncSelfHostedCaddyConfigMock,
+  reloadCaddyConfigMock,
+  syncGeneratedCaddyConfigsMock,
 } = vi.hoisted(() => {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
@@ -63,6 +68,11 @@ const {
     updateInstanceCapabilityPolicyMock: vi.fn(),
     updateInstancePluginDefaultsMock: vi.fn(),
     updateInstanceLimitDefaultsMock: vi.fn(),
+    getResolvedNetworkSettingsMock: vi.fn(),
+    updateStoredNetworkSettingsMock: vi.fn(),
+    syncSelfHostedCaddyConfigMock: vi.fn(),
+    reloadCaddyConfigMock: vi.fn(),
+    syncGeneratedCaddyConfigsMock: vi.fn(),
   };
 });
 
@@ -125,6 +135,28 @@ vi.mock("../src/services/system/InstallProfileService", async () => {
     },
   };
 });
+
+vi.mock("../src/services/system/InstanceNetworkSettingsService", async () => {
+  const { z } = await import("zod");
+  return {
+    instanceTlsModeSchema: z.enum(["managed", "external", "off"]),
+    instanceNetworkSettingsService: {
+      getResolvedSettings: getResolvedNetworkSettingsMock,
+      updateStoredSettings: updateStoredNetworkSettingsMock,
+      syncSelfHostedCaddyConfig: syncSelfHostedCaddyConfigMock,
+    },
+  };
+});
+
+vi.mock("../src/services/system/CaddyAdminService", () => ({
+  reloadCaddyConfig: reloadCaddyConfigMock,
+}));
+
+vi.mock("../src/services/publish/PublishService", () => ({
+  publishService: {
+    syncGeneratedCaddyConfigs: syncGeneratedCaddyConfigsMock,
+  },
+}));
 
 vi.mock("../src/services/studioMachines/fly/ghcr", () => ({
   listStudioImagesFromGhcr: listStudioImagesFromGhcrMock,
@@ -294,6 +326,11 @@ describe("superadmin router", () => {
     updateInstanceCapabilityPolicyMock.mockReset();
     updateInstancePluginDefaultsMock.mockReset();
     updateInstanceLimitDefaultsMock.mockReset();
+    getResolvedNetworkSettingsMock.mockReset();
+    updateStoredNetworkSettingsMock.mockReset();
+    syncSelfHostedCaddyConfigMock.mockReset();
+    reloadCaddyConfigMock.mockReset();
+    syncGeneratedCaddyConfigsMock.mockReset();
 
     (studioMachineProviderMock as any).kind = "fly";
     listStudioMachinesMock.mockResolvedValue([]);
@@ -338,6 +375,24 @@ describe("superadmin router", () => {
       domains: ["example.com"],
     });
     getDefaultTemplateMock.mockReturnValue("default template");
+    getResolvedNetworkSettingsMock.mockReturnValue({
+      publicHost: "app.vivd.local",
+      publicOrigin: "https://app.vivd.local",
+      tlsMode: "external",
+      acmeEmail: null,
+      sources: {
+        publicHost: "bootstrap_env",
+        tlsMode: "bootstrap_env",
+        acmeEmail: "default",
+      },
+      deploymentManaged: {
+        publicHost: false,
+      },
+    });
+    updateStoredNetworkSettingsMock.mockResolvedValue(undefined);
+    syncSelfHostedCaddyConfigMock.mockResolvedValue(false);
+    reloadCaddyConfigMock.mockResolvedValue(undefined);
+    syncGeneratedCaddyConfigsMock.mockResolvedValue(undefined);
     resolvePolicyMock.mockResolvedValue({
       installProfile: "platform",
       singleProjectMode: false,
@@ -398,6 +453,104 @@ describe("superadmin router", () => {
       desiredImage: null,
       images: [],
     });
+  });
+
+  it("rejects network updates while the effective install profile is platform", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updateInstanceSettings({
+        network: {
+          publicHost: "example.com",
+          tlsMode: "external",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Instance network settings are currently UI-managed only for solo installs.",
+    });
+
+    expect(updateStoredNetworkSettingsMock).not.toHaveBeenCalled();
+    expect(syncGeneratedCaddyConfigsMock).not.toHaveBeenCalled();
+  });
+
+  it("allows network updates when switching to solo in the same mutation", async () => {
+    resolvePolicyMock
+      .mockResolvedValueOnce({
+        installProfile: "platform",
+        singleProjectMode: false,
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        pluginDefaults: {
+          contact_form: {
+            pluginId: "contact_form",
+            state: "disabled",
+            managedBy: "manual_superadmin",
+          },
+          analytics: {
+            pluginId: "analytics",
+            state: "disabled",
+            managedBy: "manual_superadmin",
+          },
+        },
+        limitDefaults: {},
+        controlPlane: { mode: "host_based" },
+        pluginRuntime: { mode: "dedicated_host" },
+      })
+      .mockResolvedValueOnce({
+        installProfile: "solo",
+        singleProjectMode: true,
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: false,
+        },
+        pluginDefaults: {
+          contact_form: {
+            pluginId: "contact_form",
+            state: "enabled",
+            managedBy: "install_profile_default",
+          },
+          analytics: {
+            pluginId: "analytics",
+            state: "enabled",
+            managedBy: "install_profile_default",
+          },
+        },
+        limitDefaults: {},
+        controlPlane: { mode: "path_based" },
+        pluginRuntime: { mode: "same_host_path" },
+      });
+
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await caller.updateInstanceSettings({
+      installProfile: "solo",
+      network: {
+        publicHost: "example.com",
+        tlsMode: "managed",
+        acmeEmail: "admin@example.com",
+      },
+    });
+
+    expect(updateInstallProfileMock).toHaveBeenCalledWith("solo");
+    expect(updateStoredNetworkSettingsMock).toHaveBeenCalledWith({
+      publicHost: "example.com",
+      tlsMode: "managed",
+      acmeEmail: "admin@example.com",
+    });
+    expect(syncGeneratedCaddyConfigsMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns machine listing errors as payload (not thrown)", async () => {

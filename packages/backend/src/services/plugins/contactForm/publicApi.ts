@@ -1,4 +1,5 @@
 import { installProfileService } from "../../system/InstallProfileService";
+import { instanceNetworkSettingsService } from "../../system/InstanceNetworkSettingsService";
 
 const DEFAULT_PUBLIC_PLUGIN_API_BASE_URL = "https://api.vivd.studio";
 const CONTACT_RECIPIENT_VERIFY_CONTROL_PLANE_PATH =
@@ -105,6 +106,9 @@ function getControlPlaneOrigin(options?: {
   const controlPlaneHostOrigin = toHostOrigin(process.env.CONTROL_PLANE_HOST || "");
   if (controlPlaneHostOrigin) return controlPlaneHostOrigin;
 
+  const networkOrigin = instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
+  if (networkOrigin) return normalizeOrigin(networkOrigin);
+
   const domainOrigin = normalizeOrigin(process.env.DOMAIN || "");
   if (domainOrigin) return domainOrigin;
 
@@ -126,9 +130,11 @@ export async function getPublicPluginApiBaseUrl(options?: {
 
   const instancePolicy = await installProfileService.resolvePolicy();
   if (instancePolicy.pluginRuntime.mode === "same_host_path") {
+    const networkHost = instanceNetworkSettingsService.getResolvedSettings().publicHost || "";
     const preferredHost =
       normalizeHost(options?.requestHost || "") ||
       normalizeHost(process.env.DOMAIN || "") ||
+      normalizeHost(networkHost) ||
       normalizeHost(process.env.CONTROL_PLANE_HOST || "") ||
       normalizeHost(process.env.BETTER_AUTH_URL || "");
     if (preferredHost) {

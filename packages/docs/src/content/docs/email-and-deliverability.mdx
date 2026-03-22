@@ -1,0 +1,118 @@
+---
+title: Email & Deliverability
+description: Configure transactional email identity and monitor delivery health for a self-hosted Vivd install.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The `Email` admin surface controls install-wide transactional email behavior.
+Use it when you need to shape how emails look, track bounce and complaint feedback, or
+adjust suppression policy for the whole install.
+
+<Aside type="note" title="Install-wide email, not project form config">
+  This surface does not replace project-level Contact Form setup. Recipient lists and
+  form fields still belong in the project plugin settings.
+</Aside>
+
+## What this surface controls
+
+The Email admin area has two responsibilities:
+
+- `Email Identity`: optional branding and legal/footer details for transactional emails
+- `Email Deliverability`: bounce, complaint, suppression, and feedback webhook behavior
+
+## What it does not control
+
+These still live elsewhere:
+
+- provider credentials such as SMTP, SES, or Resend secrets: `.env` or deployment config
+- contact form recipients and form fields: project plugin settings
+- account password/email changes: personal account settings
+
+## Email identity
+
+`Email Identity` lets you add optional details such as:
+
+- display name
+- logo URL
+- support email
+- website URL
+- legal entity name
+- postal address
+- legal notice, privacy, and terms URLs
+
+If you leave all of these blank, Vivd keeps transactional emails minimal instead of
+forcing a branded legal footer.
+
+This is useful when you want:
+
+- cleaner auth and notification emails
+- customer-facing support contact details in the footer
+- legal/footer links on a production install
+
+## Deliverability
+
+`Email Deliverability` is the install-wide health and policy area for outgoing email.
+
+It shows and controls:
+
+- current email provider
+- whether webhook secrets are configured
+- suppressed recipient count
+- bounce event count
+- complaint event count
+- auto-suppression rules for bounced or complained-about recipients
+- complaint and bounce thresholds
+
+## Feedback webhooks
+
+Providers that send bounce and complaint feedback should be connected back into Vivd so
+the install can track delivery problems and suppress bad recipients automatically.
+
+Current surfaced webhook flows include:
+
+- Resend feedback endpoint, together with `RESEND_WEBHOOK_SECRET`
+- SES feedback endpoint, with optional `VIVD_SES_FEEDBACK_WEBHOOK_SECRET`
+
+Without provider feedback, the install can still send email, but it has much weaker
+visibility into delivery health.
+
+## Suppression behavior
+
+When bounce and complaint feedback arrives, Vivd can automatically suppress affected
+recipient addresses to reduce repeated delivery failures.
+
+Use the global policy settings to decide whether the install should:
+
+- auto-suppress bounced recipients
+- auto-suppress complaint recipients
+- use stricter or looser complaint and bounce thresholds
+
+You can also manually unsuppress a recipient after the underlying issue has been fixed.
+
+## Relationship to Contact Form
+
+The Contact Form plugin depends on email delivery, but it is not the same configuration
+surface.
+
+Use:
+
+- [Contact Form](/plugins/contact-form/) for recipient lists, fields, and snippets
+- `Email` admin for delivery health and transactional email identity
+
+If forms are visible but messages never arrive, check both surfaces.
+
+## Recommended setup order
+
+1. Configure the email provider in deployment env vars.
+2. Set `VIVD_EMAIL_FROM` and any provider-specific secrets.
+3. Add email identity details if you want branded/legal footers.
+4. Connect feedback webhooks for your provider.
+5. Send real test emails.
+6. Review suppression and complaint/bounce metrics after launch.
+
+## Related pages
+
+- Read [Self-Hosting](/self-hosting/) for the env bootstrap side.
+- Read [Instance Settings](/instance-settings/) for adjacent install-wide admin settings.
+- Read [Contact Form](/plugins/contact-form/) if the issue is project-specific form delivery.

@@ -44,6 +44,11 @@ import DocShot from "../../components/DocShot.astro";
     href="/publish-your-site/"
     description="Understand draft versus live, the publish checklist, and what needs a republish."
   />
+  <LinkCard
+    title="Instance Settings"
+    href="/instance-settings/"
+    description="Configure self-host install-wide defaults such as network, limits, and capability gates."
+  />
 </CardGrid>
 
 <DocShot
@@ -66,9 +71,24 @@ If you are building a brand-new site instead, start with [Create from Scratch](/
 
 <CardGrid>
   <LinkCard
+    title="How Vivd Works"
+    href="/how-vivd-works/"
+    description="Understand the isolated Studio runtime, OpenCode workspace model, and bucket-backed architecture."
+  />
+  <LinkCard
     title="Plugins"
     href="/plugins/"
     description="Set up Contact Form and Analytics before the final launch pass."
+  />
+  <LinkCard
+    title="Domains & Publish Targets"
+    href="/domains-and-publish-targets/"
+    description="Understand domain verification, allowlists, and why publish can be blocked."
+  />
+  <LinkCard
+    title="Email & Deliverability"
+    href="/email-and-deliverability/"
+    description="Configure transactional email identity and monitor delivery health."
   />
   <LinkCard
     title="Teams and Access"
@@ -90,7 +110,11 @@ If you are building a brand-new site instead, start with [Create from Scratch](/
 <Aside type="note" title="What this docs site covers">
 
 - Product workflows for creating, editing, publishing, and operating sites in Vivd.
+- The runtime model behind Vivd's isolated Studio machines and real project workspaces.
 - The solo self-host install path and first-run setup.
+- Instance-level self-host admin settings and defaults.
+- Domain registration, verification, and publish-target behavior.
+- Transactional email identity and delivery-health operations.
 - Plugin setup for Contact Form and Analytics.
 - Team-access guidance for agencies and customer-facing projects.
 - Practical troubleshooting for common issues.

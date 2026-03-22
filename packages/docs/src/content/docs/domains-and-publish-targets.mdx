@@ -1,0 +1,132 @@
+---
+title: Domains & Publish Targets
+description: Understand how Vivd handles domain registration, verification, and project publishing.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Publishing in Vivd depends on two related pieces:
+
+- the domain being allowed for the organization or install
+- the project being ready to publish its current saved state
+
+This page explains the domain side of that flow so the publish dialog is easier to
+reason about.
+
+<Aside type="note" title="Two layers, one launch">
+  The domain registry decides whether a domain can be used at all. The project publish
+  dialog decides whether the current project version is ready to go live there.
+</Aside>
+
+## Domain concepts
+
+Vivd uses two main domain usages:
+
+- `tenant_host`: an organization or tenant host used to reach that workspace
+- `publish_target`: a domain intended for a live published site
+
+For most live-site launches, `publish_target` is the clearest fit.
+On installs that use tenant hosts, an active `tenant_host` can also be publishable in
+some routing setups.
+
+## Domain types
+
+### Managed subdomain
+
+A `managed_subdomain` is a host the install manages directly, typically as part of a
+tenant-host routing pattern.
+
+Typical traits:
+
+- usually active immediately
+- does not require external verification
+- may be read-only for some usage changes, depending on the install
+
+### Custom domain
+
+A `custom_domain` is a real domain you bring to the install, such as `example.com` or
+`www.example.com`.
+
+Typical traits:
+
+- must be registered to the correct organization
+- usually starts in `pending_verification`
+- must become `active` before publishing can use it
+
+## Domain status
+
+You will usually see one of these states:
+
+- `pending_verification`: registered but not verified yet
+- `active`: usable for publishing and routing
+- `disabled`: known to Vivd but intentionally blocked
+
+If a custom domain is still pending or disabled, the publish dialog will reject it.
+
+## Verification
+
+Custom domains currently use a verification token flow before they become active.
+The admin surface can generate the token and show the values needed to prove domain
+ownership.
+
+In practice:
+
+1. Add the custom domain to the correct organization.
+2. Start verification to get the challenge details.
+3. Complete the challenge on the domain side.
+4. Check verification again until the domain becomes `active`.
+
+Until that last step succeeds, publishing stays blocked for that domain.
+
+## What the publish dialog checks
+
+When you enter a domain in the publish dialog, Vivd checks more than just syntax.
+
+It needs:
+
+- a complete domain value such as `example.com`
+- a domain that is enabled for the current organization
+- a domain that is not already in use by another project
+- an `active` domain status
+- a publishable build or saved artifact ready for the selected version
+- no unsaved Studio changes
+- no older snapshot currently selected in Studio
+
+That is why "Publish" can stay blocked even when the domain itself looks correct.
+
+## Common publish blockers
+
+These are the most common reasons the dialog refuses to publish:
+
+- the domain is not registered for this organization
+- the domain is assigned to another organization
+- the domain is still pending verification
+- the domain is disabled
+- the domain is already in use
+- the latest project artifact is still being prepared
+- Studio has unsaved changes
+- Studio is currently viewing an older snapshot
+
+## Narrow installs and implicit hosts
+
+Some narrower `solo` installs disable custom publish domains entirely.
+In that case, Vivd may still allow publishing to the install's implicit primary public
+host, but not to arbitrary extra custom domains.
+
+If the domain-management UI feels more limited than the docs examples, check the
+install capabilities in [Instance Settings](/instance-settings/).
+
+## Recommended launch workflow
+
+1. Decide which domain should be the live site.
+2. Register and verify it before launch day.
+3. Make sure its status is `active`.
+4. Save the latest Studio changes.
+5. Review the pre-publish checklist.
+6. Publish from the project.
+
+## Related pages
+
+- Read [Publish Your Site](/publish-your-site/) for the end-to-end launch flow.
+- Read [Instance Settings](/instance-settings/) for install-wide routing and capability settings.
+- Use [Troubleshooting](/troubleshooting/) if a domain looks right but publishing is still blocked.

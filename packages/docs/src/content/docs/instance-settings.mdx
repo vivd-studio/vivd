@@ -1,0 +1,169 @@
+---
+title: Instance Settings
+description: Configure install-wide defaults for self-hosted Vivd, including network, capability, and limit behavior.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+`Instance Settings` is the install-wide admin workspace for a self-hosted Vivd instance.
+Use it when you need to change how the whole install behaves, not just one project.
+
+For a standard `solo` self-host install, this is where you adjust the main public host,
+HTTPS handling, and other defaults that affect every project on the instance.
+
+<Aside type="note" title="Instance-wide, not project-wide">
+  Changes here affect the whole install. Project-specific plugin setup, publish targets,
+  and content editing still happen inside each project workspace.
+</Aside>
+
+## What belongs here
+
+- install profile and routing shape
+- main public host and HTTPS mode
+- capability gates for multi-org and domain behavior
+- default usage and project limits
+
+Related admin surfaces live nearby but are separate:
+
+- `Plugins` controls whether plugins are enabled instance-wide
+- `Email` controls transactional email identity and deliverability policy
+- domain registration and publish-target behavior are covered separately in launch/admin workflows
+
+## General
+
+The `General` section controls the install profile:
+
+- `Solo`: one host, lower admin overhead, instance-first defaults
+- `Platform`: multi-org SaaS-style surface with broader tenancy controls
+
+In `solo`, the product favors one main public host and the simpler self-host workflow.
+In `platform`, the admin surface keeps the broader multi-organization controls enabled.
+
+## Network
+
+The `Network` section is the most important part for a normal self-host install.
+
+### Public host
+
+Set the hostname or IP that Vivd should treat as the main public entrypoint.
+Enter only the host, not `http://` or `https://`.
+
+Examples:
+
+- `example.com`
+- `www.example.com`
+- `203.0.113.10`
+- `localhost`
+
+Vivd uses this value to resolve the public origin used by the control plane and other
+runtime paths for a normal `solo` install.
+
+### HTTPS handled by
+
+Choose how TLS should work:
+
+- `Bundled Caddy`: Vivd's bundled Caddy obtains and renews certificates itself
+- `External proxy`: TLS is terminated by Dokploy, Traefik, or another upstream proxy
+- `Plain HTTP`: no TLS inside the Vivd stack
+
+Typical choices:
+
+- Use `Bundled Caddy` on a VPS with a real public hostname and ports `80` and `443`
+- Use `External proxy` when another platform already owns the certificates
+- Use `Plain HTTP` for local or internal-only testing
+
+### ACME email
+
+Set the ACME email only when `Bundled Caddy` manages certificates directly.
+Vivd passes this through to Caddy for certificate issuance and renewal.
+
+### What happens after save
+
+For the bundled self-host stack, saving network settings updates Vivd's runtime view of
+the install and rewrites the bundled self-host Caddy config when UI-managed Caddy mode is
+active.
+
+### Deployment overrides still win
+
+If you explicitly set advanced deployment-level host overrides such as
+`VIVD_APP_URL`, `BETTER_AUTH_URL`, or `CONTROL_PLANE_HOST`, those remain authoritative.
+In that case, the saved UI value acts as fallback state until the override is removed.
+
+<Aside type="caution" title="Change network settings deliberately">
+  After changing the public host or TLS mode, re-check both the public site and
+  `/vivd-studio` on the intended URL before treating the change as complete.
+</Aside>
+
+## Capabilities
+
+`Capabilities` lets you bound the product surface for the whole install instead of
+leaving every multi-tenant feature available all the time.
+
+Current capability switches include:
+
+- `Multi-organization`
+- `Tenant hosts`
+- `Custom publish domains`
+- `Org limit overrides`
+- `Org plugin entitlements`
+- `Project plugin entitlements`
+- `Dedicated plugin host`
+
+For most `solo` installs, these are advanced controls. If you want the simplest
+self-host setup, keep the surface narrow and only enable the extra tenancy features
+you actually plan to use.
+
+## Instance Limits
+
+`Instance Limits` defines install-wide defaults for resource and project limits.
+These defaults sit above raw env bootstrap values and below any more specific overrides.
+
+Current defaults include:
+
+- daily, weekly, and monthly credit limits
+- image generation limit per month
+- warning threshold
+- max projects
+
+Use these values when you want a consistent baseline across the install without editing
+every organization or project individually.
+
+If org-level overrides are enabled, more specific org settings can still replace these
+instance defaults.
+
+## Related settings you may also need
+
+### Plugins
+
+Plugin availability is controlled separately in `Plugins`, not inside `Instance Settings`.
+Use that surface to enable or disable plugins instance-wide before configuring project-level
+plugin details.
+
+Read [Plugins Overview](/plugins/) if the next step is Contact Form or Analytics setup.
+
+### Email
+
+Transactional email footer/identity and deliverability policy are controlled in `Email`.
+Use that area when you need to:
+
+- set the email display name, support email, or legal footer links
+- review bounce and complaint suppression behavior
+- configure email feedback webhook endpoints
+
+The self-hosting guide covers the env bootstrap side in [Self-Hosting](/self-hosting/).
+
+### Domains & publishing
+
+Project launch domains, organization domain registration, and publish-target verification
+are related but separate concerns.
+
+Read [Domains & Publish Targets](/domains-and-publish-targets/) if the next question is
+which domain can actually be published or why a live domain is blocked.
+
+## Recommended workflow
+
+1. Set the main public host and TLS mode first.
+2. Confirm the public site and `/vivd-studio` both resolve correctly.
+3. Adjust capability gates only if the default product surface is too broad.
+4. Set instance limits before onboarding more projects or users.
+5. Then move to [Domains & Publish Targets](/domains-and-publish-targets/), [Plugins Overview](/plugins/), and [Publish Your Site](/publish-your-site/).

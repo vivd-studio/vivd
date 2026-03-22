@@ -20,13 +20,33 @@ export default defineConfig({
         SiteTitle: "./src/components/SiteTitle.astro",
       },
       sidebar: [
-        { slug: "index", label: "Overview" },
-        { slug: "getting-started" },
-        { slug: "self-hosting", label: "Self-Hosting" },
-        { slug: "import-existing-website" },
-        { slug: "create-from-scratch" },
-        { slug: "edit-in-studio" },
-        { slug: "publish-your-site" },
+        {
+          label: "Start Here",
+          items: [
+            { slug: "index", label: "Overview" },
+            { slug: "how-vivd-works", label: "How Vivd Works" },
+            { slug: "getting-started" },
+            { slug: "faq-glossary" },
+          ],
+        },
+        {
+          label: "Build & Launch",
+          items: [
+            { slug: "import-existing-website" },
+            { slug: "create-from-scratch" },
+            { slug: "edit-in-studio" },
+            { slug: "publish-your-site" },
+            { slug: "domains-and-publish-targets", label: "Domains & Publish Targets" },
+          ],
+        },
+        {
+          label: "Self-Hosting & Admin",
+          items: [
+            { slug: "self-hosting", label: "Self-Hosting" },
+            { slug: "instance-settings", label: "Instance Settings" },
+            { slug: "email-and-deliverability", label: "Email & Deliverability" },
+          ],
+        },
         {
           label: "Plugins",
           items: [
@@ -35,9 +55,10 @@ export default defineConfig({
             { slug: "plugins/analytics" },
           ],
         },
-        { slug: "teams-and-access" },
-        { slug: "troubleshooting" },
-        { slug: "faq-glossary" },
+        {
+          label: "Access & Support",
+          items: [{ slug: "teams-and-access" }, { slug: "troubleshooting" }],
+        },
       ],
       social: [
         {

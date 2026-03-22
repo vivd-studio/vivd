@@ -461,7 +461,7 @@ export default function ProjectPlugins() {
   const contactDisabledCopy =
     config.installProfile === "solo"
       ? "Contact Form is disabled for this instance. Open Instance Settings -> Plugins to enable it."
-      : "Contact Form access is managed in Super Admin. Ask a super-admin to enable access for this project, or write to support@vivd.studio.";
+      : "Contact Form access is managed in Super Admin. Ask a super-admin to enable access for this project.";
   const analyticsDisabledCopy =
     config.installProfile === "solo"
       ? "Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."

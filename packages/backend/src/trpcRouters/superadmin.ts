@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import crypto from "node:crypto";
 import { router, superAdminProcedure } from "../trpc";
@@ -37,6 +38,10 @@ import {
   instancePluginDefaultsSchema,
   partialInstanceCapabilityPolicySchema,
 } from "../services/system/InstallProfileService";
+import {
+  instanceNetworkSettingsService,
+  instanceTlsModeSchema,
+} from "../services/system/InstanceNetworkSettingsService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
 import {
   listStudioImagesFromGhcr,
@@ -46,6 +51,8 @@ import {
   organizationIdSchema,
   organizationSlugSchema,
 } from "../lib/organizationIdentifiers";
+import { reloadCaddyConfig } from "../services/system/CaddyAdminService";
+import { publishService } from "../services/publish/PublishService";
 
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
@@ -94,6 +101,14 @@ const instanceLimitDefaultsPatchSchema = z
     imageGenPerMonth: z.number().int().nonnegative().nullable().optional(),
     warningThreshold: z.number().min(0.1).max(1).nullable().optional(),
     maxProjects: z.number().int().nonnegative().nullable().optional(),
+  })
+  .strict();
+
+const instanceNetworkSettingsPatchSchema = z
+  .object({
+    publicHost: z.string().trim().min(1).max(255).nullable().optional(),
+    tlsMode: instanceTlsModeSchema.nullable().optional(),
+    acmeEmail: z.string().trim().email().nullable().optional(),
   })
   .strict();
 
@@ -188,6 +203,7 @@ async function buildEmailOverviewPayload() {
 export const superAdminRouter = router({
   getInstanceSettings: superAdminProcedure.query(async () => {
     const policy = await installProfileService.resolvePolicy();
+    const network = instanceNetworkSettingsService.getResolvedSettings();
     return {
       installProfile: policy.installProfile,
       singleProjectMode: policy.singleProjectMode,
@@ -205,6 +221,14 @@ export const superAdminRouter = router({
       limitDefaults: policy.limitDefaults,
       controlPlane: policy.controlPlane,
       pluginRuntime: policy.pluginRuntime,
+      network: {
+        publicHost: network.publicHost,
+        publicOrigin: network.publicOrigin,
+        tlsMode: network.tlsMode,
+        acmeEmail: network.acmeEmail,
+        sources: network.sources,
+        deploymentManaged: network.deploymentManaged,
+      },
     };
   }),
 
@@ -216,10 +240,14 @@ export const superAdminRouter = router({
           capabilities: partialInstanceCapabilityPolicySchema.optional(),
           pluginDefaults: instancePluginDefaultsSchema.optional(),
           limitDefaults: instanceLimitDefaultsPatchSchema.optional(),
+          network: instanceNetworkSettingsPatchSchema.optional(),
         })
         .strict(),
     )
     .mutation(async ({ input }) => {
+      const currentPolicy = await installProfileService.resolvePolicy();
+      const targetInstallProfile = input.installProfile ?? currentPolicy.installProfile;
+
       if (input.installProfile) {
         await installProfileService.updateInstallProfile(input.installProfile);
       }
@@ -232,8 +260,25 @@ export const superAdminRouter = router({
       if (input.limitDefaults) {
         await installProfileService.updateInstanceLimitDefaults(input.limitDefaults);
       }
+      if (input.network) {
+        if (targetInstallProfile !== "solo") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Instance network settings are currently UI-managed only for solo installs.",
+          });
+        }
+        await instanceNetworkSettingsService.updateStoredSettings(input.network);
+        const caddyfileChanged =
+          await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+        if (caddyfileChanged) {
+          await reloadCaddyConfig();
+        }
+        await publishService.syncGeneratedCaddyConfigs();
+      }
 
       const policy = await installProfileService.resolvePolicy();
+      const network = instanceNetworkSettingsService.getResolvedSettings();
       return {
         success: true,
         installProfile: policy.installProfile,
@@ -252,6 +297,14 @@ export const superAdminRouter = router({
         limitDefaults: policy.limitDefaults,
         controlPlane: policy.controlPlane,
         pluginRuntime: policy.pluginRuntime,
+        network: {
+          publicHost: network.publicHost,
+          publicOrigin: network.publicOrigin,
+          tlsMode: network.tlsMode,
+          acmeEmail: network.acmeEmail,
+          sources: network.sources,
+          deploymentManaged: network.deploymentManaged,
+        },
       };
     }),
 

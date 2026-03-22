@@ -4,6 +4,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { domain as domainTable, organization, publishedSite } from "../../db/schema";
 import { installProfileService } from "../system/InstallProfileService";
+import { instanceNetworkSettingsService } from "../system/InstanceNetworkSettingsService";
 
 export const RESERVED_ORG_SLUG_LABELS = [
   "app",
@@ -109,7 +110,10 @@ export class DomainService {
     const normalizedRequestDomain = requestDomain
       ? this.normalizeHost(requestDomain)
       : null;
-    const configuredPrimaryHost = this.getEnvHostname(process.env.DOMAIN);
+    const networkSettings = instanceNetworkSettingsService.getResolvedSettings();
+    const configuredPrimaryHost =
+      this.getEnvHostname(networkSettings.publicHost ?? undefined) ??
+      this.getEnvHostname(process.env.DOMAIN);
     const configuredControlPlaneHost = this.getEnvHostname(
       process.env.CONTROL_PLANE_HOST,
     );
@@ -190,11 +194,14 @@ export class DomainService {
 
   getTenantRoutingConfig(): TenantRoutingConfig {
     const enabled = parseBooleanEnv(process.env.TENANT_DOMAIN_ROUTING_ENABLED, true);
+    const networkSettings = instanceNetworkSettingsService.getResolvedSettings();
     const tenantBaseDomain =
       this.getEnvHostname(process.env.TENANT_BASE_DOMAIN) ??
+      this.getEnvHostname(networkSettings.publicHost ?? undefined) ??
       this.getEnvHostname(process.env.DOMAIN);
     const controlPlaneHost =
       this.getEnvHostname(process.env.CONTROL_PLANE_HOST) ??
+      this.getEnvHostname(networkSettings.publicHost ?? undefined) ??
       this.getEnvHostname(process.env.DOMAIN) ??
       "localhost";
 
@@ -242,6 +249,7 @@ export class DomainService {
 
   getSuperAdminHosts(): Set<string> {
     const hosts = new Set<string>();
+    const networkSettings = instanceNetworkSettingsService.getResolvedSettings();
 
     const raw = process.env.SUPERADMIN_HOSTS?.trim();
     if (raw) {
@@ -255,7 +263,10 @@ export class DomainService {
           if (normalized) hosts.add(normalized);
         });
     } else {
-      const domainHost = this.getEnvHostname(process.env.DOMAIN) ?? "localhost";
+      const domainHost =
+        this.getEnvHostname(networkSettings.publicHost ?? undefined) ??
+        this.getEnvHostname(process.env.DOMAIN) ??
+        "localhost";
       hosts.add(this.normalizeHost(domainHost));
       hosts.add("localhost");
       hosts.add("127.0.0.1");

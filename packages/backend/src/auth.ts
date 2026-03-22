@@ -1,12 +1,13 @@
 import { betterAuth } from "better-auth";
 import { admin, createAccessControl } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { isIP } from "node:net";
 import { db } from "./db";
 import { domain, organizationMember } from "./db/schema";
 import { APIError } from "better-call";
 import { eq } from "drizzle-orm";
 import { getEmailDeliveryService } from "./services/integrations/EmailDeliveryService";
+import { resolveAuthBaseUrlFromEnv, rewriteUrlOrigin } from "./lib/publicOrigin";
+import { instanceNetworkSettingsService } from "./services/system/InstanceNetworkSettingsService";
 import {
   buildPasswordResetEmail,
   buildVerificationEmail,
@@ -81,33 +82,6 @@ const authRevokeSessionsOnPasswordReset = readBooleanEnv(
   true,
 );
 
-function inferSchemeForHost(host: string): "http" | "https" {
-  const normalized = host.trim().toLowerCase();
-  if (
-    normalized === "localhost" ||
-    normalized.includes(".localhost") ||
-    isIP(normalized) !== 0
-  ) {
-    return "http";
-  }
-  return "https";
-}
-
-function buildAuthBaseUrl(): string | undefined {
-  if (process.env.VIVD_APP_URL) {
-    return process.env.VIVD_APP_URL;
-  }
-  if (process.env.BETTER_AUTH_URL) {
-    return process.env.BETTER_AUTH_URL;
-  }
-  if (process.env.CONTROL_PLANE_HOST) {
-    const host = process.env.CONTROL_PLANE_HOST;
-    const scheme = inferSchemeForHost(host);
-    return `${scheme}://${host}`;
-  }
-  return undefined;
-}
-
 async function sendTransactionalAuthEmail(input: {
   to: string;
   subject: string;
@@ -141,8 +115,10 @@ async function sendTransactionalAuthEmail(input: {
 async function getTrustedOrigins(): Promise<string[]> {
   const origins: string[] = [];
 
-  // Add main DOMAIN from env
-  if (process.env.DOMAIN) {
+  const resolvedOrigin = instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
+  if (resolvedOrigin) {
+    origins.push(resolvedOrigin);
+  } else if (process.env.DOMAIN) {
     const mainDomain = process.env.DOMAIN.startsWith("http")
       ? process.env.DOMAIN
       : `https://${process.env.DOMAIN}`;
@@ -180,7 +156,7 @@ async function getTrustedOrigins(): Promise<string[]> {
 }
 
 export const auth = betterAuth({
-  baseURL: buildAuthBaseUrl(),
+  baseURL: resolveAuthBaseUrlFromEnv(),
   basePath: "/vivd-studio/api/auth",
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -238,9 +214,10 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: authResetPasswordExpiresInSeconds,
     revokeSessionsOnPasswordReset: authRevokeSessionsOnPasswordReset,
     sendResetPassword: async ({ user, url }) => {
+      const publicOrigin = instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
       const template = await buildPasswordResetEmail({
         recipientName: user.name,
-        resetUrl: url,
+        resetUrl: rewriteUrlOrigin(url, publicOrigin),
         expiresInSeconds: authResetPasswordExpiresInSeconds,
       });
       await sendTransactionalAuthEmail({
@@ -261,9 +238,10 @@ export const auth = betterAuth({
     autoSignInAfterVerification: authAutoSignInAfterVerification,
     expiresIn: authEmailVerificationExpiresInSeconds,
     sendVerificationEmail: async ({ user, url }) => {
+      const publicOrigin = instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
       const template = await buildVerificationEmail({
         recipientName: user.name,
-        verificationUrl: url,
+        verificationUrl: rewriteUrlOrigin(url, publicOrigin),
         expiresInSeconds: authEmailVerificationExpiresInSeconds,
       });
       await sendTransactionalAuthEmail({

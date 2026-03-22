@@ -10,6 +10,9 @@ Vivd ships a **solo** self-host install path for one primary host:
 - Docker-based Studio machines by default
 - Local S3-compatible project storage by default
 
+If you want the architectural picture behind those choices, read
+[How Vivd Works](/how-vivd-works/).
+
 ## Before you run it
 
 Have these ready:
@@ -47,6 +50,7 @@ The installer prompts for:
 - your `OPENROUTER_API_KEY`
 
 On a public hostname, it also asks for the ACME email Caddy should use for certificate management.
+It derives the normal auth/admin host settings from that one public host, so you do not need to fill a separate cluster of repeated URL env vars for a standard `solo` install.
 
 On Apple Silicon, the installer automatically selects the arm64 self-host image tags.
 
@@ -58,6 +62,7 @@ It then:
 - writes `docker-compose.yml`, `Caddyfile`, and `.env`
 - generates fresh secrets for auth, scraper access, and Postgres
 - provisions a local S3-compatible bucket for project storage
+- uses that one public host as the canonical `DOMAIN` for the install
 - sets `OPENCODE_MODEL_STANDARD=openrouter/google/gemini-2.5-flash`
 - sets `OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3-pro-preview`
 - enables `STUDIO_MACHINE_PROVIDER=docker`
@@ -130,6 +135,13 @@ docker compose ps
 docker compose logs -f
 ```
 
+After install, you can also change the main public host and TLS mode in `Instance Settings -> Network`. For the hosted self-host bundle, Vivd rewrites its bundled Caddy config from there. If you still keep an explicit advanced host override env such as `VIVD_APP_URL`, `BETTER_AUTH_URL`, or `CONTROL_PLANE_HOST`, that deployment-level override remains authoritative.
+
+See [Instance Settings](/instance-settings/) for the admin-side meaning of `General`,
+`Network`, `Capabilities`, and `Instance Limits`.
+Use [Domains & Publish Targets](/domains-and-publish-targets/) for the launch-domain
+rules behind project publishing.
+
 ## Updating
 
 The installer is currently for fresh installs. It refuses to overwrite an existing `docker-compose.yml`, `Caddyfile`, or `.env`.
@@ -158,6 +170,10 @@ Most self-host installs do not need much more env work. You usually only edit `.
 - GitHub backup/sync: `GITHUB_SYNC_ENABLED`, `GITHUB_ORG`, `GITHUB_TOKEN`
 - a remote S3-compatible object store instead of the bundled local bucket
 - an optional `OPENCODE_MODEL_PRO`
+
+For the install-wide UI surface behind those choices, use [Instance Settings](/instance-settings/).
+Use [Email & Deliverability](/email-and-deliverability/) for the admin-side email
+identity and suppression/webhook workflows.
 
 ### SMTP example
 

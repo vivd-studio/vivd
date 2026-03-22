@@ -7,12 +7,28 @@ import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import DocShot from "../../components/DocShot.astro";
 
 Studio is where you take a generated draft and turn it into a launch-ready site.
+It is not just the agent chat. Studio combines the agent, the live preview, direct
+element/text editing, and the asset/file explorer around the same isolated project
+runtime.
 
 <DocShot
   src="/screenshots/docs/studio-editing_darkmode.webp"
   alt="Vivd Studio text-editing mode with the preview canvas, selected text regions, and agent panel."
   caption="Studio combines guided edits, direct text selection, and project context in a single editing pass."
 />
+
+## What Studio actually includes
+
+- **AI chat** for broader layout, styling, content, and implementation work.
+- **Direct preview editing** when you want to click into the page and fix copy or target a specific element.
+- **Asset and file explorer** for uploads, drag-and-drop replacements, organization, and file-level edits.
+- **Live project preview** served from the isolated Studio runtime for that workspace.
+
+That last point is important: the preview inside Studio is backed by the real project
+environment. For Astro or other dev-server projects, Vivd starts and proxies the project
+dev server from the isolated runtime. For static projects, it serves the workspace files
+directly. In both cases, the Studio preview is the current project state, not a separate
+render-only mock view.
 
 ## Choose the right editing mode
 

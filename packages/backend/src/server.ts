@@ -20,6 +20,8 @@ import { startContactSubmissionRetentionJob } from "./services/plugins/contactFo
 import { startContactFormTurnstileSyncJob } from "./services/plugins/contactForm/turnstile";
 import { createProjectRuntimeRouter } from "./httpRoutes/projectRuntime";
 import { publishService } from "./services/publish/PublishService";
+import { instanceNetworkSettingsService } from "./services/system/InstanceNetworkSettingsService";
+import { reloadCaddyConfig } from "./services/system/CaddyAdminService";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -118,11 +120,22 @@ app.use(
 
 app.use(
   cors({
-    origin: process.env.DOMAIN
-      ? process.env.DOMAIN.startsWith("http")
-        ? process.env.DOMAIN
-        : `https://${process.env.DOMAIN}`
-      : "http://localhost:5173",
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const resolvedOrigin =
+        instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
+      const fallbackOrigin = process.env.DOMAIN
+        ? process.env.DOMAIN.startsWith("http")
+          ? process.env.DOMAIN
+          : `https://${process.env.DOMAIN}`
+        : "http://localhost:5173";
+
+      callback(null, origin === (resolvedOrigin || fallbackOrigin));
+    },
     credentials: true,
   }),
 );
@@ -167,42 +180,59 @@ app.get("/vivd-studio/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.listen(PORT, async () => {
-  try {
-    await domainService.backfillPublishedDomainsIntoRegistry();
-    await domainService.ensureManagedTenantDomainsForExistingOrganizations();
-    console.log("[DomainService] Domain registry backfill complete");
-  } catch (error) {
-    console.error("[DomainService] Failed to backfill domain registry:", error);
+async function bootstrapInstanceNetworkSettings() {
+  await instanceNetworkSettingsService.refreshFromStore();
+  const caddyfileChanged = await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+  if (caddyfileChanged) {
+    await reloadCaddyConfig();
   }
+}
 
-  try {
-    const syncedConfigCount = await publishService.syncGeneratedCaddyConfigs();
-    if (syncedConfigCount > 0) {
-      console.log(
-        `[Publish] Regenerated ${syncedConfigCount} Caddy site config${syncedConfigCount === 1 ? "" : "s"} from the current template`,
-      );
+async function startServer() {
+  await bootstrapInstanceNetworkSettings();
+
+  app.listen(PORT, async () => {
+    try {
+      await domainService.backfillPublishedDomainsIntoRegistry();
+      await domainService.ensureManagedTenantDomainsForExistingOrganizations();
+      console.log("[DomainService] Domain registry backfill complete");
+    } catch (error) {
+      console.error("[DomainService] Failed to backfill domain registry:", error);
     }
-  } catch (error) {
-    console.error("[Publish] Failed to regenerate Caddy site configs:", error);
-  }
 
-  console.log(`Server running on port ${PORT}`);
+    try {
+      const syncedConfigCount = await publishService.syncGeneratedCaddyConfigs();
+      if (syncedConfigCount > 0) {
+        console.log(
+          `[Publish] Regenerated ${syncedConfigCount} Caddy site config${syncedConfigCount === 1 ? "" : "s"} from the current template`,
+        );
+      }
+    } catch (error) {
+      console.error("[Publish] Failed to regenerate Caddy site configs:", error);
+    }
 
-  startStudioMachineReconciler();
-  const stopContactSubmissionRetention = startContactSubmissionRetentionJob();
-  const stopContactFormTurnstileSync = startContactFormTurnstileSyncJob();
-  let hasShutdown = false;
+    console.log(`Server running on port ${PORT}`);
 
-  const cleanup = () => {
-    if (hasShutdown) return;
-    hasShutdown = true;
-    stopContactSubmissionRetention();
-    stopContactFormTurnstileSync();
-    console.log("[Server] Shutting down...");
-  };
+    startStudioMachineReconciler();
+    const stopContactSubmissionRetention = startContactSubmissionRetentionJob();
+    const stopContactFormTurnstileSync = startContactFormTurnstileSyncJob();
+    let hasShutdown = false;
 
-  process.on("SIGTERM", cleanup);
-  process.on("SIGINT", cleanup);
-  process.on("exit", cleanup);
+    const cleanup = () => {
+      if (hasShutdown) return;
+      hasShutdown = true;
+      stopContactSubmissionRetention();
+      stopContactFormTurnstileSync();
+      console.log("[Server] Shutting down...");
+    };
+
+    process.on("SIGTERM", cleanup);
+    process.on("SIGINT", cleanup);
+    process.on("exit", cleanup);
+  });
+}
+
+void startServer().catch((error) => {
+  console.error("[Server] Failed to start:", error);
+  process.exit(1);
 });

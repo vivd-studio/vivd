@@ -40,16 +40,17 @@ services:
       - OPENCODE_MODEL_ADVANCED=${OPENCODE_MODEL_ADVANCED:-}
       - OPENCODE_MODEL_PRO=${OPENCODE_MODEL_PRO:-}
       - DOMAIN=${DOMAIN}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-}
       - VIVD_INSTALL_PROFILE=${VIVD_INSTALL_PROFILE:-solo}
       - VIVD_CADDY_TLS_MODE=${VIVD_CADDY_TLS_MODE:-off}
       - VIVD_PUBLISH_INCLUDE_WWW_ALIAS=${VIVD_PUBLISH_INCLUDE_WWW_ALIAS:-false}
       - VIVD_PUBLIC_DOCS_BASE_URL=${VIVD_PUBLIC_DOCS_BASE_URL:-https://docs.vivd.studio}
-      - TRUSTED_DOMAINS=${TRUSTED_DOMAINS}
+      - VIVD_SELFHOST_CADDY_UI_MANAGED=true
+      - TRUSTED_DOMAINS=${TRUSTED_DOMAINS:-}
       - TENANT_BASE_DOMAIN=${TENANT_BASE_DOMAIN:-}
       - TENANT_DOMAIN_ROUTING_ENABLED=${TENANT_DOMAIN_ROUTING_ENABLED:-false}
-      - CONTROL_PLANE_HOST=${CONTROL_PLANE_HOST}
-      - SUPERADMIN_HOSTS=${SUPERADMIN_HOSTS}
+      - CONTROL_PLANE_HOST=${CONTROL_PLANE_HOST:-}
+      - SUPERADMIN_HOSTS=${SUPERADMIN_HOSTS:-}
       - BACKEND_URL=${BACKEND_URL:-}
       - VIVD_PUBLIC_PLUGIN_API_BASE_URL=${VIVD_PUBLIC_PLUGIN_API_BASE_URL:-}
       - PUBLISHED_DIR=/srv/published
@@ -117,7 +118,7 @@ services:
       - published_sites:/srv/published
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:

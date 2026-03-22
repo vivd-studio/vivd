@@ -16,6 +16,7 @@ import {
 import type { PublishArtifactKind } from "../project/ProjectArtifactStateService";
 import { domainService } from "./DomainService";
 import { reloadCaddyConfig } from "../system/CaddyAdminService";
+import { instanceNetworkSettingsService } from "../system/InstanceNetworkSettingsService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
@@ -73,7 +74,11 @@ export function buildPublishedSiteAddressSpec(
   },
 ): string {
   const isDev = options?.isDev ?? isDevelopmentLikeDomain(domain);
-  const caddyTlsMode = options?.caddyTlsMode ?? parseCaddyTlsMode(process.env.VIVD_CADDY_TLS_MODE);
+  const caddyTlsMode =
+    options?.caddyTlsMode ??
+    (instanceNetworkSettingsService.getResolvedSettings().tlsMode === "managed"
+      ? "managed"
+      : parseCaddyTlsMode(process.env.VIVD_CADDY_TLS_MODE));
   const includeWwwAlias =
     options?.includeWwwAlias ??
     parseBooleanEnv(process.env.VIVD_PUBLISH_INCLUDE_WWW_ALIAS, true);

@@ -9,6 +9,7 @@ export const SYSTEM_SETTING_KEYS = {
   instanceCapabilityPolicy: "instance_capability_policy",
   instancePluginDefaults: "instance_plugin_defaults",
   instanceLimitDefaults: "instance_limit_defaults",
+  instanceNetworkSettings: "instance_network_settings",
   emailTemplateBranding: "email_template_branding",
 } as const;
 
