@@ -17,6 +17,7 @@ import type { PublishArtifactKind } from "../project/ProjectArtifactStateService
 import { domainService } from "./DomainService";
 import { reloadCaddyConfig } from "../system/CaddyAdminService";
 import { instanceNetworkSettingsService } from "../system/InstanceNetworkSettingsService";
+import { installProfileService } from "../system/InstallProfileService";
 
 // Directory where published site files are stored (Caddy reads from here)
 const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
@@ -76,11 +77,14 @@ export function buildPublishedSiteAddressSpec(
   },
 ): string {
   const isDev = options?.isDev ?? isDevelopmentLikeDomain(domain);
+  const networkSettings = instanceNetworkSettingsService.getResolvedSettings();
   const caddyTlsMode =
     options?.caddyTlsMode ??
-    (instanceNetworkSettingsService.getResolvedSettings().tlsMode === "managed"
-      ? "managed"
-      : parseCaddyTlsMode(process.env.VIVD_CADDY_TLS_MODE));
+    (networkSettings.sources.tlsMode === "default"
+      ? parseCaddyTlsMode(process.env.VIVD_CADDY_TLS_MODE)
+      : networkSettings.tlsMode === "managed"
+        ? "managed"
+        : "off");
   const includeWwwAlias =
     options?.includeWwwAlias ??
     parseBooleanEnv(process.env.VIVD_PUBLISH_INCLUDE_WWW_ALIAS, true);
@@ -621,6 +625,13 @@ export class PublishService {
     return this.normalizeDomain(domain) === primaryHost;
   }
 
+  private async shouldInlinePrimaryHostPublish(domain: string): Promise<boolean> {
+    if ((await installProfileService.getInstallProfile()) !== "solo") {
+      return false;
+    }
+    return this.isPrimaryHostDomain(domain);
+  }
+
   private clearPrimaryHostInlineConfigs(): void {
     if (!fs.existsSync(PRIMARY_HOST_INLINE_SITE_DIR)) return;
 
@@ -901,7 +912,7 @@ ${blocks.join("\n\n")}
     const publishedPath = path.join(PUBLISHED_DIR, organizationId, projectSlug);
     const redirectRulesBlock = this.buildRedirectCaddyBlocks(redirectRules);
 
-    if (this.isPrimaryHostDomain(domain)) {
+    if (await this.shouldInlinePrimaryHostPublish(domain)) {
       fs.mkdirSync(PRIMARY_HOST_INLINE_SITE_DIR, { recursive: true });
       this.removePublishedSiteConfig(domain);
 
