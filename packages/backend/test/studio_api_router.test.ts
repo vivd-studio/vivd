@@ -139,6 +139,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     canSelectOrganization: true,
     organizationId: "org-1",
     organizationRole: "owner",
+    studioRuntimeAuth: null,
     ...overrides,
   };
 }
@@ -313,6 +314,26 @@ describe("studioApi router", () => {
     expect(result).toEqual({ blocked: false });
   });
 
+  it("allows getStatus with studio runtime auth when session is absent", async () => {
+    const caller = studioApiRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationRole: null,
+        studioRuntimeAuth: {
+          studioId: "studio-1",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          version: 3,
+        },
+      }),
+    );
+
+    const result = await caller.getStatus({ studioId: "studio-1" });
+
+    expect(checkLimitsMock).toHaveBeenCalledWith("org-1");
+    expect(result).toEqual({ blocked: false });
+  });
+
   it("returns rendered agent instructions for the requested project", async () => {
     const caller = studioApiRouter.createCaller(makeContext());
 
@@ -401,6 +422,64 @@ describe("studioApi router", () => {
       hasUnsavedChanges: true,
       headCommitHash: null,
       workingCommitHash: null,
+    });
+  });
+
+  it("allows workspace state reporting with studio runtime auth", async () => {
+    const caller = studioApiRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationRole: null,
+        studioRuntimeAuth: {
+          studioId: "studio-1",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          version: 3,
+        },
+      }),
+    );
+
+    await caller.reportWorkspaceState({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 3,
+      hasUnsavedChanges: false,
+    });
+
+    expect(workspaceReportMock).toHaveBeenCalledWith({
+      studioId: "studio-1",
+      organizationId: "org-1",
+      slug: "site-1",
+      version: 3,
+      hasUnsavedChanges: false,
+      headCommitHash: null,
+      workingCommitHash: null,
+    });
+  });
+
+  it("rejects workspace state reports for a mismatched studio runtime version", async () => {
+    const caller = studioApiRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationRole: null,
+        studioRuntimeAuth: {
+          studioId: "studio-1",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          version: 3,
+        },
+      }),
+    );
+
+    await expect(
+      caller.reportWorkspaceState({
+        studioId: "studio-1",
+        slug: "site-1",
+        version: 4,
+        hasUnsavedChanges: false,
+      }),
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
     });
   });
 

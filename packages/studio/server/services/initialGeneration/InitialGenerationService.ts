@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
   isConnectedMode,
   INITIAL_GENERATION_MANIFEST_RELATIVE_PATH,
   type InitialGenerationState,
@@ -23,17 +19,15 @@ import {
   syncSourceToBucket,
 } from "../sync/ArtifactSyncService.js";
 import { thumbnailGenerationReporter } from "../reporting/ThumbnailGenerationReporter.js";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+  type ConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 const startLocks = new Map<string, Promise<StartInitialGenerationResult>>();
 const monitoredSessions = new Map<string, () => void>();
 const finalizationLocks = new Map<string, Promise<void>>();
-
-type ConnectedBackendConfig = {
-  backendUrl: string;
-  sessionToken: string;
-  studioId: string;
-  organizationId?: string;
-};
 
 export type StartInitialGenerationOptions = {
   projectSlug: string;
@@ -48,21 +42,9 @@ export type StartInitialGenerationResult = {
   status: InitialGenerationState;
 };
 
-function getConnectedBackendConfig(): ConnectedBackendConfig | null {
+function getConnectedBackendConfig(): ConnectedBackendAuthConfig | null {
   if (!isConnectedMode()) return null;
-
-  const backendUrl = getBackendUrl();
-  const sessionToken = getSessionToken();
-  const studioId = getStudioId();
-  const organizationId = getConnectedOrganizationId();
-  if (!backendUrl || !sessionToken || !studioId) return null;
-
-  return {
-    backendUrl,
-    sessionToken,
-    studioId,
-    organizationId,
-  };
+  return getConnectedBackendAuthConfig();
 }
 
 async function callConnectedBackendMutation<T>(
@@ -74,13 +56,7 @@ async function callConnectedBackendMutation<T>(
 
   const response = await fetch(`${config.backendUrl}/api/trpc/${procedure}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.sessionToken}`,
-      ...(config.organizationId
-        ? { "x-vivd-organization-id": config.organizationId }
-        : {}),
-    },
+    headers: buildConnectedBackendHeaders(config),
     body: JSON.stringify({
       studioId: config.studioId,
       ...input,

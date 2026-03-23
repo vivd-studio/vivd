@@ -29,13 +29,13 @@ import { simpleGit } from "simple-git";
 import fs from "fs";
 import path from "path";
 import {
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
 import { getWorkspaceDir } from "./workspaceDir.js";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../lib/connectedBackendAuth.js";
 
 const CHECKLIST_PENDING_NOTE = "[[PENDING_AGENT_REVIEW]]";
 const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
@@ -50,18 +50,14 @@ const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
 function getConnectedChecklistApiConfig():
   | {
       backendUrl: string;
-      sessionToken: string;
       studioId: string;
       organizationId?: string;
+      sessionToken?: string;
+      studioAccessToken?: string;
     }
   | null {
   if (!isConnectedMode()) return null;
-  const backendUrl = getBackendUrl();
-  const sessionToken = getSessionToken();
-  const studioId = getStudioId();
-  const organizationId = getConnectedOrganizationId();
-  if (!backendUrl || !sessionToken || !studioId) return null;
-  return { backendUrl, sessionToken, studioId, organizationId };
+  return getConnectedBackendAuthConfig();
 }
 
 async function upsertChecklistToBackend(options: {
@@ -76,13 +72,7 @@ async function upsertChecklistToBackend(options: {
     `${config.backendUrl}/api/trpc/studioApi.upsertPublishChecklist`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.sessionToken}`,
-        ...(config.organizationId
-          ? { "x-vivd-organization-id": config.organizationId }
-          : {}),
-      },
+      headers: buildConnectedBackendHeaders(config),
       body: JSON.stringify({
         studioId: config.studioId,
         slug: options.slug,
@@ -119,12 +109,9 @@ async function getChecklistFromBackend(options: {
     `${config.backendUrl}/api/trpc/studioApi.getPublishChecklist?input=${queryInput}`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${config.sessionToken}`,
-        ...(config.organizationId
-          ? { "x-vivd-organization-id": config.organizationId }
-          : {}),
-      },
+      headers: buildConnectedBackendHeaders(config, {
+        includeContentType: false,
+      }),
     },
   );
 

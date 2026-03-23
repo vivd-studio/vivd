@@ -9,11 +9,11 @@
 
 import {
   isConnectedMode,
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
 } from "@vivd/shared";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 const REQUEST_THROTTLE_MS = 1500;
 const ERROR_COOLDOWN_MS_DEFAULT = 15_000;
@@ -49,11 +49,8 @@ class ThumbnailGenerationReporter {
   request(slug: string, version: number): void {
     if (!isConnectedMode()) return;
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) return;
+    const config = getConnectedBackendAuthConfig();
+    if (!config) return;
 
     // Prefer machine-provided slug to avoid stale route/input slugs in connected mode.
     const machineSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
@@ -75,17 +72,11 @@ class ThumbnailGenerationReporter {
 
     if (this.inflightByKey.has(key)) return;
 
-    const promise = fetch(`${backendUrl}/api/trpc/studioApi.generateThumbnail`, {
+    const promise = fetch(`${config.backendUrl}/api/trpc/studioApi.generateThumbnail`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${sessionToken}`,
-        ...(organizationId
-          ? { "x-vivd-organization-id": organizationId }
-          : {}),
-      },
+      headers: buildConnectedBackendHeaders(config),
       body: JSON.stringify({
-        studioId,
+        studioId: config.studioId,
         slug: normalizedSlug,
         version: normalizedVersion,
       }),

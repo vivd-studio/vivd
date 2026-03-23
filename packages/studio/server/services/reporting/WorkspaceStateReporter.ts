@@ -1,11 +1,11 @@
 import {
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
 import type { WorkspaceManager } from "../../workspace/WorkspaceManager.js";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 type WorkspaceStateReporterStartOptions = {
   workspace: WorkspaceManager;
@@ -59,11 +59,8 @@ class WorkspaceStateReporter {
     if (!this.options) return;
     if (this.inflight) return;
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) return;
+    const config = getConnectedBackendAuthConfig();
+    if (!config) return;
     if (!this.options.workspace.isInitialized()) return;
 
     const run = (async () => {
@@ -90,18 +87,12 @@ class WorkspaceStateReporter {
       }
 
       const response = await fetch(
-        `${backendUrl}/api/trpc/studioApi.reportWorkspaceState`,
+        `${config.backendUrl}/api/trpc/studioApi.reportWorkspaceState`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionToken}`,
-            ...(organizationId
-              ? { "x-vivd-organization-id": organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config),
           body: JSON.stringify({
-            studioId,
+            studioId: config.studioId,
             slug: this.options!.slug,
             version: this.options!.version,
             hasUnsavedChanges,

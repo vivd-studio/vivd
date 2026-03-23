@@ -9,11 +9,11 @@
 
 import {
   isConnectedMode,
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
 } from "@vivd/shared";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 const TOUCH_THROTTLE_MS = 1500;
 
@@ -24,11 +24,8 @@ class ProjectTouchReporter {
   touch(slug: string): void {
     if (!isConnectedMode()) return;
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) return;
+    const config = getConnectedBackendAuthConfig();
+    if (!config) return;
 
     const normalizedSlug = slug.trim();
     if (!normalizedSlug) return;
@@ -41,18 +38,12 @@ class ProjectTouchReporter {
     if (this.inflightBySlug.has(normalizedSlug)) return;
 
     const promise = fetch(
-      `${backendUrl}/api/trpc/studioApi.touchProjectUpdatedAt`,
+      `${config.backendUrl}/api/trpc/studioApi.touchProjectUpdatedAt`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${sessionToken}`,
-          ...(organizationId
-            ? { "x-vivd-organization-id": organizationId }
-            : {}),
-        },
+        headers: buildConnectedBackendHeaders(config),
         body: JSON.stringify({
-          studioId,
+          studioId: config.studioId,
           slug: normalizedSlug,
         }),
       },

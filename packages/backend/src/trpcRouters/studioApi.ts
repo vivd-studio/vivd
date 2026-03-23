@@ -2,11 +2,12 @@
  * Studio API Router
  *
  * Handles communication between connected studio instances and the main backend.
- * Studio instances authenticate using the user's session token (same as other protected routes).
+ * Studio instances authenticate using either the user's session token or the
+ * machine-scoped Studio runtime token.
  */
 
 import { z } from "zod";
-import { router, orgProcedure, projectMemberProcedure } from "../trpc";
+import { router, studioOrgProcedure, studioProjectProcedure } from "../trpc";
 import { usageService, type TokenData } from "../services/usage/UsageService";
 import { limitsService } from "../services/usage/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
@@ -94,9 +95,9 @@ export const studioApiRouter = router({
   /**
    * Receive usage reports from studio instances.
    * Called by studio's UsageReporter service to sync usage data.
-   * Authenticated via user's session token.
+   * Authenticated via session token or studio runtime token.
    */
-  reportUsage: orgProcedure
+  reportUsage: studioOrgProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -105,10 +106,10 @@ export const studioApiRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
-      const userId = ctx.session.user.id;
+      const actorId = ctx.session?.user.id ?? `studio:${input.studioId}`;
 
       console.log(
-        `[StudioAPI] Received ${input.reports.length} usage reports from studio ${input.studioId} (user: ${userId})`
+        `[StudioAPI] Received ${input.reports.length} usage reports from studio ${input.studioId} (user: ${actorId})`
       );
 
       // Record each report via UsageService
@@ -131,7 +132,7 @@ export const studioApiRouter = router({
    * Receive image-generation usage reports from studio tools.
    * Called when image generation succeeds in connected studio mode.
    */
-  reportImageGeneration: orgProcedure
+  reportImageGeneration: studioOrgProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -140,7 +141,7 @@ export const studioApiRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
-      const userId = ctx.session.user.id;
+      const actorId = ctx.session?.user.id ?? `studio:${input.studioId}`;
 
       await usageService.recordImageGeneration(
         organizationId,
@@ -149,7 +150,7 @@ export const studioApiRouter = router({
       );
 
       console.log(
-        `[StudioAPI] Received image generation report from studio ${input.studioId} (user: ${userId})`,
+        `[StudioAPI] Received image generation report from studio ${input.studioId} (user: ${actorId})`,
       );
 
       return { success: true };
@@ -160,7 +161,7 @@ export const studioApiRouter = router({
    * This allows the usage table to reflect the latest session titles even if no
    * further usage events are emitted after the rename.
    */
-  updateSessionTitle: orgProcedure
+  updateSessionTitle: studioOrgProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -171,10 +172,10 @@ export const studioApiRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
-      const userId = ctx.session.user.id;
+      const actorId = ctx.session?.user.id ?? `studio:${input.studioId}`;
 
       console.log(
-        `[StudioAPI] Session title update from studio ${input.studioId} (user: ${userId}): ${input.sessionId} -> "${input.sessionTitle}"`,
+        `[StudioAPI] Session title update from studio ${input.studioId} (user: ${actorId}): ${input.sessionId} -> "${input.sessionTitle}"`,
       );
 
       await usageService.updateSessionTitle(
@@ -190,9 +191,9 @@ export const studioApiRouter = router({
   /**
    * Return current usage status for a studio instance.
    * Studio calls this to get limit information for display.
-   * Authenticated via user's session token.
+   * Authenticated via session token or studio runtime token.
    */
-  getStatus: orgProcedure
+  getStatus: studioOrgProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -200,13 +201,13 @@ export const studioApiRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
-      const userId = ctx.session.user.id;
+      const actorId = ctx.session?.user.id ?? `studio:${input.studioId}`;
 
       // Return current limit status
       const status = await limitsService.checkLimits(organizationId);
 
       console.log(
-        `[StudioAPI] Status request from studio ${input.studioId} (user: ${userId}): blocked=${status.blocked}`
+        `[StudioAPI] Status request from studio ${input.studioId} (user: ${actorId}): blocked=${status.blocked}`
       );
 
       return status;
@@ -216,7 +217,7 @@ export const studioApiRouter = router({
    * Return rendered agent instructions for the active project/version.
    * Studio consumes this at session start and injects it as OpenCode `system`.
    */
-  getAgentInstructions: projectMemberProcedure
+  getAgentInstructions: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -274,7 +275,7 @@ export const studioApiRouter = router({
    * Studio instances call this after local workspace edits/snapshots so the main app
    * can sort projects by last activity.
    */
-  touchProjectUpdatedAt: projectMemberProcedure
+  touchProjectUpdatedAt: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -290,7 +291,7 @@ export const studioApiRouter = router({
    * Allow connected Studio runtimes to update the initial scratch-generation status
    * as the OpenCode session progresses.
    */
-  updateInitialGenerationStatus: projectMemberProcedure
+  updateInitialGenerationStatus: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -320,7 +321,7 @@ export const studioApiRouter = router({
    * Studio instances call this after snapshot/build artifacts have been synced so
    * the control plane can refresh project card thumbnails from the bucket-backed preview.
    */
-  generateThumbnail: projectMemberProcedure
+  generateThumbnail: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -355,7 +356,7 @@ export const studioApiRouter = router({
    * Receive live workspace state from connected studio.
    * Used by publish safety checks to avoid publishing while Studio has unsaved edits.
    */
-  reportWorkspaceState: projectMemberProcedure
+  reportWorkspaceState: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -384,7 +385,7 @@ export const studioApiRouter = router({
    * Receive agent task lease heartbeats from connected studio runtimes.
    * Keeps machines alive while an agent run is active, but applies a hard cap.
    */
-  reportAgentTaskLease: projectMemberProcedure
+  reportAgentTaskLease: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -450,7 +451,7 @@ export const studioApiRouter = router({
   /**
    * Upsert checklist state from connected studio into DB.
    */
-  upsertPublishChecklist: projectMemberProcedure
+  upsertPublishChecklist: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),
@@ -474,7 +475,7 @@ export const studioApiRouter = router({
   /**
    * Read checklist state for connected studio from DB.
    */
-  getPublishChecklist: projectMemberProcedure
+  getPublishChecklist: studioProjectProcedure
     .input(
       z.object({
         studioId: z.string(),

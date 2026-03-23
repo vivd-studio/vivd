@@ -28,6 +28,13 @@ export interface StudioMachineStartResult {
   accessToken?: string;
 }
 
+export type StudioRuntimeAuthIdentity = {
+  studioId: string;
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+};
+
 export interface StudioMachineUrlResult {
   url: string;
   accessToken?: string;
@@ -46,6 +53,10 @@ export interface StudioMachineProvider {
     version: number,
   ): Promise<StudioMachineUrlResult | null>;
   isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean>;
+  resolveRuntimeAuth?(
+    studioId: string,
+    accessToken: string,
+  ): Promise<StudioRuntimeAuthIdentity | null>;
 }
 
 export interface StudioMachineSummary {

@@ -1,10 +1,10 @@
 import {
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 const CACHE_TTL_MS = 30_000;
 
@@ -94,11 +94,8 @@ class AgentInstructionsService {
       return buildFallbackInstructions(projectSlug);
     }
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) {
+    const config = getConnectedBackendAuthConfig();
+    if (!config) {
       return buildFallbackInstructions(projectSlug);
     }
 
@@ -111,21 +108,18 @@ class AgentInstructionsService {
     try {
       const queryInput = encodeURIComponent(
         JSON.stringify({
-          studioId,
+          studioId: config.studioId,
           slug: projectSlug,
           ...(projectVersion ? { version: projectVersion } : {}),
         }),
       );
       const response = await fetch(
-        `${backendUrl}/api/trpc/studioApi.getAgentInstructions?input=${queryInput}`,
+        `${config.backendUrl}/api/trpc/studioApi.getAgentInstructions?input=${queryInput}`,
         {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-            ...(organizationId
-              ? { "x-vivd-organization-id": organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config, {
+            includeContentType: false,
+          }),
         },
       );
 

@@ -13,6 +13,13 @@ export type DevicePreset = (typeof DEVICE_PRESETS)[number];
 export type ViewportMode = "desktop" | "tablet" | "mobile";
 export type PreviewMode = "static" | "devserver";
 
+export interface PreviewImageContextMenuEvent {
+  clientX: number;
+  clientY: number;
+  src: string | null;
+  currentSrc: string | null;
+}
+
 export const TABLET_PRESET = {
   name: "iPad Air",
   width: 820,

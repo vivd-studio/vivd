@@ -7,14 +7,14 @@
 
 import {
   isConnectedMode,
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
   type StudioImageGenerationReport,
   type StudioUsageReport,
 } from "@vivd/shared";
 import type { UsageData } from "../../opencode/useEvents.js";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 const MAX_QUEUE_SIZE = 100;
 const FLUSH_INTERVAL_MS = 5000;
@@ -99,11 +99,8 @@ class UsageReporter {
   ): Promise<void> {
     if (!isConnectedMode()) return;
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) {
+    const config = getConnectedBackendAuthConfig();
+    if (!config) {
       console.error("[UsageReporter] Missing backend configuration for image generation");
       return;
     }
@@ -116,18 +113,12 @@ class UsageReporter {
 
     try {
       const response = await fetch(
-        `${backendUrl}/api/trpc/studioApi.reportImageGeneration`,
+        `${config.backendUrl}/api/trpc/studioApi.reportImageGeneration`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionToken}`,
-            ...(organizationId
-              ? { "x-vivd-organization-id": organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config),
           body: JSON.stringify({
-            studioId,
+            studioId: config.studioId,
             report,
           }),
         },
@@ -155,11 +146,8 @@ class UsageReporter {
   ): Promise<void> {
     if (!isConnectedMode()) return;
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) return;
+    const config = getConnectedBackendAuthConfig();
+    if (!config) return;
 
     const title = sessionTitle.trim();
     if (!title) return;
@@ -167,18 +155,12 @@ class UsageReporter {
 
     try {
       const response = await fetch(
-        `${backendUrl}/api/trpc/studioApi.updateSessionTitle`,
+        `${config.backendUrl}/api/trpc/studioApi.updateSessionTitle`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionToken}`,
-            ...(organizationId
-              ? { "x-vivd-organization-id": organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config),
           body: JSON.stringify({
-            studioId,
+            studioId: config.studioId,
             sessionId,
             sessionTitle: title,
             projectSlug,
@@ -230,12 +212,8 @@ class UsageReporter {
    * Send reports to the main backend.
    */
   private async sendToBackend(reports: StudioUsageReport[]): Promise<boolean> {
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-
-    if (!backendUrl || !sessionToken || !studioId) {
+    const config = getConnectedBackendAuthConfig();
+    if (!config) {
       console.error("[UsageReporter] Missing backend configuration");
       return false;
     }
@@ -247,17 +225,11 @@ class UsageReporter {
       try {
         // `studioApi.reportUsage` is a tRPC mutation procedure.
         // The Express adapter expects the raw JSON input body (no `{ json: ... }` wrapper).
-        const response = await fetch(`${backendUrl}/api/trpc/studioApi.reportUsage`, {
+        const response = await fetch(`${config.backendUrl}/api/trpc/studioApi.reportUsage`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionToken}`,
-            ...(organizationId
-              ? { "x-vivd-organization-id": organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config),
           body: JSON.stringify({
-            studioId,
+            studioId: config.studioId,
             reports,
           }),
         });
@@ -274,7 +246,7 @@ class UsageReporter {
 
         // Don't retry on auth errors
         if (response.status === 401 || response.status === 403) {
-          console.error("[UsageReporter] Authentication failed - check SESSION_TOKEN");
+          console.error("[UsageReporter] Authentication failed - check studio/backend auth");
           return false;
         }
       } catch (err) {
@@ -302,12 +274,8 @@ class UsageReporter {
       return null;
     }
 
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-
-    if (!backendUrl || !sessionToken || !studioId) {
+    const config = getConnectedBackendAuthConfig();
+    if (!config) {
       console.error("[UsageReporter] Missing backend configuration for status fetch");
       return null;
     }
@@ -319,18 +287,12 @@ class UsageReporter {
         // `studioApi.getStatus` is a tRPC query procedure, which expects GET requests.
         // The `input` querystring should be the raw JSON input (no `{ json: ... }` wrapper).
         const response = await fetch(
-          `${backendUrl}/api/trpc/studioApi.getStatus?input=${encodeURIComponent(
-            JSON.stringify({ studioId })
+          `${config.backendUrl}/api/trpc/studioApi.getStatus?input=${encodeURIComponent(
+            JSON.stringify({ studioId: config.studioId })
           )}`,
           {
             method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${sessionToken}`,
-              ...(organizationId
-                ? { "x-vivd-organization-id": organizationId }
-                : {}),
-            },
+            headers: buildConnectedBackendHeaders(config),
           }
         );
 

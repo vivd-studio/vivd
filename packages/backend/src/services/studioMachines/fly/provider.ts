@@ -3,6 +3,7 @@ import type {
   StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
+  StudioRuntimeAuthIdentity,
 } from "../types";
 import { listStudioVisitMsByIdentity } from "../visitStore";
 import type {
@@ -478,6 +479,36 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       getMachineMetadata,
       getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
     });
+  }
+
+  async resolveRuntimeAuth(
+    studioId: string,
+    accessToken: string,
+  ): Promise<StudioRuntimeAuthIdentity | null> {
+    const normalizedStudioId = studioId.trim();
+    const normalizedToken = accessToken.trim();
+    if (!normalizedStudioId || !normalizedToken) return null;
+
+    const machines = await this.apiClient.listMachines();
+    for (const machine of machines) {
+      const machineStudioId = resolveStudioIdFromMachine(machine, null);
+      if (machineStudioId !== normalizedStudioId) continue;
+
+      const machineToken = getStudioAccessTokenFromMachine(machine);
+      if (machineToken !== normalizedToken) continue;
+
+      const identity = getStudioIdentityFromMachine(machine);
+      if (!identity) continue;
+
+      return {
+        studioId: normalizedStudioId,
+        organizationId: identity.organizationId,
+        projectSlug: identity.projectSlug,
+        version: identity.version,
+      };
+    }
+
+    return null;
   }
 
   async destroyStudioMachine(machineId: string): Promise<void> {

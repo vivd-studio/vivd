@@ -6,6 +6,7 @@ import type {
   StudioMachineStartArgs,
   StudioMachineStartResult,
   StudioMachineSummary,
+  StudioRuntimeAuthIdentity,
   StudioMachineUrlResult,
 } from "../types";
 import {
@@ -1129,6 +1130,42 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       version,
     );
     return !!existing && isRunningContainer(existing);
+  }
+
+  async resolveRuntimeAuth(
+    studioId: string,
+    accessToken: string,
+  ): Promise<StudioRuntimeAuthIdentity | null> {
+    const normalizedStudioId = studioId.trim();
+    const normalizedToken = accessToken.trim();
+    if (!normalizedStudioId || !normalizedToken) return null;
+
+    const containers = await this.apiClient.listContainers();
+    const candidates = containers.filter((container) => {
+      const labels = getContainerLabels(container);
+      return trimToken(labels["vivd_studio_id"]) === normalizedStudioId;
+    });
+
+    for (const container of candidates) {
+      const inspected = await this.inspectContainer(container.Id);
+      const candidateStudioId = getContainerStudioId(inspected, null);
+      if (candidateStudioId !== normalizedStudioId) continue;
+
+      const candidateAccessToken = getContainerAccessToken(inspected);
+      if (candidateAccessToken !== normalizedToken) continue;
+
+      const identity = getContainerIdentity(inspected);
+      if (!identity) continue;
+
+      return {
+        studioId: normalizedStudioId,
+        organizationId: identity.organizationId,
+        projectSlug: identity.projectSlug,
+        version: identity.version,
+      };
+    }
+
+    return null;
   }
 
   async listStudioMachines(): Promise<StudioMachineSummary[]> {

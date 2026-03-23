@@ -1,10 +1,10 @@
 import {
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
   isConnectedMode,
 } from "@vivd/shared";
+import {
+  buildConnectedBackendHeaders,
+  getConnectedBackendAuthConfig,
+} from "../../lib/connectedBackendAuth.js";
 
 type StartRunInput = {
   runId: string;
@@ -123,13 +123,7 @@ class AgentLeaseReporter {
         `${config.backendUrl}/api/trpc/studioApi.reportAgentTaskLease`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.sessionToken}`,
-            ...(config.organizationId
-              ? { "x-vivd-organization-id": config.organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config),
           body: JSON.stringify({
             studioId: config.studioId,
             slug: run.projectSlug,
@@ -173,13 +167,7 @@ class AgentLeaseReporter {
         `${config.backendUrl}/api/trpc/studioApi.reportAgentTaskLease`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.sessionToken}`,
-            ...(config.organizationId
-              ? { "x-vivd-organization-id": config.organizationId }
-              : {}),
-          },
+          headers: buildConnectedBackendHeaders(config),
           body: JSON.stringify({
             studioId: config.studioId,
             slug: run.projectSlug,
@@ -206,18 +194,14 @@ class AgentLeaseReporter {
   private getBackendConfig():
     | {
         backendUrl: string;
-        sessionToken: string;
         studioId: string;
         organizationId?: string;
+        sessionToken?: string;
+        studioAccessToken?: string;
       }
     | null {
     if (!isConnectedMode()) return null;
-    const backendUrl = getBackendUrl();
-    const sessionToken = getSessionToken();
-    const studioId = getStudioId();
-    const organizationId = getConnectedOrganizationId();
-    if (!backendUrl || !sessionToken || !studioId) return null;
-    return { backendUrl, sessionToken, studioId, organizationId };
+    return getConnectedBackendAuthConfig();
   }
 
   private getHeartbeatMs(): number {

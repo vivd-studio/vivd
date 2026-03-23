@@ -12,6 +12,8 @@ import {
 import { and, asc, eq } from "drizzle-orm";
 import { domainService } from "./services/publish/DomainService";
 import { normalizeOrganizationId } from "./lib/organizationIdentifiers";
+import { studioMachineProvider } from "./services/studioMachines";
+import type { StudioRuntimeAuthIdentity } from "./services/studioMachines/types";
 
 type UserMembership = {
   organizationId: string;
@@ -20,6 +22,8 @@ type UserMembership = {
 
 const DEFAULT_HOST_RESOLUTION_LOG_THROTTLE_MS = 10_000;
 const hostResolutionLogAtBySignature = new Map<string, number>();
+const STUDIO_RUNTIME_TOKEN_HEADER = "x-vivd-studio-token";
+const STUDIO_RUNTIME_ID_HEADER = "x-vivd-studio-id";
 
 function getHostResolutionLogThrottleMs(): number {
   const raw = process.env.HOST_RESOLUTION_LOG_THROTTLE_MS;
@@ -109,6 +113,8 @@ export const createContext = async ({
   const bearerToken = authHeader?.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length).trim()
     : null;
+  const studioRuntimeToken = headers.get(STUDIO_RUNTIME_TOKEN_HEADER)?.trim() || null;
+  const studioRuntimeId = headers.get(STUDIO_RUNTIME_ID_HEADER)?.trim() || null;
 
   // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
   // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
@@ -158,6 +164,19 @@ export const createContext = async ({
         };
       }
     }
+  }
+
+  let studioRuntimeAuth: StudioRuntimeAuthIdentity | null = null;
+  if (
+    !session &&
+    studioRuntimeId &&
+    studioRuntimeToken &&
+    typeof studioMachineProvider.resolveRuntimeAuth === "function"
+  ) {
+    studioRuntimeAuth = await studioMachineProvider.resolveRuntimeAuth(
+      studioRuntimeId,
+      studioRuntimeToken,
+    );
   }
 
   if (session && !sessionRecordFromDb) {
@@ -271,6 +290,10 @@ export const createContext = async ({
     }
   }
 
+  if (!organizationId && studioRuntimeAuth) {
+    organizationId = studioRuntimeAuth.organizationId;
+  }
+
   const organizationRole =
     session && organizationId && session.user.role !== "super_admin"
       ? membershipRoleByOrg.get(organizationId) ?? null
@@ -303,6 +326,7 @@ export const createContext = async ({
     canSelectOrganization,
     organizationId,
     organizationRole,
+    studioRuntimeAuth,
   };
 };
 
@@ -328,41 +352,93 @@ export const protectedProcedure = t.procedure.use(async function isAuthed(
   });
 });
 
+const enforceStudioOrganizationAccess = t.middleware(async ({ ctx, next }) => {
+  if (ctx.session) {
+    await (async () => {
+      if (!ctx.organizationId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No organization selected",
+        });
+      }
+      if (ctx.session.user.role === "super_admin") {
+        return;
+      }
+
+      const org = await db.query.organization.findFirst({
+        where: eq(organization.id, ctx.organizationId),
+        columns: { status: true },
+      });
+      if (org?.status === "suspended") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Organization is suspended",
+        });
+      }
+
+      if (!ctx.organizationRole) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "You are not a member of this organization",
+        });
+      }
+    })();
+
+    return next();
+  }
+
+  if (!ctx.organizationId || !ctx.studioRuntimeAuth) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  if (ctx.organizationId !== ctx.studioRuntimeAuth.organizationId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Studio runtime is not authorized for this organization",
+    });
+  }
+
+  return next();
+});
+
 const enforceOrganizationAccess = t.middleware(async ({ ctx, next }) => {
   if (!ctx.session) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  if (!ctx.organizationId) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "No organization selected",
-    });
-  }
-  if (ctx.session.user.role === "super_admin") {
-    return next();
-  }
+  await (async () => {
+    if (!ctx.organizationId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "No organization selected",
+      });
+    }
+    if (ctx.session.user.role === "super_admin") {
+      return;
+    }
 
-  const org = await db.query.organization.findFirst({
-    where: eq(organization.id, ctx.organizationId),
-    columns: { status: true },
-  });
-  if (org?.status === "suspended") {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Organization is suspended",
+    const org = await db.query.organization.findFirst({
+      where: eq(organization.id, ctx.organizationId),
+      columns: { status: true },
     });
-  }
+    if (org?.status === "suspended") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Organization is suspended",
+      });
+    }
 
-  if (!ctx.organizationRole) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "You are not a member of this organization",
-    });
-  }
+    if (!ctx.organizationRole) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "You are not a member of this organization",
+      });
+    }
+  })();
   return next();
 });
 
 export const orgProcedure = protectedProcedure.use(enforceOrganizationAccess);
+export const studioOrgProcedure = t.procedure.use(enforceStudioOrganizationAccess);
 
 export const orgAdminProcedure = orgProcedure.use(async ({ ctx, next }) => {
   if (ctx.session.user.role === "super_admin") return next();
@@ -399,6 +475,11 @@ const enforceSuperAdminHost = t.middleware(async ({ ctx, next }) => {
 export const superAdminProcedure = protectedProcedure.use(enforceSuperAdminHost);
 
 const projectSlugSchema = z.object({ slug: z.string().min(1) });
+const studioProjectScopeSchema = z.object({
+  studioId: z.string().min(1).optional(),
+  slug: z.string().min(1),
+  version: z.number().int().positive().optional(),
+});
 const enforceClientEditorProjectAccess = t.middleware(
   async ({ ctx, getRawInput, next }) => {
     if (!ctx.session) return next();
@@ -438,10 +519,59 @@ const enforceClientEditorProjectAccess = t.middleware(
   }
 );
 
+const enforceStudioProjectAccess = t.middleware(async ({ ctx, getRawInput, next }) => {
+  if (ctx.session) return next();
+
+  if (!ctx.studioRuntimeAuth) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  const rawInput = await getRawInput();
+  const parsed = studioProjectScopeSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Studio runtime project scope is invalid",
+    });
+  }
+
+  if (
+    parsed.data.studioId &&
+    parsed.data.studioId !== ctx.studioRuntimeAuth.studioId
+  ) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Studio runtime id mismatch",
+    });
+  }
+
+  if (parsed.data.slug !== ctx.studioRuntimeAuth.projectSlug) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Studio runtime is not authorized for this project",
+    });
+  }
+
+  if (
+    parsed.data.version &&
+    parsed.data.version !== ctx.studioRuntimeAuth.version
+  ) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Studio runtime is not authorized for this project version",
+    });
+  }
+
+  return next();
+});
+
 // Project-scoped access: for client_editors, requires an assigned project and enforces slug match.
 export const projectMemberProcedure = orgProcedure.use(
   enforceClientEditorProjectAccess
 );
+export const studioProjectProcedure = studioOrgProcedure
+  .use(enforceClientEditorProjectAccess)
+  .use(enforceStudioProjectAccess);
 
 export const adminProcedure = orgProcedure.use(
   async function isTeamMember(opts) {
