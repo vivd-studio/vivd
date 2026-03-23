@@ -178,6 +178,18 @@ header.header {
   box-shadow: 0 18px 50px rgba(18, 18, 15, 0.12);
 }
 
+.doc-shot-image--dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .doc-shot-image--light {
+  display: none;
+}
+
+:root[data-theme="dark"] .doc-shot-image--dark {
+  display: block;
+}
+
 .doc-shot {
   margin: 1.5rem 0 2rem;
 }

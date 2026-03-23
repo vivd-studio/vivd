@@ -1,8 +1,18 @@
 ---
-const { src, alt, caption } = Astro.props;
+const { src, darkSrc, alt, caption } = Astro.props;
+const hasThemeVariant = typeof darkSrc === "string" && darkSrc.length > 0;
 ---
 
 <figure class="doc-shot">
-  <img src={src} alt={alt} loading="lazy" />
+  {
+    hasThemeVariant ? (
+      <>
+        <img class="doc-shot-image doc-shot-image--light" src={src} alt={alt} loading="lazy" />
+        <img class="doc-shot-image doc-shot-image--dark" src={darkSrc} alt={alt} loading="lazy" />
+      </>
+    ) : (
+      <img class="doc-shot-image" src={src} alt={alt} loading="lazy" />
+    )
+  }
   {caption ? <figcaption>{caption}</figcaption> : null}
 </figure>

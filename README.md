@@ -6,13 +6,13 @@
 
 An AI-powered website builder that turns a brief, a reference site, or a conversation into a live website. Fair-code and self-hostable, with [OpenCode](https://github.com/anomalyco/opencode) running in isolated project environments and publishing built into the workflow.
 
-[Public Docs](https://docs.vivd.studio) · [Development](#development) · [Self-Hosting](#self-hosting)
+[Public Docs](https://docs.vivd.studio) · [Features](https://docs.vivd.studio/features/) · [Development](#development) · [Self-Hosting](#self-hosting)
 
 </div>
 
 ---
 
-![Full Application View](assets/screenshots/raumquadrat_desktop_assets-chat-open_darkmode.webp)
+![Vivd branded landing page shown beside the Studio chat workspace and embedded project preview](assets/new-screenshots/vivd-studio-vivd-dark.png)
 
 ## What vivd is
 
@@ -25,6 +25,14 @@ Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) insi
 Vivd is also meant to be something you can actually run yourself: fair-code, self-hostable, and built so the same product can work as a hosted platform or as your own one-host deployment.
 
 Public product docs live in `packages/docs`. Internal planning and architecture notes live in `docs/`.
+
+## Core Product Features
+
+- start from scratch from a brief, design references, and brand assets
+- import an existing website or ZIP into a first draft
+- refine the project in Studio with AI chat, direct edits, preview, files, and assets
+- create and edit images with AI, then keep plugins and analytics inside the same project flow
+- publish to the live domain and self-host the stack when needed
 
 ## What the agent can actually do
 

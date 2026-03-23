@@ -28,6 +28,7 @@ import {
   MessageSquare,
   Monitor,
   Moon,
+  Palette,
   Plug,
   Rocket,
   RefreshCw,
@@ -37,6 +38,7 @@ import {
   Sun,
   Trash2,
 } from "lucide-react";
+import type { ColorTheme, Theme } from "@vivd/shared/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +49,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  COLOR_THEME_OPTIONS,
+  ThemeIndicator,
+} from "@/components/theme/color-theme-options";
 import { useState } from "react";
 import { DEVICE_PRESETS } from "../../types";
 import type { DevicePreset, ViewportMode } from "../../types";
@@ -101,8 +107,10 @@ interface MobileActionsMenuProps {
   analyticsAvailable?: boolean;
 
   // Theme
-  theme: string;
-  setTheme: (theme: "light" | "dark" | "system") => void;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  colorTheme: ColorTheme;
+  setColorTheme: (colorTheme: ColorTheme) => void;
 
   // Permissions
   canUseAgent: boolean;
@@ -162,6 +170,8 @@ export function MobileActionsMenu({
   analyticsAvailable = false,
   theme,
   setTheme,
+  colorTheme,
+  setColorTheme,
   previewMode,
   handleRestartDevServer,
   isRestartingDevServer,
@@ -206,13 +216,13 @@ export function MobileActionsMenu({
 
   return (
     <>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 md:hidden">
-          <Menu className="w-4 h-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 md:hidden">
+            <Menu className="w-4 h-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
         {/* View Controls Group */}
         <DropdownMenuLabel>View</DropdownMenuLabel>
         <DropdownMenuItem onClick={() => setViewportMode("desktop")}>
@@ -491,40 +501,61 @@ export function MobileActionsMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Palette className="w-4 h-4 mr-2" />
+            Color Theme
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            {COLOR_THEME_OPTIONS.map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                onClick={() => setColorTheme(option.value)}
+              >
+                <ThemeIndicator preview={option.preview} />
+                <span>{option.label}</span>
+                {colorTheme === option.value && (
+                  <Check className="w-4 h-4 ml-auto" />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
         {/* Optional user menu content (for PreviewToolbar) */}
         {userMenuContent}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-    {/* Delete confirmation dialog */}
-    {isConnectedMode && (
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete project?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{projectSlug}</strong> and
-              all its versions. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletingProject}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
-              disabled={isDeletingProject}
-              onClick={() => {
-                handleDeleteProject?.();
-                setShowDeleteConfirm(false);
-              }}
-            >
-              {isDeletingProject ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    )}
+      {/* Delete confirmation dialog */}
+      {isConnectedMode && (
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete project?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete <strong>{projectSlug}</strong> and
+                all its versions. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeletingProject}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
+                disabled={isDeletingProject}
+                onClick={() => {
+                  handleDeleteProject?.();
+                  setShowDeleteConfirm(false);
+                }}
+              >
+                {isDeletingProject ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

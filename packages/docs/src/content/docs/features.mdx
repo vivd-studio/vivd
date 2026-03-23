@@ -1,0 +1,94 @@
+---
+title: Features
+description: See the main product capabilities in Vivd, from first prompt to live site.
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+import DocShot from "../../components/DocShot.astro";
+
+Vivd is built to cover the whole website workflow instead of only the first prompt.
+You can start a project, refine it in a real workspace, add launch-critical platform
+capabilities, and publish the result without stitching together a separate stack of
+tools around it.
+
+<DocShot
+  src="/screenshots/docs/new-project-chat-light.webp"
+  darkSrc="/screenshots/docs/new-project-chat-dark.webp"
+  alt="Vivd new-project flow with a prompt area, design references, and brand asset inputs."
+  caption="Vivd starts from a real project brief, references, and assets instead of forcing every site through a blank template or a rigid form wizard."
+/>
+
+## Core product capabilities
+
+- Start from scratch with a business brief, design references, and brand assets.
+- Import an existing website or ZIP when you already have source material to adapt.
+- Edit inside Studio with AI chat, direct text editing, live preview, and the asset/file explorer.
+- Create new images with AI from the asset workflow.
+- Edit and replace project imagery with AI-assisted image workflows.
+- Configure first-party plugins such as Contact Form and Analytics inside the same project flow.
+- Publish the draft to the live domain and keep self-hosting available when you need it.
+
+<DocShot
+  src="/screenshots/docs/edit-text-light.webp"
+  darkSrc="/screenshots/docs/edit-text-dark.webp"
+  alt="Vivd Studio in edit mode with the live preview, selected text regions, and agent chat visible."
+  caption="Studio combines broader AI-led changes with direct in-preview editing so the project can move from first draft to launch-ready without leaving the workspace."
+/>
+
+## AI image creation and editing
+
+Vivd treats image work as part of the same project workflow instead of a separate tool
+handoff.
+
+- Create new imagery from prompts and project references.
+- Reuse project assets as visual references when generating replacements.
+- Review and replace project images from the asset workflow without leaving Studio.
+
+<DocShot
+  src="/screenshots/docs/create-images-ai-light.webp"
+  darkSrc="/screenshots/docs/create-images-ai-dark.webp"
+  alt="Vivd AI image creation modal with prompt input and reference image selection."
+  caption="AI image creation is built into the project asset workflow, including prompt-driven generation and reference-image selection."
+/>
+
+<DocShot
+  src="/screenshots/docs/image-asset-view-light.webp"
+  darkSrc="/screenshots/docs/image-asset-view-dark.webp"
+  alt="Vivd asset and file explorer with a project image open in the main panel."
+  caption="Generated and replacement images stay inside the same asset workflow so you can review, organize, and swap them into the project quickly."
+/>
+
+## Explore each capability
+
+<CardGrid>
+  <LinkCard
+    title="Create from Scratch"
+    href="/create-from-scratch/"
+    description="Start from a brief, references, assets, and visual direction."
+  />
+  <LinkCard
+    title="Import an Existing Website"
+    href="/import-existing-website/"
+    description="Use a live site as the starting point for a faster first draft."
+  />
+  <LinkCard
+    title="Edit in Studio"
+    href="/edit-in-studio/"
+    description="Use AI chat, direct edits, and project assets together."
+  />
+  <LinkCard
+    title="Plugins"
+    href="/plugins/"
+    description="Set up Contact Form and Analytics before the final launch pass."
+  />
+  <LinkCard
+    title="Publish Your Site"
+    href="/publish-your-site/"
+    description="Move the draft to the live domain once the review is complete."
+  />
+  <LinkCard
+    title="How Vivd Works"
+    href="/how-vivd-works/"
+    description="Understand the isolated Studio runtime and real-workspace model behind these features."
+  />
+</CardGrid>

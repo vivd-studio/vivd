@@ -5,6 +5,7 @@ export default new Map([
 ["src/content/docs/edit-in-studio.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fedit-in-studio.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/email-and-deliverability.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Femail-and-deliverability.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/faq-glossary.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ffaq-glossary.mdx&astroContentModuleFlag=true")],
+["src/content/docs/features.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Ffeatures.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/getting-started.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fgetting-started.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/how-vivd-works.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fhow-vivd-works.mdx&astroContentModuleFlag=true")],
 ["src/content/docs/import-existing-website.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fdocs%2Fimport-existing-website.mdx&astroContentModuleFlag=true")],

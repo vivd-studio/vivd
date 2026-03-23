@@ -4,10 +4,18 @@ description: "Understand Vivd's runtime model: isolated Studio machines, OpenCod
 ---
 
 import { Aside } from "@astrojs/starlight/components";
+import DocShot from "../../components/DocShot.astro";
 
 Vivd is not just a prompt-to-template generator.
 It runs an AI coding agent inside a real website workspace, then keeps preview,
 publishing, and self-hosting much simpler than a typical custom-code setup.
+
+<DocShot
+  src="/screenshots/docs/theme-aurora-light-new-proj-chat.webp"
+  darkSrc="/screenshots/docs/theme-aurora-dark-new-proj-chat.webp"
+  alt="Vivd new-project flow with fields for a site brief, design references, and brand assets."
+  caption="The current workflow starts from a real project brief and assets, then carries that context into the Studio workspace."
+/>
 
 If you want a rough mental model, Vivd is closest to:
 
@@ -95,6 +103,13 @@ workspace, and Vivd keeps that project as Astro instead of replacing it with a p
 internal format.
 
 That means the AI is shaping a real project structure with real source files.
+
+<DocShot
+  src="/screenshots/docs/code-view-light.webp"
+  darkSrc="/screenshots/docs/code-view-dark.webp"
+  alt="Vivd Studio explorer with project files on the left and source code open on the right."
+  caption="The Studio explorer exposes the real project files and source code, not a hidden template model."
+/>
 
 Vivd also supports generic/static projects, but the current Studio-first creation flow is
 increasingly centered on Astro workspaces because they offer a strong balance of:

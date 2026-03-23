@@ -43,7 +43,7 @@ const faviconSvg = "/favicon-transparent.svg";
  * Keeps the same look/feel as the studio toolbar, but without auth/profile UI.
  */
 export function StudioToolbar() {
-  const { setTheme, theme } = useTheme();
+  const { setTheme, theme, colorTheme, setColorTheme } = useTheme();
   const { canUseAgent } = usePermissions();
   const { hasOtherActiveSessions } = useOpencodeSessionActivity();
 
@@ -686,6 +686,8 @@ export function StudioToolbar() {
               analyticsAvailable={analyticsAvailable}
               theme={theme}
               setTheme={setTheme}
+              colorTheme={colorTheme}
+              setColorTheme={setColorTheme}
               canUseAgent={canUseAgent}
               previewMode={previewMode}
               handleRestartDevServer={handleRestartDevServer}

@@ -125,7 +125,12 @@ describe("StudioToolbar", () => {
 
     mockUseToolbarState.mockReturnValue(createToolbarState());
     mockUsePermissions.mockReturnValue({ canUseAgent: true });
-    mockUseTheme.mockReturnValue({ theme: "light", setTheme: vi.fn() });
+    mockUseTheme.mockReturnValue({
+      theme: "light",
+      setTheme: vi.fn(),
+      colorTheme: "vivd-sharp",
+      setColorTheme: vi.fn(),
+    });
     mockUseOpencodeSessionActivity.mockReturnValue({
       selectedSessionId: "session-1",
       activeSessionIds: [],

@@ -151,28 +151,72 @@ validate_email() {
   esac
 }
 
+prompt_hint_for_var() {
+  case "$1" in
+    PRIMARY_HOST_INPUT)
+      printf '%s' "--domain or VIVD_DOMAIN"
+      ;;
+    OPENROUTER_API_KEY_INPUT)
+      printf '%s' "--openrouter-api-key or OPENROUTER_API_KEY"
+      ;;
+    ACME_EMAIL_INPUT)
+      printf '%s' "--acme-email or VIVD_ACME_EMAIL"
+      ;;
+    *)
+      printf '%s' "the matching flag or environment variable"
+      ;;
+  esac
+}
+
+resolve_prompt_input() {
+  if (: </dev/tty) 2>/dev/null; then
+    printf '%s' "/dev/tty"
+    return 0
+  fi
+
+  if [ -t 0 ]; then
+    printf '%s' "/dev/stdin"
+    return 0
+  fi
+
+  return 1
+}
+
 prompt_if_empty() {
   local var_name="$1"
   local prompt="$2"
   local secret="${3:-false}"
   local current_value
+  local prompt_input
+  local input_hint
   current_value="${!var_name:-}"
   if [ -n "$current_value" ]; then
     return
   fi
 
+  if ! prompt_input="$(resolve_prompt_input)"; then
+    input_hint="$(prompt_hint_for_var "$var_name")"
+    fail "$prompt is required; re-run interactively or pass $input_hint"
+  fi
+
   if [ "$secret" = "true" ]; then
     printf '%s: ' "$prompt" >&2
-    stty -echo
-    IFS= read -r current_value
-    stty echo
+    if stty -echo <"$prompt_input" 2>/dev/null; then
+      IFS= read -r current_value <"$prompt_input" || true
+      stty echo <"$prompt_input" 2>/dev/null || true
+    else
+      IFS= read -r current_value <"$prompt_input" || true
+    fi
     printf '\n' >&2
   else
     printf '%s: ' "$prompt" >&2
-    IFS= read -r current_value
+    IFS= read -r current_value <"$prompt_input" || true
   fi
 
-  [ -n "$current_value" ] || fail "$prompt is required"
+  if [ -z "$current_value" ]; then
+    input_hint="$(prompt_hint_for_var "$var_name")"
+    fail "$prompt is required; re-run interactively or pass $input_hint"
+  fi
   printf -v "$var_name" '%s' "$current_value"
 }
 

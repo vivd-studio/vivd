@@ -24,6 +24,7 @@ export default defineConfig({
           label: "Start Here",
           items: [
             { slug: "index", label: "Overview" },
+            { slug: "features" },
             { slug: "how-vivd-works", label: "How Vivd Works" },
             { slug: "getting-started" },
             { slug: "faq-glossary" },

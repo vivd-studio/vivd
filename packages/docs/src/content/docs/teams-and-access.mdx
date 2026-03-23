@@ -4,6 +4,7 @@ description: Organize work across agency admins, team members, and client editor
 ---
 
 import { Aside, CardGrid, Card } from "@astrojs/starlight/components";
+import DocShot from "../../components/DocShot.astro";
 
 Vivd is built for projects that may involve internal staff and customer-side collaborators.
 
@@ -12,6 +13,13 @@ Vivd is built for projects that may involve internal staff and customer-side col
 - Organizations own projects.
 - Team members work across the organization according to their role.
 - Client editors can be limited to a specific project and a narrower editing scope.
+
+<DocShot
+  src="/screenshots/docs/instance-user-management-light.webp"
+  darkSrc="/screenshots/docs/instance-user-management-dark.webp"
+  alt="Vivd organization member management view with role and assigned-project controls."
+  caption="Access and role changes should be reviewed from the organization workspace before handing a project to customers or collaborators."
+/>
 
 ## Role model at a glance
 
