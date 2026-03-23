@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  createSessionMock,
   runTaskMock,
   listSessionsMock,
   deleteSessionMock,
@@ -16,6 +17,7 @@ const {
   getConnectedOrganizationIdMock,
   startInitialGenerationServiceMock,
 } = vi.hoisted(() => ({
+  createSessionMock: vi.fn(),
   runTaskMock: vi.fn(),
   listSessionsMock: vi.fn(),
   deleteSessionMock: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock("../opencode/index.js", () => ({
   agentEventEmitter: {
     createSessionStream: vi.fn(),
   },
+  createSession: createSessionMock,
   deleteSession: deleteSessionMock,
   getAvailableModels: getAvailableModelsMock,
   getSessionContent: getSessionContentMock,
@@ -84,6 +87,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 
 describe("agent router", () => {
   beforeEach(() => {
+    createSessionMock.mockReset();
     runTaskMock.mockReset();
     listSessionsMock.mockReset();
     deleteSessionMock.mockReset();
@@ -100,6 +104,10 @@ describe("agent router", () => {
     startInitialGenerationServiceMock.mockReset();
     vi.unstubAllGlobals();
 
+    createSessionMock.mockResolvedValue({
+      id: "sess-created",
+      title: "New Session",
+    });
     runTaskMock.mockResolvedValue({ sessionId: "sess-1" });
     listSessionsMock.mockResolvedValue([]);
     deleteSessionMock.mockResolvedValue(undefined);
@@ -129,6 +137,26 @@ describe("agent router", () => {
 
     expect(getAvailableModelsMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ provider: "openai", modelId: "gpt-4.1-mini" }]);
+  });
+
+  it("creates a session for the active workspace directory", async () => {
+    const caller = agentRouter.createCaller(makeContext());
+
+    const result = await caller.createSession({
+      projectSlug: "site-1",
+      version: 2,
+    });
+
+    expect(createSessionMock).toHaveBeenCalledWith("/tmp/workspace");
+    expect(result).toEqual({
+      success: true,
+      sessionId: "sess-created",
+      session: {
+        id: "sess-created",
+        title: "New Session",
+      },
+      version: 2,
+    });
   });
 
   it("rejects runTask when workspace is not initialized", async () => {

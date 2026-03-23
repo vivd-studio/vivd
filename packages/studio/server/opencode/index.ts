@@ -377,6 +377,17 @@ export async function listQuestions(directory: string) {
   return result.data || [];
 }
 
+export async function createSession(directory: string) {
+  const { client, directory: opencodeDir } =
+    await serverManager.getClientAndDirectory(directory);
+  const result = await client.session.create({ directory: opencodeDir });
+  if (result.error) {
+    throw new Error(`Failed to create session: ${JSON.stringify(result.error)}`);
+  }
+  if (!result.data?.id) throw new Error("Session created but no ID returned");
+  return result.data;
+}
+
 async function getOrCreateSession(
   client: OpencodeClient,
   directory: string,

@@ -4,6 +4,7 @@ import { router, publicProcedure } from "../trpc/trpc.js";
 import {
   abortSession,
   agentEventEmitter,
+  createSession,
   deleteSession,
   getAvailableModels,
   getSessionContent,
@@ -236,6 +237,24 @@ export const agentRouter = router({
   getAvailableModels: publicProcedure.query(async () => {
     return getAvailableModels();
   }),
+
+  createSession: publicProcedure
+    .input(
+      z.object({
+        projectSlug: z.string(),
+        version: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const directory = getWorkspaceDir(ctx);
+      const session = await createSession(directory);
+      return {
+        success: true,
+        sessionId: session.id,
+        session,
+        version: input.version ?? 1,
+      };
+    }),
 
   runTask: publicProcedure
     .input(

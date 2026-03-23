@@ -87,6 +87,7 @@ vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
 
 import {
   abortSession,
+  createSession,
   getMessageDiff,
   getSessionsStatus,
   listSessions,
@@ -190,6 +191,15 @@ describe("opencode index session behavior", () => {
         status: "modified",
       },
     ]);
+  });
+
+  it("creates a session in the current opencode directory", async () => {
+    const result = await createSession("/workspace/project");
+
+    expect(sessionCreateMock).toHaveBeenCalledWith({
+      directory: "/workspace/project/",
+    });
+    expect(result).toEqual({ id: "sess-new" });
   });
 
   it("prefers backend statuses while allowing retry override when backend reports idle", async () => {

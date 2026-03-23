@@ -1,7 +1,6 @@
 import {
   lazy,
   Suspense,
-  useEffect,
   useMemo,
   useCallback,
   useState,
@@ -15,9 +14,8 @@ import { usePreview } from "./PreviewContext";
 import { StudioToolbar } from "./toolbar";
 import { MobileFrame } from "./MobileFrame";
 import { PreviewIframe } from "./PreviewIframe";
-import { PreviewImageContextMenu } from "./PreviewImageContextMenu";
 import { UnsavedChangesBar } from "./UnsavedChangesBar";
-import { TABLET_PRESET, type PreviewImageContextMenuEvent } from "./types";
+import { TABLET_PRESET } from "./types";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { Loader2, AlertCircle } from "lucide-react";
 import { isTextFile } from "../asset-explorer/utils";
@@ -34,7 +32,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
-import { resolvePreviewImageAsset } from "./imageAssetResolver";
 
 const ChatPanelContent = lazy(() =>
   import("../chat/ChatPanel").then((module) => ({
@@ -126,10 +123,6 @@ export function PreviewContent() {
 
   const { canUseAiImages } = usePermissions();
   const [localEditPrompt, setLocalEditPrompt] = useState("");
-  const [previewImageContextMenu, setPreviewImageContextMenu] = useState<{
-    asset: FileTreeNode;
-    position: { x: number; y: number };
-  } | null>(null);
   const utils = trpc.useUtils();
   const [restartKind, setRestartKind] = useState<"restart" | "clean" | null>(
     null,
@@ -205,10 +198,10 @@ export function PreviewContent() {
   // File Navigation Logic (for image viewer arrow keys)
   // ============================================
 
-  // Use one asset tree for both preview image resolution and image viewer navigation.
+  // Query all assets when image viewer is open (for navigation)
   const allAssetsQuery = trpc.assets.listAllAssets.useQuery(
     { slug: projectSlug ?? "", version: selectedVersion, rootPath: "" },
-    { enabled: !!projectSlug },
+    { enabled: !!projectSlug && !!viewingImagePath },
   );
 
   // Helper to flatten tree into a list of navigable files (images and text files)
@@ -357,40 +350,6 @@ export function PreviewContent() {
     return navigableFiles[currentFileIndex] || null;
   }, [navigableFiles, currentFileIndex, viewingImagePath]);
 
-  const handlePreviewImageContextMenu = useCallback(
-    (event: PreviewImageContextMenuEvent) => {
-      if (!projectSlug || !allAssetsQuery.data?.tree) return false;
-
-      const asset = resolvePreviewImageAsset({
-        projectSlug,
-        version: selectedVersion,
-        assets: allAssetsQuery.data.tree,
-        imageUrls: [event.currentSrc, event.src],
-      });
-
-      if (!asset) return false;
-
-      setPreviewImageContextMenu({
-        asset,
-        position: { x: event.clientX, y: event.clientY },
-      });
-      return true;
-    },
-    [projectSlug, selectedVersion, allAssetsQuery.data?.tree],
-  );
-
-  useEffect(() => {
-    setPreviewImageContextMenu(null);
-  }, [
-    projectSlug,
-    selectedVersion,
-    fullUrl,
-    viewingImagePath,
-    viewingPdfPath,
-    editingTextFile,
-    selectorMode,
-  ]);
-
   const framedViewport = viewportMode !== "desktop";
   const activeFrame = viewportMode === "tablet" ? TABLET_PRESET : selectedDevice;
 
@@ -523,7 +482,6 @@ export function PreviewContent() {
                     onNavigateStart={onIframeNavigateStart}
                     onLoad={onIframeLoad}
                     onLocationChange={handlePreviewLocationChange}
-                    onImageContextMenu={handlePreviewImageContextMenu}
                     selectorMode={selectorMode}
                   />
                 </MobileFrame>
@@ -536,7 +494,6 @@ export function PreviewContent() {
                   onNavigateStart={onIframeNavigateStart}
                   onLoad={onIframeLoad}
                   onLocationChange={handlePreviewLocationChange}
-                  onImageContextMenu={handlePreviewImageContextMenu}
                   selectorMode={selectorMode}
                 />
               )}
@@ -608,18 +565,6 @@ export function PreviewContent() {
       {/* Shared Dialogs */}
       {projectSlug && (
         <>
-          <PreviewImageContextMenu
-            open={!!previewImageContextMenu}
-            projectSlug={projectSlug}
-            version={selectedVersion}
-            asset={previewImageContextMenu?.asset ?? null}
-            position={previewImageContextMenu?.position ?? null}
-            canUseAiImages={canUseAiImages}
-            onOpenChange={(open) => {
-              if (!open) setPreviewImageContextMenu(null);
-            }}
-          />
-
           <DeferredPanel fallback={null}>
             <AIEditDialog
               open={!!editingAsset}

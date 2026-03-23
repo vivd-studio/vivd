@@ -1,7 +1,6 @@
 import { forwardRef, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { ELEMENT_SELECTOR_SCRIPT } from "../chat/ElementSelector";
 import { buildCacheBustedPreviewUrl } from "./navigation";
-import type { PreviewImageContextMenuEvent } from "./types";
 
 interface PreviewIframeProps {
   src: string;
@@ -11,7 +10,6 @@ interface PreviewIframeProps {
   onLoad?: () => void;
   onNavigateStart?: () => void;
   onLocationChange?: (href: string) => void;
-  onImageContextMenu?: (event: PreviewImageContextMenuEvent) => boolean;
   selectorMode?: boolean;
 }
 
@@ -530,61 +528,6 @@ const installPreviewPdfDownloadInterceptor = (iframe: HTMLIFrameElement) => {
   }
 };
 
-const installPreviewImageContextMenuListener = (
-  iframe: HTMLIFrameElement,
-  onImageContextMenu?: (event: PreviewImageContextMenuEvent) => boolean,
-) => {
-  if (!onImageContextMenu) return;
-
-  try {
-    const doc = iframe.contentDocument as any;
-    if (!doc) return;
-
-    if (doc.__vivdPreviewImageContextMenuInstalled) return;
-    doc.__vivdPreviewImageContextMenuInstalled = true;
-
-    doc.addEventListener(
-      "contextmenu",
-      (event: MouseEvent) => {
-        if (!event.isTrusted) return;
-
-        const target = event.target;
-        const element =
-          target instanceof Element
-            ? target
-            : target instanceof Node
-              ? target.parentElement
-              : null;
-        const image = element?.closest?.("img") as HTMLImageElement | null;
-        if (!image) return;
-
-        const rect = iframe.getBoundingClientRect();
-        const iframeWidth =
-          iframe.clientWidth || iframe.contentWindow?.innerWidth || rect.width || 1;
-        const iframeHeight =
-          iframe.clientHeight || iframe.contentWindow?.innerHeight || rect.height || 1;
-        const scaleX = iframeWidth > 0 ? rect.width / iframeWidth : 1;
-        const scaleY = iframeHeight > 0 ? rect.height / iframeHeight : 1;
-
-        const handled = onImageContextMenu({
-          clientX: rect.left + event.clientX * scaleX,
-          clientY: rect.top + event.clientY * scaleY,
-          src: image.getAttribute("src"),
-          currentSrc: image.currentSrc || image.src || null,
-        });
-
-        if (!handled) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-      },
-      true,
-    );
-  } catch (err) {
-    console.warn("Could not install preview image context-menu listener", err);
-  }
-};
-
 export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
   function PreviewIframe(
     {
@@ -595,7 +538,6 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       onLoad,
       onNavigateStart,
       onLocationChange,
-      onImageContextMenu,
       selectorMode = false,
     },
     ref
@@ -656,7 +598,6 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       installPreviewNavigationStartListener(iframe, onNavigateStart);
       installPreviewLocationChangeListener(iframe, onLocationChange);
       installPreviewPdfDownloadInterceptor(iframe);
-      installPreviewImageContextMenuListener(iframe, onImageContextMenu);
       injectScrollbarStyles(iframe, isMobile);
 
       // Some previewed sites ship strict CSP which blocks inline script/style injection.

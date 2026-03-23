@@ -24,6 +24,12 @@ type UseOpencodeChatControllerArgs = {
   onTaskComplete?: () => void;
 };
 
+type PendingSessionStart = {
+  requestId: number;
+  cancelled: boolean;
+  sessionId: string | null;
+};
+
 export function useOpencodeChatController({
   projectSlug,
   version,
@@ -44,6 +50,8 @@ export function useOpencodeChatController({
   const autoSelectLockedRef = useRef(false);
   const hasAutoSelectedRunningSessionRef = useRef(false);
   const activeRunSessionIdRef = useRef<string | null>(null);
+  const nextPendingSessionStartIdRef = useRef(0);
+  const pendingSessionStartRef = useRef<PendingSessionStart | null>(null);
 
   const sessions = opencodeChat.sessions;
   const sessionsLoading = opencodeChat.bootstrapLoading;
@@ -111,6 +119,7 @@ export function useOpencodeChatController({
   );
 
   const runTaskMutation = trpc.agent.runTask.useMutation();
+  const createSessionMutation = trpc.agent.createSession.useMutation();
   const deleteSessionMutation = trpc.agent.deleteSession.useMutation({
     onSuccess: () => {
       refetchSessions();
@@ -173,6 +182,56 @@ export function useOpencodeChatController({
     },
   });
 
+  const dispatchTaskToSession = useCallback(
+    async (task: string, targetSessionId: string) => {
+      const optimisticMessageId = opencodeChat.addOptimisticUserMessage({
+        content: task,
+        sessionId: targetSessionId,
+        createdAt: Date.now(),
+      });
+
+      try {
+        const data = await runTaskMutation.mutateAsync(
+          buildRunTaskPayload(task, targetSessionId),
+        );
+
+        if (!data.sessionId) {
+          throw new Error("OpenCode did not return a session id.");
+        }
+
+        opencodeChat.assignOptimisticUserMessageSession(
+          optimisticMessageId,
+          data.sessionId,
+        );
+
+        if (data.sessionId !== selectedSessionId) {
+          setSelectedSessionId(data.sessionId);
+        }
+
+        await refetchSessions();
+        return true;
+      } catch (error) {
+        opencodeChat.removeOptimisticUserMessage(optimisticMessageId);
+        setLocalSessionError(
+          sanitizeSessionError({
+            type: "task",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        setDismissedDerivedErrorKey(null);
+        return false;
+      }
+    },
+    [
+      opencodeChat,
+      runTaskMutation,
+      buildRunTaskPayload,
+      selectedSessionId,
+      setSelectedSessionId,
+      refetchSessions,
+    ],
+  );
+
   const sendTask = useCallback(
     (
       task: string,
@@ -185,55 +244,95 @@ export function useOpencodeChatController({
         return;
       }
 
-      const optimisticMessageId = opencodeChat.addOptimisticUserMessage({
-        content: task,
-        sessionId: targetSessionId,
-        createdAt: Date.now(),
-      });
-
       setLocalSessionError(null);
       setDismissedDerivedErrorKey(null);
 
-      runTaskMutation.mutate(buildRunTaskPayload(task, targetSessionId), {
-        onSuccess: (data) => {
-          if (!data.sessionId) {
+      void (async () => {
+        let pendingRequestId: number | null = null;
+        let pendingStart: PendingSessionStart | null = null;
+
+        try {
+          if (targetSessionId) {
+            await dispatchTaskToSession(task, targetSessionId);
             return;
           }
 
-          opencodeChat.assignOptimisticUserMessageSession(
-            optimisticMessageId,
-            data.sessionId,
-          );
+          pendingRequestId = nextPendingSessionStartIdRef.current;
+          nextPendingSessionStartIdRef.current += 1;
+          pendingStart = {
+            requestId: pendingRequestId,
+            cancelled: false,
+            sessionId: null,
+          };
+          pendingSessionStartRef.current = pendingStart;
 
-          if (data.sessionId !== selectedSessionId) {
-            setSelectedSessionId(data.sessionId);
+          const created = await createSessionMutation.mutateAsync({
+            projectSlug,
+            version,
+          });
+          pendingStart.sessionId = created.sessionId;
+
+          if (pendingStart.cancelled) {
+            await deleteSessionMutation
+              .mutateAsync({
+                sessionId: created.sessionId,
+                projectSlug,
+                version,
+              })
+              .catch(() => undefined);
+            setSelectedSessionId(null);
+            return;
           }
 
-          refetchSessions();
-        },
-        onError: (error) => {
-          opencodeChat.removeOptimisticUserMessage(optimisticMessageId);
-          setLocalSessionError(
-            sanitizeSessionError({
-              type: "task",
-              message: error.message,
-            }),
-          );
-          setDismissedDerivedErrorKey(null);
-        },
-        onSettled: () => {
+          if (created.sessionId !== selectedSessionId) {
+            setSelectedSessionId(created.sessionId);
+          }
+          await refetchSessions();
+
+          if (pendingStart.cancelled) {
+            await deleteSessionMutation
+              .mutateAsync({
+                sessionId: created.sessionId,
+                projectSlug,
+                version,
+              })
+              .catch(() => undefined);
+            setSelectedSessionId(null);
+            return;
+          }
+
+          await dispatchTaskToSession(task, created.sessionId);
+        } catch (error) {
+          if (!pendingStart?.cancelled) {
+            setLocalSessionError(
+              sanitizeSessionError({
+                type: "task",
+                message: error instanceof Error ? error.message : String(error),
+              }),
+            );
+            setDismissedDerivedErrorKey(null);
+          }
+        } finally {
+          if (
+            pendingRequestId != null &&
+            pendingSessionStartRef.current?.requestId === pendingRequestId
+          ) {
+            pendingSessionStartRef.current = null;
+          }
           options?.onSettled?.();
-        },
-      });
+        }
+      })();
     },
     [
-      opencodeChat,
-      runTaskMutation,
-      buildRunTaskPayload,
+      activeQuestionRequest,
+      createSessionMutation,
+      deleteSessionMutation,
+      dispatchTaskToSession,
+      projectSlug,
+      refetchSessions,
       selectedSessionId,
       setSelectedSessionId,
-      refetchSessions,
-      activeQuestionRequest,
+      version,
     ],
   );
 
@@ -281,6 +380,19 @@ export function useOpencodeChatController({
   }, [projectSlug, selectedSessionId, unrevertMutation, version]);
 
   const stopGeneration = useCallback(() => {
+    const pendingStart = pendingSessionStartRef.current;
+    if (pendingStart) {
+      pendingStart.cancelled = true;
+      if (pendingStart.sessionId) {
+        abortSessionMutation.mutate({
+          sessionId: pendingStart.sessionId,
+          projectSlug,
+          version,
+        });
+      }
+      return;
+    }
+
     if (!selectedSessionId) return;
     abortSessionMutation.mutate({
       sessionId: selectedSessionId,
@@ -354,12 +466,16 @@ export function useOpencodeChatController({
         messages: selectedMessages,
         sessionStatus: currentSessionStatus,
         hasOptimisticUserMessage,
-        isSubmitting: runTaskMutation.isPending || isSending,
+        isSubmitting:
+          createSessionMutation.isPending ||
+          runTaskMutation.isPending ||
+          isSending,
       }),
     [
       selectedMessages,
       currentSessionStatus,
       hasOptimisticUserMessage,
+      createSessionMutation.isPending,
       runTaskMutation.isPending,
       isSending,
     ],
@@ -395,6 +511,7 @@ export function useOpencodeChatController({
     autoSelectLockedRef.current = false;
     hasAutoSelectedRunningSessionRef.current = false;
     activeRunSessionIdRef.current = null;
+    pendingSessionStartRef.current = null;
   }, [projectSlug, providerSetSelectedSessionId]);
 
   useEffect(() => {
@@ -439,7 +556,8 @@ export function useOpencodeChatController({
     activeQuestionRequest,
     sessionError,
     clearSessionError,
-    runTaskPending: runTaskMutation.isPending,
+    runTaskPending:
+      createSessionMutation.isPending || runTaskMutation.isPending,
     isSending,
     setIsSending,
     isStreaming: activityState.isStreaming,
