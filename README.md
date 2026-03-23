@@ -12,13 +12,15 @@ An AI-powered website builder that turns a brief, a reference site, or a convers
 
 ---
 
-![Vivd branded landing page shown beside the Studio chat workspace and embedded project preview](assets/new-screenshots/vivd-studio-vivd-dark.png)
+![Vivd new-project flow with chat-based website creation, design references, and brand asset inputs](assets/new-screenshots/new-project-chat-dark.png)
 
 ## What vivd is
 
 vivd is a website builder where AI is the interface. Instead of bouncing between a CMS, design tools, hosting dashboards, and hand-written edits, you create a project, describe what you want, and refine it in one place.
 
 You can start from scratch or import an existing website, then keep shaping it in Studio with chat, direct edits, assets, preview, plugins, and publishing flows that all belong to the same project instead of a chain of separate tools.
+
+![Vivd branded landing page shown beside the Studio chat workspace and embedded project preview](assets/new-screenshots/vivd-studio-vivd-dark.png)
 
 Under the hood, Vivd runs [OpenCode](https://github.com/anomalyco/opencode) inside isolated Studio environments, so the agent works inside real project files rather than a toy canvas. That technical split matters because it lets Vivd cover the whole path: generate a draft, refine it in a real workspace, and solve publishing as part of the same system instead of handing you off to another stack at the end.
 

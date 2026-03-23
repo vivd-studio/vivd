@@ -3,13 +3,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { ROUTES } from "@/app/router/paths"
 import { getDocsUrl } from "@/lib/docsUrl"
+import { hardRedirect } from "@/lib/hardRedirect"
 
 const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -19,7 +20,6 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function Login() {
-    const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const wasReset = searchParams.get("reset") === "success"
     const wasVerified = searchParams.get("verified") === "1"
@@ -38,7 +38,7 @@ export default function Login() {
             password: data.password,
         }, {
             onSuccess: () => {
-                navigate("/")
+                hardRedirect(ROUTES.DASHBOARD)
             },
             onError: (ctx) => {
                 form.setError("root", { message: ctx.error.message })

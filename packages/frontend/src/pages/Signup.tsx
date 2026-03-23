@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useNavigate } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -11,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { trpc } from "@/lib/trpc"
 import { ROUTES } from "@/app/router/paths"
 import { getDocsUrl } from "@/lib/docsUrl"
+import { hardRedirect } from "@/lib/hardRedirect"
 
 const signupSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -22,7 +22,6 @@ type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function Signup() {
     const utils = trpc.useUtils()
-    const navigate = useNavigate()
     const docsUrl = getDocsUrl("/")
     const form = useForm<SignupFormValues>({
         resolver: zodResolver(signupSchema),
@@ -42,7 +41,7 @@ export default function Signup() {
         }, {
             onSuccess: async () => {
                 await utils.user.hasUsers.invalidate()
-                navigate("/")
+                hardRedirect(ROUTES.DASHBOARD)
             },
             onError: (ctx) => {
                 form.setError("root", { message: ctx.error.message })

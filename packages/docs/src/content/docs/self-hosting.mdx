@@ -220,6 +220,7 @@ Most self-host installs do not need much more env work. You usually only edit `.
 - transactional email identity/footer: optional fields in `Instance Settings -> Email`, or env bootstrap values like `VIVD_EMAIL_BRAND_DISPLAY_NAME`, `VIVD_EMAIL_BRAND_SUPPORT_EMAIL`, and the legal/footer URLs if you want more than the minimal default email footer
 - Turnstile: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`
 - GitHub backup/sync: `GITHUB_SYNC_ENABLED`, `GITHUB_ORG`, `GITHUB_TOKEN`
+- scraper residential proxying for harder-to-fetch sites: `PROXY_HOST`, optional `PROXY_PORT`, `PROXY_USERNAME`, `PROXY_PASSWORD`
 - a remote S3-compatible object store instead of the bundled local bucket
 - an optional `OPENCODE_MODEL_PRO`
 

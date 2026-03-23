@@ -186,6 +186,30 @@ SCRAPER_URL=https://scraper.example.com
 SCRAPER_API_KEY=...
 ```
 
+Optional thumbnail-preview base override for advanced scraper topologies:
+
+```env
+VIVD_THUMBNAIL_PREVIEW_BASE_URL=https://app.example.com
+```
+
+The bundled self-host Docker stack infers this automatically and usually does not
+need it. Set it only when thumbnails should fetch preview pages from a different
+internal or public origin than the default.
+
+Optional residential proxy for the bundled scraper's Puppeteer browser:
+
+```env
+PROXY_HOST=proxy.example.com
+PROXY_PORT=823
+PROXY_USERNAME=...
+PROXY_PASSWORD=...
+```
+
+Set `PROXY_HOST` to enable it. Credentials are only used when both username and
+password are present. This applies to the bundled `scraper` service in the published
+Compose bundle; if you run a separate external scraper via `SCRAPER_URL`, configure
+the proxy on that scraper deployment instead.
+
 ## Studio / model overrides
 
 Optional OpenCode model overrides:

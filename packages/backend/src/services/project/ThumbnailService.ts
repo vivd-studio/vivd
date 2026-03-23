@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { isIP } from "node:net";
 import { scraperClient } from "../../generator/scraper-client";
 import {
   ensureVivdInternalFilesDir,
@@ -7,15 +8,8 @@ import {
 import { uploadProjectThumbnailBufferToBucket } from "./ProjectArtifactsService";
 import { projectMetaService } from "./ProjectMetaService";
 import { getInternalPreviewAccessToken } from "../../config/preview";
+import { instanceNetworkSettingsService } from "../system/InstanceNetworkSettingsService";
 
-// Base URL for the scraper (in Docker) to reach this backend's preview endpoint.
-// In dev/local, use the Docker service name. In production, use the public DOMAIN.
-const PREVIEW_BASE_URL =
-  !process.env.DOMAIN || process.env.DOMAIN.includes("localhost")
-    ? `http://backend:${process.env.PORT || 3000}`
-    : process.env.DOMAIN.startsWith("http")
-      ? process.env.DOMAIN
-      : `https://${process.env.DOMAIN}`;
 const DEBOUNCE_MS = 5000; // 5 second debounce window
 const NON_RETRYABLE_COOLDOWN_MS = 60_000;
 const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -30,6 +24,92 @@ type FailureCooldown = {
   until: number;
   reason: string;
 };
+
+function normalizeOrigin(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim() || "";
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/+$/, "");
+  }
+
+  const host = trimmed.replace(/\/+$/, "");
+  const isLocalLike =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".localhost") ||
+    isIP(host) !== 0;
+  return `${isLocalLike ? "http" : "https"}://${host}`;
+}
+
+function parseHostLike(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim() || "";
+  if (!trimmed) return null;
+
+  try {
+    const parsed = /^https?:\/\//i.test(trimmed)
+      ? new URL(trimmed)
+      : new URL(`http://${trimmed}`);
+    return parsed.hostname.toLowerCase();
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/.*$/, "")
+      .replace(/:\d+$/, "")
+      .toLowerCase();
+  }
+}
+
+function resolveLocalPreviewBaseUrl(): string {
+  const port = process.env.PORT?.trim() || "3000";
+  return `http://127.0.0.1:${port}`;
+}
+
+function resolveDockerPreviewBaseUrl(): string {
+  const port = process.env.PORT?.trim() || "3000";
+  return `http://backend:${port}`;
+}
+
+function isLocalScraperHost(host: string | null): boolean {
+  if (!host) return false;
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".localhost")
+  );
+}
+
+function isDockerServiceLikeHost(host: string | null): boolean {
+  if (!host) return false;
+  if (isLocalScraperHost(host)) return false;
+  if (isIP(host) !== 0) return false;
+  return !host.includes(".");
+}
+
+export function resolveThumbnailPreviewBaseUrl(): string {
+  const explicit = normalizeOrigin(process.env.VIVD_THUMBNAIL_PREVIEW_BASE_URL);
+  if (explicit) return explicit;
+
+  const scraperHost = parseHostLike(process.env.SCRAPER_URL || "http://scraper:3001");
+  if (isLocalScraperHost(scraperHost)) {
+    return resolveLocalPreviewBaseUrl();
+  }
+  if (isDockerServiceLikeHost(scraperHost)) {
+    return resolveDockerPreviewBaseUrl();
+  }
+
+  const networkOrigin = instanceNetworkSettingsService.getResolvedSettings().publicOrigin;
+  if (networkOrigin) return networkOrigin.replace(/\/+$/, "");
+
+  const backendUrl = normalizeOrigin(process.env.BACKEND_URL);
+  if (backendUrl) return backendUrl;
+
+  const domainOrigin = normalizeOrigin(process.env.DOMAIN);
+  if (domainOrigin) return domainOrigin;
+
+  return resolveLocalPreviewBaseUrl();
+}
 
 function extractPreviewHttpStatus(message: string): number | null {
   const match = message.match(/HTTP\s+(\d{3})/i);
@@ -192,7 +272,7 @@ class ThumbnailService {
       this.failureCooldownByKey.delete(key);
     }
 
-    const basePreviewUrl = `${PREVIEW_BASE_URL}/vivd-studio/api/preview/${slug}/v${version}/`;
+    const basePreviewUrl = `${resolveThumbnailPreviewBaseUrl()}/vivd-studio/api/preview/${slug}/v${version}/`;
 
     const project = await projectMetaService.getProject(organizationId, slug);
     if (!project) {

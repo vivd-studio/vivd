@@ -51,6 +51,29 @@ fail() {
   exit 1
 }
 
+supports_terminal_links() {
+  [ -t 1 ] || return 1
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app|Apple_Terminal|WezTerm|vscode)
+      return 0
+      ;;
+  esac
+  [ -n "${VTE_VERSION:-}" ] && return 0
+  [ -n "${WT_SESSION:-}" ] && return 0
+  [ -n "${KONSOLE_VERSION:-}" ] && return 0
+  return 1
+}
+
+format_terminal_link() {
+  local url="$1"
+  local label="${2:-$1}"
+  if supports_terminal_links; then
+    printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$url" "$label"
+  else
+    printf '%s' "$label"
+  fi
+}
+
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
@@ -413,14 +436,21 @@ else
   log "Skipping startup because --no-start was set"
 fi
 
+STUDIO_SETUP_URL="$PRIMARY_ORIGIN/vivd-studio"
+printf -v STUDIO_SETUP_LINK '%s' "$(format_terminal_link "$STUDIO_SETUP_URL")"
+
 cat <<EOF
 
 Vivd solo install is ready in:
   $INSTALL_DIR
 
+First-time setup:
+  Visit:  $STUDIO_SETUP_LINK
+  Finish the initial instance setup in Studio.
+
 Primary URLs:
   Site:   $PRIMARY_ORIGIN/
-  Studio: $PRIMARY_ORIGIN/vivd-studio
+  Studio: $STUDIO_SETUP_LINK
 
 Management:
   cd $INSTALL_DIR
