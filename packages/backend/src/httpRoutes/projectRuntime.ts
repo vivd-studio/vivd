@@ -28,6 +28,7 @@ import {
   getObjectStorageConfigFromEnv,
 } from "../services/storage/ObjectStorageService";
 import { normalizeOrganizationId } from "../lib/organizationIdentifiers";
+import { alignProjectArtifactKeyToSlug } from "../services/project/slugRename";
 
 type CreateContextResult = {
   session: any;
@@ -504,6 +505,79 @@ export function createProjectRuntimeRouter(
   deps: ProjectRuntimeRouterDeps,
 ) {
   const router = express.Router();
+
+  router.get("/vivd-studio/api/projects/:slug/v:version/thumbnail", async (req, res) => {
+    try {
+      const requestContext = await deps.createContext({ req, res });
+      const session = requestContext.session;
+
+      if (!session) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const organizationId = requestContext.organizationId;
+      if (!organizationId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const access = await checkOrganizationAccess({
+        session,
+        organizationId,
+      });
+      if (!access.ok) {
+        if (access.reason === "organization_suspended") {
+          return res.status(403).json({ error: "Organization is suspended" });
+        }
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const slug = getRouteParam(req, "slug");
+      const version = getRouteParam(req, "version");
+      if (!slug || !version) {
+        return res.status(400).json({ error: "Invalid route parameters" });
+      }
+      const ok = await deps.enforceProjectAccess(req, res, session, organizationId, slug);
+      if (!ok) return;
+
+      const versionNumber = Number.parseInt(version, 10);
+      if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+        return res.status(400).json({ error: "Invalid version" });
+      }
+
+      const projectVersion = await projectMetaService.getProjectVersion(
+        organizationId,
+        slug,
+        versionNumber,
+      );
+      const thumbnailKey = alignProjectArtifactKeyToSlug({
+        organizationId,
+        slug,
+        key: projectVersion?.thumbnailKey ?? null,
+      });
+      if (!thumbnailKey) {
+        return res.status(404).json({ error: "Thumbnail not found" });
+      }
+
+      const storage = getPreviewBucketConfig();
+      if (!storage) {
+        return res.status(503).json({ error: "Thumbnail storage is unavailable" });
+      }
+
+      const { buffer, contentType } = await getObjectBuffer({
+        client: storage.client,
+        bucket: storage.bucket,
+        key: thumbnailKey,
+      });
+
+      res.setHeader("Cache-Control", "private, no-store");
+      res.type(contentType ?? "image/webp");
+      return res.send(buffer);
+    } catch (error) {
+      if (isObjectNotFoundError(error)) {
+        return res.status(404).json({ error: "Thumbnail not found" });
+      }
+      console.error("[ProjectRuntime] Failed to serve project thumbnail:", error);
+      return res.status(500).json({ error: "Failed to load thumbnail" });
+    }
+  });
 
   // Secure external preview endpoint (unauthenticated but filtered)
   router.use("/vivd-studio/api/preview/:slug/v:version", async (req, res) => {

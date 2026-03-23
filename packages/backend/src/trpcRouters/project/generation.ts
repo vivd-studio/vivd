@@ -33,7 +33,6 @@ import {
   uploadProjectPreviewToBucket,
   uploadProjectSourceToBucket,
 } from "../../services/project/ProjectArtifactsService";
-import { getObjectDownloadUrl } from "../../services/storage/ObjectStorageService";
 import { thumbnailService } from "../../services/project/ThumbnailService";
 import { alignProjectArtifactKeyToSlug } from "../../services/project/slugRename";
 import { analyzeImages } from "../../generator/image_analyzer";
@@ -934,10 +933,7 @@ export const projectGenerationProcedures = {
             key: versionData?.thumbnailKey ?? null,
           });
           const thumbnailUrl = thumbnailKey
-            ? await getObjectDownloadUrl({
-                key: thumbnailKey,
-                expiresInSeconds: 60 * 60,
-              })
+            ? `/vivd-studio/api/projects/${encodeURIComponent(slug)}/v${currentVersion}/thumbnail`
             : null;
 
           return {
