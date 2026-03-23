@@ -1,0 +1,39 @@
+import { render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+const { sonnerPropsSpy } = vi.hoisted(() => ({
+  sonnerPropsSpy: vi.fn(),
+}));
+
+vi.mock("next-themes", () => ({
+  useTheme: () => ({ theme: "dark" }),
+}));
+
+vi.mock("sonner", () => ({
+  Toaster: (props: unknown) => {
+    sonnerPropsSpy(props);
+    return null;
+  },
+}));
+
+import { Toaster } from "./sonner";
+
+describe("Toaster", () => {
+  it("uses solid toast surfaces for default and semantic variants", () => {
+    render(<Toaster />);
+
+    const props = sonnerPropsSpy.mock.calls.at(-1)?.[0] as {
+      toastOptions?: {
+        classNames?: Record<string, string>;
+      };
+    };
+
+    const classNames = props.toastOptions?.classNames;
+    expect(classNames?.toast).toContain("group-[.toaster]:!bg-background");
+    expect(classNames?.toast).toContain("group-[.toaster]:backdrop-blur-none");
+    expect(classNames?.success).toContain("dark:!bg-emerald-500");
+    expect(classNames?.success).not.toContain("/10");
+    expect(classNames?.error).toContain("dark:!bg-red-500");
+    expect(classNames?.error).not.toContain("/10");
+  });
+});

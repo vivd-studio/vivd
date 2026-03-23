@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS,
   DEFAULT_TRPC_REQUEST_TIMEOUT_MS,
   EXTENDED_TRPC_REQUEST_TIMEOUT_MS,
   LONG_TRPC_REQUEST_TIMEOUT_MS,
@@ -35,6 +36,17 @@ describe("trpcTimeouts", () => {
     expect(
       resolveTrpcRequestTimeoutMs("/vivd-studio/api/trpc/project.gitSave?batch=1&input=%7B%7D"),
     ).toBe(LONG_TRPC_REQUEST_TIMEOUT_MS);
+  });
+
+  it("uses agent-task timeout for long-running agent mutations", () => {
+    expect(
+      resolveTrpcRequestTimeoutMs("/vivd-studio/api/trpc/agent.runTask?batch=1&input=%7B%7D"),
+    ).toBe(AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS);
+    expect(
+      resolveTrpcRequestTimeoutMs(
+        "/vivd-studio/api/trpc/agent.startInitialGeneration?batch=1&input=%7B%7D",
+      ),
+    ).toBe(AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS);
   });
 
   it("chooses the highest timeout for batched operations", () => {

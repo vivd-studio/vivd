@@ -23,7 +23,7 @@ const MAX_INPUT_IMAGES = 5;
 const DEFAULT_OUTPUT_DIR = "images";
 const ASTRO_OUTPUT_DIR = "public/images";
 const IMAGE_DOWNLOAD_TIMEOUT_MS =
-  Number.parseInt(process.env.VIVD_IMAGE_AI_DOWNLOAD_TIMEOUT_MS || "", 10) || 300_000;
+  Number.parseInt(process.env.VIVD_IMAGE_AI_DOWNLOAD_TIMEOUT_MS || "", 10) || 600_000;
 const IMAGE_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",

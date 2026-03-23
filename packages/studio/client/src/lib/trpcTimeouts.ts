@@ -1,10 +1,13 @@
 export const DEFAULT_TRPC_REQUEST_TIMEOUT_MS = 15_000;
 export const LONG_TRPC_REQUEST_TIMEOUT_MS = 3 * 60_000;
 export const EXTENDED_TRPC_REQUEST_TIMEOUT_MS = 5 * 60_000;
+export const AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS = 15 * 60_000;
 
 const TRPC_URL_MARKER = "/trpc/";
 
 const PROCEDURE_TIMEOUT_MS = new Map<string, number>([
+  ["agent.runTask", AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS],
+  ["agent.startInitialGeneration", AGENT_TASK_TRPC_REQUEST_TIMEOUT_MS],
   ["agent.runPrePublishChecklist", LONG_TRPC_REQUEST_TIMEOUT_MS],
   ["agent.fixChecklistItem", LONG_TRPC_REQUEST_TIMEOUT_MS],
   ["project.gitSave", LONG_TRPC_REQUEST_TIMEOUT_MS],

@@ -1,6 +1,6 @@
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_REQUEST_TIMEOUT_MS =
-  Number.parseInt(process.env.VIVD_OPENROUTER_IMAGE_TIMEOUT_MS || "", 10) || 420_000;
+  Number.parseInt(process.env.VIVD_OPENROUTER_IMAGE_TIMEOUT_MS || "", 10) || 900_000;
 
 function isAbortError(error: unknown): boolean {
   if (error instanceof Error && error.name === "AbortError") return true;
