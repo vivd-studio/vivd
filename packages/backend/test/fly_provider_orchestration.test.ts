@@ -261,7 +261,13 @@ describe("FlyStudioMachineProvider orchestration", () => {
       });
     (provider as any).resolveMachineReconcileState = () => ({
       accessToken: "token-1",
-      needs: { image: false, services: false, guest: false, accessToken: false },
+      needs: {
+        image: false,
+        services: false,
+        guest: false,
+        accessToken: false,
+        env: false,
+      },
     });
 
     const result = await provider.warmReconcileStudioMachine("m3");

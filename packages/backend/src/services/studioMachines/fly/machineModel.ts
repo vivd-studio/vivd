@@ -21,6 +21,7 @@ export type MachineReconcileNeeds = {
   services: boolean;
   guest: boolean;
   accessToken: boolean;
+  env: boolean;
 };
 
 export function trimToken(value: string | null | undefined): string | null {
@@ -89,6 +90,7 @@ export function resolveMachineReconcileState(options: {
   desiredImage: string;
   desiredGuest: DesiredFlyGuest;
   preferredAccessToken?: string | null;
+  desiredEnvSubset?: Record<string, string>;
   generateStudioAccessToken: () => string;
 }): { accessToken: string; needs: MachineReconcileNeeds } {
   const metadataToken = trimToken(
@@ -114,6 +116,10 @@ export function resolveMachineReconcileState(options: {
     services: needsServiceUpdate,
     guest: needsGuestUpdate(options.machine.config?.guest, options.desiredGuest),
     accessToken: !metadataToken || !envToken || metadataToken !== envToken,
+    env: Object.entries(options.desiredEnvSubset || {}).some(([key, value]) => {
+      if (typeof value !== "string") return false;
+      return trimToken(options.machine.config?.env?.[key]) !== trimToken(value);
+    }),
   };
 
   return {
@@ -127,7 +133,13 @@ export function resolveMachineReconcileState(options: {
 }
 
 export function hasMachineDrift(needs: MachineReconcileNeeds): boolean {
-  return needs.image || needs.services || needs.guest || needs.accessToken;
+  return (
+    needs.image ||
+    needs.services ||
+    needs.guest ||
+    needs.accessToken ||
+    needs.env
+  );
 }
 
 export function getMachineDriftLabels(needs: MachineReconcileNeeds): string[] {
@@ -136,6 +148,7 @@ export function getMachineDriftLabels(needs: MachineReconcileNeeds): string[] {
   if (needs.services) labels.push("services");
   if (needs.guest) labels.push("guest");
   if (needs.accessToken) labels.push("accessToken");
+  if (needs.env) labels.push("env");
   return labels;
 }
 
@@ -218,7 +231,7 @@ export function buildReconciledMachineConfig(options: {
         }
       : {}),
     ...(options.needs.guest ? { guest: options.desiredGuest } : {}),
-    ...(options.needs.accessToken
+    ...(options.needs.accessToken || options.needs.env
       ? {
           env:
             options.fullEnv ||

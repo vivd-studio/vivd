@@ -80,6 +80,7 @@ function createBaseDeps(options: {
         services: false,
         guest: false,
         accessToken: false,
+        env: false,
       } satisfies MachineReconcileNeeds,
     }),
     hasMachineDrift: () => false,

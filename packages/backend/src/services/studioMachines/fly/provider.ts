@@ -208,6 +208,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     machine: FlyMachine;
     desiredImage: string;
     preferredAccessToken?: string | null;
+    desiredEnvSubset?: Record<string, string>;
   }): { accessToken: string; needs: MachineReconcileNeeds } {
     return resolveMachineReconcileState({
       ...options,

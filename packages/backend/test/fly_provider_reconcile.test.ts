@@ -87,4 +87,31 @@ describe("Fly machine reconcile model", () => {
 
     expect(reconcileState.needs.image).toBe(false);
   });
+
+  it("flags env drift when the machine keeps a stale session token", () => {
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
+    const machine = buildMachine({
+      image: desiredImage,
+      metadataImage: desiredImage,
+    });
+    machine.config = {
+      ...machine.config,
+      env: {
+        ...machine.config?.env,
+        SESSION_TOKEN: "old-session-token",
+      },
+    };
+
+    const reconcileState = resolveMachineReconcileState({
+      machine,
+      desiredImage,
+      desiredGuest,
+      desiredEnvSubset: {
+        SESSION_TOKEN: "fresh-session-token",
+      },
+      generateStudioAccessToken: () => "generated-access-token",
+    });
+
+    expect(reconcileState.needs.env).toBe(true);
+  });
 });

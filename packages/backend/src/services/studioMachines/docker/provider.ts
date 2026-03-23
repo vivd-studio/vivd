@@ -37,6 +37,7 @@ type ContainerReconcileNeeds = {
   accessToken: boolean;
   network: boolean;
   mainBackendUrl: boolean;
+  env: boolean;
 };
 
 async function mapLimit<T>(
@@ -223,6 +224,7 @@ function resolveContainerReconcileState(options: {
   desiredMemoryBytes: number;
   desiredNetworkName: string;
   desiredMainBackendUrl?: string | null;
+  desiredEnvSubset?: Record<string, string>;
   generateStudioAccessToken: () => string;
 }): { accessToken: string; needs: ContainerReconcileNeeds } {
   const currentToken = getContainerAccessToken(options.container);
@@ -249,6 +251,10 @@ function resolveContainerReconcileState(options: {
       mainBackendUrl:
         !!options.desiredMainBackendUrl &&
         currentMainBackendUrl !== options.desiredMainBackendUrl,
+      env: Object.entries(options.desiredEnvSubset || {}).some(([key, value]) => {
+        if (typeof value !== "string") return false;
+        return trimToken(currentEnv[key]) !== trimToken(value);
+      }),
     },
   };
 }
@@ -259,7 +265,8 @@ function hasContainerDrift(needs: ContainerReconcileNeeds): boolean {
     needs.resources ||
     needs.accessToken ||
     needs.network ||
-    needs.mainBackendUrl
+    needs.mainBackendUrl ||
+    needs.env
   );
 }
 
@@ -927,11 +934,16 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       desiredMemoryBytes: this.config.memoryBytes,
       desiredNetworkName,
       desiredMainBackendUrl,
+      desiredEnvSubset: args.env,
       generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
     });
 
     if (isRunningContainer(inspected)) {
-      if (reconcileState.needs.accessToken || reconcileState.needs.mainBackendUrl) {
+      if (
+        reconcileState.needs.accessToken ||
+        reconcileState.needs.mainBackendUrl ||
+        reconcileState.needs.env
+      ) {
         inspected = await this.recreateContainer({
           existing: inspected,
           args,
@@ -945,6 +957,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           desiredMemoryBytes: this.config.memoryBytes,
           desiredNetworkName,
           desiredMainBackendUrl,
+          desiredEnvSubset: args.env,
           desiredAccessToken: reconcileState.accessToken,
           generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
         });
@@ -972,6 +985,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         desiredMemoryBytes: this.config.memoryBytes,
         desiredNetworkName,
         desiredMainBackendUrl,
+        desiredEnvSubset: args.env,
         desiredAccessToken: reconcileState.accessToken,
         generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
       });

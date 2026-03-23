@@ -31,6 +31,7 @@ export type EnsureExistingMachineRunningDeps = {
     machine: FlyMachine;
     desiredImage: string;
     preferredAccessToken?: string | null;
+    desiredEnvSubset?: Record<string, string>;
   }) => { accessToken: string; needs: MachineReconcileNeeds };
   stopMachine: (machineId: string) => Promise<void>;
   waitForState: (options: WaitForStateArgs) => Promise<void>;
@@ -97,12 +98,16 @@ export async function ensureExistingMachineRunningWorkflow(
     machine: existing,
     desiredImage,
     preferredAccessToken,
+    desiredEnvSubset: args.env,
   });
   let accessToken = reconcileState.accessToken;
 
-  if (existing.state === "started" && reconcileState.needs.accessToken) {
-    // Access token must be present in the machine env for @vivd/studio to enforce auth.
-    // Stop the machine so we can update config and boot with the token.
+  if (
+    existing.state === "started" &&
+    (reconcileState.needs.accessToken || reconcileState.needs.env)
+  ) {
+    // Critical runtime env drift (auth/tool policy/backend callbacks) requires a
+    // fresh boot so the running Studio uses the latest backend-facing config.
     await deps.stopMachine(existing.id);
     await deps.waitForState({
       machineId: existing.id,
@@ -114,6 +119,7 @@ export async function ensureExistingMachineRunningWorkflow(
       machine: existing,
       desiredImage,
       preferredAccessToken,
+      desiredEnvSubset: args.env,
     });
     accessToken = reconcileState.accessToken;
   }
@@ -139,6 +145,7 @@ export async function ensureExistingMachineRunningWorkflow(
       machine: current,
       desiredImage,
       preferredAccessToken,
+      desiredEnvSubset: args.env,
     });
     accessToken = reconcileState.accessToken;
 
