@@ -183,6 +183,8 @@ function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): stri
         respond "OK" 200
     }
 
+    import /etc/caddy/sites.d/_primary/*.caddy
+
     handle {
         root * /srv/published
         try_files {path} {path}/index.html =404

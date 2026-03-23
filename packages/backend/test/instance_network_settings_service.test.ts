@@ -100,6 +100,9 @@ describe("instance network settings service", () => {
     expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
       "solo.example.com {",
     );
+    expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
+      "import /etc/caddy/sites.d/_primary/*.caddy",
+    );
 
     await instanceNetworkSettingsService.updateStoredSettings({
       tlsMode: "off",

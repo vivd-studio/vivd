@@ -23,10 +23,26 @@ const opencodeState = vi.hoisted(() => ({
 
 const chatState = vi.hoisted(() => ({
   selectedSessionId: "session-1",
+  input: "",
+  handleSend: vi.fn(),
+  handleStopGeneration: vi.fn(),
+  attachedElement: null,
+  setAttachedElement: vi.fn(),
+  attachedImages: [] as any[],
+  addAttachedImages: vi.fn(),
+  removeAttachedImage: vi.fn(),
+  attachedFiles: [] as any[],
+  removeAttachedFile: vi.fn(),
+  selectorMode: false,
+  setSelectorMode: vi.fn(),
   isThinking: false,
   isWaiting: false,
   isLoading: false,
   isSessionHydrating: false,
+  selectorModeAvailable: true,
+  availableModels: [] as any[],
+  selectedModel: null as any,
+  setSelectedModel: vi.fn(),
   handleRevert: vi.fn(),
   handleUnrevert: vi.fn(),
   isReverted: false,
@@ -91,6 +107,11 @@ describe("MessageList latest-user anchoring", () => {
     ];
     opencodeState.selectedMessages = [{ info: { id: "user-1" }, parts: [] }];
     chatState.isSessionHydrating = false;
+    chatState.input = "";
+    chatState.attachedElement = null;
+    chatState.attachedImages = [];
+    chatState.attachedFiles = [];
+    chatState.selectorMode = false;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
     userMessageContentScrollHeightById["user-1"] = 80;
@@ -274,6 +295,32 @@ describe("MessageList latest-user anchoring", () => {
         };
       },
     });
+  });
+
+  it("uses auto scrollbar gutter for the empty-state prompt", () => {
+    timelineState.items = [];
+    opencodeState.selectedMessages = [];
+
+    const { container } = render(<MessageList />);
+
+    expect(
+      screen.getByRole("heading", { name: "Where should we begin?" }),
+    ).toBeInTheDocument();
+    expect(
+      container
+        .querySelector("[data-chat-scroll-viewport]")
+        ?.getAttribute("data-scrollbar-gutter-mode"),
+    ).toBe("auto");
+  });
+
+  it("keeps a stable scrollbar gutter once the transcript has messages", () => {
+    const { container } = render(<MessageList />);
+
+    expect(
+      container
+        .querySelector("[data-chat-scroll-viewport]")
+        ?.getAttribute("data-scrollbar-gutter-mode"),
+    ).toBe("stable");
   });
 
   it("anchors the latest user message to the top on session load", async () => {
