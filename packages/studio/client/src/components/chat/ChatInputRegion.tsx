@@ -1,6 +1,7 @@
 import { QuestionDock } from "@/features/opencodeChat/questions/QuestionDock";
 import { useChatContext } from "./ChatContext";
 import { ChatComposer } from "./ChatComposer";
+import { FollowupQueueDock } from "./FollowupQueueDock";
 
 interface ChatInputRegionProps {
   composerClassName?: string;
@@ -9,6 +10,10 @@ interface ChatInputRegionProps {
 export function ChatInputRegion({ composerClassName }: ChatInputRegionProps) {
   const {
     activeQuestionRequest,
+    queuedFollowups,
+    queuedFollowupSendingId,
+    handleSendQueuedFollowup,
+    handleEditQueuedFollowup,
     handleReplyQuestion,
     handleRejectQuestion,
   } = useChatContext();
@@ -23,5 +28,17 @@ export function ChatInputRegion({ composerClassName }: ChatInputRegionProps) {
     );
   }
 
-  return <ChatComposer className={composerClassName} />;
+  return (
+    <>
+      {queuedFollowups.length > 0 ? (
+        <FollowupQueueDock
+          items={queuedFollowups}
+          sendingId={queuedFollowupSendingId}
+          onSend={handleSendQueuedFollowup}
+          onEdit={handleEditQueuedFollowup}
+        />
+      ) : null}
+      <ChatComposer className={composerClassName} />
+    </>
+  );
 }

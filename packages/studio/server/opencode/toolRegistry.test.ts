@@ -33,14 +33,14 @@ describe("OpenCode tool registry", () => {
     expect(policy.enabledByName.vivd_plugins_catalog).toBe(true);
   });
 
-  it("keeps checklist tool disabled by default unless explicitly enabled", () => {
+  it("keeps checklist tool enabled by default and supports explicit disable", () => {
     const defaultPolicy = resolveStudioOpencodeToolPolicy({});
-    expect(defaultPolicy.enabledByName.vivd_publish_checklist).toBe(false);
+    expect(defaultPolicy.enabledByName.vivd_publish_checklist).toBe(true);
 
-    const forcedPolicy = resolveStudioOpencodeToolPolicy({
-      VIVD_OPENCODE_TOOLS_ENABLE: "vivd_publish_checklist",
+    const disabledPolicy = resolveStudioOpencodeToolPolicy({
+      VIVD_OPENCODE_TOOLS_DISABLE: "vivd_publish_checklist",
     });
-    expect(forcedPolicy.enabledByName.vivd_publish_checklist).toBe(true);
+    expect(disabledPolicy.enabledByName.vivd_publish_checklist).toBe(false);
   });
 
   it("keeps image tool enabled by default and supports image_ai feature flag disable", () => {

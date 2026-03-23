@@ -65,7 +65,7 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     moduleDistRelativePath: "opencode/toolModules/vivdPublishChecklist.js",
     moduleSourceRelativePath: "server/opencode/toolModules/vivdPublishChecklist.ts",
     definitionExportName: "vivdPublishChecklistToolDefinition",
-    defaultEnabled: false,
+    defaultEnabled: true,
     featureFlag: "publish_checklist",
   },
   {

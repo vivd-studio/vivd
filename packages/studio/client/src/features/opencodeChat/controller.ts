@@ -236,10 +236,11 @@ export function useOpencodeChatController({
     (
       task: string,
       targetSessionId: string | null,
-      options?: { onSettled?: () => void },
+      options?: { onCompleted?: (success: boolean) => void; onSettled?: () => void },
     ) => {
       if (activeQuestionRequest) {
         toast.info("Answer the pending question first");
+        options?.onCompleted?.(false);
         options?.onSettled?.();
         return;
       }
@@ -253,7 +254,8 @@ export function useOpencodeChatController({
 
         try {
           if (targetSessionId) {
-            await dispatchTaskToSession(task, targetSessionId);
+            const success = await dispatchTaskToSession(task, targetSessionId);
+            options?.onCompleted?.(success);
             return;
           }
 
@@ -281,6 +283,7 @@ export function useOpencodeChatController({
               })
               .catch(() => undefined);
             setSelectedSessionId(null);
+            options?.onCompleted?.(false);
             return;
           }
 
@@ -298,10 +301,12 @@ export function useOpencodeChatController({
               })
               .catch(() => undefined);
             setSelectedSessionId(null);
+            options?.onCompleted?.(false);
             return;
           }
 
-          await dispatchTaskToSession(task, created.sessionId);
+          const success = await dispatchTaskToSession(task, created.sessionId);
+          options?.onCompleted?.(success);
         } catch (error) {
           if (!pendingStart?.cancelled) {
             setLocalSessionError(
@@ -312,6 +317,7 @@ export function useOpencodeChatController({
             );
             setDismissedDerivedErrorKey(null);
           }
+          options?.onCompleted?.(false);
         } finally {
           if (
             pendingRequestId != null &&

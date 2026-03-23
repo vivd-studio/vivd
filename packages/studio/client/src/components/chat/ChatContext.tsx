@@ -3,18 +3,27 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { POLLING_INFREQUENT } from "@/app/config/polling";
 import { useOptionalPreview } from "../preview/PreviewContext";
 import type {
   ChatContextValue,
+  FollowupBehavior,
   ModelTier,
+  QueuedFollowup,
   SessionDebugState,
 } from "./chatTypes";
+import {
+  buildQueuedFollowupPreview,
+  FOLLOWUP_BEHAVIOR_STORAGE_KEY,
+  getStoredFollowupBehavior,
+} from "./followupUtils";
 import { useChatAttachments } from "./useChatAttachments";
 import { useConfirmDialog } from "./useConfirmDialog";
 import {
@@ -107,6 +116,18 @@ export function ChatProvider({
   );
   const availableModels = (availableModelsData ?? []) as ModelTier[];
   const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(null);
+  const [followupBehavior, setFollowupBehaviorState] =
+    useState<FollowupBehavior>(getStoredFollowupBehavior);
+  const nextQueuedFollowupIdRef = useRef(0);
+  const [queuedFollowupsBySessionId, setQueuedFollowupsBySessionId] = useState<
+    Record<string, QueuedFollowup[]>
+  >({});
+  const [queuedFollowupSendingBySessionId, setQueuedFollowupSendingBySessionId] =
+    useState<Record<string, string | null>>({});
+  const [queuedFollowupFailedBySessionId, setQueuedFollowupFailedBySessionId] =
+    useState<Record<string, string | null>>({});
+  const [queuedFollowupPausedBySessionId, setQueuedFollowupPausedBySessionId] =
+    useState<Record<string, boolean>>({});
 
   const setSelectedModel = useCallback((model: ModelTier | null) => {
     setSelectedModelState(model);
@@ -116,6 +137,11 @@ export function ChatProvider({
         JSON.stringify({ provider: model.provider, modelId: model.modelId }),
       );
     }
+  }, []);
+
+  const setFollowupBehavior = useCallback((behavior: FollowupBehavior) => {
+    setFollowupBehaviorState(behavior);
+    localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, behavior);
   }, []);
 
   useEffect(() => {
@@ -188,6 +214,113 @@ export function ChatProvider({
 
   const startInitialGenerationMutation =
     trpc.agent.startInitialGeneration.useMutation();
+
+  const queuedFollowups = selectedSessionId
+    ? queuedFollowupsBySessionId[selectedSessionId] ?? []
+    : [];
+  const queuedFollowupSendingId = selectedSessionId
+    ? queuedFollowupSendingBySessionId[selectedSessionId] ?? null
+    : null;
+  const queuedFollowupFailedId = selectedSessionId
+    ? queuedFollowupFailedBySessionId[selectedSessionId] ?? null
+    : null;
+  const queuedFollowupPaused = selectedSessionId
+    ? queuedFollowupPausedBySessionId[selectedSessionId] ?? false
+    : false;
+
+  const removeQueuedFollowup = useCallback((sessionId: string, id: string) => {
+    setQueuedFollowupsBySessionId((current) => {
+      const items = current[sessionId] ?? [];
+      const nextItems = items.filter((item) => item.id !== id);
+      if (nextItems.length === items.length) {
+        return current;
+      }
+      if (nextItems.length === 0) {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      }
+      return {
+        ...current,
+        [sessionId]: nextItems,
+      };
+    });
+  }, []);
+
+  const queueFollowup = useCallback((sessionId: string, task: string) => {
+    const id = `followup-${Date.now()}-${nextQueuedFollowupIdRef.current}`;
+    nextQueuedFollowupIdRef.current += 1;
+
+    setQueuedFollowupsBySessionId((current) => ({
+      ...current,
+      [sessionId]: [
+        ...(current[sessionId] ?? []),
+        {
+          id,
+          sessionId,
+          task,
+          preview: buildQueuedFollowupPreview(task),
+        },
+      ],
+    }));
+    setQueuedFollowupFailedBySessionId((current) => ({
+      ...current,
+      [sessionId]: null,
+    }));
+    setQueuedFollowupPausedBySessionId((current) => ({
+      ...current,
+      [sessionId]: false,
+    }));
+
+    toast.info("Message queued", {
+      description: "It will send after the current task finishes.",
+    });
+    return id;
+  }, []);
+
+  const submitPreparedTask = useCallback(
+    (
+      task: string,
+      targetSessionId: string | null,
+      options?: {
+        forceSend?: boolean;
+        onCompleted?: (success: boolean) => void;
+        onSettled?: () => void;
+      },
+    ) => {
+      if (activeQuestionRequest || runTaskPending || isSending) {
+        options?.onCompleted?.(false);
+        options?.onSettled?.();
+        return;
+      }
+
+      if (
+        targetSessionId &&
+        isThinking &&
+        !options?.forceSend &&
+        followupBehavior === "queue"
+      ) {
+        queueFollowup(targetSessionId, task);
+        options?.onCompleted?.(true);
+        options?.onSettled?.();
+        return;
+      }
+
+      sendTask(task, targetSessionId, {
+        onCompleted: options?.onCompleted,
+        onSettled: options?.onSettled,
+      });
+    },
+    [
+      activeQuestionRequest,
+      followupBehavior,
+      isSending,
+      isThinking,
+      queueFollowup,
+      runTaskPending,
+      sendTask,
+    ],
+  );
 
   useEffect(() => {
     if (selectedElement && clearSelectedElement) {
@@ -262,7 +395,7 @@ export function ChatProvider({
     }
 
     setInput("");
-    sendTask(pendingMessage, targetSessionId);
+    submitPreparedTask(pendingMessage, targetSessionId);
   }, [
     previewContext?.pendingChatMessage,
     previewContext?.clearPendingChatMessage,
@@ -276,9 +409,9 @@ export function ChatProvider({
     runTaskPending,
     selectedModel,
     selectedSessionId,
-    sendTask,
     setSelectedSessionId,
     startInitialGenerationMutation,
+    submitPreparedTask,
     version,
   ]);
 
@@ -339,7 +472,6 @@ export function ChatProvider({
         attachedImages.length === 0 &&
         attachedFiles.length === 0) ||
       activeQuestionRequest ||
-      isThinking ||
       runTaskPending ||
       isSending
     ) {
@@ -354,7 +486,7 @@ export function ChatProvider({
     setAttachedElement(null);
     clearSessionError();
 
-    sendTask(task, selectedSessionId, {
+    submitPreparedTask(task, selectedSessionId, {
       onSettled: () => setIsSending(false),
     });
   };
@@ -465,8 +597,156 @@ export function ChatProvider({
   }, [unrevertSession]);
 
   const handleStopGeneration = useCallback(() => {
+    if (selectedSessionId && (queuedFollowupsBySessionId[selectedSessionId]?.length ?? 0) > 0) {
+      setQueuedFollowupPausedBySessionId((current) => ({
+        ...current,
+        [selectedSessionId]: true,
+      }));
+    }
     stopGeneration();
-  }, [stopGeneration]);
+  }, [queuedFollowupsBySessionId, selectedSessionId, stopGeneration]);
+
+  const handleSendQueuedFollowup = useCallback(
+    (id: string) => {
+      if (!selectedSessionId) return;
+      if (queuedFollowupSendingBySessionId[selectedSessionId]) return;
+
+      const item = (queuedFollowupsBySessionId[selectedSessionId] ?? []).find(
+        (entry) => entry.id === id,
+      );
+      if (!item) return;
+
+      setQueuedFollowupPausedBySessionId((current) => ({
+        ...current,
+        [selectedSessionId]: false,
+      }));
+      setQueuedFollowupFailedBySessionId((current) => ({
+        ...current,
+        [selectedSessionId]: null,
+      }));
+      setQueuedFollowupSendingBySessionId((current) => ({
+        ...current,
+        [selectedSessionId]: id,
+      }));
+
+      submitPreparedTask(item.task, selectedSessionId, {
+        forceSend: true,
+        onCompleted: (success) => {
+          if (success) {
+            removeQueuedFollowup(selectedSessionId, id);
+            return;
+          }
+          setQueuedFollowupFailedBySessionId((current) => ({
+            ...current,
+            [selectedSessionId]: id,
+          }));
+        },
+        onSettled: () => {
+          setQueuedFollowupSendingBySessionId((current) => ({
+            ...current,
+            [selectedSessionId]:
+              current[selectedSessionId] === id ? null : current[selectedSessionId],
+          }));
+        },
+      });
+    },
+    [
+      queuedFollowupSendingBySessionId,
+      queuedFollowupsBySessionId,
+      removeQueuedFollowup,
+      selectedSessionId,
+      submitPreparedTask,
+    ],
+  );
+
+  const handleEditQueuedFollowup = useCallback(
+    (id: string) => {
+      if (!selectedSessionId) return;
+      if (queuedFollowupSendingBySessionId[selectedSessionId]) return;
+
+      const item = (queuedFollowupsBySessionId[selectedSessionId] ?? []).find(
+        (entry) => entry.id === id,
+      );
+      if (!item) return;
+
+      removeQueuedFollowup(selectedSessionId, id);
+      setQueuedFollowupFailedBySessionId((current) => ({
+        ...current,
+        [selectedSessionId]:
+          current[selectedSessionId] === id ? null : current[selectedSessionId],
+      }));
+      setQueuedFollowupPausedBySessionId((current) => ({
+        ...current,
+        [selectedSessionId]: false,
+      }));
+      setInput(item.task);
+    },
+    [
+      queuedFollowupSendingBySessionId,
+      queuedFollowupsBySessionId,
+      removeQueuedFollowup,
+      selectedSessionId,
+    ],
+  );
+
+  useEffect(() => {
+    if (!selectedSessionId) return;
+
+    const item = queuedFollowupsBySessionId[selectedSessionId]?.[0];
+    if (!item) return;
+    if (queuedFollowupSendingBySessionId[selectedSessionId]) return;
+    if (queuedFollowupFailedBySessionId[selectedSessionId] === item.id) return;
+    if (queuedFollowupPausedBySessionId[selectedSessionId]) return;
+    if (
+      activeQuestionRequest ||
+      isThinking ||
+      runTaskPending ||
+      isSending ||
+      isUsageBlocked
+    ) {
+      return;
+    }
+
+    setQueuedFollowupSendingBySessionId((current) => ({
+      ...current,
+      [selectedSessionId]: item.id,
+    }));
+
+    submitPreparedTask(item.task, selectedSessionId, {
+      onCompleted: (success) => {
+        if (success) {
+          removeQueuedFollowup(selectedSessionId, item.id);
+          return;
+        }
+        setQueuedFollowupFailedBySessionId((current) => ({
+          ...current,
+          [selectedSessionId]: item.id,
+        }));
+      },
+      onSettled: () => {
+        setQueuedFollowupSendingBySessionId((current) => ({
+          ...current,
+          [selectedSessionId]:
+            current[selectedSessionId] === item.id
+              ? null
+              : current[selectedSessionId],
+        }));
+      },
+    });
+  }, [
+    activeQuestionRequest,
+    isSending,
+    isThinking,
+    isUsageBlocked,
+    queuedFollowupFailedBySessionId,
+    queuedFollowupPausedBySessionId,
+    queuedFollowupSendingBySessionId,
+    queuedFollowupsBySessionId,
+    removeQueuedFollowup,
+    runTaskPending,
+    selectedSessionId,
+    submitPreparedTask,
+  ]);
 
   const sessionDebugState: SessionDebugState = {
     selectedSessionId,
@@ -506,6 +786,10 @@ export function ChatProvider({
     attachedFiles,
     addAttachedFile,
     removeAttachedFile,
+    followupBehavior,
+    setFollowupBehavior,
+    queuedFollowups,
+    queuedFollowupSendingId,
     selectorMode,
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,
@@ -533,6 +817,8 @@ export function ChatProvider({
     handleRevert,
     handleUnrevert,
     handleStopGeneration,
+    handleSendQueuedFollowup,
+    handleEditQueuedFollowup,
   };
 
   return (

@@ -35,6 +35,15 @@ export interface AttachedFile {
   id: string;
 }
 
+export type FollowupBehavior = "queue" | "steer";
+
+export interface QueuedFollowup {
+  id: string;
+  sessionId: string;
+  task: string;
+  preview: string;
+}
+
 export interface UsageData {
   cost: number;
   tokens: {
@@ -117,6 +126,10 @@ export interface ChatContextValue {
   attachedFiles: AttachedFile[];
   addAttachedFile: (file: AttachedFile) => void;
   removeAttachedFile: (id: string) => void;
+  followupBehavior: FollowupBehavior;
+  setFollowupBehavior: (behavior: FollowupBehavior) => void;
+  queuedFollowups: QueuedFollowup[];
+  queuedFollowupSendingId: string | null;
   selectorMode: boolean;
   setSelectorMode: ((mode: boolean) => void) | undefined;
   selectorModeAvailable: boolean;
@@ -147,4 +160,6 @@ export interface ChatContextValue {
   handleRevert: (messageId: string) => void;
   handleUnrevert: () => void;
   handleStopGeneration: () => void;
+  handleSendQueuedFollowup: (id: string) => void;
+  handleEditQueuedFollowup: (id: string) => void;
 }

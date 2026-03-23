@@ -5,6 +5,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SelectedElementPill, AttachedFilePill } from "./SelectedElementPill";
@@ -41,6 +49,8 @@ export function ChatComposer({ className }: ChatComposerProps) {
     removeAttachedImage,
     attachedFiles,
     removeAttachedFile,
+    followupBehavior,
+    setFollowupBehavior,
     selectorMode,
     setSelectorMode,
     isLoading,
@@ -296,6 +306,31 @@ export function ChatComposer({ className }: ChatComposerProps) {
                   <Plus className="w-4 h-4 mr-2" />
                   Add File
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    Follow-up behavior
+                    <DropdownMenuShortcut>
+                      {followupBehavior === "queue" ? "Queue" : "Steer"}
+                    </DropdownMenuShortcut>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuLabel>When a session is busy</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={followupBehavior}
+                      onValueChange={(value) =>
+                        setFollowupBehavior(value as "queue" | "steer")
+                      }
+                    >
+                      <DropdownMenuRadioItem value="steer">
+                        Steer
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="queue">
+                        Queue
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               </DropdownMenuContent>
             </DropdownMenu>
 
