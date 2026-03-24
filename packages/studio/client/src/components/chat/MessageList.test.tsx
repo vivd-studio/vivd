@@ -71,6 +71,7 @@ const chatState = vi.hoisted(() => ({
 
 const scrollToMock = vi.fn();
 const CHAT_ANCHOR_TOP_INSET_PX = 40;
+const viewportExtraScrollHeight = vi.hoisted(() => ({ value: 0 }));
 const anchorTopById = vi.hoisted(() => ({
   "user-1": 120,
   "user-2": 280,
@@ -121,6 +122,7 @@ describe("MessageList latest-user anchoring", () => {
     chatState.selectorMode = false;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
+    viewportExtraScrollHeight.value = 0;
     userMessageContentScrollHeightById["user-1"] = 80;
     userMessageContentScrollHeightById["user-2"] = 80;
     resizeObserverCallbacks.length = 0;
@@ -148,7 +150,12 @@ describe("MessageList latest-user anchoring", () => {
           resizeObserverCallbacks.push(callback);
         }
         observe() {}
-        disconnect() {}
+        disconnect() {
+          const index = resizeObserverCallbacks.indexOf(this.callback);
+          if (index >= 0) {
+            resizeObserverCallbacks.splice(index, 1);
+          }
+        }
         unobserve() {}
       },
     });
@@ -200,11 +207,12 @@ describe("MessageList latest-user anchoring", () => {
                 0,
                 (anchorTopById[activeMessageId] ?? 0) -
                   CHAT_ANCHOR_TOP_INSET_PX,
-              )
+              ) +
+              viewportExtraScrollHeight.value
             );
           }
 
-          return 520;
+          return 520 + viewportExtraScrollHeight.value;
         }
         return 0;
       },
@@ -427,6 +435,73 @@ describe("MessageList latest-user anchoring", () => {
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("keeps the context indicator outside the scrollable transcript content", () => {
+    const { container } = render(<MessageList />);
+
+    const indicatorButton = container.querySelector(
+      "[data-testid='session-context-usage-button']",
+    );
+    const transcriptContent = container.querySelector("[data-chat-transcript-content]");
+
+    expect(indicatorButton).not.toBeNull();
+    expect(transcriptContent).not.toContainElement(indicatorButton);
+  });
+
+  it("auto-follows streamed output while the user stays pinned to the bottom", async () => {
+    render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    scrollToMock.mockClear();
+    viewportExtraScrollHeight.value = 120;
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({
+        top: 200,
+        behavior: "auto",
+      });
+    });
+  });
+
+  it("pauses auto-follow after the user scrolls away and resumes from the jump button", async () => {
+    const { container } = render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    scrollToMock.mockClear();
+
+    const viewport = container.querySelector<HTMLElement>("[data-chat-scroll-viewport]");
+    expect(viewport).not.toBeNull();
+
+    fireEvent.wheel(viewport!, { deltaY: -120 });
+    viewport!.scrollTop = 20;
+    fireEvent.scroll(viewport!);
+
+    const resumeButton = container.querySelector(
+      "[aria-label='Jump to latest message']",
+    );
+    expect(resumeButton).toBeInTheDocument();
+
+    viewportExtraScrollHeight.value = 120;
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    expect(scrollToMock).not.toHaveBeenCalled();
+
+    fireEvent.click(resumeButton!);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({
+        top: 200,
+        behavior: "auto",
+      });
     });
   });
 

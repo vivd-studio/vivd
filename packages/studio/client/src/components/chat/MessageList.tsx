@@ -1,6 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/common";
-import { Undo2, AlertTriangle, AlertCircle, CheckCheck, X } from "lucide-react";
+import {
+  Undo2,
+  AlertTriangle,
+  AlertCircle,
+  CheckCheck,
+  X,
+  ArrowDownToLine,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useOpencodeChat } from "@/features/opencodeChat";
 import { cn } from "@/lib/utils";
@@ -14,6 +21,7 @@ import { useChatContext } from "./ChatContext";
 import { buildSessionErrorNotice } from "./sessionErrorNotice";
 import { AgentMessageRow } from "./message-list/AgentMessageRow";
 import { SessionStatusNotice } from "./message-list/SessionStatusNotice";
+import { SessionContextIndicator } from "./SessionContextIndicator";
 import { UserMessageRow } from "./message-list/UserMessageRow";
 import { useActiveTurnAnchor } from "./message-list/useActiveTurnAnchor";
 import { useWorkedSectionState } from "./message-list/useWorkedSectionState";
@@ -109,9 +117,11 @@ export function MessageList() {
     transcriptContentRef,
     showTopFade,
     showBottomFade,
+    showResumeScrollButton,
     activeTurnLayout,
     registerUserAnchor,
     registerUserRow,
+    resumeAutoScroll,
   } = useActiveTurnAnchor({
     selectedSessionId,
     latestUserMessageId,
@@ -278,6 +288,11 @@ export function MessageList() {
 
   return (
     <div className="relative flex-1 overflow-hidden">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end px-3 pt-2 md:px-5 md:pt-2">
+        <div className="pointer-events-auto">
+          <SessionContextIndicator />
+        </div>
+      </div>
       <div
         ref={scrollViewportRef}
         data-chat-scroll-viewport=""
@@ -366,6 +381,20 @@ export function MessageList() {
 
         </div>
       </div>
+      {showResumeScrollButton ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center md:bottom-6">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={resumeAutoScroll}
+            className="pointer-events-auto h-8 w-8 rounded-full border-border/60 bg-background/95 shadow-sm hover:bg-muted/90"
+            aria-label="Jump to latest message"
+          >
+            <ArrowDownToLine className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
       {showTopFade ? (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-background via-background/84 to-transparent" />
       ) : null}

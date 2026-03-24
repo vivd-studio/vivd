@@ -1,5 +1,6 @@
 import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
+import { formatDollarsAsCredits } from "@vivd/shared";
 
 interface SessionUsageTableProps {
   days: number;
@@ -7,9 +8,6 @@ interface SessionUsageTableProps {
 
 export function SessionUsageTable({ days }: SessionUsageTableProps) {
   const { data: sessions, isLoading } = trpc.usage.sessions.useQuery({ days });
-
-  const formatDollarsAsCredits = (dollars: number) =>
-    `${Math.round(dollars * 100)} ⬡`;
 
   const formatDate = (date: unknown) => {
     if (!date) return "—";

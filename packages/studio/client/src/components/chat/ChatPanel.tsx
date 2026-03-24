@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X, ChevronDown, ChevronUp } from "lucide-react";
+import { formatDollarsAsCredits } from "@vivd/shared";
 import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
 import { ChatInputRegion } from "./ChatInputRegion";
@@ -92,7 +93,7 @@ function SessionDebugDisplay({ debug }: { debug: SessionDebugState }) {
 
                 <span>Credits:</span>
                 <span className="font-semibold text-green-600">
-                  {Math.round(debug.usage.cost * 100)} ⬡
+                  {formatDollarsAsCredits(debug.usage.cost)}
                 </span>
 
                 <span>Input Tokens:</span>

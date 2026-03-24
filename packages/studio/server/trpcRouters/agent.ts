@@ -6,7 +6,7 @@ import {
   agentEventEmitter,
   createSession,
   deleteSession,
-  getAvailableModels,
+  getAvailableModelsWithMetadata,
   getSessionContent,
   getSessionsStatus,
   listProjects,
@@ -234,8 +234,9 @@ function hasPendingChecklistItems(checklist: PrePublishChecklist): boolean {
 }
 
 export const agentRouter = router({
-  getAvailableModels: publicProcedure.query(async () => {
-    return getAvailableModels();
+  getAvailableModels: publicProcedure.query(async ({ ctx }) => {
+    const directory = getWorkspaceDir(ctx);
+    return getAvailableModelsWithMetadata(directory);
   }),
 
   createSession: publicProcedure

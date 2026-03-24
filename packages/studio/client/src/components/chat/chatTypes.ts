@@ -102,6 +102,10 @@ export interface ModelTier {
   provider: string;
   modelId: string;
   label: string;
+  providerLabel?: string;
+  modelLabel?: string;
+  contextLimit?: number;
+  inputLimit?: number;
 }
 
 export interface ChatContextValue {

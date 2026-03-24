@@ -1,4 +1,5 @@
 import { usageService } from "./UsageService";
+import { dollarsToCredits } from "@vivd/shared";
 import type { LimitsConfig } from "@vivd/shared/types";
 import { db } from "../../db";
 import { organization } from "../../db/schema";
@@ -246,17 +247,17 @@ class LimitsService {
       percentage: limit > 0 ? current / limit : 0, // 0 limit = unlimited = 0%
     });
 
-    // Check each period - convert dollar costs to credits (×100)
+    // Check each period - convert dollar costs to credits via shared policy.
     const daily = calculateInfo(
-      currentUsage.daily.cost * 100,
+      dollarsToCredits(currentUsage.daily.cost),
       config.dailyCreditLimit
     );
     const weekly = calculateInfo(
-      currentUsage.weekly.cost * 100,
+      dollarsToCredits(currentUsage.weekly.cost),
       config.weeklyCreditLimit
     );
     const monthly = calculateInfo(
-      currentUsage.monthly.cost * 100,
+      dollarsToCredits(currentUsage.monthly.cost),
       config.monthlyCreditLimit
     );
     const imageGen = calculateInfo(

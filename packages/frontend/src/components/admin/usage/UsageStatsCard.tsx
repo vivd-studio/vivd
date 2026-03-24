@@ -7,6 +7,7 @@ import {
 import { LoadingSpinner } from "@/components/common";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import { formatCredits, formatDollarsAsCredits } from "@vivd/shared";
 import { SessionUsageTable } from "./SessionUsageTable";
 import { FlowUsageTable } from "./FlowUsageTable";
 
@@ -39,9 +40,6 @@ export function UsageStatsCard() {
     return null;
   }
 
-  const formatCredits = (credits: number) => `${Math.round(credits)} ⬡`;
-  const formatDollarsAsCredits = (dollars: number) =>
-    `${Math.round(dollars * 100)} ⬡`;
   const formatDate = (date: unknown) => {
     if (!date) return "—";
     try {

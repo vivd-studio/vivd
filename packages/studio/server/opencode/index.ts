@@ -29,7 +29,7 @@ export { useEvents };
 export { agentEventEmitter } from "./eventEmitter.js";
 export type { AgentEvent, AgentEventType } from "./eventEmitter.js";
 export { serverManager } from "./serverManager.js";
-export { getAvailableModels } from "./modelConfig.js";
+export { getAvailableModels, getAvailableModelsWithMetadata } from "./modelConfig.js";
 export type { ModelTier, ModelSelection } from "./modelConfig.js";
 
 const sessionTitleCache = new Map<

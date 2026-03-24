@@ -1,5 +1,6 @@
 import { LoadingSpinner } from "@/components/common";
 import { trpc } from "@/lib/trpc";
+import { formatDollarsAsCredits } from "@vivd/shared";
 
 interface FlowUsageTableProps {
   days: number;
@@ -16,9 +17,6 @@ const FLOW_LABELS: Record<string, string> = {
 
 export function FlowUsageTable({ days }: FlowUsageTableProps) {
   const { data: flows, isLoading } = trpc.usage.flows.useQuery({ days });
-
-  const formatDollarsAsCredits = (dollars: number) =>
-    `${Math.round(dollars * 100)} ⬡`;
 
   const formatDate = (date: unknown) => {
     if (!date) return "—";

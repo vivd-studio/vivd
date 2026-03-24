@@ -10,6 +10,12 @@ type PendingAnchorRequest = {
   behavior: ScrollBehavior;
 };
 
+const CHAT_ANCHOR_TOP_INSET_PX = 40;
+const ACTIVE_TURN_BODY_GAP_PX = 8;
+const MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS = 1;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 10;
+const AUTO_SCROLL_MARK_TTL_MS = 1500;
+
 export function useActiveTurnAnchor({
   selectedSessionId,
   latestUserMessageId,
@@ -42,10 +48,10 @@ export function useActiveTurnAnchor({
   const lastAnchoredUserMessageIdRef = useRef<string | null>(null);
   const pendingHydrationAnchorRef = useRef(true);
   const pendingAnchorLayoutAdjustmentsRef = useRef(0);
-
-  const CHAT_ANCHOR_TOP_INSET_PX = 40;
-  const ACTIVE_TURN_BODY_GAP_PX = 8;
-  const MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS = 1;
+  const autoScrollMarkRef = useRef<{ top: number; time: number } | null>(null);
+  const autoScrollMarkTimerRef = useRef<number | null>(null);
+  const skipNextResizeAutoScrollRef = useRef(false);
+  const [userScrolled, setUserScrolled] = useState(false);
 
   const getScrollViewport = useCallback(
     (): HTMLDivElement | null => scrollViewportRef.current,
@@ -65,6 +71,119 @@ export function useActiveTurnAnchor({
 
     return window.innerWidth >= 768 ? 80 : 64;
   }, []);
+
+  const canScrollViewport = useCallback((viewport: HTMLDivElement) => {
+    return viewport.scrollHeight - viewport.clientHeight > 1;
+  }, []);
+
+  const getDistanceFromBottom = useCallback((viewport: HTMLDivElement) => {
+    return viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+  }, []);
+
+  const setUserScrolledState = useCallback((next: boolean) => {
+    setUserScrolled((prev) => (prev === next ? prev : next));
+  }, []);
+
+  const clearAutoScrollMark = useCallback(() => {
+    if (autoScrollMarkTimerRef.current != null) {
+      window.clearTimeout(autoScrollMarkTimerRef.current);
+      autoScrollMarkTimerRef.current = null;
+    }
+    autoScrollMarkRef.current = null;
+  }, []);
+
+  const markAutoScroll = useCallback(
+    (viewport: HTMLDivElement) => {
+      autoScrollMarkRef.current = {
+        top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
+        time: Date.now(),
+      };
+
+      if (autoScrollMarkTimerRef.current != null) {
+        window.clearTimeout(autoScrollMarkTimerRef.current);
+      }
+
+      autoScrollMarkTimerRef.current = window.setTimeout(() => {
+        autoScrollMarkRef.current = null;
+        autoScrollMarkTimerRef.current = null;
+      }, AUTO_SCROLL_MARK_TTL_MS);
+    },
+    [],
+  );
+
+  const isAutoScrollPosition = useCallback((viewport: HTMLDivElement) => {
+    const mark = autoScrollMarkRef.current;
+    if (!mark) {
+      return false;
+    }
+
+    if (Date.now() - mark.time > AUTO_SCROLL_MARK_TTL_MS) {
+      autoScrollMarkRef.current = null;
+      return false;
+    }
+
+    return Math.abs(viewport.scrollTop - mark.top) < 2;
+  }, []);
+
+  const scrollToBottom = useCallback(
+    ({
+      behavior = "auto",
+      force = false,
+    }: {
+      behavior?: ScrollBehavior;
+      force?: boolean;
+    } = {}) => {
+      const viewport = getScrollViewport();
+      if (!viewport) {
+        return;
+      }
+
+      if (!force && userScrolled) {
+        return;
+      }
+
+      if (force) {
+        setUserScrolledState(false);
+      }
+
+      const distanceFromBottom = getDistanceFromBottom(viewport);
+      if (distanceFromBottom < 2) {
+        markAutoScroll(viewport);
+        return;
+      }
+
+      markAutoScroll(viewport);
+      viewport.scrollTo({
+        top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
+        behavior,
+      });
+    },
+    [
+      getDistanceFromBottom,
+      getScrollViewport,
+      markAutoScroll,
+      setUserScrolledState,
+      userScrolled,
+    ],
+  );
+
+  const pauseAutoScroll = useCallback(() => {
+    const viewport = getScrollViewport();
+    if (!viewport) {
+      return;
+    }
+
+    if (!canScrollViewport(viewport)) {
+      setUserScrolledState(false);
+      return;
+    }
+
+    setUserScrolledState(true);
+  }, [canScrollViewport, getScrollViewport, setUserScrolledState]);
+
+  const resumeAutoScroll = useCallback(() => {
+    scrollToBottom({ force: true });
+  }, [scrollToBottom]);
 
   const registerUserAnchor = useCallback(
     (messageId: string, node: HTMLDivElement | null) => {
@@ -141,9 +260,12 @@ export function useActiveTurnAnchor({
     pendingHydrationAnchorRef.current = true;
     lastAnchoredUserMessageIdRef.current = null;
     pendingAnchorLayoutAdjustmentsRef.current = 0;
+    skipNextResizeAutoScrollRef.current = false;
+    clearAutoScrollMark();
+    setUserScrolledState(false);
     setActiveTurnLayout(null);
     setPendingAnchorRequest(null);
-  }, [selectedSessionId]);
+  }, [clearAutoScrollMark, selectedSessionId, setUserScrolledState]);
 
   useEffect(() => {
     if (isSessionHydrating || !latestUserMessageId) {
@@ -230,6 +352,9 @@ export function useActiveTurnAnchor({
     }
 
     pendingAnchorLayoutAdjustmentsRef.current = 0;
+    setUserScrolledState(false);
+    skipNextResizeAutoScrollRef.current = true;
+    markAutoScroll(viewport);
     viewport.scrollTo({
       top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
       behavior: pendingAnchorRequest.behavior,
@@ -242,7 +367,9 @@ export function useActiveTurnAnchor({
     computeActiveTurnBodyMinHeight,
     getScrollViewport,
     isSessionHydrating,
+    markAutoScroll,
     pendingAnchorRequest,
+    setUserScrolledState,
     syncScrollFades,
   ]);
 
@@ -250,28 +377,113 @@ export function useActiveTurnAnchor({
     const viewport = getScrollViewport();
     if (!viewport) return;
 
-    const handleScroll = () => {
-      window.requestAnimationFrame(syncScrollFades);
+    const syncViewportState = () => {
+      viewport.style.overflowAnchor = userScrolled ? "auto" : "none";
+
+      if (!canScrollViewport(viewport)) {
+        setUserScrolledState(false);
+        syncScrollFades();
+        return;
+      }
+
+      const distanceFromBottom = getDistanceFromBottom(viewport);
+      if (distanceFromBottom < AUTO_SCROLL_BOTTOM_THRESHOLD_PX) {
+        setUserScrolledState(false);
+        syncScrollFades();
+        return;
+      }
+
+      if (!userScrolled && isAutoScrollPosition(viewport)) {
+        scrollToBottom();
+        syncScrollFades();
+        return;
+      }
+
+      setUserScrolledState(true);
+      syncScrollFades();
     };
 
-    syncScrollFades();
-    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    let frame = 0;
+    const scheduleSync = () => {
+      if (frame !== 0) {
+        return;
+      }
+
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        syncViewportState();
+      });
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY >= 0) {
+        return;
+      }
+      pauseAutoScroll();
+    };
+
+    const handleInteraction = () => {
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) {
+        pauseAutoScroll();
+      }
+    };
+
+    syncViewportState();
+    viewport.addEventListener("scroll", scheduleSync, { passive: true });
+    viewport.addEventListener("wheel", handleWheel, { passive: true });
+    viewport.addEventListener("click", handleInteraction);
 
     const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(syncScrollFades);
+      window.requestAnimationFrame(() => {
+        if (skipNextResizeAutoScrollRef.current) {
+          skipNextResizeAutoScrollRef.current = false;
+          scheduleSync();
+          return;
+        }
+
+        if (!pendingAnchorRequest && !userScrolled) {
+          scrollToBottom();
+        }
+
+        scheduleSync();
+      });
     });
     resizeObserver.observe(viewport);
 
-    const viewportContent = viewport.firstElementChild;
+    const viewportContent = transcriptContentRef.current ?? viewport.firstElementChild;
     if (viewportContent instanceof HTMLElement) {
       resizeObserver.observe(viewportContent);
     }
 
     return () => {
-      viewport.removeEventListener("scroll", handleScroll);
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+      viewport.removeEventListener("scroll", scheduleSync);
+      viewport.removeEventListener("wheel", handleWheel);
+      viewport.removeEventListener("click", handleInteraction);
       resizeObserver.disconnect();
     };
-  }, [getScrollViewport, selectedSessionId, syncScrollFades]);
+  }, [
+    canScrollViewport,
+    getDistanceFromBottom,
+    getScrollViewport,
+    isAutoScrollPosition,
+    pauseAutoScroll,
+    pendingAnchorRequest,
+    scrollToBottom,
+    selectedSessionId,
+    setUserScrolledState,
+    syncScrollFades,
+    userScrolled,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearAutoScrollMark();
+    };
+  }, [clearAutoScrollMark]);
 
   useEffect(() => {
     if (!latestUserMessageId) {
@@ -340,8 +552,10 @@ export function useActiveTurnAnchor({
     transcriptContentRef,
     showTopFade,
     showBottomFade,
+    showResumeScrollButton: userScrolled && showBottomFade,
     activeTurnLayout,
     registerUserAnchor,
     registerUserRow,
+    resumeAutoScroll,
   };
 }

@@ -5,7 +5,7 @@ const {
   runTaskMock,
   listSessionsMock,
   deleteSessionMock,
-  getAvailableModelsMock,
+  getAvailableModelsWithMetadataMock,
   getSessionContentMock,
   getSessionsStatusMock,
   getPreferredInitialGenerationModelMock,
@@ -21,7 +21,7 @@ const {
   runTaskMock: vi.fn(),
   listSessionsMock: vi.fn(),
   deleteSessionMock: vi.fn(),
-  getAvailableModelsMock: vi.fn(),
+  getAvailableModelsWithMetadataMock: vi.fn(),
   getSessionContentMock: vi.fn(),
   getSessionsStatusMock: vi.fn(),
   getPreferredInitialGenerationModelMock: vi.fn(),
@@ -41,7 +41,7 @@ vi.mock("../opencode/index.js", () => ({
   },
   createSession: createSessionMock,
   deleteSession: deleteSessionMock,
-  getAvailableModels: getAvailableModelsMock,
+  getAvailableModelsWithMetadata: getAvailableModelsWithMetadataMock,
   getSessionContent: getSessionContentMock,
   getSessionsStatus: getSessionsStatusMock,
   listProjects: vi.fn(),
@@ -91,7 +91,7 @@ describe("agent router", () => {
     runTaskMock.mockReset();
     listSessionsMock.mockReset();
     deleteSessionMock.mockReset();
-    getAvailableModelsMock.mockReset();
+    getAvailableModelsWithMetadataMock.mockReset();
     getSessionContentMock.mockReset();
     getSessionsStatusMock.mockReset();
     getPreferredInitialGenerationModelMock.mockReset();
@@ -111,7 +111,7 @@ describe("agent router", () => {
     runTaskMock.mockResolvedValue({ sessionId: "sess-1" });
     listSessionsMock.mockResolvedValue([]);
     deleteSessionMock.mockResolvedValue(undefined);
-    getAvailableModelsMock.mockReturnValue([
+    getAvailableModelsWithMetadataMock.mockResolvedValue([
       { provider: "openai", modelId: "gpt-4.1-mini" },
     ]);
     getSessionContentMock.mockResolvedValue([]);
@@ -135,7 +135,9 @@ describe("agent router", () => {
 
     const result = await caller.getAvailableModels();
 
-    expect(getAvailableModelsMock).toHaveBeenCalledTimes(1);
+    expect(getAvailableModelsWithMetadataMock).toHaveBeenCalledWith(
+      "/tmp/workspace",
+    );
     expect(result).toEqual([{ provider: "openai", modelId: "gpt-4.1-mini" }]);
   });
 

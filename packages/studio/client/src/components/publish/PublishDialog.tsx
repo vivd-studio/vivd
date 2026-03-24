@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { type ReactNode, useEffect, useState, useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
 import {
   Dialog,
@@ -106,6 +106,50 @@ function looksLikeCompleteDomain(input: string): boolean {
 
   const firstDot = normalized.indexOf(".");
   return firstDot > 0 && firstDot < normalized.length - 1;
+}
+
+const publishWarningCardClassName =
+  "rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100";
+const publishWarningBodyClassName =
+  "mt-1 text-sm leading-6 text-amber-800/90 dark:text-amber-200/80";
+const publishWarningIconClassName =
+  "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/20";
+const publishWarningPrimaryActionClassName =
+  "w-full border-amber-300 bg-white/90 text-amber-900 shadow-sm hover:bg-amber-100 hover:text-amber-950 dark:border-amber-500/35 dark:bg-amber-500/12 dark:text-amber-100 dark:hover:bg-amber-500/18 dark:hover:text-amber-50 sm:w-auto";
+const publishWarningSecondaryActionClassName =
+  "w-full border-amber-200 bg-amber-100/70 text-amber-800 shadow-sm hover:bg-amber-100 hover:text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/6 dark:text-amber-200 dark:hover:bg-amber-500/12 dark:hover:text-amber-100 sm:w-auto";
+
+function PublishWarningNotice({
+  title,
+  children,
+  actions,
+}: {
+  title: string;
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className={publishWarningCardClassName}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className={publishWarningIconClassName}>
+            <AlertTriangle className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-5 text-amber-950 dark:text-amber-50">
+              {title}
+            </p>
+            <div className={publishWarningBodyClassName}>{children}</div>
+          </div>
+        </div>
+        {actions ? (
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:min-w-fit">
+            {actions}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -654,9 +698,9 @@ export function PublishDialog({
               </div>
 
               {publishState?.readiness === "build_in_progress" ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  Site build in progress. You can publish once it is ready.
-                </div>
+                <PublishWarningNotice title="Site build in progress">
+                  You can publish once the latest build finishes.
+                </PublishWarningNotice>
               ) : null}
 
               {publishState?.readiness === "artifact_not_ready" ? (
@@ -675,31 +719,123 @@ export function PublishDialog({
               ) : null}
 
               {olderSnapshotInStudio ? (
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
-                  <div>
-                    You're viewing an older snapshot. Restore it (or go back to latest) before publishing
-                    so you publish what you're seeing.
-                  </div>
-                  <div className="flex items-center gap-2">
+                <PublishWarningNotice
+                  title="You're viewing an older snapshot"
+                  actions={
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={publishWarningPrimaryActionClassName}
+                        onClick={() => {
+                          setPublishError(null);
+                          saveMutation
+                            .mutateAsync({
+                              slug: projectSlug,
+                              version,
+                              message: "Restore snapshot",
+                            })
+                            .then(() => {
+                              void Promise.all([
+                                publishStateQuery.refetch(),
+                                utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
+                              ]);
+                            })
+                            .catch((err) => {
+                              const message = err instanceof Error ? err.message : "Failed to restore snapshot";
+                              toast.error(message);
+                            });
+                        }}
+                        disabled={
+                          publishMutation.isPending ||
+                          saveMutation.isPending ||
+                          loadVersionMutation.isPending
+                        }
+                      >
+                        {saveMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                            Restoring...
+                          </>
+                        ) : (
+                          "Restore snapshot"
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={publishWarningSecondaryActionClassName}
+                        onClick={() => {
+                          if (!publishState?.studioHeadCommitHash) {
+                            toast.error("Latest snapshot isn't available yet. Please wait a little while.");
+                            return;
+                          }
+                          setPublishError(null);
+                          loadVersionMutation
+                            .mutateAsync({
+                              slug: projectSlug,
+                              version,
+                              commitHash: publishState.studioHeadCommitHash,
+                            })
+                            .then(() => {
+                              toast.success("Switched back to latest snapshot");
+                              void publishStateQuery.refetch();
+                            })
+                            .catch((err) => {
+                              const message = err instanceof Error ? err.message : "Failed to switch snapshots";
+                              toast.error(message);
+                            });
+                        }}
+                        disabled={
+                          publishMutation.isPending ||
+                          saveMutation.isPending ||
+                          loadVersionMutation.isPending
+                        }
+                      >
+                        {loadVersionMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          "Back to latest"
+                        )}
+                      </Button>
+                    </>
+                  }
+                >
+                  Restore it, or go back to the latest snapshot, before publishing so the live site
+                  matches what you're seeing.
+                </PublishWarningNotice>
+              ) : null}
+
+              {studioStateUnknownWarning ? (
+                <PublishWarningNotice title="Studio is still loading">
+                  Studio is active, but its current state is still syncing. This updates automatically.
+                </PublishWarningNotice>
+              ) : null}
+
+              {unsavedChangesInStudio ? (
+                <PublishWarningNotice
+                  title="Unsaved changes in Studio"
+                  actions={
                     <Button
                       size="sm"
-                      className="bg-amber-700 hover:bg-amber-800 text-white"
+                      variant="outline"
+                      className={publishWarningPrimaryActionClassName}
                       onClick={() => {
                         setPublishError(null);
                         saveMutation
                           .mutateAsync({
                             slug: projectSlug,
                             version,
-                            message: "Restore snapshot",
+                            message: "Save changes",
                           })
                           .then(() => {
-                            void Promise.all([
-                              publishStateQuery.refetch(),
-                              utils.project.gitHistory.invalidate({ slug: projectSlug, version }),
-                            ]);
+                            void publishStateQuery.refetch();
                           })
                           .catch((err) => {
-                            const message = err instanceof Error ? err.message : "Failed to restore snapshot";
+                            const message = err instanceof Error ? err.message : "Failed to save changes";
                             toast.error(message);
                           });
                       }}
@@ -711,140 +847,60 @@ export function PublishDialog({
                     >
                       {saveMutation.isPending ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                          Restoring...
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          Saving...
                         </>
                       ) : (
-                        "Restore snapshot"
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-amber-400 text-amber-900 hover:bg-amber-100"
-                      onClick={() => {
-                        if (!publishState?.studioHeadCommitHash) {
-                          toast.error("Latest snapshot isn't available yet. Please wait a little while.");
-                          return;
-                        }
-                        setPublishError(null);
-                        loadVersionMutation
-                          .mutateAsync({
-                            slug: projectSlug,
-                            version,
-                            commitHash: publishState.studioHeadCommitHash,
-                          })
-                          .then(() => {
-                            toast.success("Switched back to latest snapshot");
-                            void publishStateQuery.refetch();
-                          })
-                          .catch((err) => {
-                            const message = err instanceof Error ? err.message : "Failed to switch snapshots";
-                            toast.error(message);
-                          });
-                      }}
-                      disabled={
-                        publishMutation.isPending ||
-                        saveMutation.isPending ||
-                        loadVersionMutation.isPending
-                      }
-                    >
-                      {loadVersionMutation.isPending ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                          Loading...
+                          <Save className="mr-1.5 h-4 w-4" />
+                          Save changes
                         </>
-                      ) : (
-                        "Back to latest"
                       )}
                     </Button>
-                  </div>
-                </div>
-              ) : null}
-
-              {studioStateUnknownWarning ? (
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                  Studio is active, but it's still loading. This will update automatically.
-                </div>
-              ) : null}
-
-              {unsavedChangesInStudio ? (
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
-                  <div>
-                    You have unsaved changes. Save your changes before publishing to include your latest edits.
-                  </div>
-                  <Button
-                    size="sm"
-                    className="bg-amber-700 hover:bg-amber-800 text-white"
-                    onClick={() => {
-                      setPublishError(null);
-                      saveMutation
-                        .mutateAsync({
-                          slug: projectSlug,
-                          version,
-                          message: "Save changes",
-                        })
-                        .then(() => {
-                          void publishStateQuery.refetch();
-                        })
-                        .catch((err) => {
-                          const message = err instanceof Error ? err.message : "Failed to save changes";
-                          toast.error(message);
-                        });
-                    }}
-                    disabled={
-                      publishMutation.isPending ||
-                      saveMutation.isPending ||
-                      loadVersionMutation.isPending
-                    }
-                  >
-                    {saveMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      "Save changes"
-                    )}
-                  </Button>
-                </div>
+                  }
+                >
+                  Save your changes before publishing to include your latest edits.
+                </PublishWarningNotice>
               ) : null}
 
               {preparingLatestSnapshotWarning &&
               !olderSnapshotInStudio &&
               !unsavedChangesInStudio &&
               !studioStateUnknownWarning ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <PublishWarningNotice title="Preparing your latest changes">
                   Your latest changes are being prepared for publishing. This can take a little while.
-                </div>
+                </PublishWarningNotice>
               ) : null}
 
               {missingPublishableSnapshot ? (
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
-                  <div>
-                    Publishing needs one artifact preparation run for the current snapshot.
-                    This does not create a new commit.
-                  </div>
-                  <Button
-                    size="sm"
-                    className="bg-amber-700 hover:bg-amber-800 text-white"
-                    onClick={() => void handlePreparePublishArtifacts()}
-                    disabled={
-                      publishMutation.isPending ||
-                      saveMutation.isPending ||
-                      loadVersionMutation.isPending
-                    }
-                  >
-                    {saveMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                        Preparing...
-                      </>
-                    ) : (
-                      "Prepare for publish"
-                    )}
-                  </Button>
-                </div>
+                <PublishWarningNotice
+                  title="Prepare this snapshot once"
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={publishWarningPrimaryActionClassName}
+                      onClick={() => void handlePreparePublishArtifacts()}
+                      disabled={
+                        publishMutation.isPending ||
+                        saveMutation.isPending ||
+                        loadVersionMutation.isPending
+                      }
+                    >
+                      {saveMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          Preparing...
+                        </>
+                      ) : (
+                        "Prepare for publish"
+                      )}
+                    </Button>
+                  }
+                >
+                  Publishing needs one artifact-preparation run for the current snapshot. This does
+                  not create a new commit.
+                </PublishWarningNotice>
               ) : null}
 
               <PrePublishChecklist
