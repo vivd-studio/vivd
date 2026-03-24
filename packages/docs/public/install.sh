@@ -24,7 +24,7 @@ Optional flags:
   --domain <host>            Primary host or origin, e.g. example.com
   --openrouter-api-key <key> OpenRouter API key
   --single-project <bool>    true or false (default: false)
-  --image-tag <tag>          Self-host image tag (default: latest or latest-arm64)
+  --image-tag <tag>          Self-host image tag (default: latest)
   --tls-mode <mode>          auto, managed, or external (default: auto)
   --acme-email <email>       Email used for managed HTTPS certificates
   --no-start                 Write files but do not start Docker Compose
@@ -264,16 +264,7 @@ generate_secret() {
 }
 
 resolve_default_selfhost_image_tag() {
-  local arch
-  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
-  case "$arch" in
-    arm64|aarch64)
-      printf 'latest-arm64'
-      ;;
-    *)
-      printf 'latest'
-      ;;
-  esac
+  printf 'latest'
 }
 
 download_file() {
@@ -342,8 +333,17 @@ prompt_if_empty PRIMARY_HOST_INPUT "Primary host or IP for this Vivd install"
 prompt_if_empty OPENROUTER_API_KEY_INPUT "OpenRouter API key" true
 
 SINGLE_PROJECT_MODE_INPUT="$(normalize_bool "$SINGLE_PROJECT_MODE_INPUT")"
+IMAGE_TAG_WAS_EXPLICIT="false"
+if [ -n "$SELFHOST_IMAGE_TAG_INPUT" ]; then
+  IMAGE_TAG_WAS_EXPLICIT="true"
+fi
 if [ -z "$SELFHOST_IMAGE_TAG_INPUT" ]; then
   SELFHOST_IMAGE_TAG_INPUT="$(resolve_default_selfhost_image_tag)"
+fi
+
+HOST_ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
+if [ "$IMAGE_TAG_WAS_EXPLICIT" = "false" ] && [ "$HOST_ARCH" = "arm64" -o "$HOST_ARCH" = "aarch64" ]; then
+  log "ARM64 host detected; automatic arm64 image selection is disabled for now. Using default tag '$SELFHOST_IMAGE_TAG_INPUT'. Override with --image-tag or VIVD_SELFHOST_IMAGE_TAG if you have published an ARM64 tag."
 fi
 
 PRIMARY_HOST="$(normalize_host "$PRIMARY_HOST_INPUT")"

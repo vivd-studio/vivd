@@ -1,9 +1,6 @@
 name: Build and Publish Self-Host ARM64 Images
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:

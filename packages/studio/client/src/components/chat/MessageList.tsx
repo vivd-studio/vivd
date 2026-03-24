@@ -288,7 +288,7 @@ export function MessageList() {
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end px-3 pt-2 md:px-5 md:pt-2">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-start px-3 pt-3 md:justify-end md:px-5 md:pt-2">
         <div className="pointer-events-auto">
           <SessionContextIndicator />
         </div>

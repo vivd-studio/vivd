@@ -25,6 +25,7 @@ import type {
   DockerContainerSummary,
 } from "./types";
 import { sleep } from "../fly/utils";
+import { getDefinedStudioMachineEnv } from "../env";
 
 type StudioIdentity = {
   organizationId: string;
@@ -501,9 +502,10 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       OPENCODE_IDLE_TIMEOUT_MS: "0",
     };
 
+    const definedEnv = getDefinedStudioMachineEnv(args.env);
     const explicitEnvKeys = new Set(Object.keys(args.env));
-    for (const [key, value] of Object.entries(args.env)) {
-      if (typeof value === "string") env[key] = value;
+    for (const [key, value] of Object.entries(definedEnv)) {
+      env[key] = value;
     }
 
     if (
@@ -928,6 +930,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
       args.env.MAIN_BACKEND_URL,
     );
+    const desiredEnvSubset = getDefinedStudioMachineEnv(args.env);
     let reconcileState = resolveContainerReconcileState({
       container: inspected,
       desiredImage,
@@ -935,7 +938,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       desiredMemoryBytes: this.config.memoryBytes,
       desiredNetworkName,
       desiredMainBackendUrl,
-      desiredEnvSubset: args.env,
+      desiredEnvSubset,
       generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
     });
 
@@ -958,7 +961,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           desiredMemoryBytes: this.config.memoryBytes,
           desiredNetworkName,
           desiredMainBackendUrl,
-          desiredEnvSubset: args.env,
+          desiredEnvSubset,
           desiredAccessToken: reconcileState.accessToken,
           generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
         });
@@ -986,7 +989,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         desiredMemoryBytes: this.config.memoryBytes,
         desiredNetworkName,
         desiredMainBackendUrl,
-        desiredEnvSubset: args.env,
+        desiredEnvSubset,
         desiredAccessToken: reconcileState.accessToken,
         generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
       });

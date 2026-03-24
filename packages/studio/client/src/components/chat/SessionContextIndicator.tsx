@@ -43,13 +43,17 @@ export function SessionContextIndicator() {
             <Button
               type="button"
               variant="ghost"
-              size="icon"
               onClick={() => setOpen(true)}
               aria-label="View context usage"
               data-testid="session-context-usage-button"
-              className="h-8 w-8 rounded-full border border-border/60 bg-background/90 shadow-sm hover:bg-muted/80"
+              className="h-9 min-w-[54px] rounded-full border border-border/70 bg-background/92 px-2.5 shadow-sm backdrop-blur-sm hover:bg-muted/85 dark:border-white/15 dark:bg-background/95 dark:shadow-[0_10px_30px_rgba(0,0,0,0.45)] dark:hover:border-white/25 dark:hover:bg-muted/75"
             >
-              <ContextUsageRing percentage={usage} />
+              <div className="flex items-center gap-1.5">
+                <ContextUsageRing percentage={usage} size={16} />
+                <span className="text-[11px] font-semibold leading-none text-foreground/90">
+                  {metrics.context?.usage != null ? `${metrics.context.usage}%` : "Ctx"}
+                </span>
+              </div>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="max-w-52">
@@ -88,8 +92,8 @@ export function SessionContextIndicator() {
       </TooltipProvider>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
+        <DialogContent className="w-[calc(100%-1rem)] max-w-xl max-h-[calc(100dvh-1rem)] flex flex-col overflow-hidden sm:w-full sm:max-h-[90vh]">
+          <DialogHeader className="pr-8">
             <DialogTitle>Context Usage</DialogTitle>
             <DialogDescription>
               Based on the latest assistant response with token accounting.
@@ -97,77 +101,79 @@ export function SessionContextIndicator() {
           </DialogHeader>
 
           {metrics.context ? (
-            <div className="space-y-5">
-              <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-muted/25 px-4 py-3">
-                <ContextUsageRing percentage={usage} size={52} strokeWidth={4} />
-                <div className="min-w-0">
-                  <div className="text-lg font-semibold text-foreground">
-                    {metrics.context.usage != null
-                      ? `${metrics.context.usage}% used`
-                      : "Usage unavailable"}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {formatNumber(metrics.context.total)} total tokens
-                    {metrics.context.limit
-                      ? ` of ${formatNumber(metrics.context.limit)}`
-                      : ""}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {metrics.context.providerLabel} · {metrics.context.modelLabel}
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div className="space-y-5 pb-1">
+                <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-muted/25 px-4 py-3">
+                  <ContextUsageRing percentage={usage} size={52} strokeWidth={4} />
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold text-foreground">
+                      {metrics.context.usage != null
+                        ? `${metrics.context.usage}% used`
+                        : "Usage unavailable"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatNumber(metrics.context.total)} total tokens
+                      {metrics.context.limit
+                        ? ` of ${formatNumber(metrics.context.limit)}`
+                        : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {metrics.context.providerLabel} · {metrics.context.modelLabel}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <StatCard
-                  label="Provider"
-                  value={metrics.context.providerLabel}
-                />
-                <StatCard label="Model" value={metrics.context.modelLabel} />
-                <StatCard
-                  label="Context Limit"
-                  value={formatNumber(metrics.context.limit)}
-                />
-                <StatCard
-                  label="Input Limit"
-                  value={formatNumber(metrics.context.inputLimit)}
-                />
-                <StatCard
-                  label="Total Tokens"
-                  value={formatNumber(metrics.context.total)}
-                />
-                <StatCard
-                  label="Session Credits"
-                  value={formatDollarsAsCredits(metrics.totalCost)}
-                />
-                <StatCard
-                  label="Input Tokens"
-                  value={formatNumber(metrics.context.input)}
-                />
-                <StatCard
-                  label="Output Tokens"
-                  value={formatNumber(metrics.context.output)}
-                />
-                <StatCard
-                  label="Reasoning Tokens"
-                  value={formatNumber(metrics.context.reasoning)}
-                />
-                <StatCard
-                  label="Cache Tokens"
-                  value={`${formatNumber(metrics.context.cacheRead)} / ${formatNumber(
-                    metrics.context.cacheWrite,
-                  )}`}
-                />
-                <StatCard
-                  label="Messages"
-                  value={formatNumber(metrics.messageCount)}
-                />
-                <StatCard
-                  label="User / Assistant"
-                  value={`${formatNumber(metrics.userMessageCount)} / ${formatNumber(
-                    metrics.assistantMessageCount,
-                  )}`}
-                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <StatCard
+                    label="Provider"
+                    value={metrics.context.providerLabel}
+                  />
+                  <StatCard label="Model" value={metrics.context.modelLabel} />
+                  <StatCard
+                    label="Context Limit"
+                    value={formatNumber(metrics.context.limit)}
+                  />
+                  <StatCard
+                    label="Input Limit"
+                    value={formatNumber(metrics.context.inputLimit)}
+                  />
+                  <StatCard
+                    label="Total Tokens"
+                    value={formatNumber(metrics.context.total)}
+                  />
+                  <StatCard
+                    label="Session Credits"
+                    value={formatDollarsAsCredits(metrics.totalCost)}
+                  />
+                  <StatCard
+                    label="Input Tokens"
+                    value={formatNumber(metrics.context.input)}
+                  />
+                  <StatCard
+                    label="Output Tokens"
+                    value={formatNumber(metrics.context.output)}
+                  />
+                  <StatCard
+                    label="Reasoning Tokens"
+                    value={formatNumber(metrics.context.reasoning)}
+                  />
+                  <StatCard
+                    label="Cache Tokens"
+                    value={`${formatNumber(metrics.context.cacheRead)} / ${formatNumber(
+                      metrics.context.cacheWrite,
+                    )}`}
+                  />
+                  <StatCard
+                    label="Messages"
+                    value={formatNumber(metrics.messageCount)}
+                  />
+                  <StatCard
+                    label="User / Assistant"
+                    value={`${formatNumber(metrics.userMessageCount)} / ${formatNumber(
+                      metrics.assistantMessageCount,
+                    )}`}
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -211,10 +217,10 @@ function ContextUsageRing({
   const offset = circumference - (clamped / 100) * circumference;
   const strokeClass =
     clamped >= 90
-      ? "text-destructive"
+      ? "text-destructive dark:text-rose-400"
       : clamped >= 70
-        ? "text-amber-500"
-        : "text-emerald-500";
+        ? "text-amber-500 dark:text-amber-400"
+        : "text-emerald-500 dark:text-emerald-400";
 
   return (
     <div className="relative flex items-center justify-center">
@@ -231,7 +237,7 @@ function ContextUsageRing({
           fill="none"
           stroke="currentColor"
           strokeWidth={strokeWidth}
-          className="text-border/60"
+          className="text-border/70 dark:text-white/12"
         />
         <circle
           cx={size / 2}

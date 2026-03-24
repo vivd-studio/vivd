@@ -353,18 +353,15 @@ export const protectedProcedure = t.procedure.use(async function isAuthed(
 });
 
 const enforceStudioOrganizationAccess = t.middleware(async ({ ctx, next }) => {
-  if (ctx.session) {
-    await (async () => {
-      if (!ctx.organizationId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "No organization selected",
-        });
-      }
-      if (ctx.session.user.role === "super_admin") {
-        return;
-      }
-
+  const session = ctx.session;
+  if (session) {
+    if (!ctx.organizationId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "No organization selected",
+      });
+    }
+    if (session.user.role !== "super_admin") {
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, ctx.organizationId),
         columns: { status: true },
@@ -382,8 +379,7 @@ const enforceStudioOrganizationAccess = t.middleware(async ({ ctx, next }) => {
           message: "You are not a member of this organization",
         });
       }
-    })();
-
+    }
     return next();
   }
 
@@ -402,20 +398,17 @@ const enforceStudioOrganizationAccess = t.middleware(async ({ ctx, next }) => {
 });
 
 const enforceOrganizationAccess = t.middleware(async ({ ctx, next }) => {
-  if (!ctx.session) {
+  const session = ctx.session;
+  if (!session) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  await (async () => {
-    if (!ctx.organizationId) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "No organization selected",
-      });
-    }
-    if (ctx.session.user.role === "super_admin") {
-      return;
-    }
-
+  if (!ctx.organizationId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "No organization selected",
+    });
+  }
+  if (session.user.role !== "super_admin") {
     const org = await db.query.organization.findFirst({
       where: eq(organization.id, ctx.organizationId),
       columns: { status: true },
@@ -433,7 +426,7 @@ const enforceOrganizationAccess = t.middleware(async ({ ctx, next }) => {
         message: "You are not a member of this organization",
       });
     }
-  })();
+  }
   return next();
 });
 

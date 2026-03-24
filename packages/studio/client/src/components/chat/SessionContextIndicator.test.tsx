@@ -54,6 +54,10 @@ describe("SessionContextIndicator", () => {
   it("opens a dialog with OpenCode-style context usage details", () => {
     render(<SessionContextIndicator />);
 
+    expect(
+      screen.getByTestId("session-context-usage-button"),
+    ).toHaveTextContent("51%");
+
     fireEvent.click(
       screen.getByRole("button", { name: /view context usage/i }),
     );
@@ -65,6 +69,14 @@ describe("SessionContextIndicator", () => {
     expect(screen.getByText("1,000")).toBeInTheDocument();
     expect(screen.getByText("510")).toBeInTheDocument();
     expect(screen.getByText("42 ⬡")).toBeInTheDocument();
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("max-h-[calc(100dvh-1rem)]");
+    expect(dialog.className).toContain("flex");
+
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+
+    expect(screen.queryByText("Context Usage")).not.toBeInTheDocument();
   });
 
   it("stays hidden when no session is selected", () => {

@@ -52,7 +52,7 @@ The installer prompts for:
 On a public hostname, it also asks for the ACME email Caddy should use for certificate management.
 It derives the normal auth/admin host settings from that one public host, so you do not need to fill a separate cluster of repeated URL env vars for a standard `solo` install.
 
-On Apple Silicon, the installer automatically selects the arm64 self-host image tags.
+The installer now defaults to the standard `latest` image tag on every architecture. If you intentionally publish or maintain an arm64 self-host tag, pass it explicitly with `--image-tag` or `VIVD_SELFHOST_IMAGE_TAG`.
 
 Optional install-time flags let you override single-project mode, image tag, and TLS handling.
 

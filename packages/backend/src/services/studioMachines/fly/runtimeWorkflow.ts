@@ -4,6 +4,7 @@ import type {
   StudioMachineStartArgs,
   StudioMachineStartResult,
 } from "../types";
+import { getDefinedStudioMachineEnv } from "../env";
 import {
   STUDIO_ACCESS_TOKEN_ENV_KEY,
   STUDIO_ACCESS_TOKEN_METADATA_KEY,
@@ -83,6 +84,7 @@ export async function ensureExistingMachineRunningWorkflow(
   args: StudioMachineStartArgs,
   studioKey: string,
 ): Promise<StudioMachineStartResult> {
+  const definedEnv = getDefinedStudioMachineEnv(args.env);
   const port = deps.getMachineExternalPort(existing);
   if (!port) {
     throw new Error(
@@ -98,7 +100,7 @@ export async function ensureExistingMachineRunningWorkflow(
     machine: existing,
     desiredImage,
     preferredAccessToken,
-    desiredEnvSubset: args.env,
+    desiredEnvSubset: definedEnv,
   });
   let accessToken = reconcileState.accessToken;
 
@@ -119,7 +121,7 @@ export async function ensureExistingMachineRunningWorkflow(
       machine: existing,
       desiredImage,
       preferredAccessToken,
-      desiredEnvSubset: args.env,
+      desiredEnvSubset: definedEnv,
     });
     accessToken = reconcileState.accessToken;
   }
@@ -145,7 +147,7 @@ export async function ensureExistingMachineRunningWorkflow(
       machine: current,
       desiredImage,
       preferredAccessToken,
-      desiredEnvSubset: args.env,
+      desiredEnvSubset: definedEnv,
     });
     accessToken = reconcileState.accessToken;
 
@@ -288,9 +290,10 @@ export function buildStudioEnvWorkflow(
     OPENCODE_IDLE_TIMEOUT_MS: "0",
   };
 
+  const definedEnv = getDefinedStudioMachineEnv(args.env);
   const explicitEnvKeys = new Set(Object.keys(args.env));
-  for (const [k, v] of Object.entries(args.env)) {
-    if (typeof v === "string") env[k] = v;
+  for (const [key, value] of Object.entries(definedEnv)) {
+    env[key] = value;
   }
 
   if (!env.VIVD_OPENCODE_DATA_HOME && process.env.FLY_STUDIO_OPENCODE_DATA_HOME) {
