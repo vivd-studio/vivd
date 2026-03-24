@@ -5,6 +5,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useOpencodeSessionActivity } from "@/features/opencodeChat";
 import { cn } from "@/lib/utils";
 import {
+  BarChart3,
   ChevronRight,
   FolderOpen,
   History,
@@ -16,6 +17,16 @@ import {
   Plug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +72,7 @@ export function StudioToolbar() {
     versions,
     hasMultipleVersions,
     analyticsAvailable,
+    supportEmail,
     handleVersionSelect,
     viewportMode,
     setViewportMode,
@@ -116,6 +128,8 @@ export function StudioToolbar() {
   const [leadingChromeWidth, setLeadingChromeWidth] = useState(0);
   const [workspaceControlsWidth, setWorkspaceControlsWidth] = useState(0);
   const [trailingChromeWidth, setTrailingChromeWidth] = useState(0);
+  const [showAnalyticsActivationPrompt, setShowAnalyticsActivationPrompt] =
+    useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -212,6 +226,22 @@ export function StudioToolbar() {
     );
   };
 
+  const handleOpenAnalytics = () => {
+    if (!projectSlug) return;
+    openEmbeddedStudioPath(
+      buildProjectStudioPath(projectSlug, "analytics"),
+      embedded,
+    );
+  };
+
+  const handleAnalyticsAction = () => {
+    if (analyticsAvailable) {
+      handleOpenAnalytics();
+      return;
+    }
+    setShowAnalyticsActivationPrompt(true);
+  };
+
   const expandableToggleClass = (
     active: boolean,
     expanded: boolean,
@@ -253,6 +283,7 @@ export function StudioToolbar() {
   const explorerExpandedWidth = 96;
   const editExpandedWidth = 104;
   const pluginExpandedWidth = 88;
+  const analyticsExpandedWidth = 100;
   const newSessionExpandedWidth = 68;
   const newSessionControlWidth = canUseAgent ? compactControlWidth : 0;
   const newSessionControlGap = canUseAgent ? toolbarControlGap : 0;
@@ -286,14 +317,16 @@ export function StudioToolbar() {
   const explorerControlWidth = compactControlWidth;
   const editControlWidth = compactControlWidth;
   const pluginControlWidth = compactControlWidth;
+  const analyticsControlWidth = compactControlWidth;
   const hoverExpansionAllowance = hoverableWorkspaceLabels
     ? Math.max(
         explorerExpandedWidth - compactControlWidth,
         editExpandedWidth - compactControlWidth,
         pluginExpandedWidth - compactControlWidth,
+        analyticsExpandedWidth - compactControlWidth,
       )
     : 0;
-  const workspaceControlCount = canUseAgent ? 5 : 3;
+  const workspaceControlCount = (canUseAgent ? 5 : 3) + 1;
   const reservedWorkspaceControlsWidth =
     (canUseAgent
       ? sessionGroupWidth + compactControlWidth
@@ -301,6 +334,7 @@ export function StudioToolbar() {
     explorerControlWidth +
     editControlWidth +
     pluginControlWidth +
+    analyticsControlWidth +
     toolbarControlGap * Math.max(0, workspaceControlCount - 1) +
     hoverExpansionAllowance;
   const workspaceControlStart = chatOpen
@@ -349,6 +383,13 @@ export function StudioToolbar() {
       "*",
     );
   };
+
+  const analyticsSupportHref =
+    projectSlug && supportEmail
+      ? `mailto:${supportEmail}?subject=${encodeURIComponent(
+          `Activate Analytics for ${projectSlug}`,
+        )}`
+      : null;
 
   const desktopWorkspaceControls = projectSlug ? (
     <div ref={workspaceControlsRef} className="flex items-center gap-1">
@@ -510,6 +551,35 @@ export function StudioToolbar() {
         </span>
         <span className="sr-only">Open plugins</span>
       </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleAnalyticsAction}
+        className={expandableToggleClass(
+          false,
+          false,
+          hoverableWorkspaceLabels,
+        )}
+        style={expandableToggleStyle(analyticsExpandedWidth)}
+        title={analyticsAvailable ? "Open analytics" : "Analytics requires activation"}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+          <BarChart3 className="h-4 w-4" />
+        </span>
+        <span
+          aria-hidden="true"
+          className={expandableToggleLabelClass(
+            false,
+            !shouldCollapseRightSideLabels,
+          )}
+        >
+          Analytics
+        </span>
+        <span className="sr-only">
+          {analyticsAvailable ? "Open analytics" : "Analytics requires activation"}
+        </span>
+      </Button>
     </div>
   ) : null;
 
@@ -638,7 +708,6 @@ export function StudioToolbar() {
               hasGitChanges={hasGitChanges}
               isPublished={isPublished}
               publishStatus={publishStatus}
-              analyticsAvailable={analyticsAvailable}
               embedded={embedded}
               onHardRestart={handleHardRestart}
               isConnectedMode={isConnectedMode}
@@ -683,7 +752,7 @@ export function StudioToolbar() {
               hasGitChanges={hasGitChanges}
               isPublished={isPublished}
               publishStatus={publishStatus}
-              analyticsAvailable={analyticsAvailable}
+              onOpenAnalytics={handleAnalyticsAction}
               theme={theme}
               setTheme={setTheme}
               colorTheme={colorTheme}
@@ -775,6 +844,30 @@ export function StudioToolbar() {
           utils.project.publishStatus.invalidate({ slug: projectSlug! });
         }}
       />
+
+      <AlertDialog
+        open={showAnalyticsActivationPrompt}
+        onOpenChange={setShowAnalyticsActivationPrompt}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Analytics needs activation</AlertDialogTitle>
+            <AlertDialogDescription>
+              {supportEmail
+                ? `Analytics is not active for this project yet. Contact Vivd support at ${supportEmail} to enable it.`
+                : "Analytics is not active for this project yet. Contact Vivd support to enable it."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+            {analyticsSupportHref ? (
+              <AlertDialogAction asChild>
+                <a href={analyticsSupportHref}>Email Vivd support</a>
+              </AlertDialogAction>
+            ) : null}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -34,6 +34,8 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("Enabled plugins for this project");
     expect(result.instructions).toContain("Plugin-first features");
     expect(result.instructions).toContain("vivd_plugins_catalog");
+    expect(result.instructions).toContain("vivd_plugins_*_info");
+    expect(result.instructions).toContain("it can tell you whether the plugin is enabled");
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructionsHash).toHaveLength(64);

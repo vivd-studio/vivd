@@ -8,14 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   Check,
   Copy,
-  BarChart3,
   Download,
   ExternalLink,
   Eye,
@@ -67,7 +61,6 @@ interface QuickActionsProps {
     domain?: string | null;
     lastTag?: string | null;
   };
-  analyticsAvailable?: boolean;
   gradientId?: string;
   embedded?: boolean;
   onHardRestart?: () => void;
@@ -99,7 +92,6 @@ export function QuickActions({
   hasGitChanges,
   isPublished,
   publishStatus,
-  analyticsAvailable = false,
   gradientId = "favicon-gradient",
   embedded,
   onHardRestart,
@@ -119,9 +111,6 @@ export function QuickActions({
   const publishExpandedWidth = 88;
   const desktopIconButtonClass = "h-[30px] w-[30px] p-0";
   const desktopActionsWidth =
-    (projectSlug && analyticsAvailable
-      ? compactDesktopActionWidth + desktopActionGap
-      : 0) +
     (projectSlug
       ? snapshotsExpandedWidth + desktopActionGap + publishExpandedWidth + desktopActionGap
       : 0) +
@@ -147,14 +136,6 @@ export function QuickActions({
     if (!projectSlug) return;
     openEmbeddedStudioPath(
       buildProjectStudioPath(projectSlug, "plugins"),
-      embedded,
-    );
-  };
-
-  const handleOpenAnalytics = () => {
-    if (!projectSlug) return;
-    openEmbeddedStudioPath(
-      buildProjectStudioPath(projectSlug, "analytics"),
       embedded,
     );
   };
@@ -211,23 +192,6 @@ export function QuickActions({
         className="hidden sm:flex items-center justify-end gap-1.5"
         style={{ width: `${desktopActionsWidth}px` }}
       >
-        {/* Analytics button */}
-        {projectSlug && analyticsAvailable && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleOpenAnalytics}
-                className={desktopIconButtonClass}
-              >
-                <BarChart3 className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Analytics</TooltipContent>
-          </Tooltip>
-        )}
-
         {/* Snapshots button */}
         {projectSlug &&
           renderExpandableDesktopAction({
@@ -323,12 +287,6 @@ export function QuickActions({
                   <Plug className="w-4 h-4 mr-2" />
                   Plugins
                 </DropdownMenuItem>
-                {analyticsAvailable ? (
-                  <DropdownMenuItem onClick={handleOpenAnalytics}>
-                    <BarChart3 className="w-4 h-4 mr-2" />
-                    Analytics
-                  </DropdownMenuItem>
-                ) : null}
               </>
             )}
             {previewMode === "devserver" && projectSlug && handleRestartDevServer && (

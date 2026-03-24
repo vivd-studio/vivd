@@ -1,6 +1,7 @@
 import { protectedProcedure, router } from "../trpc";
 import { domainService } from "../services/publish/DomainService";
 import { installProfileService } from "../services/system/InstallProfileService";
+import { emailTemplateBrandingService } from "../services/email/templateBranding";
 
 /**
  * Configuration router to expose app settings to the frontend.
@@ -12,7 +13,10 @@ export const configRouter = router({
    * These settings control application-wide behavior like single project mode.
    */
   getAppConfig: protectedProcedure.query(async ({ ctx }) => {
-    const instancePolicy = await installProfileService.resolvePolicy();
+    const [instancePolicy, branding] = await Promise.all([
+      installProfileService.resolvePolicy(),
+      emailTemplateBrandingService.getResolvedBranding(),
+    ]);
     const preferredTenantBaseDomain = domainService.inferTenantBaseDomainFromHost(
       ctx.requestDomain,
     );
@@ -55,6 +59,7 @@ export const configRouter = router({
       controlPlaneHost,
       activeOrganizationTenantHost,
       publicDocsBaseUrl,
+      supportEmail: branding.supportEmail ?? null,
     };
   }),
 });

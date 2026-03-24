@@ -32,6 +32,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 
 - Keep local upstream/reference repos under `vendor/`; this is the established path for agent-readable external code in this repo.
 - These checkouts are for reference, comparison, and selective borrowing. They are not workspace packages or runtime dependencies.
+- For external live/generated site repos that are being inspected alongside Vivd, prefer `vendor/sites/<repo-name>` so they stay clearly separate from the product codebase and from upstream framework references.
 - Current paths:
   - `vendor/opencode`: upstream OpenCode reference checkout (`https://github.com/anomalyco/opencode`).
   - `vendor/dokploy`: upstream Dokploy reference checkout (`https://github.com/Dokploy/dokploy`) for self-hosting/hosting patterns Vivd may reuse while still running directly on its own server/runtime.

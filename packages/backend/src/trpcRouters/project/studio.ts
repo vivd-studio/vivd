@@ -3,6 +3,7 @@ import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { resolveStudioMainBackendUrl } from "../../services/studioMachines/backendCallbackUrl";
 import { recordStudioVisit } from "../../services/studioMachines/visitStore";
+import { emailTemplateBrandingService } from "../../services/email/templateBranding";
 import { db } from "../../db";
 import { organization, projectPluginInstance, session as sessionTable } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
@@ -52,16 +53,23 @@ async function getEnabledProjectPluginIds(
   }
 }
 
-function buildStudioToolPolicyEnv(input: {
+function buildStudioRuntimeEnv(input: {
   organizationRole: string | null;
   enabledPluginIds: string[];
+  supportEmail?: string | null;
 }): Record<string, string> {
-  const toolEnv: Record<string, string> = {};
+  const runtimeEnv: Record<string, string> = {};
   if (input.organizationRole) {
-    toolEnv.VIVD_ORGANIZATION_ROLE = input.organizationRole;
+    runtimeEnv.VIVD_ORGANIZATION_ROLE = input.organizationRole;
   }
   if (input.enabledPluginIds.length > 0) {
-    toolEnv.VIVD_ENABLED_PLUGINS = input.enabledPluginIds.join(",");
+    runtimeEnv.VIVD_ENABLED_PLUGINS = input.enabledPluginIds.join(",");
+  }
+
+  const supportEmail =
+    input.supportEmail?.trim() || (process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+  if (supportEmail) {
+    runtimeEnv.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = supportEmail;
   }
 
   const passthroughKeys = [
@@ -74,11 +82,11 @@ function buildStudioToolPolicyEnv(input: {
   for (const key of passthroughKeys) {
     const value = (process.env[key] || "").trim();
     if (value) {
-      toolEnv[key] = value;
+      runtimeEnv[key] = value;
     }
   }
 
-  return toolEnv;
+  return runtimeEnv;
 }
 
 /**
@@ -134,9 +142,11 @@ export const studioProcedures = {
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
       const enabledPluginIds = await getEnabledProjectPluginIds(organizationId, input.slug);
-      const studioToolPolicyEnv = buildStudioToolPolicyEnv({
+      const branding = await emailTemplateBrandingService.getResolvedBranding();
+      const studioRuntimeEnv = buildStudioRuntimeEnv({
         organizationRole: ctx.organizationRole,
         enabledPluginIds,
+        supportEmail: branding.supportEmail ?? null,
       });
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -176,12 +186,12 @@ export const studioProcedures = {
             projectSlug: input.slug,
             version: input.version,
             env: {
-              MAIN_BACKEND_URL: mainBackendUrl,
-              SESSION_TOKEN: sessionToken,
-              GITHUB_REPO_PREFIX: githubRepoPrefix,
-              ...studioToolPolicyEnv,
-            },
-          });
+            MAIN_BACKEND_URL: mainBackendUrl,
+            SESSION_TOKEN: sessionToken,
+            GITHUB_REPO_PREFIX: githubRepoPrefix,
+            ...studioRuntimeEnv,
+          },
+        });
         try {
           await recordStudioVisit({
             organizationId,
@@ -227,9 +237,11 @@ export const studioProcedures = {
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
       const enabledPluginIds = await getEnabledProjectPluginIds(organizationId, input.slug);
-      const studioToolPolicyEnv = buildStudioToolPolicyEnv({
+      const branding = await emailTemplateBrandingService.getResolvedBranding();
+      const studioRuntimeEnv = buildStudioRuntimeEnv({
         organizationRole: ctx.organizationRole,
         enabledPluginIds,
+        supportEmail: branding.supportEmail ?? null,
       });
       const org = await db.query.organization.findFirst({
         where: eq(organization.id, organizationId),
@@ -272,7 +284,7 @@ export const studioProcedures = {
               MAIN_BACKEND_URL: mainBackendUrl,
               SESSION_TOKEN: sessionToken,
               GITHUB_REPO_PREFIX: githubRepoPrefix,
-              ...studioToolPolicyEnv,
+              ...studioRuntimeEnv,
             },
           });
         try {

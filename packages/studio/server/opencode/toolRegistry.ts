@@ -38,6 +38,8 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     defaultEnabled: true,
     featureFlag: "plugins",
   },
+  // Keep plugin info tools available even before activation; the tool bodies resolve
+  // live backend state and can tell the agent whether activation is still needed.
   {
     name: "vivd_plugins_contact_info",
     sourceFile: "vivd_plugins_contact_info.ts",
@@ -46,7 +48,6 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     definitionExportName: "vivdPluginsContactInfoToolDefinition",
     defaultEnabled: true,
     featureFlag: "contact_forms",
-    requiredPlugins: ["contact_form"],
   },
   {
     name: "vivd_plugins_analytics_info",
@@ -57,7 +58,6 @@ const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
     definitionExportName: "vivdPluginsAnalyticsInfoToolDefinition",
     defaultEnabled: true,
     featureFlag: "analytics",
-    requiredPlugins: ["analytics"],
   },
   {
     name: "vivd_publish_checklist",

@@ -115,6 +115,7 @@ interface PreviewContextValue {
   hasMultipleVersions: boolean;
   enabledPlugins: string[];
   analyticsAvailable: boolean;
+  supportEmail: string | null;
   previewMode: PreviewMode;
 
   // Handlers
@@ -540,6 +541,7 @@ export function PreviewProvider({
   const hasMultipleVersions = totalVersions > 1;
   const enabledPlugins = project?.enabledPlugins ?? [];
   const analyticsAvailable = enabledPlugins.includes("analytics");
+  const supportEmail = projectsData?.supportEmail ?? null;
 
   // Query for git changes (unsaved work)
   const { data: changesData } = trpc.project.gitHasChanges.useQuery(
@@ -1437,6 +1439,7 @@ export function PreviewProvider({
     hasMultipleVersions,
     enabledPlugins,
     analyticsAvailable,
+    supportEmail,
 
     // Handlers
     handleVersionSelect,

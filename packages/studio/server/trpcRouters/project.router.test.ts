@@ -159,6 +159,141 @@ describe("project router", () => {
     });
   });
 
+  it("includes support email from the runtime env in the project list", async () => {
+    const previousSupportEmail = process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
+    process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = "support@example.com";
+    const caller = projectRouter.createCaller(makeContext());
+
+    try {
+      await expect(caller.list()).resolves.toEqual({
+        supportEmail: "support@example.com",
+        projects: [
+          expect.objectContaining({
+            slug: "studio",
+            enabledPlugins: [],
+          }),
+        ],
+      });
+    } finally {
+      if (typeof previousSupportEmail === "string") {
+        process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = previousSupportEmail;
+      } else {
+        delete process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL;
+      }
+    }
+  });
+
+  it("uses the runtime project slug in the local fallback project list", async () => {
+    const previousProjectSlug = process.env.VIVD_PROJECT_SLUG;
+    process.env.VIVD_PROJECT_SLUG = "aurora-studio";
+    const caller = projectRouter.createCaller(makeContext());
+
+    try {
+      await expect(caller.list()).resolves.toEqual({
+        supportEmail: null,
+        projects: [
+          expect.objectContaining({
+            slug: "aurora-studio",
+            title: "aurora-studio",
+          }),
+        ],
+      });
+    } finally {
+      if (typeof previousProjectSlug === "string") {
+        process.env.VIVD_PROJECT_SLUG = previousProjectSlug;
+      } else {
+        delete process.env.VIVD_PROJECT_SLUG;
+      }
+    }
+  });
+
+  it("prefers live connected backend project data for plugin state", async () => {
+    const previousProjectSlug = process.env.VIVD_PROJECT_SLUG;
+    process.env.VIVD_PROJECT_SLUG = "aurora-studio";
+    isConnectedModeMock.mockReturnValue(true);
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        result: {
+          data: {
+            json: {
+              supportEmail: "support@example.com",
+            },
+          },
+        },
+      }),
+    });
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        result: {
+          data: {
+            json: {
+              projects: [
+                {
+                  slug: "aurora-studio",
+                  status: "completed",
+                  url: null,
+                  source: "scratch",
+                  title: "Aurora Studio",
+                  createdAt: "2026-03-24T10:00:00.000Z",
+                  updatedAt: "2026-03-24T10:00:00.000Z",
+                  currentVersion: 3,
+                  totalVersions: 3,
+                  versions: [{ version: 3, status: "completed" }],
+                  publishedDomain: null,
+                  publishedVersion: null,
+                  thumbnailUrl: null,
+                  enabledPlugins: ["analytics"],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    });
+    const caller = projectRouter.createCaller(makeContext());
+
+    try {
+      await expect(caller.list()).resolves.toEqual({
+        supportEmail: "support@example.com",
+        projects: [
+          expect.objectContaining({
+            slug: "aurora-studio",
+            currentVersion: 3,
+            enabledPlugins: ["analytics"],
+          }),
+        ],
+      });
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/trpc/config.getAppConfig?input="),
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: "Bearer session-token",
+            "x-vivd-organization-id": "org-1",
+          }),
+        }),
+      );
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/trpc/project.list?input="),
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: "Bearer session-token",
+            "x-vivd-organization-id": "org-1",
+          }),
+        }),
+      );
+    } finally {
+      if (typeof previousProjectSlug === "string") {
+        process.env.VIVD_PROJECT_SLUG = previousProjectSlug;
+      } else {
+        delete process.env.VIVD_PROJECT_SLUG;
+      }
+    }
+  });
+
   it("touches the dev server only when workspace is initialized", async () => {
     const readyCaller = projectRouter.createCaller(makeContext());
     const notReadyCaller = projectRouter.createCaller(

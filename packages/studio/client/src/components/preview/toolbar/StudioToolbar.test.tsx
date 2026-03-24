@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { StudioToolbar } from "./StudioToolbar";
 
@@ -7,6 +7,10 @@ const mockUseToolbarState = vi.fn();
 const mockUsePermissions = vi.fn();
 const mockUseTheme = vi.fn();
 const mockUseOpencodeSessionActivity = vi.fn();
+const mockBuildProjectStudioPath = vi.fn(
+  (_projectSlug: string, section: "plugins" | "analytics") => `/${section}`,
+);
+const mockOpenEmbeddedStudioPath = vi.fn();
 
 vi.mock("@/components/projects/versioning", () => ({
   VersionSelector: () => <div data-testid="version-selector" />,
@@ -38,8 +42,10 @@ vi.mock("./components", () => ({
 }));
 
 vi.mock("./hostNavigation", () => ({
-  buildProjectStudioPath: vi.fn(() => "/plugins"),
-  openEmbeddedStudioPath: vi.fn(),
+  buildProjectStudioPath: (...args: Parameters<typeof mockBuildProjectStudioPath>) =>
+    mockBuildProjectStudioPath(...args),
+  openEmbeddedStudioPath: (...args: Parameters<typeof mockOpenEmbeddedStudioPath>) =>
+    mockOpenEmbeddedStudioPath(...args),
 }));
 
 function createToolbarState() {
@@ -53,6 +59,7 @@ function createToolbarState() {
     versions: [{ version: 1, status: "draft" }],
     hasMultipleVersions: false,
     analyticsAvailable: false,
+    supportEmail: "support@example.com",
     handleVersionSelect: vi.fn(),
     viewportMode: "desktop",
     setViewportMode: vi.fn(),
@@ -122,6 +129,8 @@ describe("StudioToolbar", () => {
     mockUsePermissions.mockReset();
     mockUseTheme.mockReset();
     mockUseOpencodeSessionActivity.mockReset();
+    mockBuildProjectStudioPath.mockClear();
+    mockOpenEmbeddedStudioPath.mockClear();
 
     mockUseToolbarState.mockReturnValue(createToolbarState());
     mockUsePermissions.mockReturnValue({ canUseAgent: true });
@@ -232,5 +241,48 @@ describe("StudioToolbar", () => {
     render(<StudioToolbar />);
 
     expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
+  });
+
+  it("always shows the Analytics toolbar button", () => {
+    render(<StudioToolbar />);
+
+    expect(
+      screen.getByRole("button", { name: "Analytics requires activation" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a support prompt when analytics is not enabled", () => {
+    render(<StudioToolbar />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Analytics requires activation" }),
+    );
+
+    expect(screen.getByText("Analytics needs activation")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Email Vivd support" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("mailto:support@example.com"),
+    );
+    expect(mockOpenEmbeddedStudioPath).not.toHaveBeenCalled();
+  });
+
+  it("opens the analytics page from the toolbar when analytics is enabled", () => {
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      analyticsAvailable: true,
+      embedded: true,
+    });
+
+    render(<StudioToolbar />);
+
+    expect(screen.getByRole("button", { name: "Open analytics" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open analytics" }));
+
+    expect(mockBuildProjectStudioPath).toHaveBeenCalledWith(
+      "bettinis-bikinis",
+      "analytics",
+    );
+    expect(mockOpenEmbeddedStudioPath).toHaveBeenCalledWith("/analytics", true);
   });
 });

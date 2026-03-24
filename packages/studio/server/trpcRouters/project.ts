@@ -87,6 +87,34 @@ function readEnabledPluginsFromEnv(): string[] {
   return Array.from(unique);
 }
 
+function readSupportEmailFromEnv(): string | null {
+  const value = (process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
+  return value || null;
+}
+
+function readProjectSlugFromEnv(): string | null {
+  const value = (process.env.VIVD_PROJECT_SLUG || "").trim();
+  return value || null;
+}
+
+interface ConnectedProjectListRow {
+  slug: string;
+  status: string;
+  url: string | null;
+  source: "url" | "scratch";
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  currentVersion: number;
+  totalVersions: number;
+  versions: Array<{ version: number; status: string }>;
+  publishedDomain: string | null;
+  publishedVersion: number | null;
+  thumbnailUrl: string | null;
+  publicPreviewEnabled?: boolean;
+  enabledPlugins?: string[];
+}
+
 async function callConnectedBackendQuery<T>(
   procedure: string,
   input: Record<string, unknown>,
@@ -161,6 +189,18 @@ async function getGitHubSyncUiGate(): Promise<{ allowed: boolean; reason?: strin
   }
 }
 
+async function getConnectedSupportEmail(): Promise<string | null> {
+  if (!isConnectedMode()) return null;
+  try {
+    const config = await callConnectedBackendQuery<{
+      supportEmail?: string | null;
+    }>("config.getAppConfig", {});
+    return config.supportEmail?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function assertGitHubSyncAllowed(): Promise<void> {
   const gate = await getGitHubSyncUiGate();
   if (!gate.allowed) {
@@ -170,19 +210,48 @@ async function assertGitHubSyncAllowed(): Promise<void> {
 
 export const projectRouter = router({
   list: publicProcedure.query(async ({ ctx }) => {
+    let supportEmail = readSupportEmailFromEnv();
+    const runtimeProjectSlug = readProjectSlugFromEnv() ?? "studio";
     if (!ctx.workspace.isInitialized()) {
-      return { projects: [] };
+      return { projects: [], supportEmail };
     }
+
+    const connectedProjectSlug = readProjectSlugFromEnv();
+    if (isConnectedMode() && connectedProjectSlug) {
+      supportEmail = (await getConnectedSupportEmail()) ?? supportEmail;
+      try {
+        const connectedProjects = await callConnectedBackendQuery<{
+          projects?: ConnectedProjectListRow[];
+        }>("project.list", {});
+        const connectedProject = connectedProjects.projects?.find(
+          (project) => project.slug === connectedProjectSlug,
+        );
+
+        if (connectedProject) {
+          return {
+            supportEmail,
+            projects: [connectedProject],
+          };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[Studio project.list] Falling back to runtime env plugins for ${connectedProjectSlug}: ${message}`,
+        );
+      }
+    }
+
     const enabledPlugins = readEnabledPluginsFromEnv();
 
     return {
+      supportEmail,
       projects: [
         {
-          slug: "studio",
+          slug: runtimeProjectSlug,
           status: "completed",
           url: null,
           source: "scratch",
-          title: "studio",
+          title: runtimeProjectSlug,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           currentVersion: 1,

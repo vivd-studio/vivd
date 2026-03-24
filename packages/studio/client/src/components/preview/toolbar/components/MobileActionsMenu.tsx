@@ -104,7 +104,7 @@ interface MobileActionsMenuProps {
     domain?: string | null;
     lastTag?: string | null;
   };
-  analyticsAvailable?: boolean;
+  onOpenAnalytics?: () => void;
 
   // Theme
   theme: Theme;
@@ -167,7 +167,7 @@ export function MobileActionsMenu({
   hasGitChanges,
   isPublished,
   publishStatus,
-  analyticsAvailable = false,
+  onOpenAnalytics,
   theme,
   setTheme,
   colorTheme,
@@ -207,6 +207,10 @@ export function MobileActionsMenu({
   };
 
   const handleOpenAnalytics = () => {
+    if (onOpenAnalytics) {
+      onOpenAnalytics();
+      return;
+    }
     if (!projectSlug) return;
     openEmbeddedStudioPath(
       buildProjectStudioPath(projectSlug, "analytics"),
@@ -420,12 +424,10 @@ export function MobileActionsMenu({
               <Plug className="w-4 h-4 mr-2" />
               Plugins
             </DropdownMenuItem>
-            {analyticsAvailable ? (
-              <DropdownMenuItem onClick={handleOpenAnalytics}>
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Analytics
-              </DropdownMenuItem>
-            ) : null}
+            <DropdownMenuItem onClick={handleOpenAnalytics}>
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Analytics
+            </DropdownMenuItem>
             {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}
             {isConnectedMode && (
               <>

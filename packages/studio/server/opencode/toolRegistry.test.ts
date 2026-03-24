@@ -68,16 +68,16 @@ describe("OpenCode tool registry", () => {
     expect(policy.enabledByName.vivd_plugins_analytics_info).toBe(false);
   });
 
-  it("enables plugin-specific tools only when required plugins are active", () => {
+  it("keeps plugin info tools available regardless of boot-time plugin env", () => {
     const noPluginPolicy = resolveStudioOpencodeToolPolicy({});
-    expect(noPluginPolicy.enabledByName.vivd_plugins_contact_info).toBe(false);
-    expect(noPluginPolicy.enabledByName.vivd_plugins_analytics_info).toBe(false);
+    expect(noPluginPolicy.enabledByName.vivd_plugins_contact_info).toBe(true);
+    expect(noPluginPolicy.enabledByName.vivd_plugins_analytics_info).toBe(true);
 
     const contactOnlyPolicy = resolveStudioOpencodeToolPolicy({
       VIVD_ENABLED_PLUGINS: "contact_form",
     });
     expect(contactOnlyPolicy.enabledByName.vivd_plugins_contact_info).toBe(true);
-    expect(contactOnlyPolicy.enabledByName.vivd_plugins_analytics_info).toBe(false);
+    expect(contactOnlyPolicy.enabledByName.vivd_plugins_analytics_info).toBe(true);
 
     const allPluginsPolicy = resolveStudioOpencodeToolPolicy({
       VIVD_ENABLED_PLUGINS: "contact_form,analytics",
