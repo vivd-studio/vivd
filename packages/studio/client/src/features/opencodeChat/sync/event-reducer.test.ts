@@ -273,4 +273,118 @@ describe("openCodeChatReducer", () => {
 
     expect(replied.questionRequestsBySessionId["sess-1"]).toBeUndefined();
   });
+
+  it("cleans cached session state when a session is deleted", () => {
+    const bootstrapped = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "bootstrap.loaded",
+      payload: {
+        sessions: [{ id: "sess-1", title: "Session 1", time: { updated: 100 } }],
+        statuses: {
+          "sess-1": { type: "busy" },
+        },
+        questions: [
+          {
+            id: "que-1",
+            sessionID: "sess-1",
+            questions: [],
+          },
+        ],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "hello",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const deleted = openCodeChatReducer(bootstrapped, {
+      type: "event.received",
+      payload: {
+        type: "session.deleted",
+        properties: {
+          info: {
+            id: "sess-1",
+          },
+        },
+      },
+    });
+
+    expect(selectSessions(deleted)).toEqual([]);
+    expect(selectMessagesForSession(deleted, "sess-1")).toEqual([]);
+    expect(deleted.messagesById["msg-1"]).toBeUndefined();
+    expect(deleted.partsByMessageId["msg-1"]).toBeUndefined();
+    expect(deleted.messagesBySessionId["sess-1"]).toBeUndefined();
+    expect(deleted.sessionStatusById["sess-1"]).toBeUndefined();
+    expect(deleted.questionRequestsBySessionId["sess-1"]).toBeUndefined();
+  });
+
+  it("treats archived session updates as removals and clears cached session state", () => {
+    const bootstrapped = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "bootstrap.loaded",
+      payload: {
+        sessions: [{ id: "sess-1", title: "Session 1", time: { updated: 100 } }],
+        statuses: {
+          "sess-1": { type: "done" },
+        },
+        questions: [
+          {
+            id: "que-1",
+            sessionID: "sess-1",
+            questions: [],
+          },
+        ],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "hello",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const archived = openCodeChatReducer(bootstrapped, {
+      type: "event.received",
+      payload: {
+        type: "session.updated",
+        properties: {
+          info: {
+            id: "sess-1",
+            time: { archived: 123 },
+          },
+        },
+      },
+    });
+
+    expect(selectSessions(archived)).toEqual([]);
+    expect(selectMessagesForSession(archived, "sess-1")).toEqual([]);
+    expect(archived.messagesById["msg-1"]).toBeUndefined();
+    expect(archived.partsByMessageId["msg-1"]).toBeUndefined();
+    expect(archived.sessionStatusById["sess-1"]).toBeUndefined();
+    expect(archived.questionRequestsBySessionId["sess-1"]).toBeUndefined();
+  });
 });

@@ -9,6 +9,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./studio": {
+      "import": "./dist/studio/index.js",
+      "types": "./dist/studio/index.d.ts"
+    },
     "./config": {
       "import": "./dist/config/index.js",
       "types": "./dist/config/index.d.ts"

@@ -261,6 +261,37 @@ describe("canonical timeline builder", () => {
     expect(secondAgentRow.completedAt).toBe(BASE_TIME + 5000);
   });
 
+  it("renders a session-compacted divider without a synthetic user bubble", () => {
+    const timeline = buildCanonicalTimelineModel({
+      messages: [
+        createRecord({
+          id: "u-compact",
+          role: "user",
+          createdAt: BASE_TIME + 1000,
+          parts: [{ id: "compact-1", type: "compaction" }],
+        }),
+        createRecord({
+          id: "a-summary",
+          role: "assistant",
+          parentID: "u-compact",
+          createdAt: BASE_TIME + 2000,
+          completedAt: BASE_TIME + 3000,
+          parts: [{ id: "text-summary", type: "text", text: "Summary text" }],
+        }),
+      ],
+      sessionStatus: { type: "done" },
+      isThinking: false,
+      isWaiting: false,
+    });
+
+    expect(timeline.items).toHaveLength(1);
+    expect(timeline.items[0]).toMatchObject({
+      kind: "agent",
+      sessionDividerLabel: "Session compacted",
+      userMessageId: undefined,
+    });
+  });
+
   it("keeps a pending assistant run active even if the session status already looks terminal", () => {
     const timeline = buildCanonicalTimelineModel({
       messages: [

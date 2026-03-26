@@ -104,6 +104,7 @@ export const agentChatRouter = router({
         projectSlug: z.string(),
         version: z.number().optional(),
         lastEventId: z.string().optional(),
+        replayBuffered: z.boolean().optional(),
       }),
     )
     .subscription(async function* ({ ctx, input, signal }) {
@@ -115,6 +116,7 @@ export const agentChatRouter = router({
           directory,
           signal,
           input.lastEventId,
+          input.replayBuffered ?? true,
         );
 
         for await (const event of eventStream) {

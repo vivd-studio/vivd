@@ -130,6 +130,7 @@ export interface OpenCodeChatState {
   lastEventId: string | null;
   lastEventType: string | null;
   lastEventTime: number | null;
+  refreshGeneration: number;
   bootstrapped: boolean;
 }
 
@@ -160,5 +161,6 @@ export const OPEN_CODE_CHAT_INITIAL_STATE: OpenCodeChatState = {
   lastEventId: null,
   lastEventType: null,
   lastEventTime: null,
+  refreshGeneration: 0,
   bootstrapped: false,
 };

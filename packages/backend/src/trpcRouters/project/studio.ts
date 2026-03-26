@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createStudioBootstrapToken } from "../../../../shared/src/studio/bootstrap.js";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { resolveStudioMainBackendUrl } from "../../services/studioMachines/backendCallbackUrl";
@@ -89,6 +90,19 @@ function buildStudioRuntimeEnv(input: {
   return runtimeEnv;
 }
 
+function createStudioRuntimeBootstrapToken(options: {
+  studioId: string;
+  accessToken?: string | null;
+}): string | null {
+  const accessToken = options.accessToken?.trim();
+  if (!accessToken) return null;
+
+  return createStudioBootstrapToken({
+    accessToken,
+    studioId: options.studioId,
+  });
+}
+
 /**
  * Studio-related TRPC procedures.
  * These handle starting and managing studio instances for editing projects.
@@ -116,7 +130,10 @@ export const studioProcedures = {
       if (existing) {
         return {
           url: existing.url,
-          accessToken: existing.accessToken || null,
+          bootstrapToken: createStudioRuntimeBootstrapToken({
+            studioId: existing.studioId,
+            accessToken: existing.accessToken || null,
+          }),
           status: "running" as const,
         };
       }
@@ -124,7 +141,7 @@ export const studioProcedures = {
       // For now, return null - studio needs to be started explicitly
       return {
         url: null,
-        accessToken: null,
+        bootstrapToken: null,
         status: "stopped" as const,
       };
     }),
@@ -186,12 +203,12 @@ export const studioProcedures = {
             projectSlug: input.slug,
             version: input.version,
             env: {
-            MAIN_BACKEND_URL: mainBackendUrl,
-            SESSION_TOKEN: sessionToken,
-            GITHUB_REPO_PREFIX: githubRepoPrefix,
-            ...studioRuntimeEnv,
-          },
-        });
+              MAIN_BACKEND_URL: mainBackendUrl,
+              SESSION_TOKEN: sessionToken,
+              GITHUB_REPO_PREFIX: githubRepoPrefix,
+              ...studioRuntimeEnv,
+            },
+          });
         try {
           await recordStudioVisit({
             organizationId,
@@ -210,7 +227,10 @@ export const studioProcedures = {
           url,
           port,
           studioId,
-          accessToken: accessToken || null,
+          bootstrapToken: createStudioRuntimeBootstrapToken({
+            studioId,
+            accessToken: accessToken || null,
+          }),
           provider: studioMachineProvider.kind,
         };
       } catch (error) {
@@ -305,7 +325,10 @@ export const studioProcedures = {
           url,
           port,
           studioId,
-          accessToken: accessToken || null,
+          bootstrapToken: createStudioRuntimeBootstrapToken({
+            studioId,
+            accessToken: accessToken || null,
+          }),
           provider: studioMachineProvider.kind,
         };
       } catch (error) {
@@ -382,7 +405,13 @@ export const studioProcedures = {
       return {
         running,
         url: info?.url || null,
-        accessToken: info?.accessToken || null,
+        bootstrapToken:
+          info?.studioId && info?.accessToken
+            ? createStudioRuntimeBootstrapToken({
+                studioId: info.studioId,
+                accessToken: info.accessToken,
+              })
+            : null,
       };
     }),
 };

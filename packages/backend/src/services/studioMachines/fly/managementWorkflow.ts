@@ -179,11 +179,12 @@ export async function getStudioMachineUrlWorkflow(
     getMachineExternalPort: (machine: FlyMachine) => number | null;
     getPublicUrlForPort: (port: number) => string;
     getStudioAccessTokenFromMachine: (machine: FlyMachine) => string | null;
+    resolveStudioIdFromMachine: (machine: FlyMachine, fallback?: string | null) => string;
   },
   organizationId: string,
   projectSlug: string,
   version: number,
-): Promise<{ url: string; accessToken?: string } | null> {
+): Promise<{ studioId: string; url: string; accessToken?: string } | null> {
   const existing = await findExistingStudioMachine(
     deps,
     organizationId,
@@ -197,7 +198,11 @@ export async function getStudioMachineUrlWorkflow(
   const url = deps.getPublicUrlForPort(port);
   const accessToken = deps.getStudioAccessTokenFromMachine(existing);
   if (!accessToken) return null;
-  return { url, accessToken };
+  return {
+    studioId: deps.resolveStudioIdFromMachine(existing, null),
+    url,
+    accessToken,
+  };
 }
 
 export async function isStudioMachineRunningWorkflow(

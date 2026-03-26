@@ -4,10 +4,15 @@ const {
   getClientAndDirectoryMock,
   sessionCreateMock,
   sessionListMock,
+  sessionMessagesMock,
   sessionDiffMock,
   sessionStatusMock,
   sessionAbortMock,
+  sessionSummarizeMock,
   sessionPromptAsyncMock,
+  startEventsMock,
+  stopEventsMock,
+  useEventsCallbacksRef,
   getSessionStatusesMock,
   getSessionStatusSnapshotsMock,
   setSessionStatusMock,
@@ -19,10 +24,15 @@ const {
   getClientAndDirectoryMock: vi.fn(),
   sessionCreateMock: vi.fn(),
   sessionListMock: vi.fn(),
+  sessionMessagesMock: vi.fn(),
   sessionDiffMock: vi.fn(),
   sessionStatusMock: vi.fn(),
   sessionAbortMock: vi.fn(),
+  sessionSummarizeMock: vi.fn(),
   sessionPromptAsyncMock: vi.fn(),
+  startEventsMock: vi.fn(),
+  stopEventsMock: vi.fn(),
+  useEventsCallbacksRef: { current: null as any },
   getSessionStatusesMock: vi.fn(),
   getSessionStatusSnapshotsMock: vi.fn(),
   setSessionStatusMock: vi.fn(),
@@ -49,10 +59,13 @@ vi.mock("./eventEmitter.js", () => ({
 }));
 
 vi.mock("./useEvents.js", () => ({
-  useEvents: vi.fn(() => ({
-    start: vi.fn(),
-    stop: vi.fn(),
-  })),
+  useEvents: vi.fn((_client, callbacks) => {
+    useEventsCallbacksRef.current = callbacks;
+    return {
+      start: startEventsMock,
+      stop: stopEventsMock,
+    };
+  }),
 }));
 
 vi.mock("./modelConfig.js", () => ({
@@ -99,10 +112,15 @@ describe("opencode index session behavior", () => {
     getClientAndDirectoryMock.mockReset();
     sessionCreateMock.mockReset();
     sessionListMock.mockReset();
+    sessionMessagesMock.mockReset();
     sessionDiffMock.mockReset();
     sessionStatusMock.mockReset();
     sessionAbortMock.mockReset();
+    sessionSummarizeMock.mockReset();
     sessionPromptAsyncMock.mockReset();
+    startEventsMock.mockReset();
+    stopEventsMock.mockReset();
+    useEventsCallbacksRef.current = null;
     getSessionStatusesMock.mockReset();
     getSessionStatusSnapshotsMock.mockReset();
     setSessionStatusMock.mockReset();
@@ -112,9 +130,11 @@ describe("opencode index session behavior", () => {
     finishSessionRunsMock.mockReset();
 
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
+    sessionMessagesMock.mockResolvedValue({ data: [], error: undefined });
     sessionDiffMock.mockResolvedValue({ data: [], error: undefined });
     sessionStatusMock.mockResolvedValue({ data: {}, error: undefined });
     sessionAbortMock.mockResolvedValue({ data: {}, error: undefined });
+    sessionSummarizeMock.mockResolvedValue({ data: true, error: undefined });
     sessionCreateMock.mockResolvedValue({ data: { id: "sess-new" }, error: undefined });
     sessionPromptAsyncMock.mockResolvedValue({ data: {}, error: undefined });
     getSessionStatusesMock.mockReturnValue({});
@@ -127,9 +147,11 @@ describe("opencode index session behavior", () => {
         session: {
           create: sessionCreateMock,
           list: sessionListMock,
+          messages: sessionMessagesMock,
           diff: sessionDiffMock,
           status: sessionStatusMock,
           abort: sessionAbortMock,
+          summarize: sessionSummarizeMock,
           promptAsync: sessionPromptAsyncMock,
         },
       },
@@ -347,6 +369,47 @@ describe("opencode index session behavior", () => {
     );
   });
 
+  it("auto-compacts oversized sessions before sending the next prompt", async () => {
+    sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "a-last",
+            role: "assistant",
+            providerID: "google",
+            modelID: "gemini-2.5-flash",
+            tokens: {
+              input: 180_000,
+              output: 15_000,
+              reasoning: 5_500,
+              cache: { read: 0, write: 0 },
+            },
+          },
+          parts: [{ type: "text", text: "Large context" }],
+        },
+      ],
+      error: undefined,
+    });
+
+    await runTask(
+      "continue task",
+      "/workspace/project",
+      "sess-existing",
+      { provider: "google", modelId: "gemini-2.5-flash" },
+    );
+
+    expect(sessionSummarizeMock).toHaveBeenCalledWith({
+      sessionID: "sess-existing",
+      directory: "/workspace/project/",
+      providerID: "google",
+      modelID: "gemini-2.5-flash",
+      auto: true,
+    });
+    expect(sessionSummarizeMock.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionPromptAsyncMock.mock.invocationCallOrder[0],
+    );
+  });
+
   it("does not inject a new system prompt when continuing an existing session", async () => {
     await runTask("continue task", "/workspace/project", "sess-existing");
 
@@ -358,6 +421,52 @@ describe("opencode index session behavior", () => {
       }),
     );
     expect(sessionPromptAsyncMock.mock.calls[0]?.[0]).not.toHaveProperty("system");
+  });
+
+  it("auto-compacts oversized sessions after the run finishes", async () => {
+    sessionMessagesMock
+      .mockResolvedValueOnce({
+        data: [],
+        error: undefined,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            info: {
+              id: "a-finished",
+              role: "assistant",
+              providerID: "openrouter",
+              modelID: "google/gemini-2.5-pro",
+              tokens: {
+                input: 195_000,
+                output: 4_500,
+                reasoning: 1_500,
+                cache: { read: 0, write: 0 },
+              },
+            },
+            parts: [{ type: "text", text: "Done" }],
+          },
+        ],
+        error: undefined,
+      });
+
+    await runTask("continue task", "/workspace/project", "sess-existing");
+
+    expect(useEventsCallbacksRef.current?.onIdle).toBeTypeOf("function");
+    await useEventsCallbacksRef.current.onIdle();
+
+    expect(sessionSummarizeMock).toHaveBeenCalledWith({
+      sessionID: "sess-existing",
+      directory: "/workspace/project/",
+      providerID: "openrouter",
+      modelID: "google/gemini-2.5-pro",
+      auto: true,
+    });
+    expect(stopEventsMock).toHaveBeenCalledTimes(1);
+    expect(emitSessionEventMock).toHaveBeenCalledWith(
+      "sess-existing",
+      expect.objectContaining({ kind: "session.completed" }),
+    );
   });
 
   it("emits session.error and rejects when promptAsync fails", async () => {

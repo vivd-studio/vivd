@@ -106,6 +106,7 @@ class CanonicalEventBridge extends EventEmitter {
     projectDir: string,
     signal?: AbortSignal,
     lastEventId?: string,
+    replayBuffered = true,
   ): AsyncGenerator<CanonicalAgentEvent, void, unknown> {
     const workspaceKey = this.createWorkspaceKey(projectDir);
     const queue: CanonicalAgentEvent[] = [];
@@ -118,9 +119,10 @@ class CanonicalEventBridge extends EventEmitter {
       resolve = null;
     });
 
-    const replayEvents = this.getOrCreateWorkspaceState(workspaceKey).buffer.snapshot(
-      lastEventId,
-    );
+    const replayEvents =
+      !replayBuffered && !lastEventId
+        ? []
+        : this.getOrCreateWorkspaceState(workspaceKey).buffer.snapshot(lastEventId);
     const maxReplaySequence =
       replayEvents.length > 0 ? replayEvents[replayEvents.length - 1].sequence : 0;
 

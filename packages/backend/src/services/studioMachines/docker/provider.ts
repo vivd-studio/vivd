@@ -1116,6 +1116,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       this.config.routeIdFor(organizationId, projectSlug, version);
     const routePath = this.routeService.getRoutePath(routeId);
     return {
+      studioId: getContainerStudioId(inspected, null),
       url: this.config.getPublicUrlForRoutePath(routePath),
       accessToken,
     };

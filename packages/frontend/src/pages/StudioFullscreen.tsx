@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
+import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
 import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
@@ -35,7 +36,7 @@ export default function StudioFullscreen() {
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
-  const [studioAccessTokenOverride, setStudioAccessTokenOverride] = useState<string | null>(null);
+  const [studioBootstrapTokenOverride, setStudioBootstrapTokenOverride] = useState<string | null>(null);
   const [studioReloadNonce, setStudioReloadNonce] = useState(0);
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
@@ -107,7 +108,7 @@ export default function StudioFullscreen() {
 
   useEffect(() => {
     setStudioUrlOverride(null);
-    setStudioAccessTokenOverride(null);
+    setStudioBootstrapTokenOverride(null);
     setStudioReloadNonce(0);
     hardRestartStudio.reset();
   }, [projectSlug, hardRestartStudio.reset]);
@@ -123,7 +124,7 @@ export default function StudioFullscreen() {
         : version;
 
     setStudioUrlOverride(null);
-    setStudioAccessTokenOverride(null);
+    setStudioBootstrapTokenOverride(null);
 
     const result = await hardRestartStudio.mutateAsync({
       slug: projectSlug,
@@ -136,7 +137,7 @@ export default function StudioFullscreen() {
     }
 
     setStudioUrlOverride(result.url);
-    setStudioAccessTokenOverride(result.accessToken);
+    setStudioBootstrapTokenOverride(result.bootstrapToken);
     setStudioReloadNonce((n) => n + 1);
   };
 
@@ -153,16 +154,16 @@ export default function StudioFullscreen() {
     studioUrlQuery.data,
   ]);
 
-  const studioAccessToken = useMemo(() => {
+  const studioBootstrapToken = useMemo(() => {
     if (hardRestartStudio.isPending) return null;
-    if (studioAccessTokenOverride) return studioAccessTokenOverride;
-    if (studioUrlQuery.data?.status === "running") return studioUrlQuery.data.accessToken;
-    if (startStudio.data?.success) return startStudio.data.accessToken;
+    if (studioBootstrapTokenOverride) return studioBootstrapTokenOverride;
+    if (studioUrlQuery.data?.status === "running") return studioUrlQuery.data.bootstrapToken;
+    if (startStudio.data?.success) return startStudio.data.bootstrapToken;
     return null;
   }, [
     hardRestartStudio.isPending,
     startStudio.data,
-    studioAccessTokenOverride,
+    studioBootstrapTokenOverride,
     studioUrlQuery.data,
   ]);
 
@@ -177,18 +178,35 @@ export default function StudioFullscreen() {
   }, [projectSlug, startStudio, version]);
 
   const handleStudioRecovered = useCallback(
-    (next: { url: string; accessToken: string | null }) => {
+    (next: { url: string; bootstrapToken: string | null }) => {
       setStudioReady(false);
       setStudioLoadTimedOut(false);
       setStudioLoadErrored(false);
       setStudioUrlOverride(next.url);
-      setStudioAccessTokenOverride(next.accessToken);
+      setStudioBootstrapTokenOverride(next.bootstrapToken);
       setStudioReloadNonce((n) => n + 1);
       if (!projectSlug) return;
       void utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
     },
     [projectSlug, utils.project.getStudioUrl, version],
   );
+
+  const reloadStudioIframe = useCallback(async () => {
+    if (projectSlug) {
+      try {
+        const result = await studioUrlQuery.refetch();
+        const next = result.data;
+        if (next?.status === "running") {
+          setStudioUrlOverride(next.url);
+          setStudioBootstrapTokenOverride(next.bootstrapToken);
+        }
+      } catch {
+        // Fall back to the current runtime info if we can't refresh the session.
+      }
+    }
+
+    setStudioReloadNonce((n) => n + 1);
+  }, [projectSlug, studioUrlQuery]);
 
   const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
     enabled: Boolean(projectSlug && baseUrl && !hardRestartStudio.isPending),
@@ -368,14 +386,20 @@ export default function StudioFullscreen() {
         window.location.origin,
       ).toString(),
     );
-
-    if (studioAccessToken) {
-      const hashParams = new URLSearchParams();
-      hashParams.set("vivdStudioToken", studioAccessToken);
-      url.hash = hashParams.toString();
-    }
     return url.toString();
-  }, [baseUrl, initialGenerationRequested, projectSlug, studioAccessToken, version]);
+  }, [baseUrl, initialGenerationRequested, projectSlug, version]);
+
+  const studioBootstrapAction = useMemo(() => {
+    if (!baseUrl) return null;
+    return resolveStudioRuntimeUrl(baseUrl, "vivd-studio/api/bootstrap");
+  }, [baseUrl]);
+
+  const studioIframeTarget = useMemo(
+    () => `vivd-studio-fullscreen-${projectSlug || "project"}-v${version}`,
+    [projectSlug, version],
+  );
+
+  const studioIframeRequestKey = `${projectSlug}-${version}-${baseUrl ?? ""}-${studioReloadNonce}`;
 
   useStudioIframeReadyRetry({
     enabled: Boolean(studioIframeSrc && !studioReady),
@@ -385,8 +409,8 @@ export default function StudioFullscreen() {
   const handleHealthyRuntimeTimeoutRecovery = useCallback(() => {
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
-    setStudioReloadNonce((n) => n + 1);
-  }, []);
+    void reloadStudioIframe();
+  }, [reloadStudioIframe]);
 
   useStudioIframeTimeoutRecovery({
     enabled: Boolean(studioLoadTimedOut && baseUrl && !studioReady),
@@ -451,16 +475,20 @@ export default function StudioFullscreen() {
 
   return (
     <div className="relative h-dvh w-screen bg-background">
-      <iframe
-        ref={studioIframeRef}
-        onLoad={handleStudioIframeLoad}
-        onError={() => setStudioLoadErrored(true)}
-        key={`${projectSlug}-${version}-${baseUrl ?? ""}-${studioReloadNonce}`}
-        src={studioIframeSrc}
+      <StudioBootstrapIframe
+        iframeRef={studioIframeRef}
+        iframeName={studioIframeTarget}
+        iframeKey={studioIframeRequestKey}
         title={`Vivd Studio - ${projectSlug}`}
+        cleanSrc={studioIframeSrc}
+        bootstrapAction={studioBootstrapAction}
+        bootstrapToken={studioBootstrapToken}
+        submissionKey={studioIframeRequestKey}
         className="h-full w-full border-0"
         allow="fullscreen; clipboard-write"
         allowFullScreen
+        onLoad={handleStudioIframeLoad}
+        onError={() => setStudioLoadErrored(true)}
       />
 
       {isStudioRecovering ? (
@@ -484,7 +512,7 @@ export default function StudioFullscreen() {
                 <div className="flex items-center justify-center gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => setStudioReloadNonce((n) => n + 1)}
+                    onClick={() => void reloadStudioIframe()}
                   >
                     Reload
                   </Button>

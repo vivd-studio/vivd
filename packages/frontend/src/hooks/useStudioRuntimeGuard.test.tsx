@@ -35,7 +35,7 @@ describe("useStudioRuntimeGuard", () => {
     const ensureStudioRunning = vi.fn().mockResolvedValue({
       success: true as const,
       url: "https://studio.example.com",
-      accessToken: "token-1",
+      bootstrapToken: "token-1",
     });
     const onRecovered = vi.fn();
 
@@ -57,7 +57,7 @@ describe("useStudioRuntimeGuard", () => {
     expect(ensureStudioRunning).toHaveBeenCalledTimes(1);
     expect(onRecovered).toHaveBeenCalledWith({
       url: "https://studio.example.com",
-      accessToken: "token-1",
+      bootstrapToken: "token-1",
     });
     expect(touchStudio).toHaveBeenCalled();
   });
@@ -72,7 +72,7 @@ describe("useStudioRuntimeGuard", () => {
     const ensureStudioRunning = vi.fn().mockResolvedValue({
       success: true as const,
       url: "https://studio.example.com",
-      accessToken: null,
+      bootstrapToken: null,
     });
     const touchStudio = vi.fn();
     const onRecovered = vi.fn();
@@ -172,7 +172,7 @@ describe("useStudioRuntimeGuard", () => {
     const ensureStudioRunningA = vi.fn().mockResolvedValue({
       success: true as const,
       url: "https://studio-a-recovered.example.com",
-      accessToken: null,
+      bootstrapToken: null,
     });
     const onRecoveredA = vi.fn();
 
@@ -194,7 +194,7 @@ describe("useStudioRuntimeGuard", () => {
     const ensureStudioRunningB = vi.fn().mockResolvedValue({
       success: true as const,
       url: "https://studio-b.example.com",
-      accessToken: null,
+      bootstrapToken: null,
     });
     const onRecoveredB = vi.fn();
 
@@ -239,7 +239,7 @@ describe("useStudioRuntimeGuard", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://app.example.com/_studio/route-1/health",
+      new URL("/_studio/route-1/health", window.location.origin).toString(),
       expect.objectContaining({
         method: "GET",
         mode: "cors",

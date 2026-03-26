@@ -145,6 +145,7 @@ export interface ChatContextValue {
   clearSessionError: () => void;
   usageLimitStatus: UsageLimitStatus | null;
   isUsageBlocked: boolean;
+  softContextLimitTokens: number;
   availableModels: ModelTier[];
   selectedModel: ModelTier | null;
   setSelectedModel: (model: ModelTier | null) => void;

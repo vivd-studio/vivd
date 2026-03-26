@@ -23,6 +23,8 @@ import {
   rewriteRootAssetUrlsInText,
   stripDevServerToolingFromHtml,
 } from "./http/basePathRewrite.js";
+import { createRequireStudioAuth } from "./http/studioAuth.js";
+import { registerStudioClientHttpRoutes } from "./httpRoutes/client.js";
 import { validateStudioConfig } from "@vivd/shared";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,48 +34,10 @@ type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewBasePath?: string;
 };
 
-const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
-const STUDIO_AUTH_QUERY = "vivdStudioToken";
 const FORWARDED_PREFIX_HEADER = "x-forwarded-prefix";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getStudioAccessToken(): string | null {
-  const raw = process.env.STUDIO_ACCESS_TOKEN;
-  const token = raw?.trim();
-  return token ? token : null;
-}
-
-function safeTokenEquals(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a, "utf8");
-  const bBuf = Buffer.from(b, "utf8");
-  if (aBuf.length !== bBuf.length) return false;
-  return crypto.timingSafeEqual(aBuf, bBuf);
-}
-
-function getRequestStudioToken(req: express.Request): string | null {
-  const headerValue = req.get(STUDIO_AUTH_HEADER);
-  if (typeof headerValue === "string" && headerValue.trim()) {
-    return headerValue.trim();
-  }
-
-  const auth = req.get("authorization");
-  if (typeof auth === "string" && auth.trim()) {
-    const match = auth.trim().match(/^Bearer\s+(.+)$/i);
-    if (match?.[1]) return match[1].trim();
-  }
-
-  const queryValue = (req.query?.[STUDIO_AUTH_QUERY] ?? null) as
-    | string
-    | string[]
-    | null;
-  if (typeof queryValue === "string" && queryValue.trim()) {
-    return queryValue.trim();
-  }
-
-  return null;
 }
 
 function getProxyBasePath(req: express.Request): string | null {
@@ -93,30 +57,6 @@ function getSingleRouteParam(
     if (typeof first === "string" && first.trim()) return first;
   }
   return null;
-}
-
-function requireStudioAuth(): express.RequestHandler {
-  return (req, res, next) => {
-    const required = getStudioAccessToken();
-    if (!required) return next();
-
-    // Allow CORS preflight without auth (no sensitive data returned).
-    if (req.method === "OPTIONS") return next();
-
-    const provided = getRequestStudioToken(req);
-    if (provided && safeTokenEquals(provided, required)) return next();
-
-    // Prefer JSON for API-ish routes to make debugging easier.
-    const combinedPath = `${req.baseUrl || ""}${req.path || ""}`;
-    const wantsJson =
-      combinedPath.startsWith("/trpc") ||
-      combinedPath.startsWith("/vivd-studio/api/");
-
-    if (wantsJson) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    return res.status(401).send("Unauthorized");
-  };
 }
 
 function isTransientGitCloneError(message: string): boolean {
@@ -254,20 +194,6 @@ async function writeUploadedFile(
   await fs.writeFile(fullPath, buffer);
 }
 
-async function sendStudioClientIndex(options: {
-  req: express.Request;
-  res: express.Response;
-  clientIndexPath: string;
-}): Promise<void> {
-  let html = await fs.readFile(options.clientIndexPath, "utf8");
-  const proxyBasePath = getProxyBasePath(options.req);
-  if (proxyBasePath) {
-    html = rewriteRootAssetUrlsInText(html, proxyBasePath);
-    html = injectBasePathScript(html, proxyBasePath);
-  }
-  options.res.type("html").send(html);
-}
-
 // Single proxy instance to avoid adding EventEmitter listeners per request.
 // The route handler sets `vivdDevPreviewTarget` and `vivdDevPreviewBasePath` on the request.
 const devPreviewProxy = createProxyMiddleware({
@@ -395,40 +321,7 @@ async function startServer() {
   // Initialize workspace
   const workspace = new WorkspaceManager();
 
-  if (WORKSPACE_DIR) {
-    console.log(`Using workspace directory: ${WORKSPACE_DIR}`);
-    await workspace.open(WORKSPACE_DIR);
-    console.log(`Workspace ready at: ${workspace.getProjectPath()}`);
-  } else if (REPO_URL) {
-    console.log(`Cloning repository: ${REPO_URL}`);
-    await cloneWorkspaceWithRetry({
-      workspace,
-      repoUrl: REPO_URL,
-      gitToken: GIT_TOKEN,
-      branch: BRANCH,
-    });
-    console.log(`Repository cloned to: ${workspace.getProjectPath()}`);
-  } else {
-    console.log(
-      "No VIVD_WORKSPACE_DIR/WORKSPACE_DIR or REPO_URL provided. Workspace not initialized."
-    );
-  }
-
-  const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
-  const projectVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
-  const canReportWorkspaceState =
-    workspace.isInitialized() &&
-    projectSlug.length > 0 &&
-    Number.isFinite(projectVersion) &&
-    projectVersion > 0;
-
-  if (canReportWorkspaceState) {
-    workspaceStateReporter.start({
-      workspace,
-      slug: projectSlug,
-      version: projectVersion,
-    });
-  }
+  const requireStudioAuth = () => createRequireStudioAuth(process.env);
 
   // TRPC middleware
   app.use(
@@ -466,53 +359,59 @@ async function startServer() {
     devPreviewProxy,
   });
 
-  // Serve bundled client in production
   const clientPath = path.join(__dirname, "client");
   const clientIndexPath = path.join(clientPath, "index.html");
-  app.get("/", (_req, res) => {
-    // Relative redirect keeps path-prefixed proxies on the same runtime route.
-    res.redirect(302, "vivd-studio");
+  registerStudioClientHttpRoutes({
+    app,
+    requireStudioAuth,
+    clientPath,
+    clientIndexPath,
+    getProxyBasePath,
+    rewriteRootAssetUrlsInText,
+    injectBasePathScript,
   });
-  app.get("/vivd-studio", async (req, res) => {
-    await sendStudioClientIndex({
-      req,
-      res,
-      clientIndexPath,
-    });
-  });
-  app.get("/vivd-studio/", async (req, res) => {
-    await sendStudioClientIndex({
-      req,
-      res,
-      clientIndexPath,
-    });
-  });
-  app.use(
-    "/vivd-studio",
-    express.static(clientPath, {
-      index: false,
-      redirect: false,
-    }),
-  );
 
-  // SPA fallback
-  // Express 5 uses `path-to-regexp` which does not accept `"*"` as a route pattern.
-  // Use a regex to match everything instead.
-  app.get(/.*/, async (req, res, next) => {
-    // Skip API routes
-    if (
-      req.path.startsWith("/trpc") ||
-      req.path.startsWith("/preview") ||
-      req.path.startsWith("/vivd-studio/api/")
-    ) {
-      return next();
-    }
-    await sendStudioClientIndex({
-      req,
-      res,
-      clientIndexPath,
-    });
+  // Bind the port before workspace hydration/open completes so Fly and the
+  // startup stub can hand off cleanly without connection-refused gaps. The
+  // /health endpoint reports "starting" until the workspace is initialized.
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`Studio server running on http://${HOST}:${PORT}`);
   });
+
+  if (WORKSPACE_DIR) {
+    console.log(`Using workspace directory: ${WORKSPACE_DIR}`);
+    await workspace.open(WORKSPACE_DIR);
+    console.log(`Workspace ready at: ${workspace.getProjectPath()}`);
+  } else if (REPO_URL) {
+    console.log(`Cloning repository: ${REPO_URL}`);
+    await cloneWorkspaceWithRetry({
+      workspace,
+      repoUrl: REPO_URL,
+      gitToken: GIT_TOKEN,
+      branch: BRANCH,
+    });
+    console.log(`Repository cloned to: ${workspace.getProjectPath()}`);
+  } else {
+    console.log(
+      "No VIVD_WORKSPACE_DIR/WORKSPACE_DIR or REPO_URL provided. Workspace not initialized."
+    );
+  }
+
+  const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+  const projectVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
+  const canReportWorkspaceState =
+    workspace.isInitialized() &&
+    projectSlug.length > 0 &&
+    Number.isFinite(projectVersion) &&
+    projectVersion > 0;
+
+  if (canReportWorkspaceState) {
+    workspaceStateReporter.start({
+      workspace,
+      slug: projectSlug,
+      version: projectVersion,
+    });
+  }
 
   // Graceful shutdown
   const shutdown = async () => {
@@ -522,15 +421,12 @@ async function startServer() {
     await devServerService.close();
     opencodeServerManager.closeAll();
     await workspace.cleanup();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     process.exit(0);
   };
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-
-  app.listen(PORT, HOST, () => {
-    console.log(`Studio server running on http://${HOST}:${PORT}`);
-  });
 }
 
 startServer().catch((error) => {

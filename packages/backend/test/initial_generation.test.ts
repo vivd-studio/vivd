@@ -52,8 +52,54 @@ describe("initial generation helpers", () => {
         fs.existsSync(path.join(tmpDir, "src", "pages", "index.astro")),
       ).toBe(true);
       expect(
+        fs.existsSync(path.join(tmpDir, "src", "layouts", "Layout.astro")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "layouts", "BaseLayout.astro")),
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(tmpDir, "src", "components")),
+      ).toBe(false);
+      expect(
         fs.existsSync(path.join(tmpDir, "AGENTS.md")),
       ).toBe(true);
+
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "pages", "index.astro"),
+          "utf-8",
+        ),
+      ).toContain('import Layout from "../layouts/Layout.astro";');
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "pages", "index.astro"),
+          "utf-8",
+        ),
+      ).not.toContain("components/sections");
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "styles", "global.css"),
+          "utf-8",
+        ).trim(),
+      ).toBe('@import "tailwindcss";');
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "layouts", "Layout.astro"),
+          "utf-8",
+        ),
+      ).toContain('title = "your-title",');
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "layouts", "Layout.astro"),
+          "utf-8",
+        ),
+      ).toContain('description = "your-description",');
+      expect(
+        fs.readFileSync(
+          path.join(tmpDir, "src", "layouts", "Layout.astro"),
+          "utf-8",
+        ),
+      ).not.toContain("New Astro Site");
 
       const manifest = JSON.parse(
         fs.readFileSync(

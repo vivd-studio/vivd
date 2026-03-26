@@ -293,6 +293,26 @@ consume_sync_trigger() {
   return 0
 }
 
+wait_for_file() {
+  TARGET_FILE="$1"
+  TIMEOUT_SECONDS="$2"
+  PID_TO_CHECK="$3"
+  ELAPSED_SECONDS="0"
+
+  while [ "$ELAPSED_SECONDS" -lt "$TIMEOUT_SECONDS" ]; do
+    if [ -f "$TARGET_FILE" ]; then
+      return 0
+    fi
+    if [ -n "$PID_TO_CHECK" ] && ! kill -0 "$PID_TO_CHECK" 2>/dev/null; then
+      return 1
+    fi
+    sleep 1
+    ELAPSED_SECONDS="$((ELAPSED_SECONDS + 1))"
+  done
+
+  [ -f "$TARGET_FILE" ]
+}
+
 hydrate_source() {
   if [ -z "$S3_SOURCE_URI" ]; then
     return 0
@@ -364,12 +384,25 @@ if [ "$SYNC_ENABLED" = "1" ]; then
   STUB_PID=""
   STUB_PORT="${PORT:-3100}"
   STUB_HOST="${STUDIO_HOST:-0.0.0.0}"
+  STUB_READY_FILE="/tmp/vivd-startup-stub.ready"
+  rm -f "$STUB_READY_FILE" 2>/dev/null || true
 
   if command -v node >/dev/null 2>&1; then
-    STUB_PORT="$STUB_PORT" STUB_HOST="$STUB_HOST" node -e '
+    STUB_PORT="$STUB_PORT" STUB_HOST="$STUB_HOST" STUB_READY_FILE="$STUB_READY_FILE" node -e '
 const http = require("http");
+const fs = require("fs");
 const port = Number.parseInt(process.env.STUB_PORT || "3100", 10);
 const host = process.env.STUB_HOST || "0.0.0.0";
+const readyFile = process.env.STUB_READY_FILE || "";
+
+const cleanup = () => {
+  if (!readyFile) return;
+  try {
+    fs.unlinkSync(readyFile);
+  } catch {
+    // Ignore missing file errors during shutdown.
+  }
+};
 
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
@@ -383,11 +416,29 @@ const server = http.createServer((req, res) => {
   res.end("Studio is starting up. Please retry shortly.");
 });
 
-server.listen(port, host);
-process.on("SIGINT", () => server.close(() => process.exit(0)));
-process.on("SIGTERM", () => server.close(() => process.exit(0)));
+server.listen(port, host, () => {
+  if (!readyFile) return;
+  try {
+    fs.writeFileSync(readyFile, "ready\n", "utf8");
+  } catch {
+    // Ignore readiness marker write failures; the shell will warn below.
+  }
+});
+process.on("exit", cleanup);
+process.on("SIGINT", () => server.close(() => {
+  cleanup();
+  process.exit(0);
+}));
+process.on("SIGTERM", () => server.close(() => {
+  cleanup();
+  process.exit(0);
+}));
 ' >/dev/null 2>&1 &
     STUB_PID="$!"
+
+    if ! wait_for_file "$STUB_READY_FILE" 5 "$STUB_PID"; then
+      echo "Warning: startup stub did not report ready within 5s." >&2
+    fi
   fi
 
   HYDRATE_SOURCE_PID=""
@@ -414,6 +465,7 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
   if [ -n "$STUB_PID" ]; then
     kill -TERM "$STUB_PID" 2>/dev/null || true
     wait "$STUB_PID" 2>/dev/null || true
+    rm -f "$STUB_READY_FILE" 2>/dev/null || true
   fi
 
   write_opencode_auth

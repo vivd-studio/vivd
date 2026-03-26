@@ -37,6 +37,7 @@ import {
   buildConnectedBackendHeaders,
   getConnectedBackendAuthConfig,
 } from "../lib/connectedBackendAuth.js";
+import { getStudioRuntimeConfig } from "../config.js";
 
 const CHECKLIST_PENDING_NOTE = "[[PENDING_AGENT_REVIEW]]";
 const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
@@ -234,6 +235,8 @@ function hasPendingChecklistItems(checklist: PrePublishChecklist): boolean {
 }
 
 export const agentRouter = router({
+  getRuntimeConfig: publicProcedure.query(() => getStudioRuntimeConfig()),
+
   getAvailableModels: publicProcedure.query(async ({ ctx }) => {
     const directory = getWorkspaceDir(ctx);
     return getAvailableModelsWithMetadata(directory);

@@ -87,6 +87,61 @@ function upsertSession(
   };
 }
 
+function removeSessionCaches(
+  state: OpenCodeChatState,
+  sessionId: string,
+): OpenCodeChatState {
+  const messageIds = state.messagesBySessionId[sessionId] ?? [];
+  if (
+    messageIds.length === 0 &&
+    !state.sessionStatusById[sessionId] &&
+    !state.questionRequestsBySessionId[sessionId]
+  ) {
+    return state;
+  }
+
+  const messagesById = { ...state.messagesById };
+  const partsByMessageId = { ...state.partsByMessageId };
+  for (const messageId of messageIds) {
+    delete messagesById[messageId];
+    delete partsByMessageId[messageId];
+  }
+
+  const messagesBySessionId = { ...state.messagesBySessionId };
+  delete messagesBySessionId[sessionId];
+
+  const sessionStatusById = { ...state.sessionStatusById };
+  delete sessionStatusById[sessionId];
+
+  const questionRequestsBySessionId = { ...state.questionRequestsBySessionId };
+  delete questionRequestsBySessionId[sessionId];
+
+  return {
+    ...state,
+    messagesById,
+    messagesBySessionId,
+    partsByMessageId,
+    sessionStatusById,
+    questionRequestsBySessionId,
+  };
+}
+
+function removeSession(
+  state: OpenCodeChatState,
+  sessionId: string,
+): OpenCodeChatState {
+  const sessionsById = { ...state.sessionsById };
+  delete sessionsById[sessionId];
+
+  const withoutSession = {
+    ...state,
+    sessionsById,
+    sessionOrder: sortSessionIds(sessionsById),
+  };
+
+  return removeSessionCaches(withoutSession, sessionId);
+}
+
 function removeMessage(
   state: OpenCodeChatState,
   sessionId: string,
@@ -268,12 +323,21 @@ function applyBridgeStatus(
   };
 
   if (!properties.state) return state;
-  return {
+  const nextState: OpenCodeChatState = {
     ...state,
     connection: {
       state: properties.state,
       ...(properties.message ? { message: properties.message } : {}),
     },
+  };
+
+  if (properties.state === "connected") {
+    return nextState;
+  }
+
+  return {
+    ...nextState,
+    refreshGeneration: nextState.refreshGeneration + 1,
   };
 }
 
@@ -295,29 +359,25 @@ function applyCanonicalEvent(
   }
 
   switch (event.type) {
-    case "session.updated":
     case "session.created": {
       const session = (event.properties as { info?: OpenCodeSession })?.info;
       if (!session?.id) return nextState;
       return upsertSession(nextState, session);
     }
 
+    case "session.updated": {
+      const session = (event.properties as { info?: OpenCodeSession })?.info;
+      if (!session?.id) return nextState;
+      if (session.time?.archived) {
+        return removeSession(nextState, session.id);
+      }
+      return upsertSession(nextState, session);
+    }
+
     case "session.deleted": {
       const session = (event.properties as { info?: OpenCodeSession })?.info;
       if (!session?.id) return nextState;
-      const sessionsById = { ...nextState.sessionsById };
-      delete sessionsById[session.id];
-      const sessionStatusById = { ...nextState.sessionStatusById };
-      delete sessionStatusById[session.id];
-      const questionRequestsBySessionId = { ...nextState.questionRequestsBySessionId };
-      delete questionRequestsBySessionId[session.id];
-      return {
-        ...nextState,
-        sessionsById,
-        sessionStatusById,
-        questionRequestsBySessionId,
-        sessionOrder: sortSessionIds(sessionsById),
-      };
+      return removeSession(nextState, session.id);
     }
 
     case "session.status": {

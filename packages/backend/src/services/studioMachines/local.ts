@@ -10,6 +10,7 @@ import type {
   StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
+  StudioRuntimeAuthIdentity,
 } from "./types";
 import { getVersionDir } from "../../generator/versionUtils";
 import {
@@ -27,6 +28,7 @@ interface StudioProcess {
   process: ChildProcess;
   port: number;
   studioId: string;
+  accessToken: string;
   organizationId: string;
   projectSlug: string;
   version: number;
@@ -244,6 +246,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         studioId: existing.studioId,
         url: this.getPublicUrl(existing.port),
         port: existing.port,
+        accessToken: existing.accessToken,
       };
     }
 
@@ -272,6 +275,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     const port = await this.allocatePort();
     const studioId = args.env.STUDIO_ID || crypto.randomUUID();
+    const accessToken =
+      (args.env.STUDIO_ACCESS_TOKEN || "").trim() || crypto.randomUUID();
 
     console.log(
       `[StudioMachine] Starting local studio for ${args.organizationId}:${args.projectSlug}/v${args.version} on port ${port}`
@@ -286,6 +291,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       ...process.env,
       PORT: String(port),
       STUDIO_ID: studioId,
+      STUDIO_ACCESS_TOKEN: accessToken,
       VIVD_TENANT_ID: args.organizationId,
       VIVD_PROJECT_SLUG: args.projectSlug,
       VIVD_PROJECT_VERSION: String(args.version),
@@ -374,6 +380,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       process: proc,
       port,
       studioId,
+      accessToken,
       organizationId: args.organizationId,
       projectSlug: args.projectSlug,
       version: args.version,
@@ -395,7 +402,12 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       throw new Error(`${message}${suffix}`);
     }
 
-    return { studioId, url: this.getPublicUrl(port), port };
+    return {
+      studioId,
+      url: this.getPublicUrl(port),
+      port,
+      accessToken,
+    };
   }
 
   async restart(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
@@ -438,14 +450,40 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     organizationId: string,
     projectSlug: string,
     version: number,
-  ): Promise<{ url: string; accessToken?: string } | null> {
+  ): Promise<{ studioId: string; url: string; accessToken?: string } | null> {
     const studio = this.studios.get(this.key(organizationId, projectSlug, version));
     if (!studio) return null;
-    return { url: this.getPublicUrl(studio.port) };
+    return {
+      studioId: studio.studioId,
+      url: this.getPublicUrl(studio.port),
+      accessToken: studio.accessToken,
+    };
   }
 
   async isRunning(organizationId: string, projectSlug: string, version: number): Promise<boolean> {
     return this.studios.has(this.key(organizationId, projectSlug, version));
+  }
+
+  async resolveRuntimeAuth(
+    studioId: string,
+    accessToken: string,
+  ): Promise<StudioRuntimeAuthIdentity | null> {
+    const normalizedStudioId = studioId.trim();
+    const normalizedToken = accessToken.trim();
+    if (!normalizedStudioId || !normalizedToken) return null;
+
+    for (const studio of this.studios.values()) {
+      if (studio.studioId !== normalizedStudioId) continue;
+      if (studio.accessToken !== normalizedToken) continue;
+      return {
+        studioId: normalizedStudioId,
+        organizationId: studio.organizationId,
+        projectSlug: studio.projectSlug,
+        version: studio.version,
+      };
+    }
+
+    return null;
   }
 
   stopAll(): void {

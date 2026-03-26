@@ -38,6 +38,20 @@ interface OpencodeServerInfo {
 }
 
 const DEFAULT_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+const DEFAULT_READY_TIMEOUT_MS = 120_000;
+
+export function resolveOpencodeServerReadyTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = (env.OPENCODE_SERVER_READY_TIMEOUT_MS || "").trim();
+  if (!raw) return DEFAULT_READY_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1_000) {
+    return DEFAULT_READY_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
 const IDLE_TIMEOUT_MS = (() => {
   const raw = (process.env.OPENCODE_IDLE_TIMEOUT_MS || "").trim();
   if (!raw) return DEFAULT_IDLE_TIMEOUT_MS;
@@ -45,6 +59,7 @@ const IDLE_TIMEOUT_MS = (() => {
   if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MS;
   return parsed;
 })();
+const READY_TIMEOUT_MS = resolveOpencodeServerReadyTimeoutMs();
 const MAX_SERVERS = 10;
 const debugEnabled = process.env.OPENCODE_DEBUG === "true";
 const debugLog = (...args: unknown[]) => {
@@ -377,7 +392,7 @@ class OpencodeServerManager {
   private async waitForServerReady(
     url: string,
     proc: ChildProcess,
-    timeoutMs = 20_000,
+    timeoutMs = READY_TIMEOUT_MS,
   ): Promise<void> {
     const startedAt = Date.now();
     let attempt = 0;
@@ -412,7 +427,9 @@ class OpencodeServerManager {
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
     }
 
-    throw new Error(`[OpenCode] Timed out waiting for server to be ready at ${url}`);
+    throw new Error(
+      `[OpenCode] Timed out waiting ${timeoutMs}ms for server to be ready at ${url}`,
+    );
   }
 
   private async spawnServer(

@@ -21,6 +21,8 @@ import { agentLeaseReporter } from "../services/reporting/AgentLeaseReporter.js"
 import { requestBucketSyncAfterAgentTask } from "../services/sync/AgentTaskSyncService.js";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService.js";
 import { workspaceEventPump } from "./events/workspaceEventPump.js";
+import { isStudioSoftContextLimitReached } from "../../shared/opencodeContextPolicy.js";
+import { getStudioOpencodeSoftContextLimitTokens } from "../config.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel } from "./modelConfig.js";
@@ -39,6 +41,10 @@ const sessionTitleCache = new Map<
 
 const DEFAULT_TITLE_TTL_MS = 30_000;
 const PENDING_TITLE_TTL_MS = 5_000;
+type SessionMessageRecord = {
+  info?: Record<string, unknown>;
+  parts?: Array<Record<string, unknown>>;
+};
 
 function isPlaceholderTitle(title: string | undefined): boolean {
   if (!title) return true;
@@ -74,6 +80,194 @@ async function getSessionTitle(
   }
 }
 
+function readSessionString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function readSessionNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function getSessionTokenTotal(
+  info: Record<string, unknown> | undefined,
+): number | undefined {
+  if (!info || typeof info !== "object") {
+    return undefined;
+  }
+
+  const tokens = info.tokens as Record<string, unknown> | undefined;
+  if (!tokens || typeof tokens !== "object") {
+    return undefined;
+  }
+
+  const explicitTotal = readSessionNumber(tokens.total);
+  if (explicitTotal && explicitTotal > 0) {
+    return explicitTotal;
+  }
+
+  const input = readSessionNumber(tokens.input) ?? 0;
+  const output = readSessionNumber(tokens.output) ?? 0;
+  const reasoning = readSessionNumber(tokens.reasoning) ?? 0;
+  const cache = (tokens.cache as Record<string, unknown> | undefined) ?? {};
+  const cacheRead = readSessionNumber(cache.read) ?? 0;
+  const cacheWrite = readSessionNumber(cache.write) ?? 0;
+  const total = input + output + reasoning + cacheRead + cacheWrite;
+
+  return total > 0 ? total : undefined;
+}
+
+function getLatestAssistantContextSnapshot(messages: SessionMessageRecord[]): {
+  totalTokens: number;
+  provider?: string;
+  modelId?: string;
+  summary: boolean;
+} | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const info = message?.info;
+    if (info?.role !== "assistant") {
+      continue;
+    }
+
+    const totalTokens = getSessionTokenTotal(info);
+    if (!totalTokens) {
+      continue;
+    }
+
+    return {
+      totalTokens,
+      provider: readSessionString(
+        info.providerID,
+        info.providerId,
+        (info.model as Record<string, unknown> | undefined)?.providerID,
+        (info.model as Record<string, unknown> | undefined)?.providerId,
+      ),
+      modelId: readSessionString(
+        info.modelID,
+        info.modelId,
+        (info.model as Record<string, unknown> | undefined)?.modelID,
+        (info.model as Record<string, unknown> | undefined)?.modelId,
+      ),
+      summary: info.summary === true,
+    };
+  }
+
+  return null;
+}
+
+function resolveCompactionModelSelection(
+  preferredModel: ModelSelection | undefined,
+  latestAssistant: {
+    provider?: string;
+    modelId?: string;
+  } | null,
+): ModelSelection | null {
+  if (preferredModel) {
+    return preferredModel;
+  }
+
+  if (latestAssistant?.provider && latestAssistant.modelId) {
+    return {
+      provider: latestAssistant.provider,
+      modelId: latestAssistant.modelId,
+    };
+  }
+
+  return getDefaultModel();
+}
+
+async function maybeSoftCompactSession(options: {
+  client: OpencodeClient;
+  directory: string;
+  sessionId: string;
+  modelSelection?: ModelSelection;
+}): Promise<boolean> {
+  try {
+    const result = await options.client.session.messages({
+      sessionID: options.sessionId,
+      directory: options.directory,
+    });
+    if (result.error) {
+      console.warn(
+        `[OpenCode] Failed to inspect session=${options.sessionId} for soft compaction: ${JSON.stringify(result.error)}`,
+      );
+      return false;
+    }
+
+    const messages = Array.isArray(result.data)
+      ? (result.data as SessionMessageRecord[])
+      : [];
+    const latestAssistant = getLatestAssistantContextSnapshot(messages);
+    if (!latestAssistant || latestAssistant.summary) {
+      return false;
+    }
+
+    const softContextLimitTokens = getStudioOpencodeSoftContextLimitTokens();
+    if (
+      !isStudioSoftContextLimitReached({
+        totalTokens: latestAssistant.totalTokens,
+        softLimit: softContextLimitTokens,
+      })
+    ) {
+      return false;
+    }
+
+    const compactionModel = resolveCompactionModelSelection(
+      options.modelSelection,
+      latestAssistant,
+    );
+    if (!compactionModel) {
+      console.warn(
+        `[OpenCode] Skipping soft compaction for session=${options.sessionId}; no model is configured.`,
+      );
+      return false;
+    }
+
+    console.log(
+      `[OpenCode] Auto-compacting session=${options.sessionId} totalTokens=${latestAssistant.totalTokens} threshold=${softContextLimitTokens} model=${compactionModel.provider}/${compactionModel.modelId}`,
+    );
+    const summarizeResult = await options.client.session.summarize({
+      sessionID: options.sessionId,
+      directory: options.directory,
+      providerID: compactionModel.provider,
+      modelID: compactionModel.modelId,
+      auto: true,
+    });
+    if (summarizeResult.error) {
+      console.warn(
+        `[OpenCode] Soft compaction failed for session=${options.sessionId}: ${JSON.stringify(summarizeResult.error)}`,
+      );
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.warn(
+      `[OpenCode] Soft compaction failed for session=${options.sessionId}: ${toErrorMessage(error, "Unknown compaction failure")}`,
+    );
+    return false;
+  }
+}
+
 export async function runTask(
   task: string,
   cwd: string,
@@ -93,6 +287,12 @@ export async function runTask(
   await workspaceEventPump.retainTemporarily(directory);
 
   const currentSessionId = await getOrCreateSession(client, directory, sessionId);
+  await maybeSoftCompactSession({
+    client,
+    directory,
+    sessionId: currentSessionId,
+    modelSelection: model,
+  });
   const isNewSession = !sessionId;
   const leaseRunId = crypto.randomUUID();
   const connectedProjectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
@@ -114,6 +314,35 @@ export async function runTask(
   }
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
   let completionHandled = false;
+  let idleFinalizationInFlight = false;
+
+  const finalizeSessionRun = () => {
+    if (completionHandled) return;
+    completionHandled = true;
+    agentLeaseReporter.finishRun(leaseRunId);
+
+    agentEventEmitter.emitSessionEvent(
+      currentSessionId,
+      createAgentEvent(currentSessionId, "session.completed", {
+        kind: "session.completed",
+      } as SessionCompletedData),
+    );
+    void (async () => {
+      const sessionTitle = await getSessionTitle(client, directory, currentSessionId);
+      if (sessionTitle) {
+        await usageReporter.updateSessionTitle(
+          currentSessionId,
+          sessionTitle,
+          process.env.VIVD_PROJECT_SLUG || cwd,
+        );
+      }
+    })();
+    requestBucketSyncAfterAgentTask({
+      sessionId: currentSessionId,
+      projectDir: directory,
+    });
+    stop();
+  };
 
   const { start, stop } = useEvents(client, {
     sessionId: currentSessionId,
@@ -207,32 +436,21 @@ export async function runTask(
         process.env.VIVD_PROJECT_SLUG || cwd,
       );
     },
-    onIdle: () => {
-      if (completionHandled) return;
-      completionHandled = true;
-      agentLeaseReporter.finishRun(leaseRunId);
+    onIdle: async () => {
+      if (completionHandled || idleFinalizationInFlight) return;
+      idleFinalizationInFlight = true;
 
-      agentEventEmitter.emitSessionEvent(
-        currentSessionId,
-        createAgentEvent(currentSessionId, "session.completed", {
-          kind: "session.completed",
-        } as SessionCompletedData),
-      );
-      void (async () => {
-        const sessionTitle = await getSessionTitle(client, directory, currentSessionId);
-        if (sessionTitle) {
-          await usageReporter.updateSessionTitle(
-            currentSessionId,
-            sessionTitle,
-            process.env.VIVD_PROJECT_SLUG || cwd,
-          );
-        }
-      })();
-      requestBucketSyncAfterAgentTask({
-        sessionId: currentSessionId,
-        projectDir: directory,
-      });
-      stop();
+      try {
+        await maybeSoftCompactSession({
+          client,
+          directory,
+          sessionId: currentSessionId,
+          modelSelection: model,
+        });
+      } finally {
+        idleFinalizationInFlight = false;
+        finalizeSessionRun();
+      }
     },
     onSessionError: (error) => {
       agentEventEmitter.emitSessionEvent(

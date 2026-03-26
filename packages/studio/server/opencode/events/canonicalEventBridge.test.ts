@@ -83,4 +83,33 @@ describe("canonicalEventBridge", () => {
 
     await iterator.return?.(undefined);
   });
+
+  it("does not replay buffered events for a fresh live-only subscription", async () => {
+    const workspaceKey = canonicalEventBridge.createWorkspaceKey("/tmp/workspace-a");
+    canonicalEventBridge.emitBridgeStatus(workspaceKey, "connected");
+    canonicalEventBridge.emitOpencodeEvent(workspaceKey, {
+      type: "message.updated",
+      properties: {
+        sessionID: "sess-a",
+        info: { id: "msg-old", role: "assistant" },
+      },
+    });
+
+    const iterator = canonicalEventBridge
+      .createWorkspaceStream("/tmp/workspace-a", undefined, undefined, false)
+      [Symbol.asyncIterator]();
+    const pendingNext = iterator.next();
+
+    const expected = canonicalEventBridge.emitOpencodeEvent(workspaceKey, {
+      type: "message.updated",
+      properties: {
+        sessionID: "sess-a",
+        info: { id: "msg-live", role: "assistant" },
+      },
+    });
+
+    expect((await nextResult(pendingNext)).value?.eventId).toBe(expected?.eventId);
+
+    await iterator.return?.(undefined);
+  });
 });

@@ -6,6 +6,7 @@ import { SessionContextIndicator } from "./SessionContextIndicator";
 const { chatContextState, opencodeState } = vi.hoisted(() => ({
   chatContextState: {
     selectedSessionId: "sess-1",
+    softContextLimitTokens: 250_000,
     availableModels: [
       {
         tier: "advanced" as const,
@@ -56,19 +57,31 @@ describe("SessionContextIndicator", () => {
 
     expect(
       screen.getByTestId("session-context-usage-button"),
-    ).toHaveTextContent("51%");
+    ).toHaveTextContent("64%");
 
     fireEvent.click(
       screen.getByRole("button", { name: /view context usage/i }),
     );
 
     expect(screen.getByText("Context Usage")).toBeInTheDocument();
-    expect(screen.getByText("51% used")).toBeInTheDocument();
-    expect(screen.getByText("OpenAI")).toBeInTheDocument();
-    expect(screen.getByText("GPT-4.1")).toBeInTheDocument();
-    expect(screen.getByText("1,000")).toBeInTheDocument();
+    expect(screen.getByText("64% of working limit")).toBeInTheDocument();
     expect(screen.getByText("510")).toBeInTheDocument();
     expect(screen.getByText("42 ⬡")).toBeInTheDocument();
+    expect(screen.getByText("250,000")).toBeInTheDocument();
+    expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
+    expect(screen.queryByText("GPT-4.1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Input Tokens")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("session-context-details-toggle"));
+
+    expect(screen.getByText("Used Model")).toBeInTheDocument();
+    expect(screen.getByText("GPT-4.1")).toBeInTheDocument();
+    expect(screen.getByText("Effective Working Limit")).toBeInTheDocument();
+    expect(screen.getAllByText("800")).toHaveLength(2);
+    expect(screen.getByText("1,000")).toBeInTheDocument();
+    expect(screen.getByText("Cache Read")).toBeInTheDocument();
+    expect(screen.getByText("Cache Write")).toBeInTheDocument();
+    expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
 
     const dialog = screen.getByRole("dialog");
     expect(dialog.className).toContain("max-h-[calc(100dvh-1rem)]");
@@ -77,6 +90,12 @@ describe("SessionContextIndicator", () => {
     fireEvent.click(screen.getByRole("button", { name: /close/i }));
 
     expect(screen.queryByText("Context Usage")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /view context usage/i }),
+    );
+
+    expect(screen.queryByText("Used Model")).not.toBeInTheDocument();
   });
 
   it("stays hidden when no session is selected", () => {

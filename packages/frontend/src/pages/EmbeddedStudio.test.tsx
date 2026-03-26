@@ -160,11 +160,13 @@ function renderEmbeddedStudio() {
 
 describe("EmbeddedStudio", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
   beforeEach(() => {
     window.sessionStorage.clear();
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     useParamsMock.mockReset();
     useLocationMock.mockReset();
     useNavigateMock.mockReset();
@@ -337,7 +339,7 @@ describe("EmbeddedStudio", () => {
       data: {
         status: "running",
         url: "https://studio.example.com/runtime",
-        accessToken: null,
+        bootstrapToken: null,
       },
     });
 
@@ -378,6 +380,42 @@ describe("EmbeddedStudio", () => {
     ).toHaveLength(1);
   });
 
+  it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", () => {
+    getStudioUrlUseQueryMock.mockReturnValueOnce({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        bootstrapToken: "bootstrap-1",
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    expect(iframe.getAttribute("src")).toBe("about:blank");
+
+    const bootstrapForm = document.querySelector(
+      'form[target="vivd-studio-embedded-site-1-v1"]',
+    ) as HTMLFormElement | null;
+    expect(bootstrapForm?.getAttribute("action")).toBe(
+      "https://studio.example.com/runtime/vivd-studio/api/bootstrap",
+    );
+
+    const bootstrapTokenField = bootstrapForm?.querySelector(
+      'input[name="bootstrapToken"]',
+    ) as HTMLInputElement | null;
+    expect(bootstrapTokenField?.value).toBe("bootstrap-1");
+
+    const nextField = bootstrapForm?.querySelector(
+      'input[name="next"]',
+    ) as HTMLInputElement | null;
+    expect(nextField?.value).toContain(
+      "https://studio.example.com/runtime/vivd-studio?embedded=1",
+    );
+    expect(nextField?.value).not.toContain("vivdStudioToken");
+    expect(HTMLFormElement.prototype.submit).toHaveBeenCalledOnce();
+  });
+
   it("treats a same-origin studio iframe load as ready when the shell document is present", () => {
     const postMessage = vi.fn();
     const contentWindowMock = {
@@ -399,7 +437,7 @@ describe("EmbeddedStudio", () => {
       data: {
         status: "running",
         url: "http://app.localhost/_studio/runtime-123",
-        accessToken: null,
+        bootstrapToken: null,
       },
     });
 
@@ -454,7 +492,7 @@ describe("EmbeddedStudio", () => {
         data: {
           status: "running",
           url: "http://app.localhost/_studio/runtime-123",
-          accessToken: null,
+          bootstrapToken: null,
         },
       });
 
@@ -518,7 +556,7 @@ describe("EmbeddedStudio", () => {
         data: {
           status: "running",
           url: "http://app.localhost/_studio/runtime-123",
-          accessToken: null,
+          bootstrapToken: null,
         },
       });
 
@@ -597,7 +635,7 @@ describe("EmbeddedStudio", () => {
         data: {
           status: "running",
           url: "http://app.localhost/_studio/runtime-123",
-          accessToken: null,
+          bootstrapToken: null,
         },
       });
 
@@ -663,7 +701,7 @@ describe("EmbeddedStudio", () => {
       data: {
         status: "running",
         url: "https://studio.example.com/runtime",
-        accessToken: null,
+        bootstrapToken: null,
       },
     });
     window.sessionStorage.setItem(

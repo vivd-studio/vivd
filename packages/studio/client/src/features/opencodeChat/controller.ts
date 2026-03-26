@@ -153,8 +153,8 @@ export function useOpencodeChatController({
     },
   });
   const abortSessionMutation = trpc.agent.abortSession.useMutation({
-    onSuccess: () => {
-      refetchMessages();
+    onSuccess: async () => {
+      await Promise.allSettled([refetchSessions(), refetchMessages()]);
     },
     onError: (error) => {
       setLocalSessionError(

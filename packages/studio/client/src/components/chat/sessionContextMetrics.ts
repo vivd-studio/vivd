@@ -1,4 +1,8 @@
 import type { OpenCodeSessionMessageRecord } from "@/features/opencodeChat";
+import {
+  calculateStudioContextUsagePercentage,
+  resolveStudioWorkingContextLimit,
+} from "@studio/shared/opencodeContextPolicy";
 import type { ModelTier } from "./chatTypes";
 
 export interface SessionContextSnapshot {
@@ -9,6 +13,7 @@ export interface SessionContextSnapshot {
   modelLabel: string;
   limit?: number;
   inputLimit?: number;
+  workingLimit: number;
   input: number;
   output: number;
   reasoning: number;
@@ -30,6 +35,9 @@ export interface SessionContextMetrics {
 export function getSessionContextMetrics(
   messages: OpenCodeSessionMessageRecord[] = [],
   models: ModelTier[] = [],
+  options?: {
+    softContextLimitTokens?: number;
+  },
 ): SessionContextMetrics {
   const totalCost = messages.reduce((sum, record) => {
     const info = record.info as Record<string, unknown> | undefined;
@@ -95,6 +103,11 @@ export function getSessionContextMetrics(
   );
   const limit = matchedModel?.contextLimit;
   const inputLimit = matchedModel?.inputLimit;
+  const workingLimit = resolveStudioWorkingContextLimit({
+    contextLimit: limit,
+    inputLimit,
+    softLimit: options?.softContextLimitTokens,
+  });
 
   return {
     totalCost,
@@ -111,13 +124,19 @@ export function getSessionContextMetrics(
         matchedModel?.modelLabel || modelId || matchedModel?.modelId || "Unknown",
       limit,
       inputLimit,
+      workingLimit,
       input: tokens.input,
       output: tokens.output,
       reasoning: tokens.reasoning,
       cacheRead: tokens.cacheRead,
       cacheWrite: tokens.cacheWrite,
       total: tokens.total,
-      usage: limit ? Math.round((tokens.total / limit) * 100) : null,
+      usage: calculateStudioContextUsagePercentage({
+        totalTokens: tokens.total,
+        contextLimit: limit,
+        inputLimit,
+        softLimit: options?.softContextLimitTokens,
+      }),
       completedAt: readNumber(
         (info.time as Record<string, unknown> | undefined)?.completed,
         (info.time as Record<string, unknown> | undefined)?.updated,

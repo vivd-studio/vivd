@@ -648,7 +648,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
     organizationId: string,
     projectSlug: string,
     version: number,
-  ): Promise<{ url: string; accessToken?: string } | null> {
+  ): Promise<{ studioId: string; url: string; accessToken?: string } | null> {
     try {
       return getStudioMachineUrlWorkflow(
         {
@@ -659,6 +659,7 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
           getMachineExternalPort,
           getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
           getStudioAccessTokenFromMachine,
+          resolveStudioIdFromMachine,
         },
         organizationId,
         projectSlug,

@@ -1126,7 +1126,10 @@ export function PreviewProvider({
           : resolveStudioRuntimePath(`/vivd-studio/api${url}`);
   const previewRootUrl = getPreviewRootUrl(baseUrl || "", previewMode);
   const fullUrl = previewRootUrl
-    ? buildPreviewUrl(previewRootUrl, iframePreviewPath)
+    ? withVivdStudioTokenQuery(
+        buildPreviewUrl(previewRootUrl, iframePreviewPath),
+        getVivdStudioToken(),
+      )
     : "";
 
   const navigatePreviewPath = useCallback(

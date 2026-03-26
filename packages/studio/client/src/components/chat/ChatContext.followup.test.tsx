@@ -58,6 +58,9 @@ vi.mock("@/lib/trpc", () => ({
       getAvailableModels: {
         useQuery: () => ({ data: [] }),
       },
+      getRuntimeConfig: {
+        useQuery: () => ({ data: { softContextLimitTokens: 250_000 } }),
+      },
       startInitialGeneration: {
         useMutation: () => ({
           mutateAsync: startInitialGenerationMock,
@@ -161,9 +164,10 @@ describe("ChatProvider follow-up behavior", () => {
     expect(sendTaskMock).toHaveBeenCalledWith(
       "Polish the headline",
       "sess-1",
-      expect.objectContaining({
-        onSettled: expect.any(Function),
-      }),
+      {
+        onCompleted: undefined,
+        onSettled: undefined,
+      },
     );
     expect(latestContext!.queuedFollowups).toEqual([]);
   });
@@ -217,6 +221,101 @@ describe("ChatProvider follow-up behavior", () => {
     await waitFor(() => {
       expect(latestContext!.queuedFollowups).toEqual([]);
     });
+  });
+
+  it("keeps steer available while an existing-session dispatch is still in flight", async () => {
+    controllerState.runTaskPending = true;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    expect(latestContext).not.toBeNull();
+    expect(latestContext!.isLoading).toBe(false);
+
+    act(() => {
+      latestContext!.setInput("Tighten the intro copy");
+    });
+
+    await waitFor(() => {
+      expect(latestContext!.input).toBe("Tighten the intro copy");
+    });
+
+    await act(async () => {
+      await latestContext!.handleSend();
+    });
+
+    expect(sendTaskMock).toHaveBeenCalledWith(
+      "Tighten the intro copy",
+      "sess-1",
+      {
+        onCompleted: undefined,
+        onSettled: undefined,
+      },
+    );
+  });
+
+  it("queues existing-session follow-ups while dispatch is still in flight in queue mode", async () => {
+    window.localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, "queue");
+    controllerState.runTaskPending = true;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    expect(latestContext).not.toBeNull();
+    expect(latestContext!.isLoading).toBe(false);
+
+    act(() => {
+      latestContext!.setInput("Polish the FAQ answers");
+    });
+
+    await waitFor(() => {
+      expect(latestContext!.input).toBe("Polish the FAQ answers");
+    });
+
+    await act(async () => {
+      await latestContext!.handleSend();
+    });
+
+    expect(sendTaskMock).not.toHaveBeenCalled();
+    expect(latestContext!.queuedFollowups).toHaveLength(1);
+    expect(latestContext!.queuedFollowups[0]?.preview).toBe(
+      "Polish the FAQ answers",
+    );
+  });
+
+  it("keeps the composer locked until a new session has a target id", async () => {
+    controllerState.selectedSessionId = null;
+    controllerState.runTaskPending = true;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    expect(latestContext).not.toBeNull();
+    expect(latestContext!.isLoading).toBe(true);
+
+    act(() => {
+      latestContext!.setInput("Start the homepage");
+    });
+
+    await waitFor(() => {
+      expect(latestContext!.input).toBe("Start the homepage");
+    });
+
+    await act(async () => {
+      await latestContext!.handleSend();
+    });
+
+    expect(sendTaskMock).not.toHaveBeenCalled();
+    expect(latestContext!.queuedFollowups).toEqual([]);
   });
 
   it("pauses auto-send after stop until a queued follow-up is sent manually", async () => {

@@ -63,6 +63,7 @@ export type CanonicalTimelineItem =
       runInProgress: boolean;
       showWorkedSection: boolean;
       workedLabel?: string;
+      sessionDividerLabel?: string;
       fallbackState: TimelineFallbackState;
     };
 
@@ -79,7 +80,10 @@ type BuildCanonicalTimelineModelArgs = {
 
 function extractRenderableParts(parts: RenderableChatPart[]): RenderableChatPart[] {
   return parts.filter((part) =>
-    part?.type === "reasoning" || part?.type === "tool" || part?.type === "text",
+    part?.type === "reasoning" ||
+    part?.type === "tool" ||
+    part?.type === "text" ||
+    part?.type === "compaction",
   );
 }
 
@@ -116,6 +120,18 @@ function hasInterleavedActionAndText(parts: RenderableChatPart[]): boolean {
   }
 
   return false;
+}
+
+function isCompactionMarkerMessage(message: RenderableChatMessage | undefined): boolean {
+  if (!message || message.role !== "user") {
+    return false;
+  }
+
+  if (!Array.isArray(message.parts) || message.parts.length === 0) {
+    return false;
+  }
+
+  return message.parts.every((part) => part?.type === "compaction");
 }
 
 function finalizeInterruptedToolParts(
@@ -370,7 +386,9 @@ export function buildCanonicalTimelineModel({
   const items: CanonicalTimelineItem[] = [];
 
   turns.forEach((turn) => {
-    if (turn.userMessage) {
+    const isCompactionTurn = isCompactionMarkerMessage(turn.userMessage);
+
+    if (turn.userMessage && !isCompactionTurn) {
       items.push({
         kind: "user",
         key: `${turn.runId}-user`,
@@ -403,13 +421,13 @@ export function buildCanonicalTimelineModel({
       kind: "agent",
       key: `${turn.runId}-agent`,
       runId: turn.runId,
-      userMessageId: turn.userMessage?.id,
+      userMessageId: isCompactionTurn ? undefined : turn.userMessage?.id,
       message: latestAgentMessage,
       completedAt: turnCompletedAt,
       orderedParts,
       actionParts,
       responseParts,
-      summaryDiffs: turn.userMessage?.summaryDiffs ?? [],
+      summaryDiffs: isCompactionTurn ? [] : (turn.userMessage?.summaryDiffs ?? []),
       hasInterleavedParts,
       runInProgress,
       showWorkedSection,
@@ -419,6 +437,7 @@ export function buildCanonicalTimelineModel({
             turnCompletedAt,
           )
         : undefined,
+      sessionDividerLabel: isCompactionTurn ? "Session compacted" : undefined,
       fallbackState: runInProgress
         ? deriveFallbackState(actionParts, isWaiting)
         : null,

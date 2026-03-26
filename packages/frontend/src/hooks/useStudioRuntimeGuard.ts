@@ -5,7 +5,7 @@ type EnsureStudioRunningResult =
   | {
       success: true;
       url: string;
-      accessToken: string | null;
+      bootstrapToken: string | null;
     }
   | {
       success: false;
@@ -33,7 +33,7 @@ type UseStudioRuntimeGuardOptions = {
   studioBaseUrl: string | null;
   touchStudio: () => void;
   ensureStudioRunning: () => Promise<EnsureStudioRunningResult>;
-  onRecovered: (next: { url: string; accessToken: string | null }) => void;
+  onRecovered: (next: { url: string; bootstrapToken: string | null }) => void;
   onRecoveryError?: (message: string) => void;
   timing?: Partial<StudioRuntimeGuardTiming>;
 };
@@ -131,7 +131,7 @@ export function useStudioRuntimeGuard({
       if (result.success) {
         onRecoveredRef.current({
           url: result.url,
-          accessToken: result.accessToken ?? null,
+          bootstrapToken: result.bootstrapToken ?? null,
         });
         return;
       }

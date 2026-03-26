@@ -141,6 +141,19 @@ describe("agent router", () => {
     expect(result).toEqual([{ provider: "openai", modelId: "gpt-4.1-mini" }]);
   });
 
+  it("returns runtime config for the studio client", async () => {
+    process.env.STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS = "310000";
+    const caller = agentRouter.createCaller(makeContext());
+
+    const result = await caller.getRuntimeConfig();
+
+    expect(result).toEqual({
+      softContextLimitTokens: 310_000,
+    });
+
+    delete process.env.STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS;
+  });
+
   it("creates a session for the active workspace directory", async () => {
     const caller = agentRouter.createCaller(makeContext());
 

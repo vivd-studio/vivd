@@ -19,6 +19,7 @@ describe("LocalStudioMachineProvider orchestration", () => {
       studioId: "studio-1",
       url: "http://localhost:3200",
       port: 3200,
+      accessToken: "access-1",
     };
 
     let calls = 0;
@@ -38,5 +39,52 @@ describe("LocalStudioMachineProvider orchestration", () => {
     expect(second).toEqual(result);
     provider.stopAll();
   });
-});
 
+  it("returns the local studio access token from getUrl", async () => {
+    const provider = new LocalStudioMachineProvider();
+    (provider as any).studios.set("org-1:site-1:v1", {
+      process: {} as any,
+      port: 3200,
+      studioId: "studio-1",
+      accessToken: "access-1",
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 1,
+      lastActivityAt: new Date(),
+      objectStorageSync: null,
+    });
+
+    await expect(provider.getUrl("org-1", "site-1", 1)).resolves.toEqual({
+      studioId: "studio-1",
+      url: "http://localhost:3200",
+      accessToken: "access-1",
+    });
+
+    provider.stopAll();
+  });
+
+  it("resolves runtime auth for local studios", async () => {
+    const provider = new LocalStudioMachineProvider();
+    (provider as any).studios.set("org-1:site-1:v1", {
+      process: {} as any,
+      port: 3200,
+      studioId: "studio-1",
+      accessToken: "access-1",
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 1,
+      lastActivityAt: new Date(),
+      objectStorageSync: null,
+    });
+
+    await expect(provider.resolveRuntimeAuth("studio-1", "access-1")).resolves.toEqual({
+      studioId: "studio-1",
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 1,
+    });
+    await expect(provider.resolveRuntimeAuth("studio-1", "wrong")).resolves.toBeNull();
+
+    provider.stopAll();
+  });
+});

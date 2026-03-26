@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { POLLING_INFREQUENT } from "@/app/config/polling";
+import { DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS } from "@studio/shared/opencodeContextPolicy";
 import { useOptionalPreview } from "../preview/PreviewContext";
 import type {
   ChatContextValue,
@@ -94,6 +95,8 @@ export function ChatProvider({
   const [initialGenerationFailed, setInitialGenerationFailed] = useState<string | null>(
     null,
   );
+  const [isPreparingSend, setIsPreparingSend] = useState(false);
+  const isPreparingSendRef = useRef(false);
   const {
     confirmDialog,
     requestConfirm,
@@ -114,7 +117,16 @@ export function ChatProvider({
       staleTime: 60000,
     },
   );
+  const { data: runtimeConfigData } = trpc.agent.getRuntimeConfig.useQuery(
+    undefined,
+    {
+      staleTime: 60000,
+    },
+  );
   const availableModels = (availableModelsData ?? []) as ModelTier[];
+  const softContextLimitTokens =
+    runtimeConfigData?.softContextLimitTokens ??
+    DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS;
   const [selectedModel, setSelectedModelState] = useState<ModelTier | null>(null);
   const [followupBehavior, setFollowupBehaviorState] =
     useState<FollowupBehavior>(getStoredFollowupBehavior);
@@ -183,8 +195,6 @@ export function ChatProvider({
     sessionError,
     clearSessionError,
     runTaskPending,
-    isSending,
-    setIsSending,
     isStreaming,
     isWaiting,
     isThinking,
@@ -288,7 +298,10 @@ export function ChatProvider({
         onSettled?: () => void;
       },
     ) => {
-      if (activeQuestionRequest || runTaskPending || isSending) {
+      const hasSessionTarget = Boolean(targetSessionId);
+      const busySession = hasSessionTarget && (isThinking || runTaskPending);
+
+      if (activeQuestionRequest || (!hasSessionTarget && runTaskPending)) {
         options?.onCompleted?.(false);
         options?.onSettled?.();
         return;
@@ -296,7 +309,7 @@ export function ChatProvider({
 
       if (
         targetSessionId &&
-        isThinking &&
+        busySession &&
         !options?.forceSend &&
         followupBehavior === "queue"
       ) {
@@ -314,7 +327,6 @@ export function ChatProvider({
     [
       activeQuestionRequest,
       followupBehavior,
-      isSending,
       isThinking,
       queueFollowup,
       runTaskPending,
@@ -352,7 +364,7 @@ export function ChatProvider({
           activeQuestionRequest ||
           isThinking ||
           runTaskPending ||
-          isSending ||
+          isPreparingSend ||
           initialGenerationStarting
         ) {
           return;
@@ -402,7 +414,7 @@ export function ChatProvider({
     activeQuestionRequest,
     clearSessionError,
     initialGenerationStarting,
-    isSending,
+    isPreparingSend,
     isThinking,
     projectSlug,
     refetchSessions,
@@ -466,29 +478,34 @@ export function ChatProvider({
   }, [selectedSessionId]);
 
   const handleSend = async () => {
+    const hasSessionTarget = Boolean(selectedSessionId);
     if (
       (!input.trim() &&
         !attachedElement &&
         attachedImages.length === 0 &&
         attachedFiles.length === 0) ||
       activeQuestionRequest ||
-      runTaskPending ||
-      isSending
+      isPreparingSendRef.current ||
+      (!hasSessionTarget && runTaskPending)
     ) {
       return;
     }
 
-    setIsSending(true);
+    isPreparingSendRef.current = true;
+    setIsPreparingSend(true);
 
-    const task = await buildTaskWithAttachments(input);
+    try {
+      const task = await buildTaskWithAttachments(input);
 
-    setInput("");
-    setAttachedElement(null);
-    clearSessionError();
+      setInput("");
+      setAttachedElement(null);
+      clearSessionError();
 
-    submitPreparedTask(task, selectedSessionId, {
-      onSettled: () => setIsSending(false),
-    });
+      submitPreparedTask(task, selectedSessionId);
+    } finally {
+      isPreparingSendRef.current = false;
+      setIsPreparingSend(false);
+    }
   };
 
   const handleContinueSession = useCallback(() => {
@@ -497,7 +514,7 @@ export function ChatProvider({
       activeQuestionRequest ||
       isThinking ||
       runTaskPending ||
-      isSending ||
+      isPreparingSend ||
       isUsageBlocked
     ) {
       return;
@@ -508,8 +525,8 @@ export function ChatProvider({
     selectedSessionId,
     activeQuestionRequest,
     isThinking,
+    isPreparingSend,
     runTaskPending,
-    isSending,
     isUsageBlocked,
     sendTask,
   ]);
@@ -701,7 +718,7 @@ export function ChatProvider({
       activeQuestionRequest ||
       isThinking ||
       runTaskPending ||
-      isSending ||
+      isPreparingSend ||
       isUsageBlocked
     ) {
       return;
@@ -735,7 +752,7 @@ export function ChatProvider({
     });
   }, [
     activeQuestionRequest,
-    isSending,
+    isPreparingSend,
     isThinking,
     isUsageBlocked,
     queuedFollowupFailedBySessionId,
@@ -794,13 +811,17 @@ export function ChatProvider({
     setSelectorMode,
     selectorModeAvailable: !!setSelectorMode,
     isReverted,
-    isLoading: runTaskPending || isSending || initialGenerationStarting,
+    isLoading:
+      initialGenerationStarting ||
+      isPreparingSend ||
+      (!selectedSessionId && runTaskPending),
     activeQuestionRequest,
     sessionDebugState,
     sessionError,
     clearSessionError,
     usageLimitStatus: usageLimitStatus ?? null,
     isUsageBlocked,
+    softContextLimitTokens,
     availableModels,
     selectedModel,
     setSelectedModel,

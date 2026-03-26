@@ -6,6 +6,7 @@ export interface BuildStudioOpencodeConfigOptions {
 
 export const STUDIO_OPENCODE_CONFIG_OVERRIDES: JsonObject = {
   tools: {
+    // Keep the upstream question tool available in Studio sessions.
     question: true,
   },
   // Prevent recursive tool-invocation loops in Studio agent sessions.

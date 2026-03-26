@@ -36,6 +36,7 @@ export type StudioRuntimeAuthIdentity = {
 };
 
 export interface StudioMachineUrlResult {
+  studioId: string;
   url: string;
   accessToken?: string;
 }

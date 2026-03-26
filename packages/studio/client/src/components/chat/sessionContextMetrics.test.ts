@@ -80,18 +80,19 @@ describe("sessionContextMetrics", () => {
       modelLabel: "GPT-4.1",
       limit: 1_000,
       inputLimit: 800,
+      workingLimit: 800,
       input: 300,
       output: 120,
       reasoning: 30,
       cacheRead: 50,
       cacheWrite: 0,
       total: 500,
-      usage: 50,
+      usage: 63,
       completedAt: 200,
     });
   });
 
-  it("falls back to ids when model metadata is unavailable", () => {
+  it("uses a provided soft limit when model metadata is unavailable", () => {
     const metrics = getSessionContextMetrics([
       {
         info: {
@@ -102,15 +103,17 @@ describe("sessionContextMetrics", () => {
           modelId: "google/gemini-flash",
           cost: 0,
           tokens: {
-            input: 10,
-            output: 20,
+            input: 90_000,
+            output: 10_000,
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
         } as any,
         parts: [],
       },
-    ]);
+    ], [], {
+      softContextLimitTokens: 300_000,
+    });
 
     expect(metrics.context).toEqual({
       messageId: "a1",
@@ -120,13 +123,14 @@ describe("sessionContextMetrics", () => {
       modelLabel: "google/gemini-flash",
       limit: undefined,
       inputLimit: undefined,
-      input: 10,
-      output: 20,
+      workingLimit: 300_000,
+      input: 90_000,
+      output: 10_000,
       reasoning: 0,
       cacheRead: 0,
       cacheWrite: 0,
-      total: 30,
-      usage: null,
+      total: 100_000,
+      usage: 33,
       completedAt: undefined,
     });
   });

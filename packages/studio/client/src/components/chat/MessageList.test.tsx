@@ -450,6 +450,18 @@ describe("MessageList latest-user anchoring", () => {
     expect(transcriptContent).not.toContainElement(indicatorButton);
   });
 
+  it("keeps the context indicator left-aligned so it does not cover revert actions", () => {
+    const { container } = render(<MessageList />);
+
+    const overlay = container.querySelector(
+      "[data-testid='session-context-indicator-overlay']",
+    );
+
+    expect(overlay).not.toBeNull();
+    expect(overlay.className).toContain("justify-start");
+    expect(overlay.className).not.toContain("md:justify-end");
+  });
+
   it("auto-follows streamed output while the user stays pinned to the bottom", async () => {
     render(<MessageList />);
 
@@ -467,6 +479,27 @@ describe("MessageList latest-user anchoring", () => {
         behavior: "auto",
       });
     });
+  });
+
+  it("keeps auto-follow paused after a small upward manual scroll near the bottom", async () => {
+    const { container } = render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    scrollToMock.mockClear();
+
+    const viewport = container.querySelector<HTMLElement>("[data-chat-scroll-viewport]");
+    expect(viewport).not.toBeNull();
+
+    viewport!.scrollTop = 75;
+    fireEvent.scroll(viewport!);
+
+    viewportExtraScrollHeight.value = 120;
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    expect(scrollToMock).not.toHaveBeenCalled();
   });
 
   it("pauses auto-follow after the user scrolls away and resumes from the jump button", async () => {

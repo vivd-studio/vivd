@@ -93,8 +93,11 @@ vi.mock("@/lib/trpc", () => ({
         }),
       },
       abortSession: {
-        useMutation: () => ({
-          mutate: abortSessionMutate,
+        useMutation: (options?: { onSuccess?: () => void }) => ({
+          mutate: (input: unknown) => {
+            abortSessionMutate(input);
+            void options?.onSuccess?.();
+          },
           isPending: false,
         }),
       },
@@ -253,5 +256,34 @@ describe("useOpencodeChatController", () => {
     });
 
     expect(runTaskMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("refetches session status and messages after stopping the selected session", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    act(() => {
+      result.current.stopGeneration();
+    });
+
+    expect(abortSessionMutate).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      projectSlug: "site-1",
+      version: 1,
+    });
+
+    await waitFor(() => {
+      expect(mockOpencodeChat.refetchBootstrap).toHaveBeenCalledTimes(1);
+      expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
+        1,
+      );
+    });
   });
 });

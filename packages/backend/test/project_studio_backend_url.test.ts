@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  ensureRunningMock,
-  restartMock,
-  recordStudioVisitMock,
-  projectPluginFindManyMock,
-  organizationFindFirstMock,
-  sessionFindFirstMock,
+  const {
+    ensureRunningMock,
+    restartMock,
+    recordStudioVisitMock,
+    getResolvedBrandingMock,
+    projectPluginFindManyMock,
+    organizationFindFirstMock,
+    sessionFindFirstMock,
   dbSelectMock,
   dbSelectFromMock,
   dbSelectWhereMock,
@@ -14,6 +15,7 @@ const {
   const ensureRunningMock = vi.fn();
   const restartMock = vi.fn();
   const recordStudioVisitMock = vi.fn();
+  const getResolvedBrandingMock = vi.fn();
   const projectPluginFindManyMock = vi.fn();
   const organizationFindFirstMock = vi.fn();
   const sessionFindFirstMock = vi.fn();
@@ -25,6 +27,7 @@ const {
     ensureRunningMock,
     restartMock,
     recordStudioVisitMock,
+    getResolvedBrandingMock,
     projectPluginFindManyMock,
     organizationFindFirstMock,
     sessionFindFirstMock,
@@ -48,6 +51,12 @@ vi.mock("../src/services/studioMachines", () => ({
 
 vi.mock("../src/services/studioMachines/visitStore", () => ({
   recordStudioVisit: recordStudioVisitMock,
+}));
+
+vi.mock("../src/services/email/templateBranding", () => ({
+  emailTemplateBrandingService: {
+    getResolvedBranding: getResolvedBrandingMock,
+  },
 }));
 
 vi.mock("../src/db", () => ({
@@ -119,6 +128,7 @@ describe("project studio callback URL wiring", () => {
     ensureRunningMock.mockReset();
     restartMock.mockReset();
     recordStudioVisitMock.mockReset();
+    getResolvedBrandingMock.mockReset();
     projectPluginFindManyMock.mockReset();
     organizationFindFirstMock.mockReset();
     sessionFindFirstMock.mockReset();
@@ -132,6 +142,7 @@ describe("project studio callback URL wiring", () => {
     process.env.PORT = "3000";
 
     projectPluginFindManyMock.mockResolvedValue([]);
+    getResolvedBrandingMock.mockResolvedValue({ supportEmail: null });
     organizationFindFirstMock.mockResolvedValue({ githubRepoPrefix: null });
     sessionFindFirstMock.mockResolvedValue({ token: "session-token" });
     recordStudioVisitMock.mockResolvedValue(undefined);

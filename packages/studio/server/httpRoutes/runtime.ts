@@ -10,6 +10,7 @@ import { serverManager as opencodeServerManager } from "../opencode/serverManage
 import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
+import { createStudioBootstrapHandler } from "../http/studioAuth.js";
 
 type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewTarget?: string;
@@ -79,9 +80,10 @@ export function registerStudioRuntimeHttpRoutes(
 
   // Health check endpoint for service discovery
   app.get("/health", (_req, res) => {
+    const initialized = workspace.isInitialized();
     res.json({
-      status: "ok",
-      initialized: workspace.isInitialized(),
+      status: initialized ? "ok" : "starting",
+      initialized,
     });
   });
 
@@ -97,6 +99,12 @@ export function registerStudioRuntimeHttpRoutes(
     }
     res.status(200).end();
   });
+
+  app.post(
+    "/vivd-studio/api/bootstrap",
+    express.urlencoded({ extended: false }),
+    createStudioBootstrapHandler(process.env),
+  );
 
   // Serve workspace files in a backend-compatible path:
   // /vivd-studio/api/projects/:slug/v:version/<file>
@@ -308,7 +316,7 @@ export function registerStudioRuntimeHttpRoutes(
   );
 
   // Preview route (static files or dev server proxy)
-  app.use("/preview", async (req, res, next) => {
+  app.use("/preview", requireStudioAuth(), async (req, res, next) => {
     try {
       if (!workspace.isInitialized()) {
         return res.status(503).json({ error: "Workspace not initialized" });
@@ -439,113 +447,120 @@ export default {};
 
   // Backend-compatible static preview endpoint:
   // /vivd-studio/api/preview/:slug/v:version/<file>
-  app.use("/vivd-studio/api/preview/:slug/v:version", async (req, res, next) => {
-    try {
-      if (!workspace.isInitialized()) {
-        return res.status(503).json({ error: "Workspace not initialized" });
-      }
-
-      const { slug, version } = req.params;
-      const basePath = `/vivd-studio/api/preview/${slug}/v${version}`;
-      const forwardedBasePath = resolveForwardedRuntimeBasePath(
-        basePath,
-        getProxyBasePath(req),
-      );
-
-      const urlWithoutQuery = req.url.split("?")[0];
-      const rawFilePath = urlWithoutQuery.startsWith("/")
-        ? urlWithoutQuery.slice(1)
-        : urlWithoutQuery;
-      const filePathRaw = rawFilePath || "index.html";
-      const filePath = decodeUriPath(filePathRaw);
-      if (!filePath) {
-        return res.status(400).json({ error: "Invalid path" });
-      }
-
-      if (!isAllowedProjectFile(filePath)) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-
-      const projectPath = workspace.getProjectPath();
-      let resolvedPath: string;
+  app.use(
+    "/vivd-studio/api/preview/:slug/v:version",
+    requireStudioAuth(),
+    async (req, res, next) => {
       try {
-        resolvedPath = safeJoin(projectPath, filePath);
-      } catch {
-        return res.status(400).json({ error: "Invalid path" });
-      }
-
-      if (
-        fs.existsSync(resolvedPath) &&
-        fs.statSync(resolvedPath).isDirectory()
-      ) {
-        resolvedPath = path.join(resolvedPath, "index.html");
-      }
-
-      if (!fs.existsSync(resolvedPath) && !path.extname(resolvedPath)) {
-        const withHtml = `${resolvedPath}.html`;
-        if (fs.existsSync(withHtml)) {
-          resolvedPath = withHtml;
+        if (!workspace.isInitialized()) {
+          return res.status(503).json({ error: "Workspace not initialized" });
         }
-      }
 
-      if (!fs.existsSync(resolvedPath)) {
-        return res.status(404).json({ error: "File not found" });
-      }
+        const { slug, version } = req.params;
+        const basePath = `/vivd-studio/api/preview/${slug}/v${version}`;
+        const forwardedBasePath = resolveForwardedRuntimeBasePath(
+          basePath,
+          getProxyBasePath(req),
+        );
 
-      if (resolvedPath.endsWith(".html")) {
-        const content = await fs.readFile(resolvedPath, "utf-8");
-        let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
-        processed = injectBasePathScript(processed, forwardedBasePath);
-        res.setHeader("Content-Type", "text/html");
-        return res.send(processed);
-      }
+        const urlWithoutQuery = req.url.split("?")[0];
+        const rawFilePath = urlWithoutQuery.startsWith("/")
+          ? urlWithoutQuery.slice(1)
+          : urlWithoutQuery;
+        const filePathRaw = rawFilePath || "index.html";
+        const filePath = decodeUriPath(filePathRaw);
+        if (!filePath) {
+          return res.status(400).json({ error: "Invalid path" });
+        }
 
-      return res.sendFile(resolvedPath);
-    } catch (err) {
-      return next(err);
-    }
-  });
+        if (!isAllowedProjectFile(filePath)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const projectPath = workspace.getProjectPath();
+        let resolvedPath: string;
+        try {
+          resolvedPath = safeJoin(projectPath, filePath);
+        } catch {
+          return res.status(400).json({ error: "Invalid path" });
+        }
+
+        if (
+          fs.existsSync(resolvedPath) &&
+          fs.statSync(resolvedPath).isDirectory()
+        ) {
+          resolvedPath = path.join(resolvedPath, "index.html");
+        }
+
+        if (!fs.existsSync(resolvedPath) && !path.extname(resolvedPath)) {
+          const withHtml = `${resolvedPath}.html`;
+          if (fs.existsSync(withHtml)) {
+            resolvedPath = withHtml;
+          }
+        }
+
+        if (!fs.existsSync(resolvedPath)) {
+          return res.status(404).json({ error: "File not found" });
+        }
+
+        if (resolvedPath.endsWith(".html")) {
+          const content = await fs.readFile(resolvedPath, "utf-8");
+          let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
+          processed = injectBasePathScript(processed, forwardedBasePath);
+          res.setHeader("Content-Type", "text/html");
+          return res.send(processed);
+        }
+
+        return res.sendFile(resolvedPath);
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
 
   // Backend-compatible dev server proxy:
   // /vivd-studio/api/devpreview/:slug/v:version/*
-  app.use("/vivd-studio/api/devpreview/:slug/v:version", async (req, res, next) => {
-    try {
-      if (!workspace.isInitialized()) {
-        return res.status(503).json({ error: "Workspace not initialized" });
-      }
-
-      const { slug, version } = req.params;
-      const projectPath = workspace.getProjectPath();
-      const basePath = `/vivd-studio/api/devpreview/${slug}/v${version}`;
-      const forwardedBasePath = resolveForwardedRuntimeBasePath(
-        basePath,
-        getProxyBasePath(req),
-      );
-
-      const config = detectProjectType(projectPath);
-      if (config.mode !== "devserver") {
-        return res.status(400).json({ error: "Not a dev server project" });
-      }
-
-      if (!devServerService.hasServer()) {
-        await devServerService.getOrStartDevServer(projectPath, basePath);
-      }
-
-      const devServerUrl = devServerService.getDevServerUrl();
-      if (!devServerUrl) {
-        const status = devServerService.getDevServerStatus();
-        if (status === "starting" || status === "installing") {
-          return res
-            .status(503)
-            .json({ error: "Dev server is starting...", status });
+  app.use(
+    "/vivd-studio/api/devpreview/:slug/v:version",
+    requireStudioAuth(),
+    async (req, res, next) => {
+      try {
+        if (!workspace.isInitialized()) {
+          return res.status(503).json({ error: "Workspace not initialized" });
         }
-        return res.status(503).json({ error: "Dev server not running", status });
-      }
 
-      // Intercept Vite HMR client and dev toolbar requests - return no-op modules.
-      if (req.originalUrl.includes("/@vite/client")) {
-        res.setHeader("Content-Type", "application/javascript");
-        return res.send(`// Vite HMR disabled in preview mode
+        const { slug, version } = req.params;
+        const projectPath = workspace.getProjectPath();
+        const basePath = `/vivd-studio/api/devpreview/${slug}/v${version}`;
+        const forwardedBasePath = resolveForwardedRuntimeBasePath(
+          basePath,
+          getProxyBasePath(req),
+        );
+
+        const config = detectProjectType(projectPath);
+        if (config.mode !== "devserver") {
+          return res.status(400).json({ error: "Not a dev server project" });
+        }
+
+        if (!devServerService.hasServer()) {
+          await devServerService.getOrStartDevServer(projectPath, basePath);
+        }
+
+        const devServerUrl = devServerService.getDevServerUrl();
+        if (!devServerUrl) {
+          const status = devServerService.getDevServerStatus();
+          if (status === "starting" || status === "installing") {
+            return res
+              .status(503)
+              .json({ error: "Dev server is starting...", status });
+          }
+          return res.status(503).json({ error: "Dev server not running", status });
+        }
+
+        // Intercept Vite HMR client and dev toolbar requests - return no-op modules.
+        if (req.originalUrl.includes("/@vite/client")) {
+          res.setHeader("Content-Type", "application/javascript");
+          return res.send(`// Vite HMR disabled in preview mode
 export const createHotContext = () => ({
   accept: () => {},
   acceptExports: () => {},
@@ -561,26 +576,27 @@ export const removeStyle = () => {};
 export const injectQuery = (url) => url;
 export default {};
 `);
-      }
-      if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
-        res.setHeader("Content-Type", "application/javascript");
-        return res.send(
-          "// Dev toolbar disabled in preview mode\nexport default {};\n"
-        );
-      }
+        }
+        if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
+          res.setHeader("Content-Type", "application/javascript");
+          return res.send(
+            "// Dev toolbar disabled in preview mode\nexport default {};\n"
+          );
+        }
 
-      if (process.env.DEVSERVER_DEBUG === "1") {
-        console.log(
-          `[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`
-        );
+        if (process.env.DEVSERVER_DEBUG === "1") {
+          console.log(
+            `[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`
+          );
+        }
+
+        (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
+        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = forwardedBasePath;
+
+        return devPreviewProxy(req, res, next);
+      } catch (err) {
+        return next(err);
       }
-
-      (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
-      (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = forwardedBasePath;
-
-      return devPreviewProxy(req, res, next);
-    } catch (err) {
-      return next(err);
-    }
-  });
+    },
+  );
 }

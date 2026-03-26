@@ -57,6 +57,10 @@ export function AgentMessageRow({
 
   return (
     <div className="flex flex-col gap-1 w-full items-start overflow-hidden chat-row-enter">
+      {item.sessionDividerLabel ? (
+        <SessionDivider label={item.sessionDividerLabel} className="mt-1" />
+      ) : null}
+
       {item.showWorkedSection ? (
         <WorkedSessionSection
           label={item.workedLabel ?? "Worked session"}

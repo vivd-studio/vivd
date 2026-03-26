@@ -18,6 +18,7 @@ import {
   getSubscriptionBatcherDelay,
   queueSubscriptionEvent,
 } from "./sync/subscriptionBatcher";
+import { createRefreshQueue } from "./sync/refreshQueue";
 import {
   hasCanonicalMatchForOptimisticMessage,
   selectMergedSessionMessages,
@@ -61,6 +62,7 @@ type OpencodeChatContextValue = {
 };
 
 const OpencodeChatContext = createContext<OpencodeChatContextValue | null>(null);
+const STALE_VISIBILITY_REFRESH_MS = 15_000;
 
 export function useOpencodeChat() {
   const context = useContext(OpencodeChatContext);
@@ -89,6 +91,10 @@ export function OpencodeChatProvider({
   const subscriptionBatcherRef = useRef(createSubscriptionBatcherState());
   const flushTimerRef = useRef<number | null>(null);
   const lastFlushAtRef = useRef(0);
+  const refreshQueueRef = useRef<ReturnType<typeof createRefreshQueue> | null>(null);
+  const bootstrapReadyRef = useRef(false);
+  const queuedRefreshRef = useRef<() => Promise<void>>(async () => undefined);
+  const handledRefreshGenerationRef = useRef(0);
   const [state, dispatch] = useReducer(
     openCodeChatReducer,
     OPEN_CODE_CHAT_INITIAL_STATE,
@@ -140,6 +146,28 @@ export function OpencodeChatProvider({
       },
     });
   }, [selectedSessionId, sessionMessagesQuery.data]);
+
+  const refreshSnapshot = useCallback(async () => {
+    const tasks: Promise<unknown>[] = [bootstrapQuery.refetch()];
+    if (selectedSessionId) {
+      tasks.push(sessionMessagesQuery.refetch());
+    }
+    await Promise.allSettled(tasks);
+  }, [bootstrapQuery.refetch, selectedSessionId, sessionMessagesQuery.refetch]);
+
+  bootstrapReadyRef.current = Boolean(bootstrapQuery.data);
+  queuedRefreshRef.current = refreshSnapshot;
+
+  if (refreshQueueRef.current == null) {
+    refreshQueueRef.current = createRefreshQueue({
+      paused: () => !bootstrapReadyRef.current,
+      refresh: () => queuedRefreshRef.current(),
+    });
+  }
+
+  const queueRefresh = useCallback(() => {
+    refreshQueueRef.current?.refresh();
+  }, []);
 
   const addOptimisticUserMessage = useCallback(
     (options: { content: string; sessionId: string | null; createdAt?: number }) => {
@@ -220,20 +248,68 @@ export function OpencodeChatProvider({
         flushTimerRef.current = null;
       }
       drainSubscriptionEvents(subscriptionBatcherRef.current);
+      refreshQueueRef.current?.dispose();
     },
     [],
   );
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible" || !bootstrapReadyRef.current) {
+        return;
+      }
+
+      const now = Date.now();
+      const stale =
+        state.lastEventTime == null ||
+        now - state.lastEventTime >= STALE_VISIBILITY_REFRESH_MS;
+      if (state.connection.state === "connected" && !stale) {
+        return;
+      }
+
+      queueRefresh();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [queueRefresh, state.connection.state, state.lastEventTime]);
+
+  useEffect(() => {
+    if (!state.bootstrapped || state.connection.state !== "connected") {
+      return;
+    }
+
+    if (state.refreshGeneration <= handledRefreshGenerationRef.current) {
+      return;
+    }
+
+    handledRefreshGenerationRef.current = state.refreshGeneration;
+    queueRefresh();
+  }, [
+    queueRefresh,
+    state.bootstrapped,
+    state.connection.state,
+    state.refreshGeneration,
+  ]);
 
   trpc.agentChat.events.useSubscription(
     {
       projectSlug,
       version,
       ...(lastEventIdRef.current ? { lastEventId: lastEventIdRef.current } : {}),
+      replayBuffered: Boolean(lastEventIdRef.current),
     },
     {
-      enabled: true,
+      enabled: Boolean(bootstrapQuery.data),
       onStarted: () => {
         flushQueuedEvents();
+        queueRefresh();
         dispatch({
           type: "connection.updated",
           payload: {

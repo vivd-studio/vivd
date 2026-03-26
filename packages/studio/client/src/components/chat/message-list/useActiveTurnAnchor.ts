@@ -14,7 +14,9 @@ const CHAT_ANCHOR_TOP_INSET_PX = 40;
 const ACTIVE_TURN_BODY_GAP_PX = 8;
 const MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS = 1;
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 10;
+const MANUAL_SCROLL_RESUME_THRESHOLD_PX = 1;
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
+const USER_SCROLL_DELTA_THRESHOLD_PX = 1;
 
 export function useActiveTurnAnchor({
   selectedSessionId,
@@ -51,6 +53,9 @@ export function useActiveTurnAnchor({
   const autoScrollMarkRef = useRef<{ top: number; time: number } | null>(null);
   const autoScrollMarkTimerRef = useRef<number | null>(null);
   const skipNextResizeAutoScrollRef = useRef(false);
+  const lastObservedScrollTopRef = useRef(0);
+  // ResizeObserver and input handlers need the latest follow-state immediately.
+  const userScrolledRef = useRef(false);
   const [userScrolled, setUserScrolled] = useState(false);
 
   const getScrollViewport = useCallback(
@@ -81,6 +86,7 @@ export function useActiveTurnAnchor({
   }, []);
 
   const setUserScrolledState = useCallback((next: boolean) => {
+    userScrolledRef.current = next;
     setUserScrolled((prev) => (prev === next ? prev : next));
   }, []);
 
@@ -138,7 +144,7 @@ export function useActiveTurnAnchor({
         return;
       }
 
-      if (!force && userScrolled) {
+      if (!force && userScrolledRef.current) {
         return;
       }
 
@@ -163,7 +169,6 @@ export function useActiveTurnAnchor({
       getScrollViewport,
       markAutoScroll,
       setUserScrolledState,
-      userScrolled,
     ],
   );
 
@@ -261,6 +266,7 @@ export function useActiveTurnAnchor({
     lastAnchoredUserMessageIdRef.current = null;
     pendingAnchorLayoutAdjustmentsRef.current = 0;
     skipNextResizeAutoScrollRef.current = false;
+    lastObservedScrollTopRef.current = 0;
     clearAutoScrollMark();
     setUserScrolledState(false);
     setActiveTurnLayout(null);
@@ -378,7 +384,11 @@ export function useActiveTurnAnchor({
     if (!viewport) return;
 
     const syncViewportState = () => {
-      viewport.style.overflowAnchor = userScrolled ? "auto" : "none";
+      const didUserScroll = userScrolledRef.current;
+      viewport.style.overflowAnchor = didUserScroll ? "auto" : "none";
+      const currentScrollTop = viewport.scrollTop;
+      const previousScrollTop = lastObservedScrollTopRef.current;
+      lastObservedScrollTopRef.current = currentScrollTop;
 
       if (!canScrollViewport(viewport)) {
         setUserScrolledState(false);
@@ -387,13 +397,32 @@ export function useActiveTurnAnchor({
       }
 
       const distanceFromBottom = getDistanceFromBottom(viewport);
+      const userScrolledUp =
+        currentScrollTop <
+          previousScrollTop - USER_SCROLL_DELTA_THRESHOLD_PX &&
+        !isAutoScrollPosition(viewport);
+
+      if (userScrolledUp) {
+        setUserScrolledState(true);
+        syncScrollFades();
+        return;
+      }
+
+      if (didUserScroll) {
+        if (distanceFromBottom <= MANUAL_SCROLL_RESUME_THRESHOLD_PX) {
+          setUserScrolledState(false);
+        }
+        syncScrollFades();
+        return;
+      }
+
       if (distanceFromBottom < AUTO_SCROLL_BOTTOM_THRESHOLD_PX) {
         setUserScrolledState(false);
         syncScrollFades();
         return;
       }
 
-      if (!userScrolled && isAutoScrollPosition(viewport)) {
+      if (!didUserScroll && isAutoScrollPosition(viewport)) {
         scrollToBottom();
         syncScrollFades();
         return;
@@ -442,7 +471,7 @@ export function useActiveTurnAnchor({
           return;
         }
 
-        if (!pendingAnchorRequest && !userScrolled) {
+        if (!pendingAnchorRequest && !userScrolledRef.current) {
           scrollToBottom();
         }
 
@@ -476,7 +505,6 @@ export function useActiveTurnAnchor({
     selectedSessionId,
     setUserScrolledState,
     syncScrollFades,
-    userScrolled,
   ]);
 
   useEffect(() => {
