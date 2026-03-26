@@ -16,14 +16,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:!bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg group-[.toaster]:backdrop-blur-none",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton:
-            "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton:
-            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
-          closeButton:
-            "group-[.toast]:!bg-background group-[.toast]:!border-border group-[.toast]:!text-foreground",
+            "group toast bg-background text-foreground border-border shadow-lg backdrop-blur-none",
+          description: "text-muted-foreground",
+          actionButton: "bg-primary text-primary-foreground",
+          cancelButton: "bg-muted text-muted-foreground",
+          closeButton: "bg-background border-border text-foreground",
           success:
             `!bg-emerald-600 !text-white !border-emerald-700 dark:!bg-emerald-500 dark:!text-white dark:!border-emerald-400 ${semanticToastContentClass}`,
           error:

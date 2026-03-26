@@ -121,6 +121,32 @@ const treeFixture: FileTreeNode[] = [
     ],
   },
   { name: "images", type: "folder", path: "images", children: [] },
+  {
+    name: "dist",
+    type: "folder",
+    path: "dist",
+    children: [
+      {
+        name: "assets",
+        type: "folder",
+        path: "dist/assets",
+        children: [],
+      },
+    ],
+  },
+  {
+    name: "node_modules",
+    type: "folder",
+    path: "node_modules",
+    children: [
+      {
+        name: "react",
+        type: "folder",
+        path: "node_modules/react",
+        children: [],
+      },
+    ],
+  },
   { name: "readme.md", type: "file", path: "readme.md" },
 ];
 
@@ -307,7 +333,7 @@ describe("FileTreeView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers move targets except the current parent and descendant folders", () => {
+  it("offers move targets except the current parent, ignored folders, and descendant folders", () => {
     const fileTargets = getFileTreeMoveTargets(treeFixture, {
       name: "image-files-description.txt",
       type: "file",

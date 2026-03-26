@@ -17,6 +17,7 @@ import {
   canDragAssetToPreview,
   getFileTreeIconComponent,
   getFileTreeIndentPx,
+  isFileTreeGrayedFolder,
 } from "./utils";
 import {
   ContextMenu,
@@ -29,17 +30,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { FileTreeMoveTarget } from "./FileTreeView";
-
-// Folders to gray out (build outputs, dependencies, internal)
-const GRAYED_FOLDERS = [
-  "dist",
-  "build",
-  "node_modules",
-  ".next",
-  ".nuxt",
-  ".output",
-  ".vivd",
-];
 
 interface FileTreeItemProps {
   item: FileTreeNode;
@@ -92,7 +82,7 @@ export function FileTreeItem({
   const inputRef = useRef<HTMLInputElement>(null);
   const fileIcon = getFileTreeIconComponent(item);
 
-  const isGrayed = item.type === "folder" && GRAYED_FOLDERS.includes(item.name);
+  const isGrayed = item.type === "folder" && isFileTreeGrayedFolder(item.name);
   const isDropTarget =
     item.type === "folder" && activeInternalDropTargetPath === item.path;
 

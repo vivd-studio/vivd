@@ -11,6 +11,17 @@ import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 export const STUDIO_UPLOADS_PATH = ".vivd/uploads";
 export const FILE_TREE_INDENT_STEP_PX = 16;
 export const FILE_TREE_BASE_PADDING_PX = 12;
+export const FILE_TREE_GRAYED_FOLDER_NAMES = [
+  "dist",
+  "build",
+  "node_modules",
+  ".next",
+  ".nuxt",
+  ".output",
+  ".vivd",
+] as const;
+export const FILE_TREE_MOVE_TARGET_IGNORED_FOLDER_NAMES =
+  FILE_TREE_GRAYED_FOLDER_NAMES.filter((name) => name !== ".vivd");
 
 function normalizeAssetPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -162,6 +173,22 @@ export function getStudioImageUrlCandidates(
 
 export function getFileTreeIndentPx(depth: number): number {
   return depth * FILE_TREE_INDENT_STEP_PX + FILE_TREE_BASE_PADDING_PX;
+}
+
+export function isFileTreeGrayedFolder(name: string): boolean {
+  return FILE_TREE_GRAYED_FOLDER_NAMES.includes(
+    name as (typeof FILE_TREE_GRAYED_FOLDER_NAMES)[number],
+  );
+}
+
+export function shouldIgnoreFileTreeMoveTarget(assetPath: string): boolean {
+  return normalizeAssetPath(assetPath)
+    .split("/")
+    .some((segment) =>
+      FILE_TREE_MOVE_TARGET_IGNORED_FOLDER_NAMES.includes(
+        segment as (typeof FILE_TREE_MOVE_TARGET_IGNORED_FOLDER_NAMES)[number],
+      ),
+    );
 }
 
 export function isVivdInternalAssetPath(assetPath: string): boolean {

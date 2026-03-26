@@ -9,6 +9,7 @@ import {
   buildImageUrl,
   getFileTreeIndentPx,
   isTextFile,
+  shouldIgnoreFileTreeMoveTarget,
   STUDIO_UPLOADS_PATH,
 } from "./utils";
 import { usePreview } from "@/components/preview/PreviewContext";
@@ -49,6 +50,9 @@ export function getFileTreeMoveTargets(
   const visit = (nodes: FileTreeNode[]) => {
     for (const node of nodes) {
       if (node.type === "folder") {
+        if (shouldIgnoreFileTreeMoveTarget(node.path)) {
+          continue;
+        }
         targets.push({
           path: node.path,
           label: node.path,

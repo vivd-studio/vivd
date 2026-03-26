@@ -29,9 +29,11 @@ describe("Toaster", () => {
     };
 
     const classNames = props.toastOptions?.classNames;
-    expect(classNames?.toast).toContain("group-[.toaster]:!bg-background");
-    expect(classNames?.toast).toContain("group-[.toaster]:backdrop-blur-none");
-    expect(classNames?.closeButton).toContain("group-[.toast]:!bg-background");
+    expect(classNames?.toast).toContain("bg-background");
+    expect(classNames?.toast).not.toContain("!bg-background");
+    expect(classNames?.toast).toContain("backdrop-blur-none");
+    expect(classNames?.closeButton).toContain("bg-background");
+    expect(classNames?.closeButton).not.toContain("!bg-background");
     expect(classNames?.success).toContain("[&_[data-description]]:!text-white/90");
     expect(classNames?.success).toContain("dark:!bg-emerald-500");
     expect(classNames?.success).not.toContain("/10");
