@@ -226,36 +226,40 @@ async function getImageGenerationLimitError(): Promise<string | null> {
   return null;
 }
 
-export const vivdImageAiToolDefinition: OpencodeToolDefinition = {
+const vivdImageAiArgs = {
+  prompt: z
+    .string()
+    .min(1)
+    .max(4_000)
+    .describe("The image instruction prompt."),
+  images: z
+    .array(z.string().min(1))
+    .max(MAX_INPUT_IMAGES)
+    .default([])
+    .describe(
+      "Optional input image paths (relative to project root). Up to 5 images. In edit mode, first image is the primary source and additional images are references.",
+    ),
+  operation: z
+    .enum(["auto", "create", "edit"])
+    .default("auto")
+    .describe(
+      "Use 'auto' to choose based on image inputs. 'create' generates a new image. 'edit' transforms the first input image and can use additional references.",
+    ),
+  outputDir: z
+    .string()
+    .default("")
+    .describe(
+      "Optional output directory (relative to project root). Defaults to source image directory for edits, or auto-detected public/images (Astro) vs images/ for prompt-only creates.",
+    ),
+};
+
+type VivdImageAiArgs = z.infer<z.ZodObject<typeof vivdImageAiArgs>>;
+
+export const vivdImageAiToolDefinition: OpencodeToolDefinition<typeof vivdImageAiArgs> = {
   description:
     "Create or edit images with Vivd's OpenRouter image models. Works with prompt-only generation or up to 5 input images for edits, quality improvements, upscales, and reference-based variations.",
-  args: {
-    prompt: z
-      .string()
-      .min(1)
-      .max(4_000)
-      .describe("The image instruction prompt."),
-    images: z
-      .array(z.string().min(1))
-      .max(MAX_INPUT_IMAGES)
-      .default([])
-      .describe(
-        "Optional input image paths (relative to project root). Up to 5 images. In edit mode, first image is the primary source and additional images are references.",
-      ),
-    operation: z
-      .enum(["auto", "create", "edit"])
-      .default("auto")
-      .describe(
-        "Use 'auto' to choose based on image inputs. 'create' generates a new image. 'edit' transforms the first input image and can use additional references.",
-      ),
-    outputDir: z
-      .string()
-      .default("")
-      .describe(
-        "Optional output directory (relative to project root). Defaults to source image directory for edits, or auto-detected public/images (Astro) vs images/ for prompt-only creates.",
-      ),
-  },
-  async execute(args, context) {
+  args: vivdImageAiArgs,
+  async execute(args: VivdImageAiArgs, context) {
     const toolName = "vivd_image_ai";
     const startedAt = Date.now();
     const apiKey = (process.env.OPENROUTER_API_KEY || "").trim();

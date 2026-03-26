@@ -84,8 +84,10 @@ function getStorageConfigOrNull():
 }
 
 async function loadAwsSdkOrNull():
+  Promise<
   | { sdk: AwsSdkModule; reason: null }
-  | { sdk: null; reason: string } {
+  | { sdk: null; reason: string }
+  > {
   try {
     const sdk = (await import("@aws-sdk/client-s3")) as unknown as AwsSdkModule;
     return { sdk, reason: null };

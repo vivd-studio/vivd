@@ -4,7 +4,6 @@ description: Understand the product plugins that extend a Vivd project beyond th
 ---
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
-import DocShot from "../../components/DocShot.astro";
 
 Plugins let a Vivd project do more than render pages. In the current product surface, the main plugin workflows are Contact Form and Analytics.
 
@@ -12,13 +11,6 @@ On self-hosted installs, plugin availability can also be controlled instance-wid
 you do any project-level setup. Use [Instance Settings](/instance-settings/) and the
 adjacent `Plugins` admin surface when a plugin appears unavailable across the whole
 install rather than just one project.
-
-<DocShot
-  src="/screenshots/docs/configure-plugins-light.webp"
-  darkSrc="/screenshots/docs/configure-plugins-dark.webp"
-  alt="Vivd organization plugin overview showing Contact Form and Analytics status across projects."
-  caption="Plugin review starts with a clear overview of which projects have forms or analytics configured and which ones still need attention."
-/>
 
 <Aside type="tip" title="When to do plugin setup">
   Configure plugins before the final publish pass, not after launch day. That keeps form delivery, analytics expectations, and handoff steps inside the same review cycle.

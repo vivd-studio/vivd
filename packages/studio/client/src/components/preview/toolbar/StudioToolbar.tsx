@@ -126,7 +126,6 @@ export function StudioToolbar() {
     typeof window === "undefined" ? 1440 : window.innerWidth,
   );
   const [leadingChromeWidth, setLeadingChromeWidth] = useState(0);
-  const [workspaceControlsWidth, setWorkspaceControlsWidth] = useState(0);
   const [trailingChromeWidth, setTrailingChromeWidth] = useState(0);
   const [showAnalyticsActivationPrompt, setShowAnalyticsActivationPrompt] =
     useState(false);
@@ -155,29 +154,6 @@ export function StudioToolbar() {
 
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    const controlsNode = workspaceControlsRef.current;
-    if (!controlsNode) return;
-
-    const updateWidth = () => {
-      setWorkspaceControlsWidth(controlsNode.offsetWidth);
-    };
-
-    updateWidth();
-
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(controlsNode);
-
-    return () => observer.disconnect();
-  }, [
-    projectSlug,
-    canUseAgent,
-    assetsOpen,
-    chatOpen,
-    sessionHistoryOpen,
-    editMode,
-  ]);
 
   useEffect(() => {
     const trailingNode = trailingActionsRef.current;
@@ -348,8 +324,6 @@ export function StudioToolbar() {
   const maxLeadingWidth = chatOpen
     ? Math.max(148, workspaceControlStart - headerHorizontalPadding - 8)
     : undefined;
-  const shouldCompressLeadingIdentity =
-    typeof maxLeadingWidth === "number" && maxLeadingWidth < 320;
   const canFitProjectsBreadcrumb =
     typeof maxLeadingWidth !== "number" || maxLeadingWidth >= 184;
   const showProjectsBreadcrumb =

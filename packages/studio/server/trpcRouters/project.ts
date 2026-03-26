@@ -437,7 +437,8 @@ export const projectRouter = router({
       }
 
       const projectDir = ctx.workspace.getProjectPath();
-      const result = await devServerService.restartDevServer(projectDir, {
+      const basePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
+      const result = await devServerService.restartDevServer(projectDir, basePath, {
         clean: input.clean,
         resetCaches: true,
       });
@@ -502,6 +503,7 @@ export const projectRouter = router({
       for (const patch of input.patches) {
         if (patch.type === "setAstroText") {
           astroPatches.push({
+            type: "setAstroText",
             sourceFile: patch.sourceFile,
             sourceLoc: patch.sourceLoc,
             oldValue: patch.oldValue,

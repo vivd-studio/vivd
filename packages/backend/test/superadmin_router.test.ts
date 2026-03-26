@@ -6,6 +6,7 @@ const {
   getDesiredImageMock,
   invalidateDesiredImageCacheMock,
   reconcileStudioMachinesMock,
+  parkStudioMachineMock,
   destroyStudioMachineMock,
   getSystemSettingValueMock,
   setSystemSettingValueMock,
@@ -33,6 +34,7 @@ const {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
   const reconcileStudioMachinesMock = vi.fn();
+  const parkStudioMachineMock = vi.fn();
   const destroyStudioMachineMock = vi.fn();
   const invalidateDesiredImageCacheMock = vi.fn();
   const studioMachineProviderMock: Record<string, unknown> = {
@@ -41,6 +43,7 @@ const {
     getDesiredImage: getDesiredImageMock,
     invalidateDesiredImageCache: invalidateDesiredImageCacheMock,
     reconcileStudioMachines: reconcileStudioMachinesMock,
+    parkStudioMachine: parkStudioMachineMock,
     destroyStudioMachine: destroyStudioMachineMock,
   };
 
@@ -50,6 +53,7 @@ const {
     getDesiredImageMock,
     invalidateDesiredImageCacheMock,
     reconcileStudioMachinesMock,
+    parkStudioMachineMock,
     destroyStudioMachineMock,
     getSystemSettingValueMock: vi.fn(),
     setSystemSettingValueMock: vi.fn(),
@@ -308,6 +312,7 @@ describe("superadmin router", () => {
     getDesiredImageMock.mockReset();
     invalidateDesiredImageCacheMock.mockReset();
     reconcileStudioMachinesMock.mockReset();
+    parkStudioMachineMock.mockReset();
     destroyStudioMachineMock.mockReset();
     getSystemSettingValueMock.mockReset();
     setSystemSettingValueMock.mockReset();
@@ -344,6 +349,7 @@ describe("superadmin router", () => {
       dryRun: false,
       errors: [],
     });
+    parkStudioMachineMock.mockResolvedValue("suspended");
     getSystemSettingValueMock.mockResolvedValue(null);
     listStudioImagesFromGhcrMock.mockResolvedValue({
       imageBase: "ghcr.io/vivd-studio/vivd-studio",
@@ -716,6 +722,19 @@ describe("superadmin router", () => {
       result: {
         desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
       },
+    });
+  });
+
+  it("parks managed studio machines and returns the parked state", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.parkStudioMachine({ machineId: "machine-1" });
+
+    expect(parkStudioMachineMock).toHaveBeenCalledWith("machine-1");
+    expect(result).toEqual({
+      provider: "fly",
+      parked: true,
+      state: "suspended",
     });
   });
 

@@ -447,6 +447,13 @@ describe("MessageList latest-user anchoring", () => {
     const transcriptContent = container.querySelector("[data-chat-transcript-content]");
 
     expect(indicatorButton).not.toBeNull();
+    expect(transcriptContent).not.toBeNull();
+    if (!(indicatorButton instanceof HTMLElement)) {
+      throw new Error("Expected context indicator button");
+    }
+    if (!(transcriptContent instanceof HTMLElement)) {
+      throw new Error("Expected transcript content container");
+    }
     expect(transcriptContent).not.toContainElement(indicatorButton);
   });
 
@@ -458,6 +465,9 @@ describe("MessageList latest-user anchoring", () => {
     );
 
     expect(overlay).not.toBeNull();
+    if (!(overlay instanceof HTMLElement)) {
+      throw new Error("Expected context indicator overlay");
+    }
     expect(overlay.className).toContain("justify-start");
     expect(overlay.className).not.toContain("md:justify-end");
   });

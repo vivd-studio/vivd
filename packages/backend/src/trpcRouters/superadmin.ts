@@ -532,6 +532,29 @@ export const superAdminRouter = router({
     };
   }),
 
+  parkStudioMachine: superAdminProcedure
+    .input(
+      z.object({
+        machineId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isManagedStudioMachineProvider(studioMachineProvider)) {
+        return {
+          provider: studioMachineProvider.kind,
+          parked: false,
+          error: "Studio machine provider does not support machine parking",
+        };
+      }
+
+      const state = await studioMachineProvider.parkStudioMachine(input.machineId);
+      return {
+        provider: studioMachineProvider.kind,
+        parked: true,
+        state,
+      };
+    }),
+
   destroyStudioMachine: superAdminProcedure
     .input(
       z.object({

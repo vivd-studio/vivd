@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Pause,
   RefreshCcw,
   Server,
   Trash2,
@@ -95,6 +96,13 @@ function machineCreatedAtMs(machine: StudioMachine): number {
   return Number.isFinite(ms) ? ms : 0;
 }
 
+function canParkMachine(state: string | null): boolean {
+  const normalized = (state || "unknown").toLowerCase();
+  return !["suspended", "stopped", "stopping", "destroying", "destroyed"].includes(
+    normalized,
+  );
+}
+
 export function MachinesTab() {
   const utils = trpc.useUtils();
   const [confirmReconcileOpen, setConfirmReconcileOpen] = useState(false);
@@ -158,6 +166,31 @@ export function MachinesTab() {
     },
   });
 
+  const parkMutation = trpc.superadmin.parkStudioMachine.useMutation({
+    onSuccess: async (data, variables) => {
+      if (!data.parked || !("state" in data)) {
+        toast.error("Parking skipped", {
+          description:
+            ("error" in data && data.error) ||
+            "Studio machine provider does not support machine parking",
+        });
+        return;
+      }
+
+      const parkedLabel = data.state === "suspended" ? "suspended" : "stopped";
+      toast.success(`${machineLabel} ${parkedLabel}`, {
+        description: variables.machineId,
+      });
+      await utils.superadmin.listStudioMachines.invalidate();
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Parking failed", {
+        description: message,
+      });
+    },
+  });
+
   const destroyMutation = trpc.superadmin.destroyStudioMachine.useMutation({
     onSuccess: async (data, variables) => {
       if (!data.destroyed) {
@@ -188,6 +221,8 @@ export function MachinesTab() {
   const machines = useMemo(() => machinesQuery.data?.machines ?? [], [machinesQuery.data?.machines]);
   const provider = machinesQuery.data?.provider ?? "unknown";
   const machineLabel = provider === "docker" ? "Container" : "Machine";
+  const parkActionLabel = provider === "docker" ? "Stop" : "Suspend";
+  const activeParkMachineId = parkMutation.variables?.machineId ?? null;
   const effectiveDesiredImage = machines[0]?.desiredImage || null;
   const desiredImage =
     effectiveDesiredImage ||
@@ -594,21 +629,41 @@ export function MachinesTab() {
                         ) : null}
                       </td>
                       <td className="px-3 py-2">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="gap-2"
-                          onClick={() => setDestroyCandidate(m)}
-                          disabled={destroyMutation.isPending}
-                        >
-                          {destroyMutation.isPending &&
-                          destroyCandidate?.id === m.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                          Destroy
-                        </Button>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => parkMutation.mutate({ machineId: m.id })}
+                            disabled={parkMutation.isPending || !canParkMachine(m.state)}
+                          >
+                            {parkMutation.isPending && activeParkMachineId === m.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Pause className="h-3.5 w-3.5" />
+                            )}
+                            {m.state === "suspended"
+                              ? "Suspended"
+                              : m.state === "stopped"
+                                ? "Stopped"
+                                : parkActionLabel}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => setDestroyCandidate(m)}
+                            disabled={destroyMutation.isPending}
+                          >
+                            {destroyMutation.isPending &&
+                            destroyCandidate?.id === m.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                            Destroy
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

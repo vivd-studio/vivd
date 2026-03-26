@@ -523,7 +523,7 @@ export function createProjectRuntimeRouter(
         organizationId,
       });
       if (!access.ok) {
-        if (access.reason === "organization_suspended") {
+        if ("reason" in access && access.reason === "organization_suspended") {
           return res.status(403).json({ error: "Organization is suspended" });
         }
         return res.status(403).json({ error: "Forbidden" });
@@ -816,7 +816,7 @@ export function createProjectRuntimeRouter(
           organizationId,
         });
         if (!access.ok) {
-          if (access.reason === "organization_suspended") {
+          if ("reason" in access && access.reason === "organization_suspended") {
             return res.status(403).json({ error: "Organization is suspended" });
           }
           return res.status(403).json({ error: "Forbidden" });
@@ -914,7 +914,7 @@ export function createProjectRuntimeRouter(
         organizationId,
       });
       if (!access.ok) {
-        if (access.reason === "organization_suspended") {
+        if ("reason" in access && access.reason === "organization_suspended") {
           return res.status(403).json({ error: "Organization is suspended" });
         }
         return res.status(403).json({ error: "Forbidden" });

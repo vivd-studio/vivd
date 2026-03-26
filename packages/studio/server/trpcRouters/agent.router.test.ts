@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Context } from "../trpc/context.js";
 
 const {
   createSessionMock,
@@ -75,14 +76,14 @@ vi.mock("@vivd/shared", () => ({
 
 import { agentRouter } from "./agent.js";
 
-function makeContext(overrides: Record<string, unknown> = {}) {
+function makeContext(overrides: Partial<Context> = {}): Context {
   return {
     workspace: {
       isInitialized: vi.fn(() => true),
       getProjectPath: vi.fn(() => "/tmp/workspace"),
-    },
+    } as unknown as Context["workspace"],
     ...overrides,
-  };
+  } as Context;
 }
 
 describe("agent router", () => {
@@ -180,7 +181,7 @@ describe("agent router", () => {
         workspace: {
           isInitialized: vi.fn(() => false),
           getProjectPath: vi.fn(),
-        },
+        } as unknown as Context["workspace"],
       }),
     );
 
@@ -368,7 +369,7 @@ describe("agent router", () => {
           getProjectPath: vi.fn(() => "/tmp"),
           commit: vi.fn(async () => "commit-123"),
           hasChanges: vi.fn(async () => false),
-        },
+        } as unknown as Context["workspace"],
       }),
     );
 

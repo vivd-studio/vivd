@@ -18,7 +18,7 @@ const PROCEDURE_TIMEOUT_MS = new Map<string, number>([
 
 function extractTrpcProcedures(url: string | URL): string[] {
   const urlString = typeof url === "string" ? url : url.toString();
-  const markerIndex = url.indexOf(TRPC_URL_MARKER);
+  const markerIndex = urlString.indexOf(TRPC_URL_MARKER);
   if (markerIndex < 0) return [];
 
   let procedurePath = urlString.slice(markerIndex + TRPC_URL_MARKER.length);

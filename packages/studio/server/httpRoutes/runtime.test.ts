@@ -88,8 +88,11 @@ describe("registerStudioRuntimeHttpRoutes", () => {
       (layer: any) => layer.route?.path === "/health",
     );
     const json = vi.fn();
+    if (!routeLayer?.route?.stack[0]) {
+      throw new Error("Expected /health route");
+    }
 
-    routeLayer.route.stack[0].handle({}, { json });
+    routeLayer.route.stack[0].handle({} as any, { json } as any, vi.fn());
 
     expect(json).toHaveBeenCalledWith({
       status: "ok",
@@ -103,8 +106,11 @@ describe("registerStudioRuntimeHttpRoutes", () => {
       (layer: any) => layer.route?.path === "/health",
     );
     const json = vi.fn();
+    if (!routeLayer?.route?.stack[0]) {
+      throw new Error("Expected /health route");
+    }
 
-    routeLayer.route.stack[0].handle({}, { json });
+    routeLayer.route.stack[0].handle({} as any, { json } as any, vi.fn());
 
     expect(json).toHaveBeenCalledWith({
       status: "starting",

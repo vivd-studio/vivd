@@ -1,6 +1,7 @@
 import { listStudioVisitMsByIdentity } from "../visitStore";
 import type {
   ManagedStudioMachineProvider,
+  StudioMachineParkResult,
   StudioMachineReconcileResult,
   StudioMachineRestartArgs,
   StudioMachineStartArgs,
@@ -87,11 +88,10 @@ function isContainerInfo(
 function getContainerLabels(
   container: DockerContainerSummary | DockerContainerInfo,
 ): Record<string, string> {
-  return (
-    (isContainerInfo(container)
-      ? container.Config?.Labels || (container as DockerContainerSummary).Labels
-      : container.Labels) || {}
-  );
+  if (isContainerInfo(container)) {
+    return container.Config?.Labels ?? {};
+  }
+  return container.Labels ?? {};
 }
 
 function getContainerEnv(
@@ -1206,6 +1206,30 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       (right.createdAt || "").localeCompare(left.createdAt || ""),
     );
     return summaries;
+  }
+
+  async parkStudioMachine(machineId: string): Promise<StudioMachineParkResult> {
+    const container = await this.inspectContainer(machineId);
+    const identity = getContainerIdentity(container);
+    if (!identity) {
+      throw new Error(
+        `[DockerMachines] Refusing to park non-studio container ${machineId}`,
+      );
+    }
+
+    const routeId =
+      getContainerRouteId(container) ||
+      this.config.routeIdFor(
+        identity.organizationId,
+        identity.projectSlug,
+        identity.version,
+      );
+    await this.stopContainerIfRunning(container);
+    await this.routeService.removeRuntimeRoute(routeId);
+    this.lastActivityByStudioKey.delete(
+      this.config.key(identity.organizationId, identity.projectSlug, identity.version),
+    );
+    return "stopped";
   }
 
   async destroyStudioMachine(machineId: string): Promise<void> {

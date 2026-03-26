@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createStudioBootstrapToken } from "../../../../shared/src/studio/bootstrap.js";
+import { createStudioBootstrapToken } from "@vivd/shared/studio";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
 import { resolveStudioMainBackendUrl } from "../../services/studioMachines/backendCallbackUrl";

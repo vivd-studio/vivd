@@ -7,9 +7,11 @@ const {
   imageOptionsUseQueryMock,
   setImageOverrideUseMutationMock,
   reconcileUseMutationMock,
+  parkUseMutationMock,
   destroyUseMutationMock,
   setImageOverrideMutateMock,
   reconcileMutateMock,
+  parkMutateMock,
   destroyMutateMock,
   listInvalidateMock,
   imageOptionsInvalidateMock,
@@ -21,9 +23,11 @@ const {
   imageOptionsUseQueryMock: vi.fn(),
   setImageOverrideUseMutationMock: vi.fn(),
   reconcileUseMutationMock: vi.fn(),
+  parkUseMutationMock: vi.fn(),
   destroyUseMutationMock: vi.fn(),
   setImageOverrideMutateMock: vi.fn(),
   reconcileMutateMock: vi.fn(),
+  parkMutateMock: vi.fn(),
   destroyMutateMock: vi.fn(),
   listInvalidateMock: vi.fn(),
   imageOptionsInvalidateMock: vi.fn(),
@@ -46,6 +50,9 @@ vi.mock("@/lib/trpc", () => ({
       },
       reconcileStudioMachines: {
         useMutation: reconcileUseMutationMock,
+      },
+      parkStudioMachine: {
+        useMutation: parkUseMutationMock,
       },
       destroyStudioMachine: {
         useMutation: destroyUseMutationMock,
@@ -93,9 +100,11 @@ describe("MachinesTab", () => {
     imageOptionsUseQueryMock.mockReset();
     setImageOverrideUseMutationMock.mockReset();
     reconcileUseMutationMock.mockReset();
+    parkUseMutationMock.mockReset();
     destroyUseMutationMock.mockReset();
     setImageOverrideMutateMock.mockReset();
     reconcileMutateMock.mockReset();
+    parkMutateMock.mockReset();
     destroyMutateMock.mockReset();
     listInvalidateMock.mockReset();
     imageOptionsInvalidateMock.mockReset();
@@ -137,6 +146,10 @@ describe("MachinesTab", () => {
     reconcileUseMutationMock.mockReturnValue({
       isPending: false,
       mutate: reconcileMutateMock,
+    });
+    parkUseMutationMock.mockReturnValue({
+      isPending: false,
+      mutate: parkMutateMock,
     });
     destroyUseMutationMock.mockReturnValue({
       isPending: false,
@@ -209,6 +222,30 @@ describe("MachinesTab", () => {
     expect(reconcileMutateMock).toHaveBeenCalledTimes(1);
   });
 
+  it("parks a running machine from the actions column", () => {
+    render(<MachinesTab />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
+
+    expect(parkMutateMock).toHaveBeenCalledWith({ machineId: "machine-1" });
+  });
+
+  it("disables the park action for already suspended machines", () => {
+    listStudioMachinesUseQueryMock.mockReturnValueOnce({
+      data: {
+        provider: "fly",
+        machines: [makeMachine({ state: "suspended" })],
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<MachinesTab />);
+
+    expect(screen.getByRole("button", { name: "Suspended" })).toBeDisabled();
+  });
+
   it("renders Docker route paths with provider-neutral labels", () => {
     listStudioMachinesUseQueryMock.mockReturnValueOnce({
       data: {
@@ -230,6 +267,7 @@ describe("MachinesTab", () => {
     render(<MachinesTab />);
 
     expect(screen.getByRole("button", { name: "Container" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
     expect(screen.getByText("/_studio/site-1-v1")).toBeInTheDocument();
     expect(screen.getByText("single-host")).toBeInTheDocument();
   });

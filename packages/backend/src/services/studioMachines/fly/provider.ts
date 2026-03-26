@@ -1,5 +1,6 @@
 import type {
-  StudioMachineProvider,
+  ManagedStudioMachineProvider,
+  StudioMachineParkResult,
   StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
@@ -67,7 +68,7 @@ import {
 } from "./lifecycle";
 import { FlyProviderConfig } from "./providerConfig";
 
-export class FlyStudioMachineProvider implements StudioMachineProvider {
+export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "fly" as const;
 
   private readonly config = new FlyProviderConfig();
@@ -479,6 +480,20 @@ export class FlyStudioMachineProvider implements StudioMachineProvider {
       getMachineMetadata,
       getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
     });
+  }
+
+  async parkStudioMachine(machineId: string): Promise<StudioMachineParkResult> {
+    const machine = await this.getMachine(machineId);
+    const identity = getStudioIdentityFromMachine(machine);
+    if (!identity) {
+      throw new Error(`[FlyMachines] Refusing to park non-studio machine ${machineId}`);
+    }
+
+    const parked = await this.suspendOrStopMachine(machineId);
+    this.lastActivityByStudioKey.delete(
+      this.config.key(identity.organizationId, identity.projectSlug, identity.version),
+    );
+    return parked;
   }
 
   async resolveRuntimeAuth(

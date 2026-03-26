@@ -167,53 +167,52 @@ describe("OpenCode revert/unrevert integration", () => {
         server = await spawnOpencodeServer({ repoDir, homeDir });
         const client = createOpencodeClient({ baseUrl: server.url, directory: repoDir });
 
-        const sessionRes = await client.session.create({ query: { directory: repoDir } });
+        const sessionRes = await client.session.create({ directory: repoDir });
         expect(sessionRes.error).toBeUndefined();
         sessionId = sessionRes.data!.id;
 
         const promptRes = await client.session.prompt({
-          path: { id: sessionId },
-          query: { directory: repoDir },
-          body: {
-            model: { providerID: "opencode", modelID: "big-pickle" },
-            parts: [
-              {
-                type: "text",
-                text: "Edit foo.txt so its entire contents are exactly: AFTER\\n",
-              },
-            ],
-          },
+          sessionID: sessionId,
+          directory: repoDir,
+          model: { providerID: "opencode", modelID: "big-pickle" },
+          parts: [
+            {
+              type: "text",
+              text: "Edit foo.txt so its entire contents are exactly: AFTER\\n",
+            },
+          ],
         });
 
         expect(promptRes.error).toBeUndefined();
         expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER\n");
 
         const messagesRes = await client.session.messages({
-          path: { id: sessionId },
-          query: { directory: repoDir },
+          sessionID: sessionId,
+          directory: repoDir,
         });
         expect(messagesRes.error).toBeUndefined();
 
         userMessageId = messagesRes.data!.find((m) => m.info.role === "user")!.info.id;
 
         const diffRes = await client.session.diff({
-          path: { id: sessionId },
-          query: { directory: repoDir, messageID: userMessageId },
+          sessionID: sessionId,
+          directory: repoDir,
+          messageID: userMessageId,
         });
         expect(diffRes.error).toBeUndefined();
         expect((diffRes.data ?? []).some((d) => d.file === "foo.txt")).toBe(true);
 
         const revertRes = await client.session.revert({
-          path: { id: sessionId },
-          query: { directory: repoDir },
-          body: { messageID: userMessageId },
+          sessionID: sessionId,
+          directory: repoDir,
+          messageID: userMessageId,
         });
         expect(revertRes.error).toBeUndefined();
         expect(await fs.readFile(filePath, "utf-8")).toBe("BEFORE\n");
 
         const unrevertRes = await client.session.unrevert({
-          path: { id: sessionId },
-          query: { directory: repoDir },
+          sessionID: sessionId,
+          directory: repoDir,
         });
         expect(unrevertRes.error).toBeUndefined();
         expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER\n");
@@ -224,16 +223,16 @@ describe("OpenCode revert/unrevert integration", () => {
         const client2 = createOpencodeClient({ baseUrl: server.url, directory: repoDir });
 
         const revertRes2 = await client2.session.revert({
-          path: { id: sessionId },
-          query: { directory: repoDir },
-          body: { messageID: userMessageId },
+          sessionID: sessionId,
+          directory: repoDir,
+          messageID: userMessageId,
         });
         expect(revertRes2.error).toBeUndefined();
         expect(await fs.readFile(filePath, "utf-8")).toBe("BEFORE\n");
 
         const unrevertRes2 = await client2.session.unrevert({
-          path: { id: sessionId },
-          query: { directory: repoDir },
+          sessionID: sessionId,
+          directory: repoDir,
         });
         expect(unrevertRes2.error).toBeUndefined();
         expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER\n");

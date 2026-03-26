@@ -1,4 +1,4 @@
-import { createStudioBootstrapToken } from "../../../shared/src/studio/bootstrap.js";
+import { createStudioBootstrapToken } from "@vivd/shared/studio";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -127,6 +127,7 @@ describe("createRequireStudioAuth", () => {
         value: "studio-token",
         options: {
           httpOnly: true,
+          partitioned: true,
           sameSite: "none",
           secure: true,
           path: "/_studio/runtime-123",
@@ -154,6 +155,7 @@ describe("createRequireStudioAuth", () => {
         options: {
           httpOnly: true,
           sameSite: "lax",
+          partitioned: false,
           secure: false,
           path: "/",
         },
@@ -280,6 +282,7 @@ describe("createStudioBootstrapHandler", () => {
         value: "studio-token",
         options: {
           httpOnly: true,
+          partitioned: true,
           sameSite: "none",
           secure: true,
           path: "/",

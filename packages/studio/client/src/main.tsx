@@ -51,7 +51,9 @@ function Root() {
               }
 
               const controller = new AbortController();
-              const timeoutMs = resolveTrpcRequestTimeoutMs(url);
+              const timeoutTarget =
+                typeof url === "string" || url instanceof URL ? url : url.url;
+              const timeoutMs = resolveTrpcRequestTimeoutMs(timeoutTarget);
               const timeoutId = window.setTimeout(() => {
                 controller.abort(`Timed out after ${timeoutMs}ms`);
               }, timeoutMs);

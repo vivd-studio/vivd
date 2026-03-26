@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Context } from "../trpc/context.js";
 
 const {
   touchMock,
@@ -37,14 +38,14 @@ vi.mock("@vivd/shared", () => ({
 
 import { projectRouter } from "./project.js";
 
-function makeContext(overrides: Record<string, unknown> = {}) {
+function makeContext(overrides: Partial<Context> = {}): Context {
   return {
     workspace: {
       isInitialized: vi.fn(() => true),
       getProjectPath: vi.fn(() => "/tmp/workspace"),
-    },
+    } as unknown as Context["workspace"],
     ...overrides,
-  };
+  } as Context;
 }
 
 describe("project router", () => {
@@ -301,7 +302,7 @@ describe("project router", () => {
         workspace: {
           isInitialized: vi.fn(() => false),
           getProjectPath: vi.fn(),
-        },
+        } as unknown as Context["workspace"],
       }),
     );
 
@@ -322,7 +323,7 @@ describe("project router", () => {
         workspace: {
           isInitialized: vi.fn(() => false),
           getProjectPath: vi.fn(),
-        },
+        } as unknown as Context["workspace"],
       }),
     );
 

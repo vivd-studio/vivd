@@ -9,7 +9,6 @@
     "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
-    "declaration": true,
     "baseUrl": ".",
     "paths": {
       "@studio/*": ["./server/*"],

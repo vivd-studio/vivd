@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type express from "express";
-import { verifyStudioBootstrapToken } from "../../../shared/src/studio/bootstrap.js";
+import { verifyStudioBootstrapToken } from "@vivd/shared/studio";
 
 const FORWARDED_PREFIX_HEADER = "x-forwarded-prefix";
 const FORWARDED_HOST_HEADER = "x-forwarded-host";
@@ -191,8 +191,11 @@ export function setStudioAuthCookie(
   res.cookie(STUDIO_AUTH_COOKIE, token, {
     httpOnly: true,
     // Fly embeds use a cross-site runtime host in prod, so secure requests need
-    // SameSite=None or the iframe never sends the auth cookie back.
+    // SameSite=None. Mark them partitioned as well so modern browsers can keep
+    // sending the cookie inside the embedded Studio iframe even with tighter
+    // third-party cookie handling.
     sameSite: secure ? "none" : "lax",
+    partitioned: secure,
     secure,
     path: getCookiePath(req),
   });

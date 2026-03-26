@@ -231,12 +231,6 @@ export function ChatProvider({
   const queuedFollowupSendingId = selectedSessionId
     ? queuedFollowupSendingBySessionId[selectedSessionId] ?? null
     : null;
-  const queuedFollowupFailedId = selectedSessionId
-    ? queuedFollowupFailedBySessionId[selectedSessionId] ?? null
-    : null;
-  const queuedFollowupPaused = selectedSessionId
-    ? queuedFollowupPausedBySessionId[selectedSessionId] ?? false
-    : false;
 
   const removeQueuedFollowup = useCallback((sessionId: string, id: string) => {
     setQueuedFollowupsBySessionId((current) => {

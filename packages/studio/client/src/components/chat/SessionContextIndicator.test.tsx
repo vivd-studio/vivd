@@ -5,7 +5,7 @@ import { SessionContextIndicator } from "./SessionContextIndicator";
 
 const { chatContextState, opencodeState } = vi.hoisted(() => ({
   chatContextState: {
-    selectedSessionId: "sess-1",
+    selectedSessionId: "sess-1" as string | null,
     softContextLimitTokens: 250_000,
     availableModels: [
       {

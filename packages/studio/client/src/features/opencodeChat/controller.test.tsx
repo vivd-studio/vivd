@@ -214,7 +214,7 @@ describe("useOpencodeChatController", () => {
   });
 
   it("stops a pending new-session start before the first prompt dispatch", async () => {
-    const refetchGate = deferred<void>();
+    const refetchGate = deferred<undefined>();
     mockOpencodeChat.refetchBootstrap.mockReturnValue(refetchGate.promise);
 
     const { result } = renderHook(() =>
@@ -245,7 +245,7 @@ describe("useOpencodeChatController", () => {
       version: 1,
     });
 
-    refetchGate.resolve();
+    refetchGate.resolve(undefined);
 
     await waitFor(() => {
       expect(deleteSessionMutateAsync).toHaveBeenCalledWith({

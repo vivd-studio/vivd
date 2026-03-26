@@ -121,7 +121,10 @@ function extractClientIp(req: express.Request): string | null {
       .split(",")
       .map((entry) => entry.trim())
       .filter(Boolean);
-    const forwardedIp = forwardedParts.at(-1);
+    const forwardedIp =
+      forwardedParts.length > 0
+        ? forwardedParts[forwardedParts.length - 1]
+        : undefined;
     if (forwardedIp) return forwardedIp;
   }
 

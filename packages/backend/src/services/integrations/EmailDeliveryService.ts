@@ -110,7 +110,7 @@ class SmtpEmailDeliveryService implements EmailDeliveryService {
       return {
         accepted: false,
         provider: this.providerName,
-        error: prepared.error,
+        error: "error" in prepared ? prepared.error : "Invalid email request",
       };
     }
 
@@ -159,7 +159,7 @@ class SesEmailDeliveryService implements EmailDeliveryService {
       return {
         accepted: false,
         provider: this.providerName,
-        error: prepared.error,
+        error: "error" in prepared ? prepared.error : "Invalid email request",
       };
     }
     const { recipients, fromEmail, replyTo, subject, textBody, htmlBody, metadata } =
@@ -231,7 +231,7 @@ class ResendEmailDeliveryService implements EmailDeliveryService {
       return {
         accepted: false,
         provider: this.providerName,
-        error: prepared.error,
+        error: "error" in prepared ? prepared.error : "Invalid email request",
       };
     }
     const { recipients, fromEmail, replyTo, subject, textBody, htmlBody, metadata } =
