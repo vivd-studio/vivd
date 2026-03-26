@@ -26,7 +26,11 @@ import type {
   DockerContainerSummary,
 } from "./types";
 import { sleep } from "../fly/utils";
-import { getDefinedStudioMachineEnv } from "../env";
+import {
+  getDefinedStudioMachineEnv,
+  parseStudioMachineEnvKeyList,
+  withMissingStudioMachineEnvKeys,
+} from "../env";
 
 type StudioIdentity = {
   organizationId: string;
@@ -68,6 +72,12 @@ async function mapLimit<T>(
 const STUDIO_INTERNAL_PORT = 3100;
 const DEFAULT_ENV_PASSTHROUGH =
   "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL_STANDARD,OPENCODE_MODEL_ADVANCED,OPENCODE_MODEL_PRO,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_BUCKET_MODE,VIVD_LOCAL_S3_BUCKET,VIVD_LOCAL_S3_ENDPOINT_URL,VIVD_LOCAL_S3_ACCESS_KEY,VIVD_LOCAL_S3_SECRET_KEY,VIVD_LOCAL_S3_REGION,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_ACCESS_KEY_ID,VIVD_S3_SECRET_ACCESS_KEY,VIVD_S3_SESSION_TOKEN,VIVD_S3_REGION,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,VIVD_S3_OPENCODE_STORAGE_URI,VIVD_S3_SYNC_INTERVAL_SECONDS,VIVD_SYNC_TRIGGER_FILE,VIVD_SYNC_PAUSE_FILE,VIVD_SYNC_PAUSE_MAX_AGE_SECONDS,VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS,VIVD_SHUTDOWN_CHILD_WAIT_SECONDS,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME";
+
+function getConfiguredDockerStudioEnvPassthroughKeys(): string[] {
+  return parseStudioMachineEnvKeyList(
+    process.env.DOCKER_STUDIO_ENV_PASSTHROUGH || DEFAULT_ENV_PASSTHROUGH,
+  );
+}
 
 function parseEnvList(values: string[] | undefined): Record<string, string> {
   const env: Record<string, string> = {};
@@ -523,12 +533,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         env.MAIN_BACKEND_URL;
     }
 
-    const passthrough = (
-      process.env.DOCKER_STUDIO_ENV_PASSTHROUGH || DEFAULT_ENV_PASSTHROUGH
-    )
-      .split(",")
-      .map((key) => key.trim())
-      .filter(Boolean);
+    const passthrough = getConfiguredDockerStudioEnvPassthroughKeys();
 
     for (const key of passthrough) {
       if (explicitEnvKeys.has(key)) continue;
@@ -547,6 +552,29 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     }
 
     return env;
+  }
+
+  private buildStudioEnvDriftSubset(
+    desiredEnv: Record<string, string>,
+    explicitEnvKeys: Iterable<string>,
+  ): Record<string, string> {
+    const subset = { ...desiredEnv };
+    delete subset[STUDIO_ACCESS_TOKEN_ENV_KEY];
+
+    const managedMissingKeys = new Set<string>();
+    const explicitKeys = new Set(explicitEnvKeys);
+
+    for (const key of getConfiguredDockerStudioEnvPassthroughKeys()) {
+      if (!explicitKeys.has(key)) {
+        managedMissingKeys.add(key);
+      }
+    }
+
+    if (!explicitKeys.has("VIVD_OPENCODE_DATA_HOME")) {
+      managedMissingKeys.add("VIVD_OPENCODE_DATA_HOME");
+    }
+
+    return withMissingStudioMachineEnvKeys(subset, managedMissingKeys);
   }
 
   private async inspectContainer(
@@ -930,7 +958,14 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
       args.env.MAIN_BACKEND_URL,
     );
-    const desiredEnvSubset = getDefinedStudioMachineEnv(args.env);
+    const desiredEnvSubset = this.buildStudioEnvDriftSubset(
+      this.buildStudioEnv({
+        ...args,
+        studioId: getContainerStudioId(inspected, args.env.STUDIO_ID),
+        accessToken: getContainerAccessToken(inspected) || "",
+      }),
+      Object.keys(args.env),
+    );
     let reconcileState = resolveContainerReconcileState({
       container: inspected,
       desiredImage,
@@ -1293,13 +1328,35 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
       getContainerEnv(options.container).MAIN_BACKEND_URL,
     );
-    const reconcileState = resolveContainerReconcileState({
+    let reconcileState = resolveContainerReconcileState({
       container: options.container,
       desiredImage: options.desiredImage,
       desiredNanoCpus: this.config.nanoCpus,
       desiredMemoryBytes: this.config.memoryBytes,
       desiredNetworkName: options.desiredNetworkName,
       desiredMainBackendUrl,
+      generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+    });
+    const desiredEnvSubset = this.buildStudioEnvDriftSubset(
+      this.buildStudioEnv({
+        organizationId: options.identity.organizationId,
+        projectSlug: options.identity.projectSlug,
+        version: options.identity.version,
+        env: {},
+        studioId: getContainerStudioId(options.container),
+        accessToken: reconcileState.accessToken,
+      }),
+      [],
+    );
+    reconcileState = resolveContainerReconcileState({
+      container: options.container,
+      desiredImage: options.desiredImage,
+      desiredAccessToken: reconcileState.accessToken,
+      desiredNanoCpus: this.config.nanoCpus,
+      desiredMemoryBytes: this.config.memoryBytes,
+      desiredNetworkName: options.desiredNetworkName,
+      desiredMainBackendUrl,
+      desiredEnvSubset,
       generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
     });
 

@@ -50,10 +50,22 @@ export type WarmReconcileStudioMachineDeps = {
   getDesiredImage: () => Promise<string>;
   getMachine: (machineId: string) => Promise<FlyMachine>;
   getStudioIdentityFromMachine: (machine: FlyMachine) => StudioIdentity | null;
+  buildReconciledEnv: (options: {
+    machine: FlyMachine;
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    studioId: string;
+    accessToken: string;
+  }) => {
+    desiredEnvSubset: Record<string, string>;
+    fullEnv: Record<string, string>;
+  };
   resolveMachineReconcileState: (options: {
     machine: FlyMachine;
     desiredImage: string;
     preferredAccessToken?: string | null;
+    desiredEnvSubset?: Record<string, string>;
   }) => { accessToken: string; needs: MachineReconcileNeeds };
   hasMachineDrift: (needs: MachineReconcileNeeds) => boolean;
   shouldStopSuspendedBeforeReconcile: (
@@ -123,9 +135,24 @@ export async function warmReconcileStudioMachineWorkflow(
     return { desiredImage };
   }
 
-  const reconcileState = deps.resolveMachineReconcileState({
+  const studioId = deps.resolveStudioIdFromMachine(machine);
+  let reconcileState = deps.resolveMachineReconcileState({
     machine,
     desiredImage,
+  });
+  let reconcileEnv = deps.buildReconciledEnv({
+    machine,
+    organizationId: identity.organizationId,
+    projectSlug: identity.projectSlug,
+    version: identity.version,
+    studioId,
+    accessToken: reconcileState.accessToken,
+  });
+  reconcileState = deps.resolveMachineReconcileState({
+    machine,
+    desiredImage,
+    preferredAccessToken: reconcileState.accessToken,
+    desiredEnvSubset: reconcileEnv.desiredEnvSubset,
   });
   if (!deps.hasMachineDrift(reconcileState.needs)) {
     return { desiredImage };
@@ -136,10 +163,10 @@ export async function warmReconcileStudioMachineWorkflow(
       `[FlyMachines] Refusing to warm reconcile running machine ${machineId} (state=${state})`,
     );
   }
-
   let current = machine;
   let currentState = state;
   let currentReconcileState = reconcileState;
+  let currentReconcileEnv = reconcileEnv;
 
   // Suspended machines would resume a snapshot; stop first to boot the new image.
   if (deps.shouldStopSuspendedBeforeReconcile(currentState, currentReconcileState.needs)) {
@@ -151,9 +178,20 @@ export async function warmReconcileStudioMachineWorkflow(
     });
     current = await deps.getMachine(machineId);
     currentState = current.state || "unknown";
+    const currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
+    currentReconcileEnv = deps.buildReconciledEnv({
+      machine: current,
+      organizationId: identity.organizationId,
+      projectSlug: identity.projectSlug,
+      version: identity.version,
+      studioId: currentStudioId,
+      accessToken: currentReconcileState.accessToken,
+    });
     currentReconcileState = deps.resolveMachineReconcileState({
       machine: current,
       desiredImage,
+      preferredAccessToken: currentReconcileState.accessToken,
+      desiredEnvSubset: currentReconcileEnv.desiredEnvSubset,
     });
   }
 
@@ -171,8 +209,7 @@ export async function warmReconcileStudioMachineWorkflow(
   if (!port) {
     throw new Error("Missing external port; cannot warm image");
   }
-
-  const studioId = deps.resolveStudioIdFromMachine(current);
+  const currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
   const accessToken = currentReconcileState.accessToken;
   const reconciledAt = new Date().toISOString();
   const metadata = deps.buildReconciledMetadata({
@@ -181,7 +218,7 @@ export async function warmReconcileStudioMachineWorkflow(
     projectSlug: identity.projectSlug,
     version: identity.version,
     port,
-    studioId,
+    studioId: currentStudioId,
     desiredImage,
     accessToken,
     extra: {
@@ -197,6 +234,7 @@ export async function warmReconcileStudioMachineWorkflow(
     accessToken,
     needs: currentReconcileState.needs,
     metadata,
+    fullEnv: currentReconcileEnv.fullEnv,
   });
 
   await deps.updateMachineConfig({
@@ -252,6 +290,17 @@ export type ReconcileStudioMachinesInnerDeps = {
   getMachineCreatedAtMs: (machine: FlyMachine) => number | null;
   reconcilerConcurrency: number;
   getMachine: (machineId: string) => Promise<FlyMachine>;
+  buildReconciledEnv: (options: {
+    machine: FlyMachine;
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    studioId: string;
+    accessToken: string;
+  }) => {
+    desiredEnvSubset: Record<string, string>;
+    fullEnv: Record<string, string>;
+  };
   stopMachine: (machineId: string) => Promise<void>;
   waitForState: (options: WaitForStateOptions) => Promise<void>;
   destroyMachine: (machineId: string) => Promise<void>;
@@ -259,6 +308,7 @@ export type ReconcileStudioMachinesInnerDeps = {
     machine: FlyMachine;
     desiredImage: string;
     preferredAccessToken?: string | null;
+    desiredEnvSubset?: Record<string, string>;
   }) => { accessToken: string; needs: MachineReconcileNeeds };
   hasMachineDrift: (needs: MachineReconcileNeeds) => boolean;
   getMachineDriftLabels: (needs: MachineReconcileNeeds) => string[];
@@ -402,9 +452,24 @@ export async function reconcileStudioMachinesInnerWorkflow(
       return;
     }
 
-    const reconcileState = deps.resolveMachineReconcileState({
+    const studioId = deps.resolveStudioIdFromMachine(machine);
+    let reconcileState = deps.resolveMachineReconcileState({
       machine,
       desiredImage,
+    });
+    let reconcileEnv = deps.buildReconciledEnv({
+      machine,
+      organizationId: identity.organizationId,
+      projectSlug: identity.projectSlug,
+      version: identity.version,
+      studioId,
+      accessToken: reconcileState.accessToken,
+    });
+    reconcileState = deps.resolveMachineReconcileState({
+      machine,
+      desiredImage,
+      preferredAccessToken: reconcileState.accessToken,
+      desiredEnvSubset: reconcileEnv.desiredEnvSubset,
     });
     if (!deps.hasMachineDrift(reconcileState.needs)) return;
     const driftLabels = deps.getMachineDriftLabels(reconcileState.needs);
@@ -427,9 +492,24 @@ export async function reconcileStudioMachinesInnerWorkflow(
     try {
       let current = await deps.getMachine(machine.id);
       let currentState = current.state || "unknown";
+      let currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
       let currentReconcileState = deps.resolveMachineReconcileState({
         machine: current,
         desiredImage,
+      });
+      let currentReconcileEnv = deps.buildReconciledEnv({
+        machine: current,
+        organizationId: identity.organizationId,
+        projectSlug: identity.projectSlug,
+        version: identity.version,
+        studioId: currentStudioId,
+        accessToken: currentReconcileState.accessToken,
+      });
+      currentReconcileState = deps.resolveMachineReconcileState({
+        machine: current,
+        desiredImage,
+        preferredAccessToken: currentReconcileState.accessToken,
+        desiredEnvSubset: currentReconcileEnv.desiredEnvSubset,
       });
 
       if (currentState === "destroyed" || currentState === "destroying") return;
@@ -444,9 +524,20 @@ export async function reconcileStudioMachinesInnerWorkflow(
         });
         current = await deps.getMachine(machine.id);
         currentState = current.state || "unknown";
+        currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
+        currentReconcileEnv = deps.buildReconciledEnv({
+          machine: current,
+          organizationId: identity.organizationId,
+          projectSlug: identity.projectSlug,
+          version: identity.version,
+          studioId: currentStudioId,
+          accessToken: currentReconcileState.accessToken,
+        });
         currentReconcileState = deps.resolveMachineReconcileState({
           machine: current,
           desiredImage,
+          preferredAccessToken: currentReconcileState.accessToken,
+          desiredEnvSubset: currentReconcileEnv.desiredEnvSubset,
         });
       }
 
@@ -460,8 +551,6 @@ export async function reconcileStudioMachinesInnerWorkflow(
       if (!port) {
         throw new Error("Missing external port; cannot warm image");
       }
-
-      const studioId = deps.resolveStudioIdFromMachine(current);
       const accessToken = currentReconcileState.accessToken;
       const reconciledAt = new Date().toISOString();
       const metadata = deps.buildReconciledMetadata({
@@ -470,7 +559,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
         projectSlug: identity.projectSlug,
         version: identity.version,
         port,
-        studioId,
+        studioId: currentStudioId,
         desiredImage,
         accessToken,
         extra: {
@@ -488,6 +577,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
         accessToken,
         needs: currentReconcileState.needs,
         metadata,
+        fullEnv: currentReconcileEnv.fullEnv,
       });
 
       await deps.updateMachineConfig({

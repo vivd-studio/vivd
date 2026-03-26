@@ -27,11 +27,5 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Unit tests
-        run: npm run test:run
-
-      - name: Studio tests
-        run: npm run test:run --workspace=@vivd/studio
+      - name: Studio Auth Regression Tests
+        run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts

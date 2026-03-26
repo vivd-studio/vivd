@@ -6,6 +6,7 @@ import type {
   StudioMachineStartResult,
   StudioRuntimeAuthIdentity,
 } from "../types";
+import { mergeManagedStudioMachineEnv } from "../env";
 import { listStudioVisitMsByIdentity } from "../visitStore";
 import type {
   FlyMachine,
@@ -34,6 +35,7 @@ import {
 } from "./machineModel";
 import {
   allocatePortWorkflow,
+  buildStudioEnvDriftSubsetFromDesiredEnv,
   buildStudioEnvWorkflow,
   ensureExistingMachineRunningWorkflow,
   ensureRunningInnerWorkflow,
@@ -301,6 +303,34 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     );
   }
 
+  private buildReconciledEnv(options: {
+    machine: FlyMachine;
+    organizationId: string;
+    projectSlug: string;
+    version: number;
+    studioId: string;
+    accessToken: string;
+  }): { desiredEnvSubset: Record<string, string>; fullEnv: Record<string, string> } {
+    const desiredEnv = this.buildStudioEnv({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      version: options.version,
+      env: {},
+      studioId: options.studioId,
+      accessToken: options.accessToken,
+    });
+    const desiredEnvSubset = buildStudioEnvDriftSubsetFromDesiredEnv(desiredEnv, []);
+
+    return {
+      desiredEnvSubset,
+      fullEnv: mergeManagedStudioMachineEnv({
+        currentEnv: options.machine.config?.env,
+        desiredEnv,
+        driftSubset: desiredEnvSubset,
+      }),
+    };
+  }
+
   private allocatePort(machines: FlyMachine[]): number {
     return allocatePortWorkflow(
       {
@@ -556,6 +586,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           }),
         getMachine: (id) => this.getMachine(id),
         getStudioIdentityFromMachine,
+        buildReconciledEnv: (options) => this.buildReconciledEnv(options),
         resolveMachineReconcileState: (options) => this.resolveMachineReconcileState(options),
         hasMachineDrift,
         shouldStopSuspendedBeforeReconcile,
@@ -623,6 +654,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       getMachineCreatedAtMs,
       reconcilerConcurrency: this.config.reconcilerConcurrency,
       getMachine: (machineId) => this.getMachine(machineId),
+      buildReconciledEnv: (options) => this.buildReconciledEnv(options),
       stopMachine: (machineId) => this.apiClient.stopMachine(machineId),
       waitForState: (options) => this.waitForState(options),
       destroyMachine: (machineId) => this.apiClient.destroyMachine(machineId),

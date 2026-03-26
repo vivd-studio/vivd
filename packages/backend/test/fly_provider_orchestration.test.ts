@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FlyStudioMachineProvider } from "../src/services/studioMachines/fly/provider";
 import type {
   StudioMachineStartArgs,
@@ -28,6 +28,7 @@ function studioMachine(options: {
   state: FlyMachine["state"];
   image: string;
   metadataImage?: string;
+  env?: Record<string, string>;
 }): FlyMachine {
   const accessToken = "token-1";
   return {
@@ -43,6 +44,7 @@ function studioMachine(options: {
         VIVD_TENANT_ID: "org-1",
         VIVD_PROJECT_SLUG: "site-1",
         VIVD_PROJECT_VERSION: "1",
+        ...(options.env || {}),
       },
       services: [{ autostop: "suspend", autostart: false, ports: [{ port: 4100 }] }],
       metadata: {
@@ -59,6 +61,11 @@ function studioMachine(options: {
 }
 
 describe("FlyStudioMachineProvider orchestration", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   it("stopIdleMachines swallows list-machines failures", async () => {
     const provider = new FlyStudioMachineProvider();
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -246,6 +253,94 @@ describe("FlyStudioMachineProvider orchestration", () => {
     await expect(provider.warmReconcileStudioMachine("m2")).rejects.toThrow(
       "Refusing to warm reconcile running machine m2",
     );
+  });
+
+  it("ensureRunning refreshes passthrough model env drift", async () => {
+    vi.stubEnv(
+      "OPENCODE_MODEL_STANDARD",
+      "openrouter/google/gemini-3-flash-preview",
+    );
+
+    const provider = new FlyStudioMachineProvider();
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    const machine = studioMachine({
+      id: "m4",
+      state: "started",
+      image: desiredImage,
+      metadataImage: desiredImage,
+      env: {
+        OPENCODE_MODEL_STANDARD: "openrouter/google/gemini-2.5-flash",
+      },
+    });
+
+    (provider as any).apiClient.listMachines = async () => [machine];
+    (provider as any).getDesiredImage = async () => desiredImage;
+    (provider as any).getMachine = async () => ({
+      ...machine,
+      state: "stopped",
+    });
+    const stopMachineMock = vi
+      .spyOn((provider as any).apiClient, "stopMachine")
+      .mockResolvedValue(undefined);
+    (provider as any).waitForState = async () => {};
+
+    let updatedConfig: any = null;
+    (provider as any).apiClient.updateMachineConfig = async ({ config }: any) => {
+      updatedConfig = config;
+      return { ...machine, config, state: "stopped" };
+    };
+    (provider as any).startMachineHandlingReplacement = async () => {};
+    (provider as any).waitForReady = async () => {};
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    await provider.ensureRunning(args);
+
+    expect(stopMachineMock).toHaveBeenCalledWith("m4");
+    expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
+      "openrouter/google/gemini-3-flash-preview",
+    );
+  });
+
+  it("warmReconcileStudioMachine refreshes passthrough model env drift", async () => {
+    vi.stubEnv(
+      "OPENCODE_MODEL_STANDARD",
+      "openrouter/google/gemini-3-flash-preview",
+    );
+
+    const provider = new FlyStudioMachineProvider();
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    const machine = studioMachine({
+      id: "m5",
+      state: "stopped",
+      image: desiredImage,
+      metadataImage: desiredImage,
+      env: {
+        OPENCODE_MODEL_STANDARD: "openrouter/google/gemini-2.5-flash",
+        SESSION_TOKEN: "old-session-token",
+      },
+    });
+
+    (provider as any).getDesiredImage = async () => desiredImage;
+    (provider as any).getMachine = async () => machine;
+    let updatedConfig: any = null;
+    (provider as any).apiClient.updateMachineConfig = async ({ config }: any) => {
+      updatedConfig = config;
+      return { ...machine, config };
+    };
+    (provider as any).waitForReconcileDriftToClear = async () => null;
+    (provider as any).startMachineHandlingReplacement = async () => {};
+    (provider as any).waitForReady = async () => {};
+    (provider as any).suspendOrStopMachine = async () => "suspended";
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    await provider.warmReconcileStudioMachine("m5");
+
+    expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
+      "openrouter/google/gemini-3-flash-preview",
+    );
+    expect(updatedConfig?.env?.SESSION_TOKEN).toBe("old-session-token");
   });
 
   it("warmReconcileStudioMachine returns desired image when no drift exists", async () => {

@@ -297,6 +297,15 @@ export function createStudioBootstrapHandler(
 
     const redirectTarget = resolveStudioBootstrapRedirectTarget(req, nextTarget);
     if (!redirectTarget) {
+      console.warn("[StudioAuth] Rejected bootstrap target", {
+        requestOrigin: getRequestOrigin(req),
+        nextTarget,
+        host: getFirstHeaderValue(req.headers.host),
+        forwardedHost: getFirstHeaderValue(req.headers[FORWARDED_HOST_HEADER]),
+        forwardedPort: getFirstHeaderValue(req.headers[FORWARDED_PORT_HEADER]),
+        forwardedProto: getFirstHeaderValue(req.headers[FORWARDED_PROTO_HEADER]),
+        forwardedPrefix: getFirstHeaderValue(req.headers[FORWARDED_PREFIX_HEADER]),
+      });
       return res.status(400).json({ error: "Invalid bootstrap target" });
     }
 

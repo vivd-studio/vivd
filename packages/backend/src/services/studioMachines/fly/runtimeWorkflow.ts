@@ -4,7 +4,11 @@ import type {
   StudioMachineStartArgs,
   StudioMachineStartResult,
 } from "../types";
-import { getDefinedStudioMachineEnv } from "../env";
+import {
+  getDefinedStudioMachineEnv,
+  parseStudioMachineEnvKeyList,
+  withMissingStudioMachineEnvKeys,
+} from "../env";
 import {
   STUDIO_ACCESS_TOKEN_ENV_KEY,
   STUDIO_ACCESS_TOKEN_METADATA_KEY,
@@ -84,7 +88,6 @@ export async function ensureExistingMachineRunningWorkflow(
   args: StudioMachineStartArgs,
   studioKey: string,
 ): Promise<StudioMachineStartResult> {
-  const definedEnv = getDefinedStudioMachineEnv(args.env);
   const port = deps.getMachineExternalPort(existing);
   if (!port) {
     throw new Error(
@@ -93,14 +96,27 @@ export async function ensureExistingMachineRunningWorkflow(
   }
 
   const desiredImage = await deps.getDesiredImage();
+  const studioId = deps.resolveStudioIdFromMachine(existing, args.env.STUDIO_ID);
   const preferredAccessToken = deps.trimToken(
     args.env[STUDIO_ACCESS_TOKEN_ENV_KEY],
+  );
+  const envForDrift = deps.buildStudioEnv({
+    ...args,
+    studioId,
+    accessToken:
+      preferredAccessToken ||
+      existing.config?.env?.[STUDIO_ACCESS_TOKEN_ENV_KEY] ||
+      "",
+  });
+  const desiredEnvSubset = buildStudioEnvDriftSubsetFromDesiredEnv(
+    envForDrift,
+    Object.keys(args.env),
   );
   let reconcileState = deps.resolveMachineReconcileState({
     machine: existing,
     desiredImage,
     preferredAccessToken,
-    desiredEnvSubset: definedEnv,
+    desiredEnvSubset,
   });
   let accessToken = reconcileState.accessToken;
 
@@ -121,7 +137,7 @@ export async function ensureExistingMachineRunningWorkflow(
       machine: existing,
       desiredImage,
       preferredAccessToken,
-      desiredEnvSubset: definedEnv,
+      desiredEnvSubset,
     });
     accessToken = reconcileState.accessToken;
   }
@@ -147,12 +163,11 @@ export async function ensureExistingMachineRunningWorkflow(
       machine: current,
       desiredImage,
       preferredAccessToken,
-      desiredEnvSubset: definedEnv,
+      desiredEnvSubset,
     });
     accessToken = reconcileState.accessToken;
 
     if (deps.hasMachineDrift(reconcileState.needs)) {
-      const studioId = deps.resolveStudioIdFromMachine(current, args.env.STUDIO_ID);
       const env = deps.buildStudioEnv({ ...args, studioId, accessToken });
       const metadata = deps.buildReconciledMetadata({
         machine: current,
@@ -195,10 +210,10 @@ export async function ensureExistingMachineRunningWorkflow(
     timeoutMs: deps.startTimeoutMs,
   });
 
-  const studioId = deps.resolveStudioIdFromMachine(existing, args.env.STUDIO_ID);
+  const finalStudioId = deps.resolveStudioIdFromMachine(existing, args.env.STUDIO_ID);
 
   deps.touchKey(studioKey);
-  return { studioId, url, port, accessToken };
+  return { studioId: finalStudioId, url, port, accessToken };
 }
 
 export type RecoverCreateNameConflictDeps = {
@@ -264,6 +279,12 @@ export function allocatePortWorkflow(
 const DEFAULT_ENV_PASSTHROUGH =
   "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL_STANDARD,OPENCODE_MODEL_ADVANCED,OPENCODE_MODEL_PRO,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_BUCKET_MODE,VIVD_LOCAL_S3_BUCKET,VIVD_LOCAL_S3_ENDPOINT_URL,VIVD_LOCAL_S3_ACCESS_KEY,VIVD_LOCAL_S3_SECRET_KEY,VIVD_LOCAL_S3_REGION,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_ACCESS_KEY_ID,VIVD_S3_SECRET_ACCESS_KEY,VIVD_S3_SESSION_TOKEN,VIVD_S3_REGION,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,VIVD_S3_OPENCODE_STORAGE_URI,VIVD_S3_SYNC_INTERVAL_SECONDS,VIVD_SYNC_TRIGGER_FILE,VIVD_SYNC_PAUSE_FILE,VIVD_SYNC_PAUSE_MAX_AGE_SECONDS,VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS,VIVD_SHUTDOWN_CHILD_WAIT_SECONDS,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME";
 
+function getConfiguredFlyStudioEnvPassthroughKeys(): string[] {
+  return parseStudioMachineEnvKeyList(
+    process.env.FLY_STUDIO_ENV_PASSTHROUGH || DEFAULT_ENV_PASSTHROUGH,
+  );
+}
+
 export type BuildStudioEnvDeps = {
   desiredKillTimeoutSeconds: number;
 };
@@ -301,10 +322,7 @@ export function buildStudioEnvWorkflow(
   }
 
   // Optional passthrough for local-first testing (keeps config explicit).
-  const passthrough = (process.env.FLY_STUDIO_ENV_PASSTHROUGH || DEFAULT_ENV_PASSTHROUGH)
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean);
+  const passthrough = getConfiguredFlyStudioEnvPassthroughKeys();
 
   for (const key of passthrough) {
     if (explicitEnvKeys.has(key)) continue;
@@ -323,6 +341,29 @@ export function buildStudioEnvWorkflow(
   }
 
   return env;
+}
+
+export function buildStudioEnvDriftSubsetFromDesiredEnv(
+  desiredEnv: Record<string, string>,
+  explicitEnvKeys: Iterable<string>,
+): Record<string, string> {
+  const subset = { ...desiredEnv };
+  delete subset[STUDIO_ACCESS_TOKEN_ENV_KEY];
+
+  const managedMissingKeys = new Set<string>();
+  const explicitKeys = new Set(explicitEnvKeys);
+
+  for (const key of getConfiguredFlyStudioEnvPassthroughKeys()) {
+    if (!explicitKeys.has(key)) {
+      managedMissingKeys.add(key);
+    }
+  }
+
+  if (!explicitKeys.has("VIVD_OPENCODE_DATA_HOME")) {
+    managedMissingKeys.add("VIVD_OPENCODE_DATA_HOME");
+  }
+
+  return withMissingStudioMachineEnvKeys(subset, managedMissingKeys);
 }
 
 export type RestartInnerDeps = {
