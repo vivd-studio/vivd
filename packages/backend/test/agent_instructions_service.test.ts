@@ -38,6 +38,8 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("it can tell you whether the plugin is enabled");
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
+    expect(result.instructions).toContain(".vivd/uploads/");
+    expect(result.instructions).toContain("Treat them as working material");
     expect(result.instructionsHash).toHaveLength(64);
   });
 

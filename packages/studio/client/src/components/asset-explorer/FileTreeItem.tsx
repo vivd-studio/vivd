@@ -12,15 +12,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { FileTreeNode } from "./types";
-import { getFileTreeIconComponent } from "./utils";
+import {
+  buildAssetFileUrl,
+  canDragAssetToPreview,
+  getFileTreeIconComponent,
+  getFileTreeIndentPx,
+} from "./utils";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
+import type { FileTreeMoveTarget } from "./FileTreeView";
 
 // Folders to gray out (build outputs, dependencies, internal)
 const GRAYED_FOLDERS = [
@@ -51,6 +59,10 @@ interface FileTreeItemProps {
   onStartRename?: (item: FileTreeNode) => void;
   onCancelRename?: () => void;
   onAddToChat?: (item: FileTreeNode) => void;
+  moveTargets?: FileTreeMoveTarget[];
+  onMoveToFolder?: (targetFolderPath: string) => void;
+  activeInternalDropTargetPath?: string | null;
+  onInternalDropTargetChange?: (targetPath: string | null) => void;
 }
 
 export function FileTreeItem({
@@ -71,13 +83,18 @@ export function FileTreeItem({
   onStartRename,
   onCancelRename,
   onAddToChat,
+  moveTargets,
+  onMoveToFolder,
+  activeInternalDropTargetPath,
+  onInternalDropTargetChange,
 }: FileTreeItemProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
   const [renameValue, setRenameValue] = useState(item.name);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileIcon = getFileTreeIconComponent(item);
 
   const isGrayed = item.type === "folder" && GRAYED_FOLDERS.includes(item.name);
+  const isDropTarget =
+    item.type === "folder" && activeInternalDropTargetPath === item.path;
 
   // Focus input when entering rename mode
   useEffect(() => {
@@ -122,11 +139,8 @@ export function FileTreeItem({
     e.dataTransfer.setData("application/x-file-path", item.path);
 
     // For images, also set the asset data types so they can be dropped onto the website preview
-    if (item.isImage) {
-      const imageUrl = withVivdStudioTokenQuery(
-        `/vivd-studio/api/assets/${projectSlug}/${version}/${item.path}`,
-        getVivdStudioToken(),
-      );
+    if (item.isImage && canDragAssetToPreview(item.path)) {
+      const imageUrl = buildAssetFileUrl(projectSlug, version, item.path);
       e.dataTransfer.setData("text/plain", item.path);
       e.dataTransfer.setData("application/x-asset-path", item.path);
       e.dataTransfer.setData("application/x-asset-url", imageUrl);
@@ -170,23 +184,41 @@ export function FileTreeItem({
 
   const handleDragOver = (e: React.DragEvent) => {
     if (item.type !== "folder") return;
+    if (!e.dataTransfer.types.includes("application/x-file-path")) return;
+
+    const draggedPath = e.dataTransfer.getData("application/x-file-path");
+    if (draggedPath === item.path || item.path.startsWith(draggedPath + "/")) {
+      onInternalDropTargetChange?.(null);
+      return;
+    }
+
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
-    setIsDragOver(true);
+    onInternalDropTargetChange?.(item.path);
   };
 
-  const handleDragLeave = () => {
-    setIsDragOver(false);
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    if (activeInternalDropTargetPath === item.path) {
+      onInternalDropTargetChange?.(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
+    if (activeInternalDropTargetPath === item.path) {
+      onInternalDropTargetChange?.(null);
+    }
 
     if (item.type !== "folder") return;
 
     const draggedPath = e.dataTransfer.getData("application/x-file-path");
     if (!draggedPath) return;
+
+    e.preventDefault();
+    e.stopPropagation();
 
     // Don't drop on itself or its parent
     if (draggedPath === item.path || item.path.startsWith(draggedPath + "/")) {
@@ -201,17 +233,18 @@ export function FileTreeItem({
       className={cn(
         "flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer transition-colors overflow-hidden min-w-0",
         "hover:bg-muted/35",
-        isDragOver && "bg-muted/50 ring-1 ring-border",
+        isDropTarget && "bg-muted/50 ring-1 ring-border",
         isGrayed && "text-muted-foreground opacity-65",
         isViewing && "bg-muted font-medium",
       )}
-      style={{ paddingLeft: `${depth * 16 + 12}px` }}
+      style={{ paddingLeft: `${getFileTreeIndentPx(depth)}px` }}
       onClick={isRenaming ? undefined : onClick}
       draggable={item.type === "file" && !isRenaming}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      data-file-tree-path={item.path}
     >
       {/* Expand/collapse chevron for folders */}
       {item.type === "folder" ? (
@@ -264,6 +297,7 @@ export function FileTreeItem({
     !onDownload &&
     !onAiEdit &&
     !onCreateFolder &&
+    !onMoveToFolder &&
     !onStartRename &&
     !onAddToChat
   ) {
@@ -280,6 +314,22 @@ export function FileTreeItem({
             <FolderPlus className="mr-2 h-4 w-4" />
             New Folder
           </ContextMenuItem>
+        )}
+
+        {onMoveToFolder && moveTargets && moveTargets.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Move to</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-80 overflow-y-auto">
+              {moveTargets.map((target) => (
+                <ContextMenuItem
+                  key={target.path || "__root__"}
+                  onClick={() => onMoveToFolder(target.path)}
+                >
+                  {target.label}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
         )}
 
         {/* Rename - for all items */}
@@ -316,7 +366,8 @@ export function FileTreeItem({
 
         {/* Separator before delete if there are other items */}
         {onDelete &&
-          (onStartRename ||
+          (onMoveToFolder ||
+            onStartRename ||
             (item.type === "file" &&
               (onDownload || onAddToChat || (item.isImage && onAiEdit))) ||
             (item.type === "folder" && onCreateFolder)) && (

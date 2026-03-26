@@ -419,7 +419,7 @@ async function startServer() {
     await workspaceStateReporter.shutdown();
     await usageReporter.shutdown();
     await devServerService.close();
-    opencodeServerManager.closeAll();
+    await opencodeServerManager.closeAll();
     await workspace.cleanup();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     process.exit(0);

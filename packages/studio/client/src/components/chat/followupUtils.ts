@@ -5,11 +5,11 @@ export const FOLLOWUP_BEHAVIOR_STORAGE_KEY = "vivd-followup-behavior";
 
 export function getStoredFollowupBehavior(): FollowupBehavior {
   if (typeof window === "undefined") {
-    return "steer";
+    return "queue";
   }
 
   const stored = window.localStorage.getItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY);
-  return stored === "queue" || stored === "steer" ? stored : "steer";
+  return stored === "queue" || stored === "steer" ? stored : "queue";
 }
 
 export function buildQueuedFollowupPreview(task: string): string {

@@ -4,6 +4,7 @@ const {
   detectProjectTypeMock,
   syncSourceToBucketMock,
   buildAndUploadPreviewMock,
+  requestConnectedArtifactBuildMock,
   syncPushToGitHubMock,
   projectTouchMock,
   reportSoonMock,
@@ -11,6 +12,7 @@ const {
   detectProjectTypeMock: vi.fn(),
   syncSourceToBucketMock: vi.fn(),
   buildAndUploadPreviewMock: vi.fn(),
+  requestConnectedArtifactBuildMock: vi.fn(),
   syncPushToGitHubMock: vi.fn(),
   projectTouchMock: vi.fn(),
   reportSoonMock: vi.fn(),
@@ -24,6 +26,10 @@ vi.mock("../services/sync/ArtifactSyncService.js", () => ({
   syncSourceToBucket: syncSourceToBucketMock,
   buildAndUploadPreview: buildAndUploadPreviewMock,
   buildAndUploadPublished: vi.fn(),
+}));
+
+vi.mock("../services/sync/ConnectedArtifactBuildService.js", () => ({
+  requestConnectedArtifactBuild: requestConnectedArtifactBuildMock,
 }));
 
 vi.mock("../services/integrations/GitHubSyncService.js", () => ({
@@ -78,11 +84,17 @@ vi.mock("@vivd/shared", () => ({
 
 import { projectRouter } from "./project.js";
 
+async function flushAsyncWork() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("project router gitSave", () => {
   beforeEach(() => {
     detectProjectTypeMock.mockReset();
     syncSourceToBucketMock.mockReset();
     buildAndUploadPreviewMock.mockReset();
+    requestConnectedArtifactBuildMock.mockReset();
     syncPushToGitHubMock.mockReset();
     projectTouchMock.mockReset();
     reportSoonMock.mockReset();
@@ -90,6 +102,10 @@ describe("project router gitSave", () => {
     detectProjectTypeMock.mockReturnValue({ framework: "generic" });
     syncSourceToBucketMock.mockResolvedValue(undefined);
     buildAndUploadPreviewMock.mockResolvedValue(undefined);
+    requestConnectedArtifactBuildMock.mockResolvedValue({
+      requested: false,
+      reason: "disabled",
+    });
     syncPushToGitHubMock.mockResolvedValue({
       attempted: true,
       success: true,
@@ -134,5 +150,44 @@ describe("project router gitSave", () => {
     expect(projectTouchMock).not.toHaveBeenCalled();
     expect(reportSoonMock).not.toHaveBeenCalled();
   });
-});
 
+  it("queues preview builds via the connected builder when that path is accepted", async () => {
+    detectProjectTypeMock.mockReturnValue({ framework: "astro" });
+    requestConnectedArtifactBuildMock.mockResolvedValue({
+      requested: true,
+      deduped: false,
+      status: "queued",
+    });
+
+    const caller = projectRouter.createCaller({
+      workspace: {
+        isInitialized: vi.fn(() => true),
+        commit: vi.fn(async () => "head-1234567"),
+        getHeadCommit: vi.fn(async () => ({ hash: "head-1234567" })),
+        getProjectPath: vi.fn(() => "/tmp/workspace"),
+        runExclusive: vi.fn(async (_name, work) => await work({ cwd: "/tmp/workspace" })),
+      },
+    } as any);
+
+    await caller.gitSave({
+      slug: "site-1",
+      version: 3,
+      message: "Prepare remote build",
+    });
+    await flushAsyncWork();
+
+    expect(syncSourceToBucketMock).toHaveBeenCalledWith({
+      projectDir: "/tmp/workspace",
+      slug: "site-1",
+      version: 3,
+      commitHash: "head-1234567",
+    });
+    expect(requestConnectedArtifactBuildMock).toHaveBeenCalledWith({
+      slug: "site-1",
+      version: 3,
+      kind: "preview",
+      commitHash: "head-1234567",
+    });
+    expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
+  });
+});

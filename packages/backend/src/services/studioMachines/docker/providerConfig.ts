@@ -125,6 +125,12 @@ export class DockerProviderConfig {
     return "ghcr.io/vivd-studio/vivd-studio";
   }
 
+  get builderImageRepository(): string {
+    const configured = process.env.DOCKER_BUILDER_IMAGE_REPO?.trim();
+    if (configured) return configured;
+    return "ghcr.io/vivd-studio/vivd-builder";
+  }
+
   get network(): string {
     return process.env.DOCKER_STUDIO_NETWORK?.trim() || "vivd-network";
   }
@@ -258,6 +264,22 @@ export class DockerProviderConfig {
 
   get memoryBytes(): number {
     return this.memoryMb * 1024 * 1024;
+  }
+
+  get builderCpuLimit(): number {
+    return parsePositiveFloat(process.env.DOCKER_BUILDER_CPUS, 1);
+  }
+
+  get builderNanoCpus(): number {
+    return Math.max(1, Math.round(this.builderCpuLimit * 1_000_000_000));
+  }
+
+  get builderMemoryMb(): number {
+    return parsePositiveInt(process.env.DOCKER_BUILDER_MEMORY_MB, 4096);
+  }
+
+  get builderMemoryBytes(): number {
+    return this.builderMemoryMb * 1024 * 1024;
   }
 
   get cpuKindLabel(): string {

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Wand2, Eraser } from "lucide-react";
 import type { AssetItem } from "./types";
-import { buildImageUrl } from "./utils";
+import { getStudioImageUrlCandidates } from "./utils";
+import { FallbackImage } from "./FallbackImage";
 
 interface AIEditDialogProps {
   open: boolean;
@@ -53,8 +54,12 @@ export function AIEditDialog({
         {editingImage && (
           <div className="space-y-4">
             <div className="flex items-center justify-center bg-muted rounded-lg p-2">
-              <img
-                src={buildImageUrl(projectSlug, version, editingImage.path)}
+              <FallbackImage
+                srcs={getStudioImageUrlCandidates(
+                  projectSlug,
+                  version,
+                  editingImage.path,
+                )}
                 alt={editingImage.name}
                 className="max-w-full max-h-48 object-contain rounded"
               />

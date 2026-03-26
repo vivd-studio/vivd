@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { OPEN_CODE_CHAT_INITIAL_STATE, type OpenCodeChatState } from "../types";
-import { selectMergedSessionMessages } from "./optimisticMessages";
+import {
+  resolveCanonicalUserMessageId,
+  selectMergedSessionMessages,
+} from "./optimisticMessages";
 
 function createState(
   overrides: Partial<OpenCodeChatState> = {},
@@ -98,6 +101,50 @@ describe("selectMergedSessionMessages", () => {
     expect(messages[0]?.info.id).toBe("msg-1");
   });
 
+  it("suppresses optimistic messages when the canonical message differs only by Vivd internal tags", () => {
+    const state = createState({
+      messagesById: {
+        "msg-1": {
+          id: "msg-1",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: BASE_TIME + 30_000 },
+        },
+      },
+      messagesBySessionId: {
+        "sess-1": ["msg-1"],
+      },
+      partsByMessageId: {
+        "msg-1": [
+          {
+            id: "part-1",
+            messageID: "msg-1",
+            sessionID: "sess-1",
+            type: "text",
+            text: "Make this text red",
+          },
+        ],
+      },
+    });
+
+    const messages = selectMergedSessionMessages({
+      state,
+      sessionId: "sess-1",
+      optimisticUserMessages: [
+        {
+          clientId: "client-3",
+          sessionId: "sess-1",
+          content:
+            'Make this text red\n\n<vivd-internal type="element-ref" selector="//*[@id=\'hero\']" />',
+          createdAt: BASE_TIME + 30_100,
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.info.id).toBe("msg-1");
+  });
+
   it("keeps unmatched optimistic messages ordered after older canonical messages", () => {
     const state = createState({
       messagesById: {
@@ -140,5 +187,50 @@ describe("selectMergedSessionMessages", () => {
     expect(messages).toHaveLength(2);
     expect(messages[0]?.info.id).toBe("msg-2");
     expect(messages[1]?.info.id).toBe("optimistic:client-4");
+  });
+
+  it("resolves an optimistic message id back to the canonical user message", () => {
+    const resolved = resolveCanonicalUserMessageId(
+      [
+        {
+          info: {
+            id: "msg-1",
+            sessionID: "sess-1",
+            role: "user",
+            time: { created: BASE_TIME + 30_000 },
+          },
+          parts: [
+            {
+              id: "part-1",
+              messageID: "msg-1",
+              sessionID: "sess-1",
+              type: "text",
+              text: "Make this text red",
+            },
+          ],
+        },
+        {
+          info: {
+            id: "optimistic:client-1",
+            sessionID: "sess-1",
+            role: "user",
+            time: { created: BASE_TIME + 30_050 },
+          },
+          parts: [
+            {
+              id: "part-2",
+              messageID: "optimistic:client-1",
+              sessionID: "sess-1",
+              type: "text",
+              text:
+                'Make this text red\n\n<vivd-internal type="element-ref" selector="//*[@id=\'hero\']" />',
+            },
+          ],
+        },
+      ],
+      "optimistic:client-1",
+    );
+
+    expect(resolved).toBe("msg-1");
   });
 });

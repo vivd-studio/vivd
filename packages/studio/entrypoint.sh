@@ -223,12 +223,35 @@ sync_source() {
     --exclude ".git/index.lock"
 }
 
+repair_opencode_snapshot_gitdirs() {
+  SNAPSHOT_ROOT="$1"
+  if [ -z "$SNAPSHOT_ROOT" ] || [ ! -d "$SNAPSHOT_ROOT" ]; then
+    return 0
+  fi
+
+  # Object storage drops empty git directories, so repaired hydrated snapshot
+  # gitdirs before OpenCode starts. The steady-state local path should already
+  # be valid and does not go through this branch.
+  OPENCODE_SNAPSHOT_REPAIR_SCRIPT="/app/packages/studio/dist/opencode/snapshotGitDirRepair.js"
+  if command -v node >/dev/null 2>&1 && [ -f "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" ]; then
+    node "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" "$SNAPSHOT_ROOT"
+    return $?
+  fi
+
+  find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r repo; do
+    if [ -f "$repo/HEAD" ] && [ -f "$repo/config" ] && [ -d "$repo/objects" ]; then
+      mkdir -p "$repo/refs/heads" "$repo/refs/tags" "$repo/branches" "$repo/objects/info" "$repo/objects/pack" "$repo/info"
+    fi
+  done
+}
+
 sync_opencode() {
   if [ -z "$S3_OPENCODE_STORAGE_URI" ] && [ -z "$S3_OPENCODE_URI" ]; then
     return 0
   fi
 
   OPENCODE_SESSION_DIFF_DIR="${VIVD_OPENCODE_DATA_HOME}/storage/session_diff"
+  OPENCODE_SNAPSHOT_DIR="${VIVD_OPENCODE_DATA_HOME}/snapshot"
   OPENCODE_DB_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db"
   OPENCODE_DB_SHM_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db-shm"
   OPENCODE_DB_WAL_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db-wal"
@@ -239,6 +262,9 @@ sync_opencode() {
   fi
 
   if [ -n "$S3_OPENCODE_URI" ]; then
+    mkdir -p "$OPENCODE_SNAPSHOT_DIR"
+    aws_s3_sync "$OPENCODE_SNAPSHOT_DIR" "${S3_OPENCODE_URI}/snapshot" --delete
+
     if [ -f "$OPENCODE_DB_PATH" ]; then
       aws_s3_cp "$OPENCODE_DB_PATH" "${S3_OPENCODE_URI}/opencode.db"
     fi
@@ -337,7 +363,9 @@ hydrate_opencode() {
   fi
 
   OPENCODE_SESSION_DIFF_DIR="${VIVD_OPENCODE_DATA_HOME}/storage/session_diff"
+  OPENCODE_SNAPSHOT_DIR="${VIVD_OPENCODE_DATA_HOME}/snapshot"
   SESSION_DIFF_PID=""
+  SNAPSHOT_PID=""
   DB_PID=""
 
   if [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
@@ -350,6 +378,13 @@ hydrate_opencode() {
   fi
 
   if [ -n "$S3_OPENCODE_URI" ]; then
+    echo "Hydrating OpenCode snapshots from S3..."
+    echo "  Source: ${S3_OPENCODE_URI}/snapshot"
+    echo "  Target: ${OPENCODE_SNAPSHOT_DIR}"
+    mkdir -p "${OPENCODE_SNAPSHOT_DIR}"
+    (aws_s3_sync "${S3_OPENCODE_URI}/snapshot" "$OPENCODE_SNAPSHOT_DIR" --delete || true) &
+    SNAPSHOT_PID="$!"
+
     echo "Hydrating OpenCode DB from S3..."
     echo "  Source: ${S3_OPENCODE_URI}"
     echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
@@ -365,6 +400,10 @@ hydrate_opencode() {
 
   if [ -n "$SESSION_DIFF_PID" ]; then
     wait "$SESSION_DIFF_PID" || true
+  fi
+  if [ -n "$SNAPSHOT_PID" ]; then
+    wait "$SNAPSHOT_PID" || true
+    repair_opencode_snapshot_gitdirs "$OPENCODE_SNAPSHOT_DIR" || true
   fi
   if [ -n "$DB_PID" ]; then
     wait "$DB_PID" || true

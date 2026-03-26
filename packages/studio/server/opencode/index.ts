@@ -46,6 +46,11 @@ type SessionMessageRecord = {
   parts?: Array<Record<string, unknown>>;
 };
 
+type RevertPatchPartRecord = {
+  type?: unknown;
+  files?: unknown;
+};
+
 function isPlaceholderTitle(title: string | undefined): boolean {
   if (!title) return true;
   const t = title.trim().toLowerCase();
@@ -105,6 +110,91 @@ function readSessionNumber(...values: unknown[]): number | undefined {
   }
 
   return undefined;
+}
+
+function getTrackedFilesForMessageRevert(
+  messages: SessionMessageRecord[],
+  userMessageId: string,
+): string[] {
+  const files = new Set<string>();
+  let collect = false;
+
+  for (const message of messages) {
+    const messageId = readSessionString(message?.info?.id);
+    if (!collect) {
+      if (messageId !== userMessageId) {
+        continue;
+      }
+      collect = true;
+      continue;
+    }
+
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+    for (const part of parts as RevertPatchPartRecord[]) {
+      if (part?.type !== "patch") {
+        continue;
+      }
+
+      const patchFiles = Array.isArray(part.files) ? part.files : [];
+      for (const file of patchFiles) {
+        if (typeof file === "string" && file.trim().length > 0) {
+          files.add(file);
+        }
+      }
+    }
+  }
+
+  return [...files];
+}
+
+function normalizeUnifiedDiffPath(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/dev/null") {
+    return null;
+  }
+
+  if (trimmed.startsWith("a/") || trimmed.startsWith("b/")) {
+    return trimmed.slice(2);
+  }
+
+  return trimmed;
+}
+
+function getTrackedFilesFromUnifiedDiff(diffText: string | undefined): string[] {
+  if (!diffText) {
+    return [];
+  }
+
+  const files = new Set<string>();
+  for (const line of diffText.split(/\r?\n/)) {
+    const diffMatch = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+    if (diffMatch) {
+      const file = normalizeUnifiedDiffPath(diffMatch[2] ?? diffMatch[1] ?? "");
+      if (file) {
+        files.add(file);
+      }
+      continue;
+    }
+
+    const plusMatch = line.match(/^\+\+\+ (.+)$/);
+    if (plusMatch) {
+      const file = normalizeUnifiedDiffPath(plusMatch[1] ?? "");
+      if (file) {
+        files.add(file);
+      }
+      continue;
+    }
+
+    const minusMatch = line.match(/^--- (.+)$/);
+    if (minusMatch) {
+      const file = normalizeUnifiedDiffPath(minusMatch[1] ?? "");
+      if (file) {
+        files.add(file);
+      }
+    }
+  }
+
+  return [...files];
 }
 
 function getSessionTokenTotal(
@@ -721,33 +811,11 @@ export async function unrevertSession(sessionId: string, directory: string) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
 
-  const emitterStatus =
-    agentEventEmitter.getSessionStatuses()[sessionId]?.type ?? "idle";
-
-  let beforeRevertMessageId: string | undefined;
-  try {
-    const before = await client.session.get({
-      sessionID: sessionId,
-      directory: opencodeDir,
-    });
-    beforeRevertMessageId = before.data?.revert?.messageID;
-  } catch {
-    // Best-effort only.
-  }
-
-  console.log(
-    `[OpenCode][unrevert] requested session=${sessionId} status=${emitterStatus} project=${process.env.VIVD_PROJECT_SLUG || "unknown"} revertMessage=${beforeRevertMessageId || "none"}`,
-  );
-
   const result = await client.session.unrevert({
     sessionID: sessionId,
     directory: opencodeDir,
   });
   if (result.error) throw new Error(JSON.stringify(result.error));
-
-  console.log(
-    `[OpenCode][unrevert] completed session=${sessionId} revertNow=${result.data?.revert?.messageID || "none"}`,
-  );
 
   return result.data;
 }
@@ -902,42 +970,32 @@ export async function revertToUserMessage(
 ) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
-  const emitterStatus =
-    agentEventEmitter.getSessionStatuses()[sessionId]?.type ?? "idle";
 
-  let diffFiles: string[] = [];
-  let diffSummary: { files: number; additions: number; deletions: number } | null =
-    null;
+  let trackedFilesFromPatchParts: string[] = [];
+  let priorRevertMessageId: string | undefined;
   try {
-    const diffRes = await client.session.diff({
+    const messagesRes = await client.session.messages({
       sessionID: sessionId,
       directory: opencodeDir,
-      messageID: userMessageId,
     });
-    if (!diffRes.error && Array.isArray(diffRes.data)) {
-      diffFiles = diffRes.data.map((d) => d.file).filter(Boolean);
-      diffSummary = diffRes.data.reduce(
-        (acc, d) => {
-          acc.files += 1;
-          acc.additions += Number(d.additions) || 0;
-          acc.deletions += Number(d.deletions) || 0;
-          return acc;
-        },
-        { files: 0, additions: 0, deletions: 0 },
+    if (!messagesRes.error && Array.isArray(messagesRes.data)) {
+      trackedFilesFromPatchParts = getTrackedFilesForMessageRevert(
+        messagesRes.data as SessionMessageRecord[],
+        userMessageId,
       );
     }
   } catch {
     // Best-effort only.
   }
 
-  console.log(
-    `[OpenCode][revert] requested session=${sessionId} status=${emitterStatus} project=${process.env.VIVD_PROJECT_SLUG || "unknown"} message=${userMessageId} trackedFiles=${diffSummary?.files ?? "unknown"} (+${diffSummary?.additions ?? "?"} -${diffSummary?.deletions ?? "?"})`,
-  );
-
-  if (diffSummary && diffSummary.files === 0) {
-    console.warn(
-      `[OpenCode][revert] no tracked diff for message=${userMessageId}. This usually means the agent changed files via shell commands instead of patch edits, so revert will be a no-op.`,
-    );
+  try {
+    const before = await client.session.get({
+      sessionID: sessionId,
+      directory: opencodeDir,
+    });
+    priorRevertMessageId = readSessionString(before.data?.revert?.messageID);
+  } catch {
+    // Best-effort only.
   }
 
   const result = await client.session.revert({
@@ -950,26 +1008,28 @@ export async function revertToUserMessage(
     throw new Error(`Revert failed: ${JSON.stringify(result.error)}`);
   }
 
-  try {
-    const afterDiff = await client.session.diff({
-      sessionID: sessionId,
-      directory: opencodeDir,
-      messageID: userMessageId,
-    });
-    if (!afterDiff.error && Array.isArray(afterDiff.data)) {
-      console.log(
-        `[OpenCode][revert] completed session=${sessionId} message=${userMessageId} remainingFiles=${afterDiff.data.length} revertState=${result.data?.revert?.messageID || "none"}`,
-      );
-    }
-  } catch {
-    console.log(
-      `[OpenCode][revert] completed session=${sessionId} message=${userMessageId} revertState=${result.data?.revert?.messageID || "none"}`,
+  const afterRevertMessageId = readSessionString(result.data?.revert?.messageID);
+  const revertDiff =
+    typeof result.data?.revert?.diff === "string" ? result.data.revert.diff : undefined;
+  const trackedFilesFromResult = getTrackedFilesFromUnifiedDiff(revertDiff);
+  const reverted =
+    afterRevertMessageId === userMessageId &&
+    priorRevertMessageId !== afterRevertMessageId;
+  const trackedFiles = reverted
+    ? trackedFilesFromResult.length > 0
+      ? trackedFilesFromResult
+      : trackedFilesFromPatchParts
+    : [];
+
+  if (!reverted) {
+    console.warn(
+      `[OpenCode][revert] no-op session=${sessionId} message=${userMessageId} revertBefore=${priorRevertMessageId || "none"} revertAfter=${afterRevertMessageId || "none"}`,
     );
   }
 
   return {
-    reverted: true,
+    reverted,
     messageId: userMessageId,
-    trackedFiles: diffFiles.slice(0, 50),
+    trackedFiles: trackedFiles.slice(0, 50),
   };
 }

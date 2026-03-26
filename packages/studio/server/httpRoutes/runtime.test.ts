@@ -1,21 +1,28 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import express from "express";
 import multer from "multer";
-import path from "path";
 import { describe, expect, it, vi } from "vitest";
 
 import { resolveForwardedRuntimeBasePath } from "./runtime";
 import { registerStudioRuntimeHttpRoutes } from "./runtime";
+import { resolveRuntimeRequestedFilePath } from "./runtime";
 
-function createTestRuntimeApp(options?: { initialized?: boolean }) {
+function createTestRuntimeApp(options?: {
+  initialized?: boolean;
+  projectPath?: string;
+}) {
   const app = express();
   const authMiddleware = vi.fn((_req, _res, next) => next());
   const initialized = options?.initialized ?? true;
+  const projectPath = options?.projectPath ?? "/tmp";
 
   registerStudioRuntimeHttpRoutes({
     app,
     workspace: {
       isInitialized: () => initialized,
-      getProjectPath: () => "/tmp",
+      getProjectPath: () => projectPath,
     } as any,
     requireStudioAuth: () => authMiddleware,
     upload: multer({ storage: multer.memoryStorage() }),
@@ -54,7 +61,6 @@ function createTestRuntimeApp(options?: { initialized?: boolean }) {
 
   return { app, authMiddleware };
 }
-
 describe("resolveForwardedRuntimeBasePath", () => {
   it("keeps the route base path unchanged without a forwarded prefix", () => {
     expect(resolveForwardedRuntimeBasePath("/vivd-studio/api/preview/site/v1", null)).toBe(
@@ -78,6 +84,46 @@ describe("resolveForwardedRuntimeBasePath", () => {
         "/_studio/runtime-123/",
       ),
     ).toBe("/_studio/runtime-123/vivd-studio/api/devpreview/site/v1");
+  });
+});
+
+describe("resolveRuntimeRequestedFilePath", () => {
+  const decodeUriPath = (value: string) => {
+    try {
+      return decodeURI(value);
+    } catch {
+      return null;
+    }
+  };
+
+  it("prefers the query path for hidden working files", () => {
+    expect(
+      resolveRuntimeRequestedFilePath({
+        restPath: "",
+        queryPath: ".vivd/uploads/hero.webp",
+        decodeUriPath,
+      }),
+    ).toBe(".vivd/uploads/hero.webp");
+  });
+
+  it("decodes encoded query paths for hidden working files", () => {
+    expect(
+      resolveRuntimeRequestedFilePath({
+        restPath: "",
+        queryPath: ".vivd%2Fuploads%2Fhero%20image.webp",
+        decodeUriPath,
+      }),
+    ).toBe(".vivd/uploads/hero image.webp");
+  });
+
+  it("falls back to the pathname segments for regular files", () => {
+    expect(
+      resolveRuntimeRequestedFilePath({
+        restPath: "images/hero.webp",
+        queryPath: undefined,
+        decodeUriPath,
+      }),
+    ).toBe("images/hero.webp");
   });
 });
 
@@ -167,5 +213,105 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     );
 
     expect(matchingLayers[0]?.handle).toBe(authMiddleware);
+  });
+
+  it("serves hidden .vivd files through the project file route", async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "vivd-studio-runtime-projects-"),
+    );
+    const fullPath = path.join(projectDir, ".vivd", "uploads", "hero.webp");
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, Buffer.from("webp-bytes"));
+
+    const { app } = createTestRuntimeApp({
+      projectPath: projectDir,
+    });
+    const matchingLayers = app.router.stack.filter(
+      (layer: any) =>
+        !layer.route &&
+        Array.isArray(layer.matchers) &&
+        layer.matchers.some((matcher: (pathname: string) => unknown) =>
+          Boolean(matcher("/vivd-studio/api/projects/demo/v1")),
+        ),
+    );
+    const handler = matchingLayers[1]?.handle;
+    if (!handler) {
+      throw new Error("Expected project file route handler");
+    }
+
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+      sendFile: vi.fn(),
+      type: vi.fn(),
+    } as any;
+
+    try {
+      await handler(
+        {
+          path: "/demo/v1",
+          query: { path: ".vivd/uploads/hero.webp" },
+        } as any,
+        res,
+        vi.fn(),
+      );
+
+      expect(res.type).not.toHaveBeenCalled();
+      expect(res.sendFile).toHaveBeenCalledWith(fullPath, {
+        dotfiles: "allow",
+      });
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves hidden .vivd files through the asset file route", async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "vivd-studio-runtime-assets-"),
+    );
+    const fullPath = path.join(projectDir, ".vivd", "uploads", "hero.webp");
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, Buffer.from("webp-bytes"));
+
+    const { app } = createTestRuntimeApp({
+      projectPath: projectDir,
+    });
+    const matchingLayers = app.router.stack.filter(
+      (layer: any) =>
+        !layer.route &&
+        Array.isArray(layer.matchers) &&
+        layer.matchers.some((matcher: (pathname: string) => unknown) =>
+          Boolean(matcher("/vivd-studio/api/assets/demo/1")),
+        ),
+    );
+    const handler = matchingLayers[1]?.handle;
+    if (!handler) {
+      throw new Error("Expected asset file route handler");
+    }
+
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+      sendFile: vi.fn(),
+      type: vi.fn(),
+    } as any;
+
+    try {
+      await handler(
+        {
+          path: "/demo/1",
+          query: { path: ".vivd/uploads/hero.webp" },
+        } as any,
+        res,
+        vi.fn(),
+      );
+
+      expect(res.type).not.toHaveBeenCalled();
+      expect(res.sendFile).toHaveBeenCalledWith(fullPath, {
+        dotfiles: "allow",
+      });
+    } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 });

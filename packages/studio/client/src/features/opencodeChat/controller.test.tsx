@@ -38,7 +38,7 @@ const {
     sessions: [],
     bootstrapLoading: false,
     selectedSessionId: null as string | null,
-    selectedMessages: [],
+    selectedMessages: [] as any[],
     sessionStatus: null,
     selectedSessionIsError: false,
     selectedSessionError: null,
@@ -81,8 +81,20 @@ vi.mock("@/lib/trpc", () => ({
         }),
       },
       revertToMessage: {
-        useMutation: () => ({
-          mutateAsync: revertMutateAsync,
+        useMutation: (options?: {
+          onSuccess?: (data: unknown) => void;
+          onError?: (error: Error) => void;
+        }) => ({
+          mutateAsync: async (...args: unknown[]) => {
+            try {
+              const data = await revertMutateAsync(...args);
+              options?.onSuccess?.(data);
+              return data;
+            } catch (error) {
+              options?.onError?.(error as Error);
+              throw error;
+            }
+          },
           isPending: false,
         }),
       },
@@ -284,6 +296,126 @@ describe("useOpencodeChatController", () => {
       expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
         1,
       );
+    });
+  });
+
+  it("does not show 'Nothing to revert' when the server reports a successful revert", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    revertMutateAsync.mockResolvedValue({
+      success: true,
+      reverted: true,
+      trackedFiles: [],
+    });
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.revertToMessage("msg-1");
+    });
+
+    expect(revertMutateAsync).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      messageId: "msg-1",
+      projectSlug: "site-1",
+      version: 1,
+    });
+    expect(mockToastInfo).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Nothing to revert' only when the server reports a no-op revert", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    revertMutateAsync.mockResolvedValue({
+      success: true,
+      reverted: false,
+      trackedFiles: [],
+    });
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.revertToMessage("msg-1");
+    });
+
+    expect(mockToastInfo).toHaveBeenCalledWith("Nothing to revert", {
+      description:
+        "We couldn’t find any reversible changes for that message. This can happen when changes were made outside tracked edits (for example via terminal commands).",
+    });
+  });
+
+  it("resolves optimistic revert clicks to the canonical user message id", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.selectedMessages = [
+      {
+        info: {
+          id: "msg-1",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: 1_700_000_000_000 },
+        },
+        parts: [
+          {
+            id: "part-1",
+            messageID: "msg-1",
+            sessionID: "sess-1",
+            type: "text",
+            text: "Make this text red",
+          },
+        ],
+      },
+      {
+        info: {
+          id: "optimistic:client-1",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: 1_700_000_000_050 },
+        },
+        parts: [
+          {
+            id: "part-2",
+            messageID: "optimistic:client-1",
+            sessionID: "sess-1",
+            type: "text",
+            text:
+              'Make this text red\n\n<vivd-internal type="element-ref" selector="//*[@id=\'hero\']" />',
+          },
+        ],
+      },
+    ];
+    revertMutateAsync.mockResolvedValue({
+      success: true,
+      reverted: true,
+      trackedFiles: ["index.html"],
+    });
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.revertToMessage("optimistic:client-1");
+    });
+
+    expect(revertMutateAsync).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      messageId: "msg-1",
+      projectSlug: "site-1",
+      version: 1,
     });
   });
 });

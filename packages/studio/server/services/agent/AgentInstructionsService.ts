@@ -66,6 +66,10 @@ ${formatEnabledPluginsFromEnv()}
    - Remove outdated entries so the file stays relevant to the current project.
 5. **Before suggesting changes**: Consider SEO, accessibility, and mobile UX.
 6. **Clarify questions**: Do not assume anything or make changes when the user asks a question.
+7. **Studio uploads**:
+   - Files uploaded through the Studio explorer are stored in \`.vivd/uploads/\`.
+   - Images dropped into chat are stored in \`.vivd/dropped-images/\`.
+   - Treat both as working material; move or copy final public files into \`images/\` or \`public/images/\` only when the site should serve them.
 
 ## Git Policy
 

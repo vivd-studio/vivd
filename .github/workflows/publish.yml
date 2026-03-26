@@ -23,6 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.tag.outputs.version }}
       version_no_v: ${{ steps.tag.outputs.version_no_v }}
+      build_builder: ${{ steps.changes.outputs.build_builder }}
       build_studio: ${{ steps.changes.outputs.build_studio }}
       build_server: ${{ steps.changes.outputs.build_server }}
       build_ui: ${{ steps.changes.outputs.build_ui }}
@@ -62,6 +63,7 @@ jobs:
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_SHA}^" 2>/dev/null || true)"
 
           build_studio=false
+          build_builder=false
           build_server=false
           build_ui=false
           build_docs=false
@@ -70,6 +72,7 @@ jobs:
 
           mark_all_node_images() {
             build_studio=true
+            build_builder=true
             build_server=true
             build_ui=true
             build_docs=true
@@ -95,8 +98,13 @@ jobs:
                   ;;
                 packages/shared/*)
                   build_studio=true
+                  build_builder=true
                   build_server=true
                   build_ui=true
+                  ;;
+                packages/builder/*)
+                  build_builder=true
+                  build_server=true
                   ;;
                 packages/backend/*)
                   build_server=true
@@ -133,11 +141,12 @@ jobs:
           fi
 
           any=false
-          if [ "$build_studio" = true ] || [ "$build_server" = true ] || [ "$build_ui" = true ] || [ "$build_docs" = true ] || [ "$build_scraper" = true ] || [ "$build_caddy" = true ]; then
+          if [ "$build_studio" = true ] || [ "$build_builder" = true ] || [ "$build_server" = true ] || [ "$build_ui" = true ] || [ "$build_docs" = true ] || [ "$build_scraper" = true ] || [ "$build_caddy" = true ]; then
             any=true
           fi
 
           echo "build_studio=$build_studio" >> "$GITHUB_OUTPUT"
+          echo "build_builder=$build_builder" >> "$GITHUB_OUTPUT"
           echo "build_server=$build_server" >> "$GITHUB_OUTPUT"
           echo "build_ui=$build_ui" >> "$GITHUB_OUTPUT"
           echo "build_docs=$build_docs" >> "$GITHUB_OUTPUT"
@@ -149,6 +158,7 @@ jobs:
             echo "### Changed image selection"
             echo "- previous_tag: ${PREVIOUS_TAG:-<none>}"
             echo "- build_studio: $build_studio"
+            echo "- build_builder: $build_builder"
             echo "- build_server: $build_server"
             echo "- build_ui: $build_ui"
             echo "- build_docs: $build_docs"
@@ -193,6 +203,44 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/vivd-studio:latest
           cache-from: type=gha,scope=studio
           cache-to: type=gha,mode=max,scope=studio
+
+  build-builder:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_builder == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push vivd-builder
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/builder/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-builder:${{ needs.detect-changes.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}/vivd-builder:${{ needs.detect-changes.outputs.version_no_v }}
+            ${{ env.IMAGE_PREFIX }}/vivd-builder:latest
+          cache-from: type=gha,scope=builder
+          cache-to: type=gha,mode=max,scope=builder
 
   build-server:
     needs: detect-changes
@@ -385,7 +433,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, build-studio, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:

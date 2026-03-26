@@ -9,6 +9,7 @@ import {
   Download,
   X,
   Image as ImageIcon,
+  AlertCircle,
   Wand2,
   Trash2,
   ChevronLeft,
@@ -19,7 +20,7 @@ import {
   MessageSquarePlus,
 } from "lucide-react";
 import { toast } from "sonner";
-import { buildImageUrl } from "./utils";
+import { getStudioImageUrlCandidates } from "./utils";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
 
 interface ImageViewerPanelProps {
@@ -51,7 +52,7 @@ export function ImageViewerPanel({
   canNavigatePrevious = false,
   canNavigateNext = false,
 }: ImageViewerPanelProps) {
-  const imageUrl = buildImageUrl(projectSlug, version, filePath);
+  const imageUrls = getStudioImageUrlCandidates(projectSlug, version, filePath);
   const filename = filePath.split("/").pop() || filePath;
   const containerRef = useRef<HTMLDivElement>(null);
   const chatContext = useOptionalChatContext();
@@ -60,6 +61,9 @@ export function ImageViewerPanel({
 
   // Zoom state
   const [zoom, setZoom] = useState(1);
+  const [imageUrlIndex, setImageUrlIndex] = useState(0);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const imageUrl = imageUrls[imageUrlIndex] ?? imageUrls[0] ?? "";
 
   const handleAddToChat = useCallback(() => {
     if (!chatContext) return;
@@ -74,6 +78,8 @@ export function ImageViewerPanel({
   // Reset zoom when image changes
   useEffect(() => {
     setZoom(1);
+    setImageUrlIndex(0);
+    setImageLoadFailed(false);
   }, [filePath]);
 
   // Handle download
@@ -333,18 +339,38 @@ export function ImageViewerPanel({
         className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/10"
         onWheel={handleWheel}
       >
-        <img
-          src={imageUrl}
-          alt={filename}
-          className="max-w-full max-h-full object-contain rounded shadow-lg transition-transform duration-100"
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: "center center",
-            maxWidth: zoom > 1 ? "none" : undefined,
-            maxHeight: zoom > 1 ? "none" : undefined,
-          }}
-          draggable={false}
-        />
+        {imageLoadFailed ? (
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 px-6 py-8 text-center">
+            <AlertCircle className="h-6 w-6 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Could not load this image</p>
+              <p className="text-xs text-muted-foreground">
+                The local runtime did not return a displayable image response.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <img
+            src={imageUrl}
+            alt={filename}
+            className="max-w-full max-h-full object-contain rounded shadow-lg transition-transform duration-100"
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "center center",
+              maxWidth: zoom > 1 ? "none" : undefined,
+              maxHeight: zoom > 1 ? "none" : undefined,
+            }}
+            draggable={false}
+            onLoad={() => setImageLoadFailed(false)}
+            onError={() => {
+              if (imageUrlIndex < imageUrls.length - 1) {
+                setImageUrlIndex((index) => index + 1);
+                return;
+              }
+              setImageLoadFailed(true);
+            }}
+          />
+        )}
       </div>
 
       {/* Footer */}

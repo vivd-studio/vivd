@@ -2,7 +2,12 @@ import { Button } from "@/components/ui/button";
 import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import { Download, MessageSquarePlus, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
-import { formatSize, getFileIconComponent, buildImageUrl } from "./utils";
+import {
+  canDragAssetToPreview,
+  formatSize,
+  getFileIconComponent,
+  getStudioImageUrlCandidates,
+} from "./utils";
 import { ImageThumbnail } from "./ImageThumbnail";
 import {
   ContextMenu,
@@ -127,10 +132,15 @@ export function AssetItemCard({
           <div>
             <ImageThumbnail
               item={item}
-              imageUrl={buildImageUrl(projectSlug, version, item.path)}
+              imageUrls={getStudioImageUrlCandidates(
+                projectSlug,
+                version,
+                item.path,
+              )}
               isViewing={isViewing}
               onClick={onClick}
               actions={imageActions}
+              draggable={canDragAssetToPreview(item.path)}
             />
           </div>
         </ContextMenuTrigger>

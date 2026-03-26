@@ -5,6 +5,7 @@ import type {
   FlyMachineState,
   FlyStudioMachineReconcileResult,
 } from "./types";
+import { sleep } from "./utils";
 
 type StudioIdentity = {
   organizationId: string;
@@ -45,6 +46,30 @@ type WaitForReadyOptions = {
   url: string;
   timeoutMs: number;
 };
+
+async function waitForMachineToLeaveReplacingState(options: {
+  machineId: string;
+  getMachine: (machineId: string) => Promise<FlyMachine>;
+  timeoutMs: number;
+}): Promise<FlyMachine> {
+  const startedAt = Date.now();
+  let delayMs = 750;
+  let machine = await options.getMachine(options.machineId);
+
+  while ((machine.state || "unknown") === "replacing") {
+    if (Date.now() - startedAt >= options.timeoutMs) {
+      throw new Error(
+        `[FlyMachines] Timed out waiting for machine to finish replacement (${options.machineId})`,
+      );
+    }
+
+    await sleep(delayMs);
+    delayMs = Math.min(5000, Math.round(delayMs * 1.4));
+    machine = await options.getMachine(options.machineId);
+  }
+
+  return machine;
+}
 
 export type WarmReconcileStudioMachineDeps = {
   getDesiredImage: () => Promise<string>;
@@ -122,7 +147,11 @@ export async function warmReconcileStudioMachineWorkflow(
 ): Promise<{ desiredImage: string }> {
   const desiredImage = await deps.getDesiredImage();
 
-  const machine = await deps.getMachine(machineId);
+  const machine = await waitForMachineToLeaveReplacingState({
+    machineId,
+    getMachine: deps.getMachine,
+    timeoutMs: 60_000,
+  });
   const identity = deps.getStudioIdentityFromMachine(machine);
   if (!identity) {
     throw new Error(
@@ -176,7 +205,11 @@ export async function warmReconcileStudioMachineWorkflow(
       state: "stopped",
       timeoutMs: 60_000,
     });
-    current = await deps.getMachine(machineId);
+    current = await waitForMachineToLeaveReplacingState({
+      machineId,
+      getMachine: deps.getMachine,
+      timeoutMs: 60_000,
+    });
     currentState = current.state || "unknown";
     const currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
     currentReconcileEnv = deps.buildReconciledEnv({

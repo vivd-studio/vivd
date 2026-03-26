@@ -94,4 +94,24 @@ describe("buildUnifiedDiffPreview", () => {
       },
     ]);
   });
+
+  it("handles deleted files without after context", () => {
+    const result = buildUnifiedDiffPreview({
+      before: ["first", "second"].join("\n"),
+      after: "",
+    });
+
+    expect(result.lines).toEqual([
+      {
+        kind: "removed",
+        text: "first",
+        beforeLineNumber: 1,
+      },
+      {
+        kind: "removed",
+        text: "second",
+        beforeLineNumber: 2,
+      },
+    ]);
+  });
 });

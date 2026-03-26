@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { File, FileCode, FileText, Image as ImageIcon } from "lucide-react";
-import { getFileTreeIconComponent } from "./utils";
+import {
+  buildAssetFileUrl,
+  buildImageUrl,
+  buildProjectFileUrl,
+  canDragAssetToPreview,
+  getStudioImageUrlCandidates,
+  getFileTreeIconComponent,
+  isVivdInternalAssetPath,
+  pickInitialAssetExplorerPath,
+} from "./utils";
 
 describe("getFileTreeIconComponent", () => {
   it("uses chevrons only for folders by omitting a folder icon", () => {
@@ -59,5 +68,60 @@ describe("getFileTreeIconComponent", () => {
       icon: File,
       className: "text-muted-foreground",
     });
+  });
+});
+
+describe("asset explorer path helpers", () => {
+  it("treats .vivd paths as internal working assets", () => {
+    expect(isVivdInternalAssetPath(".vivd/uploads/logo.png")).toBe(true);
+    expect(isVivdInternalAssetPath("\\.vivd\\uploads\\logo.png")).toBe(true);
+    expect(isVivdInternalAssetPath("images/logo.png")).toBe(false);
+  });
+
+  it("only allows public assets to be dragged into the preview", () => {
+    expect(canDragAssetToPreview(".vivd/uploads/logo.png")).toBe(false);
+    expect(canDragAssetToPreview("public/images/logo.png")).toBe(true);
+  });
+
+  it("builds raw asset URLs for image and document viewers", () => {
+    expect(buildImageUrl("demo", 3, ".vivd/uploads/hero image.webp")).toBe(
+      "/vivd-studio/api/assets/demo/3?path=.vivd%2Fuploads%2Fhero%20image.webp",
+    );
+  });
+
+  it("provides both asset and project-file URL candidates for runtime fallback", () => {
+    expect(
+      getStudioImageUrlCandidates("demo", 3, ".vivd/uploads/hero image.webp"),
+    ).toEqual([
+      buildAssetFileUrl("demo", 3, ".vivd/uploads/hero image.webp"),
+      buildProjectFileUrl("demo", 3, ".vivd/uploads/hero image.webp"),
+    ]);
+  });
+
+  it("keeps regular public image URLs on the pathname form", () => {
+    expect(buildAssetFileUrl("demo", 3, "images/hero image.webp")).toBe(
+      "/vivd-studio/api/assets/demo/3/images/hero%20image.webp",
+    );
+    expect(buildProjectFileUrl("demo", 3, "images/hero image.webp")).toBe(
+      "/vivd-studio/api/projects/demo/v3/images/hero%20image.webp",
+    );
+  });
+
+  it("keeps startup focused on public/project image folders instead of hidden uploads", () => {
+    expect(
+      pickInitialAssetExplorerPath({
+        uploadsHasItems: true,
+        publicImagesHasItems: true,
+        imagesHasItems: true,
+      })
+    ).toBe("public/images");
+
+    expect(
+      pickInitialAssetExplorerPath({
+        uploadsHasItems: true,
+        publicImagesHasItems: false,
+        imagesHasItems: true,
+      })
+    ).toBe("images");
   });
 });

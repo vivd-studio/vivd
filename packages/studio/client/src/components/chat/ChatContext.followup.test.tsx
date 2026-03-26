@@ -138,7 +138,7 @@ describe("ChatProvider follow-up behavior", () => {
     );
   });
 
-  it("steers mid-session follow-ups by default", async () => {
+  it("queues mid-session follow-ups by default", async () => {
     controllerState.isThinking = true;
 
     render(
@@ -159,6 +159,35 @@ describe("ChatProvider follow-up behavior", () => {
 
     await act(async () => {
       await latestContext!.handleSend();
+    });
+
+    expect(latestContext!.followupBehavior).toBe("queue");
+    expect(latestContext!.showSteerButton).toBe(true);
+    expect(sendTaskMock).not.toHaveBeenCalled();
+    expect(latestContext!.queuedFollowups).toHaveLength(1);
+  });
+
+  it("still allows an explicit steer while queue mode is active", async () => {
+    controllerState.isThinking = true;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    expect(latestContext).not.toBeNull();
+
+    act(() => {
+      latestContext!.setInput("Polish the headline");
+    });
+
+    await waitFor(() => {
+      expect(latestContext!.input).toBe("Polish the headline");
+    });
+
+    await act(async () => {
+      await latestContext!.handleSteerSend();
     });
 
     expect(sendTaskMock).toHaveBeenCalledWith(
@@ -223,7 +252,7 @@ describe("ChatProvider follow-up behavior", () => {
     });
   });
 
-  it("keeps steer available while an existing-session dispatch is still in flight", async () => {
+  it("keeps explicit steer available while an existing-session dispatch is still in flight", async () => {
     controllerState.runTaskPending = true;
 
     render(
@@ -244,7 +273,7 @@ describe("ChatProvider follow-up behavior", () => {
     });
 
     await act(async () => {
-      await latestContext!.handleSend();
+      await latestContext!.handleSteerSend();
     });
 
     expect(sendTaskMock).toHaveBeenCalledWith(

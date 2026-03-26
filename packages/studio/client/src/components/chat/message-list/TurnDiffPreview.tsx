@@ -8,6 +8,10 @@ import {
   buildUnifiedDiffPreview,
   type UnifiedPreviewLine,
 } from "@/features/opencodeChat/diffs/unifiedPreview";
+import {
+  formatFileDiffStatus,
+  resolveFileDiffStatus,
+} from "@/features/opencodeChat/diffs/status";
 import type { RenderableFileDiffSummary } from "@/features/opencodeChat/render/timeline";
 
 type TurnDiffPreviewProps = {
@@ -24,12 +28,6 @@ function getDirectory(file: string): string {
   const parts = file.split("/");
   parts.pop();
   return parts.join("/");
-}
-
-function formatStatus(status?: string) {
-  if (status === "added") return "Added";
-  if (status === "deleted") return "Deleted";
-  return "Modified";
 }
 
 function renderPreviewPrefix(kind: UnifiedPreviewLine["kind"]) {
@@ -121,6 +119,7 @@ export function TurnDiffPreview({
                 {displayDiffs.map((diff) => {
                   const isSelected = diff.file === selectedFile;
                   const directory = getDirectory(diff.file);
+                  const status = resolveFileDiffStatus(diff);
                   return (
                     <button
                       key={diff.file}
@@ -139,6 +138,19 @@ export function TurnDiffPreview({
                         ) : null}
                         <span className="font-medium">{getFilename(diff.file)}</span>
                       </span>
+                      {status !== "modified" ? (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]",
+                            status === "added" &&
+                              "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                            status === "deleted" &&
+                              "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+                          )}
+                        >
+                          {formatFileDiffStatus(status)}
+                        </span>
+                      ) : null}
                       <span className="shrink-0 text-emerald-600">+{diff.additions}</span>
                       <span className="shrink-0 text-rose-600">-{diff.deletions}</span>
                     </button>
@@ -152,7 +164,8 @@ export function TurnDiffPreview({
                     <div className="min-w-0 text-xs">
                       <div className="truncate font-medium">{selectedDiff.file}</div>
                       <div className="text-muted-foreground">
-                        {formatStatus(selectedDiff.status)} · +{selectedDiff.additions} / -
+                        {formatFileDiffStatus(resolveFileDiffStatus(selectedDiff))} · +
+                        {selectedDiff.additions} / -
                         {selectedDiff.deletions}
                       </div>
                     </div>

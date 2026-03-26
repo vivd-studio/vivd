@@ -39,6 +39,7 @@ export type DockerContainerInfo = {
     NetworkMode?: string;
     NanoCpus?: number;
     Memory?: number;
+    AutoRemove?: boolean;
   };
   Created?: string;
 };
@@ -53,6 +54,7 @@ export type DockerContainerCreateConfig = {
     NetworkMode?: string;
     NanoCpus?: number;
     Memory?: number;
+    AutoRemove?: boolean;
   };
 };
 

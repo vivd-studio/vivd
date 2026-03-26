@@ -51,6 +51,7 @@ vi.mock("@/lib/trpc", () => {
             input: unknown,
             options: { onStarted?: () => void; onData?: (event: unknown) => void },
           ) => {
+            const subscriptionKey = JSON.stringify(input);
             useSubscriptionMock(input);
             subscriptionCallbacks.onStarted = options.onStarted;
             subscriptionCallbacks.onData = options.onData as
@@ -58,7 +59,7 @@ vi.mock("@/lib/trpc", () => {
               | undefined;
             React.useEffect(() => {
               options.onStarted?.();
-            }, []);
+            }, [subscriptionKey]);
           },
         },
       },
@@ -79,6 +80,7 @@ describe("OpencodeChatProvider", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("reconciles bootstrap state once after the event stream connects", async () => {
@@ -96,6 +98,7 @@ describe("OpencodeChatProvider", () => {
       projectSlug: "site-1",
       version: 1,
       replayBuffered: false,
+      subscriptionInstance: 0,
     });
   });
 
@@ -164,5 +167,45 @@ describe("OpencodeChatProvider", () => {
     await waitFor(() => {
       expect(mockBootstrapRefetch).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("restarts the subscription when the stream goes inactive while visible", async () => {
+    vi.useFakeTimers();
+
+    render(
+      <OpencodeChatProvider projectSlug="site-1" version={1}>
+        <div>chat</div>
+      </OpencodeChatProvider>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(mockBootstrapRefetch).toHaveBeenCalledTimes(1);
+    expect(useSubscriptionMock).toHaveBeenLastCalledWith({
+      projectSlug: "site-1",
+      version: 1,
+      replayBuffered: false,
+      subscriptionInstance: 0,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(useSubscriptionMock).toHaveBeenLastCalledWith({
+      projectSlug: "site-1",
+      version: 1,
+      replayBuffered: false,
+      subscriptionInstance: 1,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(mockBootstrapRefetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Download, Trash2, Wand2 } from "lucide-react";
 import type { AssetItem } from "./types";
+import { FallbackImage } from "./FallbackImage";
 
 interface ImagePreviewDialogProps {
   open: boolean;
@@ -70,8 +71,8 @@ export function ImagePreviewDialog({
         </DialogHeader>
         {imageUrl && (
           <div className="flex items-center justify-center p-4">
-            <img
-              src={imageUrl}
+            <FallbackImage
+              srcs={imageUrl ? [imageUrl] : []}
               alt="Preview"
               className="max-w-full max-h-[70vh] object-contain rounded"
             />

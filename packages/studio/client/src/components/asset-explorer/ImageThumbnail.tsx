@@ -3,12 +3,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Check } from "lucide-react";
+import { Check, Image as ImageIcon } from "lucide-react";
 import type { AssetItem } from "./types";
+import { FallbackImage } from "./FallbackImage";
 
 interface ImageThumbnailProps {
   item: AssetItem;
-  imageUrl: string;
+  imageUrls: string[];
   selected?: boolean;
   showSelection?: boolean;
   isViewing?: boolean;
@@ -20,7 +21,7 @@ interface ImageThumbnailProps {
 
 export function ImageThumbnail({
   item,
-  imageUrl,
+  imageUrls,
   selected = false,
   showSelection = false,
   isViewing = false,
@@ -44,7 +45,7 @@ export function ImageThumbnail({
     // Set multiple data types for flexibility
     e.dataTransfer.setData("text/plain", item.path);
     e.dataTransfer.setData("application/x-asset-path", item.path);
-    e.dataTransfer.setData("application/x-asset-url", imageUrl);
+    e.dataTransfer.setData("application/x-asset-url", imageUrls[0] ?? "");
     e.dataTransfer.effectAllowed = "copy";
 
     // Create a custom drag image with a styled border
@@ -63,7 +64,7 @@ export function ImageThumbnail({
     `;
 
     const img = document.createElement("img");
-    img.src = imageUrl;
+    img.src = imageUrls[0] ?? "";
     img.style.cssText = `
       width: 100%;
       height: 100%;
@@ -95,13 +96,15 @@ export function ImageThumbnail({
     >
       {/* Image container - native aspect ratio */}
       <div className="bg-muted">
-        <img
-          src={imageUrl}
+        <FallbackImage
+          srcs={imageUrls}
           alt={item.name}
           className="w-full h-auto block"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
+          fallback={
+            <div className="flex min-h-24 items-center justify-center py-6 text-muted-foreground">
+              <ImageIcon className="h-6 w-6" />
+            </div>
+          }
         />
       </div>
 

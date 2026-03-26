@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "target": "es2020",
@@ -7,7 +8,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "paths": {
+      "@vivd/builder": ["../builder/src/index.ts"],
+      "@vivd/builder/*": ["../builder/src/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "**/*.spec.ts", "test", "projects"]

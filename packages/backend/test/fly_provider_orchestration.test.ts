@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FlyStudioMachineProvider } from "../src/services/studioMachines/fly/provider";
+import {
+  buildStudioEnvWorkflow,
+  ensureExistingMachineRunningWorkflow,
+} from "../src/services/studioMachines/fly/runtimeWorkflow";
+import {
+  buildReconciledMachineConfig,
+  buildReconciledMetadata,
+  hasMachineDrift,
+  normalizeServicesForVivd,
+  resolveMachineReconcileState,
+  resolveStudioIdFromMachine,
+  shouldStopSuspendedBeforeReconcile,
+  trimToken,
+} from "../src/services/studioMachines/fly/machineModel";
 import type {
   StudioMachineStartArgs,
   StudioMachineStartResult,
@@ -343,6 +357,96 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(updatedConfig?.env?.SESSION_TOKEN).toBe("old-session-token");
   });
 
+  it("does not re-reconcile a suspended machine on wake after warm reconcile updated managed env", async () => {
+    vi.stubEnv(
+      "OPENCODE_MODEL_STANDARD",
+      "openrouter/google/gemini-3-flash-preview",
+    );
+
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    const accessToken = "token-1";
+    const env = buildStudioEnvWorkflow(
+      { desiredKillTimeoutSeconds: 180 },
+      {
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        env: {
+          SESSION_TOKEN: "session-token-1",
+        },
+        studioId: "studio-1",
+        accessToken,
+      },
+    );
+    const machine = studioMachine({
+      id: "m6",
+      state: "suspended",
+      image: desiredImage,
+      metadataImage: desiredImage,
+      env,
+    });
+
+    const updateMachineConfigMock = vi.fn(async ({ config }: any) => ({
+      ...machine,
+      config,
+    }));
+    const stopMachineMock = vi.fn(async () => {});
+    const result = await ensureExistingMachineRunningWorkflow(
+      {
+        getMachineExternalPort: () => 4100,
+        getDesiredImage: async () => desiredImage,
+        trimToken,
+        resolveMachineReconcileState: (options) =>
+          resolveMachineReconcileState({
+            ...options,
+            desiredGuest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
+            generateStudioAccessToken: () => "generated-token",
+          }),
+        stopMachine: stopMachineMock,
+        waitForState: async () => {},
+        getMachine: async () => machine,
+        hasMachineDrift,
+        shouldStopSuspendedBeforeReconcile,
+        resolveStudioIdFromMachine,
+        buildStudioEnv: (input) =>
+          buildStudioEnvWorkflow({ desiredKillTimeoutSeconds: 180 }, input),
+        buildReconciledMetadata,
+        buildReconciledMachineConfig: (options) =>
+          buildReconciledMachineConfig({
+            ...options,
+            desiredGuest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
+            normalizeServicesForVivd,
+          }),
+        updateMachineConfig: updateMachineConfigMock,
+        startMachineHandlingReplacement: async () => {},
+        getPublicUrlForPort: (port) =>
+          `https://studio.test:${port}`,
+        waitForReady: async () => {},
+        startTimeoutMs: 60_000,
+        touchKey: () => {},
+      },
+      machine,
+      {
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        env: {
+          SESSION_TOKEN: "session-token-1",
+        },
+      },
+      "org-1:site-1:v1",
+    );
+
+    expect(updateMachineConfigMock).not.toHaveBeenCalled();
+    expect(stopMachineMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      studioId: "studio-1",
+      url: "https://studio.test:4100",
+      port: 4100,
+      accessToken,
+    });
+  });
+
   it("warmReconcileStudioMachine returns desired image when no drift exists", async () => {
     const provider = new FlyStudioMachineProvider();
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
@@ -368,4 +472,44 @@ describe("FlyStudioMachineProvider orchestration", () => {
     const result = await provider.warmReconcileStudioMachine("m3");
     expect(result).toEqual({ desiredImage });
   });
+
+  it("warmReconcileStudioMachine waits for replacing machines to settle", async () => {
+    const provider = new FlyStudioMachineProvider();
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    const getMachineMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        studioMachine({
+          id: "m6",
+          state: "replacing",
+          image: "ghcr.io/vivd-studio/vivd-studio:v1.0.0",
+        }),
+      )
+      .mockResolvedValueOnce(
+        studioMachine({
+          id: "m6",
+          state: "stopped",
+          image: desiredImage,
+          metadataImage: desiredImage,
+        }),
+      );
+
+    (provider as any).getDesiredImage = async () => desiredImage;
+    (provider as any).getMachine = getMachineMock;
+    (provider as any).resolveMachineReconcileState = ({ machine }: any) => ({
+      accessToken: "token-1",
+      needs: {
+        image: machine.config.image !== desiredImage,
+        services: false,
+        guest: false,
+        accessToken: false,
+        env: false,
+      },
+    });
+
+    await expect(provider.warmReconcileStudioMachine("m6")).resolves.toEqual({
+      desiredImage,
+    });
+    expect(getMachineMock).toHaveBeenCalledTimes(2);
+  }, 10_000);
 });

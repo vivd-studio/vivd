@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Send, MousePointerClick, X, Square } from "lucide-react";
+import { ChevronsRight, Plus, Send, MousePointerClick, X, Square } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +51,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
     removeAttachedFile,
     followupBehavior,
     setFollowupBehavior,
+    showSteerButton,
     selectorMode,
     setSelectorMode,
     isLoading,
@@ -60,6 +61,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
     availableModels,
     selectedModel,
     setSelectedModel,
+    handleSteerSend,
   } = useChatContext();
 
   // Combine loading and blocked states for disabling
@@ -195,6 +197,7 @@ export function ChatComposer({ className }: ChatComposerProps) {
       attachedElement ||
       attachedImages.length > 0 ||
       attachedFiles.length > 0);
+  const showSteerActions = showSteerButton && canSend;
 
   return (
     <div
@@ -393,15 +396,39 @@ export function ChatComposer({ className }: ChatComposerProps) {
               </Button>
             )}
 
-            {/* Send button - always visible */}
-            <Button
-              onClick={handleSend}
-              disabled={!canSend}
-              size="icon"
-              className="h-8 w-8 rounded-full"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+            {showSteerActions ? (
+              <>
+                <Button
+                  onClick={handleSteerSend}
+                  disabled={!canSend}
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 rounded-full px-3"
+                >
+                  <ChevronsRight className="mr-1.5 h-3.5 w-3.5" />
+                  Steer
+                </Button>
+                <Button
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  size="sm"
+                  className="h-8 rounded-full px-3"
+                >
+                  Queue
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={handleSend}
+                disabled={!canSend}
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                title="Send message"
+                aria-label="Send message"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
       </InteractiveSurface>

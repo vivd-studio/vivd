@@ -6,6 +6,8 @@ import { DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS } from "../shared/ope
 
 // Quality setting for WebP image conversions (1-100)
 export const WEBP_QUALITY = 85;
+export const STUDIO_WORKING_IMAGE_UPLOAD_WEBP_QUALITY = 90;
+export const STUDIO_WORKING_IMAGE_UPLOAD_MAX_DIMENSION = 3840;
 
 export function getStudioOpencodeSoftContextLimitTokens(
   env: NodeJS.ProcessEnv = process.env,

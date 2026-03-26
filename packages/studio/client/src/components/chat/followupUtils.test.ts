@@ -10,14 +10,20 @@ describe("followupUtils", () => {
     window.localStorage.clear();
   });
 
-  it("defaults follow-up behavior to steer", () => {
-    expect(getStoredFollowupBehavior()).toBe("steer");
+  it("defaults follow-up behavior to queue", () => {
+    expect(getStoredFollowupBehavior()).toBe("queue");
   });
 
   it("reads a persisted queue behavior", () => {
     window.localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, "queue");
 
     expect(getStoredFollowupBehavior()).toBe("queue");
+  });
+
+  it("reads a persisted steer behavior", () => {
+    window.localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, "steer");
+
+    expect(getStoredFollowupBehavior()).toBe("steer");
   });
 
   it("builds previews from the first non-empty line", () => {

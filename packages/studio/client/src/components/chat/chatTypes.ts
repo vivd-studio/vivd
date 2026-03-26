@@ -132,6 +132,7 @@ export interface ChatContextValue {
   removeAttachedFile: (id: string) => void;
   followupBehavior: FollowupBehavior;
   setFollowupBehavior: (behavior: FollowupBehavior) => void;
+  showSteerButton: boolean;
   queuedFollowups: QueuedFollowup[];
   queuedFollowupSendingId: string | null;
   selectorMode: boolean;
@@ -154,6 +155,7 @@ export interface ChatContextValue {
   initialGenerationFailed: string | null;
   retryInitialGeneration: () => void;
   handleSend: () => void;
+  handleSteerSend: () => void;
   handleReplyQuestion: (
     requestId: string,
     answers: OpenCodeQuestionAnswer[],

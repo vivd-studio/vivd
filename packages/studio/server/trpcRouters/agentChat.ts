@@ -105,6 +105,7 @@ export const agentChatRouter = router({
         version: z.number().optional(),
         lastEventId: z.string().optional(),
         replayBuffered: z.boolean().optional(),
+        subscriptionInstance: z.number().optional(),
       }),
     )
     .subscription(async function* ({ ctx, input, signal }) {

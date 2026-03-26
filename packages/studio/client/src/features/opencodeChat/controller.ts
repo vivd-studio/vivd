@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { calculateUsageFromSessionMessages } from "./render/sessionMetrics";
 import { useOpencodeChat } from "./provider";
 import { sanitizeSessionError } from "./sync/errorPolicy";
+import { resolveCanonicalUserMessageId } from "./sync/optimisticMessages";
 import {
   buildDerivedSessionError,
   deriveChatActivityState,
@@ -132,7 +133,7 @@ export function useOpencodeChatController({
     onSuccess: (data) => {
       refetchSessions();
       onTaskComplete?.();
-      if (Array.isArray(data.trackedFiles) && data.trackedFiles.length === 0) {
+      if (data.reverted === false) {
         toast.info("Nothing to revert", {
           description:
             "We couldn’t find any reversible changes for that message. This can happen when changes were made outside tracked edits (for example via terminal commands).",
@@ -366,14 +367,16 @@ export function useOpencodeChatController({
   const revertToMessage = useCallback(
     async (messageId: string) => {
       if (!selectedSessionId) return;
+      const resolvedMessageId =
+        resolveCanonicalUserMessageId(selectedMessages, messageId) ?? messageId;
       await revertMutation.mutateAsync({
         sessionId: selectedSessionId,
-        messageId,
+        messageId: resolvedMessageId,
         projectSlug,
         version,
       });
     },
-    [projectSlug, revertMutation, selectedSessionId, version],
+    [projectSlug, revertMutation, selectedMessages, selectedSessionId, version],
   );
 
   const unrevertSession = useCallback(async () => {

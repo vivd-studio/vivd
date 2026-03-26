@@ -101,7 +101,9 @@ export function AssetToolbar({
           className={`h-8 ${isProcessing ? "px-3" : "w-8"}`}
           onClick={() => fileInputRef.current?.click()}
           disabled={isProcessing}
-          title={isProcessing ? "Processing..." : "Upload files"}
+          title={
+            isProcessing ? "Processing..." : "Upload files to .vivd/uploads"
+          }
         >
           {isProcessing ? (
             <div className="flex items-center gap-2">

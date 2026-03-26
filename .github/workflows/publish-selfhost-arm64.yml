@@ -20,6 +20,7 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       version_no_v: ${{ steps.tag.outputs.version_no_v }}
       build_studio: ${{ steps.changes.outputs.build_studio }}
+      build_builder: ${{ steps.changes.outputs.build_builder }}
       build_server: ${{ steps.changes.outputs.build_server }}
       build_ui: ${{ steps.changes.outputs.build_ui }}
       build_scraper: ${{ steps.changes.outputs.build_scraper }}
@@ -55,12 +56,14 @@ jobs:
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${CURRENT_SHA}^" 2>/dev/null || true)"
 
           build_studio=false
+          build_builder=false
           build_server=false
           build_ui=false
           build_scraper=false
 
           mark_all_selfhost_images() {
             build_studio=true
+            build_builder=true
             build_server=true
             build_ui=true
             build_scraper=true
@@ -77,13 +80,19 @@ jobs:
               case "$file" in
                 package.json|package-lock.json|.npmrc)
                   build_studio=true
+                  build_builder=true
                   build_server=true
                   build_ui=true
                   ;;
                 packages/shared/*)
                   build_studio=true
+                  build_builder=true
                   build_server=true
                   build_ui=true
+                  ;;
+                packages/builder/*)
+                  build_builder=true
+                  build_server=true
                   ;;
                 packages/backend/*)
                   build_server=true
@@ -113,11 +122,12 @@ jobs:
           fi
 
           any=false
-          if [ "$build_studio" = true ] || [ "$build_server" = true ] || [ "$build_ui" = true ] || [ "$build_scraper" = true ]; then
+          if [ "$build_studio" = true ] || [ "$build_builder" = true ] || [ "$build_server" = true ] || [ "$build_ui" = true ] || [ "$build_scraper" = true ]; then
             any=true
           fi
 
           echo "build_studio=$build_studio" >> "$GITHUB_OUTPUT"
+          echo "build_builder=$build_builder" >> "$GITHUB_OUTPUT"
           echo "build_server=$build_server" >> "$GITHUB_OUTPUT"
           echo "build_ui=$build_ui" >> "$GITHUB_OUTPUT"
           echo "build_scraper=$build_scraper" >> "$GITHUB_OUTPUT"
@@ -127,6 +137,7 @@ jobs:
             echo "### Self-host arm64 image selection"
             echo "- previous_tag: ${PREVIOUS_TAG:-<none>}"
             echo "- build_studio: $build_studio"
+            echo "- build_builder: $build_builder"
             echo "- build_server: $build_server"
             echo "- build_ui: $build_ui"
             echo "- build_scraper: $build_scraper"
@@ -169,6 +180,44 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/vivd-studio:latest-arm64
           cache-from: type=gha,scope=studio-arm64
           cache-to: type=gha,mode=max,scope=studio-arm64
+
+  build-builder-arm64:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.build_builder == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push vivd-builder arm64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/builder/Dockerfile
+          target: prod
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/vivd-builder:${{ needs.detect-changes.outputs.version }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-builder:${{ needs.detect-changes.outputs.version_no_v }}-arm64
+            ${{ env.IMAGE_PREFIX }}/vivd-builder:latest-arm64
+          cache-from: type=gha,scope=builder-arm64
+          cache-to: type=gha,mode=max,scope=builder-arm64
 
   build-server-arm64:
     needs: detect-changes

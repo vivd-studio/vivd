@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, ImagePlus } from "lucide-react";
 import type { AssetItem } from "./types";
-import { buildImageUrl } from "./utils";
+import { getStudioImageUrlCandidates } from "./utils";
 import { ImageThumbnail } from "./ImageThumbnail";
 
 interface CreateImageDialogProps {
@@ -93,7 +93,11 @@ export function CreateImageDialog({
                     <ImageThumbnail
                       key={img.path}
                       item={img}
-                      imageUrl={buildImageUrl(projectSlug, version, img.path)}
+                      imageUrls={getStudioImageUrlCandidates(
+                        projectSlug,
+                        version,
+                        img.path,
+                      )}
                       selected={selectedReferenceImages.includes(img.path)}
                       showSelection
                       onClick={() => onToggleReferenceImage(img.path)}

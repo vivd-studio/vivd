@@ -61,6 +61,12 @@ export class FlyProviderConfig {
     return "ghcr.io/vivd-studio/vivd-studio";
   }
 
+  get builderImageRepository(): string {
+    const configured = process.env.FLY_BUILDER_IMAGE_REPO?.trim();
+    if (configured) return configured;
+    return "ghcr.io/vivd-studio/vivd-builder";
+  }
+
   get region(): string {
     return process.env.FLY_STUDIO_REGION || process.env.FLY_REGION || "fra";
   }
@@ -171,6 +177,29 @@ export class FlyProviderConfig {
       cpu_kind: this.cpuKind,
       cpus: this.cpuCount,
       memory_mb: this.memoryMb,
+    };
+  }
+
+  get builderCpuKind(): "shared" | "performance" {
+    const configured = (process.env.FLY_BUILDER_CPU_KIND || this.cpuKind)
+      .trim()
+      .toLowerCase();
+    return configured === "performance" ? "performance" : "shared";
+  }
+
+  get builderCpuCount(): number {
+    return parsePositiveInt(process.env.FLY_BUILDER_CPUS, 1);
+  }
+
+  get builderMemoryMb(): number {
+    return parsePositiveInt(process.env.FLY_BUILDER_MEMORY_MB, 4096);
+  }
+
+  get builderGuest(): FlyProviderGuestConfig {
+    return {
+      cpu_kind: this.builderCpuKind,
+      cpus: this.builderCpuCount,
+      memory_mb: this.builderMemoryMb,
     };
   }
 

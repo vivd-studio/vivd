@@ -90,6 +90,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - Avoid running full suites frequently (some flows are long-running and/or paid-API dependent).
 - Prefer targeted tests/builds for touched areas.
+- During substantial multi-file work or refactors, run the relevant TypeScript check periodically (`npm run typecheck` or a workspace-level `npm run typecheck -w <workspace>`) instead of only at the end.
 - Create MEANINGFUL tests, we are not interested in coverage, we want to add tests that actually add value to the codebase.
 
 ## Git

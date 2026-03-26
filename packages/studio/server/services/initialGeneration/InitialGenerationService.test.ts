@@ -11,6 +11,7 @@ const {
   isSessionCompletedMock,
   syncSourceToBucketMock,
   buildAndUploadPreviewMock,
+  requestConnectedArtifactBuildMock,
   thumbnailRequestMock,
   detectProjectTypeMock,
   isConnectedModeMock,
@@ -26,6 +27,7 @@ const {
   isSessionCompletedMock: vi.fn(),
   syncSourceToBucketMock: vi.fn(),
   buildAndUploadPreviewMock: vi.fn(),
+  requestConnectedArtifactBuildMock: vi.fn(),
   thumbnailRequestMock: vi.fn(),
   detectProjectTypeMock: vi.fn(),
   isConnectedModeMock: vi.fn(),
@@ -48,6 +50,10 @@ vi.mock("../../opencode/index.js", () => ({
 vi.mock("../sync/ArtifactSyncService.js", () => ({
   syncSourceToBucket: syncSourceToBucketMock,
   buildAndUploadPreview: buildAndUploadPreviewMock,
+}));
+
+vi.mock("../sync/ConnectedArtifactBuildService.js", () => ({
+  requestConnectedArtifactBuild: requestConnectedArtifactBuildMock,
 }));
 
 vi.mock("../reporting/ThumbnailGenerationReporter.js", () => ({
@@ -129,6 +135,7 @@ describe("InitialGenerationService", () => {
     isSessionCompletedMock.mockReset();
     syncSourceToBucketMock.mockReset();
     buildAndUploadPreviewMock.mockReset();
+    requestConnectedArtifactBuildMock.mockReset();
     thumbnailRequestMock.mockReset();
     detectProjectTypeMock.mockReset();
     isConnectedModeMock.mockReset();
@@ -148,6 +155,10 @@ describe("InitialGenerationService", () => {
     detectProjectTypeMock.mockReturnValue({ framework: "astro" });
     syncSourceToBucketMock.mockResolvedValue(undefined);
     buildAndUploadPreviewMock.mockResolvedValue(undefined);
+    requestConnectedArtifactBuildMock.mockResolvedValue({
+      requested: false,
+      reason: "disabled",
+    });
     isConnectedModeMock.mockReturnValue(false);
     getBackendUrlMock.mockReturnValue("");
     getConnectedOrganizationIdMock.mockReturnValue(undefined);
@@ -236,6 +247,39 @@ describe("InitialGenerationService", () => {
     const completedManifest = readManifest(tmpDir);
     expect(completedManifest.state).toBe("completed");
     expect(completedManifest.sessionId).toBe("sess-1");
+  });
+
+  it("queues the preview build via the connected builder when that path is accepted", async () => {
+    requestConnectedArtifactBuildMock.mockResolvedValue({
+      requested: true,
+      deduped: false,
+      status: "queued",
+    });
+
+    await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+      model: { provider: "openai", modelId: "gpt-5.4" },
+    });
+
+    sessionListener?.({
+      type: "session.completed",
+      data: { kind: "session.completed" },
+    });
+    await flushAsyncWork();
+
+    expect(syncSourceToBucketMock).toHaveBeenCalledWith({
+      projectDir: tmpDir,
+      slug: "site-1",
+      version: 1,
+    });
+    expect(requestConnectedArtifactBuildMock).toHaveBeenCalledWith({
+      slug: "site-1",
+      version: 1,
+      kind: "preview",
+    });
+    expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
   });
 
   it("reuses an existing session idempotently instead of creating a duplicate run", async () => {

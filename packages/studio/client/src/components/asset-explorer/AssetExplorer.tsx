@@ -2,11 +2,16 @@ import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Plus, ImageIcon } from "lucide-react";
+import { X, Plus, ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AssetItem, ViewMode, FileTreeNode } from "./types";
-import { buildImageUrl } from "./utils";
+import {
+  buildImageUrl,
+  isVivdInternalAssetPath,
+  pickInitialAssetExplorerPath,
+  STUDIO_UPLOADS_PATH,
+} from "./utils";
 import { AssetToolbar } from "./AssetToolbar";
 import { CreateFolderInput } from "./CreateFolderInput";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
@@ -27,6 +32,35 @@ interface AssetExplorerProps {
   projectSlug: string;
   version: number;
   onClose?: () => void;
+}
+
+const OPTIMIZED_WORKING_IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".tif",
+  ".tiff",
+  ".bmp",
+  ".webp",
+]);
+
+function shouldShowWorkingImageOptimization(
+  files: FileList,
+  targetPath: string,
+): boolean {
+  const normalizedTargetPath = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (
+    normalizedTargetPath !== ".vivd/uploads" &&
+    normalizedTargetPath !== ".vivd/dropped-images"
+  ) {
+    return false;
+  }
+
+  return Array.from(files).some((file) => {
+    const lowerName = file.name.toLowerCase();
+    const extension = lowerName.slice(lowerName.lastIndexOf("."));
+    return OPTIMIZED_WORKING_IMAGE_EXTENSIONS.has(extension);
+  });
 }
 
 export function AssetExplorer({
@@ -64,6 +98,13 @@ export function AssetExplorer({
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "uploading" | "optimizing"
   >("idle");
+  const [uploadTargetPath, setUploadTargetPath] = useState<string | null>(null);
+  const [fileTreeRevealPath, setFileTreeRevealPath] = useState<string | null>(
+    null,
+  );
+  const [fileTreeHighlightedPath, setFileTreeHighlightedPath] = useState<
+    string | null
+  >(null);
 
   // Image preview state (legacy dialog)
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
@@ -107,32 +148,43 @@ export function AssetExplorer({
     { slug: projectSlug, version, relativePath: "images" },
     { enabled: !initialPathDetected },
   );
+  const uploadsCheck = trpc.assets.listAssets.useQuery(
+    { slug: projectSlug, version, relativePath: STUDIO_UPLOADS_PATH },
+    { enabled: !initialPathDetected },
+  );
 
   // Detect initial path
   useEffect(() => {
     if (initialPathDetected) return;
 
     // Wait for both queries to complete
-    if (!publicImagesCheck.isFetched || !imagesCheck.isFetched) return;
-
-    const publicHasItems =
-      publicImagesCheck.data?.items && publicImagesCheck.data.items.length > 0;
-    const imagesHasItems =
-      imagesCheck.data?.items && imagesCheck.data.items.length > 0;
-
-    // Prefer public/images if it has items, or if both are empty (it's the standard location)
-    // Only use "images" if it has items and public/images is empty
-    if (publicHasItems || !imagesHasItems) {
-      setCurrentPath("public/images");
-    } else {
-      setCurrentPath("images");
+    if (
+      !publicImagesCheck.isFetched ||
+      !imagesCheck.isFetched ||
+      !uploadsCheck.isFetched
+    ) {
+      return;
     }
+
+    const uploadsHasItems = !!uploadsCheck.data?.items?.length;
+    const publicHasItems = !!publicImagesCheck.data?.items?.length;
+    const imagesHasItems = !!imagesCheck.data?.items?.length;
+
+    setCurrentPath(
+      pickInitialAssetExplorerPath({
+        uploadsHasItems,
+        publicImagesHasItems: publicHasItems,
+        imagesHasItems,
+      }),
+    );
     setInitialPathDetected(true);
   }, [
     publicImagesCheck.isFetched,
     publicImagesCheck.data,
     imagesCheck.isFetched,
     imagesCheck.data,
+    uploadsCheck.isFetched,
+    uploadsCheck.data,
     initialPathDetected,
   ]);
 
@@ -186,10 +238,18 @@ export function AssetExplorer({
     },
   });
 
-  const handleUpload = async (files: FileList) => {
-    if (!files.length || !currentPath) return;
+  const handleUpload = async (
+    files: FileList,
+    targetPath: string = STUDIO_UPLOADS_PATH,
+  ) => {
+    if (!files.length) return;
 
-    setUploadStatus("uploading");
+    setUploadTargetPath(targetPath);
+    setUploadStatus(
+      shouldShowWorkingImageOptimization(files, targetPath)
+        ? "optimizing"
+        : "uploading",
+    );
 
     try {
       const token = getVivdStudioToken();
@@ -203,7 +263,7 @@ export function AssetExplorer({
 
       const response = await fetch(
         resolveStudioRuntimePath(
-          `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(currentPath)}`,
+          `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(targetPath)}`,
         ),
         {
           method: "POST",
@@ -216,13 +276,28 @@ export function AssetExplorer({
         throw new Error("Upload failed");
       }
 
-      setUploadStatus("idle");
+      const payload = (await response.json()) as { uploaded?: unknown };
+      const uploadedPaths = Array.isArray(payload.uploaded)
+        ? payload.uploaded.filter(
+            (value): value is string =>
+              typeof value === "string" && value.length > 0,
+          )
+        : [];
+      const firstUploadedPath = uploadedPaths[0] ?? null;
+
+      setCurrentPath(targetPath);
+      setFileTreeRevealPath(firstUploadedPath ?? targetPath);
+      setFileTreeHighlightedPath(firstUploadedPath);
       galleryQuery.refetch();
       utils.assets.invalidate();
-      toast.success("Upload successful");
+      toast.success("Upload successful", {
+        description: `Saved to ${targetPath}`,
+      });
     } catch (error) {
-      setUploadStatus("idle");
       toast.error("Upload failed", { description: (error as Error).message });
+    } finally {
+      setUploadStatus("idle");
+      setUploadTargetPath(null);
     }
   };
 
@@ -261,12 +336,24 @@ export function AssetExplorer({
 
   const handleCreateImage = () => {
     if (!createImagePrompt.trim()) return;
+
+    const publicHasItems = !!publicImagesCheck.data?.items?.length;
+    const imagesHasItems = !!imagesCheck.data?.items?.length;
+    const targetPath =
+      currentPath && !isVivdInternalAssetPath(currentPath)
+        ? currentPath
+        : pickInitialAssetExplorerPath({
+            uploadsHasItems: false,
+            publicImagesHasItems: publicHasItems,
+            imagesHasItems,
+          });
+
     createImageMutation.mutate({
       slug: projectSlug,
       version,
       prompt: createImagePrompt.trim(),
       referenceImages: selectedReferenceImages,
-      targetPath: currentPath ?? "images",
+      targetPath,
     });
   };
 
@@ -311,7 +398,7 @@ export function AssetExplorer({
 
       <AssetToolbar
         currentPath={currentPath ?? ""}
-        onFilesSelected={handleUpload}
+        onFilesSelected={(files) => handleUpload(files, STUDIO_UPLOADS_PATH)}
         onRefresh={() => {
           galleryQuery.refetch();
           utils.assets.invalidate();
@@ -334,6 +421,24 @@ export function AssetExplorer({
         uploadStatus={uploadStatus}
       />
 
+      {uploadStatus !== "idle" && uploadTargetPath && (
+        <div className="flex items-center gap-3 border-b bg-primary/5 px-4 py-2">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium">
+              {uploadStatus === "optimizing"
+                ? "Uploading and optimizing working images"
+                : "Uploading files"}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {uploadStatus === "optimizing"
+                ? `Saving to ${uploadTargetPath} as WebP working assets when possible`
+                : `Saving to ${uploadTargetPath}`}
+            </p>
+          </div>
+        </div>
+      )}
+
       <ScrollArea className="flex-1">
         {isCreatingFolder && (
           <div className="px-4 py-2 border-b">
@@ -351,6 +456,9 @@ export function AssetExplorer({
           <FileTreeView
             projectSlug={projectSlug}
             version={version}
+            revealPath={fileTreeRevealPath}
+            highlightedPath={fileTreeHighlightedPath}
+            onRevealHandled={() => setFileTreeRevealPath(null)}
             onAiEdit={
               canUseAiImages
                 ? (handleAiEdit as (item: FileTreeNode) => void)
@@ -359,6 +467,7 @@ export function AssetExplorer({
             onDelete={handleDelete as (item: FileTreeNode) => void}
             onAddToChat={handleAddToChat as (item: FileTreeNode) => void}
             onCreateFolder={handleCreateFolder}
+            onFilesUpload={(files) => handleUpload(files, STUDIO_UPLOADS_PATH)}
             onRefetch={() => {
               galleryQuery.refetch();
               utils.assets.invalidate();

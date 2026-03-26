@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   createContext,
   useContext,
@@ -63,6 +64,7 @@ type OpencodeChatContextValue = {
 
 const OpencodeChatContext = createContext<OpencodeChatContextValue | null>(null);
 const STALE_VISIBILITY_REFRESH_MS = 15_000;
+const STREAM_HEARTBEAT_TIMEOUT_MS = 15_000;
 
 export function useOpencodeChat() {
   const context = useContext(OpencodeChatContext);
@@ -95,11 +97,13 @@ export function OpencodeChatProvider({
   const bootstrapReadyRef = useRef(false);
   const queuedRefreshRef = useRef<() => Promise<void>>(async () => undefined);
   const handledRefreshGenerationRef = useRef(0);
+  const lastSubscriptionActivityAtRef = useRef<number | null>(null);
   const [state, dispatch] = useReducer(
     openCodeChatReducer,
     OPEN_CODE_CHAT_INITIAL_STATE,
   );
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [subscriptionInstance, setSubscriptionInstance] = useState(0);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<
     OpenCodeOptimisticUserMessage[]
   >([]);
@@ -167,6 +171,13 @@ export function OpencodeChatProvider({
 
   const queueRefresh = useCallback(() => {
     refreshQueueRef.current?.refresh();
+  }, []);
+
+  const restartEventSubscription = useCallback(() => {
+    lastSubscriptionActivityAtRef.current = Date.now();
+    startTransition(() => {
+      setSubscriptionInstance((value) => value + 1);
+    });
   }, []);
 
   const addOptimisticUserMessage = useCallback(
@@ -285,6 +296,44 @@ export function OpencodeChatProvider({
       return;
     }
 
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+
+    const lastActivityAt = lastSubscriptionActivityAtRef.current;
+    if (lastActivityAt == null) {
+      return;
+    }
+
+    const remainingMs =
+      lastActivityAt + STREAM_HEARTBEAT_TIMEOUT_MS - Date.now();
+    if (remainingMs <= 0) {
+      restartEventSubscription();
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      restartEventSubscription();
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    restartEventSubscription,
+    state.bootstrapped,
+    state.connection.state,
+    subscriptionInstance,
+  ]);
+
+  useEffect(() => {
+    if (!state.bootstrapped || state.connection.state !== "connected") {
+      return;
+    }
+
     if (state.refreshGeneration <= handledRefreshGenerationRef.current) {
       return;
     }
@@ -304,10 +353,12 @@ export function OpencodeChatProvider({
       version,
       ...(lastEventIdRef.current ? { lastEventId: lastEventIdRef.current } : {}),
       replayBuffered: Boolean(lastEventIdRef.current),
+      subscriptionInstance,
     },
     {
       enabled: Boolean(bootstrapQuery.data),
       onStarted: () => {
+        lastSubscriptionActivityAtRef.current = Date.now();
         flushQueuedEvents();
         queueRefresh();
         dispatch({
@@ -318,6 +369,7 @@ export function OpencodeChatProvider({
         });
       },
       onData: (trackedEvent) => {
+        lastSubscriptionActivityAtRef.current = Date.now();
         lastEventIdRef.current = trackedEvent.id;
         queueSubscriptionEvent(subscriptionBatcherRef.current, {
           ...(trackedEvent.data as CanonicalChatEvent),

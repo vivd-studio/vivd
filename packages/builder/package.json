@@ -1,0 +1,21 @@
+{
+  "name": "@vivd/builder",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Vivd artifact builder runtime",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "typecheck": "tsc --project tsconfig.typecheck.json --noEmit --pretty false",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.983.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3"
+  }
+}

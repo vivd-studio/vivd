@@ -47,6 +47,17 @@ type ProjectRuntimeRouterDeps = {
   ) => Promise<boolean>;
 };
 
+const STUDIO_ALLOWED_DOTFILES = new Set([".vivd", ".gitignore", ".env.example"]);
+const STUDIO_BLOCKED_FILE_PATHS = [
+  ".git",
+  ".env",
+  "node_modules",
+  "package.json",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "tsconfig.json",
+];
+
 function getRouteParam(req: express.Request, key: string): string | undefined {
   const value = (req.params as Record<string, unknown>)[key];
   if (typeof value === "string") return value;
@@ -63,6 +74,61 @@ function getQueryParam(req: express.Request, key: string): string | undefined {
   if (typeof value === "string") return value;
   if (Array.isArray(value) && typeof value[0] === "string") return value[0];
   return undefined;
+}
+
+function decodeRequestedStudioFilePath(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    try {
+      return decodeURI(value);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function resolveRequestedStudioFilePath(options: {
+  restPath: string;
+  queryPath: unknown;
+}): string | null {
+  const queryPath =
+    typeof options.queryPath === "string"
+      ? options.queryPath.trim()
+      : Array.isArray(options.queryPath) &&
+          typeof options.queryPath[0] === "string"
+        ? options.queryPath[0].trim()
+        : "";
+  if (queryPath) {
+    return decodeRequestedStudioFilePath(queryPath);
+  }
+
+  const restPath = options.restPath.trim();
+  if (!restPath) {
+    return null;
+  }
+
+  return decodeRequestedStudioFilePath(restPath);
+}
+
+function isAllowedStudioProjectFile(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return false;
+  }
+
+  for (const segment of segments) {
+    if (segment.startsWith(".") && !STUDIO_ALLOWED_DOTFILES.has(segment)) {
+      return false;
+    }
+  }
+
+  for (const blocked of STUDIO_BLOCKED_FILE_PATHS) {
+    if (normalized.includes(blocked)) return false;
+  }
+
+  return true;
 }
 
 function getCookieValue(req: express.Request, key: string): string | undefined {
@@ -506,6 +572,88 @@ export function createProjectRuntimeRouter(
 ) {
   const router = express.Router();
 
+  const serveStudioWorkspaceFile = async (
+    req: express.Request,
+    res: express.Response,
+    options: { routeKind: "projects" | "assets" },
+  ) => {
+    try {
+      const requestContext = await deps.createContext({ req, res });
+      const session = requestContext.session;
+      if (!session) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const organizationId = requestContext.organizationId;
+      if (!organizationId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const access = await checkOrganizationAccess({
+        session,
+        organizationId,
+      });
+      if (!access.ok) {
+        if ("reason" in access && access.reason === "organization_suspended") {
+          return res.status(403).json({ error: "Organization is suspended" });
+        }
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const parts = req.path.split("/").filter(Boolean);
+      if (parts.length < 2) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+
+      const [slug, rawVersionSegment, ...rest] = parts;
+      const versionNumber =
+        options.routeKind === "projects"
+          ? rawVersionSegment?.startsWith("v")
+            ? Number.parseInt(rawVersionSegment.slice(1), 10)
+            : Number.NaN
+          : Number.parseInt(rawVersionSegment || "", 10);
+      if (!slug || !Number.isFinite(versionNumber) || versionNumber < 1) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+
+      const ok = await deps.enforceProjectAccess(req, res, session, organizationId, slug);
+      if (!ok) return;
+
+      const relativePath = resolveRequestedStudioFilePath({
+        restPath: rest.join("/"),
+        queryPath: req.query?.path,
+      });
+      if (!relativePath) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+      if (!isAllowedStudioProjectFile(relativePath)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const versionDir = getVersionDir(organizationId, slug, versionNumber);
+      if (!fs.existsSync(versionDir)) {
+        return res.status(404).json({ error: "Project version not found" });
+      }
+
+      let resolvedPath: string;
+      try {
+        resolvedPath = safeJoin(versionDir, relativePath, {
+          allowDotSegments: true,
+        });
+      } catch {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+
+      if (!fs.existsSync(resolvedPath)) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      res.setHeader("Cache-Control", "private, no-store");
+      return res.sendFile(resolvedPath, { dotfiles: "allow" });
+    } catch (error) {
+      console.error("[ProjectRuntime] Failed to serve Studio workspace file:", error);
+      return res.status(500).json({ error: "Failed to load file" });
+    }
+  };
+
   router.get("/vivd-studio/api/projects/:slug/v:version/thumbnail", async (req, res) => {
     try {
       const requestContext = await deps.createContext({ req, res });
@@ -577,6 +725,14 @@ export function createProjectRuntimeRouter(
       console.error("[ProjectRuntime] Failed to serve project thumbnail:", error);
       return res.status(500).json({ error: "Failed to load thumbnail" });
     }
+  });
+
+  router.use("/vivd-studio/api/projects", async (req, res) => {
+    return serveStudioWorkspaceFile(req, res, { routeKind: "projects" });
+  });
+
+  router.use("/vivd-studio/api/assets", async (req, res) => {
+    return serveStudioWorkspaceFile(req, res, { routeKind: "assets" });
   });
 
   // Secure external preview endpoint (unauthenticated but filtered)

@@ -231,6 +231,13 @@ export function ChatProvider({
   const queuedFollowupSendingId = selectedSessionId
     ? queuedFollowupSendingBySessionId[selectedSessionId] ?? null
     : null;
+  const hasBusySessionTarget =
+    Boolean(selectedSessionId) && (isThinking || runTaskPending);
+  const showSteerButton =
+    followupBehavior === "queue" &&
+    hasBusySessionTarget &&
+    !activeQuestionRequest &&
+    !isUsageBlocked;
 
   const removeQueuedFollowup = useCallback((sessionId: string, id: string) => {
     setQueuedFollowupsBySessionId((current) => {
@@ -471,36 +478,60 @@ export function ChatProvider({
     }
   }, [selectedSessionId]);
 
-  const handleSend = async () => {
-    const hasSessionTarget = Boolean(selectedSessionId);
-    if (
-      (!input.trim() &&
-        !attachedElement &&
-        attachedImages.length === 0 &&
-        attachedFiles.length === 0) ||
-      activeQuestionRequest ||
-      isPreparingSendRef.current ||
-      (!hasSessionTarget && runTaskPending)
-    ) {
-      return;
-    }
+  const submitCurrentInput = useCallback(
+    async (options?: { forceSend?: boolean }) => {
+      const hasSessionTarget = Boolean(selectedSessionId);
+      if (
+        (!input.trim() &&
+          !attachedElement &&
+          attachedImages.length === 0 &&
+          attachedFiles.length === 0) ||
+        activeQuestionRequest ||
+        isPreparingSendRef.current ||
+        (!hasSessionTarget && runTaskPending)
+      ) {
+        return;
+      }
 
-    isPreparingSendRef.current = true;
-    setIsPreparingSend(true);
+      isPreparingSendRef.current = true;
+      setIsPreparingSend(true);
 
-    try {
-      const task = await buildTaskWithAttachments(input);
+      try {
+        const task = await buildTaskWithAttachments(input);
 
-      setInput("");
-      setAttachedElement(null);
-      clearSessionError();
+        setInput("");
+        setAttachedElement(null);
+        clearSessionError();
 
-      submitPreparedTask(task, selectedSessionId);
-    } finally {
-      isPreparingSendRef.current = false;
-      setIsPreparingSend(false);
-    }
-  };
+        submitPreparedTask(task, selectedSessionId, {
+          forceSend: options?.forceSend,
+        });
+      } finally {
+        isPreparingSendRef.current = false;
+        setIsPreparingSend(false);
+      }
+    },
+    [
+      activeQuestionRequest,
+      attachedElement,
+      attachedFiles.length,
+      attachedImages.length,
+      buildTaskWithAttachments,
+      clearSessionError,
+      input,
+      runTaskPending,
+      selectedSessionId,
+      submitPreparedTask,
+    ],
+  );
+
+  const handleSend = useCallback(() => {
+    void submitCurrentInput();
+  }, [submitCurrentInput]);
+
+  const handleSteerSend = useCallback(() => {
+    void submitCurrentInput({ forceSend: true });
+  }, [submitCurrentInput]);
 
   const handleContinueSession = useCallback(() => {
     if (
@@ -799,6 +830,7 @@ export function ChatProvider({
     removeAttachedFile,
     followupBehavior,
     setFollowupBehavior,
+    showSteerButton,
     queuedFollowups,
     queuedFollowupSendingId,
     selectorMode,
@@ -824,6 +856,7 @@ export function ChatProvider({
     initialGenerationFailed,
     retryInitialGeneration,
     handleSend,
+    handleSteerSend,
     handleReplyQuestion,
     handleRejectQuestion,
     handleContinueSession,

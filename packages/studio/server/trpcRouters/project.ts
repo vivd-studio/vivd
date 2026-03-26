@@ -25,6 +25,7 @@ import {
   buildAndUploadPublished,
   syncSourceToBucket,
 } from "../services/sync/ArtifactSyncService.js";
+import { requestConnectedArtifactBuild } from "../services/sync/ConnectedArtifactBuildService.js";
 import {
   checkGitHubRepoExists,
   getGitHubSyncProjectInfo,
@@ -724,24 +725,58 @@ export const projectRouter = router({
       const config = detectProjectType(projectDir);
       // Keep bucket-backed preview up to date (best-effort, async).
       if (config.framework === "astro") {
-        void syncSourceToBucket({
+        const sourceSyncPromise = syncSourceToBucket({
           projectDir,
           slug: input.slug,
           version: input.version,
           commitHash: effectiveCommitHash,
-        }).catch((err) => {
+        });
+
+        void sourceSyncPromise.catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[Artifacts] Source sync failed: ${msg}`);
         });
 
-        void buildAndUploadPreview({
-          projectDir,
-          slug: input.slug,
-          version: input.version,
-          commitHash: effectiveCommitHash,
-        })
+        void (async () => {
+          let canRequestRemoteBuild = true;
+          try {
+            await sourceSyncPromise;
+          } catch {
+            canRequestRemoteBuild = false;
+          }
+
+          if (canRequestRemoteBuild) {
+            try {
+              const requested = await requestConnectedArtifactBuild({
+                slug: input.slug,
+                version: input.version,
+                kind: "preview",
+                commitHash: effectiveCommitHash,
+              });
+              if (requested.requested) {
+                if (requested.status === "ready") {
+                  thumbnailGenerationReporter.request(input.slug, input.version);
+                }
+                return;
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `[Artifacts] Connected preview build request failed, falling back to local build: ${msg}`,
+              );
+            }
+          }
+
+          await buildAndUploadPreview({
+            projectDir,
+            slug: input.slug,
+            version: input.version,
+            commitHash: effectiveCommitHash,
+          });
+          thumbnailGenerationReporter.request(input.slug, input.version);
+        })()
           .then(() => {
-            thumbnailGenerationReporter.request(input.slug, input.version);
+            // no-op: local build path already requested thumbnail
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err);
@@ -1190,6 +1225,7 @@ export const projectRouter = router({
 
       const projectDir = ctx.workspace.getProjectPath();
       const config = detectProjectType(projectDir);
+      let shouldTriggerThumbnail = false;
 
       try {
         const result = await withBucketSyncPaused(async () => {
@@ -1208,12 +1244,37 @@ export const projectRouter = router({
           });
 
           if (config.framework === "astro") {
-            await buildAndUploadPreview({
-              projectDir,
-              slug: input.slug,
-              version: input.version,
-              commitHash: pull.headHash,
-            });
+            try {
+              const requested = await requestConnectedArtifactBuild({
+                slug: input.slug,
+                version: input.version,
+                kind: "preview",
+                commitHash: pull.headHash,
+              });
+              if (requested.requested) {
+                shouldTriggerThumbnail = requested.status === "ready";
+              } else {
+                await buildAndUploadPreview({
+                  projectDir,
+                  slug: input.slug,
+                  version: input.version,
+                  commitHash: pull.headHash,
+                });
+                shouldTriggerThumbnail = true;
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `[Artifacts] Connected preview build request failed, falling back to local build: ${msg}`,
+              );
+              await buildAndUploadPreview({
+                projectDir,
+                slug: input.slug,
+                version: input.version,
+                commitHash: pull.headHash,
+              });
+              shouldTriggerThumbnail = true;
+            }
           }
 
           return pull;
@@ -1221,7 +1282,9 @@ export const projectRouter = router({
 
         projectTouchReporter.touch(input.slug);
         void workspaceStateReporter.reportSoon();
-        thumbnailGenerationReporter.request(input.slug, input.version);
+        if (shouldTriggerThumbnail) {
+          thumbnailGenerationReporter.request(input.slug, input.version);
+        }
 
         return {
           success: true,
@@ -1263,6 +1326,7 @@ export const projectRouter = router({
 
       const projectDir = ctx.workspace.getProjectPath();
       const config = detectProjectType(projectDir);
+      let shouldTriggerThumbnail = false;
 
       try {
         const result = await withBucketSyncPaused(async () => {
@@ -1282,12 +1346,37 @@ export const projectRouter = router({
           });
 
           if (config.framework === "astro") {
-            await buildAndUploadPreview({
-              projectDir,
-              slug: input.slug,
-              version: input.version,
-              commitHash: sync.headHash,
-            });
+            try {
+              const requested = await requestConnectedArtifactBuild({
+                slug: input.slug,
+                version: input.version,
+                kind: "preview",
+                commitHash: sync.headHash,
+              });
+              if (requested.requested) {
+                shouldTriggerThumbnail = requested.status === "ready";
+              } else {
+                await buildAndUploadPreview({
+                  projectDir,
+                  slug: input.slug,
+                  version: input.version,
+                  commitHash: sync.headHash,
+                });
+                shouldTriggerThumbnail = true;
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `[Artifacts] Connected preview build request failed, falling back to local build: ${msg}`,
+              );
+              await buildAndUploadPreview({
+                projectDir,
+                slug: input.slug,
+                version: input.version,
+                commitHash: sync.headHash,
+              });
+              shouldTriggerThumbnail = true;
+            }
           }
 
           return sync;
@@ -1295,7 +1384,9 @@ export const projectRouter = router({
 
         projectTouchReporter.touch(input.slug);
         void workspaceStateReporter.reportSoon();
-        thumbnailGenerationReporter.request(input.slug, input.version);
+        if (shouldTriggerThumbnail) {
+          thumbnailGenerationReporter.request(input.slug, input.version);
+        }
 
         return {
           success: true,
@@ -1466,18 +1557,45 @@ export const projectRouter = router({
         const projectDir = ctx.workspace.getProjectPath();
 
         // Keep bucket-backed published artifacts up to date (best-effort, async).
-        void syncSourceToBucket({
+        const sourceSyncPromise = syncSourceToBucket({
           projectDir,
           slug: input.slug,
           version,
           commitHash,
-        }).catch(() => {});
-        void buildAndUploadPublished({
-          projectDir,
-          slug: input.slug,
-          version,
-          commitHash,
-        }).catch((err) => {
+        });
+        void sourceSyncPromise.catch(() => {});
+        void (async () => {
+          let canRequestRemoteBuild = true;
+          try {
+            await sourceSyncPromise;
+          } catch {
+            canRequestRemoteBuild = false;
+          }
+
+          if (canRequestRemoteBuild) {
+            try {
+              const requested = await requestConnectedArtifactBuild({
+                slug: input.slug,
+                version,
+                kind: "published",
+                commitHash,
+              });
+              if (requested.requested) return;
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `[Artifacts] Connected published build request failed, falling back to local build: ${msg}`,
+              );
+            }
+          }
+
+          await buildAndUploadPublished({
+            projectDir,
+            slug: input.slug,
+            version,
+            commitHash,
+          });
+        })().catch((err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[Artifacts] Published build/upload failed: ${msg}`);
         });

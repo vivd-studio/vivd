@@ -1,10 +1,47 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+
+vi.mock("../services/reporting/UsageReporter.js", () => ({
+  usageReporter: {
+    report: vi.fn(),
+    updateSessionTitle: vi.fn(),
+  },
+}));
+
+vi.mock("../services/reporting/AgentLeaseReporter.js", () => ({
+  agentLeaseReporter: {
+    startRun: vi.fn(),
+    finishRun: vi.fn(),
+    finishSession: vi.fn(),
+  },
+}));
+
+vi.mock("../services/sync/AgentTaskSyncService.js", () => ({
+  requestBucketSyncAfterAgentTask: vi.fn(),
+}));
+
+vi.mock("../services/agent/AgentInstructionsService.js", () => ({
+  agentInstructionsService: {
+    getSystemPromptForSessionStart: vi.fn(async () => undefined),
+  },
+}));
+
+import {
+  getSessionContent,
+  revertToUserMessage,
+  runTask,
+  unrevertSession,
+} from "./index.js";
+import { agentEventEmitter } from "./eventEmitter.js";
+import { repairOpencodeSnapshotGitDirs } from "./snapshotGitDirRepair.js";
+import { serverManager } from "./serverManager.js";
+import { workspaceEventPump } from "./events/workspaceEventPump.js";
 
 const RUN_REVERT_TESTS = process.env.VIVD_RUN_OPENCODE_REVERT_TESTS === "1";
 const OPENCODE_VERSION = "1.3.2";
@@ -66,6 +103,126 @@ async function waitForOpencodeReady(url: string, timeoutMs = 120_000): Promise<v
   }
 
   throw new Error(`Timed out waiting for OpenCode server at ${url}`);
+}
+
+async function waitForSessionToSettle(options: {
+  client: ReturnType<typeof createOpencodeClient>;
+  sessionId: string;
+  directory: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 120_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let sawBusy = false;
+  let sawUserMessage = false;
+  let sawAssistantMessage = false;
+
+  const events = await options.client.event.subscribe(
+    { directory: options.directory },
+    { signal: controller.signal } as any,
+  );
+
+  const getEventSessionId = (event: any): string | undefined =>
+    event?.properties?.sessionID ??
+    event?.properties?.info?.sessionID ??
+    event?.properties?.part?.sessionID;
+
+  try {
+    for await (const event of events.stream) {
+      if (getEventSessionId(event) !== options.sessionId) {
+        continue;
+      }
+
+      if (event.type === "message.updated") {
+        const role = (event.properties as any)?.info?.role;
+        if (role === "user") {
+          sawUserMessage = true;
+        } else if (role === "assistant") {
+          sawAssistantMessage = true;
+        }
+        continue;
+      }
+
+      if (event.type === "session.status") {
+        const type = (event.properties as any)?.status?.type;
+        if (type === "busy") {
+          sawBusy = true;
+        }
+        if (
+          (type === "idle" || type === "done") &&
+          (sawBusy || (sawUserMessage && sawAssistantMessage))
+        ) {
+          return;
+        }
+        continue;
+      }
+
+      if (
+        event.type === "session.idle" &&
+        (sawBusy || (sawUserMessage && sawAssistantMessage))
+      ) {
+        return;
+      }
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
+  }
+
+  throw new Error(
+    `Timed out waiting for session ${options.sessionId} to settle after promptAsync`,
+  );
+}
+
+async function waitForStudioSessionCompletion(
+  sessionId: string,
+  timeoutMs = 120_000,
+): Promise<void> {
+  if (agentEventEmitter.isSessionCompleted(sessionId)) {
+    return;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    for await (const event of agentEventEmitter.createSessionStream(
+      sessionId,
+      controller.signal,
+    )) {
+      if (event.type === "session.completed") {
+        return;
+      }
+
+      if (event.type === "session.error") {
+        const error = event.data as {
+          errorType?: string;
+          message?: string;
+        };
+        throw new Error(
+          `Studio session failed: ${error.errorType || "error"}: ${error.message || "Unknown error"}`,
+        );
+      }
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
+  }
+
+  if (agentEventEmitter.isSessionCompleted(sessionId)) {
+    return;
+  }
+
+  throw new Error(`Timed out waiting for Studio session ${sessionId} to complete`);
 }
 
 async function killProcess(proc: ChildProcess, timeoutMs = 5_000): Promise<void> {
@@ -134,15 +291,82 @@ async function spawnOpencodeServer(options: {
   return { url, proc };
 }
 
+async function copyOpencodePersistedState(options: {
+  fromHomeDir: string;
+  toHomeDir: string;
+}): Promise<void> {
+  const fromDataDir = path.join(
+    options.fromHomeDir,
+    ".local",
+    "share",
+    "opencode",
+  );
+  const toDataDir = path.join(
+    options.toHomeDir,
+    ".local",
+    "share",
+    "opencode",
+  );
+
+  await fs.mkdir(toDataDir, { recursive: true });
+
+  for (const filename of ["opencode.db", "opencode.db-shm", "opencode.db-wal"]) {
+    await fs
+      .copyFile(path.join(fromDataDir, filename), path.join(toDataDir, filename))
+      .catch(() => undefined);
+  }
+
+  await fs.mkdir(path.join(toDataDir, "storage"), { recursive: true });
+  await fs
+    .cp(
+      path.join(fromDataDir, "storage", "session_diff"),
+      path.join(toDataDir, "storage", "session_diff"),
+      { recursive: true },
+    )
+    .catch(() => undefined);
+
+  await fs
+    .cp(path.join(fromDataDir, "snapshot"), path.join(toDataDir, "snapshot"), {
+      recursive: true,
+    })
+    .catch(() => undefined);
+
+  const toSnapshotDir = path.join(toDataDir, "snapshot");
+  const snapshotEntries = await fs
+    .readdir(toSnapshotDir, { withFileTypes: true })
+    .catch(() => [] as Dirent[]);
+  for (const entry of snapshotEntries) {
+    if (!entry.isDirectory()) continue;
+    const repoDir = path.join(toSnapshotDir, entry.name);
+    await fs.rm(path.join(repoDir, "refs"), { recursive: true, force: true });
+    await fs.rm(path.join(repoDir, "branches"), { recursive: true, force: true });
+  }
+  await repairOpencodeSnapshotGitDirs(toSnapshotDir);
+}
+
+function setOpencodeHomeEnv(homeDir: string) {
+  process.env.HOME = homeDir;
+  process.env.XDG_CONFIG_HOME = path.join(homeDir, ".config");
+  process.env.XDG_DATA_HOME = path.join(homeDir, ".local", "share");
+  process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ plugin: [] });
+}
+
+async function stopStudioOpencodeForRepo(repoDir: string): Promise<void> {
+  workspaceEventPump.stop(repoDir);
+  await serverManager.stopServer(repoDir).catch(() => undefined);
+}
+
 describe("OpenCode revert/unrevert integration", () => {
   it.skipIf(!RUN_REVERT_TESTS)(
-    "reverts + unreverts tracked patch edits (even after server restart)",
+    "reverts + unreverts tracked patch edits after async completion, restart, and rehydration to a new home",
     { timeout: 180_000 },
     async () => {
       const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-revert-"));
       const homeDir = path.join(tmpRoot, "home");
+      const rehydratedHomeDir = path.join(tmpRoot, "rehydrated-home");
       const repoDir = path.join(tmpRoot, "repo");
       await fs.mkdir(homeDir, { recursive: true });
+      await fs.mkdir(rehydratedHomeDir, { recursive: true });
       await fs.mkdir(repoDir, { recursive: true });
 
       const filePath = path.join(repoDir, "foo.txt");
@@ -166,12 +390,13 @@ describe("OpenCode revert/unrevert integration", () => {
       try {
         server = await spawnOpencodeServer({ repoDir, homeDir });
         const client = createOpencodeClient({ baseUrl: server.url, directory: repoDir });
+        let editedContent: string;
 
         const sessionRes = await client.session.create({ directory: repoDir });
         expect(sessionRes.error).toBeUndefined();
         sessionId = sessionRes.data!.id;
 
-        const promptRes = await client.session.prompt({
+        const promptRes = await client.session.promptAsync({
           sessionID: sessionId,
           directory: repoDir,
           model: { providerID: "opencode", modelID: "big-pickle" },
@@ -184,7 +409,13 @@ describe("OpenCode revert/unrevert integration", () => {
         });
 
         expect(promptRes.error).toBeUndefined();
-        expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER\n");
+        await waitForSessionToSettle({
+          client,
+          sessionId,
+          directory: repoDir,
+        });
+        editedContent = await fs.readFile(filePath, "utf-8");
+        expect(editedContent.trim()).toBe("AFTER");
 
         const messagesRes = await client.session.messages({
           sessionID: sessionId,
@@ -215,7 +446,7 @@ describe("OpenCode revert/unrevert integration", () => {
           directory: repoDir,
         });
         expect(unrevertRes.error).toBeUndefined();
-        expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER\n");
+        expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
 
         await killProcess(server.proc);
         server = await spawnOpencodeServer({ repoDir, homeDir });
@@ -235,9 +466,159 @@ describe("OpenCode revert/unrevert integration", () => {
           directory: repoDir,
         });
         expect(unrevertRes2.error).toBeUndefined();
-        expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER\n");
+        expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
+
+        await killProcess(server.proc);
+        await copyOpencodePersistedState({
+          fromHomeDir: homeDir,
+          toHomeDir: rehydratedHomeDir,
+        });
+        server = await spawnOpencodeServer({
+          repoDir,
+          homeDir: rehydratedHomeDir,
+        });
+
+        const client3 = createOpencodeClient({ baseUrl: server.url, directory: repoDir });
+
+        const revertRes3 = await client3.session.revert({
+          sessionID: sessionId,
+          directory: repoDir,
+          messageID: userMessageId,
+        });
+        expect(revertRes3.error).toBeUndefined();
+        expect(await fs.readFile(filePath, "utf-8")).toBe("BEFORE\n");
+
+        const unrevertRes3 = await client3.session.unrevert({
+          sessionID: sessionId,
+          directory: repoDir,
+        });
+        expect(unrevertRes3.error).toBeUndefined();
+        expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
       } finally {
         if (server) await killProcess(server.proc);
+      }
+    },
+  );
+
+  it.skipIf(!RUN_REVERT_TESTS)(
+    "runs through the Studio wrapper for same-session revert/unrevert and again after restart + rehydration",
+    { timeout: 240_000 },
+    async () => {
+      const originalEnv = {
+        HOME: process.env.HOME,
+        XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+        XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+        OPENCODE_CONFIG_CONTENT: process.env.OPENCODE_CONFIG_CONTENT,
+      };
+      const tmpRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "vivd-studio-opencode-revert-"),
+      );
+      const homeDir = path.join(tmpRoot, "home");
+      const rehydratedHomeDir = path.join(tmpRoot, "rehydrated-home");
+      const repoDir = path.join(tmpRoot, "repo");
+      await fs.mkdir(homeDir, { recursive: true });
+      await fs.mkdir(rehydratedHomeDir, { recursive: true });
+      await fs.mkdir(repoDir, { recursive: true });
+
+      const filePath = path.join(repoDir, "foo.txt");
+      await fs.writeFile(filePath, "BEFORE\n", "utf-8");
+
+      await runGit(repoDir, ["init"]);
+      await runGit(repoDir, ["config", "user.email", "test@vivd.local"]);
+      await runGit(repoDir, ["config", "user.name", "Vivd Test"]);
+      try {
+        await runGit(repoDir, ["branch", "-M", "main"]);
+      } catch {
+        // Best-effort only.
+      }
+      await runGit(repoDir, ["add", "-A"]);
+      await runGit(repoDir, ["commit", "-m", "init"]);
+
+      let sessionId = "";
+      let userMessageId = "";
+      let editedContent = "";
+
+      try {
+        setOpencodeHomeEnv(homeDir);
+
+        const run = await runTask(
+          "Edit foo.txt so its entire contents are exactly: AFTER\\n",
+          repoDir,
+          undefined,
+          { provider: "opencode", modelId: "big-pickle" },
+        );
+        sessionId = run.sessionId;
+        await waitForStudioSessionCompletion(sessionId);
+
+        editedContent = await fs.readFile(filePath, "utf-8");
+        expect(editedContent.trim()).toBe("AFTER");
+
+        const messages = await getSessionContent(sessionId, repoDir);
+        const userMessage = messages.find((message) => message.info.role === "user");
+        expect(userMessage).toBeTruthy();
+        userMessageId = userMessage!.info.id;
+
+        const patchParts = messages.flatMap((message) =>
+          (message.parts ?? []).filter((part) => part?.type === "patch"),
+        );
+        expect(patchParts.length).toBeGreaterThan(0);
+
+        const revertResult = await revertToUserMessage(
+          sessionId,
+          userMessageId,
+          repoDir,
+        );
+        expect(revertResult.reverted).toBe(true);
+        expect(await fs.readFile(filePath, "utf-8")).toBe("BEFORE\n");
+
+        await unrevertSession(sessionId, repoDir);
+        expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
+
+        await stopStudioOpencodeForRepo(repoDir);
+
+        const revertResultAfterRestart = await revertToUserMessage(
+          sessionId,
+          userMessageId,
+          repoDir,
+        );
+        expect(revertResultAfterRestart.reverted).toBe(true);
+        expect(await fs.readFile(filePath, "utf-8")).toBe("BEFORE\n");
+
+        await unrevertSession(sessionId, repoDir);
+        expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
+
+        await stopStudioOpencodeForRepo(repoDir);
+        await copyOpencodePersistedState({
+          fromHomeDir: homeDir,
+          toHomeDir: rehydratedHomeDir,
+        });
+        setOpencodeHomeEnv(rehydratedHomeDir);
+
+        const revertResultAfterRehydrate = await revertToUserMessage(
+          sessionId,
+          userMessageId,
+          repoDir,
+        );
+        expect(revertResultAfterRehydrate.reverted).toBe(true);
+        expect(await fs.readFile(filePath, "utf-8")).toBe("BEFORE\n");
+
+        await unrevertSession(sessionId, repoDir);
+        expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
+      } finally {
+        await stopStudioOpencodeForRepo(repoDir);
+
+        if (originalEnv.HOME == null) delete process.env.HOME;
+        else process.env.HOME = originalEnv.HOME;
+        if (originalEnv.XDG_CONFIG_HOME == null) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = originalEnv.XDG_CONFIG_HOME;
+        if (originalEnv.XDG_DATA_HOME == null) delete process.env.XDG_DATA_HOME;
+        else process.env.XDG_DATA_HOME = originalEnv.XDG_DATA_HOME;
+        if (originalEnv.OPENCODE_CONFIG_CONTENT == null) {
+          delete process.env.OPENCODE_CONFIG_CONTENT;
+        } else {
+          process.env.OPENCODE_CONFIG_CONTENT =
+            originalEnv.OPENCODE_CONFIG_CONTENT;
+        }
       }
     },
   );

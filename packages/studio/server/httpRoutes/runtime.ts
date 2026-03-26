@@ -11,6 +11,10 @@ import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
 import { createStudioBootstrapHandler } from "../http/studioAuth.js";
+import {
+  normalizeStudioWorkingImageUpload,
+  shouldNormalizeStudioWorkingImageUpload,
+} from "../services/uploads/uploadNormalization.js";
 
 type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewTarget?: string;
@@ -34,6 +38,36 @@ type StudioRuntimeHttpRoutesDeps = {
   injectBasePathScript: (html: string, basePath: string) => string;
   devPreviewProxy: express.RequestHandler;
 };
+
+export function resolveRuntimeRequestedFilePath(options: {
+  restPath: string;
+  queryPath: unknown;
+  decodeUriPath: (value: string) => string | null;
+}): string | null {
+  const queryPath =
+    typeof options.queryPath === "string"
+      ? options.queryPath.trim()
+      : Array.isArray(options.queryPath) &&
+          typeof options.queryPath[0] === "string"
+        ? options.queryPath[0].trim()
+        : "";
+  if (queryPath) {
+    try {
+      return decodeURIComponent(queryPath);
+    } catch {
+      const decodedQueryPath = options.decodeUriPath(queryPath);
+      if (decodedQueryPath) {
+        return decodedQueryPath;
+      }
+    }
+  }
+
+  if (!options.restPath) {
+    return null;
+  }
+
+  return options.decodeUriPath(options.restPath);
+}
 
 export function resolveForwardedRuntimeBasePath(
   routeBasePath: string,
@@ -78,6 +112,53 @@ export function registerStudioRuntimeHttpRoutes(
     devPreviewProxy,
   } = deps;
 
+  const serveWorkspaceFile = (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+    options: { routeKind: "projects" | "assets" },
+  ) => {
+    try {
+      if (!workspace.isInitialized()) {
+        return res.status(503).json({ error: "Workspace not initialized" });
+      }
+
+      const parts = req.path.split("/").filter(Boolean);
+      if (parts.length < 2) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+
+      const versionSegment =
+        options.routeKind === "projects" ? parts[1] : `v${parts[1]}`;
+      if (!versionSegment?.startsWith("v")) {
+        return res.status(400).json({ error: "Invalid version" });
+      }
+
+      const relativePath = resolveRuntimeRequestedFilePath({
+        restPath: parts.slice(2).join("/"),
+        queryPath: req.query?.path,
+        decodeUriPath,
+      });
+      if (!relativePath) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+      if (!isAllowedProjectFile(relativePath)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const projectPath = workspace.getProjectPath();
+      const resolvedPath = safeJoin(projectPath, relativePath);
+
+      if (!fs.existsSync(resolvedPath)) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      return res.sendFile(resolvedPath, { dotfiles: "allow" });
+    } catch (err) {
+      return next(err);
+    }
+  };
+
   // Health check endpoint for service discovery
   app.get("/health", (_req, res) => {
     const initialized = workspace.isInitialized();
@@ -109,80 +190,13 @@ export function registerStudioRuntimeHttpRoutes(
   // Serve workspace files in a backend-compatible path:
   // /vivd-studio/api/projects/:slug/v:version/<file>
   app.use("/vivd-studio/api/projects", requireStudioAuth(), async (req, res, next) => {
-    try {
-      if (!workspace.isInitialized()) {
-        return res.status(503).json({ error: "Workspace not initialized" });
-      }
-
-      const parts = req.path.split("/").filter(Boolean);
-      if (parts.length < 2) {
-        return res.status(400).json({ error: "Invalid path" });
-      }
-
-      // Ignore slug and version (single-workspace studio)
-      const [, versionSegment, ...rest] = parts;
-      if (!versionSegment.startsWith("v")) {
-        return res.status(400).json({ error: "Invalid version" });
-      }
-
-      const relativePathRaw = rest.join("/");
-      const relativePath = decodeUriPath(relativePathRaw);
-      if (!relativePath) {
-        return res.status(400).json({ error: "Invalid path" });
-      }
-      if (!isAllowedProjectFile(relativePath)) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-
-      const projectPath = workspace.getProjectPath();
-      const resolvedPath = safeJoin(projectPath, relativePath);
-
-      if (!fs.existsSync(resolvedPath)) {
-        return res.status(404).json({ error: "File not found" });
-      }
-
-      return res.sendFile(resolvedPath);
-    } catch (err) {
-      return next(err);
-    }
+    return serveWorkspaceFile(req, res, next, { routeKind: "projects" });
   });
 
   // Serve raw asset files in a backend-compatible path:
   // /vivd-studio/api/assets/:slug/:version/<file>
   app.use("/vivd-studio/api/assets", requireStudioAuth(), async (req, res, next) => {
-    try {
-      if (!workspace.isInitialized()) {
-        return res.status(503).json({ error: "Workspace not initialized" });
-      }
-
-      const parts = req.path.split("/").filter(Boolean);
-      if (parts.length < 2) {
-        return res.status(400).json({ error: "Invalid path" });
-      }
-
-      // Ignore slug and version (single-workspace studio)
-      const [, , ...rest] = parts;
-
-      const relativePathRaw = rest.join("/");
-      const relativePath = decodeUriPath(relativePathRaw);
-      if (!relativePath) {
-        return res.status(400).json({ error: "Invalid path" });
-      }
-      if (!isAllowedProjectFile(relativePath)) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-
-      const projectPath = workspace.getProjectPath();
-      const resolvedPath = safeJoin(projectPath, relativePath);
-
-      if (!fs.existsSync(resolvedPath)) {
-        return res.status(404).json({ error: "File not found" });
-      }
-
-      return res.sendFile(resolvedPath);
-    } catch (err) {
-      return next(err);
-    }
+    return serveWorkspaceFile(req, res, next, { routeKind: "assets" });
   });
 
   // Dropped file upload endpoint (for chat drag-and-drop)
@@ -214,15 +228,18 @@ export function registerStudioRuntimeHttpRoutes(
           /[^a-zA-Z0-9._-]/g,
           "_",
         );
-        const uniqueFilename = `${uuid}-${sanitizedName}`;
-        const filePath = path.join(droppedImagesDir, uniqueFilename);
+        const preparedUpload = await normalizeStudioWorkingImageUpload({
+          filename: `${uuid}-${sanitizedName}`,
+          buffer: file.buffer,
+        });
+        const filePath = path.join(droppedImagesDir, preparedUpload.filename);
 
-        await writeUploadedFile(filePath, file.buffer);
+        await writeUploadedFile(filePath, preparedUpload.buffer);
         const slug = getSingleRouteParam(req.params?.slug);
         if (!slug) {
           return res.status(400).json({ error: "Invalid slug" });
         }
-        const relativePath = `.vivd/dropped-images/${uniqueFilename}`;
+        const relativePath = `.vivd/dropped-images/${preparedUpload.filename}`;
         projectTouchReporter.touch(slug);
         requestBucketSync("upload-dropped-file", {
           slug,
@@ -272,28 +289,39 @@ export function registerStudioRuntimeHttpRoutes(
             /[^a-zA-Z0-9._-]/g,
             "_",
           );
+          const preparedUpload = shouldNormalizeStudioWorkingImageUpload(
+            relativePath,
+          )
+            ? await normalizeStudioWorkingImageUpload({
+                filename: sanitizedName,
+                buffer: file.buffer,
+              })
+            : {
+                filename: sanitizedName,
+                buffer: file.buffer,
+              };
 
           let filePath: string;
           try {
             const rel = relativePath
               ? path.posix.join(
                   relativePath.replace(/\\/g, "/"),
-                  sanitizedName,
+                  preparedUpload.filename,
                 )
-              : sanitizedName;
+              : preparedUpload.filename;
             filePath = safeJoin(projectPath, rel);
           } catch {
             return res.status(400).json({ error: "Invalid filename" });
           }
 
-          await writeUploadedFile(filePath, file.buffer);
+          await writeUploadedFile(filePath, preparedUpload.buffer);
           uploaded.push(
             relativePath
               ? path.posix.join(
                   relativePath.replace(/\\/g, "/"),
-                  sanitizedName,
+                  preparedUpload.filename,
                 )
-              : sanitizedName,
+              : preparedUpload.filename,
           );
         }
 

@@ -16,6 +16,10 @@ import { projectMetaService } from "../services/project/ProjectMetaService";
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
 import { studioAgentLeaseService } from "../services/project/StudioAgentLeaseService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
+import {
+  artifactBuildRequestService,
+  isArtifactBuilderEnabled,
+} from "../services/project/ArtifactBuildRequestService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
 import { studioMachineProvider } from "../services/studioMachines";
 
@@ -314,6 +318,47 @@ export const studioApiRouter = router({
         errorMessage: input.status === "failed" ? input.errorMessage : undefined,
       });
       return { success: true };
+    }),
+
+  requestArtifactBuild: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        kind: z.enum(["preview", "published"]),
+        commitHash: z.string().trim().min(1).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!isArtifactBuilderEnabled()) {
+        return {
+          enabled: false,
+          accepted: false,
+          deduped: false,
+          status: "disabled" as const,
+        };
+      }
+
+      const result =
+        input.kind === "published"
+          ? await artifactBuildRequestService.requestPublishedBuild({
+              organizationId: ctx.organizationId!,
+              slug: input.slug,
+              version: input.version,
+              commitHash: input.commitHash,
+            })
+          : await artifactBuildRequestService.requestPreviewBuild({
+              organizationId: ctx.organizationId!,
+              slug: input.slug,
+              version: input.version,
+              commitHash: input.commitHash,
+            });
+
+      return {
+        enabled: true,
+        ...result,
+      };
     }),
 
   /**

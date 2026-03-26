@@ -17,6 +17,8 @@ const {
   renderAgentInstructionsMock,
   reportAgentLeaseActiveMock,
   reportAgentLeaseIdleMock,
+  requestPreviewBuildMock,
+  isArtifactBuilderEnabledMock,
   touchStudioMachineMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
@@ -35,6 +37,8 @@ const {
   renderAgentInstructionsMock: vi.fn(),
   reportAgentLeaseActiveMock: vi.fn(),
   reportAgentLeaseIdleMock: vi.fn(),
+  requestPreviewBuildMock: vi.fn(),
+  isArtifactBuilderEnabledMock: vi.fn(),
   touchStudioMachineMock: vi.fn(),
 }));
 
@@ -95,6 +99,14 @@ vi.mock("../src/services/project/StudioAgentLeaseService", () => ({
     reportActive: reportAgentLeaseActiveMock,
     reportIdle: reportAgentLeaseIdleMock,
   },
+}));
+
+vi.mock("../src/services/project/ArtifactBuildRequestService", () => ({
+  artifactBuildRequestService: {
+    requestPreviewBuild: requestPreviewBuildMock,
+    requestPublishedBuild: vi.fn(),
+  },
+  isArtifactBuilderEnabled: isArtifactBuilderEnabledMock,
 }));
 
 vi.mock("../src/services/studioMachines", () => ({
@@ -206,6 +218,14 @@ describe("studioApi router", () => {
       activeRuns: 1,
     });
     reportAgentLeaseIdleMock.mockReturnValue({ removed: true });
+    requestPreviewBuildMock.mockReset();
+    requestPreviewBuildMock.mockResolvedValue({
+      accepted: true,
+      deduped: false,
+      status: "queued",
+    });
+    isArtifactBuilderEnabledMock.mockReset();
+    isArtifactBuilderEnabledMock.mockReturnValue(false);
     touchStudioMachineMock.mockResolvedValue(undefined);
   });
 
@@ -627,6 +647,54 @@ describe("studioApi router", () => {
         projectSlug: "site-1",
         version: 2,
       }),
+    });
+  });
+
+  it("keeps artifact build requests disabled until the feature flag is enabled", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    await expect(
+      caller.requestArtifactBuild({
+        studioId: "studio-1",
+        slug: "site-1",
+        version: 3,
+        kind: "preview",
+        commitHash: "abc123",
+      }),
+    ).resolves.toEqual({
+      enabled: false,
+      accepted: false,
+      deduped: false,
+      status: "disabled",
+    });
+
+    expect(requestPreviewBuildMock).not.toHaveBeenCalled();
+  });
+
+  it("enqueues a preview build through the dedicated builder when enabled", async () => {
+    isArtifactBuilderEnabledMock.mockReturnValue(true);
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    await expect(
+      caller.requestArtifactBuild({
+        studioId: "studio-1",
+        slug: "site-1",
+        version: 3,
+        kind: "preview",
+        commitHash: "abc123",
+      }),
+    ).resolves.toEqual({
+      enabled: true,
+      accepted: true,
+      deduped: false,
+      status: "queued",
+    });
+
+    expect(requestPreviewBuildMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "site-1",
+      version: 3,
+      commitHash: "abc123",
     });
   });
 });

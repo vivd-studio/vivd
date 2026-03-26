@@ -127,7 +127,9 @@ export function ImageGalleryView({
         onDrop={onDrop}
       >
         <p>No files yet</p>
-        <p className="text-sm">Drop files here or click Upload</p>
+        <p className="text-sm">
+          Drop files here or click Upload to save them in .vivd/uploads
+        </p>
       </div>
     );
   }

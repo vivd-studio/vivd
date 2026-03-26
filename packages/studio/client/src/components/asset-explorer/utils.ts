@@ -8,6 +8,37 @@ import {
 import type { AssetItem, FileTreeNode } from "./types";
 import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
+export const STUDIO_UPLOADS_PATH = ".vivd/uploads";
+export const FILE_TREE_INDENT_STEP_PX = 16;
+export const FILE_TREE_BASE_PADDING_PX = 12;
+
+function normalizeAssetPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function hasHiddenPathSegment(assetPath: string): boolean {
+  return normalizeAssetPath(assetPath)
+    .split("/")
+    .some((segment) => segment.startsWith("."));
+}
+
+function encodeAssetPathForUrl(assetPath: string): string {
+  return normalizeAssetPath(assetPath)
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function buildStudioFileRequestUrl(basePath: string, assetPath: string): string {
+  const normalized = normalizeAssetPath(assetPath);
+
+  if (hasHiddenPathSegment(normalized)) {
+    return `${basePath}?path=${encodeURIComponent(normalized)}`;
+  }
+
+  return `${basePath}/${encodeAssetPathForUrl(normalized)}`;
+}
+
 export function formatSize(bytes?: number): string {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -85,15 +116,73 @@ export function buildImageUrl(
   version: number,
   path: string
 ): string {
-  const normalized = path.replace(/\\/g, "/").replace(/^\/+/, "");
-  const encodedPath = normalized
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
+  return buildAssetFileUrl(projectSlug, version, path);
+}
+
+export function buildAssetFileUrl(
+  projectSlug: string,
+  version: number,
+  path: string
+): string {
   return withVivdStudioTokenQuery(
-    `/vivd-studio/api/projects/${encodeURIComponent(projectSlug)}/v${version}/${encodedPath}`,
+    buildStudioFileRequestUrl(
+      `/vivd-studio/api/assets/${encodeURIComponent(projectSlug)}/${version}`,
+      path,
+    ),
     getVivdStudioToken(),
   );
+}
+
+export function buildProjectFileUrl(
+  projectSlug: string,
+  version: number,
+  path: string
+): string {
+  return withVivdStudioTokenQuery(
+    buildStudioFileRequestUrl(
+      `/vivd-studio/api/projects/${encodeURIComponent(projectSlug)}/v${version}`,
+      path,
+    ),
+    getVivdStudioToken(),
+  );
+}
+
+export function getStudioImageUrlCandidates(
+  projectSlug: string,
+  version: number,
+  path: string,
+): string[] {
+  return Array.from(
+    new Set([
+      buildAssetFileUrl(projectSlug, version, path),
+      buildProjectFileUrl(projectSlug, version, path),
+    ]),
+  );
+}
+
+export function getFileTreeIndentPx(depth: number): number {
+  return depth * FILE_TREE_INDENT_STEP_PX + FILE_TREE_BASE_PADDING_PX;
+}
+
+export function isVivdInternalAssetPath(assetPath: string): boolean {
+  const normalized = normalizeAssetPath(assetPath);
+  return normalized === ".vivd" || normalized.startsWith(".vivd/");
+}
+
+export function canDragAssetToPreview(assetPath: string): boolean {
+  return !isVivdInternalAssetPath(assetPath);
+}
+
+export function pickInitialAssetExplorerPath(options: {
+  uploadsHasItems: boolean;
+  publicImagesHasItems: boolean;
+  imagesHasItems: boolean;
+}): string {
+  if (options.publicImagesHasItems || !options.imagesHasItems) {
+    return "public/images";
+  }
+
+  return "images";
 }
 
 // Text file extensions that can be edited

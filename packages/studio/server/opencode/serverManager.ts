@@ -367,22 +367,29 @@ class OpencodeServerManager {
     return toStop.length;
   }
 
-  closeAll(): void {
+  async closeAll(): Promise<void> {
     console.log("[OpenCode] Closing all servers...");
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
 
-    for (const server of this.servers.values()) {
-      try {
-        this.killProcessTree(server.process.pid!);
-      } catch {
-        // ignore
-      }
-    }
+    const servers = Array.from(this.servers.values());
     this.servers.clear();
     this.startingServers.clear();
+
+    await Promise.allSettled(
+      servers.map(async (server) => {
+        this.releasePort(server.port);
+        const pid = server.process.pid;
+        if (!pid) return;
+        try {
+          await this.killProcessTree(pid);
+        } catch {
+          // ignore
+        }
+      }),
+    );
   }
 
   private normalizeProjectDir(projectDir: string): string {

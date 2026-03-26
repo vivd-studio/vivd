@@ -27,6 +27,7 @@ FROM devbase AS deps
 
 # Install deps for backend (+ shared) and local studio spawning (dev)
 COPY package.json package-lock.json ./
+COPY packages/builder/package.json packages/builder/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 # Keep workspace metadata available for npm workspaces resolution
@@ -36,11 +37,12 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/backend -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/builder -w @vivd/backend -w @vivd/studio --include-workspace-root=false \
     && npm cache clean --force
 
 # Stage 2: Development (hot reload)
 FROM deps AS dev
+COPY packages/builder ./packages/builder
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/theme ./packages/theme
@@ -48,6 +50,7 @@ COPY packages/studio ./packages/studio
 
 # Ensure shared is built (runtime imports come from `@vivd/shared/dist/*`)
 RUN npm run build -w @vivd/shared
+RUN npm run build -w @vivd/builder
 
 WORKDIR /app/packages/backend
 COPY packages/backend/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -59,10 +62,12 @@ CMD ["npm", "run", "dev"]
 
 # Stage 3: Build (compile TypeScript)
 FROM deps AS builder
+COPY packages/builder ./packages/builder
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 
 RUN npm run build -w @vivd/shared
+RUN npm run build -w @vivd/builder
 RUN npm run build -w @vivd/backend
 
 # Template files are needed at runtime for project scaffolding (.gitignore)
@@ -74,6 +79,7 @@ FROM base AS prod
 
 # Install production deps for the backend workspace (links shared as a workspace dep)
 COPY package.json package-lock.json ./
+COPY packages/builder/package.json packages/builder/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/studio/package.json packages/studio/package.json
@@ -87,6 +93,7 @@ RUN npm ci -w @vivd/backend --omit=dev --include-workspace-root=false \
 # Copy built outputs
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --from=builder /app/packages/backend/drizzle ./packages/backend/drizzle
+COPY --from=builder /app/packages/builder/dist ./packages/builder/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 
 # Needed so the publish service can reload Caddy's configuration
