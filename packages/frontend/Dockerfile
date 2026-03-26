@@ -2,8 +2,9 @@
 FROM node:23-slim AS deps
 WORKDIR /app
 
-# Install deps for the studio frontend + backend types + shared via root workspaces/lockfile
+# Install deps for the frontend + backend types + shared/builder workspace packages via the root lockfile
 COPY package.json package-lock.json ./
+COPY packages/builder/package.json packages/builder/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/theme/package.json packages/theme/package.json
@@ -12,16 +13,18 @@ COPY packages/studio/package.json packages/studio/package.json
 
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/backend -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
+RUN npm ci -w @vivd/builder -w @vivd/shared -w @vivd/backend -w @vivd/theme -w @vivd/frontend --include-workspace-root=false
 
 # Stage 2: Development
 FROM deps AS dev
+COPY packages/builder ./packages/builder
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 
-# Ensure shared is built (backend types import from `@vivd/shared/dist/*`)
+# Ensure shared/builder are built for workspace package resolution inside the image.
+RUN npm run build -w @vivd/builder
 RUN npm run build -w @vivd/shared
 
 WORKDIR /app/packages/frontend
@@ -30,11 +33,13 @@ CMD ["npm", "run", "dev", "--", "--host"]
 
 # Stage 3: Build
 FROM deps AS build
+COPY packages/builder ./packages/builder
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/theme ./packages/theme
 COPY packages/frontend ./packages/frontend
 
+RUN npm run build -w @vivd/builder
 RUN npm run build -w @vivd/shared
 
 ARG VITE_APP_ENV

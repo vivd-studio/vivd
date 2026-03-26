@@ -41,7 +41,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 ## OpenCode Studio Tools
 
 - Reference checkout: `vendor/opencode` (upstream: `https://github.com/anomalyco/opencode`).
-- OpenCode web split: docs live in `vendor/opencode/packages/web`, the actual web client UI is `vendor/opencode/packages/app`, and the `opencode web` CLI entrypoint is `vendor/opencode/packages/opencode/src/cli/cmd/web.ts`.
+- When this repo says "OpenCode web" or refers to the UI started by `opencode web`, that means the actual web app in `vendor/opencode/packages/app`; `vendor/opencode/packages/web` is the docs site, and the CLI entrypoint lives at `vendor/opencode/packages/opencode/src/cli/cmd/web.ts`.
 - Purpose: expose custom Vivd capabilities to the agent (namespace `vivd_*`).
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
 - Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.

@@ -38,6 +38,12 @@
       "@backend/*": [
         "../backend/src/*"
       ],
+      "@vivd/builder": [
+        "../builder/src/index.ts"
+      ],
+      "@vivd/builder/*": [
+        "../builder/src/*"
+      ],
       "@vivd/shared": [
         "../shared/src/index.ts"
       ],

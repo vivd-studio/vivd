@@ -3,7 +3,6 @@ import {
   getObjectStorageConfigFromEnv,
   readArtifactBuildMeta,
   writeArtifactBuildMeta,
-  type ArtifactBuildKind,
 } from "@vivd/builder";
 import { studioMachineProvider } from "../studioMachines";
 import { parseBooleanEnv } from "../studioMachines/fly/utils";

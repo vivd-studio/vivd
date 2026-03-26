@@ -204,7 +204,7 @@
 - This archive preserves historical progress entries from the previous full `docs/PROJECT_STATE.md`.
 - Active planning and next-step context now lives in `docs/PROJECT_STATE.md`.
 
-Last updated: 2026-02-22
+Last updated: 2026-03-26
 
 
 ## 2026-02-24 Snapshot From PROJECT_STATE (Consolidation)
@@ -453,7 +453,30 @@ Last updated: 2026-02-22
 - `docs/old/dokploy-traefik-wildcard-setup.md`
 - `docs/PROJECT_STATE_ARCHIVE.md`
 
-Last updated: 2026-03-19
+Last updated: 2026-03-26
+
+## 2026-03-26 Trimmed From Active Project State
+
+This section preserves the workstreams removed when `docs/PROJECT_STATE.md` was compacted to keep only the latest two log entries.
+
+### Archived Summary
+
+- 2026-03-26: reverted Studio follow-up behavior toward queue-first operation, with explicit `Steer` and `Queue` actions for busy sessions.
+- 2026-03-26: closed the remaining OpenCode rehydrate/revert reliability gaps across snapshot hydration, shutdown ordering, revert detection, and managed runtime env drift.
+- 2026-03-26: hardened Studio asset/file explorer behavior around hidden `.vivd` working files, upload normalization, drag/drop, and raw-file serving.
+- 2026-03-26: continued OpenCode chat parity work in Studio, including diff/review semantics, inactivity reconnects, refresh semantics, session cleanup, and a single runtime source of truth for the soft context limit.
+- 2026-03-26: dark-launched the dedicated builder runtime behind `VIVD_ARTIFACT_BUILDER_ENABLED`.
+- 2026-03-26: added repo-wide typecheck gating, cleared the current TypeScript backlog, and added an agent guardrail to run typecheck during larger edits.
+- 2026-03-26: expanded Super Admin machine controls with per-machine actions and fixed the Fly warm-reconcile `replacing` edge case.
+- 2026-03-26: fixed Fly-specific Studio auth/bootstrap issues for embedded cross-site runtimes and updated public access/user-management docs.
+- 2026-03-26: removed public docs screenshots containing real-looking org/user data and tightened vendor homepage messaging/self-host positioning.
+- 2026-03-25: kept closing Studio chat parity gaps around composer locking, context-usage UI, soft compaction policy, refresh queueing, transcript alignment, and scroll-follow behavior.
+- 2026-03-25: upgraded Vivd’s OpenCode pin to `1.3.2` and refreshed the local `vendor/opencode` reference checkout to current `origin/dev`.
+- 2026-03-25: hardened Fly Studio startup/bootstrap behavior, including longer OpenCode readiness tolerance and the private Studio bootstrap-token flow.
+- 2026-03-25: implemented and iterated on the new `vivd.studio` vendor-site/product-site direction, including product/services IA, copy cleanup, DE/EN + theme bootstrap fixes, and shared header/hero redesign work.
+- 2026-03-25: added `docs/refactor-and-hardening-plan.md` and refined the scratch-to-Studio cold-start plan around Fly startup overlap and a possible warm-pool path.
+- 2026-03-24: continued Studio/runtime/tooling cleanup with plugin-tool visibility fixes, Analytics toolbar access, shared context-usage indicators, Docker env wiring, and self-host arm64 release-lane adjustments.
+- 2026-03-23: continued self-host and runtime hardening across chat follow-ups, connected Studio auth, image timeouts, project thumbnails, publish/caddy behavior, installer/docs polish, and Dokploy/platform publish recovery.
 
 ## 2026-03-19 Trimmed From Active Project State
 

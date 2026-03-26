@@ -130,7 +130,7 @@ class LocalArtifactBuildRuntime implements ArtifactBuildRuntime {
     void runProjectArtifactBuild({
       ...request,
       env: process.env,
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
         `[ArtifactBuild] Local ${request.kind} build failed for ${request.organizationId}/${request.slug}/v${request.version}: ${message}`,
