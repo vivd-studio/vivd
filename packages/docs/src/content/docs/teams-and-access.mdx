@@ -1,68 +1,75 @@
 ---
-title: Teams and Access
-description: Organize work across agency admins, team members, and client editors.
+title: Organization User Management
+description: Manage organization members, choose the right role, and understand how access works in Vivd.
 ---
 
-import { Aside, CardGrid, Card } from "@astrojs/starlight/components";
+import { Aside } from "@astrojs/starlight/components";
 import DocShot from "../../components/DocShot.astro";
 
-Vivd is built for projects that may involve internal staff and customer-side collaborators.
+Use `Organization` -> `Members` to add people, change roles, reset passwords, and
+remove access.
 
-## Main access model
-
-- Organizations own projects.
-- Team members work across the organization according to their role.
-- Client editors can be limited to a specific project and a narrower editing scope.
+For most teams, this is the only access screen that matters. The install-wide
+`Super Admin` surface is separate and is only relevant for the person operating the
+whole Vivd instance.
 
 <DocShot
   src="/screenshots/docs/instance-user-management-light.webp"
   darkSrc="/screenshots/docs/instance-user-management-dark.webp"
   alt="Vivd organization member management view with role and assigned-project controls."
-  caption="Access and role changes should be reviewed from the organization workspace before handing a project to customers or collaborators."
+  caption="Organization member management is where admins add people, change roles, and review who can access the workspace."
 />
 
-## Role model at a glance
+## How access works
 
-<CardGrid>
-  <Card title="Agency lead or org admin">
-    <ul>
-      <li>Owns project setup, access decisions, plugins, and publish readiness.</li>
-      <li>Best fit for domain, launch, and customer handoff decisions.</li>
-    </ul>
-  </Card>
-  <Card title="Internal teammate or collaborator">
-    <ul>
-      <li>Helps with generation, Studio iteration, content review, and operational follow-up.</li>
-      <li>Best fit for day-to-day production work inside the organization.</li>
-    </ul>
-  </Card>
-  <Card title="Client editor">
-    <ul>
-      <li>Reviews project content and makes narrower edits where appropriate.</li>
-      <li>Best fit for customer-side review without full organization control.</li>
-    </ul>
-  </Card>
-</CardGrid>
+- Each person has one account.
+- That account can belong to one or more organizations.
+- Day-to-day permissions come from the person's **organization role**.
+- The global system role mostly matters only for install operators.
 
-## Recommended handoff flow
+In other words: for normal end users, think in terms of **Owner**, **Admin**, and
+**User** inside the organization they are currently working in.
 
-1. Keep project setup and launch preparation with the internal or agency team first.
-2. Add customer-side collaborators only after the project, plugins, and publish direction are clear.
-3. Confirm the correct organization and project before asking a client to review.
-4. Re-check access again before launch so reviewers can see the right project but cannot change the wrong things.
+## Roles at a glance
 
-## When to review access
+| Role | What it is for | Typical capabilities |
+|---|---|---|
+| Owner | Highest-trust organization role. Keep this to one or two responsible people. | Everything an admin can do, plus protected organization-level ownership tasks such as renaming the organization. |
+| Admin | Day-to-day organization management. | Add and remove members, change member roles, reset another member's password, create and manage projects, and run organization-level maintenance tasks. |
+| User | Regular project contributor. | Work inside existing projects, use Studio, review content, and handle normal project work without managing the organization itself. |
+| Super Admin | Install-wide operator role, not a normal project-team role. | Cross-organization and instance-wide administration such as instance settings and global user management. |
 
-- Before handing a project to a customer.
-- When a project changes owner.
-- Before launch, so the right people can review content and the wrong people cannot change it.
+## What admins do in practice
 
-## Good practice
+From the `Members` tab, organization admins and owners can:
 
-- Keep project responsibility clear.
-- Grant the narrowest access that still lets someone do their job.
-- Re-check access after project transfers or staffing changes.
+- add an existing account by email
+- create a new account directly from the organization workspace
+- change a member between `User` and `Admin`
+- remove a member from the organization
+- reset another member's password when local password auth is used
 
-<Aside type="caution" title="Before giving customer access">
-  Confirm the intended organization, project, and publish path first. Most access confusion comes from people landing in the wrong workspace rather than from a broken permission model.
+`Users` cannot manage people or organization settings, but they can still do normal
+project work inside the projects they already have access to.
+
+## Guardrails you should expect
+
+- You cannot change your own role from inside the organization workspace.
+- You cannot remove yourself from the current organization.
+- Owners are treated as protected members in the normal organization UI.
+- Organization name changes are owner-only.
+
+These guardrails are intentional. They keep the org-management surface safe from
+accidental lockouts and make it clear that `Owner` is a higher-trust role than
+day-to-day `Admin`.
+
+## Recommended setup
+
+1. Keep `Owner` very limited.
+2. Use `Admin` for people who manage team access or organization operations.
+3. Use `User` for regular collaborators working inside existing projects.
+4. Re-check membership before launch, project handoff, or staffing changes.
+
+<Aside type="note" title="About older restricted roles">
+  Some installs may still show an older project-restricted role from an earlier access model. Prefer `Owner`, `Admin`, and `User` for new assignments unless you are deliberately maintaining legacy behavior.
 </Aside>

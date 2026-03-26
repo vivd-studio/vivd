@@ -39,7 +39,7 @@ afterEach(() => {
     return;
   }
 
-  delete (globalThis as typeof globalThis & { window?: Window }).window;
+  delete (globalThis as { window?: Window }).window;
 });
 
 describe("studioAuth runtime path helpers", () => {

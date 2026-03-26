@@ -149,7 +149,9 @@ export function MessageList() {
       isLoading,
     });
   const activeTurnBodyMinHeight =
-    activeTurnUserItem && activeTurnLayout?.messageId === activeTurnUserItem.message.id
+    activeTurnUserItem &&
+    activeTurnLayout &&
+    activeTurnLayout.messageId === activeTurnUserItem.message.id
       ? activeTurnLayout.bodyMinHeight
       : 0;
   const latestCompletedAgentTimestamp = useMemo(() => {
@@ -415,29 +417,28 @@ function formatMessageTime(timestamp: number): string {
   });
 }
 
+type UserTimelineItem = Extract<CanonicalTimelineItem, { kind: "user" }>;
+
+function isUserTimelineItem(item: CanonicalTimelineItem | undefined): item is UserTimelineItem {
+  return item?.kind === "user";
+}
+
 function splitTimelineAtLatestUser(items: CanonicalTimelineItem[]) {
   let latestUserItemIndex = -1;
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item?.kind === "user" && item.message.id) {
+    if (isUserTimelineItem(item) && item.message.id) {
       latestUserItemIndex = index;
       break;
     }
   }
 
-  const latestUserMessageId =
-    latestUserItemIndex >= 0 && items[latestUserItemIndex]?.kind === "user"
-      ? items[latestUserItemIndex].message.id
-      : null;
+  const latestUserItem =
+    latestUserItemIndex >= 0 ? items[latestUserItemIndex] : undefined;
+  const activeTurnUserItem = isUserTimelineItem(latestUserItem) ? latestUserItem : null;
+  const latestUserMessageId = activeTurnUserItem?.message.id ?? null;
   const historicalItems =
     latestUserItemIndex >= 0 ? items.slice(0, latestUserItemIndex) : items;
-  const activeTurnUserItem =
-    latestUserItemIndex >= 0 && items[latestUserItemIndex]?.kind === "user"
-      ? (items[latestUserItemIndex] as Extract<
-          CanonicalTimelineItem,
-          { kind: "user" }
-        >)
-      : null;
   const activeTurnAgentItems = activeTurnUserItem
     ? items.slice(latestUserItemIndex + 1)
     : [];

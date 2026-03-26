@@ -538,7 +538,7 @@ export class DevServerService {
    */
   async getOrStartDevServer(
     projectDir: string,
-    basePath: string = "/"
+    _basePath: string = "/"
   ): Promise<{
     url: string | null;
     status: DevServerInfo["status"];

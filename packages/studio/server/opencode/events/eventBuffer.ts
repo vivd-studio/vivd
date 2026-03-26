@@ -1,7 +1,10 @@
 export class EventBuffer<T extends { eventId: string }> {
   private items: T[] = [];
+  private readonly maxSize: number;
 
-  constructor(private readonly maxSize = 1000) {}
+  constructor(maxSize = 1000) {
+    this.maxSize = maxSize;
+  }
 
   append(item: T): void {
     this.items.push(item);

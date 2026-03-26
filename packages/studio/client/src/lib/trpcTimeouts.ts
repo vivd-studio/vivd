@@ -16,11 +16,12 @@ const PROCEDURE_TIMEOUT_MS = new Map<string, number>([
   ["project.publish", EXTENDED_TRPC_REQUEST_TIMEOUT_MS],
 ]);
 
-function extractTrpcProcedures(url: string): string[] {
+function extractTrpcProcedures(url: string | URL): string[] {
+  const urlString = typeof url === "string" ? url : url.toString();
   const markerIndex = url.indexOf(TRPC_URL_MARKER);
   if (markerIndex < 0) return [];
 
-  let procedurePath = url.slice(markerIndex + TRPC_URL_MARKER.length);
+  let procedurePath = urlString.slice(markerIndex + TRPC_URL_MARKER.length);
   const queryIndex = procedurePath.indexOf("?");
   if (queryIndex >= 0) {
     procedurePath = procedurePath.slice(0, queryIndex);
@@ -41,7 +42,7 @@ function extractTrpcProcedures(url: string): string[] {
     .filter(Boolean);
 }
 
-export function resolveTrpcRequestTimeoutMs(url: string): number {
+export function resolveTrpcRequestTimeoutMs(url: string | URL): number {
   const procedures = extractTrpcProcedures(url);
   if (procedures.length === 0) {
     return DEFAULT_TRPC_REQUEST_TIMEOUT_MS;

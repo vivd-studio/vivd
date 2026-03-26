@@ -9,7 +9,6 @@ import {
 } from "../services/patching/HtmlPatchService.js";
 import {
   applyAstroPatches,
-  extractAstroPatches,
   hasAstroPatches,
   type AstroTextPatch,
 } from "../services/patching/AstroPatchService.js";
@@ -114,6 +113,46 @@ interface ConnectedProjectListRow {
   publicPreviewEnabled?: boolean;
   enabledPlugins?: string[];
 }
+
+type ConnectedPublishState = {
+  storageEnabled: boolean;
+  readiness: "ready" | "build_in_progress" | "artifact_not_ready" | string;
+  sourceKind: string;
+  framework: string;
+  publishableCommitHash: string | null;
+  lastSyncedCommitHash: string | null;
+  builtAt: string | null;
+  sourceBuiltAt: string | null;
+  previewBuiltAt: string | null;
+  error: string | null;
+  studioRunning: boolean;
+  studioStateAvailable: boolean;
+  studioHasUnsavedChanges: boolean;
+  studioHeadCommitHash: string | null;
+  studioWorkingCommitHash: string | null;
+  studioStateReportedAt: string | null;
+};
+
+type ConnectedPublishChecklist = {
+  checklist: {
+    summary: {
+      passed: number;
+      failed: number;
+      warnings: number;
+      skipped: number;
+      fixed?: number;
+    };
+    items: Array<unknown>;
+  } | null;
+  stale: boolean;
+  reason: "missing" | "project_updated" | "hash_mismatch" | null;
+};
+
+type ConnectedCheckDomainResult = {
+  available: boolean;
+  normalizedDomain: string;
+  error?: string;
+};
 
 async function callConnectedBackendQuery<T>(
   procedure: string,
@@ -398,8 +437,7 @@ export const projectRouter = router({
       }
 
       const projectDir = ctx.workspace.getProjectPath();
-      const basePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
-      const result = await devServerService.restartDevServer(projectDir, basePath, {
+      const result = await devServerService.restartDevServer(projectDir, {
         clean: input.clean,
         resetCaches: true,
       });
@@ -459,15 +497,38 @@ export const projectRouter = router({
       const targetPath = path.join(projectDir, input.filePath);
 
       // Separate patches by type
-      const astroPatches = input.patches.filter(
-        (p): p is { type: "setAstroText" } & AstroTextPatch =>
-          p.type === "setAstroText",
-      );
+      const astroPatches: AstroTextPatch[] = [];
+      const htmlPatches: HtmlPatch[] = [];
+      for (const patch of input.patches) {
+        if (patch.type === "setAstroText") {
+          astroPatches.push({
+            sourceFile: patch.sourceFile,
+            sourceLoc: patch.sourceLoc,
+            oldValue: patch.oldValue,
+            newValue: patch.newValue,
+          });
+          continue;
+        }
+        if (patch.type === "setTextNode") {
+          htmlPatches.push({
+            type: "setTextNode",
+            selector: patch.selector,
+            index: patch.index,
+            value: patch.value,
+          });
+          continue;
+        }
+        if (patch.type === "setAttr") {
+          htmlPatches.push({
+            type: "setAttr",
+            selector: patch.selector,
+            name: patch.name,
+            value: patch.value,
+          });
+        }
+      }
       const i18nPatches = extractI18nPatches(input.patches).map(
         (p): I18nJsonPatch => ({ key: p.key, lang: p.lang, value: p.value }),
-      );
-      const htmlPatches = input.patches.filter(
-        (p): p is HtmlPatch => p.type === "setTextNode" || p.type === "setAttr",
       );
 
       let totalApplied = 0;
@@ -799,7 +860,7 @@ export const projectRouter = router({
     )
     .query(async ({ input, ctx }) => {
       if (isConnectedMode()) {
-        return await callConnectedBackendQuery("project.publishState", {
+        return await callConnectedBackendQuery<ConnectedPublishState>("project.publishState", {
           slug: input.slug,
           version: input.version,
         });
@@ -835,10 +896,13 @@ export const projectRouter = router({
     )
     .query(async ({ input }) => {
       if (isConnectedMode()) {
-        return await callConnectedBackendQuery("project.publishChecklist", {
+        return await callConnectedBackendQuery<ConnectedPublishChecklist>(
+          "project.publishChecklist",
+          {
           slug: input.slug,
           version: input.version,
-        });
+          },
+        );
       }
 
       return {
@@ -857,7 +921,10 @@ export const projectRouter = router({
     )
     .query(async ({ input }) => {
       if (isConnectedMode()) {
-        return await callConnectedBackendQuery("project.checkDomain", input);
+        return await callConnectedBackendQuery<ConnectedCheckDomainResult>(
+          "project.checkDomain",
+          input,
+        );
       }
 
       const normalizedDomain = input.domain.toLowerCase().trim();

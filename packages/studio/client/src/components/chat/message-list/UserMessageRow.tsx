@@ -34,20 +34,25 @@ export function UserMessageRow({
   const elementTag = internalTags.find((tag) => tag.type === "element-ref");
   const hasElementRef =
     Boolean(elementTag?.selector) || Boolean(elementTag?.["source-file"]);
+  const messageId = message.id;
 
   return (
     <div
-      ref={(node) => registerRow(message.id, node)}
-      data-chat-user-row-id={message.id}
+      ref={(node) => {
+        if (messageId) {
+          registerRow(messageId, node);
+        }
+      }}
+      data-chat-user-row-id={messageId}
       className="flex flex-col gap-1 items-end chat-row-enter"
     >
       <div className="h-6 flex items-center justify-end">
-        {message.id ? (
+        {messageId ? (
           <Button
             variant="ghost"
             size="sm"
             className="text-[11px] text-muted-foreground/75 hover:text-muted-foreground h-6 px-2"
-            onClick={() => onRevert(message.id)}
+            onClick={() => onRevert(messageId)}
           >
             <Undo2 className="w-3 h-3 mr-1" />
             Revert to here
@@ -58,15 +63,19 @@ export function UserMessageRow({
       </div>
 
       <div
-        ref={(node) => registerAnchor(message.id, node)}
-        data-chat-user-anchor-id={message.id}
+        ref={(node) => {
+          if (messageId) {
+            registerAnchor(messageId, node);
+          }
+        }}
+        data-chat-user-anchor-id={messageId}
         className="max-w-[90%] min-w-0"
       >
         <div
           className="overflow-x-hidden rounded-[18px] bg-muted/40 px-3.5 py-1.5 text-foreground text-sm leading-[1.45] dark:bg-muted/10"
-          data-chat-user-message-id={message.id}
+          data-chat-user-message-id={messageId}
         >
-          <UserMessageText messageId={message.id} text={cleanMessage} />
+          <UserMessageText messageId={messageId} text={cleanMessage} />
 
           {(imageTags.length > 0 || fileTags.length > 0 || hasElementRef) && (
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -95,7 +104,7 @@ export function UserMessageRow({
         </div>
         {message.createdAt && (
           <div
-            data-chat-user-message-time={message.id}
+            data-chat-user-message-time={messageId}
             className="mt-0.5 px-1 text-[10px] text-muted-foreground/60 text-right"
           >
             {formatMessageTime(message.createdAt)}
@@ -110,7 +119,7 @@ function UserMessageText({
   messageId,
   text,
 }: {
-  messageId: string;
+  messageId?: string;
   text: string;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);

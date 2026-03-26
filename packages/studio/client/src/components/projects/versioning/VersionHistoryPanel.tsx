@@ -104,12 +104,6 @@ export function VersionHistoryPanel({
       { enabled: open && !!projectSlug }
     );
 
-  // Get publish status to show "Published" badge
-  const { data: publishStatus } = trpc.project.publishStatus.useQuery(
-    { slug: projectSlug },
-    { enabled: open && !!projectSlug }
-  );
-
   const {
     data: gitHubSyncStatus,
     isFetching: gitHubSyncFetching,
@@ -738,12 +732,16 @@ export function VersionHistoryPanel({
                     </Button>
                   </div>
 
-                  {!pullAllowed && gitHubSyncStatus?.pull.reason ? (
+                  {!pullAllowed &&
+                  gitHubSyncStatus?.pull &&
+                  "reason" in gitHubSyncStatus.pull ? (
                     <div className="text-xs text-muted-foreground">
                       Pull disabled: {gitHubSyncStatus.pull.reason}
                     </div>
                   ) : null}
-                  {!forceAllowed && gitHubSyncStatus?.forceSync.reason ? (
+                  {!forceAllowed &&
+                  gitHubSyncStatus?.forceSync &&
+                  "reason" in gitHubSyncStatus.forceSync ? (
                     <div className="text-xs text-muted-foreground">
                       Force sync disabled: {gitHubSyncStatus.forceSync.reason}
                     </div>

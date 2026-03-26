@@ -127,9 +127,35 @@ describe("createRequireStudioAuth", () => {
         value: "studio-token",
         options: {
           httpOnly: true,
-          sameSite: "lax",
+          sameSite: "none",
           secure: true,
           path: "/_studio/runtime-123",
+        },
+      },
+    ]);
+  });
+
+  it("keeps lax cookies for non-https studio auth", () => {
+    const middleware = createRequireStudioAuth({ STUDIO_ACCESS_TOKEN: "studio-token" } as any);
+    const req = createMockRequest({
+      path: "/vivd-studio",
+      query: { [STUDIO_AUTH_QUERY]: "studio-token" },
+    });
+    const res = createMockResponse();
+    const next = vi.fn();
+
+    middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.cookies).toEqual([
+      {
+        name: STUDIO_AUTH_COOKIE,
+        value: "studio-token",
+        options: {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: false,
+          path: "/",
         },
       },
     ]);
@@ -254,7 +280,7 @@ describe("createStudioBootstrapHandler", () => {
         value: "studio-token",
         options: {
           httpOnly: true,
-          sameSite: "lax",
+          sameSite: "none",
           secure: true,
           path: "/",
         },

@@ -107,7 +107,6 @@ interface PreviewContextValue {
 
   // Computed
   fullUrl: string;
-  previewMode: "static" | "devserver";
   devServerStatus: "ready" | "starting" | "installing" | "error" | "none";
   devServerError?: string;
   versions: VersionInfo[];

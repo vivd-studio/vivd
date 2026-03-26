@@ -59,7 +59,10 @@ export default defineConfig({
         },
         {
           label: "Access & Support",
-          items: [{ slug: "teams-and-access" }, { slug: "troubleshooting" }],
+          items: [
+            { slug: "teams-and-access", label: "Organization User Management" },
+            { slug: "troubleshooting" },
+          ],
         },
       ],
       social: [

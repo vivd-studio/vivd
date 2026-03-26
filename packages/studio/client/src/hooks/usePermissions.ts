@@ -11,9 +11,9 @@ export function usePermissions() {
 
   return {
     role,
-    isAdmin: role === "admin",
-    isUser: role === "user",
-    isClientEditor: role === "client_editor",
+    isAdmin: true,
+    isUser: false,
+    isClientEditor: false,
 
     // Feature gates
     canUseAgent: true,
@@ -23,4 +23,3 @@ export function usePermissions() {
     canAccessMaintenance: false,
   };
 }
-

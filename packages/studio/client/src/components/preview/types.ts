@@ -10,14 +10,15 @@ export const DEVICE_PRESETS = [
 ] as const;
 
 export type DevicePreset = (typeof DEVICE_PRESETS)[number];
-export type ViewportMode = "desktop" | "tablet" | "mobile";
-export type PreviewMode = "static" | "devserver";
-
 export const TABLET_PRESET = {
   name: "iPad Air",
   width: 820,
   height: 1180,
 } as const;
+
+export type FramePreset = DevicePreset | typeof TABLET_PRESET;
+export type ViewportMode = "desktop" | "tablet" | "mobile";
+export type PreviewMode = "static" | "devserver";
 
 export interface PreviewModalProps {
   open: boolean;

@@ -187,10 +187,13 @@ export function setStudioAuthCookie(
 ): void {
   if (getCookieValue(req, STUDIO_AUTH_COOKIE) === token) return;
 
+  const secure = isHttpsRequest(req);
   res.cookie(STUDIO_AUTH_COOKIE, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: isHttpsRequest(req),
+    // Fly embeds use a cross-site runtime host in prod, so secure requests need
+    // SameSite=None or the iframe never sends the auth cookie back.
+    sameSite: secure ? "none" : "lax",
+    secure,
     path: getCookiePath(req),
   });
 }

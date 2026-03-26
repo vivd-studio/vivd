@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import type { DevicePreset } from "./types";
+import type { FramePreset } from "./types";
 
 interface MobileFrameProps {
-  device: DevicePreset;
+  device: FramePreset;
   scale: number;
   children: ReactNode;
 }

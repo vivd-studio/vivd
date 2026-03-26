@@ -6,11 +6,8 @@ import { SessionList } from "./SessionList";
 import { MessageList } from "./MessageList";
 import { ChatInputRegion } from "./ChatInputRegion";
 import { OpencodeChatProvider } from "@/features/opencodeChat";
-import {
-  ChatProvider,
-  useChatContext,
-  type SessionDebugState,
-} from "./ChatContext";
+import { ChatProvider, useChatContext } from "./ChatContext";
+import type { SessionDebugState } from "./chatTypes";
 import { useOptionalPreview } from "../preview/PreviewContext";
 
 interface ChatPanelProps {

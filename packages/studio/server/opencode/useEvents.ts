@@ -482,8 +482,8 @@ function getToolError(part: any): string | undefined {
 function formatErrorMessage(
   value: unknown,
   fallback = "Unknown error",
-): string | undefined {
-  if (value == null) return undefined;
+): string {
+  if (value == null) return fallback;
   if (value instanceof Error) {
     return value.message || fallback;
   }

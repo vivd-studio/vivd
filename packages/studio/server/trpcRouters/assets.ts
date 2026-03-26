@@ -149,8 +149,6 @@ const IMAGE_EDITING_MODEL =
   process.env.IMAGE_EDITING_MODEL || "google/gemini-3-pro-image-preview";
 const HERO_GENERATION_MODEL =
   process.env.HERO_GENERATION_MODEL || "google/gemini-3-pro-image-preview";
-const BACKGROUND_REMOVAL_MODEL =
-  process.env.BACKGROUND_REMOVAL_MODEL || "openai/gpt-5-image";
 
 async function callOpenRouter(body: any): Promise<any> {
   const apiKey = process.env.OPENROUTER_API_KEY;

@@ -157,6 +157,37 @@ describe("openCodeChatReducer", () => {
     );
   });
 
+  it("marks refresh required across a bridge reconnect cycle", () => {
+    const reconnecting = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "event.received",
+      payload: {
+        eventId: "evt-1",
+        type: "bridge.status",
+        properties: {
+          state: "reconnecting",
+          message: "stream lost",
+        },
+      },
+    });
+
+    expect(reconnecting.connection.state).toBe("reconnecting");
+    expect(reconnecting.refreshGeneration).toBe(1);
+
+    const connected = openCodeChatReducer(reconnecting, {
+      type: "event.received",
+      payload: {
+        eventId: "evt-2",
+        type: "bridge.status",
+        properties: {
+          state: "connected",
+        },
+      },
+    });
+
+    expect(connected.connection.state).toBe("connected");
+    expect(connected.refreshGeneration).toBe(1);
+  });
+
   it("replaces session messages from a bootstrap snapshot", () => {
     const withOldMessage = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
       type: "event.received",
