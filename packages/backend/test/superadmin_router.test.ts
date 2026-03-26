@@ -6,6 +6,7 @@ const {
   getDesiredImageMock,
   invalidateDesiredImageCacheMock,
   reconcileStudioMachinesMock,
+  reconcileStudioMachineMock,
   parkStudioMachineMock,
   destroyStudioMachineMock,
   getSystemSettingValueMock,
@@ -34,6 +35,7 @@ const {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
   const reconcileStudioMachinesMock = vi.fn();
+  const reconcileStudioMachineMock = vi.fn();
   const parkStudioMachineMock = vi.fn();
   const destroyStudioMachineMock = vi.fn();
   const invalidateDesiredImageCacheMock = vi.fn();
@@ -43,6 +45,7 @@ const {
     getDesiredImage: getDesiredImageMock,
     invalidateDesiredImageCache: invalidateDesiredImageCacheMock,
     reconcileStudioMachines: reconcileStudioMachinesMock,
+    reconcileStudioMachine: reconcileStudioMachineMock,
     parkStudioMachine: parkStudioMachineMock,
     destroyStudioMachine: destroyStudioMachineMock,
   };
@@ -53,6 +56,7 @@ const {
     getDesiredImageMock,
     invalidateDesiredImageCacheMock,
     reconcileStudioMachinesMock,
+    reconcileStudioMachineMock,
     parkStudioMachineMock,
     destroyStudioMachineMock,
     getSystemSettingValueMock: vi.fn(),
@@ -312,6 +316,7 @@ describe("superadmin router", () => {
     getDesiredImageMock.mockReset();
     invalidateDesiredImageCacheMock.mockReset();
     reconcileStudioMachinesMock.mockReset();
+    reconcileStudioMachineMock.mockReset();
     parkStudioMachineMock.mockReset();
     destroyStudioMachineMock.mockReset();
     getSystemSettingValueMock.mockReset();
@@ -348,6 +353,9 @@ describe("superadmin router", () => {
       skippedRunningMachines: 0,
       dryRun: false,
       errors: [],
+    });
+    reconcileStudioMachineMock.mockResolvedValue({
+      desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
     });
     parkStudioMachineMock.mockResolvedValue("suspended");
     getSystemSettingValueMock.mockResolvedValue(null);
@@ -717,6 +725,23 @@ describe("superadmin router", () => {
       forceRefreshDesiredImage: true,
     });
     expect(result).toMatchObject({
+      provider: "fly",
+      reconciled: true,
+      result: {
+        desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
+      },
+    });
+  });
+
+  it("reconciles a specific managed studio machine", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.reconcileStudioMachine({ machineId: "machine-1" });
+
+    expect(reconcileStudioMachineMock).toHaveBeenCalledWith("machine-1", {
+      forceRefreshDesiredImage: true,
+    });
+    expect(result).toEqual({
       provider: "fly",
       reconciled: true,
       result: {

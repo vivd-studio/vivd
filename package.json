@@ -7,11 +7,12 @@
   ],
   "scripts": {
     "build:shared": "npm run build --workspace=@vivd/shared",
+    "typecheck": "npm run typecheck --workspace=@vivd/shared && npm run typecheck --workspace=@vivd/backend && npm run typecheck --workspace=@vivd/frontend && npm run typecheck --workspace=@vivd/studio && npm run typecheck --workspace=@vivd/scraper && npm run typecheck --workspace=@vivd/docs",
     "test": "concurrently \"npm run test --workspace=@vivd/backend\" \"npm run test --workspace=@vivd/frontend\" \"npm run test --workspace=@vivd/scraper\"",
     "test:run": "npm run test:run --workspace=@vivd/backend && npm run test:run --workspace=@vivd/frontend && npm run test:run --workspace=@vivd/scraper",
     "test:integration": "npm run test:integration --workspace=@vivd/backend --",
     "lint": "npm run lint --workspace=@vivd/frontend",
-    "check": "npm run lint && npm run test:run",
+    "check": "npm run typecheck && npm run lint && npm run test:run",
     "ci:local": "./scripts/ci-local.sh",
     "ci:local:tests": "./scripts/ci-local.sh --skip-lint",
     "ci:local:integration": "./scripts/ci-local.sh --db-integration --bucket-integration",

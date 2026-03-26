@@ -5,6 +5,7 @@ import { verifyStudioBootstrapToken } from "@vivd/shared/studio";
 const FORWARDED_PREFIX_HEADER = "x-forwarded-prefix";
 const FORWARDED_HOST_HEADER = "x-forwarded-host";
 const FORWARDED_PROTO_HEADER = "x-forwarded-proto";
+const FORWARDED_PORT_HEADER = "x-forwarded-port";
 
 export const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 export const STUDIO_AUTH_QUERY = "vivdStudioToken";
@@ -50,15 +51,66 @@ function isHttpsRequest(req: express.Request): boolean {
   return false;
 }
 
+function getFirstHeaderValue(value: string | string[] | undefined): string {
+  if (typeof value === "string") {
+    return value.split(",")[0]?.trim() || "";
+  }
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0].split(",")[0]?.trim() || "";
+  }
+  return "";
+}
+
+function splitHostAndPort(host: string): { hostname: string; port: string | null } {
+  const trimmed = host.trim();
+  if (!trimmed) return { hostname: "", port: null };
+
+  if (trimmed.startsWith("[") && trimmed.includes("]")) {
+    const end = trimmed.indexOf("]");
+    const hostname = trimmed.slice(0, end + 1);
+    const rest = trimmed.slice(end + 1);
+    const port = rest.startsWith(":") ? rest.slice(1) : null;
+    return { hostname, port: port || null };
+  }
+
+  const lastColon = trimmed.lastIndexOf(":");
+  if (lastColon > 0 && trimmed.indexOf(":") === lastColon) {
+    return {
+      hostname: trimmed.slice(0, lastColon),
+      port: trimmed.slice(lastColon + 1) || null,
+    };
+  }
+
+  return { hostname: trimmed, port: null };
+}
+
+function isDefaultPort(protocol: string, port: string | null): boolean {
+  if (!port) return true;
+  return (protocol === "https" && port === "443") || (protocol === "http" && port === "80");
+}
+
 function getRequestOrigin(req: express.Request): string | null {
-  const hostHeader = req.headers[FORWARDED_HOST_HEADER] ?? req.headers.host;
-  const host = Array.isArray(hostHeader)
-    ? hostHeader[0]
-    : typeof hostHeader === "string"
-      ? hostHeader.split(",")[0]?.trim()
-      : "";
-  if (!host) return null;
   const protocol = isHttpsRequest(req) ? "https" : "http";
+
+  const forwardedHost = getFirstHeaderValue(req.headers[FORWARDED_HOST_HEADER]);
+  const directHost = getFirstHeaderValue(req.headers.host);
+  const forwardedPort = getFirstHeaderValue(req.headers[FORWARDED_PORT_HEADER]);
+
+  const preferred = forwardedHost || directHost;
+  if (!preferred) return null;
+
+  const preferredParts = splitHostAndPort(preferred);
+  const directParts = splitHostAndPort(directHost);
+  const effectivePort =
+    preferredParts.port ||
+    forwardedPort ||
+    directParts.port;
+
+  const host = isDefaultPort(protocol, effectivePort)
+    ? preferredParts.hostname
+    : `${preferredParts.hostname}:${effectivePort}`;
+  if (!host) return null;
+
   return `${protocol}://${host}`;
 }
 

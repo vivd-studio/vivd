@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "rootDir": "..",
+    "paths": {
+      "@vivd/shared": ["../shared/src/index.ts"],
+      "@vivd/shared/*": ["../shared/src/*"]
+    }
+  },
+  "include": ["src/**/*", "../shared/src/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts", "test", "projects", "dist"]
+}

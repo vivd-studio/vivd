@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "rm -rf dist && tsc",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "start": "node dist/index.js",
     "test": "vitest",
     "test:run": "vitest run"

@@ -1232,6 +1232,31 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     return "stopped";
   }
 
+  async reconcileStudioMachine(
+    machineId: string,
+    options?: { forceRefreshDesiredImage?: boolean },
+  ): Promise<{ desiredImage: string }> {
+    const container = await this.inspectContainer(machineId);
+    const identity = getContainerIdentity(container);
+    if (!identity) {
+      throw new Error(
+        `[DockerMachines] Refusing to reconcile non-studio container ${machineId}`,
+      );
+    }
+
+    const desiredImage = await this.getDesiredImage({
+      forceRefresh: options?.forceRefreshDesiredImage === true,
+    });
+    const desiredNetworkName = await this.resolveContainerNetworkName();
+    await this.warmReconcileContainer({
+      container,
+      identity,
+      desiredImage,
+      desiredNetworkName,
+    });
+    return { desiredImage };
+  }
+
   async destroyStudioMachine(machineId: string): Promise<void> {
     const container = await this.inspectContainer(machineId);
     const identity = getContainerIdentity(container);

@@ -544,10 +544,16 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     );
   }
 
-  async warmReconcileStudioMachine(machineId: string): Promise<{ desiredImage: string }> {
+  async reconcileStudioMachine(
+    machineId: string,
+    options?: { forceRefreshDesiredImage?: boolean },
+  ): Promise<{ desiredImage: string }> {
     return warmReconcileStudioMachineWorkflow(
       {
-        getDesiredImage: () => this.getDesiredImage(),
+        getDesiredImage: () =>
+          this.getDesiredImage({
+            forceRefresh: options?.forceRefreshDesiredImage === true,
+          }),
         getMachine: (id) => this.getMachine(id),
         getStudioIdentityFromMachine,
         resolveMachineReconcileState: (options) => this.resolveMachineReconcileState(options),
@@ -573,6 +579,13 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       },
       machineId,
     );
+  }
+
+  async warmReconcileStudioMachine(
+    machineId: string,
+    options?: { forceRefreshDesiredImage?: boolean },
+  ): Promise<{ desiredImage: string }> {
+    return this.reconcileStudioMachine(machineId, options);
   }
 
   async reconcileStudioMachines(options?: {

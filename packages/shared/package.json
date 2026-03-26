@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "dev": "tsup --watch"
   },
   "devDependencies": {

@@ -131,6 +131,7 @@ run_step_allow_known_failure() {
 if [[ "$RUN_LINT" == "true" ]]; then
   run_step "Frontend lint" npm run lint
 fi
+run_step "TypeScript typecheck" npm run typecheck
 run_step "Unit tests (backend/frontend/scraper)" npm run test:run
 run_step "Studio tests" npm run test:run --workspace=@vivd/studio
 

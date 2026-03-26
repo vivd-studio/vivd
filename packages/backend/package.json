@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "nodemon",
     "build": "tsup",
+    "typecheck": "tsc --project tsconfig.typecheck.json --noEmit --pretty false",
     "start": "node dist/server.js",
     "test": "vitest",
     "test:run": "vitest run",

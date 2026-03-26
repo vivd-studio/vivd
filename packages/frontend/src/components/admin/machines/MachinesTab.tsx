@@ -103,6 +103,11 @@ function canParkMachine(state: string | null): boolean {
   );
 }
 
+function canReconcileMachine(state: string | null): boolean {
+  const normalized = (state || "unknown").toLowerCase();
+  return normalized === "stopped" || normalized === "suspended";
+}
+
 export function MachinesTab() {
   const utils = trpc.useUtils();
   const [confirmReconcileOpen, setConfirmReconcileOpen] = useState(false);
@@ -155,6 +160,30 @@ export function MachinesTab() {
       const result = data.result;
       toast.success("Reconcile completed", {
         description: `Warmed ${result.warmedOutdatedImages} reconciled • destroyed ${result.destroyedOldMachines} inactive • errors ${result.errors.length}${result.dryRun ? " (dry-run)" : ""}`,
+      });
+      await utils.superadmin.listStudioMachines.invalidate();
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Reconcile failed", {
+        description: message,
+      });
+    },
+  });
+
+  const reconcileMachineMutation = trpc.superadmin.reconcileStudioMachine.useMutation({
+    onSuccess: async (data, variables) => {
+      if (!data.reconciled || !("result" in data)) {
+        toast.error("Reconcile skipped", {
+          description:
+            ("error" in data && data.error) ||
+            "Studio machine provider does not support targeted reconciliation",
+        });
+        return;
+      }
+
+      toast.success(`${machineLabel} reconciled`, {
+        description: variables.machineId,
       });
       await utils.superadmin.listStudioMachines.invalidate();
     },
@@ -222,6 +251,7 @@ export function MachinesTab() {
   const provider = machinesQuery.data?.provider ?? "unknown";
   const machineLabel = provider === "docker" ? "Container" : "Machine";
   const parkActionLabel = provider === "docker" ? "Stop" : "Suspend";
+  const activeReconcileMachineId = reconcileMachineMutation.variables?.machineId ?? null;
   const activeParkMachineId = parkMutation.variables?.machineId ?? null;
   const effectiveDesiredImage = machines[0]?.desiredImage || null;
   const desiredImage =
@@ -630,6 +660,26 @@ export function MachinesTab() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-col gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() =>
+                              reconcileMachineMutation.mutate({ machineId: m.id })
+                            }
+                            disabled={
+                              reconcileMachineMutation.isPending ||
+                              !canReconcileMachine(m.state)
+                            }
+                          >
+                            {reconcileMachineMutation.isPending &&
+                            activeReconcileMachineId === m.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCcw className="h-3.5 w-3.5" />
+                            )}
+                            Reconcile
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

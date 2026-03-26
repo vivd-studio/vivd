@@ -232,6 +232,24 @@ describe("resolveStudioBootstrapRedirectTarget", () => {
     ).toBe("/_studio/runtime-123/vivd-studio?embedded=1");
   });
 
+  it("accepts forwarded external ports for fly studio targets", () => {
+    const req = createMockRequest({
+      secure: true,
+      headers: {
+        host: "vivd-studio-prod.fly.dev:3111",
+        "x-forwarded-host": "vivd-studio-prod.fly.dev",
+        "x-forwarded-port": "3111",
+      },
+    });
+
+    expect(
+      resolveStudioBootstrapRedirectTarget(
+        req,
+        "https://vivd-studio-prod.fly.dev:3111/vivd-studio?embedded=1",
+      ),
+    ).toBe("/vivd-studio?embedded=1");
+  });
+
   it("rejects cross-origin redirect targets", () => {
     const req = createMockRequest({
       secure: true,

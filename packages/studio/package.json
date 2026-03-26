@@ -12,6 +12,9 @@
     "build": "npm run build:server && npm run build:client",
     "build:server": "tsup --config tsup.server.config.ts",
     "build:client": "vite build --config client/vite.config.ts",
+    "typecheck": "npm run typecheck:server && npm run typecheck:client",
+    "typecheck:server": "tsc --project tsconfig.typecheck.json --noEmit --pretty false",
+    "typecheck:client": "tsc --project client/tsconfig.app.json --noEmit --pretty false",
     "start": "node dist/index.js",
     "test": "vitest",
     "test:run": "vitest run"

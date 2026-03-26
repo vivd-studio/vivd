@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev --host 0.0.0.0 --port 4321",
     "build": "astro build",
+    "typecheck": "astro check",
     "preview": "astro preview --host 0.0.0.0 --port 4321"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
     "astro-expressive-code": "file:./shims/astro-expressive-code"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.8",
     "@types/node": "^24.0.0",
     "typescript": "^5.8.3"
   }

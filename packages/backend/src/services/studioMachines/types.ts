@@ -99,6 +99,10 @@ export type StudioMachineParkResult = "suspended" | "stopped";
 
 export interface ManagedStudioMachineProvider extends StudioMachineProvider {
   listStudioMachines(): Promise<StudioMachineSummary[]>;
+  reconcileStudioMachine(
+    machineId: string,
+    options?: { forceRefreshDesiredImage?: boolean },
+  ): Promise<{ desiredImage: string }>;
   parkStudioMachine(machineId: string): Promise<StudioMachineParkResult>;
   destroyStudioMachine(machineId: string): Promise<void>;
   invalidateDesiredImageCache(): void;
@@ -116,6 +120,7 @@ export function isManagedStudioMachineProvider(
   return (
     isManagedKind &&
     typeof candidate.listStudioMachines === "function" &&
+    typeof candidate.reconcileStudioMachine === "function" &&
     typeof candidate.parkStudioMachine === "function" &&
     typeof candidate.destroyStudioMachine === "function" &&
     typeof candidate.invalidateDesiredImageCache === "function" &&

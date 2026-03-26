@@ -532,6 +532,31 @@ export const superAdminRouter = router({
     };
   }),
 
+  reconcileStudioMachine: superAdminProcedure
+    .input(
+      z.object({
+        machineId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      if (!isManagedStudioMachineProvider(studioMachineProvider)) {
+        return {
+          provider: studioMachineProvider.kind,
+          reconciled: false,
+          error: "Studio machine provider does not support targeted reconciliation",
+        };
+      }
+
+      const result = await studioMachineProvider.reconcileStudioMachine(input.machineId, {
+        forceRefreshDesiredImage: true,
+      });
+      return {
+        provider: studioMachineProvider.kind,
+        reconciled: true,
+        result,
+      };
+    }),
+
   parkStudioMachine: superAdminProcedure
     .input(
       z.object({
