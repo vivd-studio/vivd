@@ -7,6 +7,16 @@ on:
         description: "Optional git ref to validate"
         required: false
         type: string
+      run_studio_image_smoke:
+        description: "Whether to build and smoke-test the Studio production image"
+        required: false
+        default: true
+        type: boolean
+      require_model_roundtrip:
+        description: "Whether Studio image smoke must run prompt round-trips on configured model tiers"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   validate:
@@ -34,3 +44,39 @@ jobs:
 
       - name: Studio Auth Regression Tests
         run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
+
+      - name: Studio Runtime Auth And Drift Regression Tests
+        run: npm run test:run -w @vivd/backend -- studio_api_router.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
+
+      - name: Set up Docker Buildx
+        if: ${{ inputs.run_studio_image_smoke }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build vivd-studio validate image
+        if: ${{ inputs.run_studio_image_smoke }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/studio/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          load: true
+          tags: vivd-studio:validate-smoke
+          cache-from: type=gha,scope=studio
+          cache-to: type=gha,mode=max,scope=studio
+
+      - name: Smoke test vivd-studio validate image
+        if: ${{ inputs.run_studio_image_smoke }}
+        env:
+          STUDIO_IMAGE: vivd-studio:validate-smoke
+          VIVD_STUDIO_SMOKE_REQUIRE_MODELS: ${{ inputs.require_model_roundtrip }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT || secrets.GOOGLE_CLOUD_PROJECT }}
+          VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION || secrets.VERTEX_LOCATION || 'global' }}
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH: ${{ secrets.VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH }}
+          OPENCODE_MODEL_STANDARD: ${{ vars.OPENCODE_MODEL_STANDARD || secrets.OPENCODE_MODEL_STANDARD }}
+          OPENCODE_MODEL_ADVANCED: ${{ vars.OPENCODE_MODEL_ADVANCED || secrets.OPENCODE_MODEL_ADVANCED }}
+          OPENCODE_MODEL_PRO: ${{ vars.OPENCODE_MODEL_PRO || secrets.OPENCODE_MODEL_PRO }}
+        run: node ./scripts/studio-image-smoke.mjs

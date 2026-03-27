@@ -149,6 +149,8 @@ jobs:
     uses: ./.github/workflows/reusable-validate.yml
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+      run_studio_image_smoke: false
+    secrets: inherit
 
   build-studio-arm64:
     needs: [detect-changes, validate-release]

@@ -172,12 +172,16 @@ jobs:
     uses: ./.github/workflows/reusable-validate.yml
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+      run_studio_image_smoke: false
+    secrets: inherit
 
-  studio-image-smoke:
+  build-studio:
     needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_studio == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -206,10 +210,12 @@ jobs:
           load: true
           tags: vivd-studio:release-smoke
           cache-from: type=gha,scope=studio
+          cache-to: type=gha,mode=max,scope=studio
 
       - name: Smoke test vivd-studio release candidate
         env:
           STUDIO_IMAGE: vivd-studio:release-smoke
+          VIVD_STUDIO_SMOKE_REQUIRE_MODELS: true
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT || secrets.GOOGLE_CLOUD_PROJECT }}
@@ -221,22 +227,6 @@ jobs:
           OPENCODE_MODEL_PRO: ${{ vars.OPENCODE_MODEL_PRO || secrets.OPENCODE_MODEL_PRO }}
         run: node ./scripts/studio-image-smoke.mjs
 
-  build-studio:
-    needs: [detect-changes, validate-release, studio-image-smoke]
-    if: needs.detect-changes.outputs.build_studio == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -244,20 +234,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Build and push vivd-studio
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./packages/studio/Dockerfile
-          target: prod
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}
-            ${{ env.IMAGE_PREFIX }}/vivd-studio:latest
-          cache-from: type=gha,scope=studio
-          cache-to: type=gha,mode=max,scope=studio
+      - name: Tag and push smoked vivd-studio image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tags=(
+            "${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-studio:latest"
+          )
+
+          for tag in "${tags[@]}"; do
+            docker tag vivd-studio:release-smoke "$tag"
+            docker push "$tag"
+          done
 
   build-builder:
     needs: [detect-changes, validate-release]
@@ -310,8 +301,30 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Build vivd-server release candidate image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/backend/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          load: true
+          tags: vivd-server:release-smoke
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
+
+      - name: Smoke test vivd-server release candidate
+        env:
+          BACKEND_IMAGE: vivd-server:release-smoke
+        run: node ./scripts/backend-image-smoke.mjs
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -320,20 +333,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Build and push vivd-server
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./packages/backend/Dockerfile
-          target: prod
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version_no_v }}
-            ${{ env.IMAGE_PREFIX }}/vivd-server:latest
-          cache-from: type=gha,scope=server
-          cache-to: type=gha,mode=max,scope=server
+      - name: Tag and push smoked vivd-server image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tags=(
+            "${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version_no_v }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-server:latest"
+          )
+
+          for tag in "${tags[@]}"; do
+            docker tag vivd-server:release-smoke "$tag"
+            docker push "$tag"
+          done
 
   build-ui:
     needs: [detect-changes, validate-release]
@@ -426,8 +440,29 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Build vivd-scraper release candidate image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./packages/scraper
+          file: ./packages/scraper/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: vivd-scraper:release-smoke
+          cache-from: type=gha,scope=scraper
+          cache-to: type=gha,mode=max,scope=scraper
+
+      - name: Smoke test vivd-scraper release candidate
+        env:
+          SCRAPER_IMAGE: vivd-scraper:release-smoke
+        run: node ./scripts/scraper-image-smoke.mjs
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -436,19 +471,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Build and push vivd-scraper
-        uses: docker/build-push-action@v5
-        with:
-          context: ./packages/scraper
-          file: ./packages/scraper/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/vivd-scraper:${{ needs.detect-changes.outputs.version }}
-            ${{ env.IMAGE_PREFIX }}/vivd-scraper:${{ needs.detect-changes.outputs.version_no_v }}
-            ${{ env.IMAGE_PREFIX }}/vivd-scraper:latest
-          cache-from: type=gha,scope=scraper
-          cache-to: type=gha,mode=max,scope=scraper
+      - name: Tag and push smoked vivd-scraper image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tags=(
+            "${{ env.IMAGE_PREFIX }}/vivd-scraper:${{ needs.detect-changes.outputs.version }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-scraper:${{ needs.detect-changes.outputs.version_no_v }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-scraper:latest"
+          )
+
+          for tag in "${tags[@]}"; do
+            docker tag vivd-scraper:release-smoke "$tag"
+            docker push "$tag"
+          done
 
   build-caddy:
     needs: [detect-changes, validate-release]
@@ -488,7 +525,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, validate-release, studio-image-smoke, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, validate-release, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:

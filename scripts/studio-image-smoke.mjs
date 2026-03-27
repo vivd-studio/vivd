@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
+import { createStudioBootstrapToken } from "@vivd/shared/studio";
 
 const DEFAULT_IMAGE = "vivd-studio:release-smoke";
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -16,6 +17,7 @@ const DEFAULT_MODEL_TIERS = ["standard", "advanced"];
 const PROJECT_SLUG = "ci-studio-smoke";
 const PROJECT_VERSION = 1;
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
+const STUDIO_AUTH_COOKIE = "vivd_studio_token";
 
 function log(message) {
   console.log(`[studio-image-smoke] ${message}`);
@@ -32,6 +34,16 @@ function getRequiredEnv(name) {
 function getOptionalEnv(name) {
   const value = process.env[name]?.trim();
   return value ? value : null;
+}
+
+function getOptionalBooleanEnv(name, defaultValue = false) {
+  const value = getOptionalEnv(name);
+  if (!value) return defaultValue;
+
+  const normalized = value.toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  throw new Error(`Invalid boolean value for ${name}: ${value}`);
 }
 
 function parseModelSelection(rawValue, tier) {
@@ -78,13 +90,69 @@ function getModelTiers() {
   return tiers;
 }
 
+function shouldRequireModelRoundTrips() {
+  return getOptionalBooleanEnv("VIVD_STUDIO_SMOKE_REQUIRE_MODELS", false);
+}
+
+function hasProviderCredentials(selection) {
+  switch (selection.provider) {
+    case "openrouter":
+      return Boolean(getOptionalEnv("OPENROUTER_API_KEY"));
+    case "google":
+      return Boolean(
+        getOptionalEnv("GOOGLE_API_KEY") ||
+          getOptionalEnv("GOOGLE_APPLICATION_CREDENTIALS") ||
+          getOptionalEnv("GOOGLE_APPLICATION_CREDENTIALS_JSON"),
+      );
+    default:
+      return true;
+  }
+}
+
 function getModelSelections() {
-  return getModelTiers().map((tier) =>
-    parseModelSelection(
-      getRequiredEnv(`OPENCODE_MODEL_${tier.toUpperCase()}`),
-      tier,
-    ),
+  const requireModelRoundTrips = shouldRequireModelRoundTrips();
+  const missingEnvKeys = [];
+  const selections = [];
+
+  for (const tier of getModelTiers()) {
+    const envKey = `OPENCODE_MODEL_${tier.toUpperCase()}`;
+    const rawValue = getOptionalEnv(envKey);
+    if (!rawValue) {
+      missingEnvKeys.push(envKey);
+      continue;
+    }
+
+    selections.push(parseModelSelection(rawValue, tier));
+  }
+
+  if (missingEnvKeys.length > 0) {
+    if (missingEnvKeys.length === getModelTiers().length && !requireModelRoundTrips) {
+      log("Skipping model round-trips: no model tiers configured for this smoke run.");
+      return [];
+    }
+
+    throw new Error(
+      `Missing configured model tier env(s): ${missingEnvKeys.join(", ")}`,
+    );
+  }
+
+  const missingProviderCredentials = selections.filter(
+    (selection) => !hasProviderCredentials(selection),
   );
+
+  if (missingProviderCredentials.length > 0) {
+    const message = `Missing provider credentials for: ${missingProviderCredentials
+      .map((selection) => `${selection.tier}=${selection.provider}`)
+      .join(", ")}`;
+    if (requireModelRoundTrips) {
+      throw new Error(message);
+    }
+
+    log(`Skipping model round-trips: ${message}`);
+    return [];
+  }
+
+  return selections;
 }
 
 function getSmokeTimeoutMs() {
@@ -226,6 +294,74 @@ async function verifyAuthSurface(baseUrl, accessToken) {
 
   const html = await authorized.text();
   assert.match(html, /<html/i, "Expected Studio UI HTML payload");
+}
+
+function readSetCookieHeader(response) {
+  if (typeof response.headers.getSetCookie === "function") {
+    const cookies = response.headers.getSetCookie();
+    if (cookies.length > 0) {
+      return cookies.join(", ");
+    }
+  }
+
+  return response.headers.get("set-cookie") || "";
+}
+
+function extractCookieHeader(setCookieHeader) {
+  const cookieMatch = setCookieHeader.match(
+    new RegExp(`${STUDIO_AUTH_COOKIE}=([^;]+)`),
+  );
+  assert.ok(cookieMatch, "Expected bootstrap response to set Studio auth cookie");
+  return `${STUDIO_AUTH_COOKIE}=${cookieMatch[1]}`;
+}
+
+async function verifyBootstrapFlow(baseUrl, accessToken, studioId) {
+  const bootstrapToken = createStudioBootstrapToken({
+    accessToken,
+    studioId,
+  });
+
+  const response = await fetch(`${baseUrl}/vivd-studio/api/bootstrap`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      bootstrapToken,
+      next: `${baseUrl}/vivd-studio?embedded=1`,
+    }),
+  });
+
+  assert.equal(
+    response.status,
+    303,
+    "Expected bootstrap endpoint to redirect after successful auth handoff",
+  );
+  assert.equal(
+    response.headers.get("location"),
+    "/vivd-studio?embedded=1",
+    "Expected bootstrap redirect to sanitize the Studio target",
+  );
+
+  const setCookieHeader = readSetCookieHeader(response);
+  assert.match(
+    setCookieHeader,
+    new RegExp(`${STUDIO_AUTH_COOKIE}=`),
+    "Expected bootstrap response to include the Studio auth cookie",
+  );
+
+  const followUp = await fetch(`${baseUrl}/vivd-studio?embedded=1`, {
+    headers: {
+      Cookie: extractCookieHeader(setCookieHeader),
+    },
+  });
+
+  assert.equal(
+    followUp.status,
+    200,
+    "Expected bootstrap-issued cookie to authorize the Studio shell",
+  );
 }
 
 async function waitForSessionIdle(client, sessionId, timeoutMs) {
@@ -465,7 +601,11 @@ async function main() {
 
   log(`Using image ${image}`);
   log(
-    `Configured model tiers: ${modelSelections.map((selection) => `${selection.tier}=${selection.rawValue}`).join(", ")}`,
+    modelSelections.length > 0
+      ? `Configured model tiers: ${modelSelections
+          .map((selection) => `${selection.tier}=${selection.rawValue}`)
+          .join(", ")}`
+      : "Configured model tiers: none (model round-trips skipped for this smoke run)",
   );
 
   let containerId = null;
@@ -491,15 +631,18 @@ async function main() {
 
     await waitForHealth(baseUrl, containerId, timeoutMs);
     await verifyAuthSurface(baseUrl, accessToken);
+    await verifyBootstrapFlow(baseUrl, accessToken, studioId);
 
     const client = createTrpcClient(baseUrl, accessToken);
-    const availableModels = await client.agent.getAvailableModels.query();
-    for (const selection of modelSelections) {
-      assertAvailableModel(availableModels, selection);
-    }
+    if (modelSelections.length > 0) {
+      const availableModels = await client.agent.getAvailableModels.query();
+      for (const selection of modelSelections) {
+        assertAvailableModel(availableModels, selection);
+      }
 
-    for (const selection of modelSelections) {
-      await runPromptRoundTrip(client, selection, timeoutMs);
+      for (const selection of modelSelections) {
+        await runPromptRoundTrip(client, selection, timeoutMs);
+      }
     }
 
     succeeded = true;

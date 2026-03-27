@@ -9,3 +9,4 @@ on:
 jobs:
   validate:
     uses: ./.github/workflows/reusable-validate.yml
+    secrets: inherit
