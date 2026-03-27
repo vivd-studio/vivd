@@ -18,6 +18,10 @@ CMD ["npm", "run", "dev"]
 FROM deps AS build
 COPY packages/theme ./packages/theme
 COPY packages/docs ./packages/docs
+COPY packages/shared ./packages/shared
+COPY scripts ./scripts
+
+RUN mkdir -p ./packages/studio
 
 ARG VIVD_DOCS_SITE_URL=https://docs.vivd.studio
 ENV VIVD_DOCS_SITE_URL=${VIVD_DOCS_SITE_URL}
