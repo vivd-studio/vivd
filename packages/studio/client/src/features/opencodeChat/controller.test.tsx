@@ -30,9 +30,9 @@ const {
     state: {
       sessionStatusById: {},
       connection: { state: "connected" as const, message: undefined },
-      lastEventTime: null,
-      lastEventType: null,
-      lastEventId: null,
+      lastEventTime: null as number | null,
+      lastEventType: null as string | null,
+      lastEventId: null as string | null,
     },
     questionRequestsBySessionId: {},
     sessions: [],
