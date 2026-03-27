@@ -44,7 +44,8 @@ RUN npm run build -w @vivd/shared
 
 WORKDIR /app/packages/studio
 COPY packages/studio/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY packages/studio/selfHostDefaults.sh /usr/local/bin/selfHostDefaults.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/selfHostDefaults.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 EXPOSE 3100 3101
 CMD ["npm", "run", "dev"]
@@ -82,7 +83,8 @@ COPY --from=build /app/packages/studio/dist ./packages/studio/dist
 
 WORKDIR /app/packages/studio
 COPY packages/studio/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY packages/studio/selfHostDefaults.sh /usr/local/bin/selfHostDefaults.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/selfHostDefaults.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 EXPOSE 3100
 CMD ["npm", "start"]
