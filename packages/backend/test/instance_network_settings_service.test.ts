@@ -7,8 +7,11 @@ let storedValue: unknown = null;
 
 vi.mock("../src/services/system/SystemSettingsService", () => ({
   SYSTEM_SETTING_KEYS: {
+    installProfile: "install_profile",
     instanceNetworkSettings: "instance_network_settings",
   },
+  getSystemSettingValue: vi.fn(async () => null),
+  setSystemSettingValue: vi.fn(async () => undefined),
   getSystemSettingJsonValue: vi.fn(async () => storedValue),
   setSystemSettingJsonValue: vi.fn(async (_key: string, value: unknown) => {
     storedValue = value;
@@ -30,6 +33,7 @@ describe("instance network settings service", () => {
     delete process.env.VIVD_CADDY_TLS_MODE;
     delete process.env.VIVD_CADDY_ACME_EMAIL;
     delete process.env.VIVD_CADDY_PRIMARY_HOST;
+    delete process.env.VIVD_INSTALL_PROFILE;
     delete process.env.VIVD_SELFHOST_CADDY_UI_MANAGED;
     delete process.env.CADDY_MAIN_CONFIG_PATH;
   });
@@ -80,10 +84,9 @@ describe("instance network settings service", () => {
     });
   });
 
-  it("writes self-host Caddy config from the resolved settings", async () => {
+  it("writes self-host Caddy config by default for solo installs", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-caddy-"));
     const caddyfilePath = path.join(tempDir, "Caddyfile");
-    process.env.VIVD_SELFHOST_CADDY_UI_MANAGED = "true";
     process.env.CADDY_MAIN_CONFIG_PATH = caddyfilePath;
     storedValue = {
       publicHost: "solo.example.com",
@@ -113,5 +116,39 @@ describe("instance network settings service", () => {
     expect(fs.readFileSync(caddyfilePath, "utf-8")).toContain(
       "http://solo.example.com {",
     );
+  });
+
+  it("does not write self-host Caddy config by default for platform installs", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-caddy-"));
+    const caddyfilePath = path.join(tempDir, "Caddyfile");
+    process.env.CADDY_MAIN_CONFIG_PATH = caddyfilePath;
+    process.env.VIVD_INSTALL_PROFILE = "platform";
+    storedValue = {
+      publicHost: "platform.example.com",
+      tlsMode: "managed",
+    };
+
+    await instanceNetworkSettingsService.refreshFromStore();
+    const changed = await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+
+    expect(changed).toBe(false);
+    expect(fs.existsSync(caddyfilePath)).toBe(false);
+  });
+
+  it("lets env disable the solo default Caddy sync", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-caddy-"));
+    const caddyfilePath = path.join(tempDir, "Caddyfile");
+    process.env.CADDY_MAIN_CONFIG_PATH = caddyfilePath;
+    process.env.VIVD_SELFHOST_CADDY_UI_MANAGED = "false";
+    storedValue = {
+      publicHost: "solo.example.com",
+      tlsMode: "managed",
+    };
+
+    await instanceNetworkSettingsService.refreshFromStore();
+    const changed = await instanceNetworkSettingsService.syncSelfHostedCaddyConfig();
+
+    expect(changed).toBe(false);
+    expect(fs.existsSync(caddyfilePath)).toBe(false);
   });
 });

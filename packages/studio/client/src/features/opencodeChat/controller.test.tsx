@@ -299,6 +299,54 @@ describe("useOpencodeChatController", () => {
     });
   });
 
+  it("refetches the selected session once when older assistant activity still shows a stale running tool", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.selectedMessages = [
+      {
+        info: {
+          id: "msg-user",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: 1 },
+        },
+        parts: [{ id: "part-user", messageID: "msg-user", type: "text", text: "Run build" }],
+      },
+      {
+        info: {
+          id: "msg-build",
+          sessionID: "sess-1",
+          role: "assistant",
+          time: { created: 2 },
+        },
+        parts: [{ id: "tool-build", messageID: "msg-build", type: "tool", status: "running" }],
+      },
+      {
+        info: {
+          id: "msg-followup",
+          sessionID: "sess-1",
+          role: "assistant",
+          time: { created: 3, completed: 4 },
+        },
+        parts: [{ id: "part-followup", messageID: "msg-followup", type: "text", text: "Build finished." }],
+      },
+    ];
+    mockOpencodeChat.state.lastEventId = "evt-3";
+
+    renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+  });
+
   it("does not show 'Nothing to revert' when the server reports a successful revert", async () => {
     mockOpencodeChat.selectedSessionId = "sess-1";
     revertMutateAsync.mockResolvedValue({

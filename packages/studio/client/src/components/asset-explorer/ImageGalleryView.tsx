@@ -5,7 +5,7 @@ import { LoadingSpinner } from "@/components/common";
 
 import type { AssetItem } from "./types";
 import { AssetItemCard } from "./AssetItemCard";
-import { buildImageUrl, isTextFile } from "./utils";
+import { buildImageUrl, isTextFile, STUDIO_UPLOADS_PATH } from "./utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 
@@ -128,7 +128,10 @@ export function ImageGalleryView({
       >
         <p>No files yet</p>
         <p className="text-sm">
-          Drop files here or click Upload to save them in .vivd/uploads
+          Drop files here to upload to {currentPath || STUDIO_UPLOADS_PATH}
+        </p>
+        <p className="text-xs">
+          Use Upload to save working files to {STUDIO_UPLOADS_PATH}
         </p>
       </div>
     );

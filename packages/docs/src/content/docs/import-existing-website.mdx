@@ -42,6 +42,46 @@ URL import is the fastest way to get a first draft when you already have a publi
 - Sections that should be merged, removed, or reordered.
 - Contact information, legal text, and call-to-action wording.
 
+## Why some websites cannot be imported
+
+Some public websites still block automated browsing. Vivd's URL import depends
+on the scraper service opening the source page in a real headless browser, so
+imports can fail even when the site loads normally in your own browser.
+
+Common cases include:
+
+- `403 Forbidden` responses.
+- Cloudflare browser-verification or challenge pages.
+- CAPTCHA or other "verify you're human" flows.
+- IP policies that block datacenter traffic.
+
+When that happens, the failure is usually the source site's protection policy,
+not that the URL is private or malformed.
+
+## Self-hosted workaround for blocked datacenter IPs
+
+If you self-host Vivd, you can route the bundled scraper through a residential
+proxy:
+
+```env
+PROXY_HOST=proxy.example.com
+PROXY_PORT=823
+PROXY_USERNAME=...
+PROXY_PASSWORD=...
+```
+
+Set `PROXY_HOST` to enable proxying. `PROXY_PORT` defaults to `823`, and
+credentials are only sent when both `PROXY_USERNAME` and `PROXY_PASSWORD` are
+set.
+
+This is useful when the source site blocks datacenter IPs but still allows
+normal residential traffic. It is an install-level scraper setting, not a
+per-project field in the import dialog. If you run a separate scraper via
+`SCRAPER_URL`, configure the proxy on that scraper deployment instead.
+
+For the full env reference, see
+[Self-Host Config Reference](/self-host-config-reference/).
+
 ## What happens right after import
 
 Vivd does not stop at scraping or copying structure.

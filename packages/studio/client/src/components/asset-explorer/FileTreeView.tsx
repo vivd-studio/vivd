@@ -99,6 +99,9 @@ export function FileTreeView({
   const rootRef = useRef<HTMLDivElement>(null);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [externalRootDragOver, setExternalRootDragOver] = useState(false);
+  const [activeExternalDropTarget, setActiveExternalDropTarget] = useState<
+    string | null
+  >(null);
   const [activeInternalDropTarget, setActiveInternalDropTarget] = useState<
     string | "" | null
   >(null);
@@ -120,6 +123,7 @@ export function FileTreeView({
   useEffect(() => {
     const handleDragEnd = () => {
       setExternalRootDragOver(false);
+      setActiveExternalDropTarget(null);
       setActiveInternalDropTarget(null);
     };
     document.addEventListener("dragend", handleDragEnd);
@@ -354,8 +358,12 @@ export function FileTreeView({
     );
 
     if (hasFiles && !hasInternalPath) {
+      if (e.target !== e.currentTarget) {
+        return;
+      }
       e.preventDefault();
       setExternalRootDragOver(true);
+      setActiveExternalDropTarget(null);
       setActiveInternalDropTarget(null);
       e.dataTransfer.dropEffect = "copy";
       return;
@@ -375,6 +383,7 @@ export function FileTreeView({
     // Only set false if we're leaving the root container, not entering a child
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setExternalRootDragOver(false);
+      setActiveExternalDropTarget(null);
       if (activeInternalDropTarget === "") {
         setActiveInternalDropTarget(null);
       }
@@ -384,6 +393,7 @@ export function FileTreeView({
   const handleRootDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setExternalRootDragOver(false);
+    setActiveExternalDropTarget(null);
     setActiveInternalDropTarget(null);
 
     // Check for internal file move first (takes precedence)
@@ -399,6 +409,7 @@ export function FileTreeView({
 
     // Check for external file drop
     if (
+      e.target === e.currentTarget &&
       e.dataTransfer.files &&
       e.dataTransfer.files.length > 0 &&
       onFilesUpload
@@ -447,6 +458,7 @@ export function FileTreeView({
           onAiEdit={onAiEdit}
           onCreateFolder={onCreateFolder}
           onAddToChat={onAddToChat}
+          onFilesUpload={onFilesUpload ? handleFilesUpload : undefined}
           moveTargets={getFileTreeMoveTargets(data.tree, node)}
           onMoveToFolder={(targetFolderPath) =>
             handleDrop(node.path, targetFolderPath)
@@ -457,6 +469,11 @@ export function FileTreeView({
           onCancelRename={() => setRenamingPath(null)}
           activeInternalDropTargetPath={activeInternalDropTarget}
           onInternalDropTargetChange={setActiveInternalDropTarget}
+          activeExternalDropTargetPath={activeExternalDropTarget}
+          onExternalDropTargetChange={(targetPath) => {
+            setExternalRootDragOver(false);
+            setActiveExternalDropTarget(targetPath);
+          }}
         />
         {node.type === "folder" &&
           node.children &&
@@ -465,8 +482,14 @@ export function FileTreeView({
               folderPath={node.path}
               depth={depth + 1}
               onDrop={handleDrop}
+              onFilesUpload={onFilesUpload ? handleFilesUpload : undefined}
               activeInternalDropTargetPath={activeInternalDropTarget}
               onInternalDropTargetChange={setActiveInternalDropTarget}
+              activeExternalDropTargetPath={activeExternalDropTarget}
+              onExternalDropTargetChange={(targetPath) => {
+                setExternalRootDragOver(false);
+                setActiveExternalDropTarget(targetPath);
+              }}
             >
               {renderTree(node.children, depth + 1)}
             </FolderDropZone>
@@ -505,23 +528,49 @@ function FolderDropZone({
   folderPath,
   depth,
   onDrop,
+  onFilesUpload,
   children,
   activeInternalDropTargetPath,
   onInternalDropTargetChange,
+  activeExternalDropTargetPath,
+  onExternalDropTargetChange,
 }: {
   folderPath: string;
   depth: number;
   onDrop: (draggedPath: string, targetPath: string) => void;
+  onFilesUpload?: (files: FileList, targetPath: string) => Promise<void>;
   children: React.ReactNode;
   activeInternalDropTargetPath: string | "" | null;
   onInternalDropTargetChange: (targetPath: string | "" | null) => void;
+  activeExternalDropTargetPath: string | null;
+  onExternalDropTargetChange: (targetPath: string | null) => void;
 }) {
-  const isDragOver = activeInternalDropTargetPath === folderPath;
+  const dropKind =
+    activeInternalDropTargetPath === folderPath
+      ? "internal"
+      : activeExternalDropTargetPath === folderPath
+        ? "external"
+        : null;
+  const isDragOver = dropKind !== null;
 
   const handleDragOver = (e: React.DragEvent) => {
+    const hasFiles = e.dataTransfer.types.includes("Files");
     const hasInternalPath = e.dataTransfer.types.includes(
       "application/x-file-path",
     );
+    if (hasFiles && !hasInternalPath) {
+      e.preventDefault();
+      e.stopPropagation();
+      onInternalDropTargetChange(null);
+      onExternalDropTargetChange(
+        shouldIgnoreFileTreeMoveTarget(folderPath) ? null : folderPath,
+      );
+      e.dataTransfer.dropEffect = shouldIgnoreFileTreeMoveTarget(folderPath)
+        ? "none"
+        : "copy";
+      return;
+    }
+
     if (!hasInternalPath) {
       return;
     }
@@ -536,6 +585,7 @@ function FolderDropZone({
 
     e.preventDefault();
     e.stopPropagation();
+    onExternalDropTargetChange(null);
     onInternalDropTargetChange(folderPath);
     e.dataTransfer.dropEffect = "move";
   };
@@ -545,27 +595,54 @@ function FolderDropZone({
       if (activeInternalDropTargetPath === folderPath) {
         onInternalDropTargetChange(null);
       }
+      if (activeExternalDropTargetPath === folderPath) {
+        onExternalDropTargetChange(null);
+      }
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     const draggedPath = e.dataTransfer.getData("application/x-file-path");
-    if (!draggedPath) {
+    if (draggedPath) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (activeInternalDropTargetPath === folderPath) {
+        onInternalDropTargetChange(null);
+      }
+      if (activeExternalDropTargetPath === folderPath) {
+        onExternalDropTargetChange(null);
+      }
+
+      // Don't drop into itself or its children
+      if (
+        draggedPath === folderPath ||
+        folderPath.startsWith(`${draggedPath}/`)
+      ) {
+        return;
+      }
+
+      onDrop(draggedPath, folderPath);
       return;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-    if (activeInternalDropTargetPath === folderPath) {
-      onInternalDropTargetChange(null);
+    if (
+      e.dataTransfer.files &&
+      e.dataTransfer.files.length > 0 &&
+      onFilesUpload
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (activeInternalDropTargetPath === folderPath) {
+        onInternalDropTargetChange(null);
+      }
+      if (activeExternalDropTargetPath === folderPath) {
+        onExternalDropTargetChange(null);
+      }
+      if (shouldIgnoreFileTreeMoveTarget(folderPath)) {
+        return;
+      }
+      void onFilesUpload(e.dataTransfer.files, folderPath);
     }
-
-    // Don't drop into itself or its children
-    if (draggedPath === folderPath || folderPath.startsWith(`${draggedPath}/`)) {
-      return;
-    }
-
-    onDrop(draggedPath, folderPath);
   };
 
   return (
@@ -583,7 +660,9 @@ function FolderDropZone({
           className="pointer-events-none text-xs text-muted-foreground border border-dashed border-primary rounded bg-primary/10 mx-1 my-0.5 py-0.5 px-2"
           style={{ marginLeft: `${getFileTreeIndentPx(depth)}px` }}
         >
-          {`Drop into ${folderPath.split("/").pop()}`}
+          {dropKind === "external"
+            ? `Upload to ${folderPath.split("/").pop()}`
+            : `Drop into ${folderPath.split("/").pop()}`}
         </div>
       )}
     </div>

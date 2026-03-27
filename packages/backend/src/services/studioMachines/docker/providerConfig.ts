@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { instanceNetworkSettingsService } from "../../system/InstanceNetworkSettingsService";
 import {
   parseBooleanEnv,
@@ -132,7 +133,7 @@ export class DockerProviderConfig {
   }
 
   get network(): string {
-    return process.env.DOCKER_STUDIO_NETWORK?.trim() || "vivd-network";
+    return process.env.DOCKER_STUDIO_NETWORK?.trim() || soloSelfHostDefaults.dockerStudioNetwork;
   }
 
   get publicBaseUrl(): string {
@@ -158,7 +159,7 @@ export class DockerProviderConfig {
   get internalProxyBaseUrl(): string {
     const explicit = process.env.DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL?.trim();
     if (explicit) return normalizeOrigin(explicit);
-    return "http://caddy";
+    return soloSelfHostDefaults.dockerStudioInternalProxyBaseUrl;
   }
 
   get internalMainBackendUrl(): string {
@@ -168,7 +169,10 @@ export class DockerProviderConfig {
   }
 
   get routePrefix(): string {
-    return normalizePathPrefix(process.env.DOCKER_STUDIO_ROUTE_PREFIX, "/_studio");
+    return normalizePathPrefix(
+      process.env.DOCKER_STUDIO_ROUTE_PREFIX,
+      soloSelfHostDefaults.dockerStudioRoutePrefix,
+    );
   }
 
   routePathFor(routeId: string): string {
@@ -186,7 +190,7 @@ export class DockerProviderConfig {
   }
 
   get runtimeRoutesDir(): string {
-    return process.env.CADDY_RUNTIME_ROUTES_DIR || "/etc/caddy/runtime.d";
+    return process.env.CADDY_RUNTIME_ROUTES_DIR || soloSelfHostDefaults.caddyRuntimeRoutesDir;
   }
 
   get startTimeoutMs(): number {

@@ -36,6 +36,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Current paths:
   - `vendor/opencode`: upstream OpenCode reference checkout (`https://github.com/anomalyco/opencode`).
   - `vendor/dokploy`: upstream Dokploy reference checkout (`https://github.com/Dokploy/dokploy`) for self-hosting/hosting patterns Vivd may reuse while still running directly on its own server/runtime.
+  - `vendor/dyad`: upstream Dyad reference checkout (`https://github.com/dyad-sh/dyad`) for local-first AI app-builder product, packaging, and paid/open-source boundary comparisons.
 - If an upstream reference checkout is added, moved, or replaced, update this file and `docs/PROJECT_STATE.md` in the same change so the agent can rely on stable paths.
 
 ## OpenCode Studio Tools

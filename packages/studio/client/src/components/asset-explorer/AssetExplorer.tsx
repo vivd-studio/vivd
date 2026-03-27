@@ -302,6 +302,13 @@ export function AssetExplorer({
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    const isExternalFileDrag =
+      e.dataTransfer.types.includes("Files") &&
+      !e.dataTransfer.types.includes("application/x-file-path");
+    if (!isExternalFileDrag) {
+      return;
+    }
+
     e.preventDefault();
     setIsDragging(true);
   };
@@ -312,10 +319,17 @@ export function AssetExplorer({
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    const isExternalFileDrop =
+      e.dataTransfer.types.includes("Files") &&
+      !e.dataTransfer.types.includes("application/x-file-path");
+    if (!isExternalFileDrop) {
+      return;
+    }
+
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files) {
-      handleUpload(e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUpload(e.dataTransfer.files, currentPath ?? STUDIO_UPLOADS_PATH);
     }
   };
 

@@ -1,0 +1,151 @@
+# Minimal solo self-host stack.
+# Put this next to the published Caddyfile asset and a matching .env file.
+# Fixed internal wiring stays in the compose file; the .env only covers values most installs change.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      VIVD_CADDY_PRIMARY_HOST: ${VIVD_CADDY_PRIMARY_HOST}
+      VIVD_CADDY_ACME_EMAIL: ${VIVD_CADDY_ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_sites:/etc/caddy/sites.d
+      - caddy_runtime_routes:/etc/caddy/runtime.d:ro
+      - published_sites:/srv/published:ro
+    depends_on:
+      - backend
+      - minio
+    networks:
+      - vivd-network
+
+  backend:
+    image: ghcr.io/vivd-studio/vivd-server:${VIVD_SELFHOST_IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/vivd
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENCODE_MODEL_STANDARD: openrouter/google/gemini-3-flash-preview
+      OPENCODE_MODEL_ADVANCED: openrouter/google/gemini-3.1-pro-preview
+      DOMAIN: ${DOMAIN}
+      VIVD_CADDY_TLS_MODE: ${VIVD_CADDY_TLS_MODE:-managed}
+      STUDIO_MACHINE_PROVIDER: docker
+      VIVD_BUCKET_MODE: local
+      SCRAPER_API_KEY: ${SCRAPER_API_KEY}
+      VIVD_LOCAL_S3_ACCESS_KEY: ${VIVD_LOCAL_S3_ACCESS_KEY}
+      VIVD_LOCAL_S3_SECRET_KEY: ${VIVD_LOCAL_S3_SECRET_KEY}
+      DOCKER_STUDIO_IMAGE: ghcr.io/vivd-studio/vivd-studio:${VIVD_SELFHOST_IMAGE_TAG:-latest}
+    volumes:
+      - backend_data:/app/projects
+      - opencode_data:/root/.local/share/opencode/storage
+      - published_sites:/srv/published
+      - caddy_sites:/etc/caddy/sites.d
+      - caddy_runtime_routes:/etc/caddy/runtime.d
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scraper:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - vivd-network
+
+  frontend:
+    image: ghcr.io/vivd-studio/vivd-ui:${VIVD_SELFHOST_IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - vivd-network
+
+  scraper:
+    image: ghcr.io/vivd-studio/vivd-scraper:${VIVD_SELFHOST_IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      SCRAPER_API_KEY: ${SCRAPER_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - vivd-network
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: vivd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vivd"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - vivd-network
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${VIVD_LOCAL_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${VIVD_LOCAL_S3_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    networks:
+      - vivd-network
+
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    profiles:
+      - setup
+    depends_on:
+      - minio
+    environment:
+      VIVD_LOCAL_S3_ACCESS_KEY: ${VIVD_LOCAL_S3_ACCESS_KEY}
+      VIVD_LOCAL_S3_SECRET_KEY: ${VIVD_LOCAL_S3_SECRET_KEY}
+    entrypoint: >
+      /bin/sh -c '
+      until mc alias set vivd http://minio:9000 "$$VIVD_LOCAL_S3_ACCESS_KEY" "$$VIVD_LOCAL_S3_SECRET_KEY" >/dev/null 2>&1; do
+        sleep 1
+      done &&
+      mc mb --ignore-existing "vivd/vivd"
+      '
+    networks:
+      - vivd-network
+
+volumes:
+  backend_data:
+  opencode_data:
+  published_sites:
+  caddy_data:
+  caddy_config:
+  caddy_sites:
+  caddy_runtime_routes:
+  postgres_data:
+  minio_data:
+
+networks:
+  vivd-network:
+    driver: bridge

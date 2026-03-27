@@ -1,6 +1,7 @@
 import * as fs from "fs";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 
-const CADDY_ADMIN_URL = process.env.CADDY_ADMIN_URL || "http://caddy:2019";
+const CADDY_ADMIN_URL = process.env.CADDY_ADMIN_URL || soloSelfHostDefaults.caddyAdminUrl;
 const CADDY_ADMIN_ORIGIN = (() => {
   try {
     return new URL(CADDY_ADMIN_URL).origin;

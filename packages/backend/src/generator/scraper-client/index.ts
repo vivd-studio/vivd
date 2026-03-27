@@ -1,3 +1,4 @@
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import * as fs from "fs";
 import * as path from "path";
 import { log } from "../logger";
@@ -6,7 +7,8 @@ import {
   getVivdInternalFilesPath,
 } from "../vivdPaths";
 
-const SCRAPER_URL = process.env.SCRAPER_URL || "http://scraper:3001";
+const SCRAPER_URL =
+  process.env.SCRAPER_URL || `http://scraper:${soloSelfHostDefaults.scraperPort}`;
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
 
 /**

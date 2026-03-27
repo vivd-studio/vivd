@@ -6,10 +6,32 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./client/src"),
-      "@studio/shared": path.resolve(__dirname, "./shared"),
-    },
+    alias: [
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./client/src"),
+      },
+      {
+        find: "@studio/shared",
+        replacement: path.resolve(__dirname, "./shared"),
+      },
+      {
+        find: /^@vivd\/shared\/studio$/,
+        replacement: path.resolve(__dirname, "../shared/src/studio/index.ts"),
+      },
+      {
+        find: /^@vivd\/shared\/types$/,
+        replacement: path.resolve(__dirname, "../shared/src/types/index.ts"),
+      },
+      {
+        find: /^@vivd\/shared\/config$/,
+        replacement: path.resolve(__dirname, "../shared/src/config/index.ts"),
+      },
+      {
+        find: /^@vivd\/shared$/,
+        replacement: path.resolve(__dirname, "../shared/src/index.ts"),
+      },
+    ],
   },
   test: {
     projects: [

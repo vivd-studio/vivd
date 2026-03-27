@@ -30,6 +30,11 @@ export type DerivedSessionError = {
   error: SanitizedSessionError;
 } | null;
 
+export type StaleRunningToolState = {
+  messageId: string;
+  reason: "completed_message" | "superseded_message";
+};
+
 export function isActiveSessionStatus(
   status: OpenCodeSessionStatus | null | undefined,
 ): boolean {
@@ -64,6 +69,59 @@ export function hasPendingAssistantMessage(
       typeof message.info?.time?.completed !== "number"
     );
   });
+}
+
+function isRunningToolPart(part: unknown): boolean {
+  if (!part || typeof part !== "object") {
+    return false;
+  }
+
+  const record = part as {
+    type?: unknown;
+    status?: unknown;
+    state?: { status?: unknown };
+  };
+  const status = record.status ?? record.state?.status;
+  return record.type === "tool" && status === "running";
+}
+
+export function findStaleRunningToolState(
+  messages: OpenCodeSessionMessageRecord[],
+): StaleRunningToolState | null {
+  let latestAssistantIndex = -1;
+  for (let index = 0; index < messages.length; index += 1) {
+    if (messages[index]?.info?.role === "assistant") {
+      latestAssistantIndex = index;
+    }
+  }
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message?.info?.role !== "assistant") {
+      continue;
+    }
+
+    const hasRunningTool = (message.parts ?? []).some(isRunningToolPart);
+    if (!hasRunningTool || !message.info?.id) {
+      continue;
+    }
+
+    if (typeof message.info.time?.completed === "number") {
+      return {
+        messageId: message.info.id,
+        reason: "completed_message",
+      };
+    }
+
+    if (index < latestAssistantIndex) {
+      return {
+        messageId: message.info.id,
+        reason: "superseded_message",
+      };
+    }
+  }
+
+  return null;
 }
 
 export function deriveChatActivityState({

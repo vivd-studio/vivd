@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { z } from "zod";
 import { inferSchemeForHost } from "../../lib/publicOrigin";
 import {
@@ -6,6 +7,7 @@ import {
   setSystemSettingJsonValue,
   SYSTEM_SETTING_KEYS,
 } from "./SystemSettingsService";
+import { installProfileService } from "./InstallProfileService";
 
 export const instanceTlsModeSchema = z.enum(["managed", "external", "off"]);
 export type InstanceTlsMode = z.infer<typeof instanceTlsModeSchema>;
@@ -65,6 +67,14 @@ function normalizeTlsMode(
 function normalizeAcmeEmail(value: string | null | undefined): string | null {
   const trimmed = value?.trim() || "";
   return trimmed || null;
+}
+
+function parseBooleanEnv(value: string | null | undefined): boolean | null {
+  const normalized = (value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return null;
 }
 
 function isLocalLikeHost(host: string): boolean {
@@ -144,11 +154,11 @@ function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): stri
   globalOptions.push(
     "",
     "    admin 0.0.0.0:2019 {",
-    "        origins http://caddy:2019 http://backend:3000 http://localhost:2019 http://127.0.0.1:2019",
+    `        origins ${soloSelfHostDefaults.caddyAdminUrl} http://backend:3000 http://localhost:2019 http://127.0.0.1:2019`,
     "    }",
     "}",
     "",
-    "import /etc/caddy/sites.d/*.caddy",
+    `import ${soloSelfHostDefaults.caddySitesDir}/*.caddy`,
     "",
   );
 
@@ -157,7 +167,7 @@ function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): stri
     settings.tlsMode === "managed" && !isLocalLikeHost(host) ? host : `http://${host}`;
 
   return `${globalOptions.join("\n")}${address} {
-    handle_path /_vivd_s3/* {
+    handle_path ${soloSelfHostDefaults.localS3DownloadPath}/* {
         reverse_proxy minio:9000
     }
 
@@ -177,16 +187,16 @@ function buildSelfHostCaddyfile(settings: ResolvedInstanceNetworkSettings): stri
         reverse_proxy frontend:80
     }
 
-    import /etc/caddy/runtime.d/*.caddy
+    import ${soloSelfHostDefaults.caddyRuntimeRoutesDir}/*.caddy
 
     handle /health {
         respond "OK" 200
     }
 
-    import /etc/caddy/sites.d/_primary/*.caddy
+    import ${soloSelfHostDefaults.caddySitesDir}/_primary/*.caddy
 
     handle {
-        root * /srv/published
+        root * ${soloSelfHostDefaults.publishedDir}
         try_files {path} {path}/index.html =404
         file_server
     }
@@ -280,7 +290,10 @@ class InstanceNetworkSettingsService {
   }
 
   async syncSelfHostedCaddyConfig(): Promise<boolean> {
-    if ((process.env.VIVD_SELFHOST_CADDY_UI_MANAGED || "").trim() !== "true") {
+    const envOverride = parseBooleanEnv(process.env.VIVD_SELFHOST_CADDY_UI_MANAGED);
+    const enabled =
+      envOverride ?? ((await installProfileService.getInstallProfile()) === "solo");
+    if (!enabled) {
       return false;
     }
 

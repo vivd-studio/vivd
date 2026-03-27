@@ -18,7 +18,8 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.983.0"
+    "@aws-sdk/client-s3": "^3.983.0",
+    "@vivd/shared": "1.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",

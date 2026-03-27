@@ -1,0 +1,36 @@
+export const soloSelfHostDefaults = {
+  backendPort: 3000,
+  scraperPort: 3001,
+  postgresUser: "postgres",
+  postgresDb: "vivd",
+  studioMachineProvider: "docker",
+  bucketMode: "local",
+  localS3Bucket: "vivd",
+  localS3EndpointUrl: "http://minio:9000",
+  localS3Region: "us-east-1",
+  localS3DownloadPath: "/_vivd_s3",
+  publicDocsBaseUrl: "https://docs.vivd.studio",
+  publishedDir: "/srv/published",
+  caddySitesDir: "/etc/caddy/sites.d",
+  caddyRuntimeRoutesDir: "/etc/caddy/runtime.d",
+  caddyAdminUrl: "http://caddy:2019",
+  dockerStudioSocketPath: "/var/run/docker.sock",
+  dockerStudioNetwork: "vivd-network",
+  dockerStudioRoutePrefix: "/_studio",
+  dockerStudioInternalProxyBaseUrl: "http://caddy",
+  serverImageRepository: "ghcr.io/vivd-studio/vivd-server",
+  frontendImageRepository: "ghcr.io/vivd-studio/vivd-ui",
+  scraperImageRepository: "ghcr.io/vivd-studio/vivd-scraper",
+  dockerStudioImageRepository: "ghcr.io/vivd-studio/vivd-studio",
+  caddyImage: "caddy:2-alpine",
+  postgresImage: "postgres:17",
+  minioImage: "minio/minio:latest",
+  minioMcImage: "minio/mc:latest",
+  openCodeModelStandard: "openrouter/google/gemini-3-flash-preview",
+  openCodeModelAdvanced: "openrouter/google/gemini-3.1-pro-preview",
+  scratchCreationMode: "legacy_html",
+} as const;
+
+export function getSoloSelfHostLocalS3DownloadEndpoint(publicOrigin: string): string {
+  return `${publicOrigin.trim().replace(/\/+$/, "")}${soloSelfHostDefaults.localS3DownloadPath}`;
+}

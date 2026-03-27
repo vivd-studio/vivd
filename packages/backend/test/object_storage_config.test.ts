@@ -1,12 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { getObjectStorageConfigFromEnv } from "../src/services/storage/ObjectStorageService";
+import {
+  getObjectDownloadUrl,
+  getObjectStorageConfigFromEnv,
+} from "../src/services/storage/ObjectStorageService";
 
 describe("getObjectStorageConfigFromEnv", () => {
   it("resolves the local S3-compatible envs when bucket mode is local", () => {
     const config = getObjectStorageConfigFromEnv({
       VIVD_BUCKET_MODE: "local",
-      VIVD_LOCAL_S3_BUCKET: "vivd",
-      VIVD_LOCAL_S3_ENDPOINT_URL: "http://minio:9000",
+      VIVD_LOCAL_S3_ACCESS_KEY: "local-access",
+      VIVD_LOCAL_S3_SECRET_KEY: "local-secret",
+    });
+
+    expect(config).toEqual({
+      bucket: "vivd",
+      endpointUrl: "http://minio:9000",
+      region: "us-east-1",
+      accessKeyId: "local-access",
+      secretAccessKey: "local-secret",
+      sessionToken: undefined,
+    });
+  });
+
+  it("also infers bundled local bucket defaults when only local credentials are set", () => {
+    const config = getObjectStorageConfigFromEnv({
       VIVD_LOCAL_S3_ACCESS_KEY: "local-access",
       VIVD_LOCAL_S3_SECRET_KEY: "local-secret",
     });
@@ -45,14 +62,17 @@ describe("getObjectStorageConfigFromEnv", () => {
     });
   });
 
-  it("returns a local-specific validation error when local mode is missing its endpoint", () => {
-    expect(() =>
-      getObjectStorageConfigFromEnv({
+  it("derives the bundled local download endpoint from the public origin", async () => {
+    const url = await getObjectDownloadUrl({
+      key: "assets/logo.png",
+      env: {
         VIVD_BUCKET_MODE: "local",
-        VIVD_LOCAL_S3_BUCKET: "vivd",
         VIVD_LOCAL_S3_ACCESS_KEY: "local-access",
         VIVD_LOCAL_S3_SECRET_KEY: "local-secret",
-      }),
-    ).toThrow("Missing local bucket endpoint");
+        DOMAIN: "https://example.com",
+      },
+    });
+
+    expect(url).toContain("https://example.com/_vivd_s3/vivd/assets/logo.png");
   });
 });

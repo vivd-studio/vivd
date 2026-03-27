@@ -136,9 +136,9 @@ function isCompactionMarkerMessage(message: RenderableChatMessage | undefined): 
 
 function finalizeInterruptedToolParts(
   parts: RenderableChatPart[],
-  shouldFinalize: boolean,
+  mode: "completed" | "interrupted" | null,
 ): RenderableChatPart[] {
-  if (!shouldFinalize) {
+  if (!mode) {
     return parts;
   }
 
@@ -155,7 +155,7 @@ function finalizeInterruptedToolParts(
     }
 
     changed = true;
-    if (hasRenderableText) {
+    if (mode === "completed" || hasRenderableText) {
       return { ...part, status: "completed", error: undefined };
     }
 
@@ -177,6 +177,16 @@ function normalizeRecordToRenderableMessage(
   },
 ): RenderableChatMessage {
   const role = record.info?.role === "assistant" ? "agent" : "user";
+  const createdAt = normalizeOpenCodeTimestamp(record.info?.time?.created);
+  const completedAt = normalizeOpenCodeTimestamp(record.info?.time?.completed);
+  const toolFinalizationMode =
+    role === "agent"
+      ? completedAt != null
+        ? "completed"
+        : options?.finalizeInterruptedTools
+          ? "interrupted"
+          : null
+      : null;
   const renderableParts = extractRenderableParts(
     (record.parts ?? []).map(normalizeMessagePart).filter(Boolean),
   );
@@ -184,7 +194,7 @@ function normalizeRecordToRenderableMessage(
     role === "agent"
       ? finalizeInterruptedToolParts(
           renderableParts,
-          Boolean(options?.finalizeInterruptedTools),
+          toolFinalizationMode,
         )
       : renderableParts;
   const content = normalizedParts
@@ -215,9 +225,6 @@ function normalizeRecordToRenderableMessage(
       };
     })
     .filter((diff): diff is RenderableFileDiffSummary => Boolean(diff));
-  const createdAt = normalizeOpenCodeTimestamp(record.info?.time?.created);
-  const completedAt = normalizeOpenCodeTimestamp(record.info?.time?.completed);
-
   return {
     id: record.info?.id,
     parentId: record.info?.parentID ?? null,

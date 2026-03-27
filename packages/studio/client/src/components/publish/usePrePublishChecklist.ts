@@ -16,20 +16,25 @@ export function usePrePublishChecklist({
   version,
 }: UsePrePublishChecklistArgs) {
   const [isLiveChecklistRun, setIsLiveChecklistRun] = useState(false);
+  const [liveChecklistRunBaselineRunAt, setLiveChecklistRunBaselineRunAt] =
+    useState<string | null>(null);
 
-  const { mutate: runChecklist } = trpc.agent.runPrePublishChecklist.useMutation({
-      onSuccess: (data) => {
-        setIsLiveChecklistRun(false);
-        toast.success(
-          `Checklist complete: ${data.checklist.summary.passed}/${data.checklist.items.length} passed`
-        );
-        void refetchChecklist();
-      },
-      onError: (error) => {
-        setIsLiveChecklistRun(false);
-        toast.error(`Failed to run checklist: ${error.message}`);
-      },
-    });
+  const runChecklistMutation = trpc.agent.runPrePublishChecklist.useMutation({
+    onSuccess: (data) => {
+      setIsLiveChecklistRun(false);
+      setLiveChecklistRunBaselineRunAt(null);
+      toast.success(
+        `Checklist complete: ${data.checklist.summary.passed}/${data.checklist.items.length} passed`
+      );
+      void refetchChecklist();
+    },
+    onError: (error) => {
+      setIsLiveChecklistRun(false);
+      setLiveChecklistRunBaselineRunAt(null);
+      toast.error(`Failed to run checklist: ${error.message}`);
+    },
+  });
+  const { mutate: runChecklist } = runChecklistMutation;
 
   const {
     data: checklistData,
@@ -39,7 +44,8 @@ export function usePrePublishChecklist({
     { projectSlug, version },
     {
       enabled: dialogOpen && !!projectSlug,
-      refetchInterval: isLiveChecklistRun ? 1000 : false,
+      refetchInterval:
+        isLiveChecklistRun || runChecklistMutation.isPending ? 1000 : false,
       refetchIntervalInBackground: true,
     }
   );
@@ -58,19 +64,32 @@ export function usePrePublishChecklist({
     if (!dialogOpen) {
       setFixingItemId(null);
       setIsLiveChecklistRun(false);
+      setLiveChecklistRunBaselineRunAt(null);
     }
   }, [dialogOpen]);
 
   useEffect(() => {
-    if (isLiveChecklistRun && checklist && !hasPendingChecklistItems) {
-      setIsLiveChecklistRun(false);
+    if (!isLiveChecklistRun || !checklist || hasPendingChecklistItems) return;
+    if (
+      liveChecklistRunBaselineRunAt &&
+      checklist.runAt === liveChecklistRunBaselineRunAt
+    ) {
+      return;
     }
-  }, [checklist, hasPendingChecklistItems, isLiveChecklistRun]);
+    setIsLiveChecklistRun(false);
+    setLiveChecklistRunBaselineRunAt(null);
+  }, [
+    checklist,
+    hasPendingChecklistItems,
+    isLiveChecklistRun,
+    liveChecklistRunBaselineRunAt,
+  ]);
 
   useEffect(() => {
     if (!isLiveChecklistRun) return;
     const timeout = window.setTimeout(() => {
       setIsLiveChecklistRun(false);
+      setLiveChecklistRunBaselineRunAt(null);
     }, 180_000);
     return () => window.clearTimeout(timeout);
   }, [isLiveChecklistRun]);
@@ -90,10 +109,11 @@ export function usePrePublishChecklist({
 
   const handleRunChecklist = useCallback(() => {
     if (!projectSlug) return;
+    setLiveChecklistRunBaselineRunAt(checklist?.runAt ?? null);
     setIsLiveChecklistRun(true);
     void refetchChecklist();
     runChecklist({ projectSlug, version });
-  }, [projectSlug, refetchChecklist, runChecklist, version]);
+  }, [checklist?.runAt, projectSlug, refetchChecklist, runChecklist, version]);
 
   const handleFixItem = useCallback(
     (item: ChecklistItem) => {
@@ -116,7 +136,7 @@ export function usePrePublishChecklist({
     hasChangesSinceCheck,
     isLoadingChecklist,
     runChecklist: handleRunChecklist,
-    isRunningChecklist: isLiveChecklistRun,
+    isRunningChecklist: isLiveChecklistRun || runChecklistMutation.isPending,
     fixChecklistItem: handleFixItem,
     fixingItemId,
   };

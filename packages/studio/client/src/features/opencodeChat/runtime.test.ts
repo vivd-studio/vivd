@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDerivedSessionError,
   deriveChatActivityState,
+  findStaleRunningToolState,
   selectSessionActivitySummary,
   selectMostRecentActiveSessionId,
   selectMostRecentAttentionSessionId,
@@ -12,6 +13,7 @@ function createMessage(
   input: Partial<OpenCodeSessionMessageRecord["info"]> & {
     id: string;
     role: string;
+    parts?: any[];
   },
 ): OpenCodeSessionMessageRecord {
   return {
@@ -21,7 +23,7 @@ function createMessage(
       role: input.role,
       time: input.time,
     },
-    parts: [],
+    parts: input.parts ?? [],
   };
 }
 
@@ -166,5 +168,59 @@ describe("opencodeChat runtime", () => {
     });
 
     expect(selected).toBe("sess-2");
+  });
+
+  it("detects a running tool on a completed assistant message as stale", () => {
+    const stale = findStaleRunningToolState([
+      createMessage({ id: "u1", role: "user" }),
+      createMessage({
+        id: "a1",
+        role: "assistant",
+        time: { created: 1, completed: 2 },
+        parts: [{ id: "tool-1", type: "tool", status: "running" }],
+      }),
+    ]);
+
+    expect(stale).toEqual({
+      messageId: "a1",
+      reason: "completed_message",
+    });
+  });
+
+  it("detects a running tool on an older assistant message as stale once newer assistant activity exists", () => {
+    const stale = findStaleRunningToolState([
+      createMessage({ id: "u1", role: "user" }),
+      createMessage({
+        id: "a1",
+        role: "assistant",
+        time: { created: 1 },
+        parts: [{ id: "tool-1", type: "tool", status: "running" }],
+      }),
+      createMessage({
+        id: "a2",
+        role: "assistant",
+        time: { created: 2, completed: 3 },
+        parts: [{ id: "text-1", type: "text", text: "Build finished." }],
+      }),
+    ]);
+
+    expect(stale).toEqual({
+      messageId: "a1",
+      reason: "superseded_message",
+    });
+  });
+
+  it("does not flag the latest active running tool as stale", () => {
+    const stale = findStaleRunningToolState([
+      createMessage({ id: "u1", role: "user" }),
+      createMessage({
+        id: "a1",
+        role: "assistant",
+        time: { created: 1 },
+        parts: [{ id: "tool-1", type: "tool", status: "running" }],
+      }),
+    ]);
+
+    expect(stale).toBeNull();
   });
 });

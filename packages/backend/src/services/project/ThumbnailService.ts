@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { isIP } from "node:net";
 import { scraperClient } from "../../generator/scraper-client";
 import {
@@ -91,7 +92,9 @@ export function resolveThumbnailPreviewBaseUrl(): string {
   const explicit = normalizeOrigin(process.env.VIVD_THUMBNAIL_PREVIEW_BASE_URL);
   if (explicit) return explicit;
 
-  const scraperHost = parseHostLike(process.env.SCRAPER_URL || "http://scraper:3001");
+  const scraperHost = parseHostLike(
+    process.env.SCRAPER_URL || `http://scraper:${soloSelfHostDefaults.scraperPort}`,
+  );
   if (isLocalScraperHost(scraperHost)) {
     return resolveLocalPreviewBaseUrl();
   }

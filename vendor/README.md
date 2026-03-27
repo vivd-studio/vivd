@@ -4,6 +4,7 @@ This directory is reserved for local upstream/reference checkouts that Vivd cont
 
 - `opencode`: upstream OpenCode reference checkout.
 - `dokploy`: upstream Dokploy reference checkout for deployment/hosting ideas Vivd may selectively borrow.
+- `dyad`: upstream Dyad reference checkout for local-first AI app-builder, packaging, and monetization comparisons.
 
 Rules:
 

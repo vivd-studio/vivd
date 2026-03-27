@@ -3,6 +3,10 @@ title: Self-Hosting
 description: Install the solo self-hosted Vivd stack with one public host and Docker-based Studio machines.
 ---
 
+import DocCodeEditor from "../../components/DocCodeEditor.astro";
+import minimalSoloCompose from "../../snippets/self-hosting/docker-compose.minimal.yml?raw";
+import minimalSoloEnv from "../../snippets/self-hosting/solo-minimal.env?raw";
+
 Vivd ships a **solo** self-host install path for one primary host:
 
 - Public site on `/`
@@ -92,30 +96,41 @@ For an upstream TLS terminator such as Dockploy or Traefik, use the plain HTTP C
 curl -fsSLo Caddyfile https://docs.vivd.studio/install/Caddyfile.plain-http
 ```
 
-The published Compose file includes many optional passthrough envs for alternate storage,
-email, and routing setups. For a normal `solo` install, the important `.env` values are:
+If you want to see the whole self-host stack at a glance before downloading anything,
+start with this reduced solo Compose view. It keeps the same core services and defaults
+as the published bundle, but trims the optional passthrough env list down to the small
+surface most self-host installs actually edit. Fixed internal wiring stays inline in the
+Compose file instead of being shown as extra env knobs.
 
-```env
-DOMAIN=https://example.com
-OPENROUTER_API_KEY=sk-or-v1-...
-STUDIO_MACHINE_PROVIDER=docker
-VIVD_CADDY_TLS_MODE=managed
-OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
-OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
-```
+<DocCodeEditor
+  id="self-host-minimal-compose"
+  title="docker-compose.yml"
+  language="yaml"
+  description="Minimal solo stack"
+  actionHref="/install/docker-compose.yml"
+  actionLabel="Open full bundle"
+  code={minimalSoloCompose}
+/>
 
-If you are not using the installer, you also need to provide the secrets and internal
-credentials that the installer would normally generate for you:
+Save a matching `.env` next to that file. If you are not using `install.sh`, generate
+fresh random secrets for the `change-me` values yourself:
 
-```env
-BETTER_AUTH_SECRET=generate-a-long-random-secret
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=generate-a-long-random-password
-POSTGRES_DB=vivd
-SCRAPER_API_KEY=generate-a-long-random-secret
-VIVD_LOCAL_S3_ACCESS_KEY=generate-a-long-random-key
-VIVD_LOCAL_S3_SECRET_KEY=generate-a-long-random-secret
-```
+<DocCodeEditor
+  id="self-host-minimal-env"
+  title=".env"
+  language="env"
+  description="Small env surface most installs edit"
+  code={minimalSoloEnv}
+/>
+
+For `localhost`, a raw IP, or an upstream TLS terminator such as Dockploy or Traefik,
+switch to [Caddyfile.plain-http](/install/Caddyfile.plain-http) and set
+`VIVD_CADDY_TLS_MODE=off`. If TLS terminates upstream, keep `DOMAIN` on the public
+`https://...` origin even though Vivd's bundled Caddy stays on internal HTTP routing.
+
+This reduced view intentionally omits fixed solo defaults such as the publish/Caddy
+internal paths, the Docker socket path, the runtime route prefix, and the MinIO
+internal endpoint details that do not usually need operator edits.
 
 Then start the stack:
 
@@ -123,8 +138,9 @@ Then start the stack:
 docker compose up -d
 ```
 
-For the optional and advanced env groups behind that larger Compose file, use
-[Self-Host Config Reference](/self-host-config-reference/).
+If you want the exact published bundle instead of the reduced docs view, use
+[docker-compose.yml](/install/docker-compose.yml). For the optional and advanced env
+groups behind that larger file, use [Self-Host Config Reference](/self-host-config-reference/).
 
 ## What gets installed
 
@@ -220,7 +236,7 @@ Most self-host installs do not need much more env work. You usually only edit `.
 - transactional email identity/footer: optional fields in `Instance Settings -> Email`, or env bootstrap values like `VIVD_EMAIL_BRAND_DISPLAY_NAME`, `VIVD_EMAIL_BRAND_SUPPORT_EMAIL`, and the legal/footer URLs if you want more than the minimal default email footer
 - Turnstile: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`
 - GitHub backup/sync: `GITHUB_SYNC_ENABLED`, `GITHUB_ORG`, `GITHUB_TOKEN`
-- scraper residential proxying for harder-to-fetch sites: `PROXY_HOST`, optional `PROXY_PORT`, `PROXY_USERNAME`, `PROXY_PASSWORD`
+- scraper residential proxying when website import is blocked by datacenter-IP or anti-bot checks: `PROXY_HOST`, optional `PROXY_PORT`, `PROXY_USERNAME`, `PROXY_PASSWORD`
 - a remote S3-compatible object store instead of the bundled local bucket
 - an optional `OPENCODE_MODEL_PRO`
 

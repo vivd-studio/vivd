@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { isIP } from "node:net";
 import { db } from "../../db";
 import { publishedSite } from "../../db/schema";
@@ -20,9 +21,9 @@ import { instanceNetworkSettingsService } from "../system/InstanceNetworkSetting
 import { installProfileService } from "../system/InstallProfileService";
 
 // Directory where published site files are stored (Caddy reads from here)
-const PUBLISHED_DIR = process.env.PUBLISHED_DIR || "/srv/published";
+const PUBLISHED_DIR = process.env.PUBLISHED_DIR || soloSelfHostDefaults.publishedDir;
 // Directory where Caddy site configs are stored
-const CADDY_SITES_DIR = process.env.CADDY_SITES_DIR || "/etc/caddy/sites.d";
+const CADDY_SITES_DIR = process.env.CADDY_SITES_DIR || soloSelfHostDefaults.caddySitesDir;
 const PRIMARY_HOST_INLINE_SITE_DIR = path.join(CADDY_SITES_DIR, "_primary");
 const PRIMARY_HOST_INLINE_SITE_FILENAME = "published-site.caddy";
 const REDIRECTS_MANIFEST_FILENAME = "redirects.json";

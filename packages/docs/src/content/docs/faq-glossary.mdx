@@ -13,6 +13,18 @@ No. Studio is your draft and editing environment. Changes affect the live site o
 
 Use URL import when you already have a public site and want a faster first draft. Use scratch when the site should be built primarily from your brief and assets.
 
+### Why can't Vivd import some public websites?
+
+Some websites block automated browsers or traffic from datacenter IP ranges.
+Vivd's importer uses the scraper service to load the source site in a headless
+browser, so Cloudflare challenges, CAPTCHAs, `403` responses, or IP-based
+blocking can stop the import even when the site is public. Self-hosted installs
+can route the scraper through a residential proxy with `PROXY_HOST`,
+`PROXY_PORT`, `PROXY_USERNAME`, and `PROXY_PASSWORD`. Read
+[Import an Existing Website](/import-existing-website/) for the fuller
+explanation and [Self-Host Config Reference](/self-host-config-reference/) for
+the env setup.
+
 ### Do I have to configure plugins before every project?
 
 Only if the project needs those capabilities. Contact forms and analytics are project-level decisions, not mandatory for every site.

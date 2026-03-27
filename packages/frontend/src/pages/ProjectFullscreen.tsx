@@ -38,21 +38,21 @@ import {
 import { useTheme } from "@/components/theme";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import { ROUTES } from "@/app/router";
-import { CenteredLoading } from "@/components/common";
+import { CenteredLoading, VivdIcon } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import {
   FramedHostShell,
   HOST_VIEWPORT_INSET_CLASS,
   FramedViewport,
 } from "@/components/common/FramedHostShell";
-import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { authClient } from "@/lib/auth-client";
-import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
-import { useStudioIframeReadyRetry } from "@/hooks/useStudioIframeReadyRetry";
-import { useStudioIframeTimeoutRecovery } from "@/hooks/useStudioIframeTimeoutRecovery";
-import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
+import {
+  type StudioRuntimeSession,
+  useStudioHostRuntime,
+} from "@/hooks/useStudioHostRuntime";
+import { useStudioIframeLifecycle } from "@/hooks/useStudioIframeLifecycle";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
 import {
@@ -89,12 +89,6 @@ export default function ProjectFullscreen() {
   const [editRequested, setEditRequested] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
-  const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
-  const [studioBootstrapTokenOverride, setStudioBootstrapTokenOverride] = useState<string | null>(null);
-  const [studioReloadNonce, setStudioReloadNonce] = useState(0);
-  const [studioReady, setStudioReady] = useState(false);
-  const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
-  const [studioLoadErrored, setStudioLoadErrored] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const { data: projectsData, isLoading, error } = trpc.project.list.useQuery();
@@ -218,13 +212,84 @@ export default function ProjectFullscreen() {
   const canRenameProject = membership?.organizationRole !== "client_editor";
   const isRenamePending = renameSlugMutation.isPending;
 
+  const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
+    if (studioUrlQuery.data?.status !== "running") return null;
+    return {
+      url: studioUrlQuery.data.url,
+      bootstrapToken: studioUrlQuery.data.bootstrapToken,
+    };
+  }, [studioUrlQuery.data]);
+
+  const startedStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
+    if (!startStudio.data?.success) return null;
+    return {
+      url: startStudio.data.url,
+      bootstrapToken: startStudio.data.bootstrapToken,
+    };
+  }, [startStudio.data]);
+
+  const preferredStudioRuntime = useMemo(
+    () =>
+      editRequested
+        ? startedStudioRuntime ?? queryStudioRuntime
+        : queryStudioRuntime,
+    [editRequested, queryStudioRuntime, startedStudioRuntime],
+  );
+
+  const ensureStudioRunning = useCallback(async () => {
+    if (!projectSlug) {
+      return {
+        success: false as const,
+        error: "Missing project slug",
+      };
+    }
+    return startStudio.mutateAsync({ slug: projectSlug, version });
+  }, [projectSlug, startStudio, version]);
+
+  const refreshStudioRuntime = useCallback(async () => {
+    if (!projectSlug) return null;
+
+    const result = await studioUrlQuery.refetch();
+    if (result.data?.status !== "running") return null;
+
+    return {
+      url: result.data.url,
+      bootstrapToken: result.data.bootstrapToken,
+    };
+  }, [projectSlug, studioUrlQuery]);
+
+  const {
+    studioBaseUrl,
+    studioBootstrapToken,
+    studioBootstrapAction,
+    reloadNonce: studioReloadNonce,
+    isStudioRecovering,
+    replaceRuntime,
+    clearRuntimeOverride,
+    reloadStudioIframe,
+  } = useStudioHostRuntime({
+    resetKey: `${projectSlug || "project"}:v${version}`,
+    runtime: preferredStudioRuntime,
+    suspendRuntime: hardRestartStudio.isPending,
+    refreshRuntime: refreshStudioRuntime,
+    touchStudio: () => {
+      if (!projectSlug) return;
+      touchStudio.mutate({ slug: projectSlug, version });
+    },
+    ensureStudioRunning,
+    invalidateRuntime: () =>
+      projectSlug
+        ? utils.project.getStudioUrl.invalidate({ slug: projectSlug, version })
+        : undefined,
+    onRecoveryError: (message) => {
+      toast.error("Failed to wake studio", { description: message });
+    },
+  });
+
   useEffect(() => {
     setEditRequested(false);
     startStudio.reset();
     hardRestartStudio.reset();
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
-    setStudioReloadNonce(0);
   }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
 
   useEffect(() => {
@@ -254,8 +319,7 @@ export default function ProjectFullscreen() {
     if (!projectSlug || !project) return;
     if (isRenamePending) return;
     setEditRequested(true);
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
+    clearRuntimeOverride();
     startStudio.mutate({ slug: projectSlug, version });
   };
 
@@ -271,8 +335,7 @@ export default function ProjectFullscreen() {
         : version;
 
     setEditRequested(true);
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
+    clearRuntimeOverride();
 
     try {
       const result = await hardRestartStudio.mutateAsync({
@@ -286,9 +349,13 @@ export default function ProjectFullscreen() {
         return;
       }
 
-      setStudioUrlOverride(result.url);
-      setStudioBootstrapTokenOverride(result.bootstrapToken);
-      setStudioReloadNonce((n) => n + 1);
+      replaceRuntime(
+        {
+          url: result.url,
+          bootstrapToken: result.bootstrapToken,
+        },
+        { reload: true },
+      );
       toast.success("Studio restarted");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -296,176 +363,34 @@ export default function ProjectFullscreen() {
     }
   };
 
-  const studioBaseUrl = useMemo(() => {
-    if (hardRestartStudio.isPending) return null;
-    if (studioUrlOverride) return studioUrlOverride;
-    return editRequested
-      ? startStudio.data?.success
-        ? startStudio.data.url
-        : null
-      : studioUrlQuery.data?.status === "running"
-        ? studioUrlQuery.data.url
-        : null;
-  }, [
-    editRequested,
-    hardRestartStudio.isPending,
-    startStudio.data,
-    studioUrlOverride,
-    studioUrlQuery.data,
-  ]);
-
-  const studioBootstrapToken = useMemo(() => {
-    if (hardRestartStudio.isPending) return null;
-    if (studioBootstrapTokenOverride) return studioBootstrapTokenOverride;
-    return editRequested
-      ? startStudio.data?.success
-        ? startStudio.data.bootstrapToken
-        : null
-      : studioUrlQuery.data?.status === "running"
-        ? studioUrlQuery.data.bootstrapToken
-        : null;
-  }, [
-    editRequested,
-    hardRestartStudio.isPending,
-    startStudio.data,
-    studioBootstrapTokenOverride,
-    studioUrlQuery.data,
-  ]);
-
-  const ensureStudioRunning = useCallback(async () => {
-    if (!projectSlug) {
-      return {
-        success: false as const,
-        error: "Missing project slug",
-      };
-    }
-    return startStudio.mutateAsync({ slug: projectSlug, version });
-  }, [projectSlug, startStudio, version]);
-
-  const handleStudioRecovered = useCallback(
-    (next: { url: string; bootstrapToken: string | null }) => {
-      setStudioReady(false);
-      setStudioLoadTimedOut(false);
-      setStudioLoadErrored(false);
-      setStudioUrlOverride(next.url);
-      setStudioBootstrapTokenOverride(next.bootstrapToken);
-      setStudioReloadNonce((n) => n + 1);
-      if (!projectSlug) return;
-      void utils.project.getStudioUrl.invalidate({ slug: projectSlug, version });
-    },
-    [projectSlug, utils.project.getStudioUrl, version],
-  );
-
-  const reloadStudioIframe = useCallback(async () => {
-    if (projectSlug) {
-      try {
-        const result = await studioUrlQuery.refetch();
-        const next = result.data;
-        if (next?.status === "running") {
-          setStudioUrlOverride(next.url);
-          setStudioBootstrapTokenOverride(next.bootstrapToken);
-        }
-      } catch {
-        // Fall back to the current runtime info if we can't refresh the session.
-      }
-    }
-
-    setStudioReloadNonce((n) => n + 1);
-  }, [projectSlug, studioUrlQuery]);
-
-  const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
-    enabled: Boolean(projectSlug && studioBaseUrl && !hardRestartStudio.isPending),
+  const {
+    studioReady,
+    studioLoadTimedOut,
+    studioLoadErrored,
+    handleStudioIframeLoad,
+    handleStudioIframeError,
+  } = useStudioIframeLifecycle({
+    iframeRef: studioIframeRef,
     studioBaseUrl,
-    touchStudio: () => {
-      if (!projectSlug) return;
-      touchStudio.mutate({ slug: projectSlug, version });
+    reloadNonce: studioReloadNonce,
+    reloadStudioIframe,
+    theme,
+    colorTheme,
+    setTheme,
+    setColorTheme,
+    onClose: () => {
+      navigate(ROUTES.DASHBOARD);
     },
-    ensureStudioRunning,
-    onRecovered: handleStudioRecovered,
-    onRecoveryError: (message) => {
-      toast.error("Failed to wake studio", { description: message });
+    onFullscreen: () => {
+      navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${version}`);
+    },
+    onNavigate: (path) => {
+      navigate(path);
+    },
+    onHardRestart: (nextVersion) => {
+      void handleHardRestart(nextVersion);
     },
   });
-
-  const syncThemeToStudio = () => {
-    const targetWindow = studioIframeRef.current?.contentWindow;
-    if (!targetWindow) return;
-    targetWindow.postMessage(
-      { type: "vivd:host:theme", theme, colorTheme },
-      "*",
-    );
-  };
-
-  const markStudioReady = useCallback(() => {
-    setStudioReady(true);
-    setStudioLoadTimedOut(false);
-    setStudioLoadErrored(false);
-  }, []);
-
-  const tryMarkStudioReadyFromIframe = useCallback(() => {
-    if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
-      return false;
-    }
-
-    markStudioReady();
-    syncThemeToStudio();
-    return true;
-  }, [markStudioReady, syncThemeToStudio]);
-
-  const handleStudioIframeLoad = useCallback(() => {
-    syncThemeToStudio();
-    void tryMarkStudioReadyFromIframe();
-  }, [tryMarkStudioReadyFromIframe]);
-
-  useEffect(() => {
-    syncThemeToStudio();
-  }, [theme, colorTheme]);
-
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const studioWindow = studioIframeRef.current?.contentWindow;
-      if (!studioWindow || event.source !== studioWindow) return;
-      const type = event.data?.type;
-      if (type === "vivd:studio:ready") {
-        markStudioReady();
-        syncThemeToStudio();
-        return;
-      }
-      if (type === "vivd:studio:close") {
-        navigate(ROUTES.DASHBOARD);
-        return;
-      }
-      if (type === "vivd:studio:fullscreen") {
-        navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?version=${version}`);
-        return;
-      }
-      if (type === "vivd:studio:navigate") {
-        const path = event.data?.path;
-        if (typeof path === "string" && path.startsWith("/")) {
-          navigate(path);
-          return;
-        }
-      }
-      if (type === "vivd:studio:theme") {
-        markStudioReady();
-        const nextTheme = event.data?.theme;
-        const nextColorTheme = event.data?.colorTheme;
-        if (isTheme(nextTheme)) setTheme(nextTheme);
-        if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
-      }
-      if (type === "vivd:studio:hardRestart") {
-        const versionRaw = event.data?.version;
-        const versionFromMessage =
-          typeof versionRaw === "number" ? versionRaw : Number.NaN;
-        void handleHardRestart(
-          Number.isFinite(versionFromMessage) ? versionFromMessage : undefined,
-        );
-      }
-    };
-
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [markStudioReady, navigate, projectSlug, setColorTheme, setTheme, version]);
 
   const studioIframeSrc = useMemo(() => {
     if (!studioBaseUrl) return null;
@@ -481,53 +406,12 @@ export default function ProjectFullscreen() {
     return url.toString();
   }, [projectSlug, publicPreviewEnabled, studioBaseUrl, version]);
 
-  const studioBootstrapAction = useMemo(() => {
-    if (!studioBaseUrl) return null;
-    return resolveStudioRuntimeUrl(studioBaseUrl, "vivd-studio/api/bootstrap");
-  }, [studioBaseUrl]);
-
   const studioIframeTarget = useMemo(
     () => `vivd-studio-project-fullscreen-${projectSlug || "project"}-v${version}`,
     [projectSlug, version],
   );
 
   const studioIframeRequestKey = `${projectSlug}-${version}-${studioBaseUrl ?? ""}-${studioReloadNonce}`;
-
-  useStudioIframeReadyRetry({
-    enabled: Boolean(studioIframeSrc && !studioReady),
-    checkReady: tryMarkStudioReadyFromIframe,
-  });
-
-  const handleHealthyRuntimeTimeoutRecovery = useCallback(() => {
-    setStudioLoadTimedOut(false);
-    setStudioLoadErrored(false);
-    void reloadStudioIframe();
-  }, [reloadStudioIframe]);
-
-  useStudioIframeTimeoutRecovery({
-    enabled: Boolean(studioLoadTimedOut && studioBaseUrl && !studioReady),
-    studioBaseUrl,
-    onHealthyRuntimeDetected: handleHealthyRuntimeTimeoutRecovery,
-  });
-
-  useEffect(() => {
-    if (!studioIframeSrc) {
-      setStudioReady(false);
-      setStudioLoadTimedOut(false);
-      setStudioLoadErrored(false);
-      return;
-    }
-
-    setStudioReady(false);
-    setStudioLoadTimedOut(false);
-    setStudioLoadErrored(false);
-
-    const timeout = window.setTimeout(() => {
-      setStudioLoadTimedOut(true);
-    }, 25_000);
-
-    return () => window.clearTimeout(timeout);
-  }, [studioIframeSrc, studioReloadNonce]);
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;
@@ -737,6 +621,18 @@ export default function ProjectFullscreen() {
 
     return (
       <HostHeader
+        leadingAccessory={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-md"
+            onClick={handleClose}
+            title="Back to projects"
+          >
+            <VivdIcon className="h-4 w-4" />
+            <span className="sr-only">Back to projects</span>
+          </Button>
+        }
         leading={
           <>
             <div className="min-w-0 truncate text-sm font-medium sm:hidden">
@@ -1023,7 +919,7 @@ export default function ProjectFullscreen() {
             allow="fullscreen; clipboard-write"
             allowFullScreen
             onLoad={handleStudioIframeLoad}
-            onError={() => setStudioLoadErrored(true)}
+            onError={handleStudioIframeError}
           />
 
           {isStudioRecovering ? (

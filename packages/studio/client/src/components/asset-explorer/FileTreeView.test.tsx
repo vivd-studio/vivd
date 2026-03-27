@@ -176,7 +176,7 @@ describe("FileTreeView", () => {
     cleanup();
   });
 
-  it("uploads external drops in files view into .vivd/uploads", async () => {
+  it("uploads external drops on the tree background into .vivd/uploads", async () => {
     const onFilesUpload = vi.fn().mockResolvedValue(undefined);
     const file = new File(["demo"], "logo.png", { type: "image/png" });
     const files = createFileList([file]);
@@ -201,6 +201,38 @@ describe("FileTreeView", () => {
 
     await waitFor(() => {
       expect(onFilesUpload).toHaveBeenCalledWith(files, STUDIO_UPLOADS_PATH);
+    });
+  });
+
+  it("uploads external drops on a folder row into that folder", async () => {
+    const onFilesUpload = vi.fn().mockResolvedValue(undefined);
+    const file = new File(["demo"], "logo.png", { type: "image/png" });
+    const files = createFileList([file]);
+
+    const { container } = render(
+      <FileTreeView
+        projectSlug="demo"
+        version={1}
+        onFilesUpload={onFilesUpload}
+      />,
+    );
+
+    const folderRow = container.querySelector(
+      '[data-file-tree-path="images"]',
+    ) as HTMLElement | null;
+    expect(folderRow).not.toBeNull();
+
+    const dataTransfer = {
+      types: ["Files"],
+      files,
+      getData: vi.fn(() => ""),
+    };
+
+    fireEvent.dragOver(folderRow as HTMLElement, { dataTransfer });
+    fireEvent.drop(folderRow as HTMLElement, { dataTransfer });
+
+    await waitFor(() => {
+      expect(onFilesUpload).toHaveBeenCalledWith(files, "images");
     });
   });
 

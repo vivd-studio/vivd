@@ -243,6 +243,13 @@ describe("StudioToolbar", () => {
     expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
   });
 
+  it("renders the vivd mark inline instead of relying on a root-path image asset", () => {
+    render(<StudioToolbar />);
+
+    expect(screen.getByRole("img", { name: "vivd" })).toBeInTheDocument();
+    expect(document.querySelector('img[alt="vivd"]')).toBeNull();
+  });
+
   it("always shows the Analytics toolbar button", () => {
     render(<StudioToolbar />);
 

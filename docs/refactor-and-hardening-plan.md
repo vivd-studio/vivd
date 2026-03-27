@@ -50,10 +50,10 @@ Current boundary: Studio runtime `/vivd-studio`, `/preview`, `/vivd-studio/api/p
 
 ## Phase 2: Extract The Frontend Studio Host Shell
 
-- [ ] Extract shared start/restart/recover/runtime-url/access-token logic from `EmbeddedStudio.tsx`, `ProjectFullscreen.tsx`, and `StudioFullscreen.tsx`.
-- [ ] Extract shared iframe-ready, timeout-recovery, theme-sync, and hard-restart message handling into a common hook or host-shell module.
-- [ ] Keep page-specific responsibilities limited to surrounding layout, navigation, and page-only controls.
-- [ ] Add shared regression tests for early iframe load, timeout recovery, token propagation, hard restart, and initial-generation bootstrap.
+- [x] Extract shared start/restart/recover/runtime-url/access-token logic from `EmbeddedStudio.tsx`, `ProjectFullscreen.tsx`, and `StudioFullscreen.tsx`.
+- [x] Extract shared iframe-ready, timeout-recovery, theme-sync, and hard-restart message handling into a common hook or host-shell module.
+- [x] Keep page-specific responsibilities limited to surrounding layout, navigation, and page-only controls.
+- [x] Add shared regression tests for early iframe load, timeout recovery, token propagation, hard restart, and initial-generation bootstrap.
 
 ## Phase 3: Unify Self-Hosting And Caddy Sources Of Truth
 

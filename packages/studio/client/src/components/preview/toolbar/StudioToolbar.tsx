@@ -33,6 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { VivdIcon } from "@/components/common";
 
 import { useToolbarState } from "./useToolbarState";
 import {
@@ -46,8 +47,6 @@ import {
   buildProjectStudioPath,
   openEmbeddedStudioPath,
 } from "./hostNavigation";
-
-const faviconSvg = "/favicon-transparent.svg";
 
 /**
  * StudioToolbar - Standalone toolbar for the single-instance studio.
@@ -583,7 +582,7 @@ export function StudioToolbar() {
               </Button>
             ) : (
               <div className="flex shrink-0 items-center">
-                <img src={faviconSvg} alt="vivd" className="h-6 w-6 shrink-0" />
+                <VivdIcon className="h-6 w-6" strokeWidth={12} />
               </div>
             )}
 

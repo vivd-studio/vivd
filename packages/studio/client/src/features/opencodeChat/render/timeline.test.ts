@@ -326,6 +326,44 @@ describe("canonical timeline builder", () => {
     ]);
   });
 
+  it("finalizes stale running tools when the assistant message itself is already completed", () => {
+    const timeline = buildCanonicalTimelineModel({
+      messages: [
+        createRecord({
+          id: "u1",
+          role: "user",
+          createdAt: BASE_TIME + 10_000,
+          parts: [{ id: "text-u1", type: "text", text: "Build it" }],
+        }),
+        createRecord({
+          id: "a1",
+          role: "assistant",
+          parentID: "u1",
+          createdAt: BASE_TIME + 11_000,
+          completedAt: BASE_TIME + 12_000,
+          parts: [
+            { id: "tool-a1", type: "tool", tool: "bash", status: "running" },
+            { id: "text-a1", type: "text", text: "Build completed successfully." },
+          ],
+        }),
+      ],
+      sessionStatus: { type: "busy" },
+      isThinking: false,
+      isWaiting: false,
+    });
+
+    const agentRow = timeline.items.find((item) => item.kind === "agent");
+    if (agentRow?.kind !== "agent") {
+      throw new Error("Expected completed agent row");
+    }
+
+    expect(agentRow.runInProgress).toBe(false);
+    expect(agentRow.orderedParts).toMatchObject([
+      { id: "tool-a1", type: "tool", status: "completed" },
+      { id: "text-a1", type: "text", text: "Build completed successfully." },
+    ]);
+  });
+
   it("does not suggest continue when a final answer exists in an earlier assistant message of the latest turn", () => {
     const shouldSuggest = shouldSuggestInterruptedContinueFromRecords({
       sessionStatus: "done",

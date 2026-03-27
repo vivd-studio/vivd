@@ -18,6 +18,7 @@ import {
   getFileTreeIconComponent,
   getFileTreeIndentPx,
   isFileTreeGrayedFolder,
+  shouldIgnoreFileTreeMoveTarget,
 } from "./utils";
 import {
   ContextMenu,
@@ -49,10 +50,13 @@ interface FileTreeItemProps {
   onStartRename?: (item: FileTreeNode) => void;
   onCancelRename?: () => void;
   onAddToChat?: (item: FileTreeNode) => void;
+  onFilesUpload?: (files: FileList, targetFolderPath: string) => Promise<void>;
   moveTargets?: FileTreeMoveTarget[];
   onMoveToFolder?: (targetFolderPath: string) => void;
   activeInternalDropTargetPath?: string | null;
   onInternalDropTargetChange?: (targetPath: string | null) => void;
+  activeExternalDropTargetPath?: string | null;
+  onExternalDropTargetChange?: (targetPath: string | null) => void;
 }
 
 export function FileTreeItem({
@@ -73,10 +77,13 @@ export function FileTreeItem({
   onStartRename,
   onCancelRename,
   onAddToChat,
+  onFilesUpload,
   moveTargets,
   onMoveToFolder,
   activeInternalDropTargetPath,
   onInternalDropTargetChange,
+  activeExternalDropTargetPath,
+  onExternalDropTargetChange,
 }: FileTreeItemProps) {
   const [renameValue, setRenameValue] = useState(item.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -84,7 +91,9 @@ export function FileTreeItem({
 
   const isGrayed = item.type === "folder" && isFileTreeGrayedFolder(item.name);
   const isDropTarget =
-    item.type === "folder" && activeInternalDropTargetPath === item.path;
+    item.type === "folder" &&
+    (activeInternalDropTargetPath === item.path ||
+      activeExternalDropTargetPath === item.path);
 
   // Focus input when entering rename mode
   useEffect(() => {
@@ -174,7 +183,25 @@ export function FileTreeItem({
 
   const handleDragOver = (e: React.DragEvent) => {
     if (item.type !== "folder") return;
-    if (!e.dataTransfer.types.includes("application/x-file-path")) return;
+    const hasFiles = e.dataTransfer.types.includes("Files");
+    const hasInternalPath = e.dataTransfer.types.includes(
+      "application/x-file-path",
+    );
+
+    if (hasFiles && !hasInternalPath) {
+      e.preventDefault();
+      e.stopPropagation();
+      onInternalDropTargetChange?.(null);
+      onExternalDropTargetChange?.(
+        shouldIgnoreFileTreeMoveTarget(item.path) ? null : item.path,
+      );
+      e.dataTransfer.dropEffect = shouldIgnoreFileTreeMoveTarget(item.path)
+        ? "none"
+        : "copy";
+      return;
+    }
+
+    if (!hasInternalPath) return;
 
     const draggedPath = e.dataTransfer.getData("application/x-file-path");
     if (draggedPath === item.path || item.path.startsWith(draggedPath + "/")) {
@@ -185,6 +212,7 @@ export function FileTreeItem({
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
+    onExternalDropTargetChange?.(null);
     onInternalDropTargetChange?.(item.path);
   };
 
@@ -195,27 +223,47 @@ export function FileTreeItem({
     if (activeInternalDropTargetPath === item.path) {
       onInternalDropTargetChange?.(null);
     }
+    if (activeExternalDropTargetPath === item.path) {
+      onExternalDropTargetChange?.(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     if (activeInternalDropTargetPath === item.path) {
       onInternalDropTargetChange?.(null);
     }
+    if (activeExternalDropTargetPath === item.path) {
+      onExternalDropTargetChange?.(null);
+    }
 
     if (item.type !== "folder") return;
 
     const draggedPath = e.dataTransfer.getData("application/x-file-path");
-    if (!draggedPath) return;
+    if (draggedPath) {
+      e.preventDefault();
+      e.stopPropagation();
 
-    e.preventDefault();
-    e.stopPropagation();
+      // Don't drop on itself or its parent
+      if (draggedPath === item.path || item.path.startsWith(draggedPath + "/")) {
+        return;
+      }
 
-    // Don't drop on itself or its parent
-    if (draggedPath === item.path || item.path.startsWith(draggedPath + "/")) {
+      onDrop(draggedPath, item.path);
       return;
     }
 
-    onDrop(draggedPath, item.path);
+    if (
+      e.dataTransfer.files &&
+      e.dataTransfer.files.length > 0 &&
+      onFilesUpload
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (shouldIgnoreFileTreeMoveTarget(item.path)) {
+        return;
+      }
+      void onFilesUpload(e.dataTransfer.files, item.path);
+    }
   };
 
   const itemContent = (

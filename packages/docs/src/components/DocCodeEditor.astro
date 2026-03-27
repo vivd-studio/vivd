@@ -1,0 +1,74 @@
+---
+const {
+  id,
+  title,
+  code,
+  language = "text",
+  description,
+  actionHref,
+  actionLabel = "Open",
+} = Astro.props;
+---
+
+<section class="doc-code-editor" data-doc-code-editor>
+  <div class="doc-code-editor__toolbar">
+    <div class="doc-code-editor__title-row">
+      <span class="doc-code-editor__lights" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+      <div class="doc-code-editor__title-group">
+        <code class="doc-code-editor__title">{title}</code>
+        {description ? <span class="doc-code-editor__description">{description}</span> : null}
+      </div>
+    </div>
+    <div class="doc-code-editor__actions">
+      {actionHref ? (
+        <a class="doc-code-editor__link" href={actionHref}>{actionLabel}</a>
+      ) : null}
+      <button class="doc-code-editor__copy" type="button" data-copy-target={id}>
+        Copy
+      </button>
+    </div>
+  </div>
+  <pre id={id} class="doc-code-editor__body" data-language={language}><code>{code}</code></pre>
+</section>
+
+<script is:inline>
+  if (!window.__vivdDocCodeEditorInit) {
+    window.__vivdDocCodeEditorInit = true;
+
+    document.addEventListener("click", async (event) => {
+      const button =
+        event.target instanceof Element ? event.target.closest("[data-copy-target]") : null;
+      if (!button) {
+        return;
+      }
+
+      const targetId = button.getAttribute("data-copy-target");
+      if (!targetId) {
+        return;
+      }
+
+      const target = document.getElementById(targetId);
+      if (!target) {
+        return;
+      }
+
+      const code = target.textContent || "";
+      const originalLabel = button.textContent || "Copy";
+
+      try {
+        await navigator.clipboard.writeText(code.trimEnd());
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Copy failed";
+      }
+
+      window.setTimeout(() => {
+        button.textContent = originalLabel;
+      }, 1600);
+    });
+  }
+</script>

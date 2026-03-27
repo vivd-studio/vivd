@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -31,6 +32,15 @@ export type ObjectStorageConfig = {
   sessionToken?: string;
 };
 
+function hasAnyLocalBucketEnv(env: EnvMap = process.env): boolean {
+  return Boolean(
+    env.VIVD_LOCAL_S3_BUCKET ||
+      env.VIVD_LOCAL_S3_ENDPOINT_URL ||
+      env.VIVD_LOCAL_S3_ACCESS_KEY ||
+      env.VIVD_LOCAL_S3_SECRET_KEY,
+  );
+}
+
 function trimSlashes(value: string): string {
   return value.replace(/^\/+/, "").replace(/\/+$/, "");
 }
@@ -48,17 +58,21 @@ export function getObjectStorageConfigFromEnv(
   env: EnvMap = process.env,
 ): ObjectStorageConfig {
   const bucketMode = (env.VIVD_BUCKET_MODE || "").trim().toLowerCase();
-  const localBucketMode = bucketMode === "local";
+  const localBucketMode = bucketMode === "local" || (!bucketMode && hasAnyLocalBucketEnv(env));
   const bucket = (
     env.VIVD_S3_BUCKET ||
     env.R2_BUCKET ||
-    (localBucketMode ? env.VIVD_LOCAL_S3_BUCKET : "") ||
+    (localBucketMode
+      ? env.VIVD_LOCAL_S3_BUCKET || soloSelfHostDefaults.localS3Bucket
+      : "") ||
     ""
   ).trim();
   const endpointUrl = (
     env.VIVD_S3_ENDPOINT_URL ||
     env.R2_ENDPOINT ||
-    (localBucketMode ? env.VIVD_LOCAL_S3_ENDPOINT_URL : "") ||
+    (localBucketMode
+      ? env.VIVD_LOCAL_S3_ENDPOINT_URL || soloSelfHostDefaults.localS3EndpointUrl
+      : "") ||
     ""
   ).trim();
   const accessKeyId = (
@@ -82,7 +96,9 @@ export function getObjectStorageConfigFromEnv(
     env.VIVD_S3_REGION ||
     env.AWS_REGION ||
     env.AWS_DEFAULT_REGION ||
-    (localBucketMode ? env.VIVD_LOCAL_S3_REGION || "us-east-1" : "auto")
+    (localBucketMode
+      ? env.VIVD_LOCAL_S3_REGION || soloSelfHostDefaults.localS3Region
+      : "auto")
   ).trim();
 
   if (!bucket) {

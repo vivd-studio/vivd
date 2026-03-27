@@ -8,11 +8,16 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {
+  getSoloSelfHostLocalS3DownloadEndpoint,
+  soloSelfHostDefaults,
+} from "@vivd/shared/config";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { resolveAuthBaseUrlFromEnv } from "../../lib/publicOrigin";
 
 export type ObjectStorageConfig = {
   bucket: string;
@@ -33,13 +38,27 @@ let signedUrlStorageCache:
 
 const SYNC_MANIFEST_FILENAME = ".vivd-sync-manifest.json";
 const SYNC_MANIFEST_VERSION = 1;
+function hasAnyLocalBucketEnv(env: EnvMap = process.env): boolean {
+  return Boolean(
+    env.VIVD_LOCAL_S3_BUCKET ||
+      env.VIVD_LOCAL_S3_ENDPOINT_URL ||
+      env.VIVD_LOCAL_S3_ACCESS_KEY ||
+      env.VIVD_LOCAL_S3_SECRET_KEY,
+  );
+}
 
 function isLocalBucketMode(env: EnvMap = process.env): boolean {
-  return (env.VIVD_BUCKET_MODE || "").trim().toLowerCase() === "local";
+  const bucketMode = (env.VIVD_BUCKET_MODE || "").trim().toLowerCase();
+  return bucketMode === "local" || (!bucketMode && hasAnyLocalBucketEnv(env));
 }
 
 function getLocalBucketDownloadEndpoint(env: EnvMap = process.env): string {
-  return (env.VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL || "").trim();
+  const explicit = (env.VIVD_LOCAL_S3_DOWNLOAD_ENDPOINT_URL || "").trim();
+  if (explicit) return explicit;
+
+  const publicOrigin = resolveAuthBaseUrlFromEnv(env as NodeJS.ProcessEnv)?.trim();
+  if (!publicOrigin) return "";
+  return getSoloSelfHostLocalS3DownloadEndpoint(publicOrigin);
 }
 
 type SyncManifestEntry = {
@@ -55,19 +74,23 @@ type SyncManifest = {
 };
 
 function getPublicObjectBaseUrl(env: EnvMap = process.env): string | null {
-  if (publicBaseUrlCache !== undefined) return publicBaseUrlCache;
+  if (env === process.env && publicBaseUrlCache !== undefined) return publicBaseUrlCache;
   const base = (
     env.VIVD_S3_PUBLIC_BASE_URL ||
     env.R2_PUBLIC_BASE_URL ||
     (isLocalBucketMode(env) ? env.VIVD_LOCAL_S3_PUBLIC_BASE_URL : "") ||
     ""
   ).trim();
-  publicBaseUrlCache = base ? base.replace(/\/+$/, "") : null;
-  return publicBaseUrlCache;
+  const resolved = base ? base.replace(/\/+$/, "") : null;
+  if (env === process.env) {
+    publicBaseUrlCache = resolved;
+  }
+  return resolved;
 }
 
 function getSignedUrlStorage(env: EnvMap = process.env): { client: S3Client; bucket: string } | null {
-  if (signedUrlStorageCache !== undefined) return signedUrlStorageCache;
+  if (env === process.env && signedUrlStorageCache !== undefined) return signedUrlStorageCache;
+
   try {
     const config = getObjectStorageConfigFromEnv(env);
     const downloadEndpointUrl = (
@@ -75,17 +98,23 @@ function getSignedUrlStorage(env: EnvMap = process.env): { client: S3Client; buc
       (isLocalBucketMode(env) ? getLocalBucketDownloadEndpoint(env) : "") ||
       ""
     ).trim();
-    signedUrlStorageCache = {
+    const storage = {
       client: createS3Client({
         ...config,
         endpointUrl: downloadEndpointUrl || config.endpointUrl,
       }),
       bucket: config.bucket,
     };
+    if (env === process.env) {
+      signedUrlStorageCache = storage;
+    }
+    return storage;
   } catch {
-    signedUrlStorageCache = null;
+    if (env === process.env) {
+      signedUrlStorageCache = null;
+    }
+    return null;
   }
-  return signedUrlStorageCache;
 }
 
 export async function getObjectDownloadUrl(options: {
@@ -118,17 +147,20 @@ export async function getObjectDownloadUrl(options: {
 
 export function getObjectStorageConfigFromEnv(env: EnvMap = process.env): ObjectStorageConfig {
   const localBucketMode = isLocalBucketMode(env);
-  const bucketMode = (env.VIVD_BUCKET_MODE || "").trim().toLowerCase();
   const bucket = (
     env.VIVD_S3_BUCKET ||
     env.R2_BUCKET ||
-    (localBucketMode ? env.VIVD_LOCAL_S3_BUCKET : "") ||
+    (localBucketMode
+      ? env.VIVD_LOCAL_S3_BUCKET || soloSelfHostDefaults.localS3Bucket
+      : "") ||
     ""
   ).trim();
   const endpointUrl = (
     env.VIVD_S3_ENDPOINT_URL ||
     env.R2_ENDPOINT ||
-    (localBucketMode ? env.VIVD_LOCAL_S3_ENDPOINT_URL : "") ||
+    (localBucketMode
+      ? env.VIVD_LOCAL_S3_ENDPOINT_URL || soloSelfHostDefaults.localS3EndpointUrl
+      : "") ||
     ""
   ).trim();
 
@@ -153,7 +185,9 @@ export function getObjectStorageConfigFromEnv(env: EnvMap = process.env): Object
     env.VIVD_S3_REGION ||
     env.AWS_REGION ||
     env.AWS_DEFAULT_REGION ||
-    (localBucketMode ? env.VIVD_LOCAL_S3_REGION || "us-east-1" : "auto")
+    (localBucketMode
+      ? env.VIVD_LOCAL_S3_REGION || soloSelfHostDefaults.localS3Region
+      : "auto")
   ).trim();
 
   const r2Configured =
@@ -161,26 +195,9 @@ export function getObjectStorageConfigFromEnv(env: EnvMap = process.env): Object
     Boolean(env.R2_ENDPOINT) ||
     Boolean(env.R2_ACCESS_KEY) ||
     Boolean(env.R2_SECRET_KEY);
-  const localConfigured =
-    localBucketMode ||
-    (!bucketMode &&
-      (Boolean(env.VIVD_LOCAL_S3_BUCKET) ||
-        Boolean(env.VIVD_LOCAL_S3_ENDPOINT_URL) ||
-        Boolean(env.VIVD_LOCAL_S3_ACCESS_KEY) ||
-        Boolean(env.VIVD_LOCAL_S3_SECRET_KEY)));
 
   if (r2Configured && !endpointUrl) {
     throw new Error("Missing object storage endpoint. Set VIVD_S3_ENDPOINT_URL or R2_ENDPOINT.");
-  }
-  if (localConfigured && !bucket) {
-    throw new Error(
-      "Missing local bucket name. Set VIVD_LOCAL_S3_BUCKET (or VIVD_S3_BUCKET).",
-    );
-  }
-  if (localConfigured && !endpointUrl) {
-    throw new Error(
-      "Missing local bucket endpoint. Set VIVD_LOCAL_S3_ENDPOINT_URL (or VIVD_S3_ENDPOINT_URL).",
-    );
   }
   if (!bucket) {
     throw new Error("Missing bucket. Set VIVD_S3_BUCKET or R2_BUCKET.");

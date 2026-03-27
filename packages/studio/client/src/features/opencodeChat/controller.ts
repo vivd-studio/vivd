@@ -8,6 +8,7 @@ import { resolveCanonicalUserMessageId } from "./sync/optimisticMessages";
 import {
   buildDerivedSessionError,
   deriveChatActivityState,
+  findStaleRunningToolState,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
 import { sessionQuestionRequest } from "./questions/requestTree";
@@ -53,6 +54,7 @@ export function useOpencodeChatController({
   const activeRunSessionIdRef = useRef<string | null>(null);
   const nextPendingSessionStartIdRef = useRef(0);
   const pendingSessionStartRef = useRef<PendingSessionStart | null>(null);
+  const staleRunningToolHealRef = useRef<string | null>(null);
 
   const sessions = opencodeChat.sessions;
   const sessionsLoading = opencodeChat.bootstrapLoading;
@@ -100,6 +102,10 @@ export function useOpencodeChatController({
   const isReverted = Boolean(selectedSession?.revert);
   const usage = useMemo(
     () => calculateUsageFromSessionMessages(selectedMessages),
+    [selectedMessages],
+  );
+  const staleRunningToolState = useMemo(
+    () => findStaleRunningToolState(selectedMessages),
     [selectedMessages],
   );
 
@@ -533,6 +539,40 @@ export function useOpencodeChatController({
       setDismissedDerivedErrorKey(null);
     }
   }, [derivedSessionError]);
+
+  useEffect(() => {
+    if (
+      !selectedSessionId ||
+      !staleRunningToolState ||
+      isSessionHydrating ||
+      connection.state !== "connected"
+    ) {
+      if (!staleRunningToolState) {
+        staleRunningToolHealRef.current = null;
+      }
+      return;
+    }
+
+    const healKey = [
+      selectedSessionId,
+      staleRunningToolState.messageId,
+      staleRunningToolState.reason,
+      opencodeChat.state.lastEventId ?? "none",
+    ].join(":");
+    if (staleRunningToolHealRef.current === healKey) {
+      return;
+    }
+
+    staleRunningToolHealRef.current = healKey;
+    void refetchMessages();
+  }, [
+    connection.state,
+    isSessionHydrating,
+    opencodeChat.state.lastEventId,
+    refetchMessages,
+    selectedSessionId,
+    staleRunningToolState,
+  ]);
 
   useEffect(() => {
     if (activityState.isThinking && selectedSessionId) {

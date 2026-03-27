@@ -47,14 +47,15 @@ import {
   HOST_VIEWPORT_INSET_CLASS,
   FramedViewport,
 } from "@/components/common/FramedHostShell";
-import { isColorTheme, isTheme } from "@vivd/shared/types";
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { authClient } from "@/lib/auth-client";
-import { useStudioRuntimeGuard } from "@/hooks/useStudioRuntimeGuard";
-import { useStudioIframeReadyRetry } from "@/hooks/useStudioIframeReadyRetry";
-import { useStudioIframeTimeoutRecovery } from "@/hooks/useStudioIframeTimeoutRecovery";
-import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
+import { useInitialGenerationBootstrap } from "@/hooks/useInitialGenerationBootstrap";
+import {
+  type StudioRuntimeSession,
+  useStudioHostRuntime,
+} from "@/hooks/useStudioHostRuntime";
+import { useStudioIframeLifecycle } from "@/hooks/useStudioIframeLifecycle";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { toast } from "sonner";
 import {
@@ -72,16 +73,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-const INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX =
-  "vivd.initialGenerationBootstrapped";
-
-function getInitialGenerationBootstrapStorageKey(
-  projectSlug: string | undefined,
-  version: number,
-): string {
-  return `${INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX}:${projectSlug || "unknown"}:v${version}`;
-}
-
 /**
  * EmbeddedStudio - Project page inside the main app shell.
  *
@@ -97,12 +88,6 @@ export default function EmbeddedStudio() {
   const [editRequested, setEditRequested] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
-  const [studioUrlOverride, setStudioUrlOverride] = useState<string | null>(null);
-  const [studioBootstrapTokenOverride, setStudioBootstrapTokenOverride] = useState<string | null>(null);
-  const [studioReloadNonce, setStudioReloadNonce] = useState(0);
-  const [studioReady, setStudioReady] = useState(false);
-  const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
-  const [studioLoadErrored, setStudioLoadErrored] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Fetch project data to get current version
@@ -127,11 +112,6 @@ export default function EmbeddedStudio() {
   const studioVersion =
     Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
   const shouldResumeStudio = resumeStudio || initialGenerationRequested;
-  const initialGenerationBootstrapKeyRef = useRef<string | null>(null);
-  const initialGenerationBootstrapStorageKey = useMemo(
-    () => getInitialGenerationBootstrapStorageKey(projectSlug, studioVersion),
-    [projectSlug, studioVersion],
-  );
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -231,14 +211,88 @@ export default function EmbeddedStudio() {
   const canRenameProject = membership?.organizationRole !== "client_editor";
   const isRenamePending = renameSlugMutation.isPending;
 
+  const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
+    if (studioUrlQuery.data?.status !== "running") return null;
+    return {
+      url: studioUrlQuery.data.url,
+      bootstrapToken: studioUrlQuery.data.bootstrapToken,
+    };
+  }, [studioUrlQuery.data]);
+
+  const startedStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
+    if (!startStudio.data?.success) return null;
+    return {
+      url: startStudio.data.url,
+      bootstrapToken: startStudio.data.bootstrapToken,
+    };
+  }, [startStudio.data]);
+
+  const preferredStudioRuntime = useMemo(
+    () =>
+      editRequested
+        ? startedStudioRuntime ?? queryStudioRuntime
+        : queryStudioRuntime,
+    [editRequested, queryStudioRuntime, startedStudioRuntime],
+  );
+
+  const ensureStudioRunning = useCallback(async () => {
+    if (!projectSlug) {
+      return {
+        success: false as const,
+        error: "Missing project slug",
+      };
+    }
+    return startStudio.mutateAsync({ slug: projectSlug, version: studioVersion });
+  }, [projectSlug, startStudio, studioVersion]);
+
+  const refreshStudioRuntime = useCallback(async () => {
+    if (!projectSlug) return null;
+
+    const result = await studioUrlQuery.refetch();
+    if (result.data?.status !== "running") return null;
+
+    return {
+      url: result.data.url,
+      bootstrapToken: result.data.bootstrapToken,
+    };
+  }, [projectSlug, studioUrlQuery]);
+
+  const {
+    studioBaseUrl,
+    studioBootstrapToken,
+    studioBootstrapAction,
+    reloadNonce: studioReloadNonce,
+    isStudioRecovering,
+    replaceRuntime,
+    clearRuntimeOverride,
+    reloadStudioIframe,
+  } = useStudioHostRuntime({
+    resetKey: `${projectSlug || "project"}:v${studioVersion}`,
+    runtime: preferredStudioRuntime,
+    suspendRuntime: hardRestartStudio.isPending,
+    refreshRuntime: refreshStudioRuntime,
+    touchStudio: () => {
+      if (!projectSlug) return;
+      touchStudio.mutate({ slug: projectSlug, version: studioVersion });
+    },
+    ensureStudioRunning,
+    invalidateRuntime: () =>
+      projectSlug
+        ? utils.project.getStudioUrl.invalidate({
+            slug: projectSlug,
+            version: studioVersion,
+          })
+        : undefined,
+    onRecoveryError: (message) => {
+      toast.error("Failed to wake studio", { description: message });
+    },
+  });
+
   // Reset local state when navigating between projects.
   useEffect(() => {
     setEditRequested(false);
     startStudio.reset();
     hardRestartStudio.reset();
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
-    setStudioReloadNonce(0);
   }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
 
   useEffect(() => {
@@ -267,8 +321,7 @@ export default function EmbeddedStudio() {
     if (isRenamePending) return;
     if (editRequested || startStudio.isPending || hardRestartStudio.isPending) return;
     setEditRequested(true);
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
+    clearRuntimeOverride();
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
   };
 
@@ -279,10 +332,10 @@ export default function EmbeddedStudio() {
     if (hardRestartStudio.isPending || isRenamePending) return;
 
     setEditRequested(true);
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
+    clearRuntimeOverride();
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
   }, [
+    clearRuntimeOverride,
     editRequested,
     hardRestartStudio.isPending,
     initialGenerationRequested,
@@ -308,8 +361,7 @@ export default function EmbeddedStudio() {
         : studioVersion;
 
     setEditRequested(true);
-    setStudioUrlOverride(null);
-    setStudioBootstrapTokenOverride(null);
+    clearRuntimeOverride();
 
     try {
       const result = await hardRestartStudio.mutateAsync({
@@ -323,9 +375,13 @@ export default function EmbeddedStudio() {
         return;
       }
 
-      setStudioUrlOverride(result.url);
-      setStudioBootstrapTokenOverride(result.bootstrapToken);
-      setStudioReloadNonce((n) => n + 1);
+      replaceRuntime(
+        {
+          url: result.url,
+          bootstrapToken: result.bootstrapToken,
+        },
+        { reload: true },
+      );
       toast.success("Studio restarted");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -333,243 +389,47 @@ export default function EmbeddedStudio() {
     }
   };
 
-  const studioBaseUrl = useMemo(() => {
-    if (hardRestartStudio.isPending) return null;
-    if (studioUrlOverride) return studioUrlOverride;
-    return editRequested
-      ? startStudio.data?.success
-        ? startStudio.data.url
-        : null
-      : studioUrlQuery.data?.status === "running"
-        ? studioUrlQuery.data.url
-        : null;
-  }, [
-    editRequested,
-    hardRestartStudio.isPending,
-    startStudio.data,
-    studioUrlOverride,
-    studioUrlQuery.data,
-  ]);
-
-  const studioBootstrapToken = useMemo(() => {
-    if (hardRestartStudio.isPending) return null;
-    if (studioBootstrapTokenOverride) return studioBootstrapTokenOverride;
-    return editRequested
-      ? startStudio.data?.success
-        ? startStudio.data.bootstrapToken
-        : null
-      : studioUrlQuery.data?.status === "running"
-        ? studioUrlQuery.data.bootstrapToken
-        : null;
-  }, [
-    editRequested,
-    hardRestartStudio.isPending,
-    startStudio.data,
-    studioBootstrapTokenOverride,
-    studioUrlQuery.data,
-  ]);
-
-  const ensureStudioRunning = useCallback(async () => {
-    if (!projectSlug) {
-      return {
-        success: false as const,
-        error: "Missing project slug",
-      };
-    }
-    return startStudio.mutateAsync({ slug: projectSlug, version: studioVersion });
-  }, [projectSlug, startStudio, studioVersion]);
-
-  const handleStudioRecovered = useCallback(
-    (next: { url: string; bootstrapToken: string | null }) => {
-      setStudioReady(false);
-      setStudioLoadTimedOut(false);
-      setStudioLoadErrored(false);
-      setStudioUrlOverride(next.url);
-      setStudioBootstrapTokenOverride(next.bootstrapToken);
-      setStudioReloadNonce((n) => n + 1);
-      if (!projectSlug) return;
-      void utils.project.getStudioUrl.invalidate({
-        slug: projectSlug,
-        version: studioVersion,
-      });
-    },
-    [projectSlug, studioVersion, utils.project.getStudioUrl],
-  );
-
-  const reloadStudioIframe = useCallback(async () => {
-    if (projectSlug) {
-      try {
-        const result = await studioUrlQuery.refetch();
-        const next = result.data;
-        if (next?.status === "running") {
-          setStudioUrlOverride(next.url);
-          setStudioBootstrapTokenOverride(next.bootstrapToken);
-        }
-      } catch {
-        // Fall back to reloading with the most recent runtime info we already have.
-      }
-    }
-
-    setStudioReloadNonce((n) => n + 1);
-  }, [projectSlug, studioUrlQuery]);
-
-  const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
-    enabled: Boolean(projectSlug && studioBaseUrl && !hardRestartStudio.isPending),
-    studioBaseUrl,
-    touchStudio: () => {
-      if (!projectSlug) return;
-      touchStudio.mutate({ slug: projectSlug, version: studioVersion });
-    },
-    ensureStudioRunning,
-    onRecovered: handleStudioRecovered,
-    onRecoveryError: (message) => {
-      toast.error("Failed to wake studio", { description: message });
-    },
+  const sendInitialGenerationBootstrap = useInitialGenerationBootstrap({
+    enabled: initialGenerationRequested,
+    iframeRef: studioIframeRef,
+    projectSlug,
+    version: studioVersion,
   });
 
-  const syncThemeToStudio = () => {
-    const targetWindow = studioIframeRef.current?.contentWindow;
-    if (!targetWindow) return;
-    targetWindow.postMessage(
-      { type: "vivd:host:theme", theme, colorTheme },
-      "*",
-    );
-  };
-
-  const markStudioReady = useCallback(() => {
-    setStudioReady(true);
-    setStudioLoadTimedOut(false);
-    setStudioLoadErrored(false);
-  }, []);
-
-  const sendInitialGenerationBootstrap = useCallback(() => {
-    if (!initialGenerationRequested) return;
-
-    const targetWindow = studioIframeRef.current?.contentWindow;
-    if (!targetWindow) return;
-
-    if (
-      initialGenerationBootstrapKeyRef.current ===
-      initialGenerationBootstrapStorageKey
-    ) {
-      return;
-    }
-
-    try {
-      if (
-        window.sessionStorage.getItem(initialGenerationBootstrapStorageKey) ===
-        "1"
-      ) {
-        initialGenerationBootstrapKeyRef.current =
-          initialGenerationBootstrapStorageKey;
-        return;
-      }
-    } catch {
-      // Ignore storage issues and fall back to in-memory tracking.
-    }
-
-    targetWindow.postMessage(
-      {
-        type: "vivd:host:start-initial-generation",
-        projectSlug,
-        version: studioVersion,
-      },
-      "*",
-    );
-    initialGenerationBootstrapKeyRef.current =
-      initialGenerationBootstrapStorageKey;
-    try {
-      window.sessionStorage.setItem(initialGenerationBootstrapStorageKey, "1");
-    } catch {
-      // Ignore storage issues and rely on the in-memory ref for this page lifetime.
-    }
-  }, [
-    initialGenerationRequested,
-    initialGenerationBootstrapStorageKey,
-    projectSlug,
-    studioVersion,
-  ]);
-
-  const tryMarkStudioReadyFromIframe = useCallback(() => {
-    if (!isStudioIframeShellLoaded(studioIframeRef.current)) {
-      return false;
-    }
-
-    markStudioReady();
-    syncThemeToStudio();
-    sendInitialGenerationBootstrap();
-    return true;
-  }, [markStudioReady, sendInitialGenerationBootstrap, syncThemeToStudio]);
-
-  const handleStudioIframeLoad = useCallback(() => {
-    syncThemeToStudio();
-    void tryMarkStudioReadyFromIframe();
-  }, [tryMarkStudioReadyFromIframe]);
-
-  useEffect(() => {
-    syncThemeToStudio();
-  }, [theme, colorTheme]);
-
-  // Listen for studio events from the iframe (cross-origin via postMessage).
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const studioWindow = studioIframeRef.current?.contentWindow;
-      if (!studioWindow || event.source !== studioWindow) return;
-      if (event.data?.type === "vivd:studio:ready") {
-        markStudioReady();
-        syncThemeToStudio();
-        sendInitialGenerationBootstrap();
-        return;
-      }
-      if (event.data?.type === "vivd:studio:close") {
-        navigate(ROUTES.DASHBOARD);
-      }
-      if (event.data?.type === "vivd:studio:fullscreen") {
-        const params = new URLSearchParams({
-          version: String(studioVersion),
-          ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
-        });
-        navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`);
-      }
-      if (event.data?.type === "vivd:studio:navigate") {
-        const path = event.data?.path;
-        if (typeof path === "string" && path.startsWith("/")) {
-          navigate(path);
-        }
-      }
-      if (event.data?.type === "vivd:studio:theme") {
-        markStudioReady();
-        const nextTheme = event.data?.theme;
-        const nextColorTheme = event.data?.colorTheme;
-
-        if (isTheme(nextTheme)) setTheme(nextTheme);
-        if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
-      }
-      if (event.data?.type === "vivd:studio:hardRestart") {
-        const versionRaw = event.data?.version;
-        const version = typeof versionRaw === "number" ? versionRaw : Number.NaN;
-        void handleHardRestart(Number.isFinite(version) ? version : undefined);
-      }
-      if (event.data?.type === "vivd:studio:toggleSidebar") {
-        toggleSidebar();
-      }
-    };
-
-    window.addEventListener("message", onMessage);
-    return () => {
-      window.removeEventListener("message", onMessage);
-    };
-  }, [
-    navigate,
-    initialGenerationRequested,
-    markStudioReady,
-    projectSlug,
-    sendInitialGenerationBootstrap,
-    setColorTheme,
+  const {
+    studioReady,
+    studioLoadTimedOut,
+    studioLoadErrored,
+    handleStudioIframeLoad,
+    handleStudioIframeError,
+  } = useStudioIframeLifecycle({
+    iframeRef: studioIframeRef,
+    studioBaseUrl,
+    reloadNonce: studioReloadNonce,
+    reloadStudioIframe,
+    theme,
+    colorTheme,
     setTheme,
-    studioVersion,
-    toggleSidebar,
-  ]);
+    setColorTheme,
+    onReady: sendInitialGenerationBootstrap,
+    onClose: () => {
+      navigate(ROUTES.DASHBOARD);
+    },
+    onFullscreen: () => {
+      const params = new URLSearchParams({
+        version: String(studioVersion),
+        ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+      });
+      navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`);
+    },
+    onNavigate: (path) => {
+      navigate(path);
+    },
+    onToggleSidebar: toggleSidebar,
+    onHardRestart: (nextVersion) => {
+      void handleHardRestart(nextVersion);
+    },
+  });
 
   const studioIframeSrc = useMemo(() => {
     if (!studioBaseUrl) return null;
@@ -606,53 +466,12 @@ export default function EmbeddedStudio() {
     studioVersion,
   ]);
 
-  const studioBootstrapAction = useMemo(() => {
-    if (!studioBaseUrl) return null;
-    return resolveStudioRuntimeUrl(studioBaseUrl, "vivd-studio/api/bootstrap");
-  }, [studioBaseUrl]);
-
   const studioIframeTarget = useMemo(
     () => `vivd-studio-embedded-${projectSlug || "project"}-v${studioVersion}`,
     [projectSlug, studioVersion],
   );
 
   const studioIframeRequestKey = `${projectSlug}-${studioVersion}-${studioBaseUrl ?? ""}-${studioReloadNonce}`;
-
-  useStudioIframeReadyRetry({
-    enabled: Boolean(studioIframeSrc && !studioReady),
-    checkReady: tryMarkStudioReadyFromIframe,
-  });
-
-  const handleHealthyRuntimeTimeoutRecovery = useCallback(() => {
-    setStudioLoadTimedOut(false);
-    setStudioLoadErrored(false);
-    void reloadStudioIframe();
-  }, [reloadStudioIframe]);
-
-  useStudioIframeTimeoutRecovery({
-    enabled: Boolean(studioLoadTimedOut && studioBaseUrl && !studioReady),
-    studioBaseUrl,
-    onHealthyRuntimeDetected: handleHealthyRuntimeTimeoutRecovery,
-  });
-
-  useEffect(() => {
-    if (!studioIframeSrc) {
-      setStudioReady(false);
-      setStudioLoadTimedOut(false);
-      setStudioLoadErrored(false);
-      return;
-    }
-
-    setStudioReady(false);
-    setStudioLoadTimedOut(false);
-    setStudioLoadErrored(false);
-
-    const timeout = window.setTimeout(() => {
-      setStudioLoadTimedOut(true);
-    }, 25_000);
-
-    return () => window.clearTimeout(timeout);
-  }, [studioIframeSrc, studioReloadNonce]);
 
   const previewIframeSrc = useMemo(() => {
     if (!projectSlug || !project) return null;
@@ -995,7 +814,7 @@ export default function EmbeddedStudio() {
               allow="fullscreen; clipboard-write"
               allowFullScreen
               onLoad={handleStudioIframeLoad}
-              onError={() => setStudioLoadErrored(true)}
+              onError={handleStudioIframeError}
             />
 
             {isStudioRecovering ? (
