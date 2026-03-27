@@ -3,13 +3,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
-import { createStudioBootstrapToken } from "@vivd/shared/studio";
 
 const DEFAULT_IMAGE = "vivd-studio:release-smoke";
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -18,9 +18,43 @@ const PROJECT_SLUG = "ci-studio-smoke";
 const PROJECT_VERSION = 1;
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const STUDIO_AUTH_COOKIE = "vivd_studio_token";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "..");
+const sharedStudioModulePath = path.resolve(
+  repoRoot,
+  "packages/shared/dist/studio/index.js",
+);
+
+let sharedStudioModulePromise = null;
 
 function log(message) {
   console.log(`[studio-image-smoke] ${message}`);
+}
+
+function runCommand(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    cwd: options.cwd,
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0 && !options.allowFailure) {
+    const stderr = (result.stderr || "").trim();
+    const stdout = (result.stdout || "").trim();
+    throw new Error(
+      `${command} ${args.join(" ")} failed (${result.status}): ${stderr || stdout || "unknown error"}`,
+    );
+  }
+
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+  };
 }
 
 function getRequiredEnv(name) {
@@ -188,27 +222,7 @@ async function getFreePort() {
 }
 
 function runDocker(args, options = {}) {
-  const result = spawnSync("docker", args, {
-    encoding: "utf8",
-  });
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (result.status !== 0 && !options.allowFailure) {
-    const stderr = (result.stderr || "").trim();
-    const stdout = (result.stdout || "").trim();
-    throw new Error(
-      `docker ${args.join(" ")} failed (${result.status}): ${stderr || stdout || "unknown error"}`,
-    );
-  }
-
-  return {
-    status: result.status ?? 1,
-    stdout: result.stdout || "",
-    stderr: result.stderr || "",
-  };
+  return runCommand("docker", args, options);
 }
 
 function getContainerLogs(containerId) {
@@ -315,7 +329,25 @@ function extractCookieHeader(setCookieHeader) {
   return `${STUDIO_AUTH_COOKIE}=${cookieMatch[1]}`;
 }
 
+async function loadSharedStudioModule() {
+  if (!sharedStudioModulePromise) {
+    sharedStudioModulePromise = (async () => {
+      if (!existsSync(sharedStudioModulePath)) {
+        log("Building @vivd/shared for Studio smoke helpers...");
+        runCommand("npm", ["run", "build", "-w", "@vivd/shared"], {
+          cwd: repoRoot,
+        });
+      }
+
+      return import(pathToFileURL(sharedStudioModulePath).href);
+    })();
+  }
+
+  return await sharedStudioModulePromise;
+}
+
 async function verifyBootstrapFlow(baseUrl, accessToken, studioId) {
+  const { createStudioBootstrapToken } = await loadSharedStudioModule();
   const bootstrapToken = createStudioBootstrapToken({
     accessToken,
     studioId,

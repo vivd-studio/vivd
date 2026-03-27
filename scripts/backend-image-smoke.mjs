@@ -167,27 +167,31 @@ async function main() {
     getOptionalEnv("VIVD_BACKEND_SMOKE_POSTGRES_IMAGE") || DEFAULT_POSTGRES_IMAGE;
   const timeoutMs = getSmokeTimeoutMs();
   const backendPort = await getFreePort();
-  const postgresPort = await getFreePort();
   const backendContainer = `vivd-backend-smoke-${randomUUID().slice(0, 12)}`;
   const postgresContainer = `vivd-backend-smoke-pg-${randomUUID().slice(0, 12)}`;
+  const dockerNetwork = `vivd-backend-smoke-net-${randomUUID().slice(0, 12)}`;
   const baseUrl = `http://127.0.0.1:${backendPort}`;
-  const databaseUrl = `postgresql://postgres:password@host.docker.internal:${postgresPort}/vivd_smoke`;
+  const databaseUrl = `postgresql://postgres:password@${postgresContainer}:5432/vivd_smoke`;
 
   log(`Using backend image ${image}`);
   log(`Using postgres image ${postgresImage}`);
 
+  let createdNetwork = false;
   let startedPostgres = false;
   let startedBackend = false;
   let succeeded = false;
 
   try {
+    runDocker(["network", "create", dockerNetwork]);
+    createdNetwork = true;
+
     const postgresRun = runDocker([
       "run",
       "--detach",
       "--name",
       postgresContainer,
-      "--publish",
-      `127.0.0.1:${postgresPort}:5432`,
+      "--network",
+      dockerNetwork,
       "--env",
       "POSTGRES_USER=postgres",
       "--env",
@@ -208,10 +212,10 @@ async function main() {
       "--detach",
       "--name",
       backendContainer,
+      "--network",
+      dockerNetwork,
       "--publish",
       `127.0.0.1:${backendPort}:3000`,
-      "--add-host",
-      "host.docker.internal:host-gateway",
       "--env",
       "PORT=3000",
       "--env",
@@ -254,6 +258,10 @@ async function main() {
         process.stdout.write(`${logs}\n`);
       }
       runDocker(["rm", "-f", postgresContainer], { allowFailure: true });
+    }
+
+    if (createdNetwork) {
+      runDocker(["network", "rm", dockerNetwork], { allowFailure: true });
     }
   }
 }
