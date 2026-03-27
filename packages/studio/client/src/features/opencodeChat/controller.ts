@@ -140,6 +140,17 @@ export function useOpencodeChatController({
       refetchSessions();
       onTaskComplete?.();
       if (data.reverted === false) {
+        if (
+          "reason" in data &&
+          data.reason === "missing_snapshot_history"
+        ) {
+          toast.info("Revert unavailable", {
+            description:
+              "This older session depends on snapshot history that is no longer available on this Studio. New changes should be tracked again, but this specific revert cannot be reconstructed.",
+          });
+          return;
+        }
+
         toast.info("Nothing to revert", {
           description:
             "We couldn’t find any reversible changes for that message. This can happen when changes were made outside tracked edits (for example via terminal commands).",

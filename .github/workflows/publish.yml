@@ -166,8 +166,82 @@ jobs:
             echo "- build_caddy: $build_caddy"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  build-studio:
+  validate-release:
     needs: detect-changes
+    if: needs.detect-changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Studio Auth Regression Tests
+        run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
+
+  studio-image-smoke:
+    needs: [detect-changes, validate-release]
+    if: needs.detect-changes.outputs.build_studio == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build vivd-studio release candidate image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./packages/studio/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          load: true
+          tags: vivd-studio:release-smoke
+          cache-from: type=gha,scope=studio
+
+      - name: Smoke test vivd-studio release candidate
+        env:
+          STUDIO_IMAGE: vivd-studio:release-smoke
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT || secrets.GOOGLE_CLOUD_PROJECT }}
+          VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION || secrets.VERTEX_LOCATION || 'global' }}
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH: ${{ secrets.VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH }}
+          OPENCODE_MODEL_STANDARD: ${{ vars.OPENCODE_MODEL_STANDARD || secrets.OPENCODE_MODEL_STANDARD }}
+          OPENCODE_MODEL_ADVANCED: ${{ vars.OPENCODE_MODEL_ADVANCED || secrets.OPENCODE_MODEL_ADVANCED }}
+          OPENCODE_MODEL_PRO: ${{ vars.OPENCODE_MODEL_PRO || secrets.OPENCODE_MODEL_PRO }}
+        run: node ./scripts/studio-image-smoke.mjs
+
+  build-studio:
+    needs: [detect-changes, validate-release, studio-image-smoke]
     if: needs.detect-changes.outputs.build_studio == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -205,7 +279,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=studio
 
   build-builder:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_builder == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -243,7 +317,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=builder
 
   build-server:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_server == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -281,7 +355,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=server
 
   build-ui:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_ui == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -319,7 +393,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=ui
 
   build-docs:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_docs == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -359,7 +433,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=docs
 
   build-scraper:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_scraper == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -396,7 +470,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=scraper
 
   build-caddy:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_caddy == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -433,7 +507,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, validate-release, studio-image-smoke, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:

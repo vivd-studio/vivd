@@ -402,6 +402,33 @@ describe("useOpencodeChatController", () => {
     });
   });
 
+  it("shows a specific toast when older snapshot history is no longer available", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    revertMutateAsync.mockResolvedValue({
+      success: true,
+      reverted: false,
+      reason: "missing_snapshot_history",
+      trackedFiles: ["src/pages/index.astro"],
+    });
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.revertToMessage("msg-1");
+    });
+
+    expect(mockToastInfo).toHaveBeenCalledWith("Revert unavailable", {
+      description:
+        "This older session depends on snapshot history that is no longer available on this Studio. New changes should be tracked again, but this specific revert cannot be reconstructed.",
+    });
+  });
+
   it("resolves optimistic revert clicks to the canonical user message id", async () => {
     mockOpencodeChat.selectedSessionId = "sess-1";
     mockOpencodeChat.selectedMessages = [

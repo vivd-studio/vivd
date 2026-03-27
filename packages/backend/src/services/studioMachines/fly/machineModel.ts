@@ -156,7 +156,7 @@ export function shouldStopSuspendedBeforeReconcile(
   state: string | undefined,
   needs: MachineReconcileNeeds,
 ): boolean {
-  return state === "suspended" && (needs.image || needs.guest);
+  return state === "suspended" && hasMachineDrift(needs);
 }
 
 export function resolveStudioIdFromMachine(

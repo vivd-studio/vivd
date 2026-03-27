@@ -316,7 +316,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
     );
   });
 
-  it("warmReconcileStudioMachine refreshes passthrough model env drift", async () => {
+  it("warmReconcileStudioMachine stops suspended machines before refreshing passthrough env drift", async () => {
     vi.stubEnv(
       "OPENCODE_MODEL_STANDARD",
       "openrouter/google/gemini-3-flash-preview",
@@ -324,9 +324,9 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
     const provider = new FlyStudioMachineProvider();
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
-    const machine = studioMachine({
+    const suspendedMachine = studioMachine({
       id: "m5",
-      state: "stopped",
+      state: "suspended",
       image: desiredImage,
       metadataImage: desiredImage,
       env: {
@@ -336,11 +336,22 @@ describe("FlyStudioMachineProvider orchestration", () => {
     });
 
     (provider as any).getDesiredImage = async () => desiredImage;
-    (provider as any).getMachine = async () => machine;
+    const getMachineMock = vi
+      .fn()
+      .mockResolvedValueOnce(suspendedMachine)
+      .mockResolvedValueOnce({
+        ...suspendedMachine,
+        state: "stopped",
+      });
+    (provider as any).getMachine = getMachineMock;
+    const stopMachineMock = vi
+      .spyOn((provider as any).apiClient, "stopMachine")
+      .mockResolvedValue(undefined);
+    (provider as any).waitForState = async () => {};
     let updatedConfig: any = null;
     (provider as any).apiClient.updateMachineConfig = async ({ config }: any) => {
       updatedConfig = config;
-      return { ...machine, config };
+      return { ...suspendedMachine, config };
     };
     (provider as any).waitForReconcileDriftToClear = async () => null;
     (provider as any).startMachineHandlingReplacement = async () => {};
@@ -351,6 +362,8 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
     await provider.warmReconcileStudioMachine("m5");
 
+    expect(stopMachineMock).toHaveBeenCalledWith("m5");
+    expect(getMachineMock).toHaveBeenCalledTimes(2);
     expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
       "openrouter/google/gemini-3-flash-preview",
     );

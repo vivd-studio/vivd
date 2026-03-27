@@ -294,6 +294,7 @@ async function spawnOpencodeServer(options: {
 async function copyOpencodePersistedState(options: {
   fromHomeDir: string;
   toHomeDir: string;
+  repoDir: string;
 }): Promise<void> {
   const fromDataDir = path.join(
     options.fromHomeDir,
@@ -341,7 +342,7 @@ async function copyOpencodePersistedState(options: {
     await fs.rm(path.join(repoDir, "refs"), { recursive: true, force: true });
     await fs.rm(path.join(repoDir, "branches"), { recursive: true, force: true });
   }
-  await repairOpencodeSnapshotGitDirs(toSnapshotDir);
+  await repairOpencodeSnapshotGitDirs(toSnapshotDir, options.repoDir);
 }
 
 function setOpencodeHomeEnv(homeDir: string) {
@@ -354,6 +355,22 @@ function setOpencodeHomeEnv(homeDir: string) {
 async function stopStudioOpencodeForRepo(repoDir: string): Promise<void> {
   workspaceEventPump.stop(repoDir);
   await serverManager.stopServer(repoDir).catch(() => undefined);
+}
+
+async function readOpencodeProjectId(repoDir: string): Promise<string> {
+  return (
+    await fs.readFile(path.join(repoDir, ".git", "opencode"), "utf-8")
+  ).trim();
+}
+
+async function breakSnapshotObjects(snapshotRoot: string, projectId: string): Promise<void> {
+  const snapshotGitDir = path.join(snapshotRoot, projectId);
+  await fs.rm(path.join(snapshotGitDir, "objects"), {
+    recursive: true,
+    force: true,
+  });
+  await fs.mkdir(path.join(snapshotGitDir, "objects", "info"), { recursive: true });
+  await fs.mkdir(path.join(snapshotGitDir, "objects", "pack"), { recursive: true });
 }
 
 describe("OpenCode revert/unrevert integration", () => {
@@ -472,6 +489,7 @@ describe("OpenCode revert/unrevert integration", () => {
         await copyOpencodePersistedState({
           fromHomeDir: homeDir,
           toHomeDir: rehydratedHomeDir,
+          repoDir,
         });
         server = await spawnOpencodeServer({
           repoDir,
@@ -591,6 +609,7 @@ describe("OpenCode revert/unrevert integration", () => {
         await copyOpencodePersistedState({
           fromHomeDir: homeDir,
           toHomeDir: rehydratedHomeDir,
+          repoDir,
         });
         setOpencodeHomeEnv(rehydratedHomeDir);
 
@@ -604,6 +623,136 @@ describe("OpenCode revert/unrevert integration", () => {
 
         await unrevertSession(sessionId, repoDir);
         expect(await fs.readFile(filePath, "utf-8")).toBe(editedContent);
+      } finally {
+        await stopStudioOpencodeForRepo(repoDir);
+
+        if (originalEnv.HOME == null) delete process.env.HOME;
+        else process.env.HOME = originalEnv.HOME;
+        if (originalEnv.XDG_CONFIG_HOME == null) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = originalEnv.XDG_CONFIG_HOME;
+        if (originalEnv.XDG_DATA_HOME == null) delete process.env.XDG_DATA_HOME;
+        else process.env.XDG_DATA_HOME = originalEnv.XDG_DATA_HOME;
+        if (originalEnv.OPENCODE_CONFIG_CONTENT == null) {
+          delete process.env.OPENCODE_CONFIG_CONTENT;
+        } else {
+          process.env.OPENCODE_CONFIG_CONTENT =
+            originalEnv.OPENCODE_CONFIG_CONTENT;
+        }
+      }
+    },
+  );
+
+  it.skipIf(!RUN_REVERT_TESTS)(
+    "keeps future tracking working after rehydrate even when older snapshot history is unrecoverable",
+    { timeout: 240_000 },
+    async () => {
+      const originalEnv = {
+        HOME: process.env.HOME,
+        XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+        XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+        OPENCODE_CONFIG_CONTENT: process.env.OPENCODE_CONFIG_CONTENT,
+      };
+      const tmpRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "vivd-studio-opencode-old-revert-"),
+      );
+      const homeDir = path.join(tmpRoot, "home");
+      const rehydratedHomeDir = path.join(tmpRoot, "rehydrated-home");
+      const repoDir = path.join(tmpRoot, "repo");
+      await fs.mkdir(homeDir, { recursive: true });
+      await fs.mkdir(rehydratedHomeDir, { recursive: true });
+      await fs.mkdir(repoDir, { recursive: true });
+
+      const filePath = path.join(repoDir, "foo.txt");
+      await fs.writeFile(filePath, "BEFORE\n", "utf-8");
+
+      await runGit(repoDir, ["init"]);
+      await runGit(repoDir, ["config", "user.email", "test@vivd.local"]);
+      await runGit(repoDir, ["config", "user.name", "Vivd Test"]);
+      try {
+        await runGit(repoDir, ["branch", "-M", "main"]);
+      } catch {
+        // Best-effort only.
+      }
+      await runGit(repoDir, ["add", "-A"]);
+      await runGit(repoDir, ["commit", "-m", "init"]);
+
+      let firstSessionId = "";
+      let firstUserMessageId = "";
+
+      try {
+        setOpencodeHomeEnv(homeDir);
+
+        const firstRun = await runTask(
+          "Edit foo.txt so its entire contents are exactly: AFTER_ONE\\n",
+          repoDir,
+          undefined,
+          { provider: "opencode", modelId: "big-pickle" },
+        );
+        firstSessionId = firstRun.sessionId;
+        await waitForStudioSessionCompletion(firstSessionId);
+        expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER_ONE\n");
+
+        const firstMessages = await getSessionContent(firstSessionId, repoDir);
+        const firstUserMessage = firstMessages.find(
+          (message) => message.info.role === "user",
+        );
+        expect(firstUserMessage).toBeTruthy();
+        firstUserMessageId = firstUserMessage!.info.id;
+        expect(
+          firstMessages.flatMap((message) =>
+            (message.parts ?? []).filter((part) => part?.type === "patch"),
+          ).length,
+        ).toBeGreaterThan(0);
+
+        await stopStudioOpencodeForRepo(repoDir);
+        await copyOpencodePersistedState({
+          fromHomeDir: homeDir,
+          toHomeDir: rehydratedHomeDir,
+          repoDir,
+        });
+
+        const rehydratedSnapshotRoot = path.join(
+          rehydratedHomeDir,
+          ".local",
+          "share",
+          "opencode",
+          "snapshot",
+        );
+        const projectId = await readOpencodeProjectId(repoDir);
+        await breakSnapshotObjects(rehydratedSnapshotRoot, projectId);
+        await repairOpencodeSnapshotGitDirs(rehydratedSnapshotRoot, repoDir);
+
+        setOpencodeHomeEnv(rehydratedHomeDir);
+
+        const failedOldRevert = await revertToUserMessage(
+          firstSessionId,
+          firstUserMessageId,
+          repoDir,
+        );
+        expect(failedOldRevert).toMatchObject({
+          reverted: false,
+          reason: "missing_snapshot_history",
+          messageId: firstUserMessageId,
+        });
+        expect(failedOldRevert.trackedFiles).toHaveLength(1);
+        expect(failedOldRevert.trackedFiles[0]).toMatch(/\/foo\.txt$/);
+        expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER_ONE\n");
+
+        const secondRun = await runTask(
+          "Edit foo.txt so its entire contents are exactly: AFTER_TWO\\n",
+          repoDir,
+          undefined,
+          { provider: "opencode", modelId: "big-pickle" },
+        );
+        await waitForStudioSessionCompletion(secondRun.sessionId);
+        expect(await fs.readFile(filePath, "utf-8")).toBe("AFTER_TWO\n");
+
+        const secondMessages = await getSessionContent(secondRun.sessionId, repoDir);
+        expect(
+          secondMessages.flatMap((message) =>
+            (message.parts ?? []).filter((part) => part?.type === "patch"),
+          ).length,
+        ).toBeGreaterThan(0);
       } finally {
         await stopStudioOpencodeForRepo(repoDir);
 

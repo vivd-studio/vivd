@@ -23,6 +23,10 @@ import { agentInstructionsService } from "../services/agent/AgentInstructionsSer
 import { workspaceEventPump } from "./events/workspaceEventPump.js";
 import { isStudioSoftContextLimitReached } from "../../shared/opencodeContextPolicy.js";
 import { getStudioOpencodeSoftContextLimitTokens } from "../config.js";
+import {
+  resolveOpencodeSnapshotGitState,
+  snapshotGitDirHasObject,
+} from "./snapshotGitDirRepair.js";
 
 import type { ModelSelection } from "./modelConfig.js";
 import { getDefaultModel } from "./modelConfig.js";
@@ -49,6 +53,12 @@ type SessionMessageRecord = {
 type RevertPatchPartRecord = {
   type?: unknown;
   files?: unknown;
+  hash?: unknown;
+};
+
+type RevertPatchHistory = {
+  files: string[];
+  hashes: string[];
 };
 
 function isPlaceholderTitle(title: string | undefined): boolean {
@@ -112,11 +122,12 @@ function readSessionNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-function getTrackedFilesForMessageRevert(
+function getPatchHistoryForMessageRevert(
   messages: SessionMessageRecord[],
   userMessageId: string,
-): string[] {
+): RevertPatchHistory {
   const files = new Set<string>();
+  const hashes = new Set<string>();
   let collect = false;
 
   for (const message of messages) {
@@ -141,10 +152,17 @@ function getTrackedFilesForMessageRevert(
           files.add(file);
         }
       }
+
+      if (typeof part.hash === "string" && part.hash.trim().length > 0) {
+        hashes.add(part.hash);
+      }
     }
   }
 
-  return [...files];
+  return {
+    files: [...files],
+    hashes: [...hashes],
+  };
 }
 
 function normalizeUnifiedDiffPath(value: string): string | null {
@@ -963,6 +981,29 @@ function toErrorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+async function getMissingSnapshotHashes(
+  directory: string,
+  hashes: string[],
+): Promise<string[]> {
+  if (!hashes.length) {
+    return [];
+  }
+
+  const snapshotState = await resolveOpencodeSnapshotGitState(directory);
+  if (!snapshotState) {
+    return [];
+  }
+
+  return hashes.filter(
+    (hash) =>
+      !snapshotGitDirHasObject(
+        snapshotState.snapshotGitDir,
+        snapshotState.worktree,
+        hash,
+      ),
+  );
+}
+
 export async function revertToUserMessage(
   sessionId: string,
   userMessageId: string,
@@ -971,7 +1012,7 @@ export async function revertToUserMessage(
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
 
-  let trackedFilesFromPatchParts: string[] = [];
+  let patchHistory: RevertPatchHistory = { files: [], hashes: [] };
   let priorRevertMessageId: string | undefined;
   try {
     const messagesRes = await client.session.messages({
@@ -979,13 +1020,29 @@ export async function revertToUserMessage(
       directory: opencodeDir,
     });
     if (!messagesRes.error && Array.isArray(messagesRes.data)) {
-      trackedFilesFromPatchParts = getTrackedFilesForMessageRevert(
+      patchHistory = getPatchHistoryForMessageRevert(
         messagesRes.data as SessionMessageRecord[],
         userMessageId,
       );
     }
   } catch {
     // Best-effort only.
+  }
+
+  const missingSnapshotHashes = await getMissingSnapshotHashes(
+    directory,
+    patchHistory.hashes,
+  );
+  if (missingSnapshotHashes.length > 0) {
+    console.warn(
+      `[OpenCode][revert] missing snapshot history for session=${sessionId} message=${userMessageId} missingHashes=${missingSnapshotHashes.length}`,
+    );
+    return {
+      reverted: false,
+      reason: "missing_snapshot_history" as const,
+      messageId: userMessageId,
+      trackedFiles: patchHistory.files.slice(0, 50),
+    };
   }
 
   try {
@@ -1018,7 +1075,7 @@ export async function revertToUserMessage(
   const trackedFiles = reverted
     ? trackedFilesFromResult.length > 0
       ? trackedFilesFromResult
-      : trackedFilesFromPatchParts
+      : patchHistory.files
     : [];
 
   if (!reverted) {

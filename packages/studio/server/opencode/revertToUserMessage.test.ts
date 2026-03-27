@@ -3,17 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   getClientAndDirectoryMock,
   getSessionStatusesMock,
+  resolveOpencodeSnapshotGitStateMock,
   sessionGetMock,
   sessionMessagesMock,
   sessionRevertMock,
-  sessionDiffMock,
+  snapshotGitDirHasObjectMock,
 } = vi.hoisted(() => ({
   getClientAndDirectoryMock: vi.fn(),
   getSessionStatusesMock: vi.fn(),
+  resolveOpencodeSnapshotGitStateMock: vi.fn(),
   sessionGetMock: vi.fn(),
   sessionMessagesMock: vi.fn(),
   sessionRevertMock: vi.fn(),
-  sessionDiffMock: vi.fn(),
+  snapshotGitDirHasObjectMock: vi.fn(),
 }));
 
 vi.mock("./serverManager.js", () => ({
@@ -31,6 +33,11 @@ vi.mock("./eventEmitter.js", () => ({
 
 vi.mock("./useEvents.js", () => ({
   useEvents: vi.fn(),
+}));
+
+vi.mock("./snapshotGitDirRepair.js", () => ({
+  resolveOpencodeSnapshotGitState: resolveOpencodeSnapshotGitStateMock,
+  snapshotGitDirHasObject: snapshotGitDirHasObjectMock,
 }));
 
 vi.mock("../services/reporting/UsageReporter.js", () => ({
@@ -70,19 +77,21 @@ describe("revertToUserMessage", () => {
   beforeEach(() => {
     getClientAndDirectoryMock.mockReset();
     getSessionStatusesMock.mockReset();
+    resolveOpencodeSnapshotGitStateMock.mockReset();
     sessionGetMock.mockReset();
     sessionMessagesMock.mockReset();
     sessionRevertMock.mockReset();
-    sessionDiffMock.mockReset();
+    snapshotGitDirHasObjectMock.mockReset();
 
     getSessionStatusesMock.mockReturnValue({});
+    resolveOpencodeSnapshotGitStateMock.mockResolvedValue(null);
     sessionGetMock.mockResolvedValue({ data: {}, error: undefined });
     sessionMessagesMock.mockResolvedValue({ data: [], error: undefined });
     sessionRevertMock.mockResolvedValue({
       data: { revert: { messageID: "msg-user" } },
       error: undefined,
     });
-    sessionDiffMock.mockResolvedValue({ data: [], error: undefined });
+    snapshotGitDirHasObjectMock.mockReturnValue(true);
 
     getClientAndDirectoryMock.mockResolvedValue({
       directory: "/workspace/project/",
@@ -91,7 +100,6 @@ describe("revertToUserMessage", () => {
           get: sessionGetMock,
           messages: sessionMessagesMock,
           revert: sessionRevertMock,
-          diff: sessionDiffMock,
         },
       },
     });
@@ -201,6 +209,50 @@ describe("revertToUserMessage", () => {
       reverted: false,
       messageId: "msg-user",
       trackedFiles: [],
+    });
+  });
+
+  it("refuses destructive revert attempts when older snapshot history is missing", async () => {
+    resolveOpencodeSnapshotGitStateMock.mockResolvedValue({
+      projectId: "project-1",
+      worktree: "/workspace/project",
+      snapshotRoot: "/data/opencode/snapshot",
+      snapshotGitDir: "/data/opencode/snapshot/project-1",
+    });
+    snapshotGitDirHasObjectMock.mockReturnValue(false);
+    sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: { id: "msg-user", role: "user" },
+          parts: [{ id: "part-user", type: "text" }],
+        },
+        {
+          info: { id: "msg-assistant", role: "assistant", parentID: "msg-user" },
+          parts: [
+            {
+              id: "part-patch",
+              type: "patch",
+              hash: "snap-missing",
+              files: ["/workspace/project/src/pages/index.astro"],
+            },
+          ],
+        },
+      ],
+      error: undefined,
+    });
+
+    const result = await revertToUserMessage(
+      "sess-1",
+      "msg-user",
+      "/workspace/project",
+    );
+
+    expect(sessionRevertMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      reverted: false,
+      reason: "missing_snapshot_history",
+      messageId: "msg-user",
+      trackedFiles: ["/workspace/project/src/pages/index.astro"],
     });
   });
 });

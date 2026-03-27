@@ -248,7 +248,7 @@ repair_opencode_snapshot_gitdirs() {
   # be valid and does not go through this branch.
   OPENCODE_SNAPSHOT_REPAIR_SCRIPT="/app/packages/studio/dist/opencode/snapshotGitDirRepair.js"
   if command -v node >/dev/null 2>&1 && [ -f "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" ]; then
-    node "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" "$SNAPSHOT_ROOT"
+    node "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" "$SNAPSHOT_ROOT" "${VIVD_WORKSPACE_DIR:-}"
     return $?
   fi
 

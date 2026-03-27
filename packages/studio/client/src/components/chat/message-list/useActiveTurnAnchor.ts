@@ -17,6 +17,7 @@ const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 10;
 const MANUAL_SCROLL_RESUME_THRESHOLD_PX = 1;
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
 const USER_SCROLL_DELTA_THRESHOLD_PX = 1;
+const SCROLL_POSITION_EPSILON_PX = 2;
 
 export function useActiveTurnAnchor({
   selectedSessionId,
@@ -128,7 +129,9 @@ export function useActiveTurnAnchor({
       return false;
     }
 
-    return Math.abs(viewport.scrollTop - mark.top) < 2;
+    return (
+      Math.abs(viewport.scrollTop - mark.top) < SCROLL_POSITION_EPSILON_PX
+    );
   }, []);
 
   const scrollToBottom = useCallback(
@@ -357,14 +360,24 @@ export function useActiveTurnAnchor({
       return;
     }
 
+    const nextScrollTop = Math.max(
+      0,
+      viewport.scrollHeight - viewport.clientHeight,
+    );
+    const isAlreadyAnchored =
+      Math.abs(viewport.scrollTop - nextScrollTop) <
+      SCROLL_POSITION_EPSILON_PX;
+
     pendingAnchorLayoutAdjustmentsRef.current = 0;
     setUserScrolledState(false);
     skipNextResizeAutoScrollRef.current = true;
     markAutoScroll(viewport);
-    viewport.scrollTo({
-      top: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
-      behavior: pendingAnchorRequest.behavior,
-    });
+    if (!isAlreadyAnchored) {
+      viewport.scrollTo({
+        top: nextScrollTop,
+        behavior: pendingAnchorRequest.behavior,
+      });
+    }
     syncScrollFades();
     lastAnchoredUserMessageIdRef.current = pendingAnchorRequest.messageId;
     setPendingAnchorRequest(null);

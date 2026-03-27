@@ -73,10 +73,12 @@ const scrollToMock = vi.fn();
 const CHAT_ANCHOR_TOP_INSET_PX = 40;
 const viewportExtraScrollHeight = vi.hoisted(() => ({ value: 0 }));
 const anchorTopById = vi.hoisted(() => ({
+  "optimistic:client-1": 120,
   "user-1": 120,
   "user-2": 280,
 } as Record<string, number>));
 const userMessageContentScrollHeightById = vi.hoisted(() => ({
+  "optimistic:client-1": 80,
   "user-1": 80,
   "user-2": 80,
 } as Record<string, number>));
@@ -120,9 +122,11 @@ describe("MessageList latest-user anchoring", () => {
     chatState.attachedImages = [];
     chatState.attachedFiles = [];
     chatState.selectorMode = false;
+    anchorTopById["optimistic:client-1"] = 120;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
     viewportExtraScrollHeight.value = 0;
+    userMessageContentScrollHeightById["optimistic:client-1"] = 80;
     userMessageContentScrollHeightById["user-1"] = 80;
     userMessageContentScrollHeightById["user-2"] = 80;
     resizeObserverCallbacks.length = 0;
@@ -436,6 +440,56 @@ describe("MessageList latest-user anchoring", () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("does not re-anchor when an optimistic latest-user id is replaced in place", async () => {
+    timelineState.items = [
+      {
+        key: "optimistic:client-1",
+        kind: "user",
+        message: {
+          id: "optimistic:client-1",
+          content: "First prompt",
+          createdAt: Date.UTC(2026, 2, 18, 10, 59),
+        },
+      },
+    ];
+    opencodeState.selectedMessages = [
+      { info: { id: "optimistic:client-1" }, parts: [] },
+    ];
+
+    const { rerender } = render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+      expect(scrollToMock).toHaveBeenLastCalledWith({
+        top: 80,
+        behavior: "auto",
+      });
+    });
+
+    timelineState.items = [
+      {
+        key: "user-1",
+        kind: "user",
+        message: {
+          id: "user-1",
+          content: "First prompt",
+          createdAt: Date.UTC(2026, 2, 18, 10, 59),
+        },
+      },
+    ];
+    opencodeState.selectedMessages = [{ info: { id: "user-1" }, parts: [] }];
+    rerender(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    const activeTurnBody = document.querySelector<HTMLElement>(
+      "[data-chat-active-turn-body='user-1']",
+    );
+    expect(activeTurnBody?.style.minHeight).toBe("220px");
   });
 
   it("keeps the context indicator outside the scrollable transcript content", () => {

@@ -143,8 +143,34 @@ jobs:
             echo "- build_scraper: $build_scraper"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  build-studio-arm64:
+  validate-release:
     needs: detect-changes
+    if: needs.detect-changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Studio Auth Regression Tests
+        run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
+
+  build-studio-arm64:
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_studio == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -182,7 +208,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=studio-arm64
 
   build-builder-arm64:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_builder == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -220,7 +246,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=builder-arm64
 
   build-server-arm64:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_server == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -258,7 +284,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=server-arm64
 
   build-ui-arm64:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_ui == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -296,7 +322,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=ui-arm64
 
   build-scraper-arm64:
-    needs: detect-changes
+    needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_scraper == 'true'
     runs-on: ubuntu-latest
     permissions:

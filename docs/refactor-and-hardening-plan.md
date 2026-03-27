@@ -84,6 +84,7 @@ Current boundary: Studio runtime `/vivd-studio`, `/preview`, `/vivd-studio/api/p
 - [ ] Remove unexpected workspace-local lockfiles that violate the repo package-manager rule, or explicitly document allowed exceptions for `vendor/`, examples, and generated sites.
 - [ ] Add or finish backend/studio/scraper lint and typecheck scripts where they are still missing.
 - [ ] Add a lightweight workspace verification command for the touched high-risk paths.
+- [ ] Add a release-gating Studio canary in the publish pipeline that proves the candidate Studio image can actually boot, pass runtime/bootstrap auth, and execute at least one prompt on every configured model tier before the release is considered promotable.
 - [ ] Keep `.env.example`, self-host docs, and installer docs aligned with the real supported config surface.
 - [ ] Add a small change checklist for new runtime/auth/network/config surfaces so env and installer drift stops recurring.
 

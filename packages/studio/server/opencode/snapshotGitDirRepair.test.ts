@@ -62,9 +62,62 @@ describe("repairOpencodeSnapshotGitDirs", () => {
     );
     expect(broken.status).not.toBe(0);
 
-    const repaired = await repairOpencodeSnapshotGitDirs(snapshotRoot);
-    expect(repaired).toEqual([snapshotGitDir]);
+    const result = await repairOpencodeSnapshotGitDirs(snapshotRoot, repoDir);
+    expect(result.repaired).toEqual([snapshotGitDir]);
+    expect(result.rebuilt).toEqual([]);
 
+    expect(
+      runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"], { cwd: repoDir }),
+    ).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it("rebuilds the current project's snapshot gitdir when the object store is already incomplete", async () => {
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-snapshot-rebuild-"));
+    const repoDir = path.join(tmpRoot, "repo");
+    const snapshotRoot = path.join(tmpRoot, "snapshot");
+    const snapshotGitDir = path.join(snapshotRoot, "project-id");
+
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.mkdir(snapshotGitDir, { recursive: true });
+    await fs.writeFile(path.join(repoDir, "index.html"), "<h1>before</h1>\n", "utf-8");
+
+    runGit(["init"], { cwd: repoDir });
+    runGit(["config", "user.email", "studio@vivd.local"], { cwd: repoDir });
+    runGit(["config", "user.name", "Vivd Studio"], { cwd: repoDir });
+    await fs.mkdir(path.join(repoDir, ".git"), { recursive: true });
+    await fs.writeFile(path.join(repoDir, ".git", "opencode"), "project-id\n", "utf-8");
+
+    runGit(["init"], {
+      env: {
+        GIT_DIR: snapshotGitDir,
+        GIT_WORK_TREE: repoDir,
+      },
+    });
+    runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "add", "."], { cwd: repoDir });
+    expect(
+      runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"], { cwd: repoDir }),
+    ).toMatch(/^[0-9a-f]{40}$/);
+
+    await fs.rm(path.join(snapshotGitDir, "objects"), { recursive: true, force: true });
+    await fs.mkdir(path.join(snapshotGitDir, "objects", "info"), { recursive: true });
+    await fs.mkdir(path.join(snapshotGitDir, "objects", "pack"), { recursive: true });
+
+    const broken = spawnSync(
+      "git",
+      ["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"],
+      {
+        cwd: repoDir,
+        env: process.env,
+        encoding: "utf-8",
+      },
+    );
+    expect(broken.status).not.toBe(0);
+
+    const result = await repairOpencodeSnapshotGitDirs(snapshotRoot, repoDir);
+    expect(result.repaired).toEqual([snapshotGitDir]);
+    expect(result.rebuilt).toEqual([snapshotGitDir]);
+
+    runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "add", "."], { cwd: repoDir });
     expect(
       runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"], { cwd: repoDir }),
     ).toMatch(/^[0-9a-f]{40}$/);
