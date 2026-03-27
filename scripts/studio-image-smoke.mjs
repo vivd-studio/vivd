@@ -397,6 +397,60 @@ function buildDockerEnvArgs(accessToken, studioId) {
   return args;
 }
 
+function tryRemoveWorkspaceDir(workspaceDir) {
+  try {
+    rmSync(workspaceDir, { recursive: true, force: true });
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
+function attemptWorkspacePermissionRepair(image, workspaceDir) {
+  return runDocker(
+    [
+      "run",
+      "--rm",
+      "--volume",
+      `${workspaceDir}:/workspace/project`,
+      "--entrypoint",
+      "/bin/sh",
+      image,
+      "-lc",
+      "chmod -R a+rwX /workspace/project || true",
+    ],
+    { allowFailure: true },
+  );
+}
+
+function cleanupWorkspaceDir(image, workspaceDir) {
+  const initialError = tryRemoveWorkspaceDir(workspaceDir);
+  if (!initialError) {
+    return;
+  }
+
+  const initialCode =
+    typeof initialError === "object" && initialError && "code" in initialError
+      ? String(initialError.code)
+      : "unknown";
+  log(
+    `Workspace cleanup hit ${initialCode}; attempting permission repair before retry.`,
+  );
+
+  attemptWorkspacePermissionRepair(image, workspaceDir);
+
+  const retryError = tryRemoveWorkspaceDir(workspaceDir);
+  if (!retryError) {
+    return;
+  }
+
+  const retryMessage =
+    retryError instanceof Error ? retryError.message : String(retryError);
+  console.warn(
+    `[studio-image-smoke] Warning: failed to remove temp workspace ${workspaceDir}: ${retryMessage}`,
+  );
+}
+
 async function main() {
   const image = getOptionalEnv("STUDIO_IMAGE") || DEFAULT_IMAGE;
   const timeoutMs = getSmokeTimeoutMs();
@@ -460,7 +514,7 @@ async function main() {
       runDocker(["rm", "-f", containerId], { allowFailure: true });
     }
 
-    rmSync(workspaceDir, { recursive: true, force: true });
+    cleanupWorkspaceDir(image, workspaceDir);
   }
 }
 

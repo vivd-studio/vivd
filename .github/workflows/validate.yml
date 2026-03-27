@@ -8,24 +8,4 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 23
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Studio Auth Regression Tests
-        run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
+    uses: ./.github/workflows/reusable-validate.yml

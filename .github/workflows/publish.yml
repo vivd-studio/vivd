@@ -169,28 +169,9 @@ jobs:
   validate-release:
     needs: detect-changes
     if: needs.detect-changes.outputs.any == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 23
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Studio Auth Regression Tests
-        run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
+    uses: ./.github/workflows/reusable-validate.yml
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
   studio-image-smoke:
     needs: [detect-changes, validate-release]

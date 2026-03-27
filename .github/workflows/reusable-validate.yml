@@ -1,0 +1,36 @@
+name: Reusable Validate
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Optional git ref to validate"
+        required: false
+        type: string
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Studio Auth Regression Tests
+        run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
