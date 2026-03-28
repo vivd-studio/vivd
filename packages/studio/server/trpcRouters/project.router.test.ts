@@ -36,17 +36,19 @@ vi.mock("@vivd/shared", () => ({
 import { projectRouter } from "./project.js";
 
 function makeContext(overrides: Partial<Context> = {}): Context {
+  const headers: Record<string, string> = {
+    cookie: "vivd_studio_user_action_token=user-action-token-1",
+  };
+
   return {
     workspace: {
       isInitialized: vi.fn(() => true),
       getProjectPath: vi.fn(() => "/tmp/workspace"),
     } as unknown as Context["workspace"],
     req: {
-      headers: {
-        cookie: "vivd_studio_user_action_token=user-action-token-1",
-      },
+      headers,
       get(name: string) {
-        return this.headers[name.toLowerCase()];
+        return headers[name.toLowerCase()];
       },
     } as unknown as Context["req"],
     ...overrides,
