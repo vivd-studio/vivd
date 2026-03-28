@@ -30,6 +30,7 @@ function nextReset(period: "daily" | "weekly" | "monthly", now: Date = new Date(
 function getUnlimitedStatus(): UsageStatus {
   const now = new Date();
   return {
+    reason: "ok",
     blocked: false,
     imageGenBlocked: false,
     warnings: [],
@@ -54,9 +55,12 @@ function getUnlimitedStatus(): UsageStatus {
 function getBackendUnavailableStatus(): UsageStatus {
   const now = new Date();
   return {
+    reason: "backend_unavailable",
     blocked: true,
     imageGenBlocked: true,
-    warnings: ["Unable to verify usage limits - backend unavailable. Please try again later."],
+    warnings: [
+      "Unable to verify Studio usage status with the backend. AI features are temporarily unavailable. Please try again later.",
+    ],
     usage: {
       daily: { current: 0, limit: 0, percentage: 0 },
       weekly: { current: 0, limit: 0, percentage: 0 },

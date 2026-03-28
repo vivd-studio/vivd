@@ -344,6 +344,7 @@ class UsageReporter {
  * Usage status returned from backend.
  */
 export interface UsageStatus {
+  reason?: "ok" | "backend_unavailable";
   blocked: boolean;
   imageGenBlocked: boolean;
   warnings: string[];

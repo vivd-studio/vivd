@@ -370,6 +370,49 @@ describe("studioApi router", () => {
     expect(result).toEqual({ blocked: false });
   });
 
+  it("records usage for the runtime-auth organization on non-default tenant machines", async () => {
+    const caller = studioApiRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationId: "org-tenant",
+        organizationRole: null,
+        hostKind: "control_plane_host",
+        requestHost: "vivd.studio",
+        requestDomain: "vivd.studio",
+        studioRuntimeAuth: {
+          studioId: "studio-tenant",
+          organizationId: "org-tenant",
+          projectSlug: "site-1",
+          version: 3,
+        },
+      }),
+    );
+    const runAt = new Date().toISOString();
+
+    const result = await caller.reportUsage({
+      studioId: "studio-tenant",
+      reports: [
+        {
+          sessionId: "session-tenant",
+          sessionTitle: "Tenant edits",
+          cost: 2.5,
+          timestamp: runAt,
+        },
+      ],
+    });
+
+    expect(recordAiCostMock).toHaveBeenCalledWith(
+      "org-tenant",
+      2.5,
+      undefined,
+      "session-tenant",
+      "Tenant edits",
+      undefined,
+      undefined,
+    );
+    expect(result).toEqual({ success: true, recorded: 1 });
+  });
+
   it("returns rendered agent instructions for the requested project", async () => {
     const caller = studioApiRouter.createCaller(makeContext());
 

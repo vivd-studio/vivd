@@ -128,7 +128,7 @@ describe("vivdImageAiToolDefinition", () => {
     const result = JSON.parse(raw);
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("IMAGE_GEN_LIMIT_EXCEEDED");
-    expect(String(result.error?.message)).toContain("Unable to verify usage limits");
+    expect(String(result.error?.message)).toContain("Unable to verify Studio usage status");
     expect(createImageGenerationMock).not.toHaveBeenCalled();
   });
 

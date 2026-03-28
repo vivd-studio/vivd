@@ -81,6 +81,7 @@ export interface SessionError {
 }
 
 export interface UsageLimitStatus {
+  reason?: "ok" | "backend_unavailable";
   blocked: boolean;
   imageGenBlocked: boolean;
   warnings: string[];

@@ -207,7 +207,7 @@ async function getImageGenerationLimitError(): Promise<string | null> {
 
   const status = await usageReporter.fetchStatus();
   if (!status) {
-    return "Unable to verify usage limits - backend unavailable. Please try again later.";
+    return "Unable to verify Studio usage status with the backend. Image generation is temporarily unavailable. Please try again later.";
   }
 
   if (status.blocked || status.imageGenBlocked) {

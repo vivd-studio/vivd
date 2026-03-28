@@ -287,6 +287,14 @@ export const createContext = async ({
         `[HostResolution] ignoring x-vivd-organization-id="${requestedOrganizationId}" for studio user action token org=${studioUserActionAuth.organizationId}`,
       );
     }
+  } else if (studioRuntimeAuth && requestedOrganizationId) {
+    if (requestedOrganizationId === studioRuntimeAuth.organizationId) {
+      organizationId = requestedOrganizationId;
+    } else {
+      console.warn(
+        `[HostResolution] ignoring x-vivd-organization-id="${requestedOrganizationId}" for studio runtime org=${studioRuntimeAuth.organizationId}`,
+      );
+    }
   } else if (session && requestedOrganizationId && !hostOrganizationId) {
     const hasAccess =
       session.user.role === "super_admin" ||

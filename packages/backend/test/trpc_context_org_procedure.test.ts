@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   getSessionMock,
   resolveHostMock,
+  resolveRuntimeAuthMock,
   sessionFindFirstMock,
   organizationMemberFindManyMock,
   organizationFindFirstMock,
@@ -13,6 +14,7 @@ const {
 } = vi.hoisted(() => {
   const getSessionMock = vi.fn();
   const resolveHostMock = vi.fn();
+  const resolveRuntimeAuthMock = vi.fn();
   const sessionFindFirstMock = vi.fn();
   const organizationMemberFindManyMock = vi.fn();
   const organizationFindFirstMock = vi.fn();
@@ -24,6 +26,7 @@ const {
   return {
     getSessionMock,
     resolveHostMock,
+    resolveRuntimeAuthMock,
     sessionFindFirstMock,
     organizationMemberFindManyMock,
     organizationFindFirstMock,
@@ -41,6 +44,12 @@ vi.mock("../src/lib/authProvider", () => ({
 vi.mock("../src/services/publish/DomainService", () => ({
   domainService: {
     resolveHost: resolveHostMock,
+  },
+}));
+
+vi.mock("../src/services/studioMachines", () => ({
+  studioMachineProvider: {
+    resolveRuntimeAuth: resolveRuntimeAuthMock,
   },
 }));
 
@@ -130,6 +139,7 @@ describe("createContext", () => {
   beforeEach(() => {
     getSessionMock.mockReset();
     resolveHostMock.mockReset();
+    resolveRuntimeAuthMock.mockReset();
     sessionFindFirstMock.mockReset();
     organizationMemberFindManyMock.mockReset();
     organizationFindFirstMock.mockReset();
@@ -141,6 +151,7 @@ describe("createContext", () => {
 
     getSessionMock.mockResolvedValue(null);
     resolveHostMock.mockResolvedValue(makeBaseResolvedHost());
+    resolveRuntimeAuthMock.mockResolvedValue(null);
     sessionFindFirstMock.mockResolvedValue(null);
     organizationMemberFindManyMock.mockResolvedValue([]);
     organizationFindFirstMock.mockResolvedValue({ status: "active" });
@@ -299,6 +310,42 @@ describe("createContext", () => {
     expect(ctx.studioUserActionAuth).toMatchObject({
       sessionId: "sess-2",
       userId: "user-2",
+      organizationId: "org-live",
+      projectSlug: "site-1",
+      version: 3,
+    });
+  });
+
+  it("honors the requested organization header for studio runtime auth even on control-plane hosts", async () => {
+    resolveHostMock.mockResolvedValue(
+      makeBaseResolvedHost({
+        requestHost: "vivd.studio",
+        requestDomain: "vivd.studio",
+        hostKind: "control_plane_host",
+        canSelectOrganization: true,
+      }),
+    );
+    resolveRuntimeAuthMock.mockResolvedValue({
+      studioId: "studio-1",
+      organizationId: "org-live",
+      projectSlug: "site-1",
+      version: 3,
+    });
+
+    const ctx = await createContext({
+      req: makeRequest({
+        host: "vivd.studio",
+        "x-vivd-studio-id": "studio-1",
+        "x-vivd-studio-token": "access-1",
+        "x-vivd-organization-id": "org-live",
+      }),
+      res: {} as any,
+    });
+
+    expect(resolveRuntimeAuthMock).toHaveBeenCalledWith("studio-1", "access-1");
+    expect(ctx.organizationId).toBe("org-live");
+    expect(ctx.studioRuntimeAuth).toMatchObject({
+      studioId: "studio-1",
       organizationId: "org-live",
       projectSlug: "site-1",
       version: 3,

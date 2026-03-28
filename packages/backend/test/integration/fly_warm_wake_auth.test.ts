@@ -25,6 +25,9 @@
  *   VIVD_FLY_WAKE_EXPECT_MAX_MS=5000
  *   VIVD_FLY_COLD_EXPECT_MAX_MS=45000
  *   VIVD_FLY_WAKE_PRINT_LOGS=1
+ *   VIVD_FLY_WAKE_VERIFY_BACKEND_CALLBACKS=1
+ *   VIVD_FLY_TEST_ORGANIZATION_ID=<existing org id>
+ *   VIVD_FLY_TEST_MAIN_BACKEND_URL=https://vivd.studio/vivd-studio
  */
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -39,6 +42,12 @@ const FLY_STUDIO_APP = (process.env.FLY_STUDIO_APP || "").trim();
 const TEST_IMAGE = (process.env.VIVD_FLY_TEST_IMAGE || "").trim();
 const TEST_IMAGE_TAG = (process.env.VIVD_FLY_TEST_IMAGE_TAG || "").trim();
 const PRINT_LOGS = process.env.VIVD_FLY_WAKE_PRINT_LOGS === "1";
+const VERIFY_BACKEND_CALLBACKS =
+  process.env.VIVD_FLY_WAKE_VERIFY_BACKEND_CALLBACKS === "1";
+const TEST_ORGANIZATION_ID =
+  (process.env.VIVD_FLY_TEST_ORGANIZATION_ID || "").trim() || "integration";
+const TEST_MAIN_BACKEND_URL =
+  (process.env.VIVD_FLY_TEST_MAIN_BACKEND_URL || "").trim();
 const SHOULD_RUN =
   RUN_TESTS && FLY_API_TOKEN.length > 0 && FLY_STUDIO_APP.length > 0;
 
@@ -314,6 +323,67 @@ async function verifyBootstrapAuth(options: {
   expect(followUp.status).toBe(200);
 }
 
+async function verifyConnectedBackendCallbacks(machineId: string): Promise<void> {
+  const script = `
+const backendUrl = (process.env.MAIN_BACKEND_URL || "").trim();
+const studioId = (process.env.STUDIO_ID || "").trim();
+const accessToken = (process.env.STUDIO_ACCESS_TOKEN || "").trim();
+const organizationId = (process.env.VIVD_TENANT_ID || "").trim();
+const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+const version = Number.parseInt((process.env.VIVD_PROJECT_VERSION || "").trim(), 10);
+
+if (!backendUrl || !studioId || !accessToken || !organizationId || !projectSlug || !Number.isFinite(version)) {
+  throw new Error("missing connected-mode env");
+}
+
+const statusUrl = new URL("/api/trpc/studioApi.getStatus", backendUrl);
+statusUrl.searchParams.set("input", JSON.stringify({ studioId }));
+
+const headers = {
+  "x-vivd-studio-token": accessToken,
+  "x-vivd-studio-id": studioId,
+  "x-vivd-organization-id": organizationId,
+  "content-type": "application/json",
+};
+
+const statusResponse = await fetch(statusUrl, { headers });
+const statusText = await statusResponse.text();
+if (!statusResponse.ok) {
+  throw new Error(\`getStatus \${statusResponse.status}: \${statusText}\`);
+}
+
+const workspaceResponse = await fetch(new URL("/api/trpc/studioApi.reportWorkspaceState", backendUrl), {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    studioId,
+    slug: projectSlug,
+    version,
+    hasUnsavedChanges: false,
+    headCommitHash: null,
+    workingCommitHash: null,
+  }),
+});
+const workspaceText = await workspaceResponse.text();
+if (!workspaceResponse.ok) {
+  throw new Error(\`reportWorkspaceState \${workspaceResponse.status}: \${workspaceText}\`);
+}
+
+console.log(JSON.stringify({
+  getStatus: statusText,
+  reportWorkspaceState: workspaceText,
+}));
+`.trim();
+
+  const result = await executeMachineCommand({
+    machineId,
+    timeoutSeconds: 30,
+    command: ["/usr/bin/env", "node", "--input-type=module", "--eval", script],
+  });
+  expect(result.stdout.trim()).toContain("getStatus");
+  expect(result.stdout.trim()).toContain("reportWorkspaceState");
+}
+
 function tryReadFlyLogs(machineId: string): string | null {
   for (const command of ["flyctl", "fly"]) {
     const result = spawnSync(
@@ -422,9 +492,15 @@ describe.sequential("Fly warm wake + auth", () => {
       const runId = `${Date.now().toString(36)}-${crypto
         .randomBytes(4)
         .toString("hex")}`;
-      const organizationId = "integration";
+      const organizationId = TEST_ORGANIZATION_ID;
       const projectSlug = `warm-wake-${runId}`;
       const version = 1;
+      const startEnv =
+        VERIFY_BACKEND_CALLBACKS && TEST_MAIN_BACKEND_URL
+          ? {
+              MAIN_BACKEND_URL: TEST_MAIN_BACKEND_URL,
+            }
+          : {};
 
       let machineId: string | null = null;
       let latestEvents: FlyMachineEvent[] = [];
@@ -439,7 +515,7 @@ describe.sequential("Fly warm wake + auth", () => {
           organizationId,
           projectSlug,
           version,
-          env: {},
+          env: startEnv,
         });
         const coldReadyMs = Date.now() - coldStartedAt;
 
@@ -473,6 +549,19 @@ describe.sequential("Fly warm wake + auth", () => {
           accessToken: coldStart.accessToken!,
           studioId: coldStart.studioId,
         });
+        if (VERIFY_BACKEND_CALLBACKS) {
+          if (!process.env.VIVD_FLY_TEST_ORGANIZATION_ID?.trim()) {
+            throw new Error(
+              "VIVD_FLY_TEST_ORGANIZATION_ID is required when VIVD_FLY_WAKE_VERIFY_BACKEND_CALLBACKS=1",
+            );
+          }
+          if (!TEST_MAIN_BACKEND_URL) {
+            throw new Error(
+              "VIVD_FLY_TEST_MAIN_BACKEND_URL is required when VIVD_FLY_WAKE_VERIFY_BACKEND_CALLBACKS=1",
+            );
+          }
+          await verifyConnectedBackendCallbacks(machineId);
+        }
 
         const parked = await provider.parkStudioMachine(machineId);
         expect(parked).toBe("suspended");
@@ -485,7 +574,7 @@ describe.sequential("Fly warm wake + auth", () => {
           organizationId,
           projectSlug,
           version,
-          env: {},
+          env: startEnv,
         });
         const wakeReadyMs = Date.now() - wakeStartedAt;
 
@@ -512,6 +601,9 @@ describe.sequential("Fly warm wake + auth", () => {
           accessToken: woke.accessToken!,
           studioId: woke.studioId,
         });
+        if (VERIFY_BACKEND_CALLBACKS) {
+          await verifyConnectedBackendCallbacks(machineId);
+        }
 
         const summaryLines = [
           `[Fly warm wake smoke] image=${stripDigest(

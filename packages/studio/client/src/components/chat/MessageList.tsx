@@ -162,6 +162,10 @@ export function MessageList() {
       ? latestAgentItem.completedAt ?? latestAgentItem.message?.completedAt
       : undefined;
   }, [timeline.items]);
+  const blockedUsageTitle =
+    usageLimitStatus?.reason === "backend_unavailable"
+      ? "Usage Check Unavailable"
+      : "Usage Limit Reached";
 
   const renderTimelineItem = (item: CanonicalTimelineItem) =>
     item.kind === "user" ? (
@@ -190,7 +194,7 @@ export function MessageList() {
             <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <div className="font-medium text-sm text-destructive">
-                Usage Limit Reached
+                {blockedUsageTitle}
               </div>
               {usageLimitStatus.warnings.map((warning, i) => (
                 <p

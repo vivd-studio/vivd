@@ -1,0 +1,13 @@
+name: Validate Main Lite
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-main-lite:
+    uses: ./.github/workflows/reusable-validate.yml
+    with:
+      run_studio_image_smoke: false
+    secrets: inherit

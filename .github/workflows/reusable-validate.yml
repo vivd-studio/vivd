@@ -46,7 +46,7 @@ jobs:
         run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts
 
       - name: Studio Runtime Auth And Drift Regression Tests
-        run: npm run test:run -w @vivd/backend -- studio_api_router.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
+        run: npm run test:run -w @vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
 
       - name: Set up Docker Buildx
         if: ${{ inputs.run_studio_image_smoke }}

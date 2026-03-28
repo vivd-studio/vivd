@@ -122,6 +122,8 @@ describe("MessageList latest-user anchoring", () => {
     chatState.attachedImages = [];
     chatState.attachedFiles = [];
     chatState.selectorMode = false;
+    chatState.usageLimitStatus = null;
+    chatState.isUsageBlocked = false;
     anchorTopById["optimistic:client-1"] = 120;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
@@ -340,6 +342,34 @@ describe("MessageList latest-user anchoring", () => {
         .querySelector("[data-chat-scroll-viewport]")
         ?.getAttribute("data-scrollbar-gutter-mode"),
     ).toBe("stable");
+  });
+
+  it("labels backend usage-check failures without showing a usage-limit headline", () => {
+    chatState.isUsageBlocked = true;
+    chatState.usageLimitStatus = {
+      reason: "backend_unavailable",
+      blocked: true,
+      imageGenBlocked: true,
+      warnings: [
+        "Unable to verify Studio usage status with the backend. AI features are temporarily unavailable. Please try again later.",
+      ],
+      usage: {
+        daily: { current: 0, limit: 0, percentage: 0 },
+        weekly: { current: 0, limit: 0, percentage: 0 },
+        monthly: { current: 0, limit: 0, percentage: 0 },
+        imageGen: { current: 0, limit: 0, percentage: 0 },
+      },
+      nextReset: {
+        daily: new Date().toISOString(),
+        weekly: new Date().toISOString(),
+        monthly: new Date().toISOString(),
+      },
+    } as any;
+
+    render(<MessageList />);
+
+    expect(screen.getByText("Usage Check Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Usage Limit Reached")).not.toBeInTheDocument();
   });
 
   it("anchors the latest user message to the top on session load", async () => {
