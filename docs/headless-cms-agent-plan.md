@@ -8,6 +8,7 @@ This direction is now explicitly **CLI-first**.
 - The agent can already execute bash, so the CLI becomes the primary structured interface.
 - Keep structured CMS data in the **control-plane DB** as the source of truth.
 - Keep files/assets in object storage, referenced from CMS entries.
+- Treat images and document/file assets such as PDFs as first-class CMS content, not as an afterthought.
 - Render sites from a **generated content snapshot** during preview/publish, not from live DB reads by default.
 - Put the first CMS UI in the **host app project routes**, embedded into Studio the same way Plugins and Analytics already work.
 
@@ -41,6 +42,13 @@ That means:
 - **entries** are stored as validated structured payloads
 - **assets** are stored in object storage with project-scoped references
 - the **site artifact** receives a generated snapshot of the current content state
+
+Images and files must be handled as first-class content-linked assets, including common website cases such as:
+
+- hero and gallery images
+- logos and team/profile images
+- PDFs and downloadable documents
+- brochures, menus, price lists, spec sheets, and similar attachments
 
 The agent must never alter the physical platform DB schema. It may only mutate project content models through guarded backend APIs.
 
@@ -137,6 +145,10 @@ These should cover the same surface as the current `vivd_plugins_*` tools first.
 - `vivd cms entries update <model-key> <entry-key>`
 - `vivd cms entries delete <model-key> <entry-key>`
 - `vivd cms entries attach <model-key> <entry-key> <field-key> <file>`
+- `vivd cms assets list`
+- `vivd cms assets show <asset-id>`
+- `vivd cms assets upload <file>`
+- `vivd cms assets delete <asset-id>`
 - `vivd cms snapshot export`
 
 The first version does not need the full set on day one, but the plan should target this shape.
@@ -201,6 +213,30 @@ Recommended rollout:
    - shell out to `vivd ... --json`
 
 The important part is that CLI and tools share the same backend contracts.
+
+### Injected agent instruction hint
+
+The injected agent instructions should contain a **very short** summary of any CMS models that already exist for the project.
+
+Purpose:
+
+- give the agent quick situational awareness at session start
+- avoid forcing a CLI discovery round-trip for the most basic context
+- keep the main system prompt small
+
+Rules:
+
+- include only a concise model list or summary
+- do **not** inline full field definitions or large schema JSON
+- if there are many models, summarize and tell the agent to use the CLI for details
+- use the CLI as the expansion path: `vivd cms models list` and `vivd cms models show <model-key>`
+
+Suggested shape:
+
+- `CMS models: downloads (collection, 12 entries), team (singleton), faq (collection).`
+- `Use 'vivd cms models list --json' or 'vivd cms models show <model-key> --json' for details.`
+
+If no models exist yet, say that briefly and stop there.
 
 ## 2. CMS Integration Into The Control-Plane DB
 
@@ -276,6 +312,19 @@ Suggested responsibilities:
 - project/model/entry association
 - field binding
 - human filename and MIME type
+- image dimensions / variants where relevant
+- document metadata such as page count when available
+
+### Media support requirements
+
+Media is not just a generic blob attachment layer. The CMS should explicitly support:
+
+- image assets for rendering in pages and collections
+- file/document assets for downloads, especially PDFs
+- reusable project-scoped assets that can be referenced by multiple entries later
+- stable metadata returned to CLI/UI/render pipelines
+
+The first version does not need a full DAM, but it does need a coherent media model.
 
 ## Recommended field types for the first version
 
@@ -442,6 +491,13 @@ Recommended first layout:
 - **center**: entries list or table for the selected model
 - **right drawer or modal**: entry editor or model editor
 
+The CMS UI should also expose a lightweight media workflow:
+
+- upload image/file assets while editing an entry
+- pick an existing project asset when appropriate
+- preview images inline
+- preview/download files such as PDFs
+
 ### Primary view: entries first
 
 When users open the page, they should land on **entries**, not schema editing.
@@ -464,6 +520,8 @@ Recommended behavior:
 - explicit Save action
 - inline validation before submit
 - file/image fields use upload + picker UX
+- image fields should show thumbnail/alt-text oriented affordances where relevant
+- file fields should show filename, type, size, and PDF/document preview/download affordances where possible
 - list/table supports quick editing for very simple scalar fields later
 
 ### Model/schema editing
@@ -518,6 +576,14 @@ Suggested export structure:
 - entries by model
 - resolved asset references
 
+Resolved asset references should include enough information for rendering and download UX, for example:
+
+- public or preview-safe asset URL
+- MIME type
+- filename
+- image dimensions when relevant
+- file size when relevant
+
 This can be emitted as:
 
 - one consolidated JSON snapshot, or
@@ -533,6 +599,12 @@ Examples:
 - a generated loader/module used by project code
 
 The key rule is that Astro should consume a generated snapshot, not open a live DB connection.
+
+For image and file fields, the generated snapshot should make it easy to render:
+
+- responsive images or image metadata where available
+- document download links and labels
+- PDF/document cards, lists, or detail views
 
 ## Plain HTML projects
 
@@ -563,6 +635,7 @@ It should not be the default architecture for preview/publish.
 - ship `help`, `doctor`, `whoami`, `project info`
 - ship plugin parity commands
 - update agent instructions to mention CLI discovery flow
+- inject only a concise existing-model summary into agent instructions, with CLI-based expansion for detail
 
 ## Phase 1: CMS backend foundation
 

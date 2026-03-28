@@ -3,13 +3,40 @@ import axios from "axios";
 import { OPENROUTER_API_KEY } from "../../generator/config";
 import { usageService } from "../usage/UsageService";
 
-// Re-export the OpenAI client for backwards compatibility during migration
-export const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "https://github.com/vivd",
-    "X-Title": "Vivd",
+let openaiClient: OpenAI | null = null;
+
+function requireOpenRouterApiKey(): string {
+  const apiKey = OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "OPENROUTER_API_KEY is required to use OpenRouter-backed generation services.",
+    );
+  }
+  return apiKey;
+}
+
+export function getOpenRouterClient(): OpenAI {
+  if (openaiClient) {
+    return openaiClient;
+  }
+
+  openaiClient = new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: requireOpenRouterApiKey(),
+    defaultHeaders: {
+      "HTTP-Referer": "https://github.com/vivd",
+      "X-Title": "Vivd",
+    },
+  });
+  return openaiClient;
+}
+
+// Re-export the OpenAI client for backwards compatibility during migration,
+// but keep initialization lazy so backend startup does not hard-fail when
+// OpenRouter credentials are absent in environments that do not need them.
+export const openai = new Proxy({} as OpenAI, {
+  get(_target, property, receiver) {
+    return Reflect.get(getOpenRouterClient() as object, property, receiver);
   },
 });
 
@@ -39,6 +66,9 @@ async function fetchCostWithRetry(
   maxRetries: number = 3,
   baseDelayMs: number = 500
 ): Promise<number | null> {
+  const apiKey = OPENROUTER_API_KEY?.trim();
+  if (!apiKey) return null;
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (attempt > 0) {
       // Exponential backoff: 500ms, 1000ms, 1500ms
@@ -50,7 +80,7 @@ async function fetchCostWithRetry(
         `https://openrouter.ai/api/v1/generation?id=${generationId}`,
         {
           headers: {
-            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            Authorization: `Bearer ${apiKey}`,
           },
         }
       );
@@ -112,7 +142,7 @@ export async function createChatCompletion(
   options: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
   flowContext?: FlowContext
 ): Promise<OpenAI.Chat.ChatCompletion> {
-  const completion = await openai.chat.completions.create(options);
+  const completion = await getOpenRouterClient().chat.completions.create(options);
 
   // Record cost asynchronously if we have flow context
   if (flowContext && completion.id) {
@@ -147,6 +177,7 @@ export async function createImageGeneration(
   },
   flowContext?: FlowContext
 ): Promise<{ data: any; generationId: string | null }> {
+  const apiKey = requireOpenRouterApiKey();
   const response = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
@@ -157,7 +188,7 @@ export async function createImageGeneration(
     },
     {
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/vivd",
         "X-Title": "Vivd",
