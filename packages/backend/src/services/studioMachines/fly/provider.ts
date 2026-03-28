@@ -8,6 +8,10 @@ import type {
 } from "../types";
 import { mergeManagedStudioMachineEnv } from "../env";
 import { listStudioVisitMsByIdentity } from "../visitStore";
+import {
+  pickStableStudioMachineEnv,
+  resolveStableStudioMachineEnv,
+} from "../stableRuntimeEnv";
 import type {
   FlyMachine,
   FlyMachineConfig,
@@ -303,19 +307,46 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     );
   }
 
-  private buildReconciledEnv(options: {
+  protected async resolveStableStudioRuntimeEnv(options: {
+    organizationId: string;
+    projectSlug: string;
+  }): Promise<Record<string, string>> {
+    return resolveStableStudioMachineEnv({
+      providerKind: "fly",
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+    });
+  }
+
+  private async buildReconciledEnv(options: {
     machine: FlyMachine;
     organizationId: string;
     projectSlug: string;
     version: number;
     studioId: string;
     accessToken: string;
-  }): { desiredEnvSubset: Record<string, string>; fullEnv: Record<string, string> } {
+  }): Promise<{ desiredEnvSubset: Record<string, string>; fullEnv: Record<string, string> }> {
+    let stableRuntimeEnv = pickStableStudioMachineEnv(options.machine.config?.env);
+    try {
+      stableRuntimeEnv = {
+        ...stableRuntimeEnv,
+        ...(await this.resolveStableStudioRuntimeEnv({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+        })),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[FlyMachines] Failed to resolve stable runtime env for ${options.organizationId}:${options.projectSlug}/v${options.version}; reusing machine env fallback: ${message}`,
+      );
+    }
+
     const desiredEnv = this.buildStudioEnv({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       version: options.version,
-      env: {},
+      env: stableRuntimeEnv,
       studioId: options.studioId,
       accessToken: options.accessToken,
     });

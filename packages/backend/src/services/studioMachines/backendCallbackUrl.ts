@@ -70,10 +70,20 @@ function pickFallbackOrigin(input: ResolveStudioMainBackendUrlInput): string {
 export function resolveStudioMainBackendUrl(
   input: ResolveStudioMainBackendUrlInput,
 ): string {
-  const requestHost = input.requestHost?.trim();
-  if (input.providerKind !== "local" && requestHost) {
-    const scheme = isLocalHost(requestHost) ? "http" : "https";
-    return toMainBackendUrl(`${scheme}://${requestHost}`);
+  if (input.providerKind !== "local") {
+    const canonicalOrigin =
+      input.backendUrlEnv?.trim() ||
+      input.domainEnv?.trim() ||
+      input.betterAuthUrlEnv?.trim();
+    if (canonicalOrigin) {
+      return toMainBackendUrl(canonicalOrigin);
+    }
+
+    const requestHost = input.requestHost?.trim();
+    if (requestHost) {
+      const scheme = isLocalHost(requestHost) ? "http" : "https";
+      return toMainBackendUrl(`${scheme}://${requestHost}`);
+    }
   }
 
   return toMainBackendUrl(pickFallbackOrigin(input));

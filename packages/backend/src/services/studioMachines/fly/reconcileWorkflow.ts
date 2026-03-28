@@ -85,7 +85,10 @@ export type WarmReconcileStudioMachineDeps = {
   }) => {
     desiredEnvSubset: Record<string, string>;
     fullEnv: Record<string, string>;
-  };
+  } | Promise<{
+    desiredEnvSubset: Record<string, string>;
+    fullEnv: Record<string, string>;
+  }>;
   resolveMachineReconcileState: (options: {
     machine: FlyMachine;
     desiredImage: string;
@@ -169,7 +172,7 @@ export async function warmReconcileStudioMachineWorkflow(
     machine,
     desiredImage,
   });
-  let reconcileEnv = deps.buildReconciledEnv({
+  let reconcileEnv = await deps.buildReconciledEnv({
     machine,
     organizationId: identity.organizationId,
     projectSlug: identity.projectSlug,
@@ -212,7 +215,7 @@ export async function warmReconcileStudioMachineWorkflow(
     });
     currentState = current.state || "unknown";
     const currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
-    currentReconcileEnv = deps.buildReconciledEnv({
+    currentReconcileEnv = await deps.buildReconciledEnv({
       machine: current,
       organizationId: identity.organizationId,
       projectSlug: identity.projectSlug,
@@ -333,7 +336,10 @@ export type ReconcileStudioMachinesInnerDeps = {
   }) => {
     desiredEnvSubset: Record<string, string>;
     fullEnv: Record<string, string>;
-  };
+  } | Promise<{
+    desiredEnvSubset: Record<string, string>;
+    fullEnv: Record<string, string>;
+  }>;
   stopMachine: (machineId: string) => Promise<void>;
   waitForState: (options: WaitForStateOptions) => Promise<void>;
   destroyMachine: (machineId: string) => Promise<void>;
@@ -490,7 +496,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
       machine,
       desiredImage,
     });
-    let reconcileEnv = deps.buildReconciledEnv({
+    let reconcileEnv = await deps.buildReconciledEnv({
       machine,
       organizationId: identity.organizationId,
       projectSlug: identity.projectSlug,
@@ -530,7 +536,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
         machine: current,
         desiredImage,
       });
-      let currentReconcileEnv = deps.buildReconciledEnv({
+      let currentReconcileEnv = await deps.buildReconciledEnv({
         machine: current,
         organizationId: identity.organizationId,
         projectSlug: identity.projectSlug,
@@ -558,7 +564,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
         current = await deps.getMachine(machine.id);
         currentState = current.state || "unknown";
         currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
-        currentReconcileEnv = deps.buildReconciledEnv({
+        currentReconcileEnv = await deps.buildReconciledEnv({
           machine: current,
           organizationId: identity.organizationId,
           projectSlug: identity.projectSlug,

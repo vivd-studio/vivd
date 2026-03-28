@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveStudioMainBackendUrl } from "../src/services/studioMachines/backendCallbackUrl";
 
 describe("resolveStudioMainBackendUrl", () => {
-  it("prefers request host for fly machines even when BACKEND_URL is set", () => {
+  it("prefers canonical BACKEND_URL for fly machines when configured", () => {
     const url = resolveStudioMainBackendUrl({
       providerKind: "fly",
       requestHost: "felixpahlke.vivd.studio",
@@ -12,10 +12,10 @@ describe("resolveStudioMainBackendUrl", () => {
       backendPort: "3000",
     });
 
-    expect(url).toBe("https://felixpahlke.vivd.studio/vivd-studio");
+    expect(url).toBe("https://default.vivd.studio/vivd-studio");
   });
 
-  it("prefers request host for docker machines even when BACKEND_URL is set", () => {
+  it("prefers canonical BACKEND_URL for docker machines when configured", () => {
     const url = resolveStudioMainBackendUrl({
       providerKind: "docker",
       requestHost: "app.vivd.studio",
@@ -25,7 +25,7 @@ describe("resolveStudioMainBackendUrl", () => {
       backendPort: "3000",
     });
 
-    expect(url).toBe("https://app.vivd.studio/vivd-studio");
+    expect(url).toBe("https://default.vivd.studio/vivd-studio");
   });
 
   it("falls back to BACKEND_URL when fly request host is unavailable", () => {
@@ -58,7 +58,7 @@ describe("resolveStudioMainBackendUrl", () => {
     const url = resolveStudioMainBackendUrl({
       providerKind: "fly",
       requestHost: "org.localhost",
-      backendUrlEnv: "https://default.vivd.studio",
+      backendUrlEnv: "",
       domainEnv: "",
       betterAuthUrlEnv: "",
       backendPort: "3000",

@@ -164,7 +164,7 @@ describe("project studio callback URL wiring", () => {
     process.env.PORT = envSnapshot.PORT;
   });
 
-  it("startStudio uses request-host callback URL for fly machines", async () => {
+  it("startStudio uses canonical callback URL for fly machines", async () => {
     const caller = studioRouter.createCaller(makeContext());
 
     const result = await caller.startStudio({ slug: "site-1", version: 1 });
@@ -177,13 +177,20 @@ describe("project studio callback URL wiring", () => {
         projectSlug: "site-1",
         version: 1,
         env: expect.objectContaining({
-          MAIN_BACKEND_URL: "https://felixpahlke.vivd.studio/vivd-studio",
+          MAIN_BACKEND_URL: "https://default.vivd.studio/vivd-studio",
+        }),
+      }),
+    );
+    expect(ensureRunningMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.not.objectContaining({
+          VIVD_ORGANIZATION_ROLE: expect.anything(),
         }),
       }),
     );
   });
 
-  it("hardRestartStudio uses request-host callback URL for fly machines", async () => {
+  it("hardRestartStudio uses canonical callback URL for fly machines", async () => {
     const caller = studioRouter.createCaller(makeContext());
 
     const result = await caller.hardRestartStudio({ slug: "site-1", version: 1 });
@@ -197,7 +204,28 @@ describe("project studio callback URL wiring", () => {
         version: 1,
         mode: "hard",
         env: expect.objectContaining({
-          MAIN_BACKEND_URL: "https://felixpahlke.vivd.studio/vivd-studio",
+          MAIN_BACKEND_URL: "https://default.vivd.studio/vivd-studio",
+        }),
+      }),
+    );
+  });
+
+  it("startStudio sorts enabled plugins before writing machine env", async () => {
+    projectPluginFindManyMock.mockResolvedValue([
+      { pluginId: "seo" },
+      { pluginId: "analytics" },
+      { pluginId: "contact_form" },
+    ]);
+
+    const caller = studioRouter.createCaller(makeContext());
+
+    const result = await caller.startStudio({ slug: "site-1", version: 1 });
+
+    expect(result).toMatchObject({ success: true });
+    expect(ensureRunningMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          VIVD_ENABLED_PLUGINS: "analytics,contact_form,seo",
         }),
       }),
     );

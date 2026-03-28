@@ -2,94 +2,9 @@ import { z } from "zod";
 import { createStudioBootstrapToken } from "@vivd/shared/studio";
 import { projectMemberProcedure } from "../../trpc";
 import { studioMachineProvider } from "../../services/studioMachines";
-import { resolveStudioMainBackendUrl } from "../../services/studioMachines/backendCallbackUrl";
 import { recordStudioVisit } from "../../services/studioMachines/visitStore";
-import { emailTemplateBrandingService } from "../../services/email/templateBranding";
 import { createStudioUserActionToken } from "../../lib/studioUserActionToken";
-import { db } from "../../db";
-import { organization, projectPluginInstance } from "../../db/schema";
-import { and, eq } from "drizzle-orm";
-
-function normalizeGitHubRepoPrefix(value: string): string {
-  const trimmed = value.trim().replace(/^-+/, "");
-  if (!trimmed) return "";
-  return trimmed.endsWith("-") ? trimmed : `${trimmed}-`;
-}
-
-function buildStudioGitHubRepoPrefix(options: {
-  organizationId: string;
-  organizationRepoPrefix: string | null;
-}): string {
-  const instancePrefix = normalizeGitHubRepoPrefix(process.env.GITHUB_REPO_PREFIX || "");
-  const orgPrefixRaw = (options.organizationRepoPrefix || "").trim();
-  const orgPrefix = normalizeGitHubRepoPrefix(orgPrefixRaw || options.organizationId);
-
-  if (!instancePrefix) return orgPrefix;
-  if (orgPrefix.startsWith(instancePrefix)) return orgPrefix;
-  if (instancePrefix.endsWith(orgPrefix)) return instancePrefix;
-  return `${instancePrefix}${orgPrefix}`;
-}
-
-async function getEnabledProjectPluginIds(
-  organizationId: string,
-  slug: string,
-): Promise<string[]> {
-  try {
-    const rows = await db.query.projectPluginInstance.findMany({
-      where: and(
-        eq(projectPluginInstance.organizationId, organizationId),
-        eq(projectPluginInstance.projectSlug, slug),
-        eq(projectPluginInstance.status, "enabled"),
-      ),
-      columns: {
-        pluginId: true,
-      },
-    });
-    return rows.map((row) => row.pluginId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `[StudioMachine] Failed to resolve enabled plugins for ${organizationId}/${slug}: ${message}`,
-    );
-    return [];
-  }
-}
-
-function buildStudioRuntimeEnv(input: {
-  organizationRole: string | null;
-  enabledPluginIds: string[];
-  supportEmail?: string | null;
-}): Record<string, string> {
-  const runtimeEnv: Record<string, string> = {};
-  if (input.organizationRole) {
-    runtimeEnv.VIVD_ORGANIZATION_ROLE = input.organizationRole;
-  }
-  if (input.enabledPluginIds.length > 0) {
-    runtimeEnv.VIVD_ENABLED_PLUGINS = input.enabledPluginIds.join(",");
-  }
-
-  const supportEmail =
-    input.supportEmail?.trim() || (process.env.VIVD_EMAIL_BRAND_SUPPORT_EMAIL || "").trim();
-  if (supportEmail) {
-    runtimeEnv.VIVD_EMAIL_BRAND_SUPPORT_EMAIL = supportEmail;
-  }
-
-  const passthroughKeys = [
-    "VIVD_ORGANIZATION_PLAN",
-    "VIVD_OPENCODE_TOOLS_ENABLE",
-    "VIVD_OPENCODE_TOOLS_DISABLE",
-    "VIVD_OPENCODE_TOOL_FLAGS",
-  ] as const;
-
-  for (const key of passthroughKeys) {
-    const value = (process.env[key] || "").trim();
-    if (value) {
-      runtimeEnv[key] = value;
-    }
-  }
-
-  return runtimeEnv;
-}
+import { resolveStableStudioMachineEnv } from "../../services/studioMachines/stableRuntimeEnv";
 
 function createStudioRuntimeBootstrapToken(options: {
   studioId: string;
@@ -188,28 +103,11 @@ export const studioProcedures = {
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
-      const enabledPluginIds = await getEnabledProjectPluginIds(organizationId, input.slug);
-      const branding = await emailTemplateBrandingService.getResolvedBranding();
-      const studioRuntimeEnv = buildStudioRuntimeEnv({
-        organizationRole: ctx.organizationRole,
-        enabledPluginIds,
-        supportEmail: branding.supportEmail ?? null,
-      });
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
-        columns: { githubRepoPrefix: true },
-      });
-      const githubRepoPrefix = buildStudioGitHubRepoPrefix({
-        organizationId,
-        organizationRepoPrefix: org?.githubRepoPrefix ?? null,
-      });
-      const mainBackendUrl = resolveStudioMainBackendUrl({
+      const studioRuntimeEnv = await resolveStableStudioMachineEnv({
         providerKind: studioMachineProvider.kind,
+        organizationId,
+        projectSlug: input.slug,
         requestHost: ctx.requestHost,
-        backendUrlEnv: process.env.BACKEND_URL,
-        domainEnv: process.env.DOMAIN,
-        betterAuthUrlEnv: process.env.BETTER_AUTH_URL,
-        backendPort: process.env.PORT,
       });
 
       try {
@@ -218,11 +116,7 @@ export const studioProcedures = {
             organizationId,
             projectSlug: input.slug,
             version: input.version,
-            env: {
-              MAIN_BACKEND_URL: mainBackendUrl,
-              GITHUB_REPO_PREFIX: githubRepoPrefix,
-              ...studioRuntimeEnv,
-            },
+            env: studioRuntimeEnv,
           });
         try {
           await recordStudioVisit({
@@ -277,29 +171,11 @@ export const studioProcedures = {
     )
     .mutation(async ({ input, ctx }) => {
       const organizationId = ctx.organizationId!;
-      const enabledPluginIds = await getEnabledProjectPluginIds(organizationId, input.slug);
-      const branding = await emailTemplateBrandingService.getResolvedBranding();
-      const studioRuntimeEnv = buildStudioRuntimeEnv({
-        organizationRole: ctx.organizationRole,
-        enabledPluginIds,
-        supportEmail: branding.supportEmail ?? null,
-      });
-      const org = await db.query.organization.findFirst({
-        where: eq(organization.id, organizationId),
-        columns: { githubRepoPrefix: true },
-      });
-      const githubRepoPrefix = buildStudioGitHubRepoPrefix({
-        organizationId,
-        organizationRepoPrefix: org?.githubRepoPrefix ?? null,
-      });
-
-      const mainBackendUrl = resolveStudioMainBackendUrl({
+      const studioRuntimeEnv = await resolveStableStudioMachineEnv({
         providerKind: studioMachineProvider.kind,
+        organizationId,
+        projectSlug: input.slug,
         requestHost: ctx.requestHost,
-        backendUrlEnv: process.env.BACKEND_URL,
-        domainEnv: process.env.DOMAIN,
-        betterAuthUrlEnv: process.env.BETTER_AUTH_URL,
-        backendPort: process.env.PORT,
       });
 
       try {
@@ -309,11 +185,7 @@ export const studioProcedures = {
             projectSlug: input.slug,
             version: input.version,
             mode: "hard",
-            env: {
-              MAIN_BACKEND_URL: mainBackendUrl,
-              GITHUB_REPO_PREFIX: githubRepoPrefix,
-              ...studioRuntimeEnv,
-            },
+            env: studioRuntimeEnv,
           });
         try {
           await recordStudioVisit({

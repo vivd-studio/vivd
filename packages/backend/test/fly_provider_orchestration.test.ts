@@ -323,6 +323,10 @@ describe("FlyStudioMachineProvider orchestration", () => {
     );
 
     const provider = new FlyStudioMachineProvider();
+    (provider as any).resolveStableStudioRuntimeEnv = async () => ({
+      MAIN_BACKEND_URL: "https://default.vivd.studio/vivd-studio",
+      GITHUB_REPO_PREFIX: "default-",
+    });
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
     const suspendedMachine = studioMachine({
       id: "m5",
@@ -368,6 +372,57 @@ describe("FlyStudioMachineProvider orchestration", () => {
       "openrouter/google/gemini-3-flash-preview",
     );
     expect(updatedConfig?.env?.SESSION_TOKEN).toBeUndefined();
+    expect(updatedConfig?.env?.MAIN_BACKEND_URL).toBe(
+      "https://default.vivd.studio/vivd-studio",
+    );
+    expect(updatedConfig?.env?.GITHUB_REPO_PREFIX).toBe("default-");
+  });
+
+  it("warmReconcileStudioMachine preserves stable project env so first open does not need to reintroduce it", async () => {
+    const provider = new FlyStudioMachineProvider();
+    (provider as any).resolveStableStudioRuntimeEnv = async () => ({
+      MAIN_BACKEND_URL: "https://default.vivd.studio/vivd-studio",
+      GITHUB_REPO_PREFIX: "default-",
+      VIVD_ENABLED_PLUGINS: "analytics,contact_form",
+      VIVD_EMAIL_BRAND_SUPPORT_EMAIL: "support@example.com",
+    });
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    const stoppedMachine = studioMachine({
+      id: "m7",
+      state: "stopped",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.0.0",
+      env: {
+        MAIN_BACKEND_URL: "https://default.vivd.studio/vivd-studio",
+      },
+    });
+
+    (provider as any).getDesiredImage = async () => desiredImage;
+    (provider as any).getMachine = async () => stoppedMachine;
+    (provider as any).waitForReconcileDriftToClear = async () => null;
+    (provider as any).startMachineHandlingReplacement = async () => {};
+    (provider as any).waitForReady = async () => {};
+    (provider as any).suspendOrStopMachine = async () => "suspended";
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    let updatedConfig: any = null;
+    (provider as any).apiClient.updateMachineConfig = async ({ config }: any) => {
+      updatedConfig = config;
+      return { ...stoppedMachine, config };
+    };
+
+    await provider.warmReconcileStudioMachine("m7");
+
+    expect(updatedConfig?.env?.MAIN_BACKEND_URL).toBe(
+      "https://default.vivd.studio/vivd-studio",
+    );
+    expect(updatedConfig?.env?.GITHUB_REPO_PREFIX).toBe("default-");
+    expect(updatedConfig?.env?.VIVD_ENABLED_PLUGINS).toBe(
+      "analytics,contact_form",
+    );
+    expect(updatedConfig?.env?.VIVD_EMAIL_BRAND_SUPPORT_EMAIL).toBe(
+      "support@example.com",
+    );
   });
 
   it("forces one suspended-machine stop when waking a machine that still carries legacy session env", async () => {
