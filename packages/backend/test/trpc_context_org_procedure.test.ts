@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   getSessionMock,
@@ -57,6 +57,7 @@ vi.mock("../src/db", () => ({
 }));
 
 import { createContext, orgProcedure, router } from "../src/trpc";
+import { createStudioUserActionToken } from "../src/lib/studioUserActionToken";
 
 function makeRequest(headers: Record<string, string> = {}): any {
   return {
@@ -124,6 +125,8 @@ function makeBaseProcedureContext(overrides: Record<string, unknown> = {}) {
 }
 
 describe("createContext", () => {
+  const previousBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+
   beforeEach(() => {
     getSessionMock.mockReset();
     resolveHostMock.mockReset();
@@ -142,6 +145,15 @@ describe("createContext", () => {
     organizationMemberFindManyMock.mockResolvedValue([]);
     organizationFindFirstMock.mockResolvedValue({ status: "active" });
     projectMemberFindFirstMock.mockResolvedValue(null);
+    process.env.BETTER_AUTH_SECRET = "test-better-auth-secret";
+  });
+
+  afterAll(() => {
+    if (typeof previousBetterAuthSecret === "string") {
+      process.env.BETTER_AUTH_SECRET = previousBetterAuthSecret;
+    } else {
+      delete process.env.BETTER_AUTH_SECRET;
+    }
   });
 
   it("prefers host-pinned organization over session and request header", async () => {
@@ -235,6 +247,62 @@ describe("createContext", () => {
     });
 
     expect(ctx.organizationId).toBe("org-member");
+  });
+
+  it("authenticates delegated studio user action tokens without machine env session drift", async () => {
+    const nowIso = new Date().toISOString();
+    const token = createStudioUserActionToken({
+      sessionId: "sess-2",
+      userId: "user-2",
+      organizationId: "org-live",
+      projectSlug: "site-1",
+      version: 3,
+      sessionExpiresAt: new Date(Date.now() + 60_000),
+      nonce: "token-nonce",
+      nowMs: Date.now(),
+    });
+
+    getSessionMock.mockResolvedValue(null);
+    resolveHostMock.mockResolvedValue(makeBaseResolvedHost());
+    sessionFindFirstMock.mockResolvedValue({
+      id: "sess-2",
+      userId: "user-2",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      ipAddress: null,
+      userAgent: null,
+      activeOrganizationId: "org-stale",
+      user: {
+        id: "user-2",
+        email: "user2@example.com",
+        name: "User 2",
+        role: "user",
+        emailVerified: true,
+        image: null,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    });
+    organizationMemberFindManyMock.mockResolvedValue([
+      { organizationId: "org-live", role: "admin" },
+    ]);
+
+    const ctx = await createContext({
+      req: makeRequest({ "x-vivd-studio-user-action-token": token }),
+      res: {} as any,
+    });
+
+    expect(ctx.session?.session.id).toBe("sess-2");
+    expect(ctx.organizationId).toBe("org-live");
+    expect(ctx.organizationRole).toBe("admin");
+    expect(ctx.studioUserActionAuth).toMatchObject({
+      sessionId: "sess-2",
+      userId: "user-2",
+      organizationId: "org-live",
+      projectSlug: "site-1",
+      version: 3,
+    });
   });
 });
 

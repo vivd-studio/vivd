@@ -316,7 +316,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
     );
   });
 
-  it("warmReconcileStudioMachine stops suspended machines before refreshing passthrough env drift", async () => {
+  it("warmReconcileStudioMachine clears legacy session env while refreshing passthrough drift", async () => {
     vi.stubEnv(
       "OPENCODE_MODEL_STANDARD",
       "openrouter/google/gemini-3-flash-preview",
@@ -367,10 +367,10 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
       "openrouter/google/gemini-3-flash-preview",
     );
-    expect(updatedConfig?.env?.SESSION_TOKEN).toBe("old-session-token");
+    expect(updatedConfig?.env?.SESSION_TOKEN).toBeUndefined();
   });
 
-  it("does not re-reconcile a suspended machine on wake after warm reconcile updated managed env", async () => {
+  it("forces one suspended-machine stop when waking a machine that still carries legacy session env", async () => {
     vi.stubEnv(
       "OPENCODE_MODEL_STANDARD",
       "openrouter/google/gemini-3-flash-preview",
@@ -384,13 +384,12 @@ describe("FlyStudioMachineProvider orchestration", () => {
         organizationId: "org-1",
         projectSlug: "site-1",
         version: 1,
-        env: {
-          SESSION_TOKEN: "session-token-1",
-        },
+        env: {},
         studioId: "studio-1",
         accessToken,
       },
     );
+    env.SESSION_TOKEN = "legacy-session-token";
     const machine = studioMachine({
       id: "m6",
       state: "suspended",
@@ -443,15 +442,13 @@ describe("FlyStudioMachineProvider orchestration", () => {
         organizationId: "org-1",
         projectSlug: "site-1",
         version: 1,
-        env: {
-          SESSION_TOKEN: "session-token-1",
-        },
+        env: {},
       },
       "org-1:site-1:v1",
     );
 
-    expect(updateMachineConfigMock).not.toHaveBeenCalled();
-    expect(stopMachineMock).not.toHaveBeenCalled();
+    expect(updateMachineConfigMock).toHaveBeenCalledTimes(1);
+    expect(stopMachineMock).toHaveBeenCalledWith("m6");
     expect(result).toEqual({
       studioId: "studio-1",
       url: "https://studio.test:4100",

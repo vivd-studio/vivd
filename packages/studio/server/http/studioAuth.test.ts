@@ -1,4 +1,8 @@
-import { createStudioBootstrapToken } from "@vivd/shared/studio";
+import {
+  createStudioBootstrapToken,
+  STUDIO_USER_ACTION_TOKEN_COOKIE,
+  STUDIO_USER_ACTION_TOKEN_PARAM,
+} from "@vivd/shared/studio";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -287,6 +291,7 @@ describe("createStudioBootstrapHandler", () => {
     req.body = {
       bootstrapToken,
       next: "https://studio.example.com/vivd-studio?embedded=1",
+      [STUDIO_USER_ACTION_TOKEN_PARAM]: "user-action-token-1",
     };
     const res = createMockResponse();
 
@@ -298,6 +303,17 @@ describe("createStudioBootstrapHandler", () => {
       {
         name: STUDIO_AUTH_COOKIE,
         value: "studio-token",
+        options: {
+          httpOnly: true,
+          partitioned: true,
+          sameSite: "none",
+          secure: true,
+          path: "/",
+        },
+      },
+      {
+        name: STUDIO_USER_ACTION_TOKEN_COOKIE,
+        value: "user-action-token-1",
         options: {
           httpOnly: true,
           partitioned: true,

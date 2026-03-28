@@ -329,7 +329,7 @@ async function startServer() {
     requireStudioAuth(),
     createExpressMiddleware({
       router: appRouter,
-      createContext: () => createContext(workspace),
+      createContext: ({ req, res }) => createContext(workspace, req, res),
     })
   );
 
@@ -339,7 +339,7 @@ async function startServer() {
     requireStudioAuth(),
     createExpressMiddleware({
       router: appRouter,
-      createContext: () => createContext(workspace),
+      createContext: ({ req, res }) => createContext(workspace, req, res),
     }),
   );
 

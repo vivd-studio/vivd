@@ -11,8 +11,11 @@ export const vivdPluginsContactInfoToolDefinition: OpencodeToolDefinition = {
     if (validationError) return validationError;
 
     const payload = await callTrpcQuery(
-      "plugins.contactInfo",
-      { slug: config.projectSlug },
+      "studioApi.getProjectContactPluginInfo",
+      {
+        studioId: config.studioId,
+        slug: config.projectSlug,
+      },
       config,
     );
 

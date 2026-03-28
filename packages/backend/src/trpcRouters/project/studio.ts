@@ -5,8 +5,9 @@ import { studioMachineProvider } from "../../services/studioMachines";
 import { resolveStudioMainBackendUrl } from "../../services/studioMachines/backendCallbackUrl";
 import { recordStudioVisit } from "../../services/studioMachines/visitStore";
 import { emailTemplateBrandingService } from "../../services/email/templateBranding";
+import { createStudioUserActionToken } from "../../lib/studioUserActionToken";
 import { db } from "../../db";
-import { organization, projectPluginInstance, session as sessionTable } from "../../db/schema";
+import { organization, projectPluginInstance } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
 
 function normalizeGitHubRepoPrefix(value: string): string {
@@ -103,6 +104,28 @@ function createStudioRuntimeBootstrapToken(options: {
   });
 }
 
+function createStudioRuntimeUserActionToken(options: {
+  session: {
+    session: {
+      id: string;
+      userId: string;
+      expiresAt: Date;
+    };
+  };
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+}): string {
+  return createStudioUserActionToken({
+    sessionId: options.session.session.id,
+    userId: options.session.session.userId,
+    organizationId: options.organizationId,
+    projectSlug: options.projectSlug,
+    version: options.version,
+    sessionExpiresAt: options.session.session.expiresAt,
+  });
+}
+
 /**
  * Studio-related TRPC procedures.
  * These handle starting and managing studio instances for editing projects.
@@ -134,6 +157,12 @@ export const studioProcedures = {
             studioId: existing.studioId,
             accessToken: existing.accessToken || null,
           }),
+          userActionToken: createStudioRuntimeUserActionToken({
+            session: ctx.session,
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
+          }),
           status: "running" as const,
         };
       }
@@ -142,6 +171,7 @@ export const studioProcedures = {
       return {
         url: null,
         bootstrapToken: null,
+        userActionToken: null,
         status: "stopped" as const,
       };
     }),
@@ -182,20 +212,6 @@ export const studioProcedures = {
         backendPort: process.env.PORT,
       });
 
-      // Resolve the user's session token for machine-to-backend authentication.
-      // The auth session shape we expose to the app does not include the raw token.
-      const sessionId = ctx.session.session.id;
-      const sessionRecord = await db.query.session.findFirst({
-        where: eq(sessionTable.id, sessionId),
-      });
-      const sessionToken = sessionRecord?.token;
-      if (!sessionToken) {
-        return {
-          success: false as const,
-          error: "Failed to resolve session token for studio authentication",
-        };
-      }
-
       try {
         const { studioId, url, port, accessToken } =
           await studioMachineProvider.ensureRunning({
@@ -204,7 +220,6 @@ export const studioProcedures = {
             version: input.version,
             env: {
               MAIN_BACKEND_URL: mainBackendUrl,
-              SESSION_TOKEN: sessionToken,
               GITHUB_REPO_PREFIX: githubRepoPrefix,
               ...studioRuntimeEnv,
             },
@@ -230,6 +245,12 @@ export const studioProcedures = {
           bootstrapToken: createStudioRuntimeBootstrapToken({
             studioId,
             accessToken: accessToken || null,
+          }),
+          userActionToken: createStudioRuntimeUserActionToken({
+            session: ctx.session,
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
           }),
           provider: studioMachineProvider.kind,
         };
@@ -281,18 +302,6 @@ export const studioProcedures = {
         backendPort: process.env.PORT,
       });
 
-      const sessionId = ctx.session.session.id;
-      const sessionRecord = await db.query.session.findFirst({
-        where: eq(sessionTable.id, sessionId),
-      });
-      const sessionToken = sessionRecord?.token;
-      if (!sessionToken) {
-        return {
-          success: false as const,
-          error: "Failed to resolve session token for studio authentication",
-        };
-      }
-
       try {
         const { studioId, url, port, accessToken } =
           await studioMachineProvider.restart({
@@ -302,7 +311,6 @@ export const studioProcedures = {
             mode: "hard",
             env: {
               MAIN_BACKEND_URL: mainBackendUrl,
-              SESSION_TOKEN: sessionToken,
               GITHUB_REPO_PREFIX: githubRepoPrefix,
               ...studioRuntimeEnv,
             },
@@ -328,6 +336,12 @@ export const studioProcedures = {
           bootstrapToken: createStudioRuntimeBootstrapToken({
             studioId,
             accessToken: accessToken || null,
+          }),
+          userActionToken: createStudioRuntimeUserActionToken({
+            session: ctx.session,
+            organizationId,
+            projectSlug: input.slug,
+            version: input.version,
           }),
           provider: studioMachineProvider.kind,
         };
@@ -410,6 +424,15 @@ export const studioProcedures = {
             ? createStudioRuntimeBootstrapToken({
                 studioId: info.studioId,
                 accessToken: info.accessToken,
+              })
+            : null,
+        userActionToken:
+          info?.studioId && info?.accessToken
+            ? createStudioRuntimeUserActionToken({
+                session: ctx.session,
+                organizationId: ctx.organizationId!,
+                projectSlug: input.slug,
+                version: input.version,
               })
             : null,
       };

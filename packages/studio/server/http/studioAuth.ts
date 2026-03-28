@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
 import type express from "express";
-import { verifyStudioBootstrapToken } from "@vivd/shared/studio";
+import {
+  STUDIO_USER_ACTION_TOKEN_COOKIE,
+  STUDIO_USER_ACTION_TOKEN_PARAM,
+  verifyStudioBootstrapToken,
+} from "@vivd/shared/studio";
 
 const FORWARDED_PREFIX_HEADER = "x-forwarded-prefix";
 const FORWARDED_HOST_HEADER = "x-forwarded-host";
@@ -37,6 +41,11 @@ function getCookieValue(req: express.Request, key: string): string | null {
   }
 
   return null;
+}
+
+export function getStudioUserActionToken(req: express.Request): string | null {
+  const value = getCookieValue(req, STUDIO_USER_ACTION_TOKEN_COOKIE);
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function isHttpsRequest(req: express.Request): boolean {
@@ -232,15 +241,16 @@ export function getRequestStudioToken(req: express.Request): ProvidedStudioToken
   return { source: null, value: null };
 }
 
-export function setStudioAuthCookie(
+function setScopedStudioCookie(
   req: express.Request,
   res: express.Response,
+  name: string,
   token: string,
 ): void {
-  if (getCookieValue(req, STUDIO_AUTH_COOKIE) === token) return;
+  if (getCookieValue(req, name) === token) return;
 
   const secure = isHttpsRequest(req);
-  res.cookie(STUDIO_AUTH_COOKIE, token, {
+  res.cookie(name, token, {
     httpOnly: true,
     // Fly embeds use a cross-site runtime host in prod, so secure requests need
     // SameSite=None. Mark them partitioned as well so modern browsers can keep
@@ -251,6 +261,22 @@ export function setStudioAuthCookie(
     secure,
     path: getCookiePath(req),
   });
+}
+
+export function setStudioAuthCookie(
+  req: express.Request,
+  res: express.Response,
+  token: string,
+): void {
+  setScopedStudioCookie(req, res, STUDIO_AUTH_COOKIE, token);
+}
+
+export function setStudioUserActionCookie(
+  req: express.Request,
+  res: express.Response,
+  token: string,
+): void {
+  setScopedStudioCookie(req, res, STUDIO_USER_ACTION_TOKEN_COOKIE, token);
 }
 
 function persistStudioAuthCookie(
@@ -279,6 +305,7 @@ export function createStudioBootstrapHandler(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const bootstrapToken = body[STUDIO_BOOTSTRAP_TOKEN_PARAM];
     const nextTarget = body[STUDIO_BOOTSTRAP_NEXT_PARAM];
+    const userActionToken = body[STUDIO_USER_ACTION_TOKEN_PARAM];
 
     if (typeof bootstrapToken !== "string" || !bootstrapToken.trim()) {
       return res.status(400).json({ error: "Missing bootstrap token" });
@@ -310,6 +337,9 @@ export function createStudioBootstrapHandler(
     }
 
     setStudioAuthCookie(req, res, accessToken);
+    if (typeof userActionToken === "string" && userActionToken.trim()) {
+      setStudioUserActionCookie(req, res, userActionToken.trim());
+    }
     res.setHeader("cache-control", "no-store");
     return res.redirect(303, redirectTarget);
   };

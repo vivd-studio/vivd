@@ -41,16 +41,6 @@ export function isStandaloneMode(): boolean {
 }
 
 /**
- * Get the session token for authenticating with backend.
- * This is the user's auth token, passed to studio when launching.
- * Returns undefined in standalone mode.
- */
-export function getSessionToken(): string | undefined {
-  if (!isConnectedMode()) return undefined;
-  return process.env.SESSION_TOKEN;
-}
-
-/**
  * Get the connected organization id for studio->backend calls.
  * Comes from machine env (`VIVD_TENANT_ID`) with `TENANT_ID` as fallback.
  */
@@ -78,7 +68,6 @@ export function getStudioConfig(): StudioConfig {
   return {
     mode,
     backendUrl: getBackendUrl(),
-    sessionToken: getSessionToken(),
     studioId: getStudioId(),
   };
 }
@@ -93,11 +82,11 @@ export function validateStudioConfig(): void {
   const missing: string[] = [];
 
   // MAIN_BACKEND_URL is already set (that's how we detect connected mode)
-  if (!process.env.SESSION_TOKEN) {
-    missing.push("SESSION_TOKEN");
-  }
   if (!process.env.STUDIO_ID) {
     missing.push("STUDIO_ID");
+  }
+  if (!process.env.STUDIO_ACCESS_TOKEN) {
+    missing.push("STUDIO_ACCESS_TOKEN");
   }
 
   if (missing.length > 0) {

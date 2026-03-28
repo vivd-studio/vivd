@@ -386,6 +386,7 @@ describe("EmbeddedStudio", () => {
         status: "running",
         url: "https://studio.example.com/runtime",
         bootstrapToken: "bootstrap-1",
+        userActionToken: "user-action-token-1",
       },
     });
 
@@ -413,6 +414,11 @@ describe("EmbeddedStudio", () => {
       "https://studio.example.com/runtime/vivd-studio?embedded=1",
     );
     expect(nextField?.value).not.toContain("vivdStudioToken");
+
+    const userActionTokenField = bootstrapForm?.querySelector(
+      'input[name="userActionToken"]',
+    ) as HTMLInputElement | null;
+    expect(userActionTokenField?.value).toBe("user-action-token-1");
     expect(HTMLFormElement.prototype.submit).toHaveBeenCalledOnce();
   });
 

@@ -196,7 +196,6 @@ class AgentLeaseReporter {
         backendUrl: string;
         studioId: string;
         organizationId?: string;
-        sessionToken?: string;
         studioAccessToken?: string;
       }
     | null {

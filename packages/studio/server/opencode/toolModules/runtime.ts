@@ -1,6 +1,7 @@
 export interface ToolRuntimeConfig {
   backendUrl: string;
-  sessionToken: string;
+  studioId: string;
+  studioAccessToken: string;
   projectSlug: string;
   organizationId: string;
   projectVersion: number | null;
@@ -8,23 +9,36 @@ export interface ToolRuntimeConfig {
 
 export function getRuntimeConfig(): ToolRuntimeConfig {
   const backendUrl = (process.env.MAIN_BACKEND_URL || "").trim();
-  const sessionToken = (process.env.SESSION_TOKEN || "").trim();
+  const studioId = (process.env.STUDIO_ID || "").trim();
+  const studioAccessToken = (process.env.STUDIO_ACCESS_TOKEN || "").trim();
   const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
   const organizationId = (process.env.VIVD_TENANT_ID || "").trim();
   const parsedVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
   const projectVersion =
     Number.isFinite(parsedVersion) && parsedVersion > 0 ? parsedVersion : null;
-  return { backendUrl, sessionToken, projectSlug, organizationId, projectVersion };
+  return {
+    backendUrl,
+    studioId,
+    studioAccessToken,
+    projectSlug,
+    organizationId,
+    projectVersion,
+  };
 }
 
 export function validateConnectedRuntime(
   config: ToolRuntimeConfig,
   toolName: string,
 ): string | null {
-  if (config.backendUrl && config.sessionToken && config.projectSlug) {
+  if (
+    config.backendUrl &&
+    config.studioId &&
+    config.studioAccessToken &&
+    config.projectSlug
+  ) {
     return null;
   }
-  return `${toolName}: missing MAIN_BACKEND_URL, SESSION_TOKEN, or VIVD_PROJECT_SLUG`;
+  return `${toolName}: missing MAIN_BACKEND_URL, STUDIO_ID, STUDIO_ACCESS_TOKEN, or VIVD_PROJECT_SLUG`;
 }
 
 function unwrapTrpcBody(body: any): any {
@@ -42,7 +56,8 @@ export async function callTrpcQuery(
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${config.sessionToken}`,
+      "x-vivd-studio-id": config.studioId,
+      "x-vivd-studio-token": config.studioAccessToken,
       ...(config.organizationId
         ? { "x-vivd-organization-id": config.organizationId }
         : {}),
@@ -65,7 +80,8 @@ export async function callTrpcMutation(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.sessionToken}`,
+      "x-vivd-studio-id": config.studioId,
+      "x-vivd-studio-token": config.studioAccessToken,
       ...(config.organizationId
         ? { "x-vivd-organization-id": config.organizationId }
         : {}),

@@ -22,6 +22,7 @@ import {
 } from "../services/project/ArtifactBuildRequestService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
 import { studioMachineProvider } from "../services/studioMachines";
+import type { ChecklistItem, ChecklistStatus } from "../types/checklistTypes";
 
 /**
  * Schema for token data in usage reports
@@ -76,6 +77,52 @@ const prePublishChecklistSchema = z.object({
     fixed: z.number().optional(),
   }),
 });
+
+function normalizeChecklistItemNote(note: string | null | undefined): string | undefined {
+  if (note == null) return undefined;
+  const trimmed = note.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function summarizeChecklistItems(items: ChecklistItem[]): {
+  passed: number;
+  failed: number;
+  warnings: number;
+  skipped: number;
+  fixed?: number;
+} {
+  let passed = 0;
+  let failed = 0;
+  let warnings = 0;
+  let skipped = 0;
+  let fixed = 0;
+
+  for (const item of items) {
+    switch (item.status) {
+      case "pass":
+        passed += 1;
+        break;
+      case "fail":
+        failed += 1;
+        break;
+      case "warning":
+        warnings += 1;
+        break;
+      case "skip":
+        skipped += 1;
+        break;
+      case "fixed":
+        fixed += 1;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return fixed > 0
+    ? { passed, failed, warnings, skipped, fixed }
+    : { passed, failed, warnings, skipped };
+}
 
 function normalizeGenerationSource(source: string | null | undefined): "url" | "scratch" {
   return source === "url" ? "url" : "scratch";
@@ -272,6 +319,49 @@ export const studioApiRouter = router({
         instructionsHash: rendered.instructionsHash,
         templateSource: rendered.templateSource,
       };
+    }),
+
+  getProjectPluginsCatalog: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return projectPluginService.listCatalogForProject(
+        ctx.organizationId!,
+        input.slug,
+      );
+    }),
+
+  getProjectContactPluginInfo: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return projectPluginService.getContactFormInfo({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+      });
+    }),
+
+  getProjectAnalyticsPluginInfo: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return projectPluginService.getAnalyticsInfo({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+      });
     }),
 
   /**
@@ -535,5 +625,67 @@ export const studioApiRouter = router({
         version: input.version,
       });
       return { checklist };
+    }),
+
+  updatePublishChecklistItem: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        itemId: z.string().min(1),
+        status: z.enum(["pass", "fail", "warning", "skip", "fixed"]),
+        note: z.string().max(4_000).optional().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const organizationId = ctx.organizationId!;
+      const existing = await projectMetaService.getPublishChecklist({
+        organizationId,
+        slug: input.slug,
+        version: input.version,
+      });
+
+      if (!existing) {
+        throw new Error(
+          "No publish checklist exists for this project version. Run the checklist first.",
+        );
+      }
+
+      const itemIndex = existing.items.findIndex((item) => item.id === input.itemId);
+      if (itemIndex < 0) {
+        throw new Error(
+          `Unknown checklist item "${input.itemId}" for this project version.`,
+        );
+      }
+
+      const note = normalizeChecklistItemNote(input.note);
+      const updatedItems = existing.items.map((item, index) => {
+        if (index !== itemIndex) return item;
+        return {
+          ...item,
+          status: input.status as ChecklistStatus,
+          note,
+        };
+      });
+      const summary = summarizeChecklistItems(updatedItems);
+      const checklist = {
+        ...existing,
+        projectSlug: input.slug,
+        version: input.version,
+        runAt: new Date().toISOString(),
+        items: updatedItems,
+        summary,
+      };
+
+      await projectMetaService.upsertPublishChecklist({
+        organizationId,
+        checklist,
+      });
+
+      return {
+        checklist,
+        item: checklist.items[itemIndex],
+      };
     }),
 });

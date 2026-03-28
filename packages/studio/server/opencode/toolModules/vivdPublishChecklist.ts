@@ -93,8 +93,12 @@ export const vivdPublishChecklistToolDefinition: OpencodeToolDefinition = {
     try {
       if (args.action === "describe") {
         const payload = await callTrpcQuery(
-          "project.publishChecklist",
-          { slug: config.projectSlug, version },
+          "studioApi.getPublishChecklist",
+          {
+            studioId: config.studioId,
+            slug: config.projectSlug,
+            version,
+          },
           config,
         );
 
@@ -154,8 +158,9 @@ export const vivdPublishChecklistToolDefinition: OpencodeToolDefinition = {
       }
 
       const payload = await callTrpcMutation(
-        "project.updatePublishChecklistItem",
+        "studioApi.updatePublishChecklistItem",
         {
+          studioId: config.studioId,
           slug: config.projectSlug,
           version,
           itemId: args.itemId,

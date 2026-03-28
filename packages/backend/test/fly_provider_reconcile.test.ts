@@ -88,7 +88,7 @@ describe("Fly machine reconcile model", () => {
     expect(reconcileState.needs.image).toBe(false);
   });
 
-  it("flags env drift when the machine keeps a stale session token", () => {
+  it("ignores legacy session tokens that are no longer part of managed env drift", () => {
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
     const machine = buildMachine({
       image: desiredImage,
@@ -106,12 +106,10 @@ describe("Fly machine reconcile model", () => {
       machine,
       desiredImage,
       desiredGuest,
-      desiredEnvSubset: {
-        SESSION_TOKEN: "fresh-session-token",
-      },
+      desiredEnvSubset: {},
       generateStudioAccessToken: () => "generated-access-token",
     });
 
-    expect(reconcileState.needs.env).toBe(true);
+    expect(reconcileState.needs.env).toBe(false);
   });
 });

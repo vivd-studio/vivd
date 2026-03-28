@@ -1,5 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 
+const STUDIO_USER_ACTION_TOKEN_PARAM = "userActionToken";
+
 type StudioBootstrapIframeProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   iframeName: string;
@@ -8,6 +10,7 @@ type StudioBootstrapIframeProps = {
   cleanSrc: string;
   bootstrapAction: string | null;
   bootstrapToken: string | null;
+  userActionToken: string | null;
   submissionKey: string;
   className?: string;
   allow?: string;
@@ -24,6 +27,7 @@ export function StudioBootstrapIframe({
   cleanSrc,
   bootstrapAction,
   bootstrapToken,
+  userActionToken,
   submissionKey,
   className,
   allow,
@@ -70,6 +74,11 @@ export function StudioBootstrapIframe({
             type="hidden"
             name="bootstrapToken"
             value={bootstrapToken || ""}
+          />
+          <input
+            type="hidden"
+            name={STUDIO_USER_ACTION_TOKEN_PARAM}
+            value={userActionToken || ""}
           />
         </form>
       ) : null}

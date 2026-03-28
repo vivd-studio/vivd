@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
     getResolvedBrandingMock,
     projectPluginFindManyMock,
     organizationFindFirstMock,
-    sessionFindFirstMock,
   dbSelectMock,
   dbSelectFromMock,
   dbSelectWhereMock,
@@ -18,7 +17,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
   const getResolvedBrandingMock = vi.fn();
   const projectPluginFindManyMock = vi.fn();
   const organizationFindFirstMock = vi.fn();
-  const sessionFindFirstMock = vi.fn();
   const dbSelectWhereMock = vi.fn().mockResolvedValue([]);
   const dbSelectFromMock = vi.fn(() => ({ where: dbSelectWhereMock }));
   const dbSelectMock = vi.fn(() => ({ from: dbSelectFromMock }));
@@ -30,7 +28,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
     getResolvedBrandingMock,
     projectPluginFindManyMock,
     organizationFindFirstMock,
-    sessionFindFirstMock,
     dbSelectMock,
     dbSelectFromMock,
     dbSelectWhereMock,
@@ -64,7 +61,6 @@ vi.mock("../src/db", () => ({
     query: {
       projectPluginInstance: { findMany: projectPluginFindManyMock },
       organization: { findFirst: organizationFindFirstMock },
-      session: { findFirst: sessionFindFirstMock },
     },
     select: dbSelectMock,
   },
@@ -121,6 +117,7 @@ describe("project studio callback URL wiring", () => {
     BACKEND_URL: process.env.BACKEND_URL,
     DOMAIN: process.env.DOMAIN,
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
+    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     PORT: process.env.PORT,
   };
 
@@ -131,7 +128,6 @@ describe("project studio callback URL wiring", () => {
     getResolvedBrandingMock.mockReset();
     projectPluginFindManyMock.mockReset();
     organizationFindFirstMock.mockReset();
-    sessionFindFirstMock.mockReset();
     dbSelectMock.mockClear();
     dbSelectFromMock.mockClear();
     dbSelectWhereMock.mockClear();
@@ -139,12 +135,12 @@ describe("project studio callback URL wiring", () => {
     process.env.BACKEND_URL = "https://default.vivd.studio";
     process.env.DOMAIN = "https://default.vivd.studio";
     process.env.BETTER_AUTH_URL = "https://default.vivd.studio";
+    process.env.BETTER_AUTH_SECRET = "test-better-auth-secret";
     process.env.PORT = "3000";
 
     projectPluginFindManyMock.mockResolvedValue([]);
     getResolvedBrandingMock.mockResolvedValue({ supportEmail: null });
     organizationFindFirstMock.mockResolvedValue({ githubRepoPrefix: null });
-    sessionFindFirstMock.mockResolvedValue({ token: "session-token" });
     recordStudioVisitMock.mockResolvedValue(undefined);
     ensureRunningMock.mockResolvedValue({
       studioId: "studio-1",
@@ -164,6 +160,7 @@ describe("project studio callback URL wiring", () => {
     process.env.BACKEND_URL = envSnapshot.BACKEND_URL;
     process.env.DOMAIN = envSnapshot.DOMAIN;
     process.env.BETTER_AUTH_URL = envSnapshot.BETTER_AUTH_URL;
+    process.env.BETTER_AUTH_SECRET = envSnapshot.BETTER_AUTH_SECRET;
     process.env.PORT = envSnapshot.PORT;
   });
 
@@ -173,6 +170,7 @@ describe("project studio callback URL wiring", () => {
     const result = await caller.startStudio({ slug: "site-1", version: 1 });
 
     expect(result).toMatchObject({ success: true });
+    expect(result.userActionToken).toMatch(/^v1\./);
     expect(ensureRunningMock).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: "org-felix",
@@ -180,7 +178,6 @@ describe("project studio callback URL wiring", () => {
         version: 1,
         env: expect.objectContaining({
           MAIN_BACKEND_URL: "https://felixpahlke.vivd.studio/vivd-studio",
-          SESSION_TOKEN: "session-token",
         }),
       }),
     );
@@ -192,6 +189,7 @@ describe("project studio callback URL wiring", () => {
     const result = await caller.hardRestartStudio({ slug: "site-1", version: 1 });
 
     expect(result).toMatchObject({ success: true });
+    expect(result.userActionToken).toMatch(/^v1\./);
     expect(restartMock).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: "org-felix",
@@ -200,7 +198,6 @@ describe("project studio callback URL wiring", () => {
         mode: "hard",
         env: expect.objectContaining({
           MAIN_BACKEND_URL: "https://felixpahlke.vivd.studio/vivd-studio",
-          SESSION_TOKEN: "session-token",
         }),
       }),
     );

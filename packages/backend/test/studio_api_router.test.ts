@@ -14,6 +14,8 @@ const {
   getProjectMock,
   getProjectVersionMock,
   listCatalogForProjectMock,
+  getContactFormInfoMock,
+  getAnalyticsInfoMock,
   renderAgentInstructionsMock,
   reportAgentLeaseActiveMock,
   reportAgentLeaseIdleMock,
@@ -34,6 +36,8 @@ const {
   getProjectMock: vi.fn(),
   getProjectVersionMock: vi.fn(),
   listCatalogForProjectMock: vi.fn(),
+  getContactFormInfoMock: vi.fn(),
+  getAnalyticsInfoMock: vi.fn(),
   renderAgentInstructionsMock: vi.fn(),
   reportAgentLeaseActiveMock: vi.fn(),
   reportAgentLeaseIdleMock: vi.fn(),
@@ -85,6 +89,8 @@ vi.mock("../src/services/project/StudioWorkspaceStateService", () => ({
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     listCatalogForProject: listCatalogForProjectMock,
+    getContactFormInfo: getContactFormInfoMock,
+    getAnalyticsInfo: getAnalyticsInfoMock,
   },
 }));
 
@@ -171,6 +177,8 @@ describe("studioApi router", () => {
     getProjectMock.mockReset();
     getProjectVersionMock.mockReset();
     listCatalogForProjectMock.mockReset();
+    getContactFormInfoMock.mockReset();
+    getAnalyticsInfoMock.mockReset();
     renderAgentInstructionsMock.mockReset();
     reportAgentLeaseActiveMock.mockReset();
     reportAgentLeaseIdleMock.mockReset();
@@ -206,6 +214,14 @@ describe("studioApi router", () => {
         { pluginId: "contact_form", status: "enabled" },
         { pluginId: "analytics", status: "disabled" },
       ],
+    });
+    getContactFormInfoMock.mockResolvedValue({
+      pluginId: "contact_form",
+      enabled: true,
+    });
+    getAnalyticsInfoMock.mockResolvedValue({
+      pluginId: "analytics",
+      enabled: false,
     });
     renderAgentInstructionsMock.mockResolvedValue({
       instructions: "Use this prompt",
@@ -382,6 +398,66 @@ describe("studioApi router", () => {
         templateSource: "default",
       }),
     );
+  });
+
+  it("returns plugin catalog and plugin info through machine-scoped studio auth", async () => {
+    const caller = studioApiRouter.createCaller(
+      makeContext({
+        session: null,
+        organizationRole: null,
+        studioRuntimeAuth: {
+          studioId: "studio-1",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          version: 3,
+        },
+      }),
+    );
+
+    await expect(
+      caller.getProjectPluginsCatalog({
+        studioId: "studio-1",
+        slug: "site-1",
+        version: 3,
+      }),
+    ).resolves.toEqual({
+      project: { organizationId: "org-1", slug: "site-1" },
+      available: [],
+      instances: [
+        { pluginId: "contact_form", status: "enabled" },
+        { pluginId: "analytics", status: "disabled" },
+      ],
+    });
+
+    await expect(
+      caller.getProjectContactPluginInfo({
+        studioId: "studio-1",
+        slug: "site-1",
+      }),
+    ).resolves.toEqual({
+      pluginId: "contact_form",
+      enabled: true,
+    });
+
+    await expect(
+      caller.getProjectAnalyticsPluginInfo({
+        studioId: "studio-1",
+        slug: "site-1",
+      }),
+    ).resolves.toEqual({
+      pluginId: "analytics",
+      enabled: false,
+    });
+
+    expect(listCatalogForProjectMock).toHaveBeenCalledWith("org-1", "site-1");
+    expect(getContactFormInfoMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+    });
+    expect(getAnalyticsInfoMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+    });
   });
 
   it("keeps generateThumbnail resilient when async side-effects fail", async () => {
@@ -646,6 +722,71 @@ describe("studioApi router", () => {
       checklist: expect.objectContaining({
         projectSlug: "site-1",
         version: 2,
+      }),
+    });
+  });
+
+  it("updates one publish checklist item and recomputes the summary", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+    getPublishChecklistMock.mockResolvedValueOnce({
+      projectSlug: "site-1",
+      version: 2,
+      runAt: new Date().toISOString(),
+      items: [
+        {
+          id: "lint",
+          label: "Lint",
+          status: "fail",
+          note: "Needs fixing",
+        },
+        {
+          id: "links",
+          label: "Links",
+          status: "pass",
+        },
+      ],
+      summary: { passed: 1, failed: 1, warnings: 0, skipped: 0 },
+    });
+
+    const result = await caller.updatePublishChecklistItem({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 2,
+      itemId: "lint",
+      status: "fixed",
+      note: "Resolved",
+    });
+
+    expect(upsertPublishChecklistMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      checklist: expect.objectContaining({
+        projectSlug: "site-1",
+        version: 2,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: "lint",
+            status: "fixed",
+            note: "Resolved",
+          }),
+        ]),
+        summary: {
+          passed: 1,
+          failed: 0,
+          warnings: 0,
+          skipped: 0,
+          fixed: 1,
+        },
+      }),
+    });
+    expect(result).toEqual({
+      checklist: expect.objectContaining({
+        projectSlug: "site-1",
+        version: 2,
+      }),
+      item: expect.objectContaining({
+        id: "lint",
+        status: "fixed",
+        note: "Resolved",
       }),
     });
   });

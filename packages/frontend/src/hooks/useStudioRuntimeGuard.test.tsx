@@ -58,6 +58,7 @@ describe("useStudioRuntimeGuard", () => {
     expect(onRecovered).toHaveBeenCalledWith({
       url: "https://studio.example.com",
       bootstrapToken: "token-1",
+      userActionToken: null,
     });
     expect(touchStudio).toHaveBeenCalled();
   });

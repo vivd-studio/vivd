@@ -10,8 +10,12 @@ export const vivdPluginsCatalogToolDefinition: OpencodeToolDefinition = {
     if (validationError) return validationError;
 
     const payload = await callTrpcQuery(
-      "plugins.catalog",
-      { slug: config.projectSlug },
+      "studioApi.getProjectPluginsCatalog",
+      {
+        studioId: config.studioId,
+        slug: config.projectSlug,
+        version: config.projectVersion ?? undefined,
+      },
       config,
     );
 

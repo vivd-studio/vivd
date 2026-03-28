@@ -574,6 +574,8 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       managedMissingKeys.add("VIVD_OPENCODE_DATA_HOME");
     }
 
+    managedMissingKeys.add("SESSION_TOKEN");
+
     return withMissingStudioMachineEnvKeys(subset, managedMissingKeys);
   }
 

@@ -5,6 +5,7 @@ import { useStudioRuntimeGuard } from "./useStudioRuntimeGuard";
 export type StudioRuntimeSession = {
   url: string;
   bootstrapToken: string | null;
+  userActionToken?: string | null;
 };
 
 type EnsureStudioRunningResult =
@@ -12,6 +13,7 @@ type EnsureStudioRunningResult =
       success: true;
       url: string;
       bootstrapToken: string | null;
+      userActionToken?: string | null;
     }
   | {
       success: false;
@@ -107,6 +109,7 @@ export function useStudioHostRuntime({
 
   const studioBaseUrl = studioRuntime?.url ?? null;
   const studioBootstrapToken = studioRuntime?.bootstrapToken ?? null;
+  const studioUserActionToken = studioRuntime?.userActionToken ?? null;
 
   const studioBootstrapAction = useMemo(() => {
     if (!studioBaseUrl) return null;
@@ -117,6 +120,7 @@ export function useStudioHostRuntime({
     studioRuntime,
     studioBaseUrl,
     studioBootstrapToken,
+    studioUserActionToken,
     studioBootstrapAction,
     reloadNonce,
     isStudioRecovering,

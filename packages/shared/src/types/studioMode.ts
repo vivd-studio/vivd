@@ -47,8 +47,6 @@ export interface StudioConfig {
   mode: "standalone" | "connected";
   /** Main backend URL (required in connected mode) */
   backendUrl?: string;
-  /** User's session token for authenticating with backend */
-  sessionToken?: string;
   /** Unique identifier for this studio instance */
   studioId?: string;
 }

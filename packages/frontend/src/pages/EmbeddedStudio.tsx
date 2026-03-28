@@ -216,6 +216,7 @@ export default function EmbeddedStudio() {
     return {
       url: studioUrlQuery.data.url,
       bootstrapToken: studioUrlQuery.data.bootstrapToken,
+      userActionToken: studioUrlQuery.data.userActionToken,
     };
   }, [studioUrlQuery.data]);
 
@@ -224,6 +225,7 @@ export default function EmbeddedStudio() {
     return {
       url: startStudio.data.url,
       bootstrapToken: startStudio.data.bootstrapToken,
+      userActionToken: startStudio.data.userActionToken,
     };
   }, [startStudio.data]);
 
@@ -254,12 +256,14 @@ export default function EmbeddedStudio() {
     return {
       url: result.data.url,
       bootstrapToken: result.data.bootstrapToken,
+      userActionToken: result.data.userActionToken,
     };
   }, [projectSlug, studioUrlQuery]);
 
   const {
     studioBaseUrl,
     studioBootstrapToken,
+    studioUserActionToken,
     studioBootstrapAction,
     reloadNonce: studioReloadNonce,
     isStudioRecovering,
@@ -379,6 +383,7 @@ export default function EmbeddedStudio() {
         {
           url: result.url,
           bootstrapToken: result.bootstrapToken,
+          userActionToken: result.userActionToken,
         },
         { reload: true },
       );
@@ -809,6 +814,7 @@ export default function EmbeddedStudio() {
               cleanSrc={studioIframeSrc}
               bootstrapAction={studioBootstrapAction}
               bootstrapToken={studioBootstrapToken}
+              userActionToken={studioUserActionToken}
               submissionKey={studioIframeRequestKey}
               className="h-full w-full border-0"
               allow="fullscreen; clipboard-write"

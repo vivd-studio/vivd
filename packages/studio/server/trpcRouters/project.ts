@@ -38,11 +38,12 @@ import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter
 import { thumbnailGenerationReporter } from "../services/reporting/ThumbnailGenerationReporter.js";
 import { workspaceStateReporter } from "../services/reporting/WorkspaceStateReporter.js";
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
+import type { Context } from "../trpc/context.js";
 import {
-  getBackendUrl,
-  getConnectedOrganizationId,
-  getSessionToken,
-  getStudioId,
+  buildConnectedUserActionHeaders,
+  getConnectedUserActionAuthConfig,
+} from "../lib/connectedUserActionAuth.js";
+import {
   isConnectedMode,
 } from "@vivd/shared";
 
@@ -56,23 +57,6 @@ function hasDotSegment(relativePath: string): boolean {
     (segment) =>
       segment.startsWith(".") && !ALLOWED_DOTFILES.includes(segment)
   );
-}
-
-function getConnectedBackendConfig():
-  | {
-      backendUrl: string;
-      sessionToken: string;
-      studioId: string;
-      organizationId?: string;
-    }
-  | null {
-  if (!isConnectedMode()) return null;
-  const backendUrl = getBackendUrl();
-  const sessionToken = getSessionToken();
-  const studioId = getStudioId();
-  const organizationId = getConnectedOrganizationId();
-  if (!backendUrl || !sessionToken || !studioId) return null;
-  return { backendUrl, sessionToken, studioId, organizationId };
 }
 
 function readEnabledPluginsFromEnv(): string[] {
@@ -156,24 +140,22 @@ type ConnectedCheckDomainResult = {
 };
 
 async function callConnectedBackendQuery<T>(
+  ctx: Context,
   procedure: string,
   input: Record<string, unknown>,
 ): Promise<T> {
-  const config = getConnectedBackendConfig();
+  const config = getConnectedUserActionAuthConfig(ctx.req);
   if (!config) {
-    throw new Error("Connected backend is not configured");
+    throw new Error("Connected Studio user action auth is not configured");
   }
 
   const response = await fetch(
     `${config.backendUrl}/api/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${config.sessionToken}`,
-        ...(config.organizationId
-          ? { "x-vivd-organization-id": config.organizationId }
-          : {}),
-      },
+      headers: buildConnectedUserActionHeaders(config, {
+        includeContentType: false,
+      }),
     },
   );
 
@@ -187,23 +169,18 @@ async function callConnectedBackendQuery<T>(
 }
 
 async function callConnectedBackendMutation<T>(
+  ctx: Context,
   procedure: string,
   input: Record<string, unknown>,
 ): Promise<T> {
-  const config = getConnectedBackendConfig();
+  const config = getConnectedUserActionAuthConfig(ctx.req);
   if (!config) {
-    throw new Error("Connected backend is not configured");
+    throw new Error("Connected Studio user action auth is not configured");
   }
 
   const response = await fetch(`${config.backendUrl}/api/trpc/${procedure}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.sessionToken}`,
-      ...(config.organizationId
-        ? { "x-vivd-organization-id": config.organizationId }
-        : {}),
-    },
+    headers: buildConnectedUserActionHeaders(config),
     body: JSON.stringify(input),
   });
 
@@ -216,12 +193,14 @@ async function callConnectedBackendMutation<T>(
   return (body?.result?.data?.json ?? body?.result?.data ?? body) as T;
 }
 
-async function getGitHubSyncUiGate(): Promise<{ allowed: boolean; reason?: string }> {
+async function getGitHubSyncUiGate(
+  ctx: Context,
+): Promise<{ allowed: boolean; reason?: string }> {
   if (!isConnectedMode()) return { allowed: true };
   try {
     const config = await callConnectedBackendQuery<{
       isSuperAdminUser?: boolean;
-    }>("config.getAppConfig", {});
+    }>(ctx, "config.getAppConfig", {});
     if (config?.isSuperAdminUser) return { allowed: true };
     return { allowed: false, reason: "GitHub sync is super-admin only." };
   } catch {
@@ -229,20 +208,20 @@ async function getGitHubSyncUiGate(): Promise<{ allowed: boolean; reason?: strin
   }
 }
 
-async function getConnectedSupportEmail(): Promise<string | null> {
+async function getConnectedSupportEmail(ctx: Context): Promise<string | null> {
   if (!isConnectedMode()) return null;
   try {
     const config = await callConnectedBackendQuery<{
       supportEmail?: string | null;
-    }>("config.getAppConfig", {});
+    }>(ctx, "config.getAppConfig", {});
     return config.supportEmail?.trim() || null;
   } catch {
     return null;
   }
 }
 
-async function assertGitHubSyncAllowed(): Promise<void> {
-  const gate = await getGitHubSyncUiGate();
+async function assertGitHubSyncAllowed(ctx: Context): Promise<void> {
+  const gate = await getGitHubSyncUiGate(ctx);
   if (!gate.allowed) {
     throw new Error(gate.reason || "GitHub sync is super-admin only.");
   }
@@ -258,11 +237,11 @@ export const projectRouter = router({
 
     const connectedProjectSlug = readProjectSlugFromEnv();
     if (isConnectedMode() && connectedProjectSlug) {
-      supportEmail = (await getConnectedSupportEmail()) ?? supportEmail;
+      supportEmail = (await getConnectedSupportEmail(ctx)) ?? supportEmail;
       try {
         const connectedProjects = await callConnectedBackendQuery<{
           projects?: ConnectedProjectListRow[];
-        }>("project.list", {});
+        }>(ctx, "project.list", {});
         const connectedProject = connectedProjects.projects?.find(
           (project) => project.slug === connectedProjectSlug,
         );
@@ -356,11 +335,11 @@ export const projectRouter = router({
         origin: z.string().optional(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (isConnectedMode()) {
         const status = await callConnectedBackendQuery<{
           canonicalUrl?: string;
-        }>("project.getExternalPreviewStatus", {
+        }>(ctx, "project.getExternalPreviewStatus", {
           slug: input.slug,
           version: input.version,
         });
@@ -850,7 +829,7 @@ export const projectRouter = router({
             publishedAt: string | null;
             url: string | null;
             projectVersion?: number | null;
-          }>("project.publishStatus", { slug: input.slug });
+          }>(ctx, "project.publishStatus", { slug: input.slug });
 
           return {
             mode: "connected" as const,
@@ -897,7 +876,7 @@ export const projectRouter = router({
     )
     .query(async ({ input, ctx }) => {
       if (isConnectedMode()) {
-        return await callConnectedBackendQuery<ConnectedPublishState>("project.publishState", {
+        return await callConnectedBackendQuery<ConnectedPublishState>(ctx, "project.publishState", {
           slug: input.slug,
           version: input.version,
         });
@@ -931,13 +910,14 @@ export const projectRouter = router({
         version: z.number(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (isConnectedMode()) {
         return await callConnectedBackendQuery<ConnectedPublishChecklist>(
+          ctx,
           "project.publishChecklist",
           {
-          slug: input.slug,
-          version: input.version,
+            slug: input.slug,
+            version: input.version,
           },
         );
       }
@@ -956,11 +936,15 @@ export const projectRouter = router({
         slug: z.string().optional(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (isConnectedMode()) {
         return await callConnectedBackendQuery<ConnectedCheckDomainResult>(
+          ctx,
           "project.checkDomain",
-          input,
+          {
+            ...input,
+            slug: input.slug ?? readProjectSlugFromEnv() ?? undefined,
+          },
         );
       }
 
@@ -980,12 +964,12 @@ export const projectRouter = router({
         expectedCommitHash: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (!isConnectedMode()) {
         throw new Error("Publishing via domain is available in connected mode only.");
       }
 
-      return await callConnectedBackendMutation("project.publish", input);
+      return await callConnectedBackendMutation(ctx, "project.publish", input);
     }),
 
   unpublish: publicProcedure
@@ -994,11 +978,11 @@ export const projectRouter = router({
         slug: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (!isConnectedMode()) {
         throw new Error("Unpublish is available in connected mode only.");
       }
-      return await callConnectedBackendMutation("project.unpublish", input);
+      return await callConnectedBackendMutation(ctx, "project.unpublish", input);
     }),
 
   gitHubSyncStatus: publicProcedure
@@ -1009,7 +993,7 @@ export const projectRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const gate = await getGitHubSyncUiGate();
+      const gate = await getGitHubSyncUiGate(ctx);
       if (!gate.allowed) {
         return {
           uiAllowed: false,
@@ -1207,7 +1191,7 @@ export const projectRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await assertGitHubSyncAllowed();
+      await assertGitHubSyncAllowed(ctx);
       if (!ctx.workspace.isInitialized()) {
         throw new Error("Workspace not initialized");
       }
@@ -1308,7 +1292,7 @@ export const projectRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await assertGitHubSyncAllowed();
+      await assertGitHubSyncAllowed(ctx);
       if (!ctx.workspace.isInitialized()) {
         throw new Error("Workspace not initialized");
       }
@@ -1494,13 +1478,13 @@ export const projectRouter = router({
         enabled: z.boolean(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (!isConnectedMode()) {
         throw new Error("Not available in standalone mode");
       }
       return await callConnectedBackendMutation<{
         publicPreviewEnabled: boolean;
-      }>("project.setPublicPreviewEnabled", input);
+      }>(ctx, "project.setPublicPreviewEnabled", input);
     }),
 
   regenerateThumbnail: publicProcedure
@@ -1510,11 +1494,11 @@ export const projectRouter = router({
         version: z.number(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (!isConnectedMode()) {
         throw new Error("Not available in standalone mode");
       }
-      return await callConnectedBackendMutation("project.regenerateThumbnail", input);
+      return await callConnectedBackendMutation(ctx, "project.regenerateThumbnail", input);
     }),
 
   deleteProject: publicProcedure
@@ -1523,11 +1507,11 @@ export const projectRouter = router({
         slug: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (!isConnectedMode()) {
         throw new Error("Not available in standalone mode");
       }
-      return await callConnectedBackendMutation("project.delete", input);
+      return await callConnectedBackendMutation(ctx, "project.delete", input);
     }),
 
   createTag: publicProcedure

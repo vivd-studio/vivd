@@ -3,6 +3,7 @@ import * as trpcExpress from "@trpc/server/adapters/express";
 import { getSession } from "./lib/authProvider";
 import { z } from "zod";
 import { db } from "./db";
+import { STUDIO_USER_ACTION_TOKEN_HEADER } from "@vivd/shared/studio";
 import {
   organization,
   organizationMember,
@@ -14,11 +15,17 @@ import { domainService } from "./services/publish/DomainService";
 import { normalizeOrganizationId } from "./lib/organizationIdentifiers";
 import { studioMachineProvider } from "./services/studioMachines";
 import type { StudioRuntimeAuthIdentity } from "./services/studioMachines/types";
+import {
+  verifyStudioUserActionToken,
+  type VerifiedStudioUserActionToken,
+} from "./lib/studioUserActionToken";
 
 type UserMembership = {
   organizationId: string;
   role: string;
 };
+
+type StudioUserActionAuthIdentity = VerifiedStudioUserActionToken;
 
 const DEFAULT_HOST_RESOLUTION_LOG_THROTTLE_MS = 10_000;
 const hostResolutionLogAtBySignature = new Map<string, number>();
@@ -115,6 +122,8 @@ export const createContext = async ({
     : null;
   const studioRuntimeToken = headers.get(STUDIO_RUNTIME_TOKEN_HEADER)?.trim() || null;
   const studioRuntimeId = headers.get(STUDIO_RUNTIME_ID_HEADER)?.trim() || null;
+  const studioUserActionToken =
+    headers.get(STUDIO_USER_ACTION_TOKEN_HEADER)?.trim() || null;
 
   // Fallback for machine-to-backend calls (e.g. Studio UsageReporter):
   // allow `Authorization: Bearer <session.token>` in addition to cookie-based sessions.
@@ -166,6 +175,57 @@ export const createContext = async ({
     }
   }
 
+  let studioUserActionAuth: StudioUserActionAuthIdentity | null = null;
+  if (!session && studioUserActionToken) {
+    const verified = verifyStudioUserActionToken(studioUserActionToken);
+    if (verified) {
+      const sessionRecord = await db.query.session.findFirst({
+        where: eq(sessionTable.id, verified.sessionId),
+        with: {
+          user: true,
+        },
+      });
+
+      if (
+        sessionRecord &&
+        sessionRecord.userId === verified.userId &&
+        (!sessionRecord.expiresAt || new Date(sessionRecord.expiresAt) > new Date())
+      ) {
+        sessionRecordFromDb = {
+          id: sessionRecord.id,
+          activeOrganizationId: verified.organizationId,
+        };
+        session = {
+          session: {
+            id: sessionRecord.id,
+            userId: sessionRecord.userId,
+            expiresAt: new Date(sessionRecord.expiresAt),
+            createdAt: new Date(sessionRecord.createdAt),
+            updatedAt: new Date(sessionRecord.updatedAt),
+            ipAddress: sessionRecord.ipAddress,
+            userAgent: sessionRecord.userAgent,
+          },
+          user: {
+            id: sessionRecord.user.id,
+            email: sessionRecord.user.email,
+            name: sessionRecord.user.name,
+            role:
+              (sessionRecord.user.role as
+                | "super_admin"
+                | "admin"
+                | "user"
+                | "client_editor") ?? "user",
+            emailVerified: !!sessionRecord.user.emailVerified,
+            image: sessionRecord.user.image,
+            createdAt: new Date(sessionRecord.user.createdAt),
+            updatedAt: new Date(sessionRecord.user.updatedAt),
+          },
+        };
+        studioUserActionAuth = verified;
+      }
+    }
+  }
+
   let studioRuntimeAuth: StudioRuntimeAuthIdentity | null = null;
   if (
     !session &&
@@ -206,6 +266,10 @@ export const createContext = async ({
       ? sessionRecordFromDb?.activeOrganizationId ?? null
       : null;
 
+  if (studioUserActionAuth) {
+    organizationId = studioUserActionAuth.organizationId;
+  }
+
   const memberships = session
     ? await db.query.organizationMember.findMany({
         where: eq(organizationMember.userId, session.user.id),
@@ -217,7 +281,13 @@ export const createContext = async ({
     memberships.map((m) => [m.organizationId, m.role] as const),
   );
 
-  if (session && requestedOrganizationId && !hostOrganizationId) {
+  if (studioUserActionAuth && requestedOrganizationId && !hostOrganizationId) {
+    if (requestedOrganizationId !== studioUserActionAuth.organizationId) {
+      console.warn(
+        `[HostResolution] ignoring x-vivd-organization-id="${requestedOrganizationId}" for studio user action token org=${studioUserActionAuth.organizationId}`,
+      );
+    }
+  } else if (session && requestedOrganizationId && !hostOrganizationId) {
     const hasAccess =
       session.user.role === "super_admin" ||
       membershipRoleByOrg.has(requestedOrganizationId);
@@ -327,6 +397,7 @@ export const createContext = async ({
     organizationId,
     organizationRole,
     studioRuntimeAuth,
+    studioUserActionAuth,
   };
 };
 
@@ -473,6 +544,31 @@ const studioProjectScopeSchema = z.object({
   slug: z.string().min(1),
   version: z.number().int().positive().optional(),
 });
+
+function extractStudioUserActionScope(
+  rawInput: unknown,
+): { slug: string | null; version: number | null } {
+  if (!rawInput || typeof rawInput !== "object") {
+    return { slug: null, version: null };
+  }
+
+  const record = rawInput as Record<string, unknown>;
+  const slugCandidates = [record.slug, record.projectSlug, record.oldSlug];
+  const versionCandidates = [record.version, record.projectVersion];
+
+  const slug =
+    slugCandidates.find((value): value is string => typeof value === "string" && value.trim().length > 0)
+      ?.trim() ?? null;
+  const version =
+    versionCandidates.find(
+      (value): value is number => typeof value === "number" && Number.isFinite(value),
+    ) ?? null;
+
+  return {
+    slug,
+    version: version != null ? Math.trunc(version) : null,
+  };
+}
 const enforceClientEditorProjectAccess = t.middleware(
   async ({ ctx, getRawInput, next }) => {
     if (!ctx.session) return next();
@@ -558,15 +654,55 @@ const enforceStudioProjectAccess = t.middleware(async ({ ctx, getRawInput, next 
   return next();
 });
 
+const enforceStudioUserActionProjectAccess = t.middleware(
+  async ({ ctx, getRawInput, next }) => {
+    if (!ctx.studioUserActionAuth) return next();
+
+    const rawInput = await getRawInput();
+    const scope = extractStudioUserActionScope(rawInput);
+
+    if (!scope.slug) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Studio user action token is not authorized for this procedure",
+      });
+    }
+
+    if (scope.slug !== ctx.studioUserActionAuth.projectSlug) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Studio user action token is not authorized for this project",
+      });
+    }
+
+    if (
+      scope.version != null &&
+      scope.version > 0 &&
+      scope.version !== ctx.studioUserActionAuth.version
+    ) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Studio user action token is not authorized for this project version",
+      });
+    }
+
+    return next();
+  },
+);
+
 // Project-scoped access: for client_editors, requires an assigned project and enforces slug match.
 export const projectMemberProcedure = orgProcedure.use(
-  enforceClientEditorProjectAccess
+  enforceClientEditorProjectAccess,
+).use(
+  enforceStudioUserActionProjectAccess,
 );
 export const studioProjectProcedure = studioOrgProcedure
   .use(enforceClientEditorProjectAccess)
   .use(enforceStudioProjectAccess);
 
 export const adminProcedure = orgProcedure.use(
+  enforceStudioUserActionProjectAccess,
+).use(
   async function isTeamMember(opts) {
     const { ctx } = opts;
     // Team-level: blocks client_editors (allows admin + user)

@@ -6,7 +6,6 @@ const {
   stopDevServerMock,
   isConnectedModeMock,
   getBackendUrlMock,
-  getSessionTokenMock,
   getStudioIdMock,
   getConnectedOrganizationIdMock,
 } = vi.hoisted(() => ({
@@ -14,7 +13,6 @@ const {
   stopDevServerMock: vi.fn(),
   isConnectedModeMock: vi.fn(),
   getBackendUrlMock: vi.fn(),
-  getSessionTokenMock: vi.fn(),
   getStudioIdMock: vi.fn(),
   getConnectedOrganizationIdMock: vi.fn(),
 }));
@@ -31,7 +29,6 @@ vi.mock("../services/project/DevServerService.js", () => ({
 vi.mock("@vivd/shared", () => ({
   isConnectedMode: isConnectedModeMock,
   getBackendUrl: getBackendUrlMock,
-  getSessionToken: getSessionTokenMock,
   getStudioId: getStudioIdMock,
   getConnectedOrganizationId: getConnectedOrganizationIdMock,
 }));
@@ -44,6 +41,14 @@ function makeContext(overrides: Partial<Context> = {}): Context {
       isInitialized: vi.fn(() => true),
       getProjectPath: vi.fn(() => "/tmp/workspace"),
     } as unknown as Context["workspace"],
+    req: {
+      headers: {
+        cookie: "vivd_studio_user_action_token=user-action-token-1",
+      },
+      get(name: string) {
+        return this.headers[name.toLowerCase()];
+      },
+    } as unknown as Context["req"],
     ...overrides,
   } as Context;
 }
@@ -56,7 +61,6 @@ describe("project router", () => {
     stopDevServerMock.mockReset();
     isConnectedModeMock.mockReset();
     getBackendUrlMock.mockReset();
-    getSessionTokenMock.mockReset();
     getStudioIdMock.mockReset();
     getConnectedOrganizationIdMock.mockReset();
 
@@ -64,7 +68,6 @@ describe("project router", () => {
     stopDevServerMock.mockResolvedValue(undefined);
     isConnectedModeMock.mockReturnValue(false);
     getBackendUrlMock.mockReturnValue("http://backend.local");
-    getSessionTokenMock.mockReturnValue("session-token");
     getStudioIdMock.mockReturnValue("studio-1");
     getConnectedOrganizationIdMock.mockReturnValue("org-1");
 
@@ -103,7 +106,7 @@ describe("project router", () => {
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
-          Authorization: "Bearer session-token",
+          "x-vivd-studio-user-action-token": "user-action-token-1",
           "x-vivd-organization-id": "org-1",
         }),
       }),
@@ -271,7 +274,7 @@ describe("project router", () => {
         expect.objectContaining({
           method: "GET",
           headers: expect.objectContaining({
-            Authorization: "Bearer session-token",
+            "x-vivd-studio-user-action-token": "user-action-token-1",
             "x-vivd-organization-id": "org-1",
           }),
         }),
@@ -281,7 +284,7 @@ describe("project router", () => {
         expect.objectContaining({
           method: "GET",
           headers: expect.objectContaining({
-            Authorization: "Bearer session-token",
+            "x-vivd-studio-user-action-token": "user-action-token-1",
             "x-vivd-organization-id": "org-1",
           }),
         }),
