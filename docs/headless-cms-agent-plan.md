@@ -1,186 +1,648 @@
-# Headless CMS + Agent Interface Exploration
+# Headless CMS + CLI-First Agent Plan
 
-## Why this note exists
+## Decision Summary
 
-Vivd currently gives projects two primary editing surfaces:
+This direction is now explicitly **CLI-first**.
 
-- the Studio agent
-- direct file editing in the workspace / file explorer
+- Start immediately with a `vivd` CLI on the Studio machine.
+- The agent can already execute bash, so the CLI becomes the primary structured interface.
+- Keep structured CMS data in the **control-plane DB** as the source of truth.
+- Keep files/assets in object storage, referenced from CMS entries.
+- Render sites from a **generated content snapshot** during preview/publish, not from live DB reads by default.
+- Put the first CMS UI in the **host app project routes**, embedded into Studio the same way Plugins and Analytics already work.
 
-That works well for layout work, larger refactors, and generated-site iteration. It is weaker for small, frequent, structured edits such as:
+The CLI should be the first delivery surface, not a later convenience layer.
 
-- changing wording in a repeated content block
-- swapping a PDF or other attachment
-- maintaining a product catalog, team list, or FAQ
-- editing plugin configuration without touching raw source
+## Why this direction
 
-This note captures a direction where Vivd also acts as a headless CMS without breaking the current backend/Studio/OpenCode boundaries.
+Vivd already has:
 
-## Problem Statement
+- a stable control-plane/backend boundary
+- Studio-connected auth/runtime env on the machine
+- OpenCode tools that are already thin backend-backed transports
+- host-app project pages for embedded project workflows (`Plugins`, `Analytics`)
 
-Vivd needs a structured content layer so that:
+That means the lowest-risk path is:
 
-- users can edit structured data without manual file surgery
-- agents can discover and update that data safely
-- plugins and CMS-style content follow a coherent model
-- published sites can render structured entries consistently
-- small content edits stop depending on prompt-heavy file manipulation
+1. build a discoverable `vivd` CLI first
+2. keep CMS business logic in backend services
+3. expose the same operations to Studio UI and OpenCode tools
+4. materialize site-facing content snapshots at preview/publish time
 
-## Constraints From The Current Architecture
+## Core Architecture
 
-- Plugin/business state already belongs in the control plane, not in Studio source files.
-- Studio-provisioned OpenCode tools are already working as thin backend-backed transports.
-- Workspace bridge files are acceptable only as derived cache, not as the source of truth.
-- Studio source sync is exact, so the backend should not inject source files into an active workspace behind Studio's back.
-- Generated sites are plain HTML by default, while Astro is also supported, so any CMS design must account for both rendering modes.
+### Source of truth
 
-## Recommendation
+The canonical structured content should live in the control plane, not in project source files.
 
-### 1. Keep CMS state outside the workspace as the source of truth
+That means:
 
-The headless CMS should primarily live in control-plane-owned state, similar to plugin configuration.
+- **logical content schemas** are stored as app data in shared CMS tables
+- **entries** are stored as validated structured payloads
+- **assets** are stored in object storage with project-scoped references
+- the **site artifact** receives a generated snapshot of the current content state
 
-That state likely needs:
+The agent must never alter the physical platform DB schema. It may only mutate project content models through guarded backend APIs.
 
-- project-scoped content models/types
-- content entries/items
-- attachment references
-- optional render metadata or view hints
+### Files in the project workspace
 
-This avoids treating raw project files as the canonical CMS database and makes it possible to support small edits cleanly from UI, agent, or automation surfaces.
+Project files can still contain optional derived bridge/cache material under `.vivd/`, for example:
 
-### 2. Treat agent access as a transport concern, not the core CMS design
-
-The agent needs a good way to work with CMS data, but that interface should sit on top of the control-plane services rather than define the underlying model.
-
-Recommended layering:
-
-- backend services own plugin and CMS business logic
-- tRPC / HTTP APIs expose those operations
-- Studio/OpenCode custom tools stay as the first integration path
-- a future `vivd` CLI can be added as another thin client on top of the same APIs
-
-The CLI is useful because it gives the agent a stable, inspectable interface on the Studio machine and makes future non-OpenCode integrations easier. It should not become a second source of product logic.
-
-### 3. Use the CLI for structured operations, not as the only authoring UX
-
-The CLI is a strong fit for:
-
-- plugin info and plugin configuration actions
-- content model inspection
-- content entry CRUD
-- help / discovery output for the agent
-- admin/debug/operator workflows
-
-The CLI is not a substitute for a real CMS editing surface for humans. If Vivd wants to be meaningfully "agent + CMS + deployment", the control-plane UI should eventually expose structured editing directly as well.
-
-### 4. Keep workspace bridge files optional and derived
-
-If the agent or project benefits from local discoverability, Vivd can materialize a derived cache inside the workspace, for example under `.vivd/`.
-
-Possible examples:
-
-- `.vivd/plugins.json`
-- `.vivd/plugins.md`
 - `.vivd/content/models.json`
 - `.vivd/content/entries/*.json`
 - `.vivd/content/README.md`
 
-These files should be:
+These are optional and derived. They are not the source of truth.
 
-- generated from the canonical backend state
-- safe to expose inside the workspace
-- free of secrets
-- treated as cache / bridge material, not as the source of truth
+### Runtime rendering
 
-If this path is used, generation should happen from inside the Studio machine so it stays compatible with Vivd's exact sync model.
+Published sites should not hit the control-plane DB at runtime by default.
 
-### 5. Separate content storage from rendering strategy
+Default flow:
 
-There are really two separate problems:
+- edit content in control plane
+- build preview/publish artifact
+- export content snapshot into the build workspace
+- render from that snapshot
 
-1. where structured content lives
-2. how generated sites render it
+This keeps sites fast, reproducible, and operationally simple in multi-tenant setups.
 
-The likely direction is:
+## 1. CLI-First Delivery Plan
 
-- control plane owns the authoritative content state
-- publish/build steps materialize a snapshot of that content for the site artifact
+## CLI goals
 
-That snapshot could then be consumed differently depending on site type:
+The `vivd` CLI should let the agent discover the available surface and perform structured project operations without needing custom tool docs first.
 
-- plain HTML sites may need build-time rendering or generated static includes/data files
-- Astro sites can more naturally consume generated JSON/data modules at build time
+### Command design principles
 
-This suggests that content should be versioned or snapshotted at publish/build time, even if the live editing source of truth remains outside the workspace.
+- Every command group must support `--help`.
+- Every command group must support a plain `help` verb.
+- Every read command must support `--json`.
+- Errors must be explicit and actionable.
+- Exit codes must be stable and non-zero on failure.
+- Output must be readable for humans by default and deterministic for the agent via `--json`.
 
-## Product Shape
+### Required discoverability contract
 
-The product vision becomes more coherent if Vivd is framed as:
+The following commands should work from the start:
 
-- AI agent for structural/site edits
-- CMS for structured/business content
-- deployment/runtime for preview and publish
+- `vivd help`
+- `vivd doctor`
+- `vivd whoami`
+- `vivd project info`
+- `vivd plugins help`
+- `vivd plugins catalog`
+- `vivd plugins info contact`
+- `vivd plugins info analytics`
+- `vivd cms help`
+- `vivd cms models help`
+- `vivd cms entries help`
 
-Under that framing:
+Recommended convenience aliases:
 
-- agent = best for broader site changes, refactors, and implementation work
-- CMS UI = best for quick content updates and structured data maintenance
-- CLI/tools = best for automation, agent access, and operator workflows
+- `vivd help plugins`
+- `vivd help cms`
+- `vivd help cms models`
+- `vivd help cms entries`
 
-## Suggested CLI Shape
+### Initial command shape
 
-If Vivd adds a Studio-machine CLI, the first version should mirror existing backend-backed capabilities rather than invent new ones.
+#### Global
+
+- `vivd help`
+- `vivd doctor`
+- `vivd whoami`
+- `vivd project info`
+
+#### Plugin parity commands
+
+- `vivd plugins catalog`
+- `vivd plugins info contact`
+- `vivd plugins info analytics`
+- `vivd plugins configure contact ...`
+
+These should cover the same surface as the current `vivd_plugins_*` tools first.
+
+#### CMS commands
+
+- `vivd cms models list`
+- `vivd cms models show <model-key>`
+- `vivd cms models create <model-key>`
+- `vivd cms models update <model-key>`
+- `vivd cms models validate <model-key>`
+- `vivd cms models activate <model-key>`
+- `vivd cms entries list <model-key>`
+- `vivd cms entries show <model-key> <entry-key>`
+- `vivd cms entries create <model-key>`
+- `vivd cms entries update <model-key> <entry-key>`
+- `vivd cms entries delete <model-key> <entry-key>`
+- `vivd cms entries attach <model-key> <entry-key> <field-key> <file>`
+- `vivd cms snapshot export`
+
+The first version does not need the full set on day one, but the plan should target this shape.
+
+### Packaging and install
+
+Recommended packaging:
+
+- create a new workspace package, preferably `packages/cli`
+- expose a `bin` named `vivd`
+- build it into a compiled JS entrypoint first
+- place it on the Studio machine `PATH`
+
+Do **not** overcomplicate the first version with native binary packaging. Studio already runs Node. A built CLI entrypoint is enough to start.
+
+### Studio machine install path
+
+The CLI should be available anywhere the agent runs on the Studio machine.
+
+Recommended install approach:
+
+- build the CLI as part of the Studio/runtime image
+- ensure `vivd` is available on `PATH`
+- keep its auth/runtime context env-driven, matching the current Studio connected-mode envs
+
+That is better than writing ad-hoc per-project scripts into the workspace.
+
+### Shared runtime/auth client
+
+Do not build a second backend transport stack for the CLI.
+
+The CLI should reuse and consolidate the current connected-runtime path that already exists in:
+
+- `packages/studio/server/opencode/toolModules/runtime.ts`
+- `packages/studio/server/lib/connectedBackendAuth.ts`
+- `packages/shared/src/config/studioMode.ts`
+
+Recommended move:
+
+- extract a reusable Studio-connected backend client helper
+- make both OpenCode tools and the new CLI depend on that helper
+
+This should own:
+
+- env detection
+- auth headers
+- tRPC query/mutation helpers
+- project/org/studio scoping
+- uniform error formatting
+
+### Relationship to existing OpenCode tools
+
+The CLI does **not** replace the current tools on day one.
+
+Recommended rollout:
+
+1. Keep the current `vivd_plugins_*` tools working.
+2. Add CLI parity for the existing plugin/info surface.
+3. Update agent instructions to mention `vivd` as the preferred structured interface.
+4. Decide later whether tools should:
+   - keep calling the backend client directly, or
+   - shell out to `vivd ... --json`
+
+The important part is that CLI and tools share the same backend contracts.
+
+## 2. CMS Integration Into The Control-Plane DB
+
+## Principle
+
+A project's CMS schema is **logical schema data**, not a physical SQL schema.
+
+That means:
+
+- a project schema is stored as rows/config inside shared CMS tables
+- the agent changes model definitions through API calls
+- the platform DB schema remains stable
+- Drizzle migrations remain developer-owned only
+
+## Recommended stable tables
+
+### `project_content_model`
+
+One row per project-scoped collection or singleton.
+
+Suggested responsibilities:
+
+- organization/project scoping
+- model key and label
+- collection kind (`collection` or `singleton`)
+- active version pointer
+- status / archive flags
+
+### `project_content_model_version`
+
+Versioned schema definitions for a model.
+
+Suggested responsibilities:
+
+- draft vs active versioning
+- field definitions JSON
+- UI/editor metadata JSON
+- validation summary
+- migration notes
+
+### `project_content_entry`
+
+One row per content item.
+
+Suggested responsibilities:
+
+- project/model scoping
+- stable entry key or slug
+- entry status
+- ordering
+- values payload JSON
+- updated timestamps
+
+### `project_content_entry_revision`
+
+Immutable history for entry changes.
+
+Suggested responsibilities:
+
+- audit trail
+- rollback support
+- actor/source tracking (`ui`, `cli`, `agent`, `migration`)
+- before/after or full snapshot payload
+
+### `project_content_asset`
+
+Asset metadata for files/images attached to content entries.
+
+Suggested responsibilities:
+
+- object storage key
+- media metadata
+- project/model/entry association
+- field binding
+- human filename and MIME type
+
+## Recommended field types for the first version
+
+Keep the first field set intentionally small:
+
+- `text`
+- `richtext`
+- `number`
+- `boolean`
+- `date`
+- `url`
+- `select`
+- `image`
+- `file`
+
+Only add references/relations after the first content slice is proven.
+
+## Schema change safety
+
+Model changes should be versioned and validated before activation.
+
+Recommended flow:
+
+1. create or edit a **draft** model version
+2. validate it against existing entries
+3. show breaking issues
+4. optionally run a constrained data transform
+5. activate the model version
+
+By default, allow:
+
+- adding models
+- adding optional fields
+- updating labels/help text/editor metadata
+- tightening non-breaking validation
+
+Guard or block by default:
+
+- deleting fields with live data
+- changing field types
+- making optional fields required
+- deleting models with entries
+
+## 3. Backend Service + API Plan
+
+## New backend service surface
+
+Add a dedicated service layer, for example:
+
+- `packages/backend/src/services/content/ProjectContentService.ts`
+
+This service should own:
+
+- model creation/update/versioning
+- entry CRUD
+- asset binding
+- validation
+- snapshot export
+- audit/revision writes
+
+Do not place CMS logic in the CLI or Studio UI.
+
+## Router structure
+
+Recommended backend exposure:
+
+- a normal frontend-facing router, e.g. `packages/backend/src/trpcRouters/content/*`
+- a Studio-connected mirror surface added to `packages/backend/src/trpcRouters/studioApi.ts`
+
+Why both:
+
+- frontend project pages should use standard authenticated project-member procedures
+- the Studio machine CLI and any OpenCode tools should use the Studio-connected auth path
+
+The payloads and semantics should stay aligned across both surfaces.
+
+## Suggested first operations
+
+### Model operations
+
+- list models
+- get model
+- create model
+- update draft model
+- validate draft model
+- activate model
+- archive model
+
+### Entry operations
+
+- list entries
+- get entry
+- create entry
+- update entry
+- delete/archive entry
+- reorder entries
+- attach/detach asset
+
+### Snapshot operations
+
+- export project content snapshot
+- inspect last snapshot metadata
+
+## 4. Studio UI Plan
+
+## Where the CMS UI should live
+
+The first CMS UI should live in the **host app**, not inside the preview iframe DOM.
+
+Recommended first placement:
+
+- add a new project route, e.g. `/vivd-studio/projects/:projectSlug/content`
+- implement a new page like `packages/frontend/src/pages/ProjectContent.tsx`
+- support `embedded=1`, following the current `ProjectPlugins` and `ProjectAnalytics` pattern
+- add a new Studio toolbar action that navigates to that page from inside embedded Studio
+
+This is the correct first home because it:
+
+- matches the existing project-management UX
+- reuses auth/routing/forms infrastructure
+- avoids coupling the CMS editor to preview DOM internals
+- already has an embedded-into-Studio navigation pattern
+
+## Exact Studio insertion points
+
+The new CMS surface should be wired into the same places that already expose Plugins and Analytics.
+
+### Host app routing
+
+Extend:
+
+- `packages/frontend/src/app/router/paths.ts`
+- `packages/frontend/src/app/router/routes.tsx`
+
+Add:
+
+- `ROUTES.PROJECT_CONTENT(slug)`
+- a `ProjectContentRoute`
+
+### Embedded Studio host header / project actions
+
+Extend:
+
+- `packages/frontend/src/pages/EmbeddedStudio.tsx`
+
+Add a `Content` action to the project actions menu next to `Plugins` and `Analytics`.
+
+### Studio toolbar
+
+Extend:
+
+- `packages/studio/client/src/components/preview/toolbar/hostNavigation.ts`
+- `packages/studio/client/src/components/preview/toolbar/StudioToolbar.tsx`
+
+Add a `Content` button next to `Plugins` and `Analytics`, using the same embedded navigation pattern.
+
+## How the CMS page should render
+
+The page should render like a proper CMS surface, not like a raw file explorer.
+
+Recommended first layout:
+
+- **left column**: content models / collections
+- **center**: entries list or table for the selected model
+- **right drawer or modal**: entry editor or model editor
+
+### Primary view: entries first
+
+When users open the page, they should land on **entries**, not schema editing.
+
+That means the default flow is:
+
+1. pick a model
+2. see entries
+3. add/edit/delete entries
+
+Schema editing should be a secondary explicit action.
+
+### Entry editing
+
+Render entry forms from the active model definition.
+
+Recommended behavior:
+
+- generated form fields by field type
+- explicit Save action
+- inline validation before submit
+- file/image fields use upload + picker UX
+- list/table supports quick editing for very simple scalar fields later
+
+### Model/schema editing
+
+Keep schema editing behind an explicit "Edit model" flow.
+
+Recommended behavior:
+
+- open draft model editor
+- field list with add/remove/reorder
+- preview validation changes
+- show breakage before activation
+- require explicit activate/apply step
+
+## Embedded Studio behavior
+
+The first embedded Studio experience should behave like Plugins/Analytics:
+
+- from Studio toolbar, open the project Content page
+- render inside the host shell with `embedded=1`
+- keep layout compact and focused
+
+This is enough for the first version.
+
+### Later Studio-native enhancement
+
+After the host-page flow works, consider an in-Studio quick-edit drawer for small content edits.
+
+That would be a second phase, not the starting point.
+
+## 5. Site Rendering Plan
+
+## Default rendering model
+
+Do not make the site fetch live CMS data from the control plane by default.
+
+Default flow:
+
+1. content is edited in control plane
+2. preview/publish requests a content snapshot
+3. snapshot is written into the build workspace
+4. site renders that snapshot
+
+## Snapshot shape
+
+The snapshot should be explicit and portable.
+
+Suggested export structure:
+
+- snapshot metadata
+- active models
+- entries by model
+- resolved asset references
+
+This can be emitted as:
+
+- one consolidated JSON snapshot, or
+- one manifest plus per-model files
+
+## Astro projects
+
+For Astro projects, generate content into a build-friendly location that Astro can import directly.
 
 Examples:
 
-- `vivd help`
-- `vivd plugins catalog`
-- `vivd plugins info contact`
-- `vivd plugins configure contact ...`
-- `vivd content models list`
-- `vivd content models ensure products`
-- `vivd content entries list products`
-- `vivd content entries upsert products --file product.json`
+- generated JSON files under a reserved generated directory
+- a generated loader/module used by project code
 
-The key rule is that CLI commands should call the same underlying service contracts as UI and tool surfaces.
+The key rule is that Astro should consume a generated snapshot, not open a live DB connection.
 
-## Open Questions
+## Plain HTML projects
 
-- Should CMS source of truth live in the DB, in object-storage-managed content bundles, or in a hybrid model?
-- What is the minimal first-class content model: free-form JSON, typed fields, or collection templates?
-- Should the CLI be the main agent surface, or an optional convenience wrapper around the same APIs?
-- How should publish/versioning snapshot CMS data so a site build remains reproducible?
-- What is the first CMS-shaped use case to validate the model: product catalog, team members, FAQ, downloads, or something else?
-- How much of the first version needs a user-facing control-plane UI versus agent-only workflows?
+For plain HTML sites, the first version should stay constrained.
 
-## Recommended First Slice
+Recommended path:
 
-Do not start with a full CMS system. Start with one narrow vertical slice:
+- export generated content JSON
+- support a small set of Vivd-owned rendering patterns/components
+- have the agent or generator wire those patterns into pages
 
-1. Define one project-scoped structured content concept in the backend.
-2. Expose read/write operations through the existing backend surface.
-3. Add a thin agent-facing interface:
-   - either one or two new OpenCode tools first
-   - or a minimal `vivd` CLI that wraps the same calls
-4. Materialize an optional derived `.vivd/` bridge file only if it clearly helps agent reasoning.
-5. Render that content in one site pattern and verify the editing loop feels better than raw file editing.
+Do not try to support arbitrary runtime querying from plain HTML in the first version.
 
-The best initial candidate is probably a simple collection type such as products, team members, FAQs, or downloads/documents. That will test:
+## Optional future live mode
 
-- schema shape
-- attachments
-- listing/detail rendering
-- small-content-edit ergonomics
-- agent discoverability
+If some projects need runtime-fresh data later, add that as an **opt-in** mode.
+
+It should not be the default architecture for preview/publish.
+
+## 6. Delivery Phases
+
+## Phase 0: CLI foundation
+
+- add `packages/cli`
+- expose `vivd`
+- extract shared connected backend client
+- install CLI on Studio machine
+- ship `help`, `doctor`, `whoami`, `project info`
+- ship plugin parity commands
+- update agent instructions to mention CLI discovery flow
+
+## Phase 1: CMS backend foundation
+
+- add stable CMS tables + Drizzle migration
+- add `ProjectContentService`
+- add frontend-facing `content` router
+- add Studio-facing `studioApi` CMS procedures
+- support read-only model/entry inspection from CLI
+
+## Phase 2: CMS write path
+
+- model draft/version flow
+- entry CRUD
+- asset attachment flow
+- revision history
+- CLI write commands
+
+## Phase 3: Studio UI
+
+- add `ProjectContent` page
+- add embedded mode support
+- add `Content` route
+- add `Content` toolbar/action entry points
+- render entries list + editor
+- add guarded model editor
+
+## Phase 4: Preview/publish rendering
+
+- snapshot export
+- preview integration
+- publish integration
+- first supported render pattern in sites
+
+## Phase 5: Tool consolidation
+
+- decide whether OpenCode tools stay direct-client based or shell out to `vivd`
+- add focused `vivd_cms_*` tools only if they still add value beyond bash + CLI
+
+## 7. Recommended First Vertical Slice
+
+Do not start with a general CMS builder for everything.
+
+Recommended first slice:
+
+- a `downloads` or `documents` collection
+
+Why this is a strong first slice:
+
+- directly addresses the “swap a PDF / small content fix” pain
+- tests file attachments
+- tests repeated structured entries
+- avoids the full complexity of a rich product catalog on day one
+
+Suggested first model:
+
+- `title`
+- `description`
+- `category`
+- `file`
+- `thumbnail` or `coverImage`
+- `order`
+
+After that works, add a more relational slice like `products`.
+
+## 8. Immediate Next Steps
+
+1. Create the CLI package and shared backend client.
+2. Mirror existing plugin info/catalog surfaces in the CLI.
+3. Add the first CMS tables and read-only CLI inspection commands.
+4. Add the `ProjectContent` route and Studio toolbar/button wiring.
+5. Land one narrow collection (`downloads`/`documents`) before broadening the field model.
 
 ## Current Leaning
 
-Current architectural leaning:
+The current recommended architecture is:
 
-- control plane as CMS source of truth
-- thin agent transports on top (`vivd_*` tools now, `vivd` CLI later if useful)
-- optional derived workspace bridge files under `.vivd/`
-- publish/build snapshotting for renderable site content
+- **control plane DB** as canonical CMS store
+- **`vivd` CLI** as the first-class structured agent interface
+- **host app embedded pages** as the first Studio UI surface
+- **generated preview/publish snapshots** as the site rendering mechanism
+- optional `.vivd/` bridge files only as derived cache
 
-That preserves the existing Vivd boundary that runtime/business logic belongs in backend services, while still giving the agent better structured capabilities than raw prompt-driven file editing.
+This fits Vivd's current boundaries and avoids turning either project files or the agent into the primary CMS database.

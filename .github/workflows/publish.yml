@@ -84,7 +84,10 @@ jobs:
             build_caddy=true
           }
 
-          if [ -z "$PREVIOUS_TAG" ]; then
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "Release tag push detected. Building all images unconditionally."
+            mark_all_images
+          elif [ -z "$PREVIOUS_TAG" ]; then
             echo "No previous tag found. Building all images."
             mark_all_images
           else
@@ -156,6 +159,11 @@ jobs:
 
           {
             echo "### Changed image selection"
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo "- mode: full release rebuild on tag push"
+            else
+              echo "- mode: selective rebuild from diff"
+            fi
             echo "- previous_tag: ${PREVIOUS_TAG:-<none>}"
             echo "- build_studio: $build_studio"
             echo "- build_builder: $build_builder"

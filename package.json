@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "publish:tag": "./scripts/publish.sh",
     "sync:self-host-assets": "npm run sync:self-host-assets --workspace=@vivd/docs",
     "build:shared": "npm run build --workspace=@vivd/shared",
     "typecheck": "npm run typecheck --workspace=@vivd/shared && npm run typecheck --workspace=@vivd/builder && npm run typecheck --workspace=@vivd/backend && npm run typecheck --workspace=@vivd/frontend && npm run typecheck --workspace=@vivd/studio && npm run typecheck --workspace=@vivd/scraper && npm run typecheck --workspace=@vivd/docs",
