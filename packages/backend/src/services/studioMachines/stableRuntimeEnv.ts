@@ -19,8 +19,6 @@ export const STABLE_STUDIO_MACHINE_ENV_KEYS = [
   ...STABLE_STUDIO_RUNTIME_FLAG_KEYS,
 ] as const;
 
-type StableStudioMachineEnvKey = (typeof STABLE_STUDIO_MACHINE_ENV_KEYS)[number];
-
 function normalizeGitHubRepoPrefix(value: string): string {
   const trimmed = value.trim().replace(/^-+/, "");
   if (!trimmed) return "";
