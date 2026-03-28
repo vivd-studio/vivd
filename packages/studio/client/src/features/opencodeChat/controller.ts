@@ -32,6 +32,8 @@ type PendingSessionStart = {
   sessionId: string | null;
 };
 
+const STALE_ACTIVE_SESSION_RECONCILE_MS = 8_000;
+
 export function useOpencodeChatController({
   projectSlug,
   version,
@@ -55,6 +57,9 @@ export function useOpencodeChatController({
   const nextPendingSessionStartIdRef = useRef(0);
   const pendingSessionStartRef = useRef<PendingSessionStart | null>(null);
   const staleRunningToolHealRef = useRef<string | null>(null);
+  const staleActiveSessionIdRef = useRef<string | null>(null);
+  const staleActiveSessionObservedAtRef = useRef<number | null>(null);
+  const staleActiveSessionHealAtRef = useRef<number | null>(null);
 
   const sessions = opencodeChat.sessions;
   const sessionsLoading = opencodeChat.bootstrapLoading;
@@ -68,6 +73,9 @@ export function useOpencodeChatController({
   const refetchSessions = opencodeChat.refetchBootstrap;
   const isSessionHydrating = opencodeChat.selectedSessionLoading;
   const hasOptimisticUserMessage = opencodeChat.selectedHasOptimisticUserMessage;
+  const refetchSelectedSessionSnapshot = useCallback(async () => {
+    await Promise.allSettled([refetchSessions(), refetchMessages()]);
+  }, [refetchMessages, refetchSessions]);
 
   const setSelectedSessionId = useCallback(
     (sessionId: string | null) => {
@@ -172,7 +180,7 @@ export function useOpencodeChatController({
   });
   const abortSessionMutation = trpc.agent.abortSession.useMutation({
     onSuccess: async () => {
-      await Promise.allSettled([refetchSessions(), refetchMessages()]);
+      await refetchSelectedSessionSnapshot();
     },
     onError: (error) => {
       setLocalSessionError(
@@ -508,6 +516,23 @@ export function useOpencodeChatController({
   );
 
   useEffect(() => {
+    if (!activityState.isThinking || !selectedSessionId) {
+      staleActiveSessionIdRef.current = null;
+      staleActiveSessionObservedAtRef.current = null;
+      staleActiveSessionHealAtRef.current = null;
+      return;
+    }
+
+    if (staleActiveSessionIdRef.current === selectedSessionId) {
+      return;
+    }
+
+    staleActiveSessionIdRef.current = selectedSessionId;
+    staleActiveSessionObservedAtRef.current = Date.now();
+    staleActiveSessionHealAtRef.current = null;
+  }, [activityState.isThinking, selectedSessionId]);
+
+  useEffect(() => {
     if (
       selectedSessionId ||
       autoSelectLockedRef.current ||
@@ -583,6 +608,79 @@ export function useOpencodeChatController({
     refetchMessages,
     selectedSessionId,
     staleRunningToolState,
+  ]);
+
+  useEffect(() => {
+    if (
+      !selectedSessionId ||
+      !activityState.isThinking ||
+      isSessionHydrating ||
+      connection.state !== "connected"
+    ) {
+      return;
+    }
+
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+
+    const observedAt = staleActiveSessionObservedAtRef.current;
+    if (observedAt == null) {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const schedule = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
+        timer = window.setTimeout(schedule, STALE_ACTIVE_SESSION_RECONCILE_MS);
+        return;
+      }
+
+      const lastEventTime = opencodeChat.state.lastEventTime ?? 0;
+      const lastHealAt = staleActiveSessionHealAtRef.current ?? 0;
+      const anchor = Math.max(observedAt, lastEventTime, lastHealAt);
+      const remainingMs = Math.max(
+        0,
+        anchor + STALE_ACTIVE_SESSION_RECONCILE_MS - Date.now(),
+      );
+
+      timer = window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        staleActiveSessionHealAtRef.current = Date.now();
+        void refetchSelectedSessionSnapshot().finally(() => {
+          if (cancelled) {
+            return;
+          }
+          schedule();
+        });
+      }, remainingMs);
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [
+    activityState.isThinking,
+    connection.state,
+    isSessionHydrating,
+    opencodeChat.state.lastEventTime,
+    refetchSelectedSessionSnapshot,
+    selectedSessionId,
   ]);
 
   useEffect(() => {

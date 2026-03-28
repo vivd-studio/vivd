@@ -167,6 +167,15 @@ describe("OpencodeChatProvider", () => {
     await waitFor(() => {
       expect(mockBootstrapRefetch).toHaveBeenCalledTimes(2);
     });
+
+    await waitFor(() => {
+      expect(useSubscriptionMock).toHaveBeenLastCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        replayBuffered: false,
+        subscriptionInstance: 1,
+      });
+    });
   });
 
   it("restarts the subscription when the stream goes inactive while visible", async () => {

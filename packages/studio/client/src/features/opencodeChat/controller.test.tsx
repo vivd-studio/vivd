@@ -347,6 +347,43 @@ describe("useOpencodeChatController", () => {
     });
   });
 
+  it("reconciles a visible active session after event silence leaves it locally stuck in working state", async () => {
+    vi.useFakeTimers();
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.sessionStatus = { type: "busy" } as any;
+    mockOpencodeChat.selectedMessages = [
+      {
+        info: {
+          id: "msg-user",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: 1 },
+        },
+        parts: [{ id: "part-user", messageID: "msg-user", type: "text", text: ":)" }],
+      },
+    ];
+
+    renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    expect(mockOpencodeChat.refetchBootstrap).not.toHaveBeenCalled();
+    expect(mockOpencodeChat.refetchSelectedSessionMessages).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_000);
+    });
+
+    expect(mockOpencodeChat.refetchBootstrap).toHaveBeenCalledTimes(1);
+    expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
   it("does not show 'Nothing to revert' when the server reports a successful revert", async () => {
     mockOpencodeChat.selectedSessionId = "sess-1";
     revertMutateAsync.mockResolvedValue({

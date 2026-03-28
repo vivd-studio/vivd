@@ -283,13 +283,21 @@ export function OpencodeChatProvider({
       }
 
       queueRefresh();
+      if (state.connection.state === "connected" && stale) {
+        restartEventSubscription();
+      }
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [queueRefresh, state.connection.state, state.lastEventTime]);
+  }, [
+    queueRefresh,
+    restartEventSubscription,
+    state.connection.state,
+    state.lastEventTime,
+  ]);
 
   useEffect(() => {
     if (!state.bootstrapped || state.connection.state !== "connected") {
