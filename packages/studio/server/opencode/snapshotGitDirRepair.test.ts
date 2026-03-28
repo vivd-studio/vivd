@@ -122,4 +122,29 @@ describe("repairOpencodeSnapshotGitDirs", () => {
       runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"], { cwd: repoDir }),
     ).toMatch(/^[0-9a-f]{40}$/);
   });
+
+  it("initializes the current project's snapshot gitdir when hydration restored only an empty placeholder directory", async () => {
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-snapshot-init-"));
+    const repoDir = path.join(tmpRoot, "repo");
+    const snapshotRoot = path.join(tmpRoot, "snapshot");
+    const snapshotGitDir = path.join(snapshotRoot, "project-id");
+
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.mkdir(path.join(snapshotGitDir, "info"), { recursive: true });
+    await fs.writeFile(path.join(repoDir, "index.html"), "<h1>before</h1>\n", "utf-8");
+
+    runGit(["init"], { cwd: repoDir });
+    runGit(["config", "user.email", "studio@vivd.local"], { cwd: repoDir });
+    runGit(["config", "user.name", "Vivd Studio"], { cwd: repoDir });
+    await fs.writeFile(path.join(repoDir, ".git", "opencode"), "project-id\n", "utf-8");
+
+    const result = await repairOpencodeSnapshotGitDirs(snapshotRoot, repoDir);
+    expect(result.repaired).toEqual([snapshotGitDir]);
+    expect(result.rebuilt).toEqual([snapshotGitDir]);
+
+    runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "add", "."], { cwd: repoDir });
+    expect(
+      runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"], { cwd: repoDir }),
+    ).toMatch(/^[0-9a-f]{40}$/);
+  });
 });

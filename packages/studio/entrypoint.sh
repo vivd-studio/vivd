@@ -417,7 +417,6 @@ hydrate_opencode() {
   fi
   if [ -n "$SNAPSHOT_PID" ]; then
     wait "$SNAPSHOT_PID" || true
-    repair_opencode_snapshot_gitdirs "$OPENCODE_SNAPSHOT_DIR" || true
   fi
   if [ -n "$DB_PID" ]; then
     wait "$DB_PID" || true
@@ -513,6 +512,10 @@ process.on("SIGTERM", () => server.close(() => {
 
   if [ -n "$HYDRATE_OPENCODE_PID" ]; then
     wait "$HYDRATE_OPENCODE_PID" || true
+  fi
+
+  if [ -n "$S3_OPENCODE_STORAGE_URI" ] || [ -n "$S3_OPENCODE_URI" ]; then
+    repair_opencode_snapshot_gitdirs "${VIVD_OPENCODE_DATA_HOME}/snapshot" || true
   fi
 
   if [ -n "$STUB_PID" ]; then
