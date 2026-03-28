@@ -141,7 +141,7 @@ async function waitForHealth(baseUrl, containerId, timeoutMs) {
   );
 }
 
-function assertMigrationsRecorded(postgresContainerId) {
+function assertSchemaInitialized(postgresContainerId) {
   const result = runDocker([
     "exec",
     postgresContainerId,
@@ -151,13 +151,41 @@ function assertMigrationsRecorded(postgresContainerId) {
     "-d",
     "vivd_smoke",
     "-Atc",
-    "select count(*) from __drizzle_migrations;",
+    [
+      "select table_name",
+      "from information_schema.tables",
+      "where table_schema = 'public'",
+      "order by table_name;",
+    ].join(" "),
   ]);
 
-  const count = Number.parseInt(result.stdout.trim(), 10);
-  assert.ok(
-    Number.isFinite(count) && count > 0,
-    "Expected backend startup to record Drizzle migrations",
+  const tables = new Set(
+    result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+
+  const expectedTables = [
+    "organization",
+    "user",
+    "session",
+    "system_setting",
+    "project_meta",
+    "project_version",
+    "project_publish_checklist",
+    "project_plugin_instance",
+  ];
+  const missing = expectedTables.filter((table) => !tables.has(table));
+
+  assert.equal(
+    missing.length,
+    0,
+    [
+      "Expected backend startup migrations to initialize the core schema.",
+      `Missing tables: ${missing.join(", ") || "none"}`,
+      `Present tables: ${Array.from(tables).join(", ") || "none"}`,
+    ].join("\n"),
   );
 }
 
@@ -238,7 +266,7 @@ async function main() {
     startedBackend = true;
 
     await waitForHealth(baseUrl, backendContainer, timeoutMs);
-    assertMigrationsRecorded(postgresContainer);
+    assertSchemaInitialized(postgresContainer);
     succeeded = true;
     log("Backend image smoke test completed successfully");
   } finally {

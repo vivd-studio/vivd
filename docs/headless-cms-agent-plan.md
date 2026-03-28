@@ -149,6 +149,9 @@ These should cover the same surface as the current `vivd_plugins_*` tools first.
 - `vivd cms assets show <asset-id>`
 - `vivd cms assets upload <file>`
 - `vivd cms assets delete <asset-id>`
+- `vivd cms render help`
+- `vivd cms render show-contract`
+- `vivd cms render scaffold <model-key>`
 - `vivd cms snapshot export`
 
 The first version does not need the full set on day one, but the plan should target this shape.
@@ -230,6 +233,7 @@ Rules:
 - do **not** inline full field definitions or large schema JSON
 - if there are many models, summarize and tell the agent to use the CLI for details
 - use the CLI as the expansion path: `vivd cms models list` and `vivd cms models show <model-key>`
+- include a short rendering hint that CMS content should be integrated through the Vivd render contract, not by inventing direct backend fetches
 
 Suggested shape:
 
@@ -565,6 +569,91 @@ Default flow:
 3. snapshot is written into the build workspace
 4. site renders that snapshot
 
+## Recommended render contract
+
+The easiest, most flexible, and most scalable rendering path is:
+
+- control-plane DB as canonical CMS store
+- generated local content snapshot inside the project/workspace
+- a small Vivd-owned render helper package consumed from project code
+
+Do **not** make the default rendering contract:
+
+- direct runtime reads from the control-plane DB
+- ad-hoc fetches to internal CMS APIs from arbitrary page code
+- raw JSON parsing scattered across projects
+
+### Recommended package shape
+
+Add a small internal package, for example:
+
+- `@vivd/content`
+
+This package should provide a stable code-facing render API on top of the generated snapshot.
+
+Suggested responsibilities:
+
+- read the generated snapshot
+- expose collection/singleton helpers
+- resolve assets consistently
+- hide snapshot layout details from project code
+
+Suggested API shape:
+
+- `getCollection(modelKey)`
+- `getEntry(modelKey, entryKey)`
+- `getSingleton(modelKey)`
+- `resolveAsset(assetRef)`
+- `listAssets(modelKey?)`
+
+Astro-specific helpers can be added if useful, for example:
+
+- `@vivd/content/astro`
+
+### Why this is the preferred path
+
+This gives Vivd the best balance of:
+
+- **ease**: agent and developers work against code helpers, not raw DB/API contracts
+- **flexibility**: snapshot format can evolve without rewriting project templates
+- **scalability**: preview/publish remain snapshot-based and tenant-safe
+- **agent ergonomics**: the agent can use CLI for discovery and code imports for integration
+
+## Agent integration contract
+
+The plan should explicitly tell the agent how CMS data is supposed to be integrated into a page.
+
+The default instruction should be:
+
+- use the CLI to inspect models and entries
+- use the Vivd render helper package in project code
+- render from the generated snapshot contract
+- do **not** invent direct control-plane fetches unless the project explicitly opts into a live mode later
+
+Suggested concise instruction pattern:
+
+- `Use 'vivd cms models list' and 'vivd cms models show <model-key>' to inspect CMS data.`
+- `When integrating CMS data into project code, use the Vivd content render contract/helpers rather than calling the control-plane API directly.`
+- `If no helper import is present yet, scaffold or add the standard Vivd CMS render helper usage instead of hand-parsing backend responses.`
+
+### Agent-friendly scaffold path
+
+The CLI should help the agent implement rendering, not just inspect data.
+
+Recommended rendering-oriented commands:
+
+- `vivd cms render help`
+- `vivd cms render show-contract`
+- `vivd cms render scaffold <model-key>`
+
+The scaffold command does not need to fully edit arbitrary projects on day one, but it should at least provide:
+
+- the expected import path
+- the expected helper calls
+- a minimal Astro example
+- a minimal plain HTML / JS example where applicable
+- notes on image/file field rendering
+
 ## Snapshot shape
 
 The snapshot should be explicit and portable.
@@ -589,6 +678,13 @@ This can be emitted as:
 - one consolidated JSON snapshot, or
 - one manifest plus per-model files
 
+Recommended first implementation:
+
+- a generated snapshot under a reserved path such as `.vivd/content/`
+- a stable helper package API that reads from that location
+
+Project code should depend on the helper contract, not the raw file layout.
+
 ## Astro projects
 
 For Astro projects, generate content into a build-friendly location that Astro can import directly.
@@ -597,6 +693,7 @@ Examples:
 
 - generated JSON files under a reserved generated directory
 - a generated loader/module used by project code
+- a small helper import from `@vivd/content` or `@vivd/content/astro`
 
 The key rule is that Astro should consume a generated snapshot, not open a live DB connection.
 
@@ -605,6 +702,12 @@ For image and file fields, the generated snapshot should make it easy to render:
 - responsive images or image metadata where available
 - document download links and labels
 - PDF/document cards, lists, or detail views
+
+Recommended Astro direction:
+
+- keep the agent-facing integration code-based
+- have the agent import the standard Vivd helper package
+- keep the helper API stable even if the generated snapshot layout evolves
 
 ## Plain HTML projects
 
@@ -615,6 +718,7 @@ Recommended path:
 - export generated content JSON
 - support a small set of Vivd-owned rendering patterns/components
 - have the agent or generator wire those patterns into pages
+- prefer a tiny generated or bundled helper script over repeated custom JSON parsing when possible
 
 Do not try to support arbitrary runtime querying from plain HTML in the first version.
 
@@ -634,6 +738,7 @@ It should not be the default architecture for preview/publish.
 - install CLI on Studio machine
 - ship `help`, `doctor`, `whoami`, `project info`
 - ship plugin parity commands
+- ship initial render-contract discovery commands
 - update agent instructions to mention CLI discovery flow
 - inject only a concise existing-model summary into agent instructions, with CLI-based expansion for detail
 
@@ -665,9 +770,11 @@ It should not be the default architecture for preview/publish.
 ## Phase 4: Preview/publish rendering
 
 - snapshot export
+- add the first Vivd render helper package / render contract
 - preview integration
 - publish integration
 - first supported render pattern in sites
+- render-scaffold guidance for the agent
 
 ## Phase 5: Tool consolidation
 
@@ -704,9 +811,10 @@ After that works, add a more relational slice like `products`.
 
 1. Create the CLI package and shared backend client.
 2. Mirror existing plugin info/catalog surfaces in the CLI.
-3. Add the first CMS tables and read-only CLI inspection commands.
-4. Add the `ProjectContent` route and Studio toolbar/button wiring.
-5. Land one narrow collection (`downloads`/`documents`) before broadening the field model.
+3. Define the first render contract around a small Vivd-owned helper package plus generated `.vivd/content/` snapshot.
+4. Add the first CMS tables and read-only CLI inspection commands.
+5. Add the `ProjectContent` route and Studio toolbar/button wiring.
+6. Land one narrow collection (`downloads`/`documents`) before broadening the field model.
 
 ## Current Leaning
 
@@ -714,6 +822,7 @@ The current recommended architecture is:
 
 - **control plane DB** as canonical CMS store
 - **`vivd` CLI** as the first-class structured agent interface
+- **a small Vivd-owned render helper package** as the standard integration surface inside project code
 - **host app embedded pages** as the first Studio UI surface
 - **generated preview/publish snapshots** as the site rendering mechanism
 - optional `.vivd/` bridge files only as derived cache
