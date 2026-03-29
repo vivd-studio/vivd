@@ -540,6 +540,12 @@ Recommended behavior:
 - show breakage before activation
 - require explicit activate/apply step
 
+Recommended product scope:
+
+- v1 should focus on **human-editable content entries**
+- general human-editable model/schema editing can land in **v2**
+- v1 model creation and evolution can stay more controlled through agent/CLI-led flows
+
 ## Embedded Studio behavior
 
 The first embedded Studio experience should behave like Plugins/Analytics:
@@ -711,7 +717,19 @@ Recommended Astro direction:
 
 ## Plain HTML projects
 
-For plain HTML sites, the first version should stay constrained.
+For plain HTML sites, the first version should stay **de-prioritized and constrained**.
+
+Reasoning:
+
+- a true headless CMS experience on pure no-build plain HTML is awkward if we do not want direct live backend reads
+- without a build or regeneration step, plain HTML tends to push us toward client-side fetches or ad-hoc runtime injection
+- that is not the clean path this CMS architecture is optimized for
+
+Recommended product stance:
+
+- do **not** optimize v1 around no-build plain HTML CMS rendering
+- focus the first-class experience on build-step projects, especially Astro
+- if plain HTML is supported in v1 at all, keep it limited to Vivd-owned scaffolded patterns or regeneration flows rather than arbitrary hand-authored integration
 
 Recommended path:
 
@@ -728,7 +746,202 @@ If some projects need runtime-fresh data later, add that as an **opt-in** mode.
 
 It should not be the default architecture for preview/publish.
 
-## 6. Delivery Phases
+## 6. Most Important Open Implementation Decisions
+
+The overall direction is solid enough to start, but a few contracts should be locked before implementation spreads across backend, CLI, Studio UI, and rendering.
+
+## A. Render contract
+
+### Recommendation
+
+Freeze a small, explicit render contract before building CMS CRUD deeply.
+
+Recommended default:
+
+- generated snapshot under `.vivd/content/`
+- small helper package such as `@vivd/content`
+- CLI discovery and scaffold commands pointing to that contract
+
+Recommended first snapshot layout:
+
+- `.vivd/content/manifest.json`
+- `.vivd/content/models/<model-key>.json`
+- `.vivd/content/assets/<asset-id>.json` or asset metadata embedded in model files
+
+Recommended first helper API:
+
+- `getCollection(modelKey)`
+- `getSingleton(modelKey)`
+- `getEntry(modelKey, entryKey)`
+- `resolveAsset(assetRef)`
+
+### Why it matters
+
+If this stays vague, every later layer will drift:
+
+- CLI scaffolds
+- agent instructions
+- Astro examples
+- plain HTML examples
+- snapshot export
+
+### Default assumption
+
+Treat the helper package API as the stable contract and the raw snapshot file layout as replaceable internals.
+
+## B. Preview invalidation and refresh
+
+### Recommendation
+
+Start with a simple, explicit refresh path after CMS saves.
+
+Recommended flow:
+
+1. CMS write succeeds in the control plane.
+2. Backend increments a project content revision.
+3. Active Studio runtime notices or is told about the revision.
+4. Studio regenerates `.vivd/content/`.
+5. Preview refreshes with a content-revision cache buster.
+
+Recommended first behavior:
+
+- entry and asset changes: debounced refresh after save
+- schema/model activation: explicit refresh after apply
+- image/file replacement: asset URL cache-busting based on content revision or asset revision
+
+### Why it matters
+
+The product promise is that CMS edits show up in preview quickly. That requires a concrete invalidation story, not just a storage model.
+
+### Default assumption
+
+For v1, prefer a whole-preview refresh after successful save over a more fragile partial hot-update system.
+
+## C. Schema/model versioning rules
+
+### Recommendation
+
+Separate safe entry editing from riskier model evolution.
+
+Recommended model lifecycle:
+
+- one active version
+- zero or one draft version
+- validate draft against existing entries
+- activate only after validation passes
+
+Recommended default policy:
+
+- allow without ceremony:
+  - add model
+  - add optional field
+  - edit labels/help text/display metadata
+- require guarded validation/activation:
+  - type changes
+  - required/optional flips
+  - field deletion
+  - slug/identity changes
+
+### Why it matters
+
+Without this, “schema editing” becomes dangerous very quickly and will either break content or push the team back toward raw manual edits.
+
+### Default assumption
+
+Schema edits are draft/apply operations; entry edits are normal CRUD.
+
+## D. Media lifecycle
+
+### Recommendation
+
+Treat media as a small, coherent subsystem, not as anonymous uploads.
+
+Recommended first media model:
+
+- stable asset id
+- object storage key
+- display filename
+- MIME type
+- size
+- image dimensions when relevant
+- optional alt text / caption metadata later
+- soft-delete / archive instead of immediate hard delete when assets are in use
+
+Recommended first UX:
+
+- upload and attach during entry edit
+- choose existing asset for reuse where practical
+- image thumbnail preview
+- PDF/file preview/download affordances
+
+Recommended first deletion policy:
+
+- block or warn on deletion if an asset is referenced by active content
+- prefer replacement or detach over hard delete
+
+### Why it matters
+
+Images and PDFs are not edge cases here. They are central to why users want CMS workflows instead of file surgery.
+
+### Default assumption
+
+Start with project-scoped assets, not global instance-wide media libraries.
+
+## E. Scope of framework support in v1
+
+### Recommendation
+
+Support Astro well first, and keep plain HTML support constrained to Vivd-owned render patterns/scaffolds.
+
+Recommended v1 split:
+
+- Astro: first-class helper-based render integration
+- plain HTML: de-prioritized, limited to scaffolded JSON/helper-based render blocks for specific patterns if needed
+- everything else: later, once the render contract is stable
+
+### Why it matters
+
+Trying to solve fully generic rendering for every project type too early will slow the whole CMS effort down.
+
+### Default assumption
+
+Astro gets the best experience first; plain HTML gets a limited but solid pattern-based path.
+
+## F. Agent instruction scope
+
+### Recommendation
+
+Keep injected instructions short and operational.
+
+Recommended contents:
+
+- concise existing-model summary
+- short render-contract hint
+- short CLI discovery reminder
+
+Do not include:
+
+- full schema definitions
+- long render examples
+- full asset manifests
+
+### Why it matters
+
+The agent needs context, but a bloated prompt will make everything worse.
+
+### Default assumption
+
+Use the prompt only for orientation and rules. Use CLI + code scaffolds for detail.
+
+## Product decisions that still need explicit guidance
+
+Resolved product decisions:
+
+1. v1 should let users edit and change **content entries** directly; general human-editable model/schema editing can be deferred to v2.
+2. v1 should not focus on pure no-build plain HTML CMS rendering; Astro/build-step projects are the primary target, with plain HTML kept constrained or deferred.
+3. v1 content editing should use **explicit save** rather than autosave.
+
+## 7. Delivery Phases
 
 ## Phase 0: CLI foundation
 
@@ -765,7 +978,7 @@ It should not be the default architecture for preview/publish.
 - add `Content` route
 - add `Content` toolbar/action entry points
 - render entries list + editor
-- add guarded model editor
+- keep v1 human UI focused on entry editing; defer general human model editor to v2
 
 ## Phase 4: Preview/publish rendering
 
@@ -773,7 +986,7 @@ It should not be the default architecture for preview/publish.
 - add the first Vivd render helper package / render contract
 - preview integration
 - publish integration
-- first supported render pattern in sites
+- first supported Astro-first render pattern in sites
 - render-scaffold guidance for the agent
 
 ## Phase 5: Tool consolidation
@@ -781,7 +994,7 @@ It should not be the default architecture for preview/publish.
 - decide whether OpenCode tools stay direct-client based or shell out to `vivd`
 - add focused `vivd_cms_*` tools only if they still add value beyond bash + CLI
 
-## 7. Recommended First Vertical Slice
+## 8. Recommended First Vertical Slice
 
 Do not start with a general CMS builder for everything.
 
@@ -807,14 +1020,16 @@ Suggested first model:
 
 After that works, add a more relational slice like `products`.
 
-## 8. Immediate Next Steps
+## 9. Immediate Next Steps
 
 1. Create the CLI package and shared backend client.
-2. Mirror existing plugin info/catalog surfaces in the CLI.
-3. Define the first render contract around a small Vivd-owned helper package plus generated `.vivd/content/` snapshot.
+2. Define the first render contract around a small Vivd-owned helper package plus generated `.vivd/content/` snapshot.
+3. Mirror existing plugin info/catalog surfaces in the CLI.
 4. Add the first CMS tables and read-only CLI inspection commands.
-5. Add the `ProjectContent` route and Studio toolbar/button wiring.
-6. Land one narrow collection (`downloads`/`documents`) before broadening the field model.
+5. Lock the preview refresh/invalidation flow for content saves.
+6. Build the v1 entry-editing `ProjectContent` route and Studio toolbar/button wiring.
+7. Keep model/schema editing agent/CLI-led first; defer the general human model editor to v2.
+8. Land one narrow collection (`downloads`/`documents`) before broadening the field model.
 
 ## Current Leaning
 
@@ -823,8 +1038,9 @@ The current recommended architecture is:
 - **control plane DB** as canonical CMS store
 - **`vivd` CLI** as the first-class structured agent interface
 - **a small Vivd-owned render helper package** as the standard integration surface inside project code
-- **host app embedded pages** as the first Studio UI surface
+- **host app embedded pages** as the first Studio UI surface, focused on entry editing in v1
 - **generated preview/publish snapshots** as the site rendering mechanism
+- **Astro/build-step projects** as the primary rendering target in v1
 - optional `.vivd/` bridge files only as derived cache
 
 This fits Vivd's current boundaries and avoids turning either project files or the agent into the primary CMS database.
