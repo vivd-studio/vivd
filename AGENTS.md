@@ -80,6 +80,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - In production, Studio runtimes run on Fly Machines.
 - Machines are started/reused per project (scoped by organization + project slug) via backend orchestration.
+- For Fly-specific Studio lifecycle/debugging rules and drift/cold-start findings, see `.skills/FLY_STUDIO_MACHINES.md`.
 
 ## DB / Migrations
 
@@ -94,7 +95,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 - During substantial multi-file work or refactors, run the relevant TypeScript check periodically (`npm run typecheck` or a workspace-level `npm run typecheck -w <workspace>`) instead of only at the end.
 - Create MEANINGFUL tests, we are not interested in coverage, we want to add tests that actually add value to the codebase.
 - Shared GitHub Actions validation lives in `.github/workflows/reusable-validate.yml`; `validate.yml` uses it for PR/main CI, and publish workflows use it as the release gate before image push.
-- Release flow is `npm run publish:tag` (`scripts/publish.sh`) first, then tag-triggered GitHub workflow validation + image smoke tests. For release-impacting changes, agents should proactively suggest the right targeted regression tests or smoke checks so they land in that pipeline before shipping.
+- Release flow is `npm run publish:tag` (`scripts/publish.sh`) first, then tag-triggered GitHub workflow validation + image smoke tests. For release-impacting changes, agents should proactively suggest the right targeted regression tests or smoke checks so they land in that pipeline before shipping, so that our pipline becomes more robust over time.
 
 ## Git
 
