@@ -279,7 +279,6 @@ export default function ProjectFullscreen() {
 
   const {
     studioBaseUrl,
-    studioRuntimeUrl,
     studioBootstrapToken,
     studioUserActionToken,
     studioBootstrapAction,
@@ -418,7 +417,7 @@ export default function ProjectFullscreen() {
   });
 
   const studioIframeSrc = useMemo(() => {
-    const liveStudioBaseUrl = studioRuntimeUrl ?? studioBaseUrl;
+    const liveStudioBaseUrl = studioBaseUrl;
     if (!liveStudioBaseUrl) return null;
     const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
@@ -430,7 +429,7 @@ export default function ProjectFullscreen() {
       new URL(ROUTES.PROJECT_FULLSCREEN(projectSlug || ""), window.location.origin).toString(),
     );
     return url.toString();
-  }, [projectSlug, publicPreviewEnabled, studioBaseUrl, studioRuntimeUrl, version]);
+  }, [projectSlug, publicPreviewEnabled, studioBaseUrl, version]);
 
   const studioIframeTarget = useMemo(
     () => `vivd-studio-project-fullscreen-${projectSlug || "project"}-v${version}`,

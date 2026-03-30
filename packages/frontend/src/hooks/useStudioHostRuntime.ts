@@ -39,6 +39,51 @@ type ReplaceRuntimeOptions = {
   reload?: boolean;
 };
 
+function isDefaultPort(protocol: string, port: string): boolean {
+  return (
+    (protocol === "https:" && (port === "" || port === "443")) ||
+    (protocol === "http:" && (port === "" || port === "80"))
+  );
+}
+
+export function selectBrowserStudioBaseUrl(
+  runtime: StudioRuntimeSession | null,
+  currentOrigin: string | null = typeof window === "undefined"
+    ? null
+    : window.location.origin,
+): string | null {
+  const directRuntimeUrl = runtime?.runtimeUrl ?? runtime?.url ?? null;
+  const compatibilityUrl = runtime?.compatibilityUrl ?? null;
+
+  if (!directRuntimeUrl) return compatibilityUrl;
+  if (!compatibilityUrl || !currentOrigin) return directRuntimeUrl;
+
+  let runtimeUrl: URL;
+  let currentUrl: URL;
+  try {
+    runtimeUrl = new URL(directRuntimeUrl, currentOrigin);
+    currentUrl = new URL(currentOrigin);
+  } catch {
+    return directRuntimeUrl;
+  }
+
+  const runtimeUsesNonDefaultPort = !isDefaultPort(
+    runtimeUrl.protocol,
+    runtimeUrl.port,
+  );
+
+  // HTTPS control-plane pages cannot safely use a direct Docker runtime
+  // on a non-default port. Prefer the path-mounted compatibility route.
+  if (
+    currentUrl.protocol === "https:" &&
+    (runtimeUrl.protocol !== "https:" || runtimeUsesNonDefaultPort)
+  ) {
+    return compatibilityUrl;
+  }
+
+  return directRuntimeUrl;
+}
+
 export function useStudioHostRuntime({
   resetKey,
   runtime,
@@ -102,9 +147,11 @@ export function useStudioHostRuntime({
     [invalidateRuntime, replaceRuntime],
   );
 
+  const studioBaseUrl = selectBrowserStudioBaseUrl(studioRuntime);
+
   const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
-    enabled: Boolean(studioRuntime?.runtimeUrl ?? studioRuntime?.url),
-    studioBaseUrl: studioRuntime?.runtimeUrl ?? studioRuntime?.url ?? null,
+    enabled: Boolean(studioBaseUrl),
+    studioBaseUrl,
     touchStudio,
     ensureStudioRunning,
     onRecovered: handleStudioRecovered,
@@ -112,7 +159,6 @@ export function useStudioHostRuntime({
   });
 
   const studioRuntimeUrl = studioRuntime?.runtimeUrl ?? studioRuntime?.url ?? null;
-  const studioBaseUrl = studioRuntimeUrl;
   const studioBootstrapToken = studioRuntime?.bootstrapToken ?? null;
   const studioUserActionToken = studioRuntime?.userActionToken ?? null;
   const studioCompatibilityUrl = studioRuntime?.compatibilityUrl ?? null;

@@ -285,7 +285,6 @@ export default function EmbeddedStudio() {
     replaceRuntime,
     clearRuntimeOverride,
     reloadStudioIframe,
-    studioRuntimeUrl,
   } = useStudioHostRuntime({
     resetKey: `${projectSlug || "project"}:v${studioVersion}`,
     runtime: preferredStudioRuntime,
@@ -462,7 +461,7 @@ export default function EmbeddedStudio() {
   });
 
   const studioIframeSrc = useMemo(() => {
-    const liveStudioBaseUrl = studioRuntimeUrl ?? studioBaseUrl;
+    const liveStudioBaseUrl = studioBaseUrl;
     if (!liveStudioBaseUrl) return null;
 
     const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
@@ -494,7 +493,6 @@ export default function EmbeddedStudio() {
     projectSlug,
     publicPreviewEnabled,
     studioBaseUrl,
-    studioRuntimeUrl,
     studioVersion,
   ]);
 
