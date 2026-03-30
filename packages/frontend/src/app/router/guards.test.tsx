@@ -195,6 +195,18 @@ describe("router guards", () => {
     ).toBeNull();
   });
 
+  it("does not compute a redirect for production tenant hosts in host-based mode", () => {
+    expect(
+      getCanonicalControlPlaneUrl({
+        controlPlaneMode: "host_based",
+        controlPlaneHost: "app.vivd.studio",
+        currentHost: "felix.vivd.studio",
+        pathname: ROUTES.PROJECT("site-1"),
+        search: "?view=studio&version=1",
+      }),
+    ).toBeNull();
+  });
+
   it("RequireAssignedProject redirects client editors away from non-assigned projects", () => {
     usePermissionsMock.mockReturnValueOnce({
       isClientEditor: true,

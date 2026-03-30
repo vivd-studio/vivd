@@ -9,14 +9,23 @@ import { CenteredLoading as Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { EmailVerificationPrompt } from "@/components/auth/EmailVerificationPrompt";
 
+function stripPort(host: string): string {
+  return host.trim().toLowerCase().replace(/:\d+$/, "");
+}
+
+function isLocalDevelopmentHost(host: string): boolean {
+  const normalizedHost = stripPort(host);
+  return (
+    normalizedHost === "localhost" ||
+    normalizedHost === "127.0.0.1" ||
+    normalizedHost.endsWith(".localhost") ||
+    normalizedHost.endsWith(".local") ||
+    normalizedHost.endsWith(".nip.io")
+  );
+}
+
 function inferSchemeForHost(host: string): "http" | "https" {
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host.endsWith(".nip.io")
-  ) {
+  if (isLocalDevelopmentHost(host)) {
     return "http";
   }
   return "https";
@@ -39,6 +48,12 @@ export function getCanonicalControlPlaneUrl(options: {
   const controlPlaneHost = normalizeHostForComparison(options.controlPlaneHost);
   const currentHost = normalizeHostForComparison(options.currentHost);
   if (!controlPlaneHost || !currentHost || currentHost === controlPlaneHost) {
+    return null;
+  }
+  if (
+    !isLocalDevelopmentHost(controlPlaneHost) ||
+    !isLocalDevelopmentHost(currentHost)
+  ) {
     return null;
   }
 
