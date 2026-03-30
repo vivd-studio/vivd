@@ -1,6 +1,7 @@
 export type FlyMachineState =
   | "pending"
   | "created"
+  | "suspending"
   | "starting"
   | "started"
   | "stopping"

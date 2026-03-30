@@ -22,7 +22,15 @@
  *   VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS=5000
  */
 import { describe, it, expect } from "vitest";
+import {
+  getMachineDriftLabels,
+  getStudioAccessTokenFromMachine,
+  hasMachineDrift,
+  resolveStudioIdFromMachine,
+} from "../../src/services/studioMachines/fly/machineModel";
 import { FlyStudioMachineProvider } from "../../src/services/studioMachines/fly/provider";
+import { buildStudioEnvDriftSubsetFromDesiredEnv } from "../../src/services/studioMachines/fly/runtimeWorkflow";
+import { resolveStableStudioMachineEnv } from "../../src/services/studioMachines/stableRuntimeEnv";
 import type { FlyMachine } from "../../src/services/studioMachines/fly/types";
 
 const RUN_TESTS = process.env.VIVD_RUN_FLY_RECONCILE_FLOW_TESTS === "1";
@@ -113,6 +121,13 @@ describe("Fly warm reconciliation flow", () => {
       const organizationId = "integration";
       const projectSlug = `reconcile-e2e-${Date.now().toString(36)}`;
       const version = 1;
+      // Use the same stable env surface as the real control-plane start flow so the
+      // wake assertion does not create synthetic env drift after warm reconcile.
+      const startEnv = await resolveStableStudioMachineEnv({
+        providerKind: "fly",
+        organizationId,
+        projectSlug,
+      });
 
       let machineId: string | null = null;
 
@@ -133,7 +148,7 @@ describe("Fly warm reconciliation flow", () => {
           organizationId,
           projectSlug,
           version,
-          env: {},
+          env: startEnv,
         });
 
         const summaries = await provider.listStudioMachines();
@@ -173,12 +188,40 @@ describe("Fly warm reconciliation flow", () => {
         const vivdImage = (after.config?.metadata as any)?.vivd_image ?? null;
         expect(vivdImage).toBe(reconciledDesiredImage);
 
+        const reconciledAccessToken = getStudioAccessTokenFromMachine(after);
+        expect(reconciledAccessToken).toBeTruthy();
+        const reconciledStudioId = resolveStudioIdFromMachine(after);
+        const envForDrift = (provider as any).buildStudioEnv({
+          organizationId,
+          projectSlug,
+          version,
+          env: startEnv,
+          studioId: reconciledStudioId,
+          accessToken: reconciledAccessToken!,
+        }) as Record<string, string>;
+        const desiredEnvSubset = buildStudioEnvDriftSubsetFromDesiredEnv(
+          envForDrift,
+          Object.keys(startEnv),
+        );
+        const postReconcileState = (provider as any).resolveMachineReconcileState({
+          machine: after,
+          desiredImage: reconciledDesiredImage,
+          preferredAccessToken: reconciledAccessToken,
+          desiredEnvSubset,
+        }) as { accessToken: string; needs: Record<string, boolean> };
+        expect(
+          hasMachineDrift(postReconcileState.needs as any),
+          `Warm reconcile left machine drift before wake: ${getMachineDriftLabels(
+            postReconcileState.needs as any,
+          ).join(",") || "<none>"}`,
+        ).toBe(false);
+
         const wakeStartedAt = Date.now();
         const wake = await provider.ensureRunning({
           organizationId,
           projectSlug,
           version,
-          env: {},
+          env: startEnv,
         });
         const wakeReadyMs = Date.now() - wakeStartedAt;
 

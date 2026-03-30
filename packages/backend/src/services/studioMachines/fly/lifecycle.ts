@@ -2,22 +2,23 @@ import type { MachineReconcileNeeds } from "./machineModel";
 import type { FlyMachine, FlyMachineState } from "./types";
 import { sleep } from "./utils";
 
-function isReplacementTransitionState(state: string): boolean {
-  return (
-    state === "pending" ||
-    state === "created" ||
-    state === "replacing" ||
-    state === "stopping" ||
-    state === "unknown"
-  );
-}
-
 export function isMachineGettingReplacedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
   return (
     normalized.includes("failed_precondition") &&
     normalized.includes("machine getting replaced")
+  );
+}
+
+function isMachineTemporarilyBusyError(error: unknown): boolean {
+  if (isMachineGettingReplacedError(error)) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("failed_precondition") &&
+    (normalized.includes("machine still active") ||
+      normalized.includes("machine still attempting to start"))
   );
 }
 
@@ -40,14 +41,12 @@ export async function startMachineHandlingReplacement(options: {
 
     if (state === "started" || state === "starting") return;
 
-    if (!isReplacementTransitionState(state)) {
-      try {
-        await options.startMachine(options.machineId);
-        return;
-      } catch (err) {
-        if (!isMachineGettingReplacedError(err)) throw err;
-        // Fall through to retry loop while the replacement settles into a startable state.
-      }
+    try {
+      await options.startMachine(options.machineId);
+      return;
+    } catch (err) {
+      if (!isMachineTemporarilyBusyError(err)) throw err;
+      // Fall through to retry loop while the machine settles into a startable state.
     }
 
     await sleep(delayMs);
