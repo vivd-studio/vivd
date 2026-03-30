@@ -392,6 +392,36 @@ describe("EmbeddedStudio", () => {
     expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
   });
 
+  it("polls studio status while waiting for a started machine to become query-visible", () => {
+    const startStudioMutate = vi.fn();
+    startStudioUseMutationMock.mockReturnValue({
+      mutate: startStudioMutate,
+      isPending: false,
+      data: null,
+      error: null,
+      reset: vi.fn(),
+    });
+
+    renderEmbeddedStudio();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    const latestCall = getStudioUrlUseQueryMock.mock.calls.at(-1);
+    const options = latestCall?.[1] as
+      | {
+          refetchInterval?: (query: {
+            state: { data?: { status?: string } | undefined };
+          }) => number | false;
+        }
+      | undefined;
+
+    expect(options?.refetchInterval?.({ state: { data: { status: "stopped" } } })).toBe(
+      1_000,
+    );
+    expect(options?.refetchInterval?.({ state: { data: { status: "running" } } })).toBe(
+      false,
+    );
+  });
+
   it("auto-starts studio when initial generation is requested and no runtime is active", () => {
     const startStudioMutate = vi.fn();
     useLocationMock.mockReturnValue({

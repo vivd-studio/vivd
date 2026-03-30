@@ -127,6 +127,8 @@ export default function EmbeddedStudio() {
       utils.project.getStudioUrl.invalidate({ slug: projectSlug, version: studioVersion });
     },
   });
+  const shouldPollStudioStatus =
+    (editRequested || shouldResumeStudio) && !hardRestartStudio.isPending;
   const touchStudio = trpc.project.touchStudio.useMutation();
   const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
     { slug: projectSlug!, version: studioVersion },
@@ -137,6 +139,10 @@ export default function EmbeddedStudio() {
       staleTime: 0,
       refetchOnMount: "always",
       refetchOnReconnect: "always",
+      refetchInterval: (query) =>
+        shouldPollStudioStatus && query.state.data?.status !== "running"
+          ? 1_000
+          : false,
     },
   );
   const { data: externalPreview } = trpc.project.getExternalPreviewStatus.useQuery(
