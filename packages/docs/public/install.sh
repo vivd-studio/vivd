@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 DEFAULT_INSTALLER_BASE_URL="https://docs.vivd.studio/install"
 INSTALLER_BASE_URL="${VIVD_INSTALLER_BASE_URL:-$DEFAULT_INSTALLER_BASE_URL}"
@@ -11,6 +11,9 @@ SELFHOST_IMAGE_TAG_INPUT="${VIVD_SELFHOST_IMAGE_TAG:-}"
 TLS_MODE_INPUT="${VIVD_TLS_MODE:-auto}"
 ACME_EMAIL_INPUT="${VIVD_ACME_EMAIL:-}"
 AUTO_START="true"
+INSTALL_FILES_READY="false"
+STUDIO_SETUP_URL=""
+STUDIO_SETUP_LINK=""
 
 # BEGIN GENERATED SELF-HOST DEFAULTS
 DEFAULT_POSTGRES_USER="postgres"
@@ -60,6 +63,46 @@ fail() {
   printf '[vivd-install] ERROR: %s\n' "$*" >&2
   exit 1
 }
+
+print_install_failure_hint() {
+  local exit_code="$1"
+
+  if [ "$exit_code" -eq 0 ]; then
+    return
+  fi
+
+  trap - ERR
+
+  if [ "$INSTALL_FILES_READY" = "true" ]; then
+    cat >&2 <<EOF
+
+Vivd install did not finish cleanly.
+
+Files:
+  $INSTALL_DIR
+
+Expected URLs:
+  Site:   $PRIMARY_ORIGIN/
+  Studio: $STUDIO_SETUP_LINK
+
+Troubleshooting:
+  cd $INSTALL_DIR
+  docker compose ps
+  docker compose logs --tail=200 backend postgres
+
+If backend logs show:
+  password authentication failed for user "postgres"
+
+then Postgres is usually reusing an older Docker volume while this install wrote a
+new POSTGRES_PASSWORD into .env. Reuse the old password if you need the existing
+database, or remove the old Compose volumes if this should be a fresh install.
+EOF
+  fi
+
+  exit "$exit_code"
+}
+
+trap 'print_install_failure_hint "$?"' ERR
 
 supports_terminal_links() {
   [ -t 1 ] || return 1
@@ -420,7 +463,17 @@ if [ "$SINGLE_PROJECT_MODE_INPUT" = "true" ]; then
   printf '\nSINGLE_PROJECT_MODE=true\n' >>"$INSTALL_DIR/.env"
 fi
 
+STUDIO_SETUP_URL="$PRIMARY_ORIGIN/vivd-studio"
+printf -v STUDIO_SETUP_LINK '%s' "$(format_terminal_link "$STUDIO_SETUP_URL")"
+INSTALL_FILES_READY="true"
+
 log "Wrote install files to $INSTALL_DIR"
+cat <<EOF
+
+Expected URLs once startup completes:
+  Site:   $PRIMARY_ORIGIN/
+  Studio: $STUDIO_SETUP_LINK
+EOF
 
 if [ "$AUTO_START" = "true" ]; then
   log "Pulling and starting the stack"
@@ -434,9 +487,6 @@ if [ "$AUTO_START" = "true" ]; then
 else
   log "Skipping startup because --no-start was set"
 fi
-
-STUDIO_SETUP_URL="$PRIMARY_ORIGIN/vivd-studio"
-printf -v STUDIO_SETUP_LINK '%s' "$(format_terminal_link "$STUDIO_SETUP_URL")"
 
 cat <<EOF
 

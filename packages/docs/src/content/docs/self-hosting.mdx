@@ -203,6 +203,34 @@ docker compose ps
 docker compose logs -f
 ```
 
+## Troubleshooting
+
+If backend startup loops on `db:migrate:prod` with:
+
+```text
+password authentication failed for user "postgres"
+```
+
+then the backend is usually reading a newly generated `POSTGRES_PASSWORD` from
+`.env` while Docker is still reusing an older `postgres_data` volume from a
+previous install.
+
+This most often happens when you delete `~/vivd` and run the installer again:
+the files are new, but Docker named volumes survive unless you remove them
+explicitly.
+
+If this should be a fresh install and you do not need the old database data:
+
+```bash
+cd ~/vivd
+docker compose down -v
+docker compose up -d
+```
+
+If you do need the old data, do not remove the volume. Instead, restore the old
+`POSTGRES_PASSWORD` value so the backend and existing Postgres volume match
+again.
+
 After install, you can also change the main public host and TLS mode in `Instance Settings -> Network`. For the hosted self-host bundle, Vivd rewrites its bundled Caddy config from there. If you still keep an explicit advanced host override env such as `VIVD_APP_URL`, `BETTER_AUTH_URL`, or `CONTROL_PLANE_HOST`, that deployment-level override remains authoritative.
 
 See [Instance Settings](/instance-settings/) for the admin-side meaning of `General`,
