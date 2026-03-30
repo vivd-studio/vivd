@@ -381,25 +381,6 @@ export function registerStudioRuntimeHttpRoutes(
             .json({ error: "Dev server not running", status });
         }
 
-        if (req.originalUrl.includes("/@vite/client")) {
-          res.setHeader("Content-Type", "application/javascript");
-          return res.send(`// Vite HMR disabled in preview mode
-export const createHotContext = () => ({
-  accept: () => {},
-  acceptExports: () => {},
-  dispose: () => {},
-  prune: () => {},
-  invalidate: () => {},
-  on: () => {},
-  send: () => {},
-  data: {},
-});
-export const updateStyle = () => {};
-export const removeStyle = () => {};
-export const injectQuery = (url) => url;
-export default {};
-`);
-        }
         if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
           res.setHeader("Content-Type", "application/javascript");
           return res.send(

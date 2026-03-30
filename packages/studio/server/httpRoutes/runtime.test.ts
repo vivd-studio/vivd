@@ -9,6 +9,7 @@ import {
   injectBasePathScript,
   rewriteRootAssetUrlsInText,
 } from "../http/basePathRewrite.js";
+import { devServerService } from "../services/project/DevServerService.js";
 import { resolveForwardedRuntimeBasePath } from "./runtime";
 import { registerStudioRuntimeHttpRoutes } from "./runtime";
 import { resolveRuntimeRequestedFilePath } from "./runtime";
@@ -377,6 +378,42 @@ describe("registerStudioRuntimeHttpRoutes", () => {
 
       expect(response.status).toBe(404);
     } finally {
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("proxies @vite/client on the runtime root instead of stubbing it", async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "vivd-studio-runtime-devserver-root-"),
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "package.json"),
+      JSON.stringify({
+        name: "devserver-project",
+        scripts: { dev: "vite" },
+      }),
+    );
+
+    const hasServerSpy = vi
+      .spyOn(devServerService, "hasServer")
+      .mockReturnValue(true);
+    const getDevServerUrlSpy = vi
+      .spyOn(devServerService, "getDevServerUrl")
+      .mockReturnValue("http://127.0.0.1:4321");
+
+    const { app } = createTestRuntimeApp({ projectPath: projectDir });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/@vite/client`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toBe("proxied");
+    } finally {
+      hasServerSpy.mockRestore();
+      getDevServerUrlSpy.mockRestore();
       server.close();
       fs.rmSync(projectDir, { recursive: true, force: true });
     }

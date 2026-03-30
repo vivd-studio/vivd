@@ -41,9 +41,10 @@ export const previewProcedures = {
         urlHost && publishService.isDevDomain(urlHost)
           ? "http"
           : "https";
-      const url = urlHost
+      const canonicalUrl = urlHost
         ? new URL(previewPath, `${scheme}://${urlHost}`).toString()
         : previewPath;
+      const url = previewPath;
 
       const project = await projectMetaService.getProject(organizationId, slug);
       if (!project) {
@@ -62,7 +63,7 @@ export const previewProcedures = {
             mode: artifactState.sourceKind === "preview" ? ("built" as const) : ("static" as const),
             status: "ready" as const,
             url,
-            canonicalUrl: url,
+            canonicalUrl,
             publicPreviewEnabled,
           };
         }
@@ -71,7 +72,7 @@ export const previewProcedures = {
             mode: "built" as const,
             status: "building" as const,
             url,
-            canonicalUrl: url,
+            canonicalUrl,
             publicPreviewEnabled,
             error: artifactState.error ?? undefined,
           };
@@ -81,7 +82,7 @@ export const previewProcedures = {
             mode: "built" as const,
             status: "error" as const,
             url,
-            canonicalUrl: url,
+            canonicalUrl,
             publicPreviewEnabled,
             error: artifactState.error ?? undefined,
           };
@@ -91,7 +92,7 @@ export const previewProcedures = {
           mode: "built" as const,
           status: "pending" as const,
           url,
-          canonicalUrl: url,
+          canonicalUrl,
           publicPreviewEnabled,
           error: artifactState.error ?? undefined,
         };
@@ -108,7 +109,7 @@ export const previewProcedures = {
           mode: "static" as const,
           status: "ready" as const,
           url,
-          canonicalUrl: url,
+          canonicalUrl,
           publicPreviewEnabled,
         };
       }
@@ -120,7 +121,7 @@ export const previewProcedures = {
           mode: "built" as const,
           status: "ready" as const,
           url,
-          canonicalUrl: url,
+          canonicalUrl,
           publicPreviewEnabled,
         };
       }
@@ -130,7 +131,7 @@ export const previewProcedures = {
         mode: "built" as const,
         status: buildStatus?.status || ("pending" as const),
         url,
-        canonicalUrl: url,
+        canonicalUrl,
         publicPreviewEnabled,
         error: buildStatus?.error,
       };

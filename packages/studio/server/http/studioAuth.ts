@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import type express from "express";
 import {
   STUDIO_USER_ACTION_TOKEN_COOKIE,
@@ -22,7 +23,18 @@ type ProvidedStudioToken = {
   value: string | null;
 };
 
-function getCookieValue(req: express.Request, key: string): string | null {
+type StudioAuthRequestLike = {
+  headers: IncomingHttpHeaders;
+  method?: string;
+  url?: string;
+  query?: Record<string, unknown>;
+  get?: (name: string) => string | undefined;
+};
+
+function getCookieValue(
+  req: Pick<StudioAuthRequestLike, "headers">,
+  key: string,
+): string | null {
   const cookieHeader = req.headers.cookie;
   if (!cookieHeader) return null;
 
@@ -68,6 +80,37 @@ function getFirstHeaderValue(value: string | string[] | undefined): string {
     return value[0].split(",")[0]?.trim() || "";
   }
   return "";
+}
+
+function getHeaderValue(req: StudioAuthRequestLike, name: string): string {
+  const fromGetter = req.get?.(name);
+  if (typeof fromGetter === "string" && fromGetter.trim()) {
+    return fromGetter.trim();
+  }
+
+  return getFirstHeaderValue(req.headers[name.toLowerCase()]);
+}
+
+function getQueryValue(
+  req: StudioAuthRequestLike,
+  name: string,
+): string | string[] | null {
+  const fromQuery = req.query?.[name];
+  if (typeof fromQuery === "string" || Array.isArray(fromQuery)) {
+    return fromQuery;
+  }
+
+  const rawUrl = typeof req.url === "string" ? req.url : "";
+  if (!rawUrl) return null;
+
+  try {
+    const parsed = new URL(rawUrl, "http://studio.local");
+    const values = parsed.searchParams.getAll(name);
+    if (values.length === 0) return null;
+    return values.length === 1 ? values[0] : values;
+  } catch {
+    return null;
+  }
 }
 
 function splitHostAndPort(host: string): { hostname: string; port: string | null } {
@@ -209,24 +252,21 @@ export function safeTokenEquals(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-export function getRequestStudioToken(req: express.Request): ProvidedStudioToken {
-  const headerValue = req.get(STUDIO_AUTH_HEADER);
-  if (typeof headerValue === "string" && headerValue.trim()) {
-    return { source: "header", value: headerValue.trim() };
+export function getRequestStudioToken(req: StudioAuthRequestLike): ProvidedStudioToken {
+  const headerValue = getHeaderValue(req, STUDIO_AUTH_HEADER);
+  if (headerValue) {
+    return { source: "header", value: headerValue };
   }
 
-  const auth = req.get("authorization");
-  if (typeof auth === "string" && auth.trim()) {
-    const match = auth.trim().match(/^Bearer\s+(.+)$/i);
+  const auth = getHeaderValue(req, "authorization");
+  if (auth) {
+    const match = auth.match(/^Bearer\s+(.+)$/i);
     if (match?.[1]) {
       return { source: "authorization", value: match[1].trim() };
     }
   }
 
-  const queryValue = (req.query?.[STUDIO_AUTH_QUERY] ?? null) as
-    | string
-    | string[]
-    | null;
+  const queryValue = getQueryValue(req, STUDIO_AUTH_QUERY);
   if (typeof queryValue === "string" && queryValue.trim()) {
     return { source: "query", value: queryValue.trim() };
   }
@@ -237,6 +277,39 @@ export function getRequestStudioToken(req: express.Request): ProvidedStudioToken
   }
 
   return { source: null, value: null };
+}
+
+export function isStudioRequestAuthorized(
+  req: StudioAuthRequestLike,
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  authorized: boolean;
+  required: string | null;
+  provided: ProvidedStudioToken;
+} {
+  const required = getStudioAccessToken(env);
+  if (!required) {
+    return {
+      authorized: true,
+      required: null,
+      provided: { source: null, value: null },
+    };
+  }
+
+  if (req.method === "OPTIONS") {
+    return {
+      authorized: true,
+      required,
+      provided: { source: null, value: null },
+    };
+  }
+
+  const provided = getRequestStudioToken(req);
+  return {
+    authorized: !!(provided.value && safeTokenEquals(provided.value, required)),
+    required,
+    provided,
+  };
 }
 
 function setScopedStudioCookie(
@@ -347,14 +420,11 @@ export function createRequireStudioAuth(
   env: NodeJS.ProcessEnv = process.env,
 ): express.RequestHandler {
   return (req, res, next) => {
-    const required = getStudioAccessToken(env);
-    if (!required) return next();
+    const auth = isStudioRequestAuthorized(req, env);
+    if (!auth.required) return next();
 
-    if (req.method === "OPTIONS") return next();
-
-    const provided = getRequestStudioToken(req);
-    if (provided.value && safeTokenEquals(provided.value, required)) {
-      persistStudioAuthCookie(req, res, required, provided.source);
+    if (auth.authorized) {
+      persistStudioAuthCookie(req, res, auth.required, auth.provided.source);
       return next();
     }
 

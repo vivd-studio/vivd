@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createStudioBootstrapHandler,
   createRequireStudioAuth,
+  isStudioRequestAuthorized,
   resolveStudioBootstrapRedirectTarget,
   STUDIO_AUTH_COOKIE,
   STUDIO_AUTH_HEADER,
@@ -199,6 +200,44 @@ describe("createRequireStudioAuth", () => {
 
     expect(next).toHaveBeenCalledOnce();
     expect(res.cookies[0]?.name).toBe(STUDIO_AUTH_COOKIE);
+  });
+});
+
+describe("isStudioRequestAuthorized", () => {
+  it("accepts cookie auth for raw upgrade requests", () => {
+    const result = isStudioRequestAuthorized(
+      {
+        method: "GET",
+        url: "/?token=vite-hmr",
+        headers: {
+          cookie: `${STUDIO_AUTH_COOKIE}=studio-token`,
+        },
+      },
+      { STUDIO_ACCESS_TOKEN: "studio-token" } as NodeJS.ProcessEnv,
+    );
+
+    expect(result.authorized).toBe(true);
+    expect(result.provided).toEqual({
+      source: "cookie",
+      value: "studio-token",
+    });
+  });
+
+  it("reads query auth from raw request urls when Express query parsing is unavailable", () => {
+    const result = isStudioRequestAuthorized(
+      {
+        method: "GET",
+        url: `/ws?${STUDIO_AUTH_QUERY}=studio-token`,
+        headers: {},
+      },
+      { STUDIO_ACCESS_TOKEN: "studio-token" } as NodeJS.ProcessEnv,
+    );
+
+    expect(result.authorized).toBe(true);
+    expect(result.provided).toEqual({
+      source: "query",
+      value: "studio-token",
+    });
   });
 });
 

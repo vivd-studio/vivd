@@ -28,6 +28,7 @@ import {
   injectPreviewBridgeScript,
 } from "./http/previewBridge.js";
 import { createRequireStudioAuth } from "./http/studioAuth.js";
+import { handleStudioPreviewUpgrade } from "./http/devServerUpgrade.js";
 import { registerStudioClientHttpRoutes } from "./httpRoutes/client.js";
 import { validateStudioConfig } from "@vivd/shared";
 
@@ -200,7 +201,7 @@ async function writeUploadedFile(
 
 // Single proxy instance to avoid adding EventEmitter listeners per request.
 // The route handler sets `vivdDevPreviewTarget` and `vivdDevPreviewBasePath` on the request.
-  const devPreviewProxy = createProxyMiddleware({
+const devPreviewProxy = createProxyMiddleware({
   target: "http://127.0.0.1:0", // Overridden by `router` per request
   changeOrigin: true,
   ws: true,
@@ -394,6 +395,25 @@ async function startServer() {
   // /health endpoint reports "starting" until the workspace is initialized.
   const server = app.listen(PORT, HOST, () => {
     console.log(`Studio server running on http://${HOST}:${PORT}`);
+  });
+  server.on("upgrade", (req, socket, head) => {
+    void handleStudioPreviewUpgrade({
+      req,
+      socket,
+      head,
+      env: process.env,
+      workspace,
+      proxy: devPreviewProxy,
+    }).then((handled) => {
+      if (!handled && !socket.destroyed) {
+        socket.destroy();
+      }
+    }).catch((error) => {
+      console.error("[DevServer] WebSocket upgrade error:", error);
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
+    });
   });
 
   if (WORKSPACE_DIR) {

@@ -230,7 +230,11 @@ describe("EmbeddedStudio", () => {
       data: { status: "stopped" },
     });
     externalPreviewUseQueryMock.mockReturnValue({
-      data: { status: "ready", url: "https://preview.example.com/site-1" },
+      data: {
+        status: "ready",
+        url: "/vivd-studio/api/preview/site-1/v1/",
+        canonicalUrl: "https://preview.example.com/site-1",
+      },
     });
     regenerateThumbnailUseMutationMock.mockReturnValue({
       mutate: vi.fn(),
@@ -318,7 +322,10 @@ describe("EmbeddedStudio", () => {
     renderEmbeddedStudio();
 
     expect(screen.getByTestId("host-header")).toBeInTheDocument();
-    expect(screen.getByTitle("Preview - site-1")).toBeInTheDocument();
+    expect(screen.getByTitle("Preview - site-1")).toHaveAttribute(
+      "src",
+      "/vivd-studio/api/preview/site-1/v1/",
+    );
     expectNoPreviewSurfaceControls();
   });
 

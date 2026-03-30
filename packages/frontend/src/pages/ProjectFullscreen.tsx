@@ -448,7 +448,10 @@ export default function ProjectFullscreen() {
   const handleCopyPreviewUrl = () => {
     if (isRenamePending) return;
     if (!externalPreview || externalPreview.status !== "ready") return;
-    const absoluteUrl = new URL(externalPreview.url, window.location.origin).toString();
+    const absoluteUrl = new URL(
+      externalPreview.canonicalUrl ?? externalPreview.url,
+      window.location.origin,
+    ).toString();
 
     navigator.clipboard
       .writeText(absoluteUrl)
