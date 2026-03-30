@@ -28,7 +28,7 @@ export const soloSelfHostDefaults = {
   minioMcImage: "minio/mc:latest",
   openCodeModelStandard: "openrouter/google/gemini-3-flash-preview",
   openCodeModelAdvanced: "openrouter/google/gemini-3.1-pro-preview",
-  scratchCreationMode: "legacy_html",
+  scratchCreationMode: "studio_astro",
 } as const;
 
 export function getSoloSelfHostLocalS3DownloadEndpoint(publicOrigin: string): string {

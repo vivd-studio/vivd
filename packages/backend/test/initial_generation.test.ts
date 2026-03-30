@@ -21,10 +21,10 @@ describe("initial generation helpers", () => {
     vi.unstubAllEnvs();
   });
 
-  it("defaults scratch creation mode to legacy_html", () => {
+  it("defaults scratch creation mode to studio_astro", () => {
     delete process.env.VIVD_SCRATCH_CREATION_MODE;
 
-    expect(getScratchCreationMode()).toBe("legacy_html");
+    expect(getScratchCreationMode()).toBe("studio_astro");
   });
 
   it("copies the Astro starter scaffold and writes the manifest", () => {

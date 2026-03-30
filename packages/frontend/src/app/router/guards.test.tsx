@@ -76,6 +76,7 @@ vi.mock("@/lib/trpc", () => ({
 
 import {
   DashboardClientEditorGuard,
+  getCanonicalControlPlaneUrl,
   RequireAssignedProject,
   RequireAuth,
 } from "./guards";
@@ -166,6 +167,32 @@ describe("router guards", () => {
     expect(screen.getByText("Wrong tenant host")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Go to control plane" });
     expect(link.getAttribute("href")).toBe(`http://app.localhost${ROUTES.DASHBOARD}`);
+  });
+
+  it("computes a canonical control-plane redirect for host-based local platform routes", () => {
+    expect(
+      getCanonicalControlPlaneUrl({
+        controlPlaneMode: "host_based",
+        controlPlaneHost: "app.localhost",
+        currentHost: "localhost",
+        pathname: ROUTES.PROJECT("site-1"),
+        search: "?view=studio&version=1",
+        hash: "",
+      }),
+    ).toBe(
+      `http://app.localhost${ROUTES.PROJECT("site-1")}?view=studio&version=1`,
+    );
+  });
+
+  it("does not compute a redirect when already on the canonical control-plane host", () => {
+    expect(
+      getCanonicalControlPlaneUrl({
+        controlPlaneMode: "host_based",
+        controlPlaneHost: "app.localhost",
+        currentHost: "app.localhost",
+        pathname: ROUTES.DASHBOARD,
+      }),
+    ).toBeNull();
   });
 
   it("RequireAssignedProject redirects client editors away from non-assigned projects", () => {

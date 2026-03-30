@@ -762,7 +762,7 @@ describe("EmbeddedStudio", () => {
     }
   });
 
-  it("does not replay initial generation after the bootstrap was already consumed in this tab", () => {
+  it("replays initial generation even when a stale session bootstrap flag exists", () => {
     const postMessage = vi.fn();
     const contentWindowMock = { postMessage };
     useLocationMock.mockReturnValue({
@@ -800,10 +800,10 @@ describe("EmbeddedStudio", () => {
     });
 
     expect(
-      postMessage.mock.calls.some(
+      postMessage.mock.calls.filter(
         ([message]) =>
           message?.type === "vivd:host:start-initial-generation",
       ),
-    ).toBe(false);
+    ).toHaveLength(1);
   });
 });

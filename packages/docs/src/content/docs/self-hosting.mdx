@@ -69,6 +69,7 @@ It then:
 - uses that one public host as the canonical `DOMAIN` for the install
 - sets `OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview`
 - sets `OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview`
+- defaults `VIVD_SCRATCH_CREATION_MODE=studio_astro`
 - enables `STUDIO_MACHINE_PROVIDER=docker`
 - starts the stack with `docker compose up -d`
 
@@ -159,6 +160,13 @@ By default:
 
 - a public hostname uses bundled Caddy-managed HTTPS
 - `localhost` and raw IP installs use plain HTTP
+
+Raw-IP installs are workable for quick tests, but they are not as robust as a
+real hostname with HTTPS. Modern browsers can still prefer or retry `https://`
+for a raw IP because of browser-side HTTPS-first behavior or stale cached app
+shells, and plain HTTP on an IP cannot intercept that. For reliable day-to-day
+use, point a real hostname at the server and let bundled Caddy manage HTTPS, or
+put Vivd behind an upstream TLS terminator.
 
 If you want an upstream proxy to own certificates instead, run the installer with:
 

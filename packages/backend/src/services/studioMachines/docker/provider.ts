@@ -287,6 +287,10 @@ function resolveContainerReconcileState(options: {
   const currentNanoCpus = options.container.HostConfig?.NanoCpus || 0;
   const currentMemory = options.container.HostConfig?.Memory || 0;
   const currentNetworkMode = trimToken(options.container.HostConfig?.NetworkMode) || "";
+  const currentNetworks = options.container.NetworkSettings?.Networks;
+  const currentNetworkAttached = currentNetworks
+    ? Boolean(currentNetworks[options.desiredNetworkName])
+    : true;
   const currentMainBackendUrl = trimToken(currentEnv.MAIN_BACKEND_URL) || null;
 
   return {
@@ -297,7 +301,8 @@ function resolveContainerReconcileState(options: {
         currentNanoCpus !== options.desiredNanoCpus ||
         currentMemory !== options.desiredMemoryBytes,
       accessToken: currentToken !== accessToken,
-      network: currentNetworkMode !== options.desiredNetworkName,
+      network:
+        currentNetworkMode !== options.desiredNetworkName || !currentNetworkAttached,
       mainBackendUrl:
         !!options.desiredMainBackendUrl &&
         currentMainBackendUrl !== options.desiredMainBackendUrl,
@@ -464,6 +469,11 @@ function createContainerSpec(options: {
       Memory: options.config.memoryBytes,
       PortBindings: {
         [`${STUDIO_INTERNAL_PORT}/tcp`]: [{ HostPort: String(options.externalPort) }],
+      },
+    },
+    NetworkingConfig: {
+      EndpointsConfig: {
+        [options.networkName]: {},
       },
     },
   };

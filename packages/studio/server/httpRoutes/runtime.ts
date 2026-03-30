@@ -163,6 +163,7 @@ export function registerStudioRuntimeHttpRoutes(
   // Health check endpoint for service discovery
   app.get("/health", (_req, res) => {
     const initialized = workspace.isInitialized();
+    res.set("Access-Control-Allow-Origin", "*");
     res.json({
       status: initialized ? "ok" : "starting",
       initialized,

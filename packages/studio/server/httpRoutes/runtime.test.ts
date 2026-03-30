@@ -180,13 +180,15 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     const routeLayer = app.router.stack.find(
       (layer: any) => layer.route?.path === "/health",
     );
+    const set = vi.fn();
     const json = vi.fn();
     if (!routeLayer?.route?.stack[0]) {
       throw new Error("Expected /health route");
     }
 
-    routeLayer.route.stack[0].handle({} as any, { json } as any, vi.fn());
+    routeLayer.route.stack[0].handle({} as any, { set, json } as any, vi.fn());
 
+    expect(set).toHaveBeenCalledWith("Access-Control-Allow-Origin", "*");
     expect(json).toHaveBeenCalledWith({
       status: "ok",
       initialized: true,
@@ -198,13 +200,15 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     const routeLayer = app.router.stack.find(
       (layer: any) => layer.route?.path === "/health",
     );
+    const set = vi.fn();
     const json = vi.fn();
     if (!routeLayer?.route?.stack[0]) {
       throw new Error("Expected /health route");
     }
 
-    routeLayer.route.stack[0].handle({} as any, { json } as any, vi.fn());
+    routeLayer.route.stack[0].handle({} as any, { set, json } as any, vi.fn());
 
+    expect(set).toHaveBeenCalledWith("Access-Control-Allow-Origin", "*");
     expect(json).toHaveBeenCalledWith({
       status: "starting",
       initialized: false,

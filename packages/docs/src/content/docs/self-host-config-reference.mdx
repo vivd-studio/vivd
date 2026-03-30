@@ -24,6 +24,7 @@ STUDIO_MACHINE_PROVIDER=docker
 VIVD_CADDY_TLS_MODE=managed
 OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
 OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
+VIVD_SCRATCH_CREATION_MODE=studio_astro
 ```
 
 If you are not using `install.sh`, you must also provide:
@@ -240,6 +241,13 @@ Optional OpenCode model overrides:
 OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview
 OPENCODE_MODEL_ADVANCED=openrouter/google/gemini-3.1-pro-preview
 OPENCODE_MODEL_PRO=openrouter/google/gemini-3.1-pro-preview
+```
+
+Scratch creation mode defaults to `studio_astro`. Switch back to `legacy_html`
+only if you intentionally want the older backend-generated plain HTML flow:
+
+```env
+VIVD_SCRATCH_CREATION_MODE=legacy_html
 ```
 
 Optional scratch-generation model overrides for the legacy backend HTML flow:

@@ -1,5 +1,5 @@
 import { Navigate, useLocation, useParams } from "react-router-dom";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
@@ -22,12 +22,45 @@ function inferSchemeForHost(host: string): "http" | "https" {
   return "https";
 }
 
+function normalizeHostForComparison(host: string | null | undefined): string {
+  return (host || "").trim().toLowerCase();
+}
+
+export function getCanonicalControlPlaneUrl(options: {
+  controlPlaneMode: "path_based" | "host_based";
+  controlPlaneHost: string | null;
+  currentHost: string | null;
+  pathname: string;
+  search?: string;
+  hash?: string;
+}): string | null {
+  if (options.controlPlaneMode !== "host_based") return null;
+
+  const controlPlaneHost = normalizeHostForComparison(options.controlPlaneHost);
+  const currentHost = normalizeHostForComparison(options.currentHost);
+  if (!controlPlaneHost || !currentHost || currentHost === controlPlaneHost) {
+    return null;
+  }
+
+  const scheme = inferSchemeForHost(controlPlaneHost);
+  return `${scheme}://${controlPlaneHost}${options.pathname}${options.search || ""}${options.hash || ""}`;
+}
+
+function ExternalRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+
+  return <Loading />;
+}
+
 /**
  * Requires an authenticated session.
  * Redirects to login if no session exists.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
+  const location = useLocation();
   const { config, isLoading } = useAppConfig();
 
   if (!session) {
@@ -36,6 +69,20 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (isLoading) {
     return <Loading />;
+  }
+
+  const canonicalControlPlaneUrl = getCanonicalControlPlaneUrl({
+    controlPlaneMode: config.controlPlaneMode,
+    controlPlaneHost: config.controlPlaneHost,
+    currentHost:
+      typeof window === "undefined" ? null : window.location.host,
+    pathname: location.pathname,
+    search: location.search,
+    hash: location.hash,
+  });
+
+  if (canonicalControlPlaneUrl) {
+    return <ExternalRedirect to={canonicalControlPlaneUrl} />;
   }
 
   if (!config.hasHostOrganizationAccess) {

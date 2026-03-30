@@ -19,9 +19,9 @@ function ensureDirectory(dir: string): void {
 }
 
 export function getScratchCreationMode(): ScratchCreationMode {
-  return process.env.VIVD_SCRATCH_CREATION_MODE === "studio_astro"
-    ? "studio_astro"
-    : "legacy_html";
+  return process.env.VIVD_SCRATCH_CREATION_MODE === "legacy_html"
+    ? "legacy_html"
+    : "studio_astro";
 }
 
 export function isStudioAstroScratchCreationEnabled(): boolean {
