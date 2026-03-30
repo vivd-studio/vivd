@@ -1,6 +1,7 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OpencodeChatProvider } from "./provider";
+import type { OpenCodeChatBootstrap } from "./types";
 
 const {
   mockBootstrapRefetch,
@@ -18,7 +19,7 @@ const {
     statuses: {},
     questions: [],
     messages: [],
-  },
+  } as OpenCodeChatBootstrap,
   useSubscriptionMock: vi.fn(),
   subscriptionCallbacks: {
     onStarted: undefined as undefined | (() => void),

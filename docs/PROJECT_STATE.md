@@ -20,8 +20,8 @@
 
 ## Latest Progress
 
+- 2026-03-30: fixed the lingering Studio client typecheck failure in `client/src/features/opencodeChat/provider.test.tsx`. The hoisted bootstrap mock had been inferred with `sessions: never[]`, so later test setup that assigned concrete session rows failed TypeScript even though the provider/runtime code was fine. The test now types that bootstrap fixture explicitly as `OpenCodeChatBootstrap`, and full `npm run typecheck -w @vivd/studio` is green again.
 - 2026-03-30: fixed the solo/self-host live preview regression for path-mounted Studio runtimes. The Studio client had been treating `project.getPreviewInfo().url === "/"` as the control-plane origin root instead of the mounted runtime root when Studio was served under `/_studio/...`, which made the preview iframe load `https://<host>/` and show the server's plain `Not found` response. The runtime path helper now resolves live preview root URLs back onto the mounted runtime base, and the runtime dev-server proxy now also receives the forwarded base path so path-mounted preview HTML can rewrite root-relative asset and preview-bridge URLs correctly.
-- 2026-03-30: expanded the shared release/publish validation gate so `reusable-validate.yml` now runs the frontend, Studio, and backend regressions that specifically cover the Docker/self-host/runtime-handover failures we just hit: Docker provider drift/network attach, local-provider host resolution, runtime `/health` CORS, production-vs-local host redirect behavior, browser Studio URL selection, embedded Studio startup/auto-resume, and initial-generation handoff fallback.
 
 ## Active Priorities
 
