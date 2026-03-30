@@ -20,7 +20,13 @@
  *   VIVD_FLY_TEST_IMAGE_TAG=dev-...
  *   VIVD_FLY_TEST_DRIFT_IMAGE=ghcr.io/vivd-studio/vivd-studio:1.1.27
  *   VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS=6000
+ *
+ * Note:
+ *   If your local env pins FLY_STUDIO_IMAGE to an older dev tag, pass
+ *   VIVD_FLY_TEST_IMAGE or VIVD_FLY_TEST_IMAGE_TAG explicitly so this
+ *   smoke validates the current Studio image instead of that stale pin.
  */
+import { spawnSync } from "node:child_process";
 import { describe, it, expect } from "vitest";
 import {
   getMachineDriftLabels,
@@ -93,6 +99,95 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+type ParsedSemverImage = {
+  repository: string;
+  prefix: string;
+  major: number;
+  minor: number;
+  patch: number;
+};
+
+function parseSemverImage(image: string): ParsedSemverImage | null {
+  const normalized = stripDigest(image) || image;
+  const lastSlash = normalized.lastIndexOf("/");
+  const lastColon = normalized.lastIndexOf(":");
+  if (lastColon <= lastSlash) return null;
+  const repository = normalized.slice(0, lastColon);
+  const tag = normalized.slice(lastColon + 1);
+  const match = tag.match(/^(v?)(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return null;
+  return {
+    repository,
+    prefix: match[1] || "",
+    major: Number.parseInt(match[2] || "0", 10),
+    minor: Number.parseInt(match[3] || "0", 10),
+    patch: Number.parseInt(match[4] || "0", 10),
+  };
+}
+
+function imageManifestExists(image: string): boolean {
+  const result = spawnSync("docker", ["manifest", "inspect", image], {
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
+
+function resolvePreviousExistingSemverImage(image: string): string | null {
+  const parsed = parseSemverImage(image);
+  if (!parsed) return null;
+
+  for (let patch = parsed.patch - 1; patch >= 0; patch -= 1) {
+    const candidate = `${parsed.repository}:${parsed.prefix}${parsed.major}.${parsed.minor}.${patch}`;
+    if (imageManifestExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function isManifestUnknownError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("failed to get manifest") &&
+    normalized.includes("manifest unknown")
+  );
+}
+
+async function resolveFallbackDriftImage(
+  provider: FlyStudioMachineProvider,
+  requestedDriftImage: string,
+  desiredImage: string,
+): Promise<string | null> {
+  const semverFallback = resolvePreviousExistingSemverImage(requestedDriftImage);
+  if (semverFallback && semverFallback !== stripDigest(desiredImage)) {
+    return semverFallback;
+  }
+
+  const desiredSemver = parseSemverImage(desiredImage);
+  const summaries = await provider.listStudioMachines();
+  for (const summary of summaries) {
+    const state = (summary.state || "").toLowerCase();
+    if (state === "destroyed" || state === "destroying") continue;
+    const image = stripDigest(summary.image);
+    if (!image || image === stripDigest(desiredImage)) continue;
+    const candidateSemver = parseSemverImage(image);
+    if (candidateSemver) {
+      if (candidateSemver.major < 1) continue;
+      if (
+        desiredSemver &&
+        (candidateSemver.major !== desiredSemver.major ||
+          candidateSemver.minor !== desiredSemver.minor)
+      ) {
+        continue;
+      }
+    }
+    return image;
+  }
+  return null;
+}
+
 async function waitForState(
   provider: FlyStudioMachineProvider,
   machineId: string,
@@ -140,16 +235,37 @@ describe("Fly warm reconciliation flow", () => {
         const desiredImage = (await provider.getDesiredImage({
           forceRefresh: true,
         })) as string;
-        const driftImage =
+        let driftImage =
           TEST_DRIFT_IMAGE || `${imageBaseWithoutTag(desiredImage)}:latest`;
         process.env.FLY_STUDIO_IMAGE = driftImage;
-
-        await provider.ensureRunning({
-          organizationId,
-          projectSlug,
-          version,
-          env: startEnv,
-        });
+        try {
+          await provider.ensureRunning({
+            organizationId,
+            projectSlug,
+            version,
+            env: startEnv,
+          });
+        } catch (error) {
+          if (!isManifestUnknownError(error)) {
+            throw error;
+          }
+          const fallbackDriftImage = await resolveFallbackDriftImage(
+            provider,
+            driftImage,
+            desiredImage,
+          );
+          if (!fallbackDriftImage) {
+            throw error;
+          }
+          driftImage = fallbackDriftImage;
+          process.env.FLY_STUDIO_IMAGE = driftImage;
+          await provider.ensureRunning({
+            organizationId,
+            projectSlug,
+            version,
+            env: startEnv,
+          });
+        }
 
         const summaries = await provider.listStudioMachines();
         const summary = summaries.find(
