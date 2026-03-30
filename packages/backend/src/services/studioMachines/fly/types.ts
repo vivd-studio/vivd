@@ -1,4 +1,5 @@
 export type FlyMachineState =
+  | "pending"
   | "created"
   | "starting"
   | "started"

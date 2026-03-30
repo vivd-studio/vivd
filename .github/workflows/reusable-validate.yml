@@ -46,7 +46,7 @@ jobs:
         run: npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts server/httpRoutes/runtime.test.ts client/src/components/chat/ChatContext.followup.test.tsx
 
       - name: Backend Studio Runtime Auth And Drift Regression Tests
-        run: npm run test:run -w @vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts docker_provider.test.ts local_provider_orchestration.test.ts
+        run: npm run test:run -w @vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_lifecycle.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts docker_provider.test.ts local_provider_orchestration.test.ts
 
       - name: Frontend Studio Host Regression Tests
         run: npm run test:run -w @vivd/frontend -- src/app/router/guards.test.tsx src/hooks/useStudioHostRuntime.test.ts src/pages/EmbeddedStudio.test.tsx

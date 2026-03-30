@@ -106,7 +106,7 @@ run_release_preflight() {
     npm run test:run --workspace=@vivd/studio -- server/http/studioAuth.test.ts
   run_step \
     "Backend Studio runtime regressions" \
-    npm run test:run --workspace=@vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
+    npm run test:run --workspace=@vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_lifecycle.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
 }
 
 while [[ $# -gt 0 ]]; do

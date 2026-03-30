@@ -23,6 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.tag.outputs.version }}
       version_no_v: ${{ steps.tag.outputs.version_no_v }}
+      previous_tag: ${{ steps.changes.outputs.previous_tag }}
       build_builder: ${{ steps.changes.outputs.build_builder }}
       build_studio: ${{ steps.changes.outputs.build_studio }}
       build_server: ${{ steps.changes.outputs.build_server }}
@@ -156,6 +157,7 @@ jobs:
           echo "build_scraper=$build_scraper" >> "$GITHUB_OUTPUT"
           echo "build_caddy=$build_caddy" >> "$GITHUB_OUTPUT"
           echo "any=$any" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
 
           {
             echo "### Changed image selection"
@@ -257,6 +259,65 @@ jobs:
             docker tag vivd-studio:release-smoke "$tag"
             docker push "$tag"
           done
+
+  studio-fly-reconcile-smoke:
+    needs: [detect-changes, validate-release, build-studio]
+    if: needs.detect-changes.outputs.build_studio == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Fly release smoke configuration
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${FLY_API_TOKEN}" ]; then
+            echo "::error::Missing FLY_API_TOKEN secret for Fly release validation."
+            exit 1
+          fi
+
+          if [ -z "${FLY_STUDIO_APP}" ]; then
+            echo "::error::Missing FLY_STUDIO_VALIDATE_APP repo variable/secret for Fly release validation."
+            exit 1
+          fi
+
+      - name: Fly warm reconcile release smoke
+        env:
+          VIVD_RUN_FLY_RECONCILE_FLOW_TESTS: "1"
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
+          VIVD_FLY_TEST_IMAGE: ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
+          VIVD_FLY_TEST_DRIFT_IMAGE: ${{ needs.detect-changes.outputs.previous_tag && format('{0}/vivd-studio:{1}', env.IMAGE_PREFIX, needs.detect-changes.outputs.previous_tag) || '' }}
+          VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS: "5000"
+        run: npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
+
+      - name: Fly warm wake auth release smoke
+        env:
+          VIVD_RUN_FLY_WARM_WAKE_AUTH_TESTS: "1"
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
+          VIVD_FLY_TEST_IMAGE: ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
+          VIVD_FLY_WAKE_EXPECT_MAX_MS: "5000"
+        run: npm run test:integration -w @vivd/backend -- test/integration/fly_warm_wake_auth.test.ts
 
   build-builder:
     needs: [detect-changes, validate-release]
@@ -533,7 +594,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, validate-release, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, validate-release, build-studio, studio-fly-reconcile-smoke, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:
