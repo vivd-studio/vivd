@@ -95,6 +95,7 @@ export function ChatProvider({
   const [initialGenerationFailed, setInitialGenerationFailed] = useState<string | null>(
     null,
   );
+  const initialGenerationFallbackAttemptedRef = useRef(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
   const {
@@ -358,6 +359,11 @@ export function ChatProvider({
     }
 
     if (pending.kind === "initialGeneration") {
+      if (initialGenerationStarting) {
+        clearPending();
+        return;
+      }
+
       if (
         activeQuestionRequest ||
         isThinking ||
@@ -427,6 +433,71 @@ export function ChatProvider({
     setSelectedSessionId,
     startInitialGenerationMutation,
     submitPreparedTask,
+    version,
+  ]);
+
+  useEffect(() => {
+    if (!initialGenerationRequested) return;
+    if (initialGenerationFallbackAttemptedRef.current) return;
+    if (previewContext?.pendingChatMessage?.kind === "initialGeneration") return;
+    if (sessionsLoading || isSessionHydrating) return;
+    if (selectedSessionId || sessions.length > 0) return;
+    if (
+      activeQuestionRequest ||
+      isThinking ||
+      runTaskPending ||
+      isPreparingSend ||
+      initialGenerationStarting
+    ) {
+      return;
+    }
+
+    initialGenerationFallbackAttemptedRef.current = true;
+
+    void (async () => {
+      try {
+        setInitialGenerationStarting(true);
+        setInitialGenerationFailed(null);
+        clearSessionError();
+
+        const result = await startInitialGenerationMutation.mutateAsync({
+          projectSlug,
+          version,
+          model: selectedModel
+            ? {
+                provider: selectedModel.provider,
+                modelId: selectedModel.modelId,
+              }
+            : undefined,
+        });
+
+        setSelectedSessionId(result.sessionId);
+        void refetchSessions();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setInitialGenerationFailed(message);
+      } finally {
+        setInitialGenerationStarting(false);
+      }
+    })();
+  }, [
+    activeQuestionRequest,
+    clearSessionError,
+    initialGenerationRequested,
+    initialGenerationStarting,
+    isPreparingSend,
+    isSessionHydrating,
+    isThinking,
+    previewContext?.pendingChatMessage,
+    projectSlug,
+    refetchSessions,
+    runTaskPending,
+    selectedModel,
+    selectedSessionId,
+    sessions,
+    sessionsLoading,
+    setSelectedSessionId,
+    startInitialGenerationMutation,
     version,
   ]);
 

@@ -367,6 +367,31 @@ describe("ChatProvider follow-up behavior", () => {
     expect(latestContext!.queuedFollowups).toEqual([]);
   });
 
+  it("falls back to auto-start initial generation when the host bridge message is missed", async () => {
+    controllerState.selectedSessionId = null;
+    controllerState.sessions = [];
+    controllerState.sessionsLoading = false;
+    controllerState.isSessionHydrating = false;
+    previewState.initialGenerationRequested = true;
+    previewState.pendingChatMessage = null;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        model: undefined,
+      });
+    });
+
+    expect(controllerState.setSelectedSessionId).toHaveBeenCalledWith("sess-new");
+  });
+
   it("pauses auto-send after stop until a queued follow-up is sent manually", async () => {
     window.localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, "queue");
     controllerState.isThinking = true;
