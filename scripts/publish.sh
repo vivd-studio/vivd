@@ -96,6 +96,11 @@ ensure_tag_absent() {
 
 run_release_preflight() {
   run_step "TypeScript typecheck" npm run typecheck
+  run_step "Build shared" npm run build --workspace=@vivd/shared
+  run_step "Build builder" npm run build --workspace=@vivd/builder
+  run_step "Build backend" npm run build --workspace=@vivd/backend
+  run_step "Build studio" npm run build --workspace=@vivd/studio
+  run_step "Build scraper" npm run build --workspace=@vivd/scraper
   run_step \
     "Studio auth regression test" \
     npm run test:run --workspace=@vivd/studio -- server/http/studioAuth.test.ts

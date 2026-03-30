@@ -1,7 +1,10 @@
 import { PreviewProvider, PreviewContent } from "@/components/preview";
 import { Toaster } from "@/components/ui/sonner";
-import { postVivdHostMessage } from "@/lib/hostBridge";
-import { useEffect } from "react";
+import {
+  isVivdHostMessageEvent,
+  postVivdHostMessage,
+} from "@/lib/hostBridge";
+import { useCallback, useEffect } from "react";
 
 export function App() {
   const params = new URLSearchParams(window.location.search);
@@ -32,11 +35,29 @@ export function App() {
     window.history.back();
   };
 
-  // Signal to the host app that the studio JS is running (iframe onLoad can fire before React mounts).
-  useEffect(() => {
+  const postStudioReady = useCallback(() => {
     if (!embedded) return;
     postVivdHostMessage({ type: "vivd:studio:ready" });
   }, [embedded]);
+
+  // Signal to the host app that the studio JS is running (iframe onLoad can fire before React mounts).
+  // Also answer explicit host ready checks so a missed first message does not leave the
+  // host stuck on its boot screen while the studio is already interactive.
+  useEffect(() => {
+    if (!embedded) return;
+
+    postStudioReady();
+
+    const onMessage = (event: MessageEvent) => {
+      if (!isVivdHostMessageEvent(event)) return;
+      if (event.data?.type !== "vivd:host:ready-check") return;
+
+      postStudioReady();
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [embedded, postStudioReady]);
 
   return (
     <>

@@ -51,15 +51,32 @@ export function useStudioIframeLifecycle({
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
 
-  const syncThemeToStudio = useCallback(() => {
-    const targetWindow = iframeRef.current?.contentWindow;
-    if (!targetWindow || !studioOrigin) return;
+  const postMessageToStudio = useCallback(
+    (message: Record<string, unknown>) => {
+      const targetWindow = iframeRef.current?.contentWindow;
+      if (!targetWindow || !studioOrigin) return;
 
-    targetWindow.postMessage(
-      { type: "vivd:host:theme", theme, colorTheme },
-      studioOrigin,
-    );
-  }, [colorTheme, studioOrigin, theme]);
+      targetWindow.postMessage(message, studioOrigin);
+    },
+    [iframeRef, studioOrigin],
+  );
+
+  const syncThemeToStudio = useCallback(() => {
+    postMessageToStudio({
+      type: "vivd:host:theme",
+      theme,
+      colorTheme,
+    });
+  }, [colorTheme, postMessageToStudio, theme]);
+
+  const requestStudioReadyCheck = useCallback(() => {
+    postMessageToStudio({ type: "vivd:host:ready-check" });
+  }, [postMessageToStudio]);
+
+  const requestStudioBridgeSync = useCallback(() => {
+    requestStudioReadyCheck();
+    syncThemeToStudio();
+  }, [requestStudioReadyCheck, syncThemeToStudio]);
 
   const markStudioReady = useCallback(() => {
     setStudioReady(true);
@@ -75,17 +92,18 @@ export function useStudioIframeLifecycle({
 
   const tryMarkStudioReadyFromIframe = useCallback(() => {
     if (!isStudioIframeShellLoaded(iframeRef.current)) {
+      requestStudioBridgeSync();
       return false;
     }
 
     handleStudioReady();
     return true;
-  }, [handleStudioReady]);
+  }, [handleStudioReady, iframeRef, requestStudioBridgeSync]);
 
   const handleStudioIframeLoad = useCallback(() => {
-    syncThemeToStudio();
+    requestStudioBridgeSync();
     void tryMarkStudioReadyFromIframe();
-  }, [syncThemeToStudio, tryMarkStudioReadyFromIframe]);
+  }, [requestStudioBridgeSync, tryMarkStudioReadyFromIframe]);
 
   const handleStudioIframeError = useCallback(() => {
     setStudioLoadErrored(true);
@@ -94,6 +112,10 @@ export function useStudioIframeLifecycle({
   useEffect(() => {
     syncThemeToStudio();
   }, [syncThemeToStudio]);
+
+  useEffect(() => {
+    requestStudioBridgeSync();
+  }, [requestStudioBridgeSync]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

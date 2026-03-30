@@ -108,6 +108,50 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.onHardRestart).toHaveBeenCalledWith(7);
   });
 
+  it("keeps requesting a ready handshake for cross-origin iframes until the studio responds", async () => {
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+    });
+    const postMessage = vi.fn();
+
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = { postMessage };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:ready-check" },
+      "https://studio.example.com",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:theme", theme: "light", colorTheme: "vivd-sharp" },
+      "https://studio.example.com",
+    );
+    expect(latestValue?.studioReady).toBe(false);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:ready" },
+          origin: "https://studio.example.com",
+          source: frameWindow as unknown as MessageEventSource,
+        }),
+      );
+    });
+
+    expect(latestValue?.studioReady).toBe(true);
+    expect(props.onReady).toHaveBeenCalledTimes(1);
+  });
+
   it("polls runtime health after a load timeout and reloads once the runtime is healthy", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);

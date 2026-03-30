@@ -234,7 +234,11 @@ export function useOpencodeChatController({
           setSelectedSessionId(data.sessionId);
         }
 
-        await refetchSessions();
+        if (targetSessionId === selectedSessionId) {
+          await refetchSelectedSessionSnapshot();
+        } else {
+          await refetchSessions();
+        }
         return true;
       } catch (error) {
         opencodeChat.removeOptimisticUserMessage(optimisticMessageId);
@@ -252,6 +256,7 @@ export function useOpencodeChatController({
       opencodeChat,
       runTaskMutation,
       buildRunTaskPayload,
+      refetchSelectedSessionSnapshot,
       selectedSessionId,
       setSelectedSessionId,
       refetchSessions,

@@ -72,15 +72,18 @@ function removeSessionMessagesFromState(
 
   const messagesById = { ...state.messagesById };
   const partsByMessageId = { ...state.partsByMessageId };
+  const pendingPartDeltasByMessageId = { ...state.pendingPartDeltasByMessageId };
   for (const messageId of existingMessageIds) {
     delete messagesById[messageId];
     delete partsByMessageId[messageId];
+    delete pendingPartDeltasByMessageId[messageId];
   }
 
   return {
     ...state,
     messagesById,
     partsByMessageId,
+    pendingPartDeltasByMessageId,
     messagesBySessionId: {
       ...state.messagesBySessionId,
       [sessionId]: [],

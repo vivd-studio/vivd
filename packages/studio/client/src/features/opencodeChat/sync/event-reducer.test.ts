@@ -157,6 +157,98 @@ describe("openCodeChatReducer", () => {
     );
   });
 
+  it("buffers text deltas that arrive before the corresponding part update and merges them once the part exists", () => {
+    const next = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "events.receivedBatch",
+      payload: [
+        {
+          eventId: "evt-1",
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+          },
+        },
+        {
+          eventId: "evt-2",
+          type: "message.part.delta",
+          properties: {
+            messageID: "msg-1",
+            partID: "part-1",
+            field: "text",
+            delta: "Hello",
+          },
+        },
+        {
+          eventId: "evt-3",
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-1",
+              messageID: "msg-1",
+              type: "text",
+              text: "",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(selectMessagesForSession(next, "sess-1")[0]?.parts[0]?.text).toBe(
+      "Hello",
+    );
+  });
+
+  it("does not duplicate a buffered text delta when the later part update already includes that prefix", () => {
+    const next = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "events.receivedBatch",
+      payload: [
+        {
+          eventId: "evt-1",
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+          },
+        },
+        {
+          eventId: "evt-2",
+          type: "message.part.delta",
+          properties: {
+            messageID: "msg-1",
+            partID: "part-1",
+            field: "text",
+            delta: "Hello",
+          },
+        },
+        {
+          eventId: "evt-3",
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-1",
+              messageID: "msg-1",
+              type: "text",
+              text: "Hello world",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(selectMessagesForSession(next, "sess-1")[0]?.parts[0]?.text).toBe(
+      "Hello world",
+    );
+  });
+
   it("marks refresh required across a bridge reconnect cycle", () => {
     const reconnecting = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
       type: "event.received",

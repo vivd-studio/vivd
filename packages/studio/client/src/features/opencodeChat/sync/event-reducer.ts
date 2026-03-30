@@ -102,9 +102,11 @@ function removeSessionCaches(
 
   const messagesById = { ...state.messagesById };
   const partsByMessageId = { ...state.partsByMessageId };
+  const pendingPartDeltasByMessageId = { ...state.pendingPartDeltasByMessageId };
   for (const messageId of messageIds) {
     delete messagesById[messageId];
     delete partsByMessageId[messageId];
+    delete pendingPartDeltasByMessageId[messageId];
   }
 
   const messagesBySessionId = { ...state.messagesBySessionId };
@@ -121,6 +123,7 @@ function removeSessionCaches(
     messagesById,
     messagesBySessionId,
     partsByMessageId,
+    pendingPartDeltasByMessageId,
     sessionStatusById,
     questionRequestsBySessionId,
   };
@@ -155,15 +158,80 @@ function removeMessage(
   delete messagesById[messageId];
   const partsByMessageId = { ...state.partsByMessageId };
   delete partsByMessageId[messageId];
+  const pendingPartDeltasByMessageId = { ...state.pendingPartDeltasByMessageId };
+  delete pendingPartDeltasByMessageId[messageId];
 
   return {
     ...state,
     messagesById,
     partsByMessageId,
+    pendingPartDeltasByMessageId,
     messagesBySessionId: {
       ...state.messagesBySessionId,
       [sessionId]: nextMessageIds,
     },
+  };
+}
+
+function clearPendingPartDeltas(
+  state: OpenCodeChatState,
+  messageId: string,
+  partId: string,
+): OpenCodeChatState {
+  const pendingByMessage = state.pendingPartDeltasByMessageId[messageId];
+  if (!pendingByMessage?.[partId]) {
+    return state;
+  }
+
+  const nextPendingByMessage = { ...pendingByMessage };
+  delete nextPendingByMessage[partId];
+
+  const pendingPartDeltasByMessageId = {
+    ...state.pendingPartDeltasByMessageId,
+  };
+
+  if (Object.keys(nextPendingByMessage).length === 0) {
+    delete pendingPartDeltasByMessageId[messageId];
+  } else {
+    pendingPartDeltasByMessageId[messageId] = nextPendingByMessage;
+  }
+
+  return {
+    ...state,
+    pendingPartDeltasByMessageId,
+  };
+}
+
+function mergePendingPartDeltasIntoPart(
+  state: OpenCodeChatState,
+  part: OpenCodePart,
+): { state: OpenCodeChatState; part: OpenCodePart } {
+  const pendingFields =
+    state.pendingPartDeltasByMessageId[part.messageID]?.[part.id];
+  if (!pendingFields) {
+    return { state, part };
+  }
+
+  const nextPart = { ...part };
+  for (const [field, pendingDelta] of Object.entries(pendingFields)) {
+    const existing = nextPart[field];
+    if (typeof existing === "string") {
+      if (
+        existing === pendingDelta ||
+        existing.startsWith(pendingDelta) ||
+        existing.includes(pendingDelta)
+      ) {
+        continue;
+      }
+      nextPart[field] = pendingDelta + existing;
+      continue;
+    }
+    nextPart[field] = pendingDelta;
+  }
+
+  return {
+    state: clearPendingPartDeltas(state, part.messageID, part.id),
+    part: nextPart,
   };
 }
 
@@ -197,17 +265,18 @@ function upsertPart(
   state: OpenCodeChatState,
   part: OpenCodePart,
 ): OpenCodeChatState {
-  const currentParts = state.partsByMessageId[part.messageID] ?? [];
+  const merged = mergePendingPartDeltasIntoPart(state, part);
+  const currentParts = merged.state.partsByMessageId[part.messageID] ?? [];
   const nextParts = currentParts.some((current) => current.id === part.id)
     ? currentParts.map((current) =>
-        current.id === part.id ? { ...current, ...part } : current,
+        current.id === part.id ? { ...current, ...merged.part } : current,
       )
-    : sortParts([...currentParts, part]);
+    : sortParts([...currentParts, merged.part]);
 
   return {
-    ...state,
+    ...merged.state,
     partsByMessageId: {
-      ...state.partsByMessageId,
+      ...merged.state.partsByMessageId,
       [part.messageID]: nextParts,
     },
   };
@@ -289,7 +358,26 @@ function applyPartDelta(
 ): OpenCodeChatState {
   const currentParts = state.partsByMessageId[payload.messageID] ?? [];
   const index = currentParts.findIndex((part) => part.id === payload.partID);
-  if (index < 0) return state;
+  if (index < 0) {
+    const pendingByMessage =
+      state.pendingPartDeltasByMessageId[payload.messageID] ?? {};
+    const pendingByPart = pendingByMessage[payload.partID] ?? {};
+    const existingDelta = pendingByPart[payload.field] ?? "";
+
+    return {
+      ...state,
+      pendingPartDeltasByMessageId: {
+        ...state.pendingPartDeltasByMessageId,
+        [payload.messageID]: {
+          ...pendingByMessage,
+          [payload.partID]: {
+            ...pendingByPart,
+            [payload.field]: existingDelta + payload.delta,
+          },
+        },
+      },
+    };
+  }
 
   const currentPart = currentParts[index];
   const currentValue = currentPart[payload.field];

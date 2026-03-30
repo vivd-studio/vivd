@@ -125,6 +125,7 @@ export interface OpenCodeChatState {
   messagesById: Record<string, OpenCodeMessage>;
   messagesBySessionId: Record<string, string[]>;
   partsByMessageId: Record<string, OpenCodePart[]>;
+  pendingPartDeltasByMessageId: Record<string, Record<string, Record<string, string>>>;
   sessionStatusById: Record<string, OpenCodeSessionStatus>;
   questionRequestsBySessionId: Record<string, OpenCodeQuestionRequest[]>;
   lastEventId: string | null;
@@ -156,6 +157,7 @@ export const OPEN_CODE_CHAT_INITIAL_STATE: OpenCodeChatState = {
   messagesById: {},
   messagesBySessionId: {},
   partsByMessageId: {},
+  pendingPartDeltasByMessageId: {},
   sessionStatusById: {},
   questionRequestsBySessionId: {},
   lastEventId: null,

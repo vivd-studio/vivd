@@ -52,7 +52,11 @@ That is a core part of the product: Vivd ships platform capabilities the agent c
 
 - `packages/frontend` and `packages/backend` power the main app and control plane.
 - `packages/studio` is the isolated Studio runtime where editing and agent work happen.
+- `packages/scraper` is the dedicated website import/scraping service.
 - `packages/docs` is the public docs site.
+- `packages/shared` holds shared config, contracts, and types used across services.
+- `packages/theme` contains shared design tokens and theme styles.
+- `packages/builder` is the dedicated artifact-builder runtime that is currently still dark-launched.
 - `docs/` holds internal notes, planning, and architecture material.
 
 ## Development
@@ -71,8 +75,10 @@ cd vivd
 npm install
 cp .env.example .env
 # set at least OPENROUTER_API_KEY in .env
-docker compose up -d
+docker compose watch
 ```
+
+`docker compose watch` is the normal day-to-day loop for this repo. `docker-compose.override.yml` already defines sync/rebuild rules for the main dev services, so you usually do not need to boot them separately on the host. If you only want to start the stack without live sync/rebuild, `docker compose up -d` still works.
 
 For the default Compose-based local setup, the backend container runs Drizzle migrations on startup. You usually do not need a separate host-side `npm run db:migrate` just to boot the stack.
 
@@ -85,24 +91,27 @@ For day-to-day local work, the main endpoints are:
 
 `.env.example` is Compose-oriented. If you run packages directly on the host instead of inside Compose, replace service hostnames such as `postgres`, `backend`, and `scraper` with host-reachable values.
 
-### Useful Workspace Commands
+### Optional Host-Side Workspace Commands
+
+If you stay inside `docker compose watch`, you can usually ignore these. They are mainly useful for targeted validation, debugging one workspace directly on the host, or working outside Compose.
 
 | Purpose | Command |
 | --- | --- |
-| Backend dev server | `npm run dev -w @vivd/backend` |
-| Frontend dev server | `npm run dev -w @vivd/frontend` |
-| Studio runtime dev server | `npm run dev -w @vivd/studio` |
-| Docs site | `npm run dev -w @vivd/docs` |
-| Scraper service | `npm run dev -w @vivd/scraper` |
+| Run a single workspace directly on the host | `npm run dev -w @vivd/<backend|frontend|studio|docs|scraper>` |
+| Run a targeted typecheck | `npm run typecheck -w @vivd/<backend|frontend|studio|docs|scraper>` |
+| Run targeted tests | `npm run test:run -w @vivd/<backend|frontend|studio|scraper>` |
+| Run backend integration tests | `npm run test:integration -w @vivd/backend -- <path-to-test>` |
 | Generate Drizzle migrations | `npm run db:generate` |
 | Apply Drizzle migrations | `npm run db:migrate` |
 | Local CI-style check | `npm run ci:local` |
 
-Vivd uses npm workspaces with one root `package-lock.json`. Install dependencies at the repo root and prefer workspace-scoped commands such as `npm run build -w @vivd/backend`.
+Vivd uses npm workspaces with one root `package-lock.json`. Install dependencies at the repo root and prefer workspace-scoped commands such as `npm run typecheck -w @vivd/backend` when you want a targeted check.
 
 For tests, prefer targeted runs in the areas you changed before reaching for the broader `ci:local` variants.
 
 ## Self-Hosting
+
+The public self-host install/docs path currently focuses on `solo`. The hosted Vivd product itself runs the multi-org `platform` mode.
 
 Vivd currently ships a first-party `solo` self-host path:
 

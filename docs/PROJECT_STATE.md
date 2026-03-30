@@ -17,11 +17,18 @@
 - Bucket-first source, preview, and publish flow is active.
 - Fly studio-machine orchestration covers core lifecycle paths; the Docker provider is available but still needs parity hardening.
 - Multi-org auth and tenant host scoping are in place across the core control plane.
-- The self-host profile split is far enough along that `solo` is the primary self-host target; `platform` remains supported but lower priority.
+- The self-host profile split is active: public self-host/install docs currently center `solo`, while the hosted product itself runs the multi-org `platform` mode.
 - The dedicated builder runtime exists behind `VIVD_ARTIFACT_BUILDER_ENABLED` and is still dark-launched.
 
 ## Latest Progress
 
+- 2026-03-30: migrated the ad-hoc repo skill notes into the proper Codex repo skill layout. Fly Studio machine lifecycle/debugging guidance now lives in `.agents/skills/fly-studio-machines/`, with a concise `SKILL.md` plus a deeper `references/drift-and-debugging.md` note. `AGENTS.md` now points to that canonical skill path, and the old loose `.skills/*.md` notes were dropped instead of carrying stale standalone OpenCode/Dokploy doc lists now that the real upstream reference checkouts already live in `vendor/`.
+- 2026-03-30: tightened the local standard release path without paying the full Docker-image cost. `scripts/publish.sh` `release` mode now runs workspace builds for `@vivd/shared`, `@vivd/builder`, `@vivd/backend`, `@vivd/studio`, and `@vivd/scraper` between typecheck and the targeted release regressions, so local tag preflight now exercises the production build outputs in addition to TypeScript-only validation. Added `packages/backend/test/openrouter_service.test.ts` to lock in the lazy OpenRouter client behavior: importing `OpenRouterService` without `OPENROUTER_API_KEY` must stay safe, and the failure is only allowed when the client/proxy is actually accessed.
+- 2026-03-30: corrected the repo-level install-profile guidance so it no longer implies that `platform` is generally lower priority than `solo`. The new wording makes the real split explicit: public self-host/install docs currently center `solo`, while the hosted product itself runs the multi-org `platform` mode.
+- 2026-03-30: fast-forwarded the vendored OpenCode reference checkout in `vendor/opencode` from `4167e25c7` to `47d2ab120` and reviewed the newer app/global-sync changes for chat stability parity. Upstream has continued hardening its delayed global event start, bootstrap/session warming, and session follow-up persistence, but there still was not a direct drop-in fix for Vivd's two remaining chat annoyances. On the Vivd side, the chat reducer now buffers `message.part.delta` text that arrives before the matching part exists so the first chunk of a final streamed response does not disappear until a later refresh, and the controller now reconciles the selected session snapshot immediately after an in-session steer/follow-up send succeeds so busy-session steering is less likely to stay visually stuck on stale `Working...` state.
+- 2026-03-30: re-verified the dormant-tab Studio wake path and added a focused frontend regression for it. `useStudioRuntimeGuard` already probes runtime health immediately, every 20s while visible, and again on browser `focus` / `visibilitychange`; the new test now proves that a previously healthy Studio runtime which later stops answering `/health` will be woken through `ensureStudioRunning` when the tab regains focus instead of silently leaving stale iframe UI on screen.
+- 2026-03-30: clarified the root README local-development guidance so it now points contributors at `docker compose watch` as the default day-to-day stack entrypoint and reframes workspace commands as optional host-side/debugging tools instead of the primary dev path.
+- 2026-03-30: fixed the embedded Studio boot-screen race that could leave the control-plane project view stuck on `Booting studio` even after the iframe was already interactive. The shared frontend iframe lifecycle now actively re-requests a Studio ready handshake and re-syncs host theme while startup polling is still in progress, and the Studio client now answers explicit `vivd:host:ready-check` bridge messages so a missed first `vivd:studio:ready` event no longer requires a manual browser refresh. Focused frontend and Studio client regressions now cover the cross-origin ready-check path on both sides.
 - 2026-03-30: split the project-page publish-preview URL contract into an embedded same-host path and a canonical share URL. `project.getExternalPreviewStatus` now returns `/vivd-studio/api/preview/:slug/v:version/` for in-app iframes while keeping `canonicalUrl` on the tenant/current host for copy/share actions, so the control-plane project preview no longer depends on cross-host preview auth/routing just to render inside the app.
 - 2026-03-30: enabled authenticated dev-server WebSocket proxying for Studio live preview on the runtime-root transport. The Studio server now forwards preview-side upgrade requests to the underlying Vite/Astro dev server after validating the Studio runtime auth token/cookie, and the root live-preview path no longer stubs `@vite/client`, so HMR/WebSocket flows can work on the new live-preview origin. The old compatibility transport remains removed.
 - 2026-03-30: cleaned up the old Studio preview compatibility transport after the runtime-root cutover. The private Studio runtime no longer serves the legacy `/preview` and `/vivd-studio/api/devpreview/*` live-preview paths, the unused `trpc.preview` router was removed, preview-bootstrap auth no longer accepts `/preview` redirect targets, and preview-bridge script generation now comes from one shared implementation under `packages/studio/shared`. Public/shareable project preview URLs remain unchanged on `/vivd-studio/api/preview/:slug/v:version/`.
@@ -97,16 +104,17 @@
 
 1. Execute `docs/refactor-and-hardening-plan.md`, focusing next on the remaining OpenCode chat transport/state cutover work, preview-policy cleanup, and self-host config cleanup.
 2. Finish landing the Studio preview architecture rework in `docs/studio-preview-architecture-plan.md`, focusing on the runtime URL strategy, the project-page publish-preview vs Studio live-preview split, and preview bridge rollout.
-3. Validate Studio lifecycle hardening across Fly and Docker, especially rehydrate/revert behavior and machine/env sync paths.
-4. Finish scratch-to-Studio initial-generation hardening and prove the dedicated builder path before moving Astro preview/publish builds off Studio machines.
-5. Keep `solo` self-hosting simple while continuing Docker parity, SSE Phase 1, targeted smoke coverage, and removal of remaining local-FS assumptions.
-6. Land the next control-plane ops features: reversible project archiving, superadmin project transfer, and post-login tenant redirect.
+3. Defer, but keep explicitly queued, the Fly runtime-host masking follow-up for Studio live preview: move platform runtimes from public `host:port` URLs to wildcard hostnames on a single Fly app, likely using Fly-native host routing/replay rather than multiple Fly apps or a Caddy front proxy.
+4. Validate Studio lifecycle hardening across Fly and Docker, especially rehydrate/revert behavior and machine/env sync paths.
+5. Finish scratch-to-Studio initial-generation hardening and prove the dedicated builder path before moving Astro preview/publish builds off Studio machines.
+6. Keep `solo` self-hosting simple while continuing Docker parity, SSE Phase 1, targeted smoke coverage, and removal of remaining local-FS assumptions.
+7. Land the next control-plane ops features: reversible project archiving, superadmin project transfer, and post-login tenant redirect.
 
 ## Open Decisions
 
 | Question | Status |
 |---|---|
-| Fly app strategy (single app vs app-per-tenant) | TBD |
+| Fly app strategy (single app vs app-per-tenant) | Lean single app; if we add runtime-host masking for platform preview, prefer wildcard hostnames plus Fly-native routing/replay over app-per-tenant or app-per-runtime sprawl |
 | Concurrency model for edits (single-writer lock vs optimistic) | TBD |
 | Build execution location (backend vs studio vs dedicated builder) | In progress: dedicated builder image/runtime is scaffolded behind `VIVD_ARTIFACT_BUILDER_ENABLED`, but the switch stays off until the new path is production-verified |
 | Preview artifact exposure (public vs signed URLs) | TBD |

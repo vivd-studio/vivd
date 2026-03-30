@@ -68,7 +68,8 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 - `docker-compose.yml`: base stack.
 - `docker-compose.override.yml`: local dev overrides.
 - `docker-compose.prod.yml`: production compose variant.
-- Install profiles: default `solo` = one host (`/`, `/vivd-studio`, same-host `/plugins/*`); set `VIVD_INSTALL_PROFILE=platform` for the SaaS/multi-org host-based mode.
+- Install profiles: public self-host/install docs currently focus on `solo` = one host (`/`, `/vivd-studio`, same-host `/plugins/*`). `platform` is the multi-org host-based mode used for the hosted product and platform-style deployments;
+
 - Local URLs via Caddy:
   - Studio/control-plane route: `http://localhost/vivd-studio`
   - Published-site host: `http://localhost/`
@@ -80,7 +81,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - In production, Studio runtimes run on Fly Machines.
 - Machines are started/reused per project (scoped by organization + project slug) via backend orchestration.
-- For Fly-specific Studio lifecycle/debugging rules and drift/cold-start findings, see `.skills/FLY_STUDIO_MACHINES.md`.
+- For Fly-specific Studio lifecycle/debugging rules and drift/cold-start findings, see `.agents/skills/fly-studio-machines/SKILL.md`.
 
 ## DB / Migrations
 

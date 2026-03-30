@@ -270,6 +270,43 @@ describe("useOpencodeChatController", () => {
     expect(runTaskMutateAsync).not.toHaveBeenCalled();
   });
 
+  it("reconciles the selected session snapshot after sending a follow-up into the active session", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    runTaskMutateAsync.mockResolvedValue({
+      success: true,
+      sessionId: "sess-1",
+      version: 1,
+    });
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    act(() => {
+      result.current.sendTask("steer here", "sess-1");
+    });
+
+    await waitFor(() => {
+      expect(runTaskMutateAsync).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        task: "steer here",
+        sessionId: "sess-1",
+        version: 1,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockOpencodeChat.refetchBootstrap).toHaveBeenCalledTimes(1);
+      expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+  });
+
   it("refetches session status and messages after stopping the selected session", async () => {
     mockOpencodeChat.selectedSessionId = "sess-1";
 
