@@ -57,6 +57,8 @@ describe("LocalStudioMachineProvider orchestration", () => {
     await expect(provider.getUrl("org-1", "site-1", 1)).resolves.toEqual({
       studioId: "studio-1",
       url: "http://localhost:3200",
+      runtimeUrl: "http://localhost:3200",
+      compatibilityUrl: null,
       accessToken: "access-1",
     });
 

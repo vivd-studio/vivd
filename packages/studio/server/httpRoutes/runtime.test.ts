@@ -5,6 +5,10 @@ import express from "express";
 import multer from "multer";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  injectBasePathScript,
+  rewriteRootAssetUrlsInText,
+} from "../http/basePathRewrite.js";
 import { resolveForwardedRuntimeBasePath } from "./runtime";
 import { registerStudioRuntimeHttpRoutes } from "./runtime";
 import { resolveRuntimeRequestedFilePath } from "./runtime";
@@ -52,14 +56,56 @@ function createTestRuntimeApp(options?: {
     },
     writeUploadedFile: async () => {},
     getProxyBasePath: () => null,
-    rewriteRootAssetUrlsInText: (text) => text,
-    injectBasePathScript: (html) => html,
+    rewriteRootAssetUrlsInText,
+    injectBasePathScript,
     devPreviewProxy: (_req, res) => {
       res.status(200).send("proxied");
     },
   });
 
   return { app, authMiddleware };
+}
+
+async function startRuntimeServer(app: express.Express) {
+  const server = app.listen(0);
+  await new Promise<void>((resolve) => {
+    server.once("listening", resolve);
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Expected runtime server to bind to a TCP port");
+  }
+
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+function createTempPreviewProject() {
+  const projectDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "vivd-studio-runtime-preview-"),
+  );
+  fs.mkdirSync(path.join(projectDir, "assets"), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectDir, "index.html"),
+    `<!doctype html>
+<html>
+  <head>
+    <script src="/assets/app.js"></script>
+  </head>
+  <body>
+    <a href="/about">About</a>
+  </body>
+</html>`,
+  );
+  fs.writeFileSync(
+    path.join(projectDir, "assets", "app.js"),
+    'console.log("app");',
+  );
+
+  return projectDir;
 }
 describe("resolveForwardedRuntimeBasePath", () => {
   it("keeps the route base path unchanged without a forwarded prefix", () => {
@@ -80,10 +126,10 @@ describe("resolveForwardedRuntimeBasePath", () => {
   it("normalizes trailing slashes before joining", () => {
     expect(
       resolveForwardedRuntimeBasePath(
-        "/vivd-studio/api/devpreview/site/v1/",
+        "/vivd-studio/api/preview/site/v1/",
         "/_studio/runtime-123/",
       ),
-    ).toBe("/_studio/runtime-123/vivd-studio/api/devpreview/site/v1");
+    ).toBe("/_studio/runtime-123/vivd-studio/api/preview/site/v1");
   });
 });
 
@@ -173,20 +219,6 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     expect(routeLayer?.route?.stack[0]?.handle).not.toBe(authMiddleware);
   });
 
-  it("registers auth before /preview", () => {
-    const { app, authMiddleware } = createTestRuntimeApp();
-    const matchingLayers = app.router.stack.filter(
-      (layer: any) =>
-        !layer.route &&
-        Array.isArray(layer.matchers) &&
-        layer.matchers.some((matcher: (pathname: string) => unknown) =>
-          Boolean(matcher("/preview")),
-        ),
-    );
-
-    expect(matchingLayers[0]?.handle).toBe(authMiddleware);
-  });
-
   it("registers auth before backend-compatible preview routes", () => {
     const { app, authMiddleware } = createTestRuntimeApp();
     const matchingLayers = app.router.stack.filter(
@@ -200,21 +232,6 @@ describe("registerStudioRuntimeHttpRoutes", () => {
 
     expect(matchingLayers[0]?.handle).toBe(authMiddleware);
   });
-
-  it("registers auth before backend-compatible devpreview routes", () => {
-    const { app, authMiddleware } = createTestRuntimeApp();
-    const matchingLayers = app.router.stack.filter(
-      (layer: any) =>
-        !layer.route &&
-        Array.isArray(layer.matchers) &&
-        layer.matchers.some((matcher: (pathname: string) => unknown) =>
-          Boolean(matcher("/vivd-studio/api/devpreview/site/v1")),
-        ),
-    );
-
-    expect(matchingLayers[0]?.handle).toBe(authMiddleware);
-  });
-
   it("serves hidden .vivd files through the project file route", async () => {
     const projectDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "vivd-studio-runtime-projects-"),
@@ -311,6 +328,56 @@ describe("registerStudioRuntimeHttpRoutes", () => {
         dotfiles: "allow",
       });
     } finally {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves root live preview HTML without compat path rewriting", async () => {
+    const projectDir = createTempPreviewProject();
+    const { app } = createTestRuntimeApp({ projectPath: projectDir });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/`);
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('/assets/app.js');
+      expect(html).toContain('/vivd-studio/api/preview-bridge.js');
+      expect(html).not.toContain('/preview/assets/app.js');
+      expect(html).not.toContain('__vivdBasePath');
+    } finally {
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 404 for the removed legacy /preview transport", async () => {
+    const projectDir = createTempPreviewProject();
+    const { app } = createTestRuntimeApp({ projectPath: projectDir });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/preview/`);
+
+      expect(response.status).toBe(404);
+    } finally {
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 404 for the removed legacy devpreview transport", async () => {
+    const projectDir = createTempPreviewProject();
+    const { app } = createTestRuntimeApp({ projectPath: projectDir });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/vivd-studio/api/devpreview/site/v1/`);
+
+      expect(response.status).toBe(404);
+    } finally {
+      server.close();
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
   });

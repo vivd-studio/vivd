@@ -1078,7 +1078,8 @@ describe("DockerStudioMachineProvider", () => {
       state: "started",
     });
     expect(url).toMatchObject({
-      url: "http://app.localhost/_studio/site-1-v1",
+      url: expect.stringMatching(/\/_studio\/site-1-v1$/),
+      compatibilityUrl: expect.stringMatching(/\/_studio\/site-1-v1$/),
       accessToken: "access-existing",
     });
     expect(isRunning).toBe(true);

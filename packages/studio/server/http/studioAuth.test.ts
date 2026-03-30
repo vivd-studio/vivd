@@ -82,7 +82,7 @@ function createMockResponse() {
 describe("createRequireStudioAuth", () => {
   it("rejects unauthenticated shell requests", () => {
     const middleware = createRequireStudioAuth({ STUDIO_ACCESS_TOKEN: "studio-token" } as any);
-    const req = createMockRequest({ path: "/preview" });
+    const req = createMockRequest({ path: "/vivd-studio" });
     const res = createMockResponse();
     const next = vi.fn();
 
@@ -170,7 +170,7 @@ describe("createRequireStudioAuth", () => {
   it("accepts an existing cookie token without reissuing it", () => {
     const middleware = createRequireStudioAuth({ STUDIO_ACCESS_TOKEN: "studio-token" } as any);
     const req = createMockRequest({
-      path: "/preview",
+      path: "/vivd-studio",
       headers: {
         cookie: `${STUDIO_AUTH_COOKIE}=studio-token`,
       },
@@ -187,7 +187,7 @@ describe("createRequireStudioAuth", () => {
   it("accepts explicit auth headers", () => {
     const middleware = createRequireStudioAuth({ STUDIO_ACCESS_TOKEN: "studio-token" } as any);
     const req = createMockRequest({
-      path: "/preview",
+      path: "/vivd-studio",
       headers: {
         [STUDIO_AUTH_HEADER]: "studio-token",
       },
@@ -266,6 +266,22 @@ describe("resolveStudioBootstrapRedirectTarget", () => {
       resolveStudioBootstrapRedirectTarget(
         req,
         "https://evil.example.com/vivd-studio",
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects removed legacy preview redirect targets", () => {
+    const req = createMockRequest({
+      secure: true,
+      headers: {
+        host: "studio.example.com",
+      },
+    });
+
+    expect(
+      resolveStudioBootstrapRedirectTarget(
+        req,
+        "https://studio.example.com/preview/",
       ),
     ).toBeNull();
   });

@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -41,10 +42,18 @@ import {
   normalizePreviewPathInput,
 } from "./navigation";
 import {
+  getPreviewBridgeOrigin,
+  isPreviewBridgeMessage,
+} from "./bridge";
+import {
   collectVivdTextPatchesFromDocument,
   getI18nKeyForEditableElement,
   type VivdPatch,
 } from "@/lib/vivdPreviewTextPatching";
+import {
+  getVivdHostOrigin,
+  isVivdHostMessageEvent,
+} from "@/lib/hostBridge";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 
 // Version info from project data
@@ -226,6 +235,7 @@ export function PreviewProvider({
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
   const iframeLoadingDelayTimerRef = useRef<number | null>(null);
+  const iframeLoadWatchdogRef = useRef<number | null>(null);
   const [selectedVersion, setSelectedVersion] = useState(version || 1);
   const [viewportMode, setViewportModeState] = useState<ViewportMode>(() => {
     if (typeof window === "undefined") return "desktop";
@@ -283,10 +293,26 @@ export function PreviewProvider({
     iframeLoadingDelayTimerRef.current = null;
   }, []);
 
+  const clearIframeLoadWatchdog = useCallback(() => {
+    if (iframeLoadWatchdogRef.current === null) return;
+    window.clearTimeout(iframeLoadWatchdogRef.current);
+    iframeLoadWatchdogRef.current = null;
+  }, []);
+
+  const startIframeLoadWatchdog = useCallback(() => {
+    clearIframeLoadWatchdog();
+    iframeLoadWatchdogRef.current = window.setTimeout(() => {
+      iframeLoadWatchdogRef.current = null;
+      setIframeLoading(false);
+    }, 25_000);
+  }, [clearIframeLoadWatchdog]);
+
   const beginIframeLoading = useCallback(() => {
     clearIframeLoadingDelayTimer();
+    clearIframeLoadWatchdog();
     setIframeLoading(true);
-  }, [clearIframeLoadingDelayTimer]);
+    startIframeLoadWatchdog();
+  }, [clearIframeLoadingDelayTimer, startIframeLoadWatchdog]);
 
   const beginIframeNavigationLoading = useCallback(() => {
     clearIframeLoadingDelayTimer();
@@ -294,17 +320,22 @@ export function PreviewProvider({
     iframeLoadingDelayTimerRef.current = window.setTimeout(() => {
       iframeLoadingDelayTimerRef.current = null;
       setIframeLoading(true);
+      startIframeLoadWatchdog();
     }, 150);
-  }, [clearIframeLoadingDelayTimer]);
+  }, [clearIframeLoadingDelayTimer, startIframeLoadWatchdog]);
 
   const endIframeLoading = useCallback(() => {
     clearIframeLoadingDelayTimer();
+    clearIframeLoadWatchdog();
     setIframeLoading(false);
-  }, [clearIframeLoadingDelayTimer]);
+  }, [clearIframeLoadingDelayTimer, clearIframeLoadWatchdog]);
 
   useEffect(() => {
-    return () => clearIframeLoadingDelayTimer();
-  }, [clearIframeLoadingDelayTimer]);
+    return () => {
+      clearIframeLoadingDelayTimer();
+      clearIframeLoadWatchdog();
+    };
+  }, [clearIframeLoadingDelayTimer, clearIframeLoadWatchdog]);
 
   type SavePatch =
     | VivdPatch
@@ -448,9 +479,6 @@ export function PreviewProvider({
 
       const prefixes = [
         resolveStudioRuntimePath(
-          `/vivd-studio/api/devpreview/${projectSlug}/v${selectedVersion}`,
-        ),
-        resolveStudioRuntimePath(
           `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}`,
         ),
         resolveStudioRuntimePath(
@@ -580,6 +608,18 @@ export function PreviewProvider({
         },
       },
     );
+
+  const shareablePreviewOrigin = useMemo(() => getVivdHostOrigin(), []);
+  const { data: shareablePreviewUrl } = trpc.project.getShareablePreviewUrl.useQuery(
+    {
+      slug: projectSlug!,
+      version: selectedVersion,
+      origin: shareablePreviewOrigin,
+    },
+    {
+      enabled: !!projectSlug,
+    },
+  );
 
   // Before query returns, assume we're loading (prevents flash of static content)
   const previewMode = previewInfo?.mode ?? "static";
@@ -1052,7 +1092,6 @@ export function PreviewProvider({
         resolveStudioRuntimePath(
           `/vivd-studio/api/projects/${projectSlug}/v${selectedVersion}`,
         ),
-        resolveStudioRuntimePath("/preview"),
       ];
 
       let relative = pathname;
@@ -1111,22 +1150,36 @@ export function PreviewProvider({
     side: "left",
   });
 
-  // Build version-aware URL - use dynamic URL from previewInfo if available
-  const baseUrl = previewInfo?.url
-    ? resolveStudioRuntimePath(previewInfo.url)
-    : isPreviewLoading
-      ? ""
-      : projectSlug
-        ? resolveStudioRuntimePath(
-            `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/index.html`,
-          )
-        : url?.startsWith("http") || url?.startsWith("/vivd-studio/api")
-          ? resolveStudioRuntimePath(url)
-          : resolveStudioRuntimePath(`/vivd-studio/api${url}`);
-  const previewRootUrl = getPreviewRootUrl(baseUrl || "", previewMode);
-  const fullUrl = previewRootUrl
+  const livePreviewRootUrl = useMemo(() => {
+    const candidate = originalUrl ?? url ?? previewInfo?.url ?? "/";
+    if (!candidate) return "";
+    return getPreviewRootUrl(resolveStudioRuntimePath(candidate), previewMode);
+  }, [originalUrl, previewInfo?.url, previewMode, url]);
+
+  const fallbackPublishPreviewUrl = useMemo(() => {
+    if (!projectSlug) return "";
+    return new URL(
+      `/vivd-studio/api/preview/${projectSlug}/v${selectedVersion}/`,
+      shareablePreviewOrigin,
+    ).toString();
+  }, [projectSlug, selectedVersion, shareablePreviewOrigin]);
+
+  const stablePublishPreviewUrl = useMemo(() => {
+    const candidate = shareablePreviewUrl?.url || fallbackPublishPreviewUrl;
+    if (!candidate) return "";
+
+    try {
+      return new URL(candidate, shareablePreviewOrigin).toString();
+    } catch {
+      return candidate;
+    }
+  }, [fallbackPublishPreviewUrl, shareablePreviewOrigin, shareablePreviewUrl?.url]);
+
+  const activePreviewRootUrl = livePreviewRootUrl;
+
+  const fullUrl = activePreviewRootUrl
     ? withVivdStudioTokenQuery(
-        buildPreviewUrl(previewRootUrl, iframePreviewPath),
+        buildPreviewUrl(activePreviewRootUrl, iframePreviewPath),
         getVivdStudioToken(),
       )
     : "";
@@ -1149,11 +1202,11 @@ export function PreviewProvider({
 
   const handlePreviewLocationChange = useCallback(
     (href: string) => {
-      if (!previewRootUrl) return;
-      const nextPath = getPreviewPathFromUrl(href, previewRootUrl);
+      if (!activePreviewRootUrl) return;
+      const nextPath = getPreviewPathFromUrl(href, activePreviewRootUrl);
       setCurrentPreviewPath((prev) => (prev === nextPath ? prev : nextPath));
     },
-    [previewRootUrl],
+    [activePreviewRootUrl],
   );
 
   useEffect(() => {
@@ -1161,56 +1214,19 @@ export function PreviewProvider({
     setIframePreviewPath("/");
   }, [projectSlug]);
 
-  const getShareablePreviewOrigin = () => {
-    const params = new URLSearchParams(window.location.search);
-
-    // Prefer explicit hostOrigin param set by the parent app.
-    const hostOrigin = params.get("hostOrigin");
-    if (hostOrigin) {
-      try {
-        return new URL(hostOrigin).origin;
-      } catch {
-        // Ignore invalid values.
-      }
-    }
-
-    // Fallback: extract origin from returnTo URL.
-    const returnTo = params.get("returnTo");
-    if (returnTo) {
-      try {
-        return new URL(returnTo).origin;
-      } catch {
-        // Ignore invalid returnTo values.
-      }
-    }
-
-    if (document.referrer) {
-      try {
-        return new URL(document.referrer).origin;
-      } catch {
-        // Ignore invalid referrers.
-      }
-    }
-
-    return window.location.origin;
-  };
-
-  const handleCopy = () => {
-    // Always copy the external preview URL, not the internal dev server URL
-    if (!projectSlug) return;
+  const handleCopy = useCallback(() => {
     if (!publicPreviewEnabled) {
       toast.error("Preview URL is disabled for this project");
       return;
     }
 
-    const origin = getShareablePreviewOrigin();
-    utils.project
-      .getShareablePreviewUrl
-      .fetch({ slug: projectSlug, version: selectedVersion, origin })
-      .then((data) => {
-        const absoluteUrl = new URL(data.url, origin).toString();
-        return navigator.clipboard.writeText(absoluteUrl);
-      })
+    if (!stablePublishPreviewUrl) {
+      toast.error("Preview URL is not ready yet");
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(stablePublishPreviewUrl)
       .then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -1219,7 +1235,7 @@ export function PreviewProvider({
         const message = err instanceof Error ? err.message : String(err);
         toast.error("Failed to copy preview URL", { description: message });
       });
-  };
+  }, [publicPreviewEnabled, stablePublishPreviewUrl]);
 
   const handleTaskComplete = () => {
     // Refresh the iframe
@@ -1253,14 +1269,15 @@ export function PreviewProvider({
     if (!mode) {
       // Clean up selector in iframe
       const iframe = iframeRef.current;
+      const targetOrigin = getPreviewBridgeOrigin(fullUrl) ?? window.location.origin;
       if (iframe?.contentWindow) {
         iframe.contentWindow.postMessage(
           { type: "vivd-cleanup-selector" },
-          "*",
+          targetOrigin,
         );
       }
     }
-  }, []);
+  }, [fullUrl]);
 
   const clearSelectedElement = useCallback(() => {
     setSelectedElement(null);
@@ -1296,14 +1313,62 @@ export function PreviewProvider({
   // Listen for element selection from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "vivd:host:start-initial-generation") {
+      const iframeWindow = iframeRef.current?.contentWindow;
+
+      if (isPreviewBridgeMessage(event.data)) {
+        if (!iframeWindow || event.source !== iframeWindow) return;
+
+        const previewOrigin = getPreviewBridgeOrigin(fullUrl);
+        if (!previewOrigin || event.origin !== previewOrigin) return;
+
+        if (event.data.type === "vivd:preview:navigation-start") {
+          beginIframeNavigationLoading();
+        }
+
+        if (event.data.type === "vivd:preview:ready") {
+          return;
+        }
+
+        if (event.data.type === "vivd:preview:location-change") {
+          handlePreviewLocationChange(event.data.location.href);
+          return;
+        }
+
+        if (event.data.type === "vivd:preview:navigation-complete") {
+          handlePreviewLocationChange(event.data.location.href);
+          endIframeLoading();
+          return;
+        }
+
+        if (event.data.type === "vivd:preview:runtime-error") {
+          endIframeLoading();
+          const message =
+            event.data.error?.message?.trim() || "Preview runtime error";
+          toast.error(message, {
+            description: event.data.error?.stack || event.data.kind || undefined,
+          });
+          return;
+        }
+      }
+
+      if (
+        isVivdHostMessageEvent(event) &&
+        event.data?.type === "vivd:host:start-initial-generation"
+      ) {
         setChatOpen(true);
         setPendingChatMessage({
           kind: "initialGeneration",
           message: "",
           startNewSession: true,
         });
-      } else if (event.data?.type === "vivd-element-selected") {
+        return;
+      }
+
+      if (iframeWindow && event.source !== iframeWindow) return;
+      const previewOrigin = getPreviewBridgeOrigin(fullUrl);
+      if (!previewOrigin || event.origin !== previewOrigin) return;
+
+      if (event.data?.type === "vivd-element-selected") {
         const {
           description,
           selector,
@@ -1332,7 +1397,14 @@ export function PreviewProvider({
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [
+    beginIframeNavigationLoading,
+    endIframeLoading,
+    fullUrl,
+    handlePreviewLocationChange,
+    setSelectorMode,
+    setChatOpen,
+  ]);
 
   // Global Escape key handler to exit edit mode and selector mode
   useEffect(() => {

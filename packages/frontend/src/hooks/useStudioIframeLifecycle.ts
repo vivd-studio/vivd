@@ -6,6 +6,10 @@ import {
   type Theme,
 } from "@vivd/shared/types";
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
+import {
+  getVivdStudioBridgeOrigin,
+  parseVivdStudioBridgeMessage,
+} from "@/lib/studioBridge";
 import { useStudioIframeReadyRetry } from "./useStudioIframeReadyRetry";
 import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery";
 
@@ -45,16 +49,17 @@ export function useStudioIframeLifecycle({
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
+  const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
 
   const syncThemeToStudio = useCallback(() => {
     const targetWindow = iframeRef.current?.contentWindow;
-    if (!targetWindow) return;
+    if (!targetWindow || !studioOrigin) return;
 
     targetWindow.postMessage(
       { type: "vivd:host:theme", theme, colorTheme },
-      "*",
+      studioOrigin,
     );
-  }, [colorTheme, theme]);
+  }, [colorTheme, studioOrigin, theme]);
 
   const markStudioReady = useCallback(() => {
     setStudioReady(true);
@@ -94,53 +99,53 @@ export function useStudioIframeLifecycle({
     const onMessage = (event: MessageEvent) => {
       const studioWindow = iframeRef.current?.contentWindow;
       if (!studioWindow || event.source !== studioWindow) return;
+      if (!studioOrigin || event.origin !== studioOrigin) return;
 
-      const type = event.data?.type;
-      if (type === "vivd:studio:ready") {
+      const message = parseVivdStudioBridgeMessage(event);
+      if (!message) return;
+
+      if (message.type === "vivd:studio:ready") {
         handleStudioReady();
         return;
       }
 
-      if (type === "vivd:studio:close" || type === "vivd:studio:exitFullscreen") {
+      if (
+        message.type === "vivd:studio:close" ||
+        message.type === "vivd:studio:exitFullscreen"
+      ) {
         onClose?.();
         return;
       }
 
-      if (type === "vivd:studio:fullscreen") {
+      if (message.type === "vivd:studio:fullscreen") {
         onFullscreen?.();
         return;
       }
 
-      if (type === "vivd:studio:navigate") {
-        const path = event.data?.path;
-        if (typeof path === "string" && path.startsWith("/")) {
-          onNavigate?.(path);
+      if (message.type === "vivd:studio:navigate") {
+        if (message.path.startsWith("/")) {
+          onNavigate?.(message.path);
         }
         return;
       }
 
-      if (type === "vivd:studio:theme") {
+      if (message.type === "vivd:studio:theme") {
         markStudioReady();
 
-        const nextTheme = event.data?.theme;
-        const nextColorTheme = event.data?.colorTheme;
-        if (isTheme(nextTheme)) setTheme(nextTheme);
-        if (isColorTheme(nextColorTheme)) setColorTheme(nextColorTheme);
+        if (isTheme(message.theme)) setTheme(message.theme);
+        if (isColorTheme(message.colorTheme)) setColorTheme(message.colorTheme);
 
         return;
       }
 
-      if (type === "vivd:studio:hardRestart") {
-        const versionRaw = event.data?.version;
-        const requestedVersion =
-          typeof versionRaw === "number" ? versionRaw : Number.NaN;
+      if (message.type === "vivd:studio:hardRestart") {
         onHardRestart?.(
-          Number.isFinite(requestedVersion) ? requestedVersion : undefined,
+          Number.isFinite(message.version) ? message.version : undefined,
         );
         return;
       }
 
-      if (type === "vivd:studio:toggleSidebar") {
+      if (message.type === "vivd:studio:toggleSidebar") {
         onToggleSidebar?.();
       }
     };
@@ -157,6 +162,7 @@ export function useStudioIframeLifecycle({
     onToggleSidebar,
     setColorTheme,
     setTheme,
+    studioOrigin,
   ]);
 
   useStudioIframeReadyRetry({

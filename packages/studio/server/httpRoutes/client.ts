@@ -51,10 +51,6 @@ export function registerStudioClientHttpRoutes(
       injectBasePathScript,
     });
 
-  app.get("/", requireStudioAuth(), (_req, res) => {
-    res.redirect(302, "vivd-studio");
-  });
-
   app.get("/vivd-studio", requireStudioAuth(), async (req, res) => {
     await sendIndex(req, res);
   });
@@ -74,6 +70,7 @@ export function registerStudioClientHttpRoutes(
 
   app.get(/.*/, (req, res, next) => {
     if (
+      req.path === "/" ||
       req.path.startsWith("/trpc") ||
       req.path.startsWith("/preview") ||
       req.path.startsWith("/vivd-studio/api/")

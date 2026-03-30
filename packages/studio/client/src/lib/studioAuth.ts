@@ -2,7 +2,6 @@ export const VIVD_STUDIO_TOKEN_HEADER = "x-vivd-studio-token";
 export const VIVD_STUDIO_TOKEN_PARAM = "vivdStudioToken";
 
 const STUDIO_ROOT_PATH = "/vivd-studio";
-const PREVIEW_ROOT_PATH = "/preview";
 
 let cachedToken: string | null | undefined;
 
@@ -34,9 +33,7 @@ export function getStudioRuntimeBasePath(): string {
 function shouldPrefixStudioRuntimePath(pathname: string): boolean {
   return (
     pathname === STUDIO_ROOT_PATH ||
-    pathname.startsWith(`${STUDIO_ROOT_PATH}/`) ||
-    pathname === PREVIEW_ROOT_PATH ||
-    pathname.startsWith(`${PREVIEW_ROOT_PATH}/`)
+    pathname.startsWith(`${STUDIO_ROOT_PATH}/`)
   );
 }
 

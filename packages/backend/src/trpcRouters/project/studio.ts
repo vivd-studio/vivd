@@ -6,6 +6,55 @@ import { recordStudioVisit } from "../../services/studioMachines/visitStore";
 import { createStudioUserActionToken } from "../../lib/studioUserActionToken";
 import { resolveStableStudioMachineEnv } from "../../services/studioMachines/stableRuntimeEnv";
 
+const studioRuntimeResolvedContractSchema = z.object({
+  url: z.string(),
+  runtimeUrl: z.string().nullable(),
+  compatibilityUrl: z.string().nullable(),
+  bootstrapToken: z.string().nullable(),
+  userActionToken: z.string().nullable(),
+});
+
+const studioRuntimePendingContractSchema = z.object({
+  url: z.null(),
+  runtimeUrl: z.null(),
+  compatibilityUrl: z.null(),
+  bootstrapToken: z.null(),
+  userActionToken: z.null(),
+});
+
+const studioRuntimeStatusSchema = z.union([
+  studioRuntimeResolvedContractSchema.extend({
+    status: z.literal("running"),
+  }),
+  studioRuntimePendingContractSchema.extend({
+    status: z.literal("stopped"),
+  }),
+]);
+
+const studioRuntimeStartSchema = z.union([
+  studioRuntimeResolvedContractSchema.extend({
+    success: z.literal(true),
+    studioId: z.string(),
+    port: z.number().optional(),
+    provider: z.string(),
+  }),
+  studioRuntimePendingContractSchema.extend({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+]);
+
+const studioRuntimeRunningSchema = z.object({
+  running: z.boolean(),
+  url: z.string().nullable(),
+  runtimeUrl: z.string().nullable(),
+  compatibilityUrl: z.string().nullable(),
+  bootstrapToken: z.string().nullable(),
+});
+
+type StudioRuntimeStatusContract = z.infer<typeof studioRuntimeStatusSchema>;
+type StudioRuntimeStartContract = z.infer<typeof studioRuntimeStartSchema>;
+
 function createStudioRuntimeBootstrapToken(options: {
   studioId: string;
   accessToken?: string | null;
@@ -57,7 +106,8 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .query(async ({ ctx, input }) => {
+    .output(studioRuntimeStatusSchema)
+    .query(async ({ ctx, input }): Promise<StudioRuntimeStatusContract> => {
       const organizationId = ctx.organizationId!;
       // Check if studio is already running
       const existing = await studioMachineProvider.getUrl(
@@ -68,6 +118,8 @@ export const studioProcedures = {
       if (existing) {
         return {
           url: existing.url,
+          runtimeUrl: existing.runtimeUrl ?? existing.url,
+          compatibilityUrl: existing.compatibilityUrl ?? null,
           bootstrapToken: createStudioRuntimeBootstrapToken({
             studioId: existing.studioId,
             accessToken: existing.accessToken || null,
@@ -85,6 +137,8 @@ export const studioProcedures = {
       // For now, return null - studio needs to be started explicitly
       return {
         url: null,
+        runtimeUrl: null,
+        compatibilityUrl: null,
         bootstrapToken: null,
         userActionToken: null,
         status: "stopped" as const,
@@ -101,7 +155,8 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .output(studioRuntimeStartSchema)
+    .mutation(async ({ input, ctx }): Promise<StudioRuntimeStartContract> => {
       const organizationId = ctx.organizationId!;
       const studioRuntimeEnv = await resolveStableStudioMachineEnv({
         providerKind: studioMachineProvider.kind,
@@ -111,13 +166,19 @@ export const studioProcedures = {
       });
 
       try {
-        const { studioId, url, port, accessToken } =
-          await studioMachineProvider.ensureRunning({
-            organizationId,
-            projectSlug: input.slug,
-            version: input.version,
-            env: studioRuntimeEnv,
-          });
+        const {
+          studioId,
+          url,
+          runtimeUrl,
+          compatibilityUrl,
+          port,
+          accessToken,
+        } = await studioMachineProvider.ensureRunning({
+          organizationId,
+          projectSlug: input.slug,
+          version: input.version,
+          env: studioRuntimeEnv,
+        });
         try {
           await recordStudioVisit({
             organizationId,
@@ -134,6 +195,8 @@ export const studioProcedures = {
         return {
           success: true as const,
           url,
+          runtimeUrl: runtimeUrl ?? url,
+          compatibilityUrl: compatibilityUrl ?? null,
           port,
           studioId,
           bootstrapToken: createStudioRuntimeBootstrapToken({
@@ -151,6 +214,11 @@ export const studioProcedures = {
       } catch (error) {
         return {
           success: false as const,
+          url: null,
+          runtimeUrl: null,
+          compatibilityUrl: null,
+          bootstrapToken: null,
+          userActionToken: null,
           error: error instanceof Error ? error.message : "Failed to start studio",
         };
       }
@@ -169,7 +237,8 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .output(studioRuntimeStartSchema)
+    .mutation(async ({ input, ctx }): Promise<StudioRuntimeStartContract> => {
       const organizationId = ctx.organizationId!;
       const studioRuntimeEnv = await resolveStableStudioMachineEnv({
         providerKind: studioMachineProvider.kind,
@@ -179,7 +248,7 @@ export const studioProcedures = {
       });
 
       try {
-        const { studioId, url, port, accessToken } =
+        const { studioId, url, port, accessToken, runtimeUrl, compatibilityUrl } =
           await studioMachineProvider.restart({
             organizationId,
             projectSlug: input.slug,
@@ -203,6 +272,8 @@ export const studioProcedures = {
         return {
           success: true as const,
           url,
+          runtimeUrl: runtimeUrl ?? url,
+          compatibilityUrl: compatibilityUrl ?? null,
           port,
           studioId,
           bootstrapToken: createStudioRuntimeBootstrapToken({
@@ -220,6 +291,11 @@ export const studioProcedures = {
       } catch (error) {
         return {
           success: false as const,
+          url: null,
+          runtimeUrl: null,
+          compatibilityUrl: null,
+          bootstrapToken: null,
+          userActionToken: null,
           error: error instanceof Error ? error.message : "Failed to restart studio",
         };
       }
@@ -277,6 +353,7 @@ export const studioProcedures = {
         version: z.number(),
       })
     )
+    .output(studioRuntimeRunningSchema)
     .query(async ({ ctx, input }) => {
       const running = await studioMachineProvider.isRunning(
         ctx.organizationId!,
@@ -291,6 +368,8 @@ export const studioProcedures = {
       return {
         running,
         url: info?.url || null,
+        runtimeUrl: info?.runtimeUrl ?? info?.url ?? null,
+        compatibilityUrl: info?.compatibilityUrl ?? null,
         bootstrapToken:
           info?.studioId && info?.accessToken
             ? createStudioRuntimeBootstrapToken({

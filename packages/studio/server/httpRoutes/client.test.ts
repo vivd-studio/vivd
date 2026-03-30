@@ -47,11 +47,10 @@ describe("registerStudioClientHttpRoutes", () => {
     const { app, authMiddleware } = createApp();
     const routes = app.router.stack.filter((layer: any) => layer.route);
 
-    const rootRoute = routes.find((layer: any) => layer.route.path === "/");
     const studioRoute = routes.find((layer: any) => layer.route.path === "/vivd-studio");
     const studioSlashRoute = routes.find((layer: any) => layer.route.path === "/vivd-studio/");
 
-    expect(rootRoute?.route?.stack[0]?.handle).toBe(authMiddleware);
+    expect(routes.some((layer: any) => layer.route.path === "/")).toBe(false);
     expect(studioRoute?.route?.stack[0]?.handle).toBe(authMiddleware);
     expect(studioSlashRoute?.route?.stack[0]?.handle).toBe(authMiddleware);
   });

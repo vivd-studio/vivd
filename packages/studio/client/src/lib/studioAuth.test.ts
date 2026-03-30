@@ -61,8 +61,8 @@ describe("studioAuth runtime path helpers", () => {
     });
 
     expect(getStudioRuntimeBasePath()).toBe("/_studio/runtime-456");
-    expect(resolveStudioRuntimePath("/preview/site")).toBe(
-      "/_studio/runtime-456/preview/site",
+    expect(resolveStudioRuntimePath("/vivd-studio/assets/site")).toBe(
+      "/_studio/runtime-456/vivd-studio/assets/site",
     );
   });
 

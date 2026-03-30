@@ -1,4 +1,8 @@
-import type { FlyMachine, FlyStudioMachineSummary } from "./types";
+import type {
+  FlyMachine,
+  FlyStudioMachineSummary,
+  FlyStudioMachineUrlResult,
+} from "./types";
 
 type StudioIdentity = {
   organizationId: string;
@@ -53,6 +57,8 @@ export async function listStudioMachinesWorkflow(deps: {
       externalPort: port,
       routePath: null,
       url: port ? deps.getPublicUrlForPort(port) : null,
+      runtimeUrl: port ? deps.getPublicUrlForPort(port) : null,
+      compatibilityUrl: null,
       image,
       desiredImage,
       imageOutdated: !!image && image !== desiredImage,
@@ -184,7 +190,7 @@ export async function getStudioMachineUrlWorkflow(
   organizationId: string,
   projectSlug: string,
   version: number,
-): Promise<{ studioId: string; url: string; accessToken?: string } | null> {
+): Promise<FlyStudioMachineUrlResult | null> {
   const existing = await findExistingStudioMachine(
     deps,
     organizationId,
@@ -201,6 +207,8 @@ export async function getStudioMachineUrlWorkflow(
   return {
     studioId: deps.resolveStudioIdFromMachine(existing, null),
     url,
+    runtimeUrl: url,
+    compatibilityUrl: null,
     accessToken,
   };
 }

@@ -147,20 +147,23 @@ export function PreviewContent() {
     },
   });
 
-  // For dev server projects, don't render iframe until ready
-  const isDevServerReady =
-    !isPreviewLoading &&
-    (previewMode === "static" || devServerStatus === "ready");
-
-  // Show loading for both iframe loading AND dev server starting
   const isRestartingDevServer = restartDevServerMutation.isPending;
-  const isLoading =
-    iframeLoading ||
-    isPreviewLoading ||
-    devServerStatus === "starting" ||
-    devServerStatus === "installing" ||
-    isRestartingDevServer;
-  const isDevServerError = devServerStatus === "error" && !isRestartingDevServer;
+  const livePreviewRequiresRuntime = previewMode === "devserver";
+  const isPreviewReady =
+    Boolean(fullUrl) &&
+    (!livePreviewRequiresRuntime ||
+      (!isPreviewLoading && devServerStatus === "ready"));
+  const isLoading = livePreviewRequiresRuntime
+    ? iframeLoading ||
+      isPreviewLoading ||
+      devServerStatus === "starting" ||
+      devServerStatus === "installing" ||
+      isRestartingDevServer
+    : Boolean(fullUrl) && iframeLoading;
+  const isDevServerError =
+    livePreviewRequiresRuntime &&
+    devServerStatus === "error" &&
+    !isRestartingDevServer;
 
   // Determine loading message
   const getLoadingMessage = () => {
@@ -418,146 +421,148 @@ export function PreviewContent() {
                 : ""
             }`}
           >
-          {/* Loading/Error Overlay */}
-          <div
-            className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
-              isLoading || isDevServerError
-                ? "opacity-100"
-                : "opacity-0 pointer-events-none"
-            }`}
-          >
-            {isDevServerError ? (
-              <div className="flex flex-col items-center gap-3 max-w-md text-center px-4">
-                <AlertCircle className="h-8 w-8 text-destructive" />
-                <span className="text-sm font-medium text-destructive">
-                  Dev server failed to start
-                </span>
-                {devServerError && (
-                  <span className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded max-h-32 overflow-auto">
-                    {devServerError}
-                  </span>
-                )}
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    onClick={() => triggerDevServerRestart()}
-                    disabled={!projectSlug || restartDevServerMutation.isPending}
-                  >
-                    Restart dev server
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => triggerDevServerRestart({ clean: true })}
-                    disabled={!projectSlug || restartDevServerMutation.isPending}
-                  >
-                    Clean reinstall
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  {getLoadingMessage()}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Iframe container - only rendered when dev server is ready */}
-          {isDevServerReady && (
             <div
-              className={`h-full transition-opacity duration-150 ${
-                iframeLoading ? "opacity-0" : "opacity-100"
-              } ${framedViewport ? "flex items-center justify-center overflow-hidden p-5" : "w-full"}`}
+              className={`absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity duration-150 ${
+                isLoading || isDevServerError
+                  ? "opacity-100"
+                  : "opacity-0 pointer-events-none"
+              }`}
             >
-              {framedViewport ? (
-                <MobileFrame device={activeFrame} scale={mobileScale}>
+              {isDevServerError ? (
+                <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
+                  <AlertCircle className="h-8 w-8 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">
+                    Dev server failed to start
+                  </span>
+                  {devServerError && (
+                    <span className="max-h-32 overflow-auto rounded bg-muted p-2 font-mono text-xs text-muted-foreground">
+                      {devServerError}
+                    </span>
+                  )}
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      onClick={() => triggerDevServerRestart()}
+                      disabled={!projectSlug || restartDevServerMutation.isPending}
+                    >
+                      Restart dev server
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => triggerDevServerRestart({ clean: true })}
+                      disabled={!projectSlug || restartDevServerMutation.isPending}
+                    >
+                      Clean reinstall
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    {getLoadingMessage()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {isPreviewReady ? (
+              <div
+                className={`h-full transition-opacity duration-150 ${
+                  iframeLoading ? "opacity-0" : "opacity-100"
+                } ${
+                  framedViewport
+                    ? "flex items-center justify-center overflow-hidden p-5"
+                    : "w-full"
+                }`}
+              >
+                {framedViewport ? (
+                  <MobileFrame device={activeFrame} scale={mobileScale}>
+                    <PreviewIframe
+                      ref={iframeRef}
+                      src={fullUrl}
+                      refreshKey={refreshKey}
+                      isMobile={viewportMode === "mobile"}
+                      onNavigateStart={onIframeNavigateStart}
+                      onLoad={onIframeLoad}
+                      onLocationChange={handlePreviewLocationChange}
+                      selectorMode={selectorMode}
+                    />
+                  </MobileFrame>
+                ) : (
                   <PreviewIframe
                     ref={iframeRef}
                     src={fullUrl}
                     refreshKey={refreshKey}
-                    isMobile={viewportMode === "mobile"}
+                    isMobile={false}
                     onNavigateStart={onIframeNavigateStart}
                     onLoad={onIframeLoad}
                     onLocationChange={handlePreviewLocationChange}
                     selectorMode={selectorMode}
                   />
-                </MobileFrame>
-              ) : (
-                <PreviewIframe
-                  ref={iframeRef}
-                  src={fullUrl}
-                  refreshKey={refreshKey}
-                  isMobile={false}
-                  onNavigateStart={onIframeNavigateStart}
-                  onLoad={onIframeLoad}
-                  onLocationChange={handlePreviewLocationChange}
-                  selectorMode={selectorMode}
+                )}
+              </div>
+            ) : null}
+
+            <UnsavedChangesBar />
+
+            {/* Text Editor - overlay on top of iframe to preserve iframe state */}
+            {projectSlug && editingTextFile && (
+              <DeferredPanel>
+                <TextEditorPanel
+                  projectSlug={projectSlug}
+                  version={selectedVersion}
+                  filePath={editingTextFile}
+                  onClose={() => setEditingTextFile(null)}
                 />
-              )}
-            </div>
-          )}
+              </DeferredPanel>
+            )}
 
-          <UnsavedChangesBar />
+            {/* Image Viewer - overlay on top of iframe similar to text editor */}
+            {projectSlug && viewingImagePath && (
+              <DeferredPanel>
+                <ImageViewerPanel
+                  projectSlug={projectSlug}
+                  version={selectedVersion}
+                  filePath={viewingImagePath}
+                  onClose={() => setViewingImagePath(null)}
+                  onNavigatePrevious={handleNavigatePrevious}
+                  onNavigateNext={handleNavigateNext}
+                  canNavigatePrevious={canNavigatePrevious}
+                  canNavigateNext={canNavigateNext}
+                  onAiEdit={
+                    canUseAiImages && currentAsset
+                      ? () => setEditingAsset(currentAsset)
+                      : undefined
+                  }
+                  onDelete={
+                    currentAsset
+                      ? () => setPendingDeleteAsset(currentAsset)
+                      : undefined
+                  }
+                />
+              </DeferredPanel>
+            )}
 
-          {/* Text Editor - overlay on top of iframe to preserve iframe state */}
-          {projectSlug && editingTextFile && (
-            <DeferredPanel>
-              <TextEditorPanel
-                projectSlug={projectSlug}
-                version={selectedVersion}
-                filePath={editingTextFile}
-                onClose={() => setEditingTextFile(null)}
-              />
-            </DeferredPanel>
-          )}
-
-          {/* Image Viewer - overlay on top of iframe similar to text editor */}
-          {projectSlug && viewingImagePath && (
-            <DeferredPanel>
-              <ImageViewerPanel
-                projectSlug={projectSlug}
-                version={selectedVersion}
-                filePath={viewingImagePath}
-                onClose={() => setViewingImagePath(null)}
-                onNavigatePrevious={handleNavigatePrevious}
-                onNavigateNext={handleNavigateNext}
-                canNavigatePrevious={canNavigatePrevious}
-                canNavigateNext={canNavigateNext}
-                onAiEdit={
-                  canUseAiImages && currentAsset
-                    ? () => setEditingAsset(currentAsset)
-                    : undefined
-                }
-                onDelete={
-                  currentAsset
-                    ? () => setPendingDeleteAsset(currentAsset)
-                    : undefined
-                }
-              />
-            </DeferredPanel>
-          )}
-
-          {/* PDF Viewer - overlay on top of iframe similar to text editor */}
-          {projectSlug && viewingPdfPath && (
-            <DeferredPanel>
-              <PdfViewerPanel
-                projectSlug={projectSlug}
-                version={selectedVersion}
-                filePath={viewingPdfPath}
-                onClose={() => setViewingPdfPath(null)}
-                onDelete={() =>
-                  setPendingDeleteAsset({
-                    type: "file",
-                    name: viewingPdfPath.split("/").pop() || viewingPdfPath,
-                    path: viewingPdfPath,
-                  })
-                }
-              />
-            </DeferredPanel>
-          )}
+            {/* PDF Viewer - overlay on top of iframe similar to text editor */}
+            {projectSlug && viewingPdfPath && (
+              <DeferredPanel>
+                <PdfViewerPanel
+                  projectSlug={projectSlug}
+                  version={selectedVersion}
+                  filePath={viewingPdfPath}
+                  onClose={() => setViewingPdfPath(null)}
+                  onDelete={() =>
+                    setPendingDeleteAsset({
+                      type: "file",
+                      name: viewingPdfPath.split("/").pop() || viewingPdfPath,
+                      path: viewingPdfPath,
+                    })
+                  }
+                />
+              </DeferredPanel>
+            )}
           </div>
         </div>
       </div>

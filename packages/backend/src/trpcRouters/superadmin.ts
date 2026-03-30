@@ -53,6 +53,7 @@ import {
 } from "../lib/organizationIdentifiers";
 import { reloadCaddyConfig } from "../services/system/CaddyAdminService";
 import { publishService } from "../services/publish/PublishService";
+import type { StudioMachineSummary } from "../services/studioMachines/types";
 
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
@@ -77,6 +78,33 @@ const organizationRoleSchema = z.enum([
 const domainUsageSchema = z.enum(["tenant_host", "publish_target"]);
 const domainTypeSchema = z.enum(["managed_subdomain", "custom_domain"]);
 const domainStatusSchema = z.enum(["active", "disabled", "pending_verification"]);
+const studioMachineSummarySchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  state: z.string().nullable(),
+  region: z.string().nullable(),
+  cpuKind: z.string().nullable(),
+  cpus: z.number().nullable(),
+  memoryMb: z.number().nullable(),
+  organizationId: z.string(),
+  projectSlug: z.string(),
+  version: z.number(),
+  externalPort: z.number().nullable(),
+  routePath: z.string().nullable(),
+  url: z.string().nullable(),
+  runtimeUrl: z.string().nullable(),
+  compatibilityUrl: z.string().nullable(),
+  image: z.string().nullable(),
+  desiredImage: z.string(),
+  imageOutdated: z.boolean(),
+  createdAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+const listStudioMachinesOutputSchema = z.object({
+  provider: z.string(),
+  machines: z.array(studioMachineSummarySchema),
+  error: z.string().optional(),
+});
 
 const orgMemberRoleSchema = z.enum(["owner", "admin", "member", "client_editor"]);
 const pluginIdSchema = z.enum(PLUGIN_IDS);
@@ -308,7 +336,17 @@ export const superAdminRouter = router({
       };
     }),
 
-  listStudioMachines: superAdminProcedure.query(async () => {
+  listStudioMachines: superAdminProcedure.output(listStudioMachinesOutputSchema).query(async (): Promise<
+    | {
+        provider: string;
+        machines: StudioMachineSummary[];
+      }
+    | {
+        provider: string;
+        machines: StudioMachineSummary[];
+        error: string;
+      }
+  > => {
     if (!isManagedStudioMachineProvider(studioMachineProvider)) {
       return {
         provider: studioMachineProvider.kind,

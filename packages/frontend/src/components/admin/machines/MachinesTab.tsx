@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
+import { readStudioRuntimeOrigins } from "@/lib/studioRuntimeSession";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -592,32 +593,43 @@ export function MachinesTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedMachines.map((m: StudioMachine) => (
-                    <tr key={m.id} className="border-t align-top">
-                      <td className="px-3 py-2">
-                        <div className="font-mono text-xs break-all">{m.organizationId}</div>
-                        <div className="text-sm">
-                          <span className="font-medium">{m.projectSlug}</span>
-                          <span className="text-muted-foreground"> / v{m.version}</span>
-                        </div>
-                        {m.url ? (
-                          <a
-                            className="text-xs text-blue-600 hover:underline break-all"
-                            href={m.url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {m.url}
-                          </a>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">no url</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge variant={badgeVariantForState(m.state)}>
-                          {m.state || "unknown"}
-                        </Badge>
-                      </td>
+                  {sortedMachines.map((m: StudioMachine) => {
+                    const { runtimeUrl, compatibilityUrl } =
+                      readStudioRuntimeOrigins(m);
+
+                    return (
+                      <tr key={m.id} className="border-t align-top">
+                        <td className="px-3 py-2">
+                          <div className="font-mono text-xs break-all">
+                            {m.organizationId}
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">{m.projectSlug}</span>
+                            <span className="text-muted-foreground"> / v{m.version}</span>
+                          </div>
+                          {runtimeUrl || m.url ? (
+                            <a
+                              className="text-xs text-blue-600 hover:underline break-all"
+                              href={runtimeUrl || m.url || undefined}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Live runtime: {runtimeUrl || m.url}
+                            </a>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">no url</div>
+                          )}
+                          {compatibilityUrl || m.routePath ? (
+                            <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                              Compatibility: {compatibilityUrl || m.routePath}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant={badgeVariantForState(m.state)}>
+                            {m.state || "unknown"}
+                          </Badge>
+                        </td>
                       <td className="px-3 py-2">
                         <div>{formatAge(m.createdAt)}</div>
                         <div className="text-[11px] text-muted-foreground">
@@ -716,7 +728,8 @@ export function MachinesTab() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

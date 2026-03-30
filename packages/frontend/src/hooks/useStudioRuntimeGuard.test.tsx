@@ -57,6 +57,8 @@ describe("useStudioRuntimeGuard", () => {
     expect(ensureStudioRunning).toHaveBeenCalledTimes(1);
     expect(onRecovered).toHaveBeenCalledWith({
       url: "https://studio.example.com",
+      runtimeUrl: "https://studio.example.com",
+      compatibilityUrl: null,
       bootstrapToken: "token-1",
       userActionToken: null,
     });
@@ -240,7 +242,7 @@ describe("useStudioRuntimeGuard", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("/_studio/route-1/health", window.location.origin).toString(),
+      "https://app.example.com/_studio/route-1/health",
       expect.objectContaining({
         method: "GET",
         mode: "cors",

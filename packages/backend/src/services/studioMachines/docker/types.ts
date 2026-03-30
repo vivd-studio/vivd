@@ -16,6 +16,9 @@ export type DockerContainerSummary = {
   Status?: string;
   Created?: number;
   Labels?: Record<string, string>;
+  HostConfig?: {
+    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
+  };
 };
 
 export type DockerContainerInfo = {
@@ -40,6 +43,7 @@ export type DockerContainerInfo = {
     NanoCpus?: number;
     Memory?: number;
     AutoRemove?: boolean;
+    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
   };
   Created?: string;
 };
@@ -55,6 +59,7 @@ export type DockerContainerCreateConfig = {
     NanoCpus?: number;
     Memory?: number;
     AutoRemove?: boolean;
+    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
   };
 };
 

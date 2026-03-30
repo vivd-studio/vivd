@@ -292,12 +292,12 @@ export const projectRouter = router({
         version: z.number(),
       }),
     )
-    .query(async ({ input, ctx }) => {
+    .query(async ({ ctx }) => {
       if (!ctx.workspace.isInitialized()) {
         return {
           mode: "static" as const,
           status: "starting" as const,
-          url: `/vivd-studio/api/preview/${input.slug}/v${input.version}/index.html`,
+          url: "/",
           error: "Workspace not initialized",
         };
       }
@@ -309,20 +309,16 @@ export const projectRouter = router({
         return {
           mode: "static" as const,
           status: "ready" as const,
-          url: `/vivd-studio/api/preview/${input.slug}/v${input.version}/index.html`,
+          url: "/",
         };
       }
 
-      const basePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
-      const result = await devServerService.getOrStartDevServer(
-        projectDir,
-        basePath,
-      );
+      const result = await devServerService.getOrStartDevServer(projectDir, "/");
 
       return {
         mode: "devserver" as const,
         status: result.status,
-        url: `${basePath}/`,
+        url: "/",
         error: result.error,
       };
     }),
@@ -417,8 +413,7 @@ export const projectRouter = router({
       }
 
       const projectDir = ctx.workspace.getProjectPath();
-      const basePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
-      const result = await devServerService.restartDevServer(projectDir, basePath, {
+      const result = await devServerService.restartDevServer(projectDir, "/", {
         clean: input.clean,
         resetCaches: true,
       });
@@ -1426,7 +1421,6 @@ export const projectRouter = router({
 
       const projectDir = ctx.workspace.getProjectPath();
       const config = detectProjectType(projectDir);
-      const devPreviewBasePath = `/vivd-studio/api/devpreview/${input.slug}/v${input.version}`;
       const hadDevServer = config.mode === "devserver" && devServerService.hasServer();
 
       if (hadDevServer) {
@@ -1444,7 +1438,7 @@ export const projectRouter = router({
 
       if (hadDevServer) {
         try {
-          await devServerService.restartDevServer(projectDir, devPreviewBasePath, {
+          await devServerService.restartDevServer(projectDir, "/", {
             resetCaches: true,
           });
         } catch (err) {

@@ -112,7 +112,24 @@ export function getPreviewRootUrl(
   if (!baseUrl) return "";
 
   if (previewMode === "static") {
-    return baseUrl.replace(/\/index\.html?$/i, "/");
+    try {
+      const url = new URL(baseUrl, window.location.href);
+      if (/\/index\.html?$/i.test(url.pathname)) {
+        url.pathname = url.pathname.replace(/\/index\.html?$/i, "/");
+      } else if (
+        !url.pathname.endsWith("/") &&
+        !/\.[a-z0-9]+$/i.test(url.pathname)
+      ) {
+        url.pathname = `${url.pathname}/`;
+      }
+      return url.toString();
+    } catch {
+      const normalized = baseUrl.replace(/\/index\.html?$/i, "/");
+      if (normalized.endsWith("/") || /\.[a-z0-9]+$/i.test(normalized)) {
+        return normalized;
+      }
+      return `${normalized}/`;
+    }
   }
 
   return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;

@@ -577,8 +577,8 @@ export class DevServerService {
     );
 
     // Important: The dev server itself always runs at base "/".
-    // We serve it behind different prefixes (e.g. /preview, /vivd-studio/api/devpreview/...),
-    // so the proxy layer strips its mount path and rewrites outgoing asset/navigation URLs.
+    // Studio now serves live preview directly from the runtime root and keeps
+    // any remaining path-based preview compatibility outside the dev server.
     const devServerBasePath = "/";
 
     // Create initial entry with installing status

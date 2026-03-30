@@ -32,8 +32,8 @@ implementation details.
 - [x] Lock down private Studio runtime shell and preview routes so unpublished workspace content is not reachable without runtime auth.
 - [x] Replace iframe query-token bootstrap with a short-lived Studio bootstrap flow that posts to the runtime, sets the cookie server-side, and redirects to a clean `/vivd-studio` URL without exposing the long-lived runtime token in browser-visible URLs.
 - [ ] Separate private Studio preview from intentionally shareable/public preview behavior and document that policy clearly.
-Current boundary: Studio runtime `/vivd-studio`, `/preview`, `/vivd-studio/api/preview`, and `/vivd-studio/api/devpreview` are private runtime surfaces; the control-plane external preview/share URL remains the separate `publicPreviewEnabled` decision until the broader preview-policy cleanup is finished.
-- [x] Add regression tests proving unauthenticated requests cannot read private runtime content from `/vivd-studio`, `/preview`, `/vivd-studio/api/preview`, or `/vivd-studio/api/devpreview`.
+Current boundary: the Studio runtime shell and its private helper/API routes remain auth-gated, while the old runtime `/preview` and `/vivd-studio/api/devpreview` compatibility transport has now been removed. The control-plane external preview/share URL remains the separate `publicPreviewEnabled` decision until the broader preview-policy cleanup is finished.
+- [x] Add regression tests proving unauthenticated requests cannot read private runtime content from the Studio shell and private runtime preview/API surfaces, including the now-removed legacy compatibility paths before cleanup.
 - [ ] Review whether deterministic Docker runtime route ids are acceptable once auth is enforced everywhere; remove any accidental reliance on path secrecy.
 - [ ] Re-review same-host object download exposure through `/_vivd_s3/*` and replace it with a narrower backend proxy or signed-download flow if the current MinIO passthrough is broader than intended.
 

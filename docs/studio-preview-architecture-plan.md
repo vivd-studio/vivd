@@ -44,17 +44,20 @@ This creates a long tail of framework-specific and browser-specific edge cases.
 
 ## Proposed Model
 
-### Two Explicit Preview Modes
+### Two Preview Surfaces, Chosen by Context
 
-Vivd should expose two distinct preview surfaces:
+Vivd should keep two distinct preview surfaces, but the product should choose
+between them automatically instead of exposing a manual mode switch in normal UX:
 
 1. Live Preview
-   Fast, editable, framework-native preview for Studio sessions.
+   Fast, editable, framework-native preview for active Studio sessions.
 
 2. Publish Preview
-   Built artifact preview that matches publish output as closely as possible.
+   Built artifact preview that matches publish output as closely as possible for
+   project pages and share flows.
 
-The product should stop implying that one preview surface can perfectly satisfy both goals.
+The product should stop implying that one preview surface can perfectly satisfy
+both goals, while also avoiding unnecessary user-facing surface switching.
 
 ### Live Preview Transport
 
@@ -197,8 +200,8 @@ Long term:
 
 ### Phase 3: Product Split
 
-- present Live Preview and Publish Preview explicitly in Studio
-- use built preview for the "matches publish" promise
+- keep the product split implicit: project page/share flows use Publish Preview, Studio uses Live Preview
+- use built preview for the "matches publish" promise on the project page/shareable surface
 - keep Live Preview optimized for edit speed and interaction fidelity
 
 ### Phase 4: Default Cutover
@@ -229,7 +232,6 @@ Add end-to-end and targeted regression coverage for:
 
 ## Open Questions
 
-- Should Live Preview and Publish Preview be separate tabs, a mode switch, or context-sensitive surfaces in one preview shell?
 - How much of the current edit-mode DOM patching should move into the new preview bridge versus staying as same-origin-only behavior on runtime-hosted Studio?
 - Do we want a stable runtime hostname per project/version in platform mode, or only ephemeral runtime IDs plus stable shareable preview URLs?
 - What minimum self-host ergonomics are acceptable for port-based runtimes in solo installs?
@@ -244,4 +246,5 @@ Short version:
 - Self-hosted live preview: per-runtime port by default, optional host-based mode with wildcard DNS/TLS
 - Shareable/public preview: stable project/version URL
 - Publish-fidelity preview: built artifact
+- Product UX: context-sensitive selection, with Publish Preview on the project page and Live Preview automatically inside Studio
 - Studio/preview coordination: explicit `postMessage` bridge

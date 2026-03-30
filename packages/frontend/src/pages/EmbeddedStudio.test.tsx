@@ -158,6 +158,15 @@ function renderEmbeddedStudio() {
   );
 }
 
+function expectNoPreviewSurfaceControls() {
+  expect(
+    screen.queryByRole("button", { name: "Live Preview" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Publish Preview" }),
+  ).not.toBeInTheDocument();
+}
+
 describe("EmbeddedStudio", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -305,6 +314,36 @@ describe("EmbeddedStudio", () => {
     expect(screen.getByText("Project not found")).toBeInTheDocument();
   });
 
+  it("shows the publish preview by default without preview-surface controls", () => {
+    renderEmbeddedStudio();
+
+    expect(screen.getByTestId("host-header")).toBeInTheDocument();
+    expect(screen.getByTitle("Preview - site-1")).toBeInTheDocument();
+    expectNoPreviewSurfaceControls();
+  });
+
+  it("hides the host header once studio is active", () => {
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        runtimeUrl: "https://studio.example.com/runtime",
+        compatibilityUrl: "https://studio.example.com/runtime",
+        bootstrapToken: null,
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    expect(screen.getByTitle("Vivd Studio - site-1")).toBeInTheDocument();
+    expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("host-header")).not.toBeInTheDocument();
+    expectNoPreviewSurfaceControls();
+  });
+
   it("auto-starts studio when initial generation is requested and no runtime is active", () => {
     const startStudioMutate = vi.fn();
     useLocationMock.mockReturnValue({
@@ -335,10 +374,12 @@ describe("EmbeddedStudio", () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1&initialGeneration=1",
     });
-    getStudioUrlUseQueryMock.mockReturnValueOnce({
+    getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
-        url: "https://studio.example.com/runtime",
+        url: "https://app.example.com/_studio/route-1",
+        runtimeUrl: "https://studio.example.com/runtime",
+        compatibilityUrl: "https://app.example.com/_studio/route-1",
         bootstrapToken: null,
       },
     });
@@ -357,12 +398,14 @@ describe("EmbeddedStudio", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: { type: "vivd:studio:ready" },
+          origin: "https://studio.example.com",
           source: contentWindowMock as unknown as MessageEventSource,
         }),
       );
       window.dispatchEvent(
         new MessageEvent("message", {
           data: { type: "vivd:studio:ready" },
+          origin: "https://studio.example.com",
           source: contentWindowMock as unknown as MessageEventSource,
         }),
       );
@@ -370,7 +413,7 @@ describe("EmbeddedStudio", () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "vivd:host:start-initial-generation" }),
-      "*",
+      "https://studio.example.com",
     );
     expect(
       postMessage.mock.calls.filter(
@@ -381,7 +424,10 @@ describe("EmbeddedStudio", () => {
   });
 
   it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", () => {
-    getStudioUrlUseQueryMock.mockReturnValueOnce({
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
         url: "https://studio.example.com/runtime",
@@ -423,6 +469,9 @@ describe("EmbeddedStudio", () => {
   });
 
   it("treats a same-origin studio iframe load as ready when the shell document is present", () => {
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
     const postMessage = vi.fn();
     const contentWindowMock = {
       postMessage,
@@ -439,7 +488,7 @@ describe("EmbeddedStudio", () => {
     );
     frameDocument.head.append(script);
 
-    getStudioUrlUseQueryMock.mockReturnValueOnce({
+    getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
         url: "http://app.localhost/_studio/runtime-123",
@@ -468,7 +517,7 @@ describe("EmbeddedStudio", () => {
     expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "vivd:host:theme" }),
-      "*",
+      "http://app.localhost",
     );
   });
 
@@ -476,6 +525,9 @@ describe("EmbeddedStudio", () => {
     vi.useFakeTimers();
 
     try {
+      useLocationMock.mockReturnValue({
+        search: "?view=studio&version=1",
+      });
       const postMessage = vi.fn();
       const contentWindowMock = {
         postMessage,
@@ -529,7 +581,7 @@ describe("EmbeddedStudio", () => {
       expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: "vivd:host:theme" }),
-        "*",
+        "http://app.localhost",
       );
     } finally {
       vi.useRealTimers();
@@ -540,6 +592,9 @@ describe("EmbeddedStudio", () => {
     vi.useFakeTimers();
 
     try {
+      useLocationMock.mockReturnValue({
+        search: "?view=studio&version=1",
+      });
       const postMessage = vi.fn();
       const contentWindowMock = {
         postMessage,
@@ -602,7 +657,7 @@ describe("EmbeddedStudio", () => {
       ).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: "vivd:host:theme" }),
-        "*",
+        "http://app.localhost",
       );
     } finally {
       vi.useRealTimers();
@@ -613,6 +668,9 @@ describe("EmbeddedStudio", () => {
     vi.useFakeTimers();
 
     try {
+      useLocationMock.mockReturnValue({
+        search: "?view=studio&version=1",
+      });
       let resolveHealthFetch: ((value: { ok: boolean }) => void) | null = null;
       const fetchMock = vi.fn().mockImplementation(
         () =>
@@ -703,7 +761,7 @@ describe("EmbeddedStudio", () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1&initialGeneration=1",
     });
-    getStudioUrlUseQueryMock.mockReturnValueOnce({
+    getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
         url: "https://studio.example.com/runtime",
@@ -728,6 +786,7 @@ describe("EmbeddedStudio", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: { type: "vivd:studio:ready" },
+          origin: "https://studio.example.com",
           source: contentWindowMock as unknown as MessageEventSource,
         }),
       );

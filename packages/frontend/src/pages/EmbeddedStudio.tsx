@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDocumentTitle } from "@/lib/brand";
@@ -57,6 +56,7 @@ import {
 } from "@/hooks/useStudioHostRuntime";
 import { useStudioIframeLifecycle } from "@/hooks/useStudioIframeLifecycle";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
+import { readStudioRuntimeOrigins } from "@/lib/studioRuntimeSession";
 import { toast } from "sonner";
 import {
   BarChart3,
@@ -86,6 +86,7 @@ export default function EmbeddedStudio() {
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
   const [editRequested, setEditRequested] = useState(false);
+  const [previewSurface, setPreviewSurface] = useState<"live" | "publish">("publish");
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [previewUrlCopied, setPreviewUrlCopied] = useState(false);
   const studioIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -210,11 +211,15 @@ export default function EmbeddedStudio() {
   const canManagePreview = membership?.organizationRole !== "client_editor";
   const canRenameProject = membership?.organizationRole !== "client_editor";
   const isRenamePending = renameSlugMutation.isPending;
-
   const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (studioUrlQuery.data?.status !== "running") return null;
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
+      studioUrlQuery.data,
+    );
     return {
       url: studioUrlQuery.data.url,
+      runtimeUrl,
+      compatibilityUrl,
       bootstrapToken: studioUrlQuery.data.bootstrapToken,
       userActionToken: studioUrlQuery.data.userActionToken,
     };
@@ -222,8 +227,13 @@ export default function EmbeddedStudio() {
 
   const startedStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (!startStudio.data?.success) return null;
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
+      startStudio.data,
+    );
     return {
       url: startStudio.data.url,
+      runtimeUrl,
+      compatibilityUrl,
       bootstrapToken: startStudio.data.bootstrapToken,
       userActionToken: startStudio.data.userActionToken,
     };
@@ -252,9 +262,14 @@ export default function EmbeddedStudio() {
 
     const result = await studioUrlQuery.refetch();
     if (result.data?.status !== "running") return null;
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
+      result.data,
+    );
 
     return {
       url: result.data.url,
+      runtimeUrl,
+      compatibilityUrl,
       bootstrapToken: result.data.bootstrapToken,
       userActionToken: result.data.userActionToken,
     };
@@ -270,6 +285,7 @@ export default function EmbeddedStudio() {
     replaceRuntime,
     clearRuntimeOverride,
     reloadStudioIframe,
+    studioRuntimeUrl,
   } = useStudioHostRuntime({
     resetKey: `${projectSlug || "project"}:v${studioVersion}`,
     runtime: preferredStudioRuntime,
@@ -295,6 +311,7 @@ export default function EmbeddedStudio() {
   // Reset local state when navigating between projects.
   useEffect(() => {
     setEditRequested(false);
+    setPreviewSurface("publish");
     startStudio.reset();
     hardRestartStudio.reset();
   }, [projectSlug, startStudio.reset, hardRestartStudio.reset]);
@@ -305,10 +322,11 @@ export default function EmbeddedStudio() {
 
   // If we navigated back from fullscreen with `?view=studio`, prefer showing the running studio.
   useEffect(() => {
-    if (shouldResumeStudio) {
+    if (shouldResumeStudio && studioUrlQuery.data?.status === "running") {
       setEditRequested(false);
+      setPreviewSurface("live");
     }
-  }, [shouldResumeStudio]);
+  }, [shouldResumeStudio, studioUrlQuery.data?.status]);
 
   // Set document title to project name
   useEffect(() => {
@@ -324,6 +342,7 @@ export default function EmbeddedStudio() {
     if (!projectSlug || !project) return;
     if (isRenamePending) return;
     if (editRequested || startStudio.isPending || hardRestartStudio.isPending) return;
+    setPreviewSurface("live");
     setEditRequested(true);
     clearRuntimeOverride();
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
@@ -335,6 +354,7 @@ export default function EmbeddedStudio() {
     if (editRequested || startStudio.isPending || startStudio.data) return;
     if (hardRestartStudio.isPending || isRenamePending) return;
 
+    setPreviewSurface("live");
     setEditRequested(true);
     clearRuntimeOverride();
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
@@ -364,6 +384,7 @@ export default function EmbeddedStudio() {
         ? requestedVersion
         : studioVersion;
 
+    setPreviewSurface("live");
     setEditRequested(true);
     clearRuntimeOverride();
 
@@ -379,9 +400,12 @@ export default function EmbeddedStudio() {
         return;
       }
 
+      const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(result);
       replaceRuntime(
         {
           url: result.url,
+          runtimeUrl,
+          compatibilityUrl,
           bootstrapToken: result.bootstrapToken,
           userActionToken: result.userActionToken,
         },
@@ -397,6 +421,7 @@ export default function EmbeddedStudio() {
   const sendInitialGenerationBootstrap = useInitialGenerationBootstrap({
     enabled: initialGenerationRequested,
     iframeRef: studioIframeRef,
+    studioBaseUrl,
     projectSlug,
     version: studioVersion,
   });
@@ -437,9 +462,10 @@ export default function EmbeddedStudio() {
   });
 
   const studioIframeSrc = useMemo(() => {
-    if (!studioBaseUrl) return null;
+    const liveStudioBaseUrl = studioRuntimeUrl ?? studioBaseUrl;
+    if (!liveStudioBaseUrl) return null;
 
-    const url = new URL(resolveStudioRuntimeUrl(studioBaseUrl, "vivd-studio"));
+    const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
@@ -468,6 +494,7 @@ export default function EmbeddedStudio() {
     projectSlug,
     publicPreviewEnabled,
     studioBaseUrl,
+    studioRuntimeUrl,
     studioVersion,
   ]);
 
@@ -483,6 +510,8 @@ export default function EmbeddedStudio() {
     if (externalPreview?.status !== "ready") return null;
     return externalPreview.url;
   }, [externalPreview, projectSlug, project]);
+
+  const livePreviewActive = previewSurface === "live";
 
   const handleCopyPreviewUrl = () => {
     if (isRenamePending) return;
@@ -518,10 +547,8 @@ export default function EmbeddedStudio() {
     (studioVersion === project?.currentVersion && project?.status === "completed");
 
   const renderEmbeddedHeader = ({
-    actionSlot,
     includeProjectActions = false,
   }: {
-    actionSlot?: ReactNode;
     includeProjectActions?: boolean;
   }) => {
     const projectActions = includeProjectActions ? (
@@ -719,7 +746,6 @@ export default function EmbeddedStudio() {
         trailing={
           <>
             {projectActions}
-            {actionSlot}
           </>
         }
       />
@@ -781,17 +807,7 @@ export default function EmbeddedStudio() {
 
   if (editRequested && !studioIframeSrc) {
     return (
-      <FramedHostShell
-        className="h-full"
-        header={renderEmbeddedHeader({
-          actionSlot: (
-            <Button disabled size="sm" className="h-8 rounded-md px-3">
-              <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
-              Booting studio…
-            </Button>
-          ),
-        })}
-      >
+      <FramedHostShell className="h-full">
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="bg-background/80">
             <StudioStartupLoading className="h-full min-h-0" />
@@ -803,75 +819,79 @@ export default function EmbeddedStudio() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {studioIframeSrc ? (
-        <div className="flex-1 min-h-0">
-          <div className="relative h-full w-full">
-            <StudioBootstrapIframe
-              iframeRef={studioIframeRef}
-              iframeName={studioIframeTarget}
-              iframeKey={studioIframeRequestKey}
-              title={`Vivd Studio - ${projectSlug}`}
-              cleanSrc={studioIframeSrc}
-              bootstrapAction={studioBootstrapAction}
-              bootstrapToken={studioBootstrapToken}
-              userActionToken={studioUserActionToken}
-              submissionKey={studioIframeRequestKey}
-              className="h-full w-full border-0"
-              allow="fullscreen; clipboard-write"
-              allowFullScreen
-              onLoad={handleStudioIframeLoad}
-              onError={handleStudioIframeError}
-            />
+      {livePreviewActive && studioIframeSrc ? (
+        <FramedHostShell className="h-full">
+          <div className={HOST_VIEWPORT_INSET_CLASS}>
+            <FramedViewport className="bg-background/80">
+              <div className="relative h-full w-full">
+                <StudioBootstrapIframe
+                  iframeRef={studioIframeRef}
+                  iframeName={studioIframeTarget}
+                  iframeKey={studioIframeRequestKey}
+                  title={`Vivd Studio - ${projectSlug}`}
+                  cleanSrc={studioIframeSrc}
+                  bootstrapAction={studioBootstrapAction}
+                  bootstrapToken={studioBootstrapToken}
+                  userActionToken={studioUserActionToken}
+                  submissionKey={studioIframeRequestKey}
+                  className="h-full w-full border-0"
+                  allow="fullscreen; clipboard-write"
+                  allowFullScreen
+                  onLoad={handleStudioIframeLoad}
+                  onError={handleStudioIframeError}
+                />
 
-            {isStudioRecovering ? (
-              <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-                Reconnecting studio machine...
-              </div>
-            ) : null}
-
-            {!studioReady ? (
-              <div className="absolute inset-0 z-10 bg-background">
-                {studioLoadTimedOut || studioLoadErrored ? (
-                  <div className="flex h-full w-full items-center justify-center px-6">
-                    <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
-                      <div className="text-base font-semibold">
-                        Studio is taking longer than usual
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        The studio machine may still be booting or it might be
-                        unresponsive (common after restarts). Try reloading the
-                        iframe or doing a hard restart.
-                      </div>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => void reloadStudioIframe()}
-                        >
-                          Reload
-                        </Button>
-                        <Button
-                          onClick={() => void handleHardRestart()}
-                          disabled={hardRestartStudio.isPending}
-                        >
-                          {hardRestartStudio.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Restarting…
-                            </>
-                          ) : (
-                            "Hard restart"
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                {isStudioRecovering ? (
+                  <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
+                    Reconnecting studio machine...
                   </div>
-                ) : (
-                  <StudioStartupLoading className="h-full min-h-0" />
-                )}
+                ) : null}
+
+                {!studioReady ? (
+                  <div className="absolute inset-0 z-10 bg-background">
+                    {studioLoadTimedOut || studioLoadErrored ? (
+                      <div className="flex h-full w-full items-center justify-center px-6">
+                        <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+                          <div className="text-base font-semibold">
+                            Studio is taking longer than usual
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            The studio machine may still be booting or it might be
+                            unresponsive (common after restarts). Try reloading the
+                            iframe or doing a hard restart.
+                          </div>
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => void reloadStudioIframe()}
+                            >
+                              Reload
+                            </Button>
+                            <Button
+                              onClick={() => void handleHardRestart()}
+                              disabled={hardRestartStudio.isPending}
+                            >
+                              {hardRestartStudio.isPending ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Restarting…
+                                </>
+                              ) : (
+                                "Hard restart"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <StudioStartupLoading className="h-full min-h-0" />
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </FramedViewport>
           </div>
-        </div>
+        </FramedHostShell>
       ) : (
         <FramedHostShell
           className="h-full"
@@ -890,7 +910,7 @@ export default function EmbeddedStudio() {
                 <div className="flex h-full items-center justify-center p-6">
                   <div className="flex w-full max-w-4xl flex-col gap-4">
                     <div className="text-sm text-muted-foreground">
-                      Preview not ready yet
+                      Publish preview not ready yet
                       {externalPreview?.status
                         ? ` (${externalPreview.status})`
                         : ""}. Click{" "}

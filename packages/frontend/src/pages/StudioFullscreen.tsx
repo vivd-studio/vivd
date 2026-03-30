@@ -14,6 +14,7 @@ import {
 } from "@/hooks/useStudioHostRuntime";
 import { useStudioIframeLifecycle } from "@/hooks/useStudioIframeLifecycle";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
+import { readStudioRuntimeOrigins } from "@/lib/studioRuntimeSession";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -70,8 +71,13 @@ export default function StudioFullscreen() {
 
   const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (studioUrlQuery.data?.status !== "running") return null;
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
+      studioUrlQuery.data,
+    );
     return {
       url: studioUrlQuery.data.url,
+      runtimeUrl,
+      compatibilityUrl,
       bootstrapToken: studioUrlQuery.data.bootstrapToken,
       userActionToken: studioUrlQuery.data.userActionToken,
     };
@@ -79,8 +85,13 @@ export default function StudioFullscreen() {
 
   const startedStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (!startStudio.data?.success) return null;
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
+      startStudio.data,
+    );
     return {
       url: startStudio.data.url,
+      runtimeUrl,
+      compatibilityUrl,
       bootstrapToken: startStudio.data.bootstrapToken,
       userActionToken: startStudio.data.userActionToken,
     };
@@ -106,9 +117,14 @@ export default function StudioFullscreen() {
 
     const result = await studioUrlQuery.refetch();
     if (result.data?.status !== "running") return null;
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
+      result.data,
+    );
 
     return {
       url: result.data.url,
+      runtimeUrl,
+      compatibilityUrl,
       bootstrapToken: result.data.bootstrapToken,
       userActionToken: result.data.userActionToken,
     };
@@ -116,6 +132,7 @@ export default function StudioFullscreen() {
 
   const {
     studioBaseUrl,
+    studioRuntimeUrl,
     studioBootstrapToken,
     studioUserActionToken,
     studioBootstrapAction,
@@ -187,9 +204,12 @@ export default function StudioFullscreen() {
       return;
     }
 
+    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(result);
     replaceRuntime(
       {
         url: result.url,
+        runtimeUrl,
+        compatibilityUrl,
         bootstrapToken: result.bootstrapToken,
         userActionToken: result.userActionToken,
       },
@@ -200,6 +220,7 @@ export default function StudioFullscreen() {
   const sendInitialGenerationBootstrap = useInitialGenerationBootstrap({
     enabled: initialGenerationRequested,
     iframeRef: studioIframeRef,
+    studioBaseUrl,
     projectSlug,
     version,
   });
@@ -237,8 +258,9 @@ export default function StudioFullscreen() {
   });
 
   const studioIframeSrc = useMemo(() => {
-    if (!studioBaseUrl) return null;
-    const url = new URL(resolveStudioRuntimeUrl(studioBaseUrl, "vivd-studio"));
+    const liveStudioBaseUrl = studioRuntimeUrl ?? studioBaseUrl;
+    if (!liveStudioBaseUrl) return null;
+    const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
     url.searchParams.set("fullscreen", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
@@ -260,7 +282,7 @@ export default function StudioFullscreen() {
       ).toString(),
     );
     return url.toString();
-  }, [initialGenerationRequested, projectSlug, studioBaseUrl, version]);
+  }, [initialGenerationRequested, projectSlug, studioBaseUrl, studioRuntimeUrl, version]);
 
   const studioIframeTarget = useMemo(
     () => `vivd-studio-fullscreen-${projectSlug || "project"}-v${version}`,

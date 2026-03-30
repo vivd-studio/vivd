@@ -7,7 +7,7 @@ describe("resolveStudioRuntimeUrl", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps path-mounted runtimes on the current host", () => {
+  it("preserves path-mounted runtimes without rebasing them onto the current host", () => {
     vi.stubGlobal("window", {
       location: {
         origin: "http://localhost",
@@ -19,7 +19,7 @@ describe("resolveStudioRuntimeUrl", () => {
         "http://app.localhost/_studio/runtime-123",
         "vivd-studio",
       ),
-    ).toBe("http://localhost/_studio/runtime-123/vivd-studio");
+    ).toBe("http://app.localhost/_studio/runtime-123/vivd-studio");
   });
 
   it("preserves the provided origin for non path-mounted runtimes", () => {

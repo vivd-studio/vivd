@@ -4,6 +4,7 @@ import type {
   StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
+  StudioMachineUrlResult,
   StudioRuntimeAuthIdentity,
 } from "../types";
 import { mergeManagedStudioMachineEnv } from "../env";
@@ -739,7 +740,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     organizationId: string,
     projectSlug: string,
     version: number,
-  ): Promise<{ studioId: string; url: string; accessToken?: string } | null> {
+  ): Promise<StudioMachineUrlResult | null> {
     try {
       return getStudioMachineUrlWorkflow(
         {

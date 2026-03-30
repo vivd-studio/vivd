@@ -23,6 +23,10 @@ import {
   rewriteRootAssetUrlsInText,
   stripDevServerToolingFromHtml,
 } from "./http/basePathRewrite.js";
+import {
+  createPreviewBridgeScript,
+  injectPreviewBridgeScript,
+} from "./http/previewBridge.js";
 import { createRequireStudioAuth } from "./http/studioAuth.js";
 import { registerStudioClientHttpRoutes } from "./httpRoutes/client.js";
 import { validateStudioConfig } from "@vivd/shared";
@@ -196,7 +200,7 @@ async function writeUploadedFile(
 
 // Single proxy instance to avoid adding EventEmitter listeners per request.
 // The route handler sets `vivdDevPreviewTarget` and `vivdDevPreviewBasePath` on the request.
-const devPreviewProxy = createProxyMiddleware({
+  const devPreviewProxy = createProxyMiddleware({
   target: "http://127.0.0.1:0", // Overridden by `router` per request
   changeOrigin: true,
   ws: true,
@@ -269,13 +273,19 @@ const devPreviewProxy = createProxyMiddleware({
       }
 
       const text = responseBuffer.toString("utf8");
-      const rewritten = rewriteRootAssetUrlsInText(text, basePath);
+      const shouldRewrite = Boolean(basePath && basePath !== "/");
+      const rewritten = shouldRewrite
+        ? rewriteRootAssetUrlsInText(text, basePath)
+        : text;
       const isHtml = ct.includes("text/html");
       let finalText = isHtml ? stripDevServerToolingFromHtml(rewritten) : rewritten;
 
       // Inject base path rewrite script for HTML pages
-      if (isHtml && basePath) {
+      if (isHtml && shouldRewrite) {
         finalText = injectBasePathScript(finalText, basePath);
+      }
+      if (isHtml) {
+        finalText = injectPreviewBridgeScript(finalText);
       }
 
       return Buffer.from(finalText, "utf8");
@@ -341,6 +351,14 @@ async function startServer() {
       router: appRouter,
       createContext: ({ req, res }) => createContext(workspace, req, res),
     }),
+  );
+
+  app.get(
+    "/vivd-studio/api/preview-bridge.js",
+    requireStudioAuth(),
+    (_req, res) => {
+      res.type("application/javascript").send(createPreviewBridgeScript());
+    },
   );
 
   registerStudioRuntimeHttpRoutes({

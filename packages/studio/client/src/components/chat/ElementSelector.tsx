@@ -61,6 +61,8 @@ export const ELEMENT_SELECTOR_SCRIPT = `
 
   if (window.__vivdSelectorActive) return;
   window.__vivdSelectorActive = true;
+  const parentWindow = window.parent && window.parent !== window ? window.parent : null;
+  const parentOrigin = window.location.origin;
 
   let hoveredElement = null;
   const originalStyles = new Map();
@@ -225,7 +227,8 @@ export const ELEMENT_SELECTOR_SCRIPT = `
       sourceFile = srcMatch ? srcMatch[1] : astroSourceFile;
     }
     
-    window.parent.postMessage({
+    if (parentWindow) {
+      parentWindow.postMessage({
       type: 'vivd-element-selected',
       data: {
         description,
@@ -237,14 +240,17 @@ export const ELEMENT_SELECTOR_SCRIPT = `
         astroSourceFile: sourceFile,
         astroSourceLoc,
       }
-    }, '*');
+      }, parentOrigin);
+    }
     
     cleanup();
   }
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') {
-      window.parent.postMessage({ type: 'vivd-selector-cancelled' }, '*');
+      if (parentWindow) {
+        parentWindow.postMessage({ type: 'vivd-selector-cancelled' }, parentOrigin);
+      }
       cleanup();
     }
   }
@@ -271,6 +277,9 @@ export const ELEMENT_SELECTOR_SCRIPT = `
 
   // Listen for cleanup message from parent
   window.addEventListener('message', function handler(e) {
+    if (!parentWindow || e.source !== parentWindow || e.origin !== parentOrigin) {
+      return;
+    }
     if (e.data?.type === 'vivd-cleanup-selector') {
       cleanup();
       window.removeEventListener('message', handler);

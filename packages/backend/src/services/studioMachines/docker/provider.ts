@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import { listStudioVisitMsByIdentity } from "../visitStore";
+import net from "node:net";
 import type {
   ManagedStudioMachineProvider,
   StudioMachineParkResult,
@@ -87,6 +89,18 @@ function parseEnvList(values: string[] | undefined): Record<string, string> {
     env[value.slice(0, idx)] = value.slice(idx + 1);
   }
   return env;
+}
+
+function isPortAvailable(port: number, hostname: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+
+    server.on("error", () => resolve(false));
+    server.listen({ port, host: hostname }, () => {
+      server.close(() => resolve(true));
+    });
+  });
 }
 
 function isContainerInfo(
@@ -187,6 +201,30 @@ function getContainerRouteId(
   container: DockerContainerSummary | DockerContainerInfo,
 ): string | null {
   return trimToken(getContainerLabels(container)["vivd_route_id"]);
+}
+
+function getContainerExternalPort(
+  container: DockerContainerSummary | DockerContainerInfo,
+): number | null {
+  const fromLabel = trimToken(getContainerLabels(container)["vivd_external_port"]);
+  if (fromLabel) {
+    const parsed = Number.parseInt(fromLabel, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
+  const bindings = container.HostConfig?.PortBindings?.[`${STUDIO_INTERNAL_PORT}/tcp`];
+  const fromBinding = bindings?.find((binding) => {
+    const hostPort = trimToken(binding.HostPort);
+    if (!hostPort) return false;
+    const parsed = Number.parseInt(hostPort, 10);
+    return Number.isFinite(parsed) && parsed > 0;
+  });
+  if (fromBinding?.HostPort) {
+    const parsed = Number.parseInt(fromBinding.HostPort, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
+  return null;
 }
 
 function containerStateStatus(
@@ -328,6 +366,8 @@ function summaryFromContainer(options: {
   desiredImage: string;
   routePath: string | null;
   url: string | null;
+  runtimeUrl: string | null;
+  compatibilityUrl: string | null;
   cpuKind: string;
 }): StudioMachineSummary {
   const identity = getContainerIdentity(options.container);
@@ -355,9 +395,11 @@ function summaryFromContainer(options: {
     organizationId: identity.organizationId,
     projectSlug: identity.projectSlug,
     version: identity.version,
-    externalPort: null,
+    externalPort: getContainerExternalPort(options.container),
     routePath: options.routePath,
     url: options.url,
+    runtimeUrl: options.runtimeUrl,
+    compatibilityUrl: options.compatibilityUrl,
     image: configuredImage,
     desiredImage: options.desiredImage,
     imageOutdated: !!configuredImage && configuredImage !== options.desiredImage,
@@ -390,6 +432,7 @@ function createContainerSpec(options: {
   accessToken: string;
   desiredImage: string;
   routeId: string;
+  externalPort: number;
   env: Record<string, string>;
   config: DockerProviderConfig;
   networkName: string;
@@ -401,6 +444,7 @@ function createContainerSpec(options: {
     vivd_project_slug: options.args.projectSlug,
     vivd_project_version: String(options.args.version),
     vivd_studio_id: options.studioId,
+    vivd_external_port: String(options.externalPort),
     vivd_image: options.desiredImage,
     vivd_route_id: options.routeId,
     vivd_created_at: new Date().toISOString(),
@@ -418,11 +462,12 @@ function createContainerSpec(options: {
       NetworkMode: options.networkName,
       NanoCpus: options.config.nanoCpus,
       Memory: options.config.memoryBytes,
+      PortBindings: {
+        [`${STUDIO_INTERNAL_PORT}/tcp`]: [{ HostPort: String(options.externalPort) }],
+      },
     },
   };
 }
-
-import crypto from "node:crypto";
 
 export class DockerStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "docker" as const;
@@ -442,6 +487,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   });
 
   private inflight = new Map<string, Promise<StudioMachineStartResult>>();
+  private nextPublicPort = this.config.publicPortStart;
   private reconcilerInterval: NodeJS.Timeout | null = null;
   private reconcileInFlight: Promise<StudioMachineReconcileResult> | null = null;
   private idleCleanupInterval: NodeJS.Timeout | null = null;
@@ -487,6 +533,17 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
 
   private touchKey(studioKey: string): void {
     this.lastActivityByStudioKey.set(studioKey, Date.now());
+  }
+
+  private async allocatePublicPort(): Promise<number> {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const port = this.nextPublicPort++;
+      if (await isPortAvailable(port, "0.0.0.0")) {
+        return port;
+      }
+    }
+
+    throw new Error("[DockerMachines] Could not allocate a public port for studio runtime");
   }
 
   private resolveManagedMainBackendUrl(raw: string | null | undefined): string | null {
@@ -698,6 +755,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     desiredImage: string;
     preferredAccessToken?: string | null;
     preserveStudioIdFrom?: DockerContainerInfo | null;
+    preserveExternalPortFrom?: DockerContainerInfo | null;
   }): Promise<DockerContainerInfo> {
     const studioId =
       options.preserveStudioIdFrom
@@ -707,6 +765,12 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       trimToken(options.preferredAccessToken) ||
       getContainerAccessToken(options.preserveStudioIdFrom || ({} as DockerContainerInfo)) ||
       this.config.generateStudioAccessToken();
+    const externalPort =
+      getContainerExternalPort(
+        options.preserveExternalPortFrom ||
+          options.preserveStudioIdFrom ||
+          ({} as DockerContainerInfo),
+      ) || (await this.allocatePublicPort());
     const routeId = this.config.routeIdFor(
       options.args.organizationId,
       options.args.projectSlug,
@@ -724,6 +788,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       accessToken,
       desiredImage: options.desiredImage,
       routeId,
+      externalPort,
       env,
       config: this.config,
       networkName,
@@ -788,6 +853,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       desiredImage: options.desiredImage,
       preferredAccessToken: options.preferredAccessToken,
       preserveStudioIdFrom: options.existing,
+      preserveExternalPortFrom: options.existing,
     });
   }
 
@@ -838,17 +904,24 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       }
     }
 
+    const externalPort = getContainerExternalPort(container);
+    const runtimeUrl = externalPort
+      ? this.config.getPublicUrlForPort(externalPort)
+      : null;
+    const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
+
     await this.waitForReady({
       containerId: container.Id,
       routePath,
       timeoutMs: this.config.startTimeoutMs,
     });
 
-    const url = this.config.getPublicUrlForRoutePath(routePath);
     this.touchKey(studioKey);
     return {
       studioId: getContainerStudioId(container, args.env.STUDIO_ID),
-      url,
+      url: runtimeUrl ?? compatibilityUrl,
+      runtimeUrl,
+      compatibilityUrl,
       accessToken,
     };
   }
@@ -1152,9 +1225,16 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       getContainerRouteId(inspected) ||
       this.config.routeIdFor(organizationId, projectSlug, version);
     const routePath = this.routeService.getRoutePath(routeId);
+    const externalPort = getContainerExternalPort(inspected);
+    const runtimeUrl = externalPort
+      ? this.config.getPublicUrlForPort(externalPort)
+      : null;
+    const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
     return {
       studioId: getContainerStudioId(inspected, null),
-      url: this.config.getPublicUrlForRoutePath(routePath),
+      url: runtimeUrl ?? compatibilityUrl,
+      runtimeUrl,
+      compatibilityUrl,
       accessToken,
     };
   }
@@ -1225,15 +1305,22 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           identity.organizationId,
           identity.projectSlug,
           identity.version,
-        );
+      );
       const routePath = this.routeService.getRoutePath(routeId);
       const running = isRunningContainer(inspected);
+      const externalPort = getContainerExternalPort(inspected);
       summaries.push(
         summaryFromContainer({
           container: inspected,
           desiredImage,
           routePath,
-          url: running ? this.config.getPublicUrlForRoutePath(routePath) : null,
+          url: running
+            ? externalPort
+              ? this.config.getPublicUrlForPort(externalPort)
+              : this.config.getPublicUrlForRoutePath(routePath)
+            : null,
+          runtimeUrl: running && externalPort ? this.config.getPublicUrlForPort(externalPort) : null,
+          compatibilityUrl: this.config.getPublicUrlForRoutePath(routePath),
           cpuKind: this.config.cpuKindLabel,
         }),
       );

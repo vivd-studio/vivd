@@ -235,6 +235,8 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(result).toEqual({
       studioId: createPayload.config.metadata.vivd_studio_id,
       url: "https://studio.test:4100",
+      runtimeUrl: "https://studio.test:4100",
+      compatibilityUrl: null,
       port: 4100,
       accessToken: "token-generated",
     });
@@ -507,6 +509,8 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(result).toEqual({
       studioId: "studio-1",
       url: "https://studio.test:4100",
+      runtimeUrl: "https://studio.test:4100",
+      compatibilityUrl: null,
       port: 4100,
       accessToken,
     });

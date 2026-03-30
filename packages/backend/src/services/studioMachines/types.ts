@@ -24,6 +24,8 @@ export interface StudioMachineRestartArgs extends StudioMachineStartArgs {
 export interface StudioMachineStartResult {
   studioId: string;
   url: string;
+  runtimeUrl?: string | null;
+  compatibilityUrl?: string | null;
   port?: number;
   accessToken?: string;
 }
@@ -38,6 +40,8 @@ export type StudioRuntimeAuthIdentity = {
 export interface StudioMachineUrlResult {
   studioId: string;
   url: string;
+  runtimeUrl?: string | null;
+  compatibilityUrl?: string | null;
   accessToken?: string;
 }
 
@@ -74,6 +78,8 @@ export interface StudioMachineSummary {
   externalPort: number | null;
   routePath: string | null;
   url: string | null;
+  runtimeUrl: string | null;
+  compatibilityUrl: string | null;
   image: string | null;
   desiredImage: string;
   imageOutdated: boolean;

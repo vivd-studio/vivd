@@ -190,6 +190,8 @@ export function MobileActionsMenu({
 }: MobileActionsMenuProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const canCopyPreviewUrl = Boolean(projectSlug) && publicPreviewEnabled;
+  const isEditDisabled = hasUnsavedChanges && !editMode;
+  const editLabel = editMode ? "Stop Editing" : "Edit Text";
 
   const handleDownloadZip = () => {
     if (!projectSlug) return;
@@ -323,10 +325,10 @@ export function MobileActionsMenu({
             ) : null}
             <DropdownMenuItem
               onClick={toggleEditMode}
-              disabled={hasUnsavedChanges && !editMode}
+              disabled={isEditDisabled}
             >
               <Edit3 className="w-4 h-4 mr-2" />
-              {editMode ? "Stop Editing" : "Edit Text"}
+              {editLabel}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

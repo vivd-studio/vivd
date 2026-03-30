@@ -1,5 +1,12 @@
-import { forwardRef, useEffect, useRef, useState, type SyntheticEvent } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from "react";
 import { ELEMENT_SELECTOR_SCRIPT } from "../chat/ElementSelector";
+import { buildPreviewBridgeScript } from "./bridge";
 import { buildCacheBustedPreviewUrl } from "./navigation";
 
 interface PreviewIframeProps {
@@ -55,7 +62,7 @@ const shouldRetryForPreviewError = (payload: {
 // Scrollbar style injection for the iframe
 const injectScrollbarStyles = (
   iframe: HTMLIFrameElement,
-  isMobile: boolean
+  isMobile: boolean,
 ) => {
   try {
     const doc = iframe.contentDocument;
@@ -189,14 +196,46 @@ const injectSelectorScript = (iframe: HTMLIFrameElement) => {
   }
 };
 
+const injectPreviewBridgeScript = (
+  iframe: HTMLIFrameElement,
+  parentOrigin: string,
+): boolean => {
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) return false;
+
+    const previousFlag = (iframe.contentWindow as any)?.__vivdPreviewBridgeInstalled;
+    if (previousFlag) return true;
+
+    const script = doc.createElement("script");
+    script.id = "vivd-preview-bridge-script";
+    script.textContent = buildPreviewBridgeScript({ parentOrigin });
+
+    const target = doc.head || doc.documentElement || doc.body;
+    if (!target) return false;
+
+    target.appendChild(script);
+
+    const installed = Boolean(
+      (iframe.contentWindow as any)?.__vivdPreviewBridgeInstalled,
+    );
+    if (!installed) {
+      script.remove();
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("Could not inject preview bridge into iframe", err);
+    return false;
+  }
+};
+
 const inferVivdBasePathFromPathname = (pathname: string): string | undefined => {
   if (!pathname.startsWith("/")) return undefined;
 
-  const previewMatch = pathname.match(/^(.*\/preview)(?:\/|$)/);
-  if (previewMatch) return previewMatch[1];
-
   const studioMatch = pathname.match(
-    /^(.*\/vivd-studio\/api\/(?:preview|devpreview)\/[^/]+\/v[^/]+)(?:\/|$)/,
+    /^(.*\/vivd-studio\/api\/preview\/[^/]+\/v[^/]+)(?:\/|$)/,
   );
   if (studioMatch) return studioMatch[1];
 
@@ -232,8 +271,8 @@ const resolvePreviewHref = (
   const href = hrefAttr.trim();
   if (!href) return undefined;
 
-  // Root-relative URLs need to be prefixed with the preview base path so they stay
-  // inside `/preview` or `/vivd-studio/api/(preview|devpreview)/...`.
+  // Root-relative URLs need to be prefixed when the iframe is mounted under a
+  // path-based preview base rather than the runtime root.
   if (href.startsWith("/")) {
     const basePath = getVivdBasePathForIframe(iframe);
     const base = basePath?.endsWith("/") ? basePath.slice(0, -1) : basePath;
@@ -540,8 +579,9 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       onLocationChange,
       selectorMode = false,
     },
-    ref
+    ref,
   ) {
+    const iframeRef = useRef<HTMLIFrameElement | null>(null);
     // Track retry attempts - resets when refreshKey changes (intentional refresh)
     const retryCountRef = useRef(0);
     const lastRefreshKeyRef = useRef(refreshKey);
@@ -595,8 +635,16 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       // Reset retry count on successful load
       retryCountRef.current = 0;
 
-      installPreviewNavigationStartListener(iframe, onNavigateStart);
-      installPreviewLocationChangeListener(iframe, onLocationChange);
+      const bridgeInstalled = injectPreviewBridgeScript(
+        iframe,
+        window.location.origin,
+      );
+
+      if (!bridgeInstalled) {
+        installPreviewNavigationStartListener(iframe, onNavigateStart);
+        installPreviewLocationChangeListener(iframe, onLocationChange);
+      }
+
       installPreviewPdfDownloadInterceptor(iframe);
       injectScrollbarStyles(iframe, isMobile);
 
@@ -605,6 +653,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
       if (selectorMode) {
         injectHighlightListener(iframe);
       }
+
       onLoad?.();
     };
 
@@ -626,7 +675,14 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
     return (
       <iframe
         key={`${refreshKey}_${internalRefreshKey}`}
-        ref={ref}
+        ref={(node) => {
+          iframeRef.current = node;
+          if (typeof ref === "function") {
+            ref(node);
+          } else if (ref) {
+            ref.current = node;
+          }
+        }}
         src={cacheBustedSrc}
         className={`w-full h-full border-0 ${className}`}
         title="Preview"

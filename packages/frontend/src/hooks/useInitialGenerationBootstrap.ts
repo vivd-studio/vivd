@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, type RefObject } from "react";
+import { getVivdStudioBridgeOrigin } from "@/lib/studioBridge";
 
 const INITIAL_GENERATION_BOOTSTRAP_STORAGE_PREFIX =
   "vivd.initialGenerationBootstrapped";
@@ -13,6 +14,7 @@ export function getInitialGenerationBootstrapStorageKey(
 type UseInitialGenerationBootstrapOptions = {
   enabled: boolean;
   iframeRef: RefObject<HTMLIFrameElement | null>;
+  studioBaseUrl: string | null;
   projectSlug: string | undefined;
   version: number;
 };
@@ -20,6 +22,7 @@ type UseInitialGenerationBootstrapOptions = {
 export function useInitialGenerationBootstrap({
   enabled,
   iframeRef,
+  studioBaseUrl,
   projectSlug,
   version,
 }: UseInitialGenerationBootstrapOptions) {
@@ -28,12 +31,16 @@ export function useInitialGenerationBootstrap({
     () => getInitialGenerationBootstrapStorageKey(projectSlug, version),
     [projectSlug, version],
   );
+  const targetOrigin = useMemo(
+    () => getVivdStudioBridgeOrigin(studioBaseUrl),
+    [studioBaseUrl],
+  );
 
   return useCallback(() => {
     if (!enabled) return;
 
     const targetWindow = iframeRef.current?.contentWindow;
-    if (!targetWindow) return;
+    if (!targetWindow || !targetOrigin) return;
 
     if (bootstrappedKeyRef.current === storageKey) {
       return;
@@ -54,7 +61,7 @@ export function useInitialGenerationBootstrap({
         projectSlug,
         version,
       },
-      "*",
+      targetOrigin,
     );
     bootstrappedKeyRef.current = storageKey;
 
@@ -63,5 +70,5 @@ export function useInitialGenerationBootstrap({
     } catch {
       // Ignore storage issues and rely on in-memory tracking for this page lifetime.
     }
-  }, [enabled, iframeRef, projectSlug, storageKey, version]);
+  }, [enabled, iframeRef, projectSlug, storageKey, targetOrigin, version]);
 }

@@ -27,6 +27,13 @@ export function EditControls({
 }: EditControlsProps) {
   if (!projectSlug) return null;
 
+  const isDisabled = hasUnsavedChanges && !editMode;
+  const tooltipLabel = hasUnsavedChanges && !editMode
+    ? "Save or discard image changes first"
+    : editMode
+      ? "Editing text"
+      : "Edit text";
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -35,7 +42,7 @@ export function EditControls({
             variant="ghost"
             size="sm"
             onClick={toggleEditMode}
-            disabled={hasUnsavedChanges && !editMode}
+            disabled={isDisabled}
             style={
               {
                 ["--toolbar-expanded-width" as const]: `${expandedWidth}px`,
@@ -77,13 +84,7 @@ export function EditControls({
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent>
-        {hasUnsavedChanges && !editMode
-          ? "Save or discard image changes first"
-          : editMode
-            ? "Editing text"
-            : "Edit text"}
-      </TooltipContent>
+      <TooltipContent>{tooltipLabel}</TooltipContent>
     </Tooltip>
   );
 }

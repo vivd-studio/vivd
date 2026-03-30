@@ -1,5 +1,6 @@
 import { PreviewProvider, PreviewContent } from "@/components/preview";
 import { Toaster } from "@/components/ui/sonner";
+import { postVivdHostMessage } from "@/lib/hostBridge";
 import { useEffect } from "react";
 
 export function App() {
@@ -21,7 +22,7 @@ export function App() {
 
   const onClose = () => {
     if (embedded) {
-      window.parent?.postMessage({ type: "vivd:studio:close" }, "*");
+      postVivdHostMessage({ type: "vivd:studio:close" });
       return;
     }
     if (returnTo) {
@@ -34,7 +35,7 @@ export function App() {
   // Signal to the host app that the studio JS is running (iframe onLoad can fire before React mounts).
   useEffect(() => {
     if (!embedded) return;
-    window.parent?.postMessage({ type: "vivd:studio:ready" }, "*");
+    postVivdHostMessage({ type: "vivd:studio:ready" });
   }, [embedded]);
 
   return (

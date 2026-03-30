@@ -213,7 +213,14 @@ export async function ensureExistingMachineRunningWorkflow(
   const finalStudioId = deps.resolveStudioIdFromMachine(existing, args.env.STUDIO_ID);
 
   deps.touchKey(studioKey);
-  return { studioId: finalStudioId, url, port, accessToken };
+  return {
+    studioId: finalStudioId,
+    url,
+    runtimeUrl: url,
+    compatibilityUrl: null,
+    port,
+    accessToken,
+  };
 }
 
 export type RecoverCreateNameConflictDeps = {
@@ -513,7 +520,14 @@ export async function restartInnerWorkflow(
   });
 
   deps.touchKey(studioKey);
-  return { studioId, url, port, accessToken };
+  return {
+    studioId,
+    url,
+    runtimeUrl: url,
+    compatibilityUrl: null,
+    port,
+    accessToken,
+  };
 }
 
 export type EnsureRunningInnerDeps = {
@@ -634,5 +648,12 @@ export async function ensureRunningInnerWorkflow(
   });
 
   deps.touchKey(studioKey);
-  return { studioId, url, port, accessToken };
+  return {
+    studioId,
+    url,
+    runtimeUrl: url,
+    compatibilityUrl: null,
+    port,
+    accessToken,
+  };
 }

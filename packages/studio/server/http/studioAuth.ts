@@ -139,9 +139,7 @@ function normalizeForwardedPrefix(pathname: string): string {
 function isAllowedRuntimeTargetPath(pathname: string): boolean {
   return (
     pathname === "/vivd-studio" ||
-    pathname.startsWith("/vivd-studio/") ||
-    pathname === "/preview" ||
-    pathname.startsWith("/preview/")
+    pathname.startsWith("/vivd-studio/")
   );
 }
 

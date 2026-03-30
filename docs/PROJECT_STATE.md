@@ -7,7 +7,7 @@
 - Finish the OpenCode-aligned Studio chat/runtime refactor and close the remaining upstream-parity gaps.
 - Harden Studio lifecycle across Fly and Docker, especially auth, rehydrate/revert, and env drift paths.
 - Close the remaining scratch-to-Studio initial-generation gaps and validate the dedicated builder path.
-- Rework Studio preview architecture so live preview stops depending on path-mounted dev-preview rewriting and publish-fidelity is explicit.
+- Land the Studio preview architecture rework so live preview stops depending on path-mounted dev-preview rewriting and publish-fidelity is explicit.
 - Continue `docs/refactor-and-hardening-plan.md`, starting with auth, transport/state cleanup, and self-host config/source-of-truth cleanup.
 - Keep upstream references in `vendor/` useful and keep this file scoped to active work.
 
@@ -22,7 +22,9 @@
 
 ## Latest Progress
 
-- 2026-03-29: documented the proper Studio preview rework direction in `docs/studio-preview-architecture-plan.md`. The current recommendation is to stop treating path-mounted, response-rewritten dev preview as the mainline transport for framework projects, split Live Preview from Publish Preview explicitly, move live Studio preview onto real runtime origins (platform: host/subdomain per runtime; self-host default: per-runtime port, with wildcard-host mode optional), and replace current iframe click/submit heuristics with an explicit `postMessage` preview bridge plus deterministic loading-state events.
+- 2026-03-30: cleaned up the old Studio preview compatibility transport after the runtime-root cutover. The private Studio runtime no longer serves the legacy `/preview` and `/vivd-studio/api/devpreview/*` live-preview paths, the unused `trpc.preview` router was removed, preview-bootstrap auth no longer accepts `/preview` redirect targets, and preview-bridge script generation now comes from one shared implementation under `packages/studio/shared`. Public/shareable project preview URLs remain unchanged on `/vivd-studio/api/preview/:slug/v:version/`.
+- 2026-03-30: finished the current product UX cut of the Studio preview architecture rework. Project pages now stay on the stable publish preview, entering Studio automatically switches to the live runtime preview, and the temporary exposed Live Preview / Publish Preview controls plus duplicate host header in embedded Studio were removed again so the product chooses the right surface implicitly by context.
+- 2026-03-29: started landing the Studio preview architecture rework from `docs/studio-preview-architecture-plan.md`. Live preview is moving onto real runtime origins, Publish Preview is being split out as the stable shareable surface, the preview bridge is replacing iframe heuristics, and the Docker provider now exposes self-host runtime ports so the new transport works without wildcard DNS.
 - 2026-03-28: tightened the new Fly-machine skill note so it now explicitly tells future agents to ask the user for SSH host/access details when that debugging path would help, instead of guessing or hardcoding infra access.
 - 2026-03-28: removed the hardcoded prod backend SSH host from `.skills/FLY_STUDIO_MACHINES.md`. The Fly-machine debugging note now stays generic and only says to use SSH access when the user explicitly provides it in the conversation, so repo guidance no longer bakes in a specific host/IP.
 - 2026-03-28: moved the growing Fly Studio machine operational guidance out of `AGENTS.md` into `.skills/FLY_STUDIO_MACHINES.md` so future agent runs still see the wake/reconcile/auth/drift findings without bloating the main repo instructions. `AGENTS.md` now keeps only a short pointer to that Fly-specific reference.
@@ -92,7 +94,7 @@
 ## Active Priorities
 
 1. Execute `docs/refactor-and-hardening-plan.md`, focusing next on the remaining OpenCode chat transport/state cutover work, preview-policy cleanup, and self-host config cleanup.
-2. Land the Studio preview architecture rework in `docs/studio-preview-architecture-plan.md`, starting with the runtime URL strategy, Live Preview vs Publish Preview product split, and preview bridge design.
+2. Finish landing the Studio preview architecture rework in `docs/studio-preview-architecture-plan.md`, focusing on the runtime URL strategy, the project-page publish-preview vs Studio live-preview split, and preview bridge rollout.
 3. Validate Studio lifecycle hardening across Fly and Docker, especially rehydrate/revert behavior and machine/env sync paths.
 4. Finish scratch-to-Studio initial-generation hardening and prove the dedicated builder path before moving Astro preview/publish builds off Studio machines.
 5. Keep `solo` self-hosting simple while continuing Docker parity, SSE Phase 1, targeted smoke coverage, and removal of remaining local-FS assumptions.
@@ -106,7 +108,7 @@
 | Concurrency model for edits (single-writer lock vs optimistic) | TBD |
 | Build execution location (backend vs studio vs dedicated builder) | In progress: dedicated builder image/runtime is scaffolded behind `VIVD_ARTIFACT_BUILDER_ENABLED`, but the switch stays off until the new path is production-verified |
 | Preview artifact exposure (public vs signed URLs) | TBD |
-| Studio URL pattern (path-mounted route vs real runtime origin, and how Live Preview vs Publish Preview split in product UX) | In progress in `docs/studio-preview-architecture-plan.md`; current recommendation is real runtime origins for Live Preview, stable project/version URLs for shareable preview, and an explicit Live Preview vs Publish Preview split |
+| Studio URL pattern (path-mounted route vs real runtime origin, and how Live Preview vs Publish Preview split in product UX) | In progress in `docs/studio-preview-architecture-plan.md`; current recommendation is real runtime origins for Studio/live preview, stable project/version URLs for shareable preview, and a context-sensitive UX where project pages show Publish Preview while Studio always opens on Live Preview |
 | Self-hosting boundary (`solo` vs `platform`, and instance/org/project policy split) | In progress in `docs/self-hosting-profile-split-plan.md`; the `solo` foundation is landed, while migration-path docs and the remaining boundary cleanup are still open |
 | Headless CMS source of truth + agent surface | CLI-first plan in `docs/headless-cms-agent-plan.md`; current leaning is control-plane-owned structured content, a Studio-machine `vivd` CLI as the primary agent surface, host-app embedded CMS pages inside Studio, and generated preview/publish content snapshots |
 

@@ -5,6 +5,8 @@ type EnsureStudioRunningResult =
   | {
       success: true;
       url: string;
+      runtimeUrl?: string | null;
+      compatibilityUrl?: string | null;
       bootstrapToken: string | null;
       userActionToken?: string | null;
     }
@@ -36,6 +38,8 @@ type UseStudioRuntimeGuardOptions = {
   ensureStudioRunning: () => Promise<EnsureStudioRunningResult>;
   onRecovered: (next: {
     url: string;
+    runtimeUrl?: string | null;
+    compatibilityUrl?: string | null;
     bootstrapToken: string | null;
     userActionToken?: string | null;
   }) => void;
@@ -136,6 +140,8 @@ export function useStudioRuntimeGuard({
       if (result.success) {
         onRecoveredRef.current({
           url: result.url,
+          runtimeUrl: result.runtimeUrl ?? result.url,
+          compatibilityUrl: result.compatibilityUrl ?? null,
           bootstrapToken: result.bootstrapToken ?? null,
           userActionToken: result.userActionToken ?? null,
         });

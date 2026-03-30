@@ -7,22 +7,16 @@ function getCurrentOrigin(): string | null {
   return window.location.origin;
 }
 
-function isPathMountedRuntime(pathname: string): boolean {
-  return pathname === "/_studio" || pathname.startsWith("/_studio/");
-}
-
 function resolveRuntimeBaseUrl(baseUrl: string): URL {
   const currentOrigin = getCurrentOrigin() ?? "http://localhost";
-  const parsed = new URL(baseUrl, ensureTrailingSlash(currentOrigin));
-
-  // Path-mounted studio runtimes should stay on the current host. The backend may
-  // hand us a control-plane host like app.localhost, but for embedded paths the
-  // route should resolve against whatever host the user is currently visiting.
-  if (getCurrentOrigin() && isPathMountedRuntime(parsed.pathname)) {
-    return new URL(ensureTrailingSlash(parsed.pathname), ensureTrailingSlash(currentOrigin));
+  const resolved = new URL(baseUrl, ensureTrailingSlash(currentOrigin));
+  if (
+    !resolved.pathname.endsWith("/") &&
+    !/\.[a-z0-9]+$/i.test(resolved.pathname)
+  ) {
+    resolved.pathname = `${resolved.pathname}/`;
   }
-
-  return new URL(ensureTrailingSlash(parsed.toString()));
+  return resolved;
 }
 
 export function resolveStudioRuntimeUrl(baseUrl: string, path: string): string {

@@ -84,11 +84,21 @@ export type FlyStudioMachineSummary = {
   externalPort: number | null;
   routePath: string | null;
   url: string | null;
+  runtimeUrl: string | null;
+  compatibilityUrl: string | null;
   image: string | null;
   desiredImage: string;
   imageOutdated: boolean;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type FlyStudioMachineUrlResult = {
+  studioId: string;
+  url: string;
+  runtimeUrl: string | null;
+  compatibilityUrl: string | null;
+  accessToken?: string;
 };
 
 export type FlyStudioMachineReconcileResult = {

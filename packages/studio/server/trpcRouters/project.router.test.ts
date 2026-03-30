@@ -4,25 +4,56 @@ import type { Context } from "../trpc/context.js";
 const {
   touchMock,
   stopDevServerMock,
+  getOrStartDevServerMock,
   isConnectedModeMock,
   getBackendUrlMock,
   getStudioIdMock,
   getConnectedOrganizationIdMock,
+  detectProjectTypeMock,
+  getConnectedUserActionAuthConfigMock,
 } = vi.hoisted(() => ({
   touchMock: vi.fn(),
   stopDevServerMock: vi.fn(),
+  getOrStartDevServerMock: vi.fn(),
   isConnectedModeMock: vi.fn(),
   getBackendUrlMock: vi.fn(),
   getStudioIdMock: vi.fn(),
   getConnectedOrganizationIdMock: vi.fn(),
+  detectProjectTypeMock: vi.fn(),
+  getConnectedUserActionAuthConfigMock: vi.fn(),
 }));
 
 vi.mock("../services/project/DevServerService.js", () => ({
   devServerService: {
     touch: touchMock,
     stopDevServer: stopDevServerMock,
-    getOrStartDevServer: vi.fn(),
+    getOrStartDevServer: getOrStartDevServerMock,
     restartDevServer: vi.fn(),
+  },
+}));
+
+vi.mock("../services/project/projectType.js", () => ({
+  detectProjectType: detectProjectTypeMock,
+}));
+
+vi.mock("../lib/connectedUserActionAuth.js", () => ({
+  getConnectedUserActionAuthConfig: getConnectedUserActionAuthConfigMock,
+  buildConnectedUserActionHeaders: (
+    config: {
+      userActionToken: string;
+      organizationId?: string;
+    },
+    options?: { includeContentType?: boolean },
+  ) => {
+    const headers: Record<string, string> = {};
+    if (options?.includeContentType !== false) {
+      headers["Content-Type"] = "application/json";
+    }
+    headers["x-vivd-studio-user-action-token"] = config.userActionToken;
+    if (config.organizationId) {
+      headers["x-vivd-organization-id"] = config.organizationId;
+    }
+    return headers;
   },
 }));
 
@@ -61,17 +92,35 @@ describe("project router", () => {
   beforeEach(() => {
     touchMock.mockReset();
     stopDevServerMock.mockReset();
+    getOrStartDevServerMock.mockReset();
     isConnectedModeMock.mockReset();
     getBackendUrlMock.mockReset();
     getStudioIdMock.mockReset();
     getConnectedOrganizationIdMock.mockReset();
+    detectProjectTypeMock.mockReset();
+    getConnectedUserActionAuthConfigMock.mockReset();
 
     touchMock.mockReturnValue(undefined);
     stopDevServerMock.mockResolvedValue(undefined);
+    getOrStartDevServerMock.mockResolvedValue({
+      url: null,
+      status: "starting",
+    });
     isConnectedModeMock.mockReturnValue(false);
     getBackendUrlMock.mockReturnValue("http://backend.local");
     getStudioIdMock.mockReturnValue("studio-1");
     getConnectedOrganizationIdMock.mockReturnValue("org-1");
+    detectProjectTypeMock.mockReturnValue({
+      mode: "static",
+      packageManager: "npm",
+      framework: "generic",
+    });
+    getConnectedUserActionAuthConfigMock.mockReturnValue({
+      backendUrl: "http://backend.local",
+      studioId: "studio-1",
+      organizationId: "org-1",
+      userActionToken: "user-action-token-1",
+    });
 
     globalThis.fetch = vi.fn();
   });
@@ -163,6 +212,54 @@ describe("project router", () => {
     ).resolves.toEqual({
       url: "/vivd-studio/api/preview/site-1/v2/",
     });
+  });
+
+  it("returns the runtime root for static preview info", async () => {
+    detectProjectTypeMock.mockReturnValue({
+      mode: "static",
+      packageManager: "npm",
+      framework: "generic",
+    });
+
+    const caller = projectRouter.createCaller(makeContext());
+    await expect(
+      caller.getPreviewInfo({
+        slug: "site-1",
+        version: 2,
+      }),
+    ).resolves.toEqual({
+      mode: "static",
+      status: "ready",
+      url: "/",
+    });
+  });
+
+  it("starts dev preview on the runtime root", async () => {
+    detectProjectTypeMock.mockReturnValue({
+      mode: "devserver",
+      devCommand: "npm run dev",
+      packageManager: "npm",
+      framework: "generic",
+    });
+    getOrStartDevServerMock.mockResolvedValue({
+      url: null,
+      status: "starting",
+      error: undefined,
+    });
+
+    const caller = projectRouter.createCaller(makeContext());
+    await expect(
+      caller.getPreviewInfo({
+        slug: "site-1",
+        version: 2,
+      }),
+    ).resolves.toEqual({
+      mode: "devserver",
+      status: "starting",
+      url: "/",
+      error: undefined,
+    });
+    expect(getOrStartDevServerMock).toHaveBeenCalledWith("/tmp/workspace", "/");
   });
 
   it("includes support email from the runtime env in the project list", async () => {

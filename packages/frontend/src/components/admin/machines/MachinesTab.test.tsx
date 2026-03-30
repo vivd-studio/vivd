@@ -96,6 +96,8 @@ function makeMachine(overrides: Record<string, unknown> = {}) {
     externalPort: 443,
     routePath: null,
     url: "https://studio.example.com",
+    runtimeUrl: "https://studio.example.com",
+    compatibilityUrl: null,
     ...overrides,
   };
 }
@@ -293,6 +295,8 @@ describe("MachinesTab", () => {
             region: null,
             externalPort: null,
             routePath: "/_studio/site-1-v1",
+            runtimeUrl: null,
+            compatibilityUrl: "/_studio/site-1-v1",
           }),
         ],
       },

@@ -1,33 +1,7 @@
+import { getVivdHostOrigin, postVivdHostMessage } from "@/lib/hostBridge";
+
 export function getHostAppOrigin() {
-  const params = new URLSearchParams(window.location.search);
-
-  const hostOrigin = params.get("hostOrigin");
-  if (hostOrigin) {
-    try {
-      return new URL(hostOrigin).origin;
-    } catch {
-      // Ignore invalid values.
-    }
-  }
-
-  const returnTo = params.get("returnTo");
-  if (returnTo) {
-    try {
-      return new URL(returnTo).origin;
-    } catch {
-      // Ignore invalid values.
-    }
-  }
-
-  if (document.referrer) {
-    try {
-      return new URL(document.referrer).origin;
-    } catch {
-      // Ignore invalid values.
-    }
-  }
-
-  return window.location.origin;
+  return getVivdHostOrigin();
 }
 
 export function buildHostAppUrl(path: string) {
@@ -44,7 +18,7 @@ export function openHostPath(path: string) {
 
 export function openEmbeddedStudioPath(path: string, embedded?: boolean) {
   if (embedded) {
-    window.parent?.postMessage({ type: "vivd:studio:navigate", path }, "*");
+    postVivdHostMessage({ type: "vivd:studio:navigate", path });
     return;
   }
 

@@ -5,6 +5,10 @@ import {
   type ColorTheme,
   type Theme,
 } from "@vivd/shared/types";
+import {
+  isVivdHostMessageEvent,
+  postVivdHostMessage,
+} from "@/lib/hostBridge";
 
 type ResolvedTheme = Exclude<Theme, "system">;
 
@@ -119,7 +123,7 @@ export function ThemeProvider({
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (window.parent === window) return;
+      if (!isVivdHostMessageEvent(event)) return;
       if (event.data?.type !== "vivd:host:theme") return;
 
       const nextTheme = event.data?.theme;
@@ -143,10 +147,7 @@ export function ThemeProvider({
   useEffect(() => {
     if (window.parent === window) return;
     if (!hostThemeInitialized) return;
-    window.parent.postMessage(
-      { type: "vivd:studio:theme", theme, colorTheme },
-      "*"
-    );
+    postVivdHostMessage({ type: "vivd:studio:theme", theme, colorTheme });
   }, [hostThemeInitialized, theme, colorTheme]);
 
   const value = {

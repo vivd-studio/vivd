@@ -15,6 +15,7 @@ import {
   normalizeStudioWorkingImageUpload,
   shouldNormalizeStudioWorkingImageUpload,
 } from "../services/uploads/uploadNormalization.js";
+import { injectPreviewBridgeScript } from "../http/previewBridge.js";
 
 type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewTarget?: string;
@@ -344,24 +345,27 @@ export function registerStudioRuntimeHttpRoutes(
   );
 
   // Preview route (static files or dev server proxy)
-  app.use("/preview", requireStudioAuth(), async (req, res, next) => {
+  app.use("/", requireStudioAuth(), async (req, res, next) => {
     try {
       if (!workspace.isInitialized()) {
         return res.status(503).json({ error: "Workspace not initialized" });
       }
 
+      if (
+        req.path === "/health" ||
+        req.path.startsWith("/preview") ||
+        req.path.startsWith("/vivd-studio") ||
+        req.path.startsWith("/trpc")
+      ) {
+        return next();
+      }
+
       const projectPath = workspace.getProjectPath();
       const config = detectProjectType(projectPath);
-      const basePath = "/preview";
-      const forwardedBasePath = resolveForwardedRuntimeBasePath(
-        basePath,
-        getProxyBasePath(req),
-      );
 
       if (config.mode === "devserver") {
-        // Ensure dev server exists (start async if needed)
         if (!devServerService.hasServer()) {
-          await devServerService.getOrStartDevServer(projectPath, basePath);
+          await devServerService.getOrStartDevServer(projectPath, "/");
         }
 
         const devServerUrl = devServerService.getDevServerUrl();
@@ -377,8 +381,6 @@ export function registerStudioRuntimeHttpRoutes(
             .json({ error: "Dev server not running", status });
         }
 
-        // Intercept Vite HMR client and dev toolbar requests - return no-op modules.
-        // This prevents WebSocket connection attempts when embedding the dev server behind our proxy.
         if (req.originalUrl.includes("/@vite/client")) {
           res.setHeader("Content-Type", "application/javascript");
           return res.send(`// Vite HMR disabled in preview mode
@@ -401,24 +403,20 @@ export default {};
         if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
           res.setHeader("Content-Type", "application/javascript");
           return res.send(
-            "// Dev toolbar disabled in preview mode\nexport default {};\n"
+            "// Dev toolbar disabled in preview mode\nexport default {};\n",
           );
         }
 
         if (process.env.DEVSERVER_DEBUG === "1") {
           console.log(
-            `[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`
+            `[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`,
           );
         }
 
         (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
-        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = forwardedBasePath;
-
         return devPreviewProxy(req, res, next);
       }
 
-      // Static mode: serve files from the workspace directory.
-      // Express has already stripped the "/preview" prefix from req.path.
       const requestedPath = req.path.replace(/^\/+/, "");
       const relativePathRaw = requestedPath.length ? requestedPath : "index.html";
       let relativePath = decodeUriPath(relativePathRaw);
@@ -433,13 +431,11 @@ export default {};
         return res.status(400).json({ error: "Invalid path" });
       }
 
-      // Directory -> index.html
       if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
         resolvedPath = path.join(resolvedPath, "index.html");
         relativePath = path.posix.join(relativePath.replace(/\\/g, "/"), "index.html");
       }
 
-      // Clean URLs -> try appending .html
       if (!fs.existsSync(resolvedPath) && !path.extname(resolvedPath)) {
         const withHtml = `${resolvedPath}.html`;
         if (fs.existsSync(withHtml)) {
@@ -461,8 +457,7 @@ export default {};
 
       if (resolvedPath.endsWith(".html")) {
         const content = await fs.readFile(resolvedPath, "utf-8");
-        let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
-        processed = injectBasePathScript(processed, forwardedBasePath);
+        const processed = injectPreviewBridgeScript(content);
         res.setHeader("Content-Type", "text/html");
         return res.send(processed);
       }
@@ -535,6 +530,7 @@ export default {};
           const content = await fs.readFile(resolvedPath, "utf-8");
           let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
           processed = injectBasePathScript(processed, forwardedBasePath);
+          processed = injectPreviewBridgeScript(processed);
           res.setHeader("Content-Type", "text/html");
           return res.send(processed);
         }
@@ -546,85 +542,4 @@ export default {};
     },
   );
 
-  // Backend-compatible dev server proxy:
-  // /vivd-studio/api/devpreview/:slug/v:version/*
-  app.use(
-    "/vivd-studio/api/devpreview/:slug/v:version",
-    requireStudioAuth(),
-    async (req, res, next) => {
-      try {
-        if (!workspace.isInitialized()) {
-          return res.status(503).json({ error: "Workspace not initialized" });
-        }
-
-        const { slug, version } = req.params;
-        const projectPath = workspace.getProjectPath();
-        const basePath = `/vivd-studio/api/devpreview/${slug}/v${version}`;
-        const forwardedBasePath = resolveForwardedRuntimeBasePath(
-          basePath,
-          getProxyBasePath(req),
-        );
-
-        const config = detectProjectType(projectPath);
-        if (config.mode !== "devserver") {
-          return res.status(400).json({ error: "Not a dev server project" });
-        }
-
-        if (!devServerService.hasServer()) {
-          await devServerService.getOrStartDevServer(projectPath, basePath);
-        }
-
-        const devServerUrl = devServerService.getDevServerUrl();
-        if (!devServerUrl) {
-          const status = devServerService.getDevServerStatus();
-          if (status === "starting" || status === "installing") {
-            return res
-              .status(503)
-              .json({ error: "Dev server is starting...", status });
-          }
-          return res.status(503).json({ error: "Dev server not running", status });
-        }
-
-        // Intercept Vite HMR client and dev toolbar requests - return no-op modules.
-        if (req.originalUrl.includes("/@vite/client")) {
-          res.setHeader("Content-Type", "application/javascript");
-          return res.send(`// Vite HMR disabled in preview mode
-export const createHotContext = () => ({
-  accept: () => {},
-  acceptExports: () => {},
-  dispose: () => {},
-  prune: () => {},
-  invalidate: () => {},
-  on: () => {},
-  send: () => {},
-  data: {},
-});
-export const updateStyle = () => {};
-export const removeStyle = () => {};
-export const injectQuery = (url) => url;
-export default {};
-`);
-        }
-        if (req.originalUrl.includes("dev-toolbar/entrypoint.js")) {
-          res.setHeader("Content-Type", "application/javascript");
-          return res.send(
-            "// Dev toolbar disabled in preview mode\nexport default {};\n"
-          );
-        }
-
-        if (process.env.DEVSERVER_DEBUG === "1") {
-          console.log(
-            `[DevServer] Proxying ${req.originalUrl} to ${devServerUrl}`
-          );
-        }
-
-        (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
-        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath = forwardedBasePath;
-
-        return devPreviewProxy(req, res, next);
-      } catch (err) {
-        return next(err);
-      }
-    },
-  );
 }

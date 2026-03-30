@@ -4,6 +4,8 @@ import { useStudioRuntimeGuard } from "./useStudioRuntimeGuard";
 
 export type StudioRuntimeSession = {
   url: string;
+  runtimeUrl?: string | null;
+  compatibilityUrl?: string | null;
   bootstrapToken: string | null;
   userActionToken?: string | null;
 };
@@ -12,6 +14,8 @@ type EnsureStudioRunningResult =
   | {
       success: true;
       url: string;
+      runtimeUrl?: string | null;
+      compatibilityUrl?: string | null;
       bootstrapToken: string | null;
       userActionToken?: string | null;
     }
@@ -99,17 +103,19 @@ export function useStudioHostRuntime({
   );
 
   const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
-    enabled: Boolean(studioRuntime?.url),
-    studioBaseUrl: studioRuntime?.url ?? null,
+    enabled: Boolean(studioRuntime?.runtimeUrl ?? studioRuntime?.url),
+    studioBaseUrl: studioRuntime?.runtimeUrl ?? studioRuntime?.url ?? null,
     touchStudio,
     ensureStudioRunning,
     onRecovered: handleStudioRecovered,
     onRecoveryError,
   });
 
-  const studioBaseUrl = studioRuntime?.url ?? null;
+  const studioRuntimeUrl = studioRuntime?.runtimeUrl ?? studioRuntime?.url ?? null;
+  const studioBaseUrl = studioRuntimeUrl;
   const studioBootstrapToken = studioRuntime?.bootstrapToken ?? null;
   const studioUserActionToken = studioRuntime?.userActionToken ?? null;
+  const studioCompatibilityUrl = studioRuntime?.compatibilityUrl ?? null;
 
   const studioBootstrapAction = useMemo(() => {
     if (!studioBaseUrl) return null;
@@ -119,6 +125,8 @@ export function useStudioHostRuntime({
   return {
     studioRuntime,
     studioBaseUrl,
+    studioRuntimeUrl,
+    studioCompatibilityUrl,
     studioBootstrapToken,
     studioUserActionToken,
     studioBootstrapAction,

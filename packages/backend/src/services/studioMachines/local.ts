@@ -10,6 +10,7 @@ import type {
   StudioMachineRestartArgs,
   StudioMachineStartArgs,
   StudioMachineStartResult,
+  StudioMachineUrlResult,
   StudioRuntimeAuthIdentity,
 } from "./types";
 import { getVersionDir } from "../../generator/versionUtils";
@@ -245,6 +246,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       return {
         studioId: existing.studioId,
         url: this.getPublicUrl(existing.port),
+        runtimeUrl: this.getPublicUrl(existing.port),
+        compatibilityUrl: null,
         port: existing.port,
         accessToken: existing.accessToken,
       };
@@ -405,6 +408,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return {
       studioId,
       url: this.getPublicUrl(port),
+      runtimeUrl: this.getPublicUrl(port),
+      compatibilityUrl: null,
       port,
       accessToken,
     };
@@ -450,12 +455,14 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     organizationId: string,
     projectSlug: string,
     version: number,
-  ): Promise<{ studioId: string; url: string; accessToken?: string } | null> {
+  ): Promise<StudioMachineUrlResult | null> {
     const studio = this.studios.get(this.key(organizationId, projectSlug, version));
     if (!studio) return null;
     return {
       studioId: studio.studioId,
       url: this.getPublicUrl(studio.port),
+      runtimeUrl: this.getPublicUrl(studio.port),
+      compatibilityUrl: null,
       accessToken: studio.accessToken,
     };
   }

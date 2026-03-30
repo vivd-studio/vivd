@@ -47,6 +47,7 @@ import {
   buildProjectStudioPath,
   openEmbeddedStudioPath,
 } from "./hostNavigation";
+import { postVivdHostMessage } from "@/lib/hostBridge";
 
 /**
  * StudioToolbar - Standalone toolbar for the single-instance studio.
@@ -333,10 +334,9 @@ export function StudioToolbar() {
 
   const handleToggleFullscreen = () => {
     if (!embedded) return;
-    window.parent?.postMessage(
-      { type: fullscreen ? "vivd:studio:exitFullscreen" : "vivd:studio:fullscreen" },
-      "*",
-    );
+    postVivdHostMessage({
+      type: fullscreen ? "vivd:studio:exitFullscreen" : "vivd:studio:fullscreen",
+    });
   };
 
   const handleHardRestart = () => {
@@ -347,14 +347,11 @@ export function StudioToolbar() {
       : "Hard restart the studio? This may interrupt the current session.";
     if (!window.confirm(message)) return;
 
-    window.parent?.postMessage(
-      {
-        type: "vivd:studio:hardRestart",
-        slug: projectSlug,
-        version: selectedVersion,
-      },
-      "*",
-    );
+    postVivdHostMessage({
+      type: "vivd:studio:hardRestart",
+      slug: projectSlug,
+      version: selectedVersion,
+    });
   };
 
   const analyticsSupportHref =
@@ -571,10 +568,7 @@ export function StudioToolbar() {
                 size="icon"
                 className="h-7 w-7 shrink-0 rounded-md"
                 onClick={() => {
-                  window.parent?.postMessage(
-                    { type: "vivd:studio:toggleSidebar" },
-                    "*",
-                  );
+                  postVivdHostMessage({ type: "vivd:studio:toggleSidebar" });
                 }}
               >
                 <PanelLeft className="h-4 w-4" />

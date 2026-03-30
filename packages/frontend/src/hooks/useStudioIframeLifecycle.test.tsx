@@ -78,7 +78,7 @@ describe("useStudioIframeLifecycle", () => {
     expect(latestValue?.studioReady).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(
       { type: "vivd:host:theme", theme: "light", colorTheme: "vivd-sharp" },
-      "*",
+      "https://app.example.com",
     );
     expect(props.onReady).toHaveBeenCalledTimes(1);
   });
@@ -99,6 +99,7 @@ describe("useStudioIframeLifecycle", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: { type: "vivd:studio:hardRestart", version: 7 },
+          origin: "https://app.example.com",
           source: frameWindow as unknown as MessageEventSource,
         }),
       );
@@ -119,7 +120,7 @@ describe("useStudioIframeLifecycle", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3000/_studio/route-1/health",
+      "https://app.example.com/_studio/route-1/health",
       expect.objectContaining({
         method: "GET",
         mode: "cors",

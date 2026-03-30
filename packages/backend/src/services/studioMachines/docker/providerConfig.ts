@@ -47,6 +47,10 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
+function formatUrlHostname(hostname: string): string {
+  return hostname.includes(":") ? `[${hostname}]` : hostname;
+}
+
 function normalizeDockerApiVersion(value: string | undefined): string {
   const trimmed = value?.trim() || "";
   if (!trimmed) return "";
@@ -156,6 +160,24 @@ export class DockerProviderConfig {
     return "http://localhost";
   }
 
+  get publicProtocol(): string {
+    return new URL(this.publicBaseUrl).protocol.replace(/:$/, "");
+  }
+
+  get publicHost(): string {
+    return new URL(this.publicBaseUrl).host;
+  }
+
+  get publicHostname(): string {
+    return new URL(this.publicBaseUrl).hostname;
+  }
+
+  get publicPortStart(): number {
+    const raw = process.env.DOCKER_STUDIO_PUBLIC_PORT_START || "4100";
+    const parsed = Number.parseInt(raw, 10);
+    return Math.max(1024, Number.isFinite(parsed) ? parsed : 4100);
+  }
+
   get internalProxyBaseUrl(): string {
     const explicit = process.env.DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL?.trim();
     if (explicit) return normalizeOrigin(explicit);
@@ -182,6 +204,14 @@ export class DockerProviderConfig {
   getPublicUrlForRoutePath(routePath: string): string {
     const route = routePath.replace(/^\/+/, "");
     return new URL(route, ensureTrailingSlash(this.publicBaseUrl)).toString();
+  }
+
+  getPublicUrlForPort(port: number): string {
+    const needsPort =
+      !(this.publicProtocol === "https" && port === 443) &&
+      !(this.publicProtocol === "http" && port === 80);
+    const hostname = formatUrlHostname(this.publicHostname);
+    return `${this.publicProtocol}://${hostname}${needsPort ? `:${port}` : ""}`;
   }
 
   getInternalProxyUrlForRoutePath(routePath: string): string {
