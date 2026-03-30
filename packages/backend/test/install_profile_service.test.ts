@@ -85,4 +85,42 @@ describe("InstallProfileService", () => {
 
     await expect(installProfileService.getInstallProfile()).resolves.toBe("platform");
   });
+
+  it("keeps the platform-only capability subset disabled on solo", async () => {
+    getSystemSettingValueMock.mockResolvedValueOnce("solo");
+    getSystemSettingJsonValueMock.mockImplementation(async (key: string) => {
+      if (key === "instance_capability_policy") {
+        return {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        };
+      }
+
+      return null;
+    });
+
+    await expect(installProfileService.resolvePolicy()).resolves.toMatchObject({
+      installProfile: "solo",
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: true,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: true,
+        dedicatedPluginHost: false,
+      },
+      controlPlane: {
+        mode: "path_based",
+      },
+      pluginRuntime: {
+        mode: "same_host_path",
+      },
+    });
+  });
 });

@@ -329,7 +329,7 @@ describe("EmbeddedStudio", () => {
     expectNoPreviewSurfaceControls();
   });
 
-  it("hides the host header once studio is active", () => {
+  it("hides the host header once the embedded studio iframe is active", () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1",
     });
@@ -349,6 +349,47 @@ describe("EmbeddedStudio", () => {
     expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("host-header")).not.toBeInTheDocument();
     expectNoPreviewSurfaceControls();
+  });
+
+  it("auto-resumes an already running studio without requiring a view query param", () => {
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        runtimeUrl: "https://studio.example.com/runtime",
+        compatibilityUrl: "https://studio.example.com/runtime",
+        bootstrapToken: null,
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    expect(screen.getByTitle("Vivd Studio - site-1")).toBeInTheDocument();
+    expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("host-header")).not.toBeInTheDocument();
+  });
+
+  it("keeps the host header and shows a loading action while studio is booting after edit", () => {
+    const startStudioMutate = vi.fn();
+    startStudioUseMutationMock.mockReturnValue({
+      mutate: startStudioMutate,
+      isPending: false,
+      data: null,
+      error: null,
+      reset: vi.fn(),
+    });
+
+    renderEmbeddedStudio();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(startStudioMutate).toHaveBeenCalledWith({
+      slug: "site-1",
+      version: 1,
+    });
+    expect(screen.getByTestId("host-header")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Starting..." })).toBeDisabled();
+    expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
   });
 
   it("auto-starts studio when initial generation is requested and no runtime is active", () => {

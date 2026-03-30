@@ -108,6 +108,8 @@ describe("InstanceSettingsTab", () => {
   it("shows network settings as read-only in platform mode", () => {
     render(<InstanceSettingsTab />);
 
+    expect(screen.getByText("Multi-org platform profile")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "This shows the currently resolved host and TLS state. Platform host topology stays deployment-managed for now.",
@@ -116,5 +118,60 @@ describe("InstanceSettingsTab", () => {
     expect(screen.getByLabelText("Public host")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save network" })).toBeDisabled();
     expect(screen.getByText("https://app.example.com")).toBeInTheDocument();
+  });
+
+  it("hides profile switching and advanced capability editing in solo mode", () => {
+    getInstanceSettingsUseQueryMock.mockReturnValue({
+      data: {
+        installProfile: "solo",
+        singleProjectMode: false,
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        pluginDefaults: {
+          contact_form: { enabled: true },
+          analytics: { enabled: true },
+        },
+        limitDefaults: {},
+        controlPlane: {
+          mode: "path_based",
+        },
+        pluginRuntime: {
+          mode: "same_host_path",
+        },
+        network: {
+          publicHost: "example.com",
+          publicOrigin: "https://example.com",
+          tlsMode: "managed",
+          acmeEmail: "admin@example.com",
+          sources: {
+            publicHost: "settings",
+            tlsMode: "settings",
+            acmeEmail: "settings",
+          },
+          deploymentManaged: {
+            publicHost: false,
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    render(<InstanceSettingsTab />);
+
+    expect(screen.getByText("Single-tenant self-host profile")).toBeInTheDocument();
+    expect(screen.getByText(/licensed platform deployments/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Capabilities")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save capabilities" }),
+    ).not.toBeInTheDocument();
   });
 });

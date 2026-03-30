@@ -140,6 +140,11 @@ const instanceNetworkSettingsPatchSchema = z
   })
   .strict();
 
+const SOLO_INSTALL_PROFILE_LOCK_MESSAGE =
+  "Install profile changes are not available from the UI on solo installs.";
+const SOLO_CAPABILITIES_LOCK_MESSAGE =
+  "Advanced tenancy capabilities are not editable on solo installs.";
+
 function getGlobalUserRoleForOrganizationRole(
   _role: z.infer<typeof organizationRoleSchema>,
 ): "user" {
@@ -274,6 +279,21 @@ export const superAdminRouter = router({
     )
     .mutation(async ({ input }) => {
       const currentPolicy = await installProfileService.resolvePolicy();
+
+      if (currentPolicy.installProfile === "solo" && input.installProfile) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: SOLO_INSTALL_PROFILE_LOCK_MESSAGE,
+        });
+      }
+
+      if (currentPolicy.installProfile === "solo" && input.capabilities) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: SOLO_CAPABILITIES_LOCK_MESSAGE,
+        });
+      }
+
       const targetInstallProfile = input.installProfile ?? currentPolicy.installProfile;
 
       if (input.installProfile) {

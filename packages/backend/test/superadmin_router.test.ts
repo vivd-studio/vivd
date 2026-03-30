@@ -488,6 +488,94 @@ describe("superadmin router", () => {
     expect(syncGeneratedCaddyConfigsMock).not.toHaveBeenCalled();
   });
 
+  it("rejects install profile changes from a solo instance", async () => {
+    resolvePolicyMock.mockResolvedValueOnce({
+      installProfile: "solo",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updateInstanceSettings({
+        installProfile: "platform",
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Install profile changes are not available from the UI on solo installs.",
+    });
+
+    expect(updateInstallProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects advanced capability updates from a solo instance", async () => {
+    resolvePolicyMock.mockResolvedValueOnce({
+      installProfile: "solo",
+      singleProjectMode: false,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "manual_superadmin",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(
+      caller.updateInstanceSettings({
+        capabilities: {
+          multiOrg: true,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Advanced tenancy capabilities are not editable on solo installs.",
+    });
+
+    expect(updateInstanceCapabilityPolicyMock).not.toHaveBeenCalled();
+  });
+
   it("allows network updates when switching to solo in the same mutation", async () => {
     resolvePolicyMock
       .mockResolvedValueOnce({

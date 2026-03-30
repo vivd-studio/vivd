@@ -202,7 +202,7 @@ Default SaaS topology:
 
 Expose only the settings a self-hoster actually needs:
 
-- General / install profile
+- General / active profile + routing summary
 - Plugins
 - Limits
 - Email
@@ -210,6 +210,8 @@ Expose only the settings a self-hoster actually needs:
 
 Hide or collapse:
 
+- easy `solo` -> `platform` switching from the standard self-host UI
+- install-profile switching from the standard admin UI
 - org directory
 - domain governance UI
 - plugin entitlement matrix

@@ -9,10 +9,23 @@ const {
   sendTaskMock,
   stopGenerationMock,
   startInitialGenerationMock,
+  previewState,
 } = vi.hoisted(() => ({
   sendTaskMock: vi.fn(),
   stopGenerationMock: vi.fn(),
   startInitialGenerationMock: vi.fn(),
+  previewState: {
+    initialGenerationRequested: false,
+    pendingChatMessage: null as
+      | {
+          kind?: "task" | "initialGeneration";
+          message: string;
+          startNewSession?: boolean;
+        }
+      | null,
+    clearPendingChatMessage: vi.fn(),
+    setChatOpen: vi.fn(),
+  },
   controllerState: {
     sessions: [],
     sessionsLoading: false,
@@ -71,7 +84,7 @@ vi.mock("@/lib/trpc", () => ({
 }));
 
 vi.mock("../preview/PreviewContext", () => ({
-  useOptionalPreview: () => null,
+  useOptionalPreview: () => previewState,
 }));
 
 vi.mock("@/features/opencodeChat", () => ({
@@ -118,6 +131,13 @@ describe("ChatProvider follow-up behavior", () => {
     sendTaskMock.mockReset();
     stopGenerationMock.mockReset();
     startInitialGenerationMock.mockReset();
+    previewState.initialGenerationRequested = false;
+    previewState.pendingChatMessage = null;
+    previewState.clearPendingChatMessage.mockReset();
+    previewState.clearPendingChatMessage.mockImplementation(() => {
+      previewState.pendingChatMessage = null;
+    });
+    previewState.setChatOpen.mockReset();
 
     controllerState.sendTask = sendTaskMock;
     controllerState.stopGeneration = stopGenerationMock;
@@ -401,5 +421,42 @@ describe("ChatProvider follow-up behavior", () => {
         }),
       );
     });
+  });
+
+  it("keeps a pending initial-generation bootstrap until chat is ready to consume it", async () => {
+    controllerState.runTaskPending = true;
+    previewState.initialGenerationRequested = true;
+    previewState.pendingChatMessage = {
+      kind: "initialGeneration",
+      message: "",
+      startNewSession: true,
+    };
+
+    const view = render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    expect(startInitialGenerationMock).not.toHaveBeenCalled();
+    expect(previewState.clearPendingChatMessage).not.toHaveBeenCalled();
+    expect(previewState.pendingChatMessage).not.toBeNull();
+
+    controllerState.runTaskPending = false;
+    view.rerender(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        model: undefined,
+      });
+    });
+    expect(previewState.clearPendingChatMessage).toHaveBeenCalledTimes(1);
+    expect(previewState.pendingChatMessage).toBeNull();
   });
 });

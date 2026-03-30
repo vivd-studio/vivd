@@ -509,7 +509,9 @@ export default function EmbeddedStudio() {
     return externalPreview.url;
   }, [externalPreview, projectSlug, project]);
 
-  const livePreviewActive = previewSurface === "live";
+  // A running studio should always take over the embedded surface, even without
+  // an explicit `?view=studio` hint, so revisiting a project auto-resumes Studio.
+  const livePreviewActive = previewSurface === "live" || Boolean(studioIframeSrc);
 
   const handleCopyPreviewUrl = () => {
     if (isRenamePending) return;
@@ -552,6 +554,12 @@ export default function EmbeddedStudio() {
   }: {
     includeProjectActions?: boolean;
   }) => {
+    const showStudioStartupAction =
+      editRequested &&
+      (startStudio.isPending ||
+        hardRestartStudio.isPending ||
+        !studioIframeSrc ||
+        !studioReady);
     const projectActions = includeProjectActions ? (
       <>
         {!editRequested ? (
@@ -566,6 +574,11 @@ export default function EmbeddedStudio() {
             className="h-8 rounded-md px-3"
           >
             Edit
+          </Button>
+        ) : showStudioStartupAction ? (
+          <Button size="sm" disabled className="h-8 rounded-md px-3">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {hardRestartStudio.isPending ? "Restarting..." : "Starting..."}
           </Button>
         ) : null}
         <Button
@@ -808,11 +821,12 @@ export default function EmbeddedStudio() {
 
   if (editRequested && !studioIframeSrc) {
     return (
-      <FramedHostShell className="h-full">
-        <div className={HOST_VIEWPORT_INSET_CLASS}>
-          <FramedViewport className="bg-background/80">
-            <StudioStartupLoading className="h-full min-h-0" />
-          </FramedViewport>
+      <FramedHostShell
+        className="h-full"
+        header={renderEmbeddedHeader({ includeProjectActions: true })}
+      >
+        <div className="relative flex h-full min-h-0 flex-col bg-background">
+          <StudioStartupLoading className="h-full min-h-0" />
         </div>
       </FramedHostShell>
     );
@@ -821,78 +835,74 @@ export default function EmbeddedStudio() {
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {livePreviewActive && studioIframeSrc ? (
-        <FramedHostShell className="h-full">
-          <div className={HOST_VIEWPORT_INSET_CLASS}>
-            <FramedViewport className="bg-background/80">
-              <div className="relative h-full w-full">
-                <StudioBootstrapIframe
-                  iframeRef={studioIframeRef}
-                  iframeName={studioIframeTarget}
-                  iframeKey={studioIframeRequestKey}
-                  title={`Vivd Studio - ${projectSlug}`}
-                  cleanSrc={studioIframeSrc}
-                  bootstrapAction={studioBootstrapAction}
-                  bootstrapToken={studioBootstrapToken}
-                  userActionToken={studioUserActionToken}
-                  submissionKey={studioIframeRequestKey}
-                  className="h-full w-full border-0"
-                  allow="fullscreen; clipboard-write"
-                  allowFullScreen
-                  onLoad={handleStudioIframeLoad}
-                  onError={handleStudioIframeError}
-                />
+        <div className="relative flex-1 min-h-0">
+          <div className="relative h-full w-full">
+            <StudioBootstrapIframe
+              iframeRef={studioIframeRef}
+              iframeName={studioIframeTarget}
+              iframeKey={studioIframeRequestKey}
+              title={`Vivd Studio - ${projectSlug}`}
+              cleanSrc={studioIframeSrc}
+              bootstrapAction={studioBootstrapAction}
+              bootstrapToken={studioBootstrapToken}
+              userActionToken={studioUserActionToken}
+              submissionKey={studioIframeRequestKey}
+              className="h-full w-full border-0"
+              allow="fullscreen; clipboard-write"
+              allowFullScreen
+              onLoad={handleStudioIframeLoad}
+              onError={handleStudioIframeError}
+            />
 
-                {isStudioRecovering ? (
-                  <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-                    Reconnecting studio machine...
-                  </div>
-                ) : null}
-
-                {!studioReady ? (
-                  <div className="absolute inset-0 z-10 bg-background">
-                    {studioLoadTimedOut || studioLoadErrored ? (
-                      <div className="flex h-full w-full items-center justify-center px-6">
-                        <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
-                          <div className="text-base font-semibold">
-                            Studio is taking longer than usual
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            The studio machine may still be booting or it might be
-                            unresponsive (common after restarts). Try reloading the
-                            iframe or doing a hard restart.
-                          </div>
-                          <div className="flex items-center justify-center gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => void reloadStudioIframe()}
-                            >
-                              Reload
-                            </Button>
-                            <Button
-                              onClick={() => void handleHardRestart()}
-                              disabled={hardRestartStudio.isPending}
-                            >
-                              {hardRestartStudio.isPending ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Restarting…
-                                </>
-                              ) : (
-                                "Hard restart"
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <StudioStartupLoading className="h-full min-h-0" />
-                    )}
-                  </div>
-                ) : null}
+            {isStudioRecovering ? (
+              <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
+                Reconnecting studio machine...
               </div>
-            </FramedViewport>
+            ) : null}
+
+            {!studioReady ? (
+              <div className="absolute inset-0 z-10 bg-background">
+                {studioLoadTimedOut || studioLoadErrored ? (
+                  <div className="flex h-full w-full items-center justify-center px-6">
+                    <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
+                      <div className="text-base font-semibold">
+                        Studio is taking longer than usual
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        The studio machine may still be booting or it might be
+                        unresponsive (common after restarts). Try reloading the
+                        iframe or doing a hard restart.
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => void reloadStudioIframe()}
+                        >
+                          Reload
+                        </Button>
+                        <Button
+                          onClick={() => void handleHardRestart()}
+                          disabled={hardRestartStudio.isPending}
+                        >
+                          {hardRestartStudio.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Restarting…
+                            </>
+                          ) : (
+                            "Hard restart"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <StudioStartupLoading className="h-full min-h-0" />
+                )}
+              </div>
+            ) : null}
           </div>
-        </FramedHostShell>
+        </div>
       ) : (
         <FramedHostShell
           className="h-full"

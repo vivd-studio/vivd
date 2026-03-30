@@ -114,6 +114,14 @@ const PROFILE_DEFAULT_PLUGIN_DEFAULTS: Record<InstallProfile, Record<PluginId, b
   },
 };
 
+const SOLO_FORCED_DISABLED_CAPABILITIES: Partial<InstanceCapabilityPolicy> = {
+  multiOrg: false,
+  tenantHosts: false,
+  orgLimitOverrides: false,
+  orgPluginEntitlements: false,
+  dedicatedPluginHost: false,
+};
+
 function parseBoolean(value: string | undefined): boolean | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
@@ -147,10 +155,21 @@ function normalizeCapabilityPolicy(
   value: unknown,
 ): InstanceCapabilityPolicy {
   const parsed = partialInstanceCapabilityPolicySchema.safeParse(value);
-  return {
+  const merged = {
     ...PROFILE_DEFAULT_CAPABILITIES[profile],
     ...(parsed.success ? parsed.data : {}),
   };
+
+  if (profile === "solo") {
+    // Keep the platform-only subset disabled on solo even if older
+    // platform-style capability overrides remain stored.
+    return {
+      ...merged,
+      ...SOLO_FORCED_DISABLED_CAPABILITIES,
+    };
+  }
+
+  return merged;
 }
 
 function normalizePluginDefaults(

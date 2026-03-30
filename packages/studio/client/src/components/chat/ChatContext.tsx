@@ -357,20 +357,20 @@ export function ChatProvider({
       return;
     }
 
-    clearPending();
-
     if (pending.kind === "initialGeneration") {
-      void (async () => {
-        if (
-          activeQuestionRequest ||
-          isThinking ||
-          runTaskPending ||
-          isPreparingSend ||
-          initialGenerationStarting
-        ) {
-          return;
-        }
+      if (
+        activeQuestionRequest ||
+        isThinking ||
+        runTaskPending ||
+        isPreparingSend ||
+        initialGenerationStarting
+      ) {
+        return;
+      }
 
+      clearPending();
+
+      void (async () => {
         try {
           setInitialGenerationStarting(true);
           setInitialGenerationFailed(null);
@@ -401,6 +401,8 @@ export function ChatProvider({
 
     const { message: pendingMessage, startNewSession } = pending;
     const targetSessionId = startNewSession ? null : selectedSessionId;
+
+    clearPending();
 
     if (startNewSession) {
       setSelectedSessionId(null);

@@ -22,6 +22,7 @@ import {
   syncDirectoryToBucketExact,
 } from "../storage/ObjectStorageService";
 import type { S3Client } from "@aws-sdk/client-s3";
+import { resolveAuthBaseUrlFromEnv } from "../../lib/publicOrigin";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -510,9 +511,28 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   }
 
   private getPublicUrl(port: number): string {
-    const host = process.env.STUDIO_PUBLIC_HOST || "localhost";
-    const protocol = process.env.STUDIO_PUBLIC_PROTOCOL || "http";
-    return `${protocol}://${host}:${port}`;
+    const hostOverride = (process.env.STUDIO_PUBLIC_HOST || "").trim();
+    if (hostOverride) {
+      const protocol = (process.env.STUDIO_PUBLIC_PROTOCOL || "http").trim() || "http";
+      return `${protocol}://${hostOverride}:${port}`;
+    }
+
+    const authBaseUrl = resolveAuthBaseUrlFromEnv(process.env);
+    if (authBaseUrl) {
+      try {
+        const publicUrl = new URL(authBaseUrl);
+        publicUrl.port = String(port);
+        publicUrl.pathname = "/";
+        publicUrl.search = "";
+        publicUrl.hash = "";
+        return publicUrl.origin;
+      } catch {
+        // Fall through to the localhost default below.
+      }
+    }
+
+    const protocol = (process.env.STUDIO_PUBLIC_PROTOCOL || "http").trim() || "http";
+    return `${protocol}://localhost:${port}`;
   }
 
   private getInternalUrl(port: number): string {
