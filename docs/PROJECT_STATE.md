@@ -20,8 +20,8 @@
 
 ## Latest Progress
 
+- 2026-03-30: fixed the clean-CI frontend regression where `EmbeddedStudio.test.tsx` could not resolve `@vivd/shared/types` through Vite/Vitest. `packages/frontend` had TypeScript path mappings for `@vivd/shared`, but its Vite and Vitest configs only aliased `@`, so workspace-source imports depended on `@vivd/shared` having already been built. Frontend Vite/Vitest now alias `@vivd/shared` exactly plus its subpaths to `packages/shared/src`, and the targeted frontend regression suite plus frontend typecheck are green again.
 - 2026-03-30: fixed the lingering Studio client typecheck failure in `client/src/features/opencodeChat/provider.test.tsx`. The hoisted bootstrap mock had been inferred with `sessions: never[]`, so later test setup that assigned concrete session rows failed TypeScript even though the provider/runtime code was fine. The test now types that bootstrap fixture explicitly as `OpenCodeChatBootstrap`, and full `npm run typecheck -w @vivd/studio` is green again.
-- 2026-03-30: fixed the solo/self-host live preview regression for path-mounted Studio runtimes. The Studio client had been treating `project.getPreviewInfo().url === "/"` as the control-plane origin root instead of the mounted runtime root when Studio was served under `/_studio/...`, which made the preview iframe load `https://<host>/` and show the server's plain `Not found` response. The runtime path helper now resolves live preview root URLs back onto the mounted runtime base, and the runtime dev-server proxy now also receives the forwarded base path so path-mounted preview HTML can rewrite root-relative asset and preview-bridge URLs correctly.
 
 ## Active Priorities
 

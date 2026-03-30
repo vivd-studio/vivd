@@ -4,9 +4,8 @@
 
 ## 2026-03-30 Additional Entries Moved From PROJECT_STATE
 
+- 2026-03-30: fixed the solo/self-host live preview regression for path-mounted Studio runtimes. The Studio client had been treating `project.getPreviewInfo().url === "/"` as the control-plane origin root instead of the mounted runtime root when Studio was served under `/_studio/...`, which made the preview iframe load `https://<host>/` and show the server's plain `Not found` response. The runtime path helper now resolves live preview root URLs back onto the mounted runtime base, and the runtime dev-server proxy now also receives the forwarded base path so path-mounted preview HTML can rewrite root-relative asset and preview-bridge URLs correctly.
 - 2026-03-30: expanded the shared release/publish validation gate so `reusable-validate.yml` now runs the frontend, Studio, and backend regressions that specifically cover the Docker/self-host/runtime-handover failures we just hit: Docker provider drift/network attach, local-provider host resolution, runtime `/health` CORS, production-vs-local host redirect behavior, browser Studio URL selection, embedded Studio startup/auto-resume, and initial-generation handoff fallback.
-
-## 2026-03-30 Additional Entries Moved From PROJECT_STATE
 
 - 2026-03-30: Studio initial generation no longer force-upgrades to the advanced model behind the UI's back. The initial run now follows the standard/default model path unless the current Studio selection explicitly says otherwise, and the chat model state now stays pinned to the actual first-run request even when model metadata arrives after startup.
 - 2026-03-30: added the next missing OpenCode-style session-sync slice in Studio chat: active-session indicators now treat cached pending assistant messages as active even when `session.status` drifted stale, queued snapshot refreshes now reconcile non-selected locally-active sessions too so the session list/toolbar are less likely to lose track of a still-running turn, and the Sessions toolbar dot is limited again to other active sessions so the current open run does not badge its own history button.

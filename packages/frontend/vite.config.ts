@@ -2,13 +2,17 @@ import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+const sharedSrc = path.resolve(__dirname, "../shared/src");
+
 export default defineConfig({
   base: "/vivd-studio",
   plugins: [react() as any],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      { find: /^@vivd\/shared$/, replacement: path.resolve(sharedSrc, "index.ts") },
+      { find: /^@vivd\/shared\/(.*)$/, replacement: `${sharedSrc}/$1` },
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+    ],
   },
   server: {
     proxy: {
