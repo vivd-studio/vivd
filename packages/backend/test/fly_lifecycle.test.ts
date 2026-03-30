@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { startMachineHandlingReplacement } from "../src/services/studioMachines/fly/lifecycle";
+import {
+  startMachineHandlingReplacement,
+  waitForReady,
+} from "../src/services/studioMachines/fly/lifecycle";
 import type { FlyMachine } from "../src/services/studioMachines/fly/types";
 
 function machine(state: FlyMachine["state"]): FlyMachine {
@@ -13,6 +16,8 @@ function machine(state: FlyMachine["state"]): FlyMachine {
 describe("Fly lifecycle helpers", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("retries start while Fly reports replacement transition states", async () => {
@@ -97,6 +102,36 @@ describe("Fly lifecycle helpers", () => {
     await result;
 
     expect(startMachine).toHaveBeenCalledTimes(2);
+    expect(getMachine).toHaveBeenCalledTimes(2);
+  });
+
+  it("polls readiness frequently enough to avoid adding nearly a second of wake latency", async () => {
+    vi.useFakeTimers();
+
+    const getMachine = vi.fn<() => Promise<FlyMachine>>().mockResolvedValue(machine("started"));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "starting" }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "ok" }),
+      } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = waitForReady({
+      machineId: "machine-1",
+      url: "http://example.test",
+      timeoutMs: 5_000,
+      getMachine: async () => getMachine(),
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+    await result;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(getMachine).toHaveBeenCalledTimes(2);
   });
 });

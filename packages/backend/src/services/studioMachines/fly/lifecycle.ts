@@ -2,6 +2,8 @@ import type { MachineReconcileNeeds } from "./machineModel";
 import type { FlyMachine, FlyMachineState } from "./types";
 import { sleep } from "./utils";
 
+const READY_POLL_INTERVAL_MS = 250;
+
 export function isMachineGettingReplacedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
@@ -85,7 +87,7 @@ export async function waitForReady(options: {
       }
     }
 
-    await sleep(1000);
+    await sleep(READY_POLL_INTERVAL_MS);
   }
 
   throw new Error(

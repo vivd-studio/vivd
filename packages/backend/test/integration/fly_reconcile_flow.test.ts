@@ -19,7 +19,7 @@
  *   VIVD_FLY_TEST_IMAGE=ghcr.io/vivd-studio/vivd-studio:dev-...
  *   VIVD_FLY_TEST_IMAGE_TAG=dev-...
  *   VIVD_FLY_TEST_DRIFT_IMAGE=ghcr.io/vivd-studio/vivd-studio:1.1.27
- *   VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS=5000
+ *   VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS=6000
  */
 import { describe, it, expect } from "vitest";
 import {
