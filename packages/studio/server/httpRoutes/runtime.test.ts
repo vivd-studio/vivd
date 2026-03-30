@@ -17,6 +17,8 @@ import { resolveRuntimeRequestedFilePath } from "./runtime";
 function createTestRuntimeApp(options?: {
   initialized?: boolean;
   projectPath?: string;
+  getProxyBasePath?: (req: express.Request) => string | null;
+  devPreviewProxy?: express.RequestHandler;
 }) {
   const app = express();
   const authMiddleware = vi.fn((_req, _res, next) => next());
@@ -56,12 +58,14 @@ function createTestRuntimeApp(options?: {
       return resolvedTarget;
     },
     writeUploadedFile: async () => {},
-    getProxyBasePath: () => null,
+    getProxyBasePath: options?.getProxyBasePath ?? (() => null),
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
-    devPreviewProxy: (_req, res) => {
-      res.status(200).send("proxied");
-    },
+    devPreviewProxy:
+      options?.devPreviewProxy ??
+      ((_req, res) => {
+        res.status(200).send("proxied");
+      }),
   });
 
   return { app, authMiddleware };
@@ -237,6 +241,55 @@ describe("registerStudioRuntimeHttpRoutes", () => {
 
     expect(matchingLayers[0]?.handle).toBe(authMiddleware);
   });
+
+  it("forwards the path-mounted runtime base path to the live preview proxy", async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "vivd-studio-runtime-devserver-proxy-"),
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "package.json"),
+      JSON.stringify({
+        name: "devserver-project",
+        scripts: { dev: "astro dev" },
+      }),
+    );
+
+    const hasServerSpy = vi
+      .spyOn(devServerService, "hasServer")
+      .mockReturnValue(true);
+    const getDevServerUrlSpy = vi
+      .spyOn(devServerService, "getDevServerUrl")
+      .mockReturnValue("http://127.0.0.1:4321");
+    const getDevServerStatusSpy = vi
+      .spyOn(devServerService, "getDevServerStatus")
+      .mockReturnValue("ready");
+
+    const { app } = createTestRuntimeApp({
+      projectPath: projectDir,
+      getProxyBasePath: () => "/_studio/runtime-123",
+      devPreviewProxy: ((req, res) => {
+        expect((req as any).vivdDevPreviewTarget).toBe("http://127.0.0.1:4321");
+        expect((req as any).vivdDevPreviewBasePath).toBe("/_studio/runtime-123");
+        res.status(200).send("proxied");
+      }) as express.RequestHandler,
+    });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toBe("proxied");
+    } finally {
+      hasServerSpy.mockRestore();
+      getDevServerUrlSpy.mockRestore();
+      getDevServerStatusSpy.mockRestore();
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   it("serves hidden .vivd files through the project file route", async () => {
     const projectDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "vivd-studio-runtime-projects-"),

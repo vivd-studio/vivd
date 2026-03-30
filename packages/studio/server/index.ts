@@ -270,15 +270,23 @@ const devPreviewProxy = createProxyMiddleware({
         ct.includes("text/ecmascript") ||
         looksLikeTextByUrl;
       if (!isTextLike || !basePath) {
-        return responseBuffer;
+        if (!ct.includes("text/html")) {
+          return responseBuffer;
+        }
+
+        const html = responseBuffer.toString("utf8");
+        return Buffer.from(injectPreviewBridgeScript(html), "utf8");
       }
 
-      const text = responseBuffer.toString("utf8");
+      let text = responseBuffer.toString("utf8");
+      const isHtml = ct.includes("text/html");
+      if (isHtml) {
+        text = injectPreviewBridgeScript(text);
+      }
       const shouldRewrite = Boolean(basePath && basePath !== "/");
       const rewritten = shouldRewrite
         ? rewriteRootAssetUrlsInText(text, basePath)
         : text;
-      const isHtml = ct.includes("text/html");
       let finalText = isHtml ? stripDevServerToolingFromHtml(rewritten) : rewritten;
 
       // Inject base path rewrite script for HTML pages

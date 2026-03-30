@@ -45,13 +45,16 @@ export function resolveStudioRuntimePath(urlOrPath: string): string {
     if (url.origin !== window.location.origin) return urlOrPath;
 
     const runtimeBasePath = getStudioRuntimeBasePath();
-    if (
-      runtimeBasePath &&
-      shouldPrefixStudioRuntimePath(url.pathname) &&
-      url.pathname !== runtimeBasePath &&
-      !url.pathname.startsWith(`${runtimeBasePath}/`)
-    ) {
-      url.pathname = `${runtimeBasePath}${url.pathname}`;
+    if (runtimeBasePath) {
+      if (url.pathname === "/") {
+        url.pathname = `${runtimeBasePath}/`;
+      } else if (
+        shouldPrefixStudioRuntimePath(url.pathname) &&
+        url.pathname !== runtimeBasePath &&
+        !url.pathname.startsWith(`${runtimeBasePath}/`)
+      ) {
+        url.pathname = `${runtimeBasePath}${url.pathname}`;
+      }
     }
 
     return isAbsolute ? url.toString() : `${url.pathname}${url.search}${url.hash}`;

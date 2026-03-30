@@ -406,16 +406,16 @@ export function StudioToolbar() {
                 shouldReserveSessionSlot,
               )}
               style={expandableToggleStyle(sessionExpandedWidth)}
-              title={chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
-            >
-              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
-                <History className="h-4 w-4" />
-                {hasOtherActiveSessions ? (
-                  <span
-                    data-testid="sessions-button-activity-indicator"
-                    className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-background"
-                    aria-hidden="true"
-                  />
+                title={chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
+              >
+                <span className="relative flex h-8 w-8 shrink-0 items-center justify-center">
+                  <History className="h-4 w-4" />
+                  {hasOtherActiveSessions ? (
+                    <span
+                      data-testid="sessions-button-activity-indicator"
+                      className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-background"
+                      aria-hidden="true"
+                    />
                 ) : null}
               </span>
               <span
@@ -424,16 +424,16 @@ export function StudioToolbar() {
                   shouldExpandSessionLabel,
                   shouldReserveSessionSlot,
                 )}
-              >
-                Sessions
-              </span>
-              {hasOtherActiveSessions ? (
-                <span className="sr-only">Another session is active</span>
-              ) : null}
-              <span className="sr-only">
-                {chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
-              </span>
-            </Button>
+                >
+                  Sessions
+                </span>
+                {hasOtherActiveSessions ? (
+                  <span className="sr-only">Another session is active</span>
+                ) : null}
+                <span className="sr-only">
+                  {chatOpen && sessionHistoryOpen ? "Hide sessions" : "Show sessions"}
+                </span>
+              </Button>
           </div>
         </div>
       ) : null}

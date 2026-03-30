@@ -15,7 +15,6 @@ import {
   getAvailableModels,
   getAvailableModelsWithMetadata,
   getDefaultModel,
-  getPreferredInitialGenerationModel,
 } from "./modelConfig.js";
 
 describe("OpenCode model config", () => {
@@ -55,17 +54,13 @@ describe("OpenCode model config", () => {
     ]);
   });
 
-  it("prefers advanced for initial generation while defaulting general chat to standard", () => {
+  it("defaults general chat to the standard tier", () => {
     vi.stubEnv("OPENCODE_MODEL_STANDARD", "openrouter/google/gemini-2.5-flash");
     vi.stubEnv("OPENCODE_MODEL_ADVANCED", "openrouter/google/gemini-3-pro-preview");
 
     expect(getDefaultModel()).toEqual({
       provider: "openrouter",
       modelId: "google/gemini-2.5-flash",
-    });
-    expect(getPreferredInitialGenerationModel()).toEqual({
-      provider: "openrouter",
-      modelId: "google/gemini-3-pro-preview",
     });
   });
 
@@ -75,7 +70,6 @@ describe("OpenCode model config", () => {
 
     expect(getAvailableModels()).toEqual([]);
     expect(getDefaultModel()).toBeNull();
-    expect(getPreferredInitialGenerationModel()).toBeNull();
   });
 
   it("enriches configured models with provider metadata when available", async () => {

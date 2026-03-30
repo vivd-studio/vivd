@@ -3,6 +3,7 @@ import {
   buildDerivedSessionError,
   deriveChatActivityState,
   findStaleRunningToolState,
+  selectLikelyActiveSessionIds,
   selectSessionActivitySummary,
   selectMostRecentActiveSessionId,
   selectMostRecentAttentionSessionId,
@@ -121,6 +122,8 @@ describe("opencodeChat runtime", () => {
         "sess-2": { type: "retry", attempt: 2 },
         "sess-3": { type: "done" },
       },
+      messagesById: {},
+      messagesBySessionId: {},
       selectedSessionId: "sess-1",
     });
 
@@ -142,6 +145,8 @@ describe("opencodeChat runtime", () => {
         "sess-1": { type: "busy" },
         "sess-2": { type: "idle" },
       },
+      messagesById: {},
+      messagesBySessionId: {},
       selectedSessionId: "sess-1",
     });
 
@@ -150,6 +155,32 @@ describe("opencodeChat runtime", () => {
     expect(summary.otherActiveSessionIds).toEqual([]);
     expect(summary.otherActiveSessionCount).toBe(0);
     expect(summary.hasOtherActiveSessions).toBe(false);
+  });
+
+  it("treats a session with a cached pending assistant message as active even when its status looks idle", () => {
+    const activeSessionIds = selectLikelyActiveSessionIds({
+      sessions: [
+        { id: "sess-1", time: { updated: 20 } },
+        { id: "sess-2", time: { updated: 10 } },
+      ],
+      sessionStatusById: {
+        "sess-1": { type: "idle" },
+        "sess-2": { type: "done" },
+      },
+      messagesById: {
+        "msg-1": {
+          id: "msg-1",
+          sessionID: "sess-1",
+          role: "assistant",
+          time: { created: 1 },
+        },
+      },
+      messagesBySessionId: {
+        "sess-1": ["msg-1"],
+      },
+    });
+
+    expect(activeSessionIds).toEqual(["sess-1"]);
   });
 
   it("selects the most recent session needing attention when a question is pending", () => {

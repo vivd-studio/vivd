@@ -102,20 +102,6 @@ export function getDefaultModel(): ModelSelection | null {
   };
 }
 
-export function getPreferredInitialGenerationModel(): ModelSelection | null {
-  const models = getAvailableModels();
-  const advancedModel = models.find((model) => model.tier === "advanced");
-
-  if (advancedModel) {
-    return {
-      provider: advancedModel.provider,
-      modelId: advancedModel.modelId,
-    };
-  }
-
-  return getDefaultModel();
-}
-
 export function validateModelSelection(
   model: ModelSelection,
 ): ModelSelection | null {

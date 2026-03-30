@@ -5,12 +5,21 @@ import { ChatProvider, useChatContext } from "./ChatContext";
 import { FOLLOWUP_BEHAVIOR_STORAGE_KEY } from "./followupUtils";
 
 const {
+  availableModelsState,
   controllerState,
   sendTaskMock,
   stopGenerationMock,
   startInitialGenerationMock,
   previewState,
 } = vi.hoisted(() => ({
+  availableModelsState: {
+    data: [] as Array<{
+      tier: "standard" | "advanced" | "pro";
+      provider: string;
+      modelId: string;
+      label: string;
+    }>,
+  },
   sendTaskMock: vi.fn(),
   stopGenerationMock: vi.fn(),
   startInitialGenerationMock: vi.fn(),
@@ -69,7 +78,7 @@ vi.mock("@/lib/trpc", () => ({
     },
     agent: {
       getAvailableModels: {
-        useQuery: () => ({ data: [] }),
+        useQuery: () => ({ data: availableModelsState.data }),
       },
       getRuntimeConfig: {
         useQuery: () => ({ data: { softContextLimitTokens: 250_000 } }),
@@ -138,6 +147,7 @@ describe("ChatProvider follow-up behavior", () => {
       previewState.pendingChatMessage = null;
     });
     previewState.setChatOpen.mockReset();
+    availableModelsState.data = [];
 
     controllerState.sendTask = sendTaskMock;
     controllerState.stopGeneration = stopGenerationMock;
@@ -390,6 +400,98 @@ describe("ChatProvider follow-up behavior", () => {
     });
 
     expect(controllerState.setSelectedSessionId).toHaveBeenCalledWith("sess-new");
+  });
+
+  it("passes the default standard model through when initial generation starts with models loaded", async () => {
+    availableModelsState.data = [
+      {
+        tier: "standard",
+        provider: "openai",
+        modelId: "gpt-4.1-mini",
+        label: "Standard",
+      },
+      {
+        tier: "advanced",
+        provider: "openai",
+        modelId: "gpt-4.1",
+        label: "Advanced",
+      },
+    ];
+    controllerState.selectedSessionId = null;
+    controllerState.sessions = [];
+    controllerState.sessionsLoading = false;
+    controllerState.isSessionHydrating = false;
+    previewState.initialGenerationRequested = true;
+    previewState.pendingChatMessage = null;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        model: {
+          provider: "openai",
+          modelId: "gpt-4.1-mini",
+        },
+      });
+    });
+    expect(latestContext?.selectedModel?.modelId).toBe("gpt-4.1-mini");
+  });
+
+  it("keeps the displayed model aligned with the default initial-generation request when models arrive late", async () => {
+    window.localStorage.setItem(
+      "vivd-selected-model",
+      JSON.stringify({ provider: "openai", modelId: "gpt-4.1" }),
+    );
+    controllerState.selectedSessionId = null;
+    controllerState.sessions = [];
+    controllerState.sessionsLoading = false;
+    controllerState.isSessionHydrating = false;
+    previewState.initialGenerationRequested = true;
+    previewState.pendingChatMessage = null;
+
+    const view = render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        model: undefined,
+      });
+    });
+
+    availableModelsState.data = [
+      {
+        tier: "standard",
+        provider: "openai",
+        modelId: "gpt-4.1-mini",
+        label: "Standard",
+      },
+      {
+        tier: "advanced",
+        provider: "openai",
+        modelId: "gpt-4.1",
+        label: "Advanced",
+      },
+    ];
+    view.rerender(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(latestContext?.selectedModel?.modelId).toBe("gpt-4.1-mini");
+    });
   });
 
   it("pauses auto-send after stop until a queued follow-up is sent manually", async () => {

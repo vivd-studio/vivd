@@ -35,4 +35,15 @@ describe("rewriteRootAssetUrlsInText", () => {
       "style=\"background-image:url('/_studio/runtime-123/vivd-studio/api/preview/site/v1/images/hero.jpg')\"",
     );
   });
+
+  it("rewrites the injected preview bridge script source for path-mounted runtimes", () => {
+    expect(
+      rewriteRootAssetUrlsInText(
+        '<script src="/vivd-studio/api/preview-bridge.js"></script>',
+        "/_studio/runtime-123",
+      ),
+    ).toContain(
+      'src="/_studio/runtime-123/vivd-studio/api/preview-bridge.js"',
+    );
+  });
 });

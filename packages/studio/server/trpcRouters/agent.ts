@@ -16,7 +16,6 @@ import {
   unrevertSession,
 } from "../opencode/index.js";
 import {
-  getPreferredInitialGenerationModel,
   validateModelSelection,
 } from "../opencode/modelConfig.js";
 import { initialGenerationService } from "../services/initialGeneration/InitialGenerationService.js";
@@ -306,17 +305,15 @@ export const agentRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const directory = getWorkspaceDir(ctx);
-      const preferredModel = getPreferredInitialGenerationModel();
-      const fallbackModel =
-        preferredModel || !input.model
-          ? undefined
-          : validateModelSelection(input.model) ?? input.model;
+      const validatedModel = input.model
+        ? validateModelSelection(input.model) ?? input.model
+        : undefined;
 
       return await initialGenerationService.startInitialGeneration({
         projectSlug: input.projectSlug,
         version: input.version ?? 1,
         workspaceDir: directory,
-        model: preferredModel ?? fallbackModel,
+        model: validatedModel,
       });
     }),
 

@@ -96,6 +96,7 @@ export function ChatProvider({
     null,
   );
   const initialGenerationFallbackAttemptedRef = useRef(false);
+  const pendingInitialGenerationDefaultModelRef = useRef(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
   const {
@@ -142,15 +143,20 @@ export function ChatProvider({
   const [queuedFollowupPausedBySessionId, setQueuedFollowupPausedBySessionId] =
     useState<Record<string, boolean>>({});
 
+  const persistSelectedModelPreference = useCallback((model: ModelTier) => {
+    localStorage.setItem(
+      "vivd-selected-model",
+      JSON.stringify({ provider: model.provider, modelId: model.modelId }),
+    );
+  }, []);
+
   const setSelectedModel = useCallback((model: ModelTier | null) => {
+    pendingInitialGenerationDefaultModelRef.current = false;
     setSelectedModelState(model);
     if (model) {
-      localStorage.setItem(
-        "vivd-selected-model",
-        JSON.stringify({ provider: model.provider, modelId: model.modelId }),
-      );
+      persistSelectedModelPreference(model);
     }
-  }, []);
+  }, [persistSelectedModelPreference]);
 
   const setFollowupBehavior = useCallback((behavior: FollowupBehavior) => {
     setFollowupBehaviorState(behavior);
@@ -159,6 +165,16 @@ export function ChatProvider({
 
   useEffect(() => {
     if (availableModels.length === 0 || selectedModel) {
+      return;
+    }
+
+    if (pendingInitialGenerationDefaultModelRef.current) {
+      const defaultModel = availableModels[0];
+      if (defaultModel) {
+        setSelectedModelState(defaultModel);
+        persistSelectedModelPreference(defaultModel);
+      }
+      pendingInitialGenerationDefaultModelRef.current = false;
       return;
     }
 
@@ -180,7 +196,29 @@ export function ChatProvider({
     }
 
     setSelectedModelState(availableModels[0]);
-  }, [availableModels, selectedModel]);
+  }, [availableModels, persistSelectedModelPreference, selectedModel]);
+
+  const resolveInitialGenerationModel = useCallback(() => {
+    if (selectedModel) {
+      return {
+        provider: selectedModel.provider,
+        modelId: selectedModel.modelId,
+      };
+    }
+
+    const defaultModel = availableModels[0];
+    if (defaultModel) {
+      setSelectedModelState(defaultModel);
+      persistSelectedModelPreference(defaultModel);
+      return {
+        provider: defaultModel.provider,
+        modelId: defaultModel.modelId,
+      };
+    }
+
+    pendingInitialGenerationDefaultModelRef.current = true;
+    return undefined;
+  }, [availableModels, persistSelectedModelPreference, selectedModel]);
 
   const {
     sessions,
@@ -378,6 +416,7 @@ export function ChatProvider({
 
       void (async () => {
         try {
+          const model = resolveInitialGenerationModel();
           setInitialGenerationStarting(true);
           setInitialGenerationFailed(null);
           clearSessionError();
@@ -385,12 +424,7 @@ export function ChatProvider({
           const result = await startInitialGenerationMutation.mutateAsync({
             projectSlug,
             version,
-            model: selectedModel
-              ? {
-                  provider: selectedModel.provider,
-                  modelId: selectedModel.modelId,
-                }
-              : undefined,
+            model,
           });
 
           setSelectedSessionId(result.sessionId);
@@ -427,8 +461,8 @@ export function ChatProvider({
     isThinking,
     projectSlug,
     refetchSessions,
+    resolveInitialGenerationModel,
     runTaskPending,
-    selectedModel,
     selectedSessionId,
     setSelectedSessionId,
     startInitialGenerationMutation,
@@ -456,6 +490,7 @@ export function ChatProvider({
 
     void (async () => {
       try {
+        const model = resolveInitialGenerationModel();
         setInitialGenerationStarting(true);
         setInitialGenerationFailed(null);
         clearSessionError();
@@ -463,12 +498,7 @@ export function ChatProvider({
         const result = await startInitialGenerationMutation.mutateAsync({
           projectSlug,
           version,
-          model: selectedModel
-            ? {
-                provider: selectedModel.provider,
-                modelId: selectedModel.modelId,
-              }
-            : undefined,
+          model,
         });
 
         setSelectedSessionId(result.sessionId);
@@ -491,8 +521,8 @@ export function ChatProvider({
     previewContext?.pendingChatMessage,
     projectSlug,
     refetchSessions,
+    resolveInitialGenerationModel,
     runTaskPending,
-    selectedModel,
     selectedSessionId,
     sessions,
     sessionsLoading,
@@ -510,18 +540,14 @@ export function ChatProvider({
 
     void (async () => {
       try {
+        const model = resolveInitialGenerationModel();
         setInitialGenerationStarting(true);
         clearSessionError();
 
         const result = await startInitialGenerationMutation.mutateAsync({
           projectSlug,
           version,
-          model: selectedModel
-            ? {
-                provider: selectedModel.provider,
-                modelId: selectedModel.modelId,
-              }
-            : undefined,
+          model,
         });
 
         setSelectedSessionId(result.sessionId);
@@ -539,7 +565,7 @@ export function ChatProvider({
     previewContext,
     projectSlug,
     refetchSessions,
-    selectedModel,
+    resolveInitialGenerationModel,
     setSelectedSessionId,
     startInitialGenerationMutation,
     version,

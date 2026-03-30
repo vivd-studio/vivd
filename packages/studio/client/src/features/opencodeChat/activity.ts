@@ -24,7 +24,15 @@ export function useOpencodeSessionActivity(): OpenCodeSessionActivitySummary {
     return selectSessionActivitySummary({
       sessions: context.sessions,
       sessionStatusById: context.state.sessionStatusById,
+      messagesById: context.state.messagesById,
+      messagesBySessionId: context.state.messagesBySessionId,
       selectedSessionId: context.selectedSessionId,
     });
-  }, [context?.selectedSessionId, context?.sessions, context?.state.sessionStatusById]);
+  }, [
+    context?.selectedSessionId,
+    context?.sessions,
+    context?.state.messagesById,
+    context?.state.messagesBySessionId,
+    context?.state.sessionStatusById,
+  ]);
 }

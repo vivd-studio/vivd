@@ -1,5 +1,6 @@
 import type {
   OpenCodeConnectionState,
+  OpenCodeMessage,
   OpenCodeSessionActivitySummary,
   OpenCodeQuestionRequest,
   OpenCodeSession,
@@ -208,13 +209,11 @@ export function buildDerivedSessionError({
 export function selectSessionActivitySummary(args: {
   sessions: OpenCodeSession[];
   sessionStatusById: Record<string, OpenCodeSessionStatus>;
+  messagesById: Record<string, OpenCodeMessage>;
+  messagesBySessionId: Record<string, string[]>;
   selectedSessionId: string | null;
 }): OpenCodeSessionActivitySummary {
-  const activeSessionIds = args.sessions
-    .filter((session) =>
-      isActiveSessionStatus(args.sessionStatusById[session.id] ?? null),
-    )
-    .map((session) => session.id);
+  const activeSessionIds = selectLikelyActiveSessionIds(args);
   const selectedSessionId = args.selectedSessionId ?? null;
   const selectedSessionIsActive = Boolean(
     selectedSessionId && activeSessionIds.includes(selectedSessionId),
@@ -232,6 +231,30 @@ export function selectSessionActivitySummary(args: {
     hasAnyActiveSession: activeSessionIds.length > 0,
     hasOtherActiveSessions: otherActiveSessionIds.length > 0,
   };
+}
+
+export function selectLikelyActiveSessionIds(args: {
+  sessions: OpenCodeSession[];
+  sessionStatusById: Record<string, OpenCodeSessionStatus>;
+  messagesById: Record<string, OpenCodeMessage>;
+  messagesBySessionId: Record<string, string[]>;
+}): string[] {
+  return args.sessions
+    .filter((session) => {
+      if (isActiveSessionStatus(args.sessionStatusById[session.id] ?? null)) {
+        return true;
+      }
+
+      const messageIds = args.messagesBySessionId[session.id] ?? [];
+      return messageIds.some((messageId) => {
+        const message = args.messagesById[messageId];
+        return (
+          message?.role === "assistant" &&
+          typeof message.time?.completed !== "number"
+        );
+      });
+    })
+    .map((session) => session.id);
 }
 
 export function selectMostRecentActiveSessionId(args: {

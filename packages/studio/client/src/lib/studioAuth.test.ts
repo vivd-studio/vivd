@@ -49,6 +49,7 @@ describe("studioAuth runtime path helpers", () => {
     });
 
     expect(getStudioRuntimeBasePath()).toBe("/_studio/runtime-123");
+    expect(resolveStudioRuntimePath("/")).toBe("/_studio/runtime-123/");
     expect(resolveStudioRuntimePath("/vivd-studio/api/trpc")).toBe(
       "/_studio/runtime-123/vivd-studio/api/trpc",
     );

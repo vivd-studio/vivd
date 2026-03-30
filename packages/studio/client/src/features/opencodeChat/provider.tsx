@@ -24,6 +24,7 @@ import {
   hasCanonicalMatchForOptimisticMessage,
   selectMergedSessionMessages,
 } from "./sync/optimisticMessages";
+import { selectLikelyActiveSessionIds } from "./runtime";
 import type {
   CanonicalChatEvent,
   OpenCodeOptimisticUserMessage,
@@ -108,6 +109,7 @@ export function OpencodeChatProvider({
     OpenCodeOptimisticUserMessage[]
   >([]);
   const nextOptimisticMessageIdRef = useRef(0);
+  const utils = trpc.useUtils();
 
   const bootstrapQuery = trpc.agentChat.bootstrap.useQuery(
     {
@@ -151,13 +153,61 @@ export function OpencodeChatProvider({
     });
   }, [selectedSessionId, sessionMessagesQuery.data]);
 
+  const activeSessionIdsForSync = useMemo(
+    () =>
+      selectLikelyActiveSessionIds({
+        sessions: selectSessions(state),
+        sessionStatusById: state.sessionStatusById,
+        messagesById: state.messagesById,
+        messagesBySessionId: state.messagesBySessionId,
+      }),
+    [
+      state.messagesById,
+      state.messagesBySessionId,
+      state.sessionOrder,
+      state.sessionStatusById,
+      state.sessionsById,
+    ],
+  );
+
   const refreshSnapshot = useCallback(async () => {
     const tasks: Promise<unknown>[] = [bootstrapQuery.refetch()];
     if (selectedSessionId) {
       tasks.push(sessionMessagesQuery.refetch());
     }
+
+    for (const sessionId of activeSessionIdsForSync) {
+      if (!sessionId || sessionId === selectedSessionId) {
+        continue;
+      }
+      tasks.push(
+        utils.agentChat.sessionMessages
+          .fetch({
+            projectSlug,
+            version,
+            sessionId,
+          })
+          .then((messages) => {
+            dispatch({
+              type: "session.messages.loaded",
+              payload: {
+                sessionId,
+                messages,
+              },
+            });
+          }),
+      );
+    }
     await Promise.allSettled(tasks);
-  }, [bootstrapQuery.refetch, selectedSessionId, sessionMessagesQuery.refetch]);
+  }, [
+    activeSessionIdsForSync,
+    bootstrapQuery.refetch,
+    projectSlug,
+    selectedSessionId,
+    sessionMessagesQuery.refetch,
+    utils.agentChat.sessionMessages,
+    version,
+  ]);
 
   bootstrapReadyRef.current = Boolean(bootstrapQuery.data);
   queuedRefreshRef.current = refreshSnapshot;

@@ -9,7 +9,6 @@ const {
   getAvailableModelsWithMetadataMock,
   getSessionContentMock,
   getSessionsStatusMock,
-  getPreferredInitialGenerationModelMock,
   validateModelSelectionMock,
   isConnectedModeMock,
   getBackendUrlMock,
@@ -25,7 +24,6 @@ const {
   getAvailableModelsWithMetadataMock: vi.fn(),
   getSessionContentMock: vi.fn(),
   getSessionsStatusMock: vi.fn(),
-  getPreferredInitialGenerationModelMock: vi.fn(),
   validateModelSelectionMock: vi.fn(),
   isConnectedModeMock: vi.fn(),
   getBackendUrlMock: vi.fn(),
@@ -53,7 +51,6 @@ vi.mock("../opencode/index.js", () => ({
 }));
 
 vi.mock("../opencode/modelConfig.js", () => ({
-  getPreferredInitialGenerationModel: getPreferredInitialGenerationModelMock,
   validateModelSelection: validateModelSelectionMock,
 }));
 
@@ -95,7 +92,6 @@ describe("agent router", () => {
     getAvailableModelsWithMetadataMock.mockReset();
     getSessionContentMock.mockReset();
     getSessionsStatusMock.mockReset();
-    getPreferredInitialGenerationModelMock.mockReset();
     validateModelSelectionMock.mockReset();
     isConnectedModeMock.mockReset();
     getBackendUrlMock.mockReset();
@@ -117,7 +113,6 @@ describe("agent router", () => {
     ]);
     getSessionContentMock.mockResolvedValue([]);
     getSessionsStatusMock.mockResolvedValue({});
-    getPreferredInitialGenerationModelMock.mockReturnValue(null);
     validateModelSelectionMock.mockImplementation((model) => model);
     isConnectedModeMock.mockReturnValue(false);
     getBackendUrlMock.mockReturnValue("");
@@ -255,8 +250,8 @@ describe("agent router", () => {
     ]);
   });
 
-  it("starts initial generation with the preferred advanced model", async () => {
-    getPreferredInitialGenerationModelMock.mockReturnValueOnce({
+  it("starts initial generation with the validated caller-provided model", async () => {
+    validateModelSelectionMock.mockReturnValueOnce({
       provider: "openai",
       modelId: "gpt-5.4",
     });
@@ -274,7 +269,6 @@ describe("agent router", () => {
       workspaceDir: "/tmp/workspace",
       model: { provider: "openai", modelId: "gpt-5.4" },
     });
-    expect(validateModelSelectionMock).not.toHaveBeenCalled();
     expect(result).toEqual({
       sessionId: "sess-initial",
       reused: false,
@@ -282,24 +276,19 @@ describe("agent router", () => {
     });
   });
 
-  it("falls back to the caller-provided model when no preferred initial-generation model exists", async () => {
-    validateModelSelectionMock.mockReturnValueOnce({
-      provider: "anthropic",
-      modelId: "claude-sonnet",
-    });
+  it("starts initial generation without an explicit model override by default", async () => {
     const caller = agentRouter.createCaller(makeContext());
 
     await caller.startInitialGeneration({
       projectSlug: "site-1",
       version: 3,
-      model: { provider: "anthropic", modelId: "claude-sonnet-4" },
     });
 
     expect(startInitialGenerationServiceMock).toHaveBeenCalledWith({
       projectSlug: "site-1",
       version: 3,
       workspaceDir: "/tmp/workspace",
-      model: { provider: "anthropic", modelId: "claude-sonnet" },
+      model: undefined,
     });
   });
 

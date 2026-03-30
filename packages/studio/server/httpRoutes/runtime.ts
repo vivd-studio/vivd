@@ -396,6 +396,8 @@ export function registerStudioRuntimeHttpRoutes(
         }
 
         (req as DevPreviewProxyRequest).vivdDevPreviewTarget = devServerUrl;
+        (req as DevPreviewProxyRequest).vivdDevPreviewBasePath =
+          getProxyBasePath(req) ?? "";
         return devPreviewProxy(req, res, next);
       }
 

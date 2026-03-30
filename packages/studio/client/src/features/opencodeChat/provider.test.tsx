@@ -5,12 +5,14 @@ import { OpencodeChatProvider } from "./provider";
 const {
   mockBootstrapRefetch,
   mockSessionMessagesRefetch,
+  mockSessionMessagesFetch,
   mockBootstrapData,
   useSubscriptionMock,
   subscriptionCallbacks,
 } = vi.hoisted(() => ({
   mockBootstrapRefetch: vi.fn(async () => undefined),
   mockSessionMessagesRefetch: vi.fn(async () => undefined),
+  mockSessionMessagesFetch: vi.fn(async () => []),
   mockBootstrapData: {
     sessions: [],
     statuses: {},
@@ -29,6 +31,13 @@ vi.mock("@/lib/trpc", () => {
 
   return {
     trpc: {
+      useUtils: () => ({
+        agentChat: {
+          sessionMessages: {
+            fetch: mockSessionMessagesFetch,
+          },
+        },
+      }),
       agentChat: {
         bootstrap: {
           useQuery: () => ({
@@ -71,11 +80,17 @@ describe("OpencodeChatProvider", () => {
   beforeEach(() => {
     mockBootstrapRefetch.mockReset();
     mockSessionMessagesRefetch.mockReset();
+    mockSessionMessagesFetch.mockReset();
     useSubscriptionMock.mockReset();
     subscriptionCallbacks.onStarted = undefined;
     subscriptionCallbacks.onData = undefined;
     mockBootstrapRefetch.mockResolvedValue(undefined);
     mockSessionMessagesRefetch.mockResolvedValue(undefined);
+    mockSessionMessagesFetch.mockResolvedValue([]);
+    mockBootstrapData.sessions = [];
+    mockBootstrapData.statuses = {};
+    mockBootstrapData.messages = [];
+    mockBootstrapData.questions = [];
   });
 
   afterEach(() => {
@@ -216,5 +231,32 @@ describe("OpencodeChatProvider", () => {
     });
 
     expect(mockBootstrapRefetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("reconciles non-selected active sessions during a queued refresh", async () => {
+    mockBootstrapData.sessions = [
+      { id: "sess-selected", time: { updated: 20 } },
+      { id: "sess-active", time: { updated: 10 } },
+    ];
+    mockBootstrapData.statuses = {
+      "sess-selected": { type: "idle" },
+      "sess-active": { type: "busy" },
+    };
+
+    render(
+      <OpencodeChatProvider projectSlug="site-1" version={1}>
+        <div>chat</div>
+      </OpencodeChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockBootstrapRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSessionMessagesFetch).toHaveBeenCalledWith({
+      projectSlug: "site-1",
+      version: 1,
+      sessionId: "sess-active",
+    });
   });
 });

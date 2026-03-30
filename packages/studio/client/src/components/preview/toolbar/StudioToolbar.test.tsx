@@ -173,10 +173,10 @@ describe("StudioToolbar", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId("sessions-button-activity-indicator"),
-    ).toBeInTheDocument();
+      ).toBeInTheDocument();
   });
 
-  it("does not show the Sessions button indicator when no other session is active", () => {
+  it("does not show the Sessions button indicator when no session is active", () => {
     render(<StudioToolbar />);
 
     expect(
@@ -184,7 +184,7 @@ describe("StudioToolbar", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("sessions-button-activity-indicator"),
-    ).not.toBeInTheDocument();
+      ).not.toBeInTheDocument();
   });
 
   it("does not show the Sessions button indicator when only the selected session is active", () => {
