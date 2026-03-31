@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -58,7 +58,9 @@ function renderTab(path = "/vivd-studio/superadmin?section=instance") {
 }
 
 describe("InstanceSettingsTab", () => {
+  const originalLocation = window.location;
   const scrollIntoViewMock = vi.fn();
+  const softwareRefetchMock = vi.fn();
 
   beforeEach(() => {
     useUtilsMock.mockReset();
@@ -69,6 +71,12 @@ describe("InstanceSettingsTab", () => {
     startInstanceSoftwareUpdateUseMutationMock.mockReset();
     startInstanceSoftwareUpdateMutateMock.mockReset();
     scrollIntoViewMock.mockReset();
+    softwareRefetchMock.mockReset();
+    window.sessionStorage.clear();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -151,7 +159,7 @@ describe("InstanceSettingsTab", () => {
       },
       isLoading: false,
       isFetching: false,
-      refetch: vi.fn(),
+      refetch: softwareRefetchMock.mockResolvedValue({}),
     });
 
     updateInstanceSettingsUseMutationMock.mockReturnValue({
@@ -274,5 +282,188 @@ describe("InstanceSettingsTab", () => {
     await waitFor(() => {
       expect(scrollIntoViewMock).toHaveBeenCalled();
     });
+  });
+
+  it("locks the updater after the managed update starts", async () => {
+    getInstanceSettingsUseQueryMock.mockReturnValue({
+      data: {
+        installProfile: "solo",
+        singleProjectMode: false,
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        pluginDefaults: {
+          contact_form: { enabled: true },
+          analytics: { enabled: true },
+        },
+        limitDefaults: {},
+        controlPlane: {
+          mode: "path_based",
+        },
+        pluginRuntime: {
+          mode: "same_host_path",
+        },
+        network: {
+          publicHost: "49.13.48.211",
+          publicOrigin: "http://49.13.48.211",
+          tlsMode: "off",
+          acmeEmail: null,
+          sources: {
+            publicHost: "bootstrap_env",
+            tlsMode: "bootstrap_env",
+            acmeEmail: "default",
+          },
+          deploymentManaged: {
+            publicHost: false,
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: {
+        currentVersion: "1.1.38",
+        currentRevision: "abc123def456",
+        currentImage: "ghcr.io/vivd-studio/vivd-server:latest",
+        currentImageTag: "latest",
+        latestVersion: "1.1.39",
+        latestTag: "1.1.39",
+        latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.39",
+        releaseStatus: "available",
+        managedUpdate: {
+          enabled: true,
+          reason: null,
+          helperImage: "docker:28-cli",
+          workdir: "/srv/selfhost",
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: softwareRefetchMock.mockResolvedValue({}),
+    });
+
+    startInstanceSoftwareUpdateUseMutationMock.mockImplementation((options) => ({
+      isPending: false,
+      mutate: () => {
+        options.onSuccess?.({
+          started: true,
+          helperContainerId: "helper-1",
+          helperImage: "docker:28-cli",
+          targetTag: "1.1.39",
+        });
+      },
+    }));
+
+    renderTab();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update to 1.1.39" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Updating to 1.1.39" })).toBeDisabled();
+    });
+    expect(window.sessionStorage.getItem("vivd.instance-software.pending-update")).toContain(
+      "\"targetTag\":\"1.1.39\"",
+    );
+    expect(screen.getByText(/update to 1.1.39 is running/i)).toBeInTheDocument();
+  });
+
+  it("reloads only after the target version is reported as current", async () => {
+    window.sessionStorage.setItem(
+      "vivd.instance-software.pending-update",
+      JSON.stringify({
+        targetTag: "1.1.39",
+        startedAt: Date.now(),
+      }),
+    );
+
+    const locationSnapshot = window.location;
+    const reloadMock = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...locationSnapshot,
+        reload: reloadMock,
+      },
+    });
+
+    getInstanceSettingsUseQueryMock.mockReturnValue({
+      data: {
+        installProfile: "solo",
+        singleProjectMode: false,
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        pluginDefaults: {
+          contact_form: { enabled: true },
+          analytics: { enabled: true },
+        },
+        limitDefaults: {},
+        controlPlane: {
+          mode: "path_based",
+        },
+        pluginRuntime: {
+          mode: "same_host_path",
+        },
+        network: {
+          publicHost: "49.13.48.211",
+          publicOrigin: "http://49.13.48.211",
+          tlsMode: "off",
+          acmeEmail: null,
+          sources: {
+            publicHost: "bootstrap_env",
+            tlsMode: "bootstrap_env",
+            acmeEmail: "default",
+          },
+          deploymentManaged: {
+            publicHost: false,
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: {
+        currentVersion: "1.1.39",
+        currentRevision: "abc123def456",
+        currentImage: "ghcr.io/vivd-studio/vivd-server:latest",
+        currentImageTag: "latest",
+        latestVersion: "1.1.39",
+        latestTag: "1.1.39",
+        latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.39",
+        releaseStatus: "current",
+        managedUpdate: {
+          enabled: true,
+          reason: null,
+          helperImage: "docker:28-cli",
+          workdir: "/srv/selfhost",
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: softwareRefetchMock.mockResolvedValue({}),
+    });
+
+    renderTab();
+
+    await waitFor(() => {
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+    });
+    expect(window.sessionStorage.getItem("vivd.instance-software.pending-update")).toBeNull();
   });
 });

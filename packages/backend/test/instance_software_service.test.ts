@@ -6,6 +6,7 @@ import {
 
 describe("InstanceSoftwareService", () => {
   const inspectContainerMock = vi.fn();
+  const listContainersMock = vi.fn();
   const pullImageMock = vi.fn();
   const createContainerMock = vi.fn();
   const startContainerMock = vi.fn();
@@ -13,6 +14,7 @@ describe("InstanceSoftwareService", () => {
 
   beforeEach(() => {
     inspectContainerMock.mockReset();
+    listContainersMock.mockReset();
     pullImageMock.mockReset();
     createContainerMock.mockReset();
     startContainerMock.mockReset();
@@ -50,6 +52,7 @@ describe("InstanceSoftwareService", () => {
       getHostname: () => "backend-container",
       dockerApiClient: {
         inspectContainer: inspectContainerMock,
+        listContainers: listContainersMock,
         pullImage: pullImageMock,
         createContainer: createContainerMock,
         startContainer: startContainerMock,
@@ -84,6 +87,7 @@ describe("InstanceSoftwareService", () => {
         },
       ],
     });
+    listContainersMock.mockResolvedValue([]);
     pullImageMock.mockResolvedValue(undefined);
     createContainerMock.mockResolvedValue({
       Id: "helper-1",
@@ -102,6 +106,7 @@ describe("InstanceSoftwareService", () => {
       getHostname: () => "backend-container",
       dockerApiClient: {
         inspectContainer: inspectContainerMock,
+        listContainers: listContainersMock,
         pullImage: pullImageMock,
         createContainer: createContainerMock,
         startContainer: startContainerMock,
@@ -141,5 +146,110 @@ describe("InstanceSoftwareService", () => {
       }),
     });
     expect(startContainerMock).toHaveBeenCalledWith("helper-1");
+  });
+
+  it("blocks duplicate managed updates when an updater container is already running", async () => {
+    inspectContainerMock.mockResolvedValue({
+      Config: {
+        Image: "ghcr.io/vivd-studio/vivd-server:latest",
+      },
+      Mounts: [
+        {
+          Destination: "/srv/selfhost",
+          Source: "/Users/test/vivd",
+        },
+      ],
+    });
+    listContainersMock.mockResolvedValue([
+      {
+        Id: "helper-running",
+        State: "running",
+        Labels: {
+          vivd_role: "selfhost_updater",
+        },
+      },
+    ]);
+
+    const service = new InstanceSoftwareService({
+      env: {
+        VIVD_SELFHOST_UPDATE_WORKDIR: "/srv/selfhost",
+      },
+      now: () => 3_000,
+      getHostname: () => "backend-container",
+      dockerApiClient: {
+        inspectContainer: inspectContainerMock,
+        listContainers: listContainersMock,
+        pullImage: pullImageMock,
+        createContainer: createContainerMock,
+        startContainer: startContainerMock,
+      },
+      listSemverImagesFromGhcr: listSemverImagesFromGhcrMock,
+    });
+
+    const result = await service.startManagedUpdate({
+      installProfile: "solo",
+      targetTag: "1.1.34",
+    });
+
+    expect(result).toEqual({
+      started: false,
+      error: "A managed self-host update is already running for this installation.",
+      targetTag: "1.1.34",
+    });
+    expect(pullImageMock).not.toHaveBeenCalled();
+    expect(createContainerMock).not.toHaveBeenCalled();
+  });
+
+  it("retries helper-container creation once when the helper image is still missing", async () => {
+    inspectContainerMock.mockResolvedValue({
+      Config: {
+        Image: "ghcr.io/vivd-studio/vivd-server:latest",
+      },
+      Mounts: [
+        {
+          Destination: "/srv/selfhost",
+          Source: "/Users/test/vivd",
+        },
+      ],
+    });
+    listContainersMock.mockResolvedValue([]);
+    pullImageMock.mockResolvedValue(undefined);
+    createContainerMock
+      .mockRejectedValueOnce(new Error("[DockerMachines] No such image: docker:28-cli"))
+      .mockResolvedValueOnce({
+        Id: "helper-2",
+      });
+    startContainerMock.mockResolvedValue(undefined);
+
+    const service = new InstanceSoftwareService({
+      env: {
+        VIVD_SELFHOST_UPDATE_WORKDIR: "/srv/selfhost",
+      },
+      now: () => 4_000,
+      getHostname: () => "backend-container",
+      dockerApiClient: {
+        inspectContainer: inspectContainerMock,
+        listContainers: listContainersMock,
+        pullImage: pullImageMock,
+        createContainer: createContainerMock,
+        startContainer: startContainerMock,
+      },
+      listSemverImagesFromGhcr: listSemverImagesFromGhcrMock,
+    });
+
+    const result = await service.startManagedUpdate({
+      installProfile: "solo",
+      targetTag: "1.1.34",
+    });
+
+    expect(result).toEqual({
+      started: true,
+      helperContainerId: "helper-2",
+      helperImage: "docker:28-cli",
+      targetTag: "1.1.34",
+    });
+    expect(pullImageMock).toHaveBeenCalledTimes(2);
+    expect(createContainerMock).toHaveBeenCalledTimes(2);
+    expect(startContainerMock).toHaveBeenCalledWith("helper-2");
   });
 });

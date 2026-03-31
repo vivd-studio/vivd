@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { HardDriveDownload, Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import type { RouterOutputs } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,9 +98,18 @@ const LIMIT_FIELDS = [
 type CapabilityKey = (typeof CAPABILITY_META)[number]["key"];
 type LimitFieldKey = (typeof LIMIT_FIELDS)[number]["key"];
 type NetworkTlsMode = "managed" | "external" | "off";
+type InstanceSoftware = RouterOutputs["superadmin"]["getInstanceSoftware"];
+type PendingManagedUpdate = {
+  targetTag: string;
+  startedAt: number;
+};
 
 type CapabilityState = Record<CapabilityKey, boolean>;
 type LimitState = Record<LimitFieldKey, string>;
+
+const MANAGED_UPDATE_STORAGE_KEY = "vivd.instance-software.pending-update";
+const MANAGED_UPDATE_POLL_INTERVAL_MS = 3_000;
+const MANAGED_UPDATE_TIMEOUT_MS = 5 * 60_000;
 
 function emptyLimitState(): LimitState {
   return {
@@ -130,6 +140,67 @@ function toLimitState(
   };
 }
 
+function normalizeVersionLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return trimmed;
+  return `${Number.parseInt(match[1], 10)}.${Number.parseInt(match[2], 10)}.${Number.parseInt(
+    match[3],
+    10,
+  )}`;
+}
+
+function doesSoftwareMatchTarget(
+  software: InstanceSoftware | undefined,
+  targetTag: string | null,
+): boolean {
+  if (!software || !targetTag) return false;
+
+  const normalizedTarget = normalizeVersionLabel(targetTag);
+  const currentCandidates = [software.currentVersion, software.currentImageTag]
+    .map((value) => normalizeVersionLabel(value))
+    .filter((value): value is string => !!value);
+
+  if (normalizedTarget && currentCandidates.includes(normalizedTarget)) {
+    return true;
+  }
+
+  const normalizedLatest = normalizeVersionLabel(software.latestTag || software.latestVersion);
+  return software.releaseStatus === "current" && !!normalizedTarget && normalizedLatest === normalizedTarget;
+}
+
+function readPendingManagedUpdate(): PendingManagedUpdate | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(MANAGED_UPDATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingManagedUpdate>;
+    const targetTag = typeof parsed.targetTag === "string" ? parsed.targetTag.trim() : "";
+    const startedAt =
+      typeof parsed.startedAt === "number" && Number.isFinite(parsed.startedAt)
+        ? parsed.startedAt
+        : 0;
+    if (!targetTag || startedAt <= 0) return null;
+    return { targetTag, startedAt };
+  } catch {
+    return null;
+  }
+}
+
+function writePendingManagedUpdate(pending: PendingManagedUpdate | null) {
+  if (typeof window === "undefined") return;
+
+  if (!pending) {
+    window.sessionStorage.removeItem(MANAGED_UPDATE_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(MANAGED_UPDATE_STORAGE_KEY, JSON.stringify(pending));
+}
+
 export function InstanceSettingsTab() {
   const location = useLocation();
   const utils = trpc.useUtils();
@@ -138,6 +209,7 @@ export function InstanceSettingsTab() {
     staleTime: 60_000,
     retry: false,
   });
+  const refetchSoftware = softwareQuery.refetch;
   const settings = settingsQuery.data;
   const software = softwareQuery.data;
 
@@ -154,10 +226,13 @@ export function InstanceSettingsTab() {
   const [publicHost, setPublicHost] = useState("");
   const [tlsMode, setTlsMode] = useState<NetworkTlsMode>("off");
   const [acmeEmail, setAcmeEmail] = useState("");
-  const [waitingForUpdate, setWaitingForUpdate] = useState(false);
+  const [pendingManagedUpdate, setPendingManagedUpdate] = useState<PendingManagedUpdate | null>(
+    () => readPendingManagedUpdate(),
+  );
   const effectiveInstallProfile = settings?.installProfile ?? null;
   const isSoloInstall = effectiveInstallProfile === "solo";
   const isPlatformInstall = effectiveInstallProfile === "platform";
+  const waitingForUpdate = !!pendingManagedUpdate;
 
   useEffect(() => {
     if (!settings) return;
@@ -175,6 +250,59 @@ export function InstanceSettingsTab() {
       behavior: "smooth",
     });
   }, [location.hash]);
+
+  useEffect(() => {
+    if (!pendingManagedUpdate) return;
+    if (!doesSoftwareMatchTarget(software, pendingManagedUpdate.targetTag)) return;
+
+    writePendingManagedUpdate(null);
+    setPendingManagedUpdate(null);
+    toast.success("Update completed", {
+      description: `Now running ${software?.currentVersion || software?.currentImageTag || pendingManagedUpdate.targetTag}. Reloading the page.`,
+    });
+    window.location.reload();
+  }, [pendingManagedUpdate, software]);
+
+  useEffect(() => {
+    if (!pendingManagedUpdate) return;
+
+    let cancelled = false;
+    let timeoutId: number | null = null;
+
+    const poll = async () => {
+      if (Date.now() - pendingManagedUpdate.startedAt > MANAGED_UPDATE_TIMEOUT_MS) {
+        writePendingManagedUpdate(null);
+        setPendingManagedUpdate(null);
+        toast.error("Update status timed out", {
+          description:
+            "The update did not report the target version within 5 minutes. Check the self-host logs and try again if needed.",
+        });
+        return;
+      }
+
+      try {
+        await refetchSoftware();
+      } catch {
+        // Backend/frontend may be restarting. Keep polling.
+      }
+
+      if (cancelled) return;
+      timeoutId = window.setTimeout(() => {
+        void poll();
+      }, MANAGED_UPDATE_POLL_INTERVAL_MS);
+    };
+
+    timeoutId = window.setTimeout(() => {
+      void poll();
+    }, MANAGED_UPDATE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [pendingManagedUpdate, refetchSoftware]);
 
   const updateSettings = trpc.superadmin.updateInstanceSettings.useMutation({
     onSuccess: async () => {
@@ -194,32 +322,16 @@ export function InstanceSettingsTab() {
         return;
       }
 
-      setWaitingForUpdate(true);
+      const pending = {
+        targetTag: result.targetTag,
+        startedAt: Date.now(),
+      } satisfies PendingManagedUpdate;
+      writePendingManagedUpdate(pending);
+      setPendingManagedUpdate(pending);
       toast.success("Update started", {
-        description: `Applying ${result.targetTag}. This page will reload once the backend is ready again.`,
+        description: `Applying ${result.targetTag}. The update stays locked until this instance reports that version as running.`,
       });
-
-      const pollHealth = async () => {
-        try {
-          const response = await fetch("/vivd-studio/api/health", {
-            cache: "no-store",
-          });
-          if (response.ok) {
-            window.location.reload();
-            return;
-          }
-        } catch {
-          // Backend/frontend may be restarting. Keep polling.
-        }
-
-        window.setTimeout(() => {
-          void pollHealth();
-        }, 2_000);
-      };
-
-      window.setTimeout(() => {
-        void pollHealth();
-      }, 3_000);
+      void refetchSoftware();
     },
     onError: (error) => {
       toast.error("Failed to start update", {
@@ -255,6 +367,7 @@ export function InstanceSettingsTab() {
     software?.releaseStatus === "available"
       ? `Update to ${software.latestVersion || software.latestTag}`
       : "Apply latest release";
+  const waitingTargetLabel = pendingManagedUpdate?.targetTag || software?.latestVersion || software?.latestTag || "latest release";
 
   const handleSaveCapabilities = () => {
     updateSettings.mutate(
@@ -452,6 +565,13 @@ export function InstanceSettingsTab() {
             <p className="text-sm text-muted-foreground">{software.managedUpdate.reason}</p>
           ) : null}
 
+          {waitingForUpdate ? (
+            <p className="text-sm text-muted-foreground">
+              Update to {waitingTargetLabel} is running. This page will stay locked until the
+              backend reports the new version after restart.
+            </p>
+          ) : null}
+
           {isPlatformInstall ? (
             <p className="text-sm text-muted-foreground">
               This page shows the current platform version only. Applying updates remains a
@@ -488,7 +608,7 @@ export function InstanceSettingsTab() {
                 {startSoftwareUpdate.isPending || waitingForUpdate ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Starting update
+                    {startSoftwareUpdate.isPending ? "Starting update" : `Updating to ${waitingTargetLabel}`}
                   </>
                 ) : (
                   <>

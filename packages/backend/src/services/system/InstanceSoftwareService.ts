@@ -35,7 +35,11 @@ type InstanceSoftwareServiceDeps = {
   getHostname: () => string;
   dockerApiClient: Pick<
     DockerApiClient,
-    "inspectContainer" | "pullImage" | "createContainer" | "startContainer"
+    | "inspectContainer"
+    | "listContainers"
+    | "pullImage"
+    | "createContainer"
+    | "startContainer"
   >;
   listSemverImagesFromGhcr: typeof listSemverImagesFromGhcr;
 };
@@ -69,6 +73,7 @@ export type ManagedInstanceSoftwareUpdateResult =
 const RELEASE_TAG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 const DEFAULT_UPDATE_HELPER_IMAGE = "docker:28-cli";
 const DEFAULT_UPDATE_SERVICES = ["backend", "frontend", "scraper"];
+const MANAGED_UPDATE_HELPER_LABEL = "selfhost_updater";
 
 function trimToken(value: string | null | undefined): string | null {
   const trimmed = value?.trim() || "";
@@ -171,8 +176,20 @@ export function buildManagedSelfHostUpdateScript(): string {
     '  update_env_var "DOCKER_STUDIO_IMAGE" "${TARGET_STUDIO_IMAGE}"',
     "fi",
     'docker compose pull ${UPDATE_SERVICES}',
-    'docker compose up -d ${UPDATE_SERVICES}',
+    'docker compose up -d --force-recreate ${UPDATE_SERVICES}',
   ].join("\n");
+}
+
+function isMissingImageError(error: unknown, imageRef: string): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  const imageToken = imageRef.trim().toLowerCase();
+  return (
+    normalized.includes("no such image") ||
+    (imageToken.length > 0 &&
+      normalized.includes(imageToken) &&
+      (normalized.includes("not found") || normalized.includes("pull access denied")))
+  );
 }
 
 export class InstanceSoftwareService {
@@ -265,34 +282,46 @@ export class InstanceSoftwareService {
       soloSelfHostDefaults.dockerStudioSocketPath;
 
     try {
+      const existingUpdater = await this.findActiveManagedUpdateContainer();
+      if (existingUpdater) {
+        console.info("[InstanceSoftwareService] Managed self-host update already running", {
+          helperContainerId: existingUpdater.Id,
+          targetTag,
+        });
+        return {
+          started: false,
+          error: "A managed self-host update is already running for this installation.",
+          targetTag,
+        };
+      }
+
       await this.deps.dockerApiClient.pullImage(helperImage);
 
-      const created = await this.deps.dockerApiClient.createContainer({
-        name: `vivd-selfhost-updater-${this.deps.now()}`,
-        config: {
-          Image: helperImage,
-          Env: [
-            `TARGET_TAG=${targetTag}`,
-            `TARGET_STUDIO_IMAGE=${targetStudioImage}`,
-            `UPDATE_SELFHOST_IMAGE_TAG=${shouldRewriteSelfHostImageTag ? "1" : "0"}`,
-            `UPDATE_STUDIO_IMAGE=${shouldRewriteStudioImage ? "1" : "0"}`,
-            `UPDATE_SERVICES=${updateServices.join(" ")}`,
-          ],
-          Labels: {
-            vivd_managed: "true",
-            vivd_role: "selfhost_updater",
-            vivd_target_tag: targetTag,
-          },
-          WorkingDir: "/workspace",
-          Cmd: ["sh", "-lc", buildManagedSelfHostUpdateScript()],
-          HostConfig: {
-            AutoRemove: true,
-            Binds: [`${socketPath}:/var/run/docker.sock`, `${current.updateWorkdirHostPath}:/workspace`],
-          },
-        },
+      console.info("[InstanceSoftwareService] Starting managed self-host update", {
+        targetTag,
+        helperImage,
+        updateServices,
+        updateWorkdirHostPath: current.updateWorkdirHostPath,
+        rewriteSelfHostImageTag: shouldRewriteSelfHostImageTag,
+        rewriteStudioImage: shouldRewriteStudioImage,
+      });
+
+      const created = await this.createManagedUpdateHelperContainer({
+        helperImage,
+        targetTag,
+        targetStudioImage,
+        updateServices,
+        socketPath,
+        updateWorkdirHostPath: current.updateWorkdirHostPath,
+        shouldRewriteSelfHostImageTag,
+        shouldRewriteStudioImage,
       });
 
       await this.deps.dockerApiClient.startContainer(created.Id);
+      console.info("[InstanceSoftwareService] Managed self-host update started", {
+        helperContainerId: created.Id,
+        targetTag,
+      });
       return {
         started: true,
         helperContainerId: created.Id,
@@ -300,6 +329,10 @@ export class InstanceSoftwareService {
         targetTag,
       };
     } catch (error) {
+      console.error("[InstanceSoftwareService] Managed self-host update failed to start", {
+        targetTag,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {
         started: false,
         error: error instanceof Error ? error.message : String(error),
@@ -396,6 +429,85 @@ export class InstanceSoftwareService {
       updateWorkdirContainerPath,
       updateWorkdirHostPath,
     };
+  }
+
+  private async findActiveManagedUpdateContainer(): Promise<{ Id: string } | null> {
+    try {
+      const containers = await this.deps.dockerApiClient.listContainers();
+      return (
+        containers.find((container) => {
+          const labels = container.Labels || {};
+          const role = trimToken(labels.vivd_role);
+          const state = trimToken(container.State)?.toLowerCase();
+          return (
+            role === MANAGED_UPDATE_HELPER_LABEL &&
+            (!!state && ["created", "running", "restarting"].includes(state))
+          );
+        }) || null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private async createManagedUpdateHelperContainer(options: {
+    helperImage: string;
+    targetTag: string;
+    targetStudioImage: string;
+    updateServices: string[];
+    socketPath: string;
+    updateWorkdirHostPath: string;
+    shouldRewriteSelfHostImageTag: boolean;
+    shouldRewriteStudioImage: boolean;
+  }) {
+    const config = {
+      Image: options.helperImage,
+      Env: [
+        `TARGET_TAG=${options.targetTag}`,
+        `TARGET_STUDIO_IMAGE=${options.targetStudioImage}`,
+        `UPDATE_SELFHOST_IMAGE_TAG=${options.shouldRewriteSelfHostImageTag ? "1" : "0"}`,
+        `UPDATE_STUDIO_IMAGE=${options.shouldRewriteStudioImage ? "1" : "0"}`,
+        `UPDATE_SERVICES=${options.updateServices.join(" ")}`,
+      ],
+      Labels: {
+        vivd_managed: "true",
+        vivd_role: MANAGED_UPDATE_HELPER_LABEL,
+        vivd_target_tag: options.targetTag,
+      },
+      WorkingDir: "/workspace",
+      Cmd: ["sh", "-lc", buildManagedSelfHostUpdateScript()],
+      HostConfig: {
+        AutoRemove: true,
+        Binds: [
+          `${options.socketPath}:/var/run/docker.sock`,
+          `${options.updateWorkdirHostPath}:/workspace`,
+        ],
+      },
+    };
+
+    try {
+      return await this.deps.dockerApiClient.createContainer({
+        name: `vivd-selfhost-updater-${this.deps.now()}`,
+        config,
+      });
+    } catch (error) {
+      if (!isMissingImageError(error, options.helperImage)) {
+        throw error;
+      }
+
+      console.warn(
+        "[InstanceSoftwareService] Helper image missing during updater container create; retrying after pull",
+        {
+          helperImage: options.helperImage,
+          targetTag: options.targetTag,
+        },
+      );
+      await this.deps.dockerApiClient.pullImage(options.helperImage);
+      return await this.deps.dockerApiClient.createContainer({
+        name: `vivd-selfhost-updater-${this.deps.now()}`,
+        config,
+      });
+    }
   }
 
   private resolveManagedUpdateState(
