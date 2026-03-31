@@ -1,3 +1,4 @@
+import os from "node:os";
 import { listStudioVisitMsByIdentity } from "../visitStore";
 import type {
   ManagedStudioMachineProvider,
@@ -303,8 +304,23 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     return await resolveContainerNetworkNameWorkflow({
       configuredNetwork: this.config.network,
       listNetworks: () => this.apiClient.listNetworks(),
+      getPreferredNetworkName: () => this.resolveCurrentContainerNetworkName(),
       warn: (message) => console.warn(message),
     });
+  }
+
+  private async resolveCurrentContainerNetworkName(): Promise<string | null> {
+    try {
+      const hostname = trimToken(os.hostname());
+      if (!hostname) return null;
+      const container = await this.inspectContainer(hostname);
+      const hostConfigNetwork = trimToken(container.HostConfig?.NetworkMode);
+      if (hostConfigNetwork) return hostConfigNetwork;
+      const attachedNetworks = Object.keys(container.NetworkSettings?.Networks || {});
+      return trimToken(attachedNetworks[0]);
+    } catch {
+      return null;
+    }
   }
 
   private async ensureImageAvailableForCreate(

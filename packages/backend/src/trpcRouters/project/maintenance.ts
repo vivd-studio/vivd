@@ -66,6 +66,8 @@ import {
   deleteProjectVersionArtifactsFromBucket,
 } from "../../services/project/ProjectArtifactsService";
 import { studioMachineProvider } from "../../services/studioMachines";
+import { cleanupManagedStudioMachinesForDeletedProject } from "../../services/studioMachines/deleteCleanup";
+import { isManagedStudioMachineProvider } from "../../services/studioMachines/types";
 import { projectMetaService } from "../../services/project/ProjectMetaService";
 import { getProjectArtifactKeyPrefix } from "../../services/project/ProjectStoragePaths";
 import { rewriteProjectArtifactKeyForSlug } from "../../services/project/slugRename";
@@ -1004,16 +1006,25 @@ export const projectMaintenanceProcedures = {
         new Set([projectDir, legacyProjectDir, tenantProjectDir]),
       );
 
-      // Stop any running studio machines for this project (all versions).
-      // This prevents a studio from writing new artifacts after we delete DB/bucket state.
-      for (const v of manifest.versions) {
-        try {
-          await studioMachineProvider.stop(organizationId, slug, v.version);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `[Delete] Failed to stop studio for ${slug}/v${v.version}: ${message}`,
-          );
+      if (isManagedStudioMachineProvider(studioMachineProvider)) {
+        await cleanupManagedStudioMachinesForDeletedProject({
+          provider: studioMachineProvider,
+          organizationId,
+          slug,
+          logPrefix: "Delete",
+        });
+      } else {
+        // Stop any running local studio machines for this project (all versions).
+        // Managed providers destroy matching machines entirely above.
+        for (const v of manifest.versions) {
+          try {
+            await studioMachineProvider.stop(organizationId, slug, v.version);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(
+              `[Delete] Failed to stop studio for ${slug}/v${v.version}: ${message}`,
+            );
+          }
         }
       }
 
@@ -1139,14 +1150,24 @@ export const projectMaintenanceProcedures = {
         );
       }
 
-      // Stop any running studio machine for this version.
-      try {
-        await studioMachineProvider.stop(organizationId, slug, version);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[DeleteVersion] Failed to stop studio for ${slug}/v${version}: ${message}`,
-        );
+      if (isManagedStudioMachineProvider(studioMachineProvider)) {
+        await cleanupManagedStudioMachinesForDeletedProject({
+          provider: studioMachineProvider,
+          organizationId,
+          slug,
+          version,
+          logPrefix: "DeleteVersion",
+        });
+      } else {
+        // Stop any running local studio machine for this version.
+        try {
+          await studioMachineProvider.stop(organizationId, slug, version);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[DeleteVersion] Failed to stop studio for ${slug}/v${version}: ${message}`,
+          );
+        }
       }
 
       // Delete the version using the utility function

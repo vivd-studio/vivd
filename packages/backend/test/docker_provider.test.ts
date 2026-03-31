@@ -1,3 +1,4 @@
+import os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DockerApiClient } from "../src/services/studioMachines/docker/apiClient";
 import { DockerStudioMachineProvider } from "../src/services/studioMachines/docker/provider";
@@ -246,6 +247,102 @@ describe("DockerStudioMachineProvider", () => {
         Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
       },
       Created: new Date().toISOString(),
+    });
+
+    await (provider as any).createFreshContainer({
+      args: {
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        env: {},
+      },
+      desiredImage: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+    });
+
+    expect(createContainerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          HostConfig: expect.objectContaining({
+            NetworkMode: "vivd_vivd-network",
+          }),
+          NetworkingConfig: {
+            EndpointsConfig: {
+              "vivd_vivd-network": {},
+            },
+          },
+        }),
+      }),
+    );
+  });
+
+  it("prefers the backend container network when multiple compose-prefixed matches exist", async () => {
+    delete process.env.DATABASE_URL;
+    const provider = new DockerStudioMachineProvider();
+    const apiClient = (provider as any).apiClient;
+
+    vi.spyOn(os, "hostname").mockReturnValue("backend-container");
+    vi.spyOn(apiClient, "listNetworks").mockResolvedValue([
+      { Name: "bridge" },
+      { Name: "vivd_vivd-network" },
+      { Name: "workspace_vivd-network" },
+    ]);
+    const createContainerMock = vi
+      .spyOn(apiClient, "createContainer")
+      .mockResolvedValueOnce({ Id: "container-4" });
+    vi.spyOn(apiClient, "inspectContainer").mockImplementation(async (containerId) => {
+      if (containerId === "backend-container") {
+        return {
+          Id: "backend-container",
+          Name: "/vivd-backend-1",
+          HostConfig: {
+            NetworkMode: "vivd_vivd-network",
+          },
+        NetworkSettings: {
+          Networks: {
+            "vivd_vivd-network": {},
+          },
+        },
+        };
+      }
+
+      return {
+        Id: "container-4",
+        Name: "/studio-site-1-v1",
+        Config: {
+          Image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+          Env: [
+            "STUDIO_ID=studio-4",
+            "STUDIO_ACCESS_TOKEN=access-4",
+            "VIVD_TENANT_ID=org-1",
+            "VIVD_PROJECT_SLUG=site-1",
+            "VIVD_PROJECT_VERSION=1",
+          ],
+          Labels: {
+            vivd_managed: "true",
+            vivd_provider: "docker",
+            vivd_organization_id: "org-1",
+            vivd_project_slug: "site-1",
+            vivd_project_version: "1",
+            vivd_studio_id: "studio-4",
+            vivd_image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+            vivd_route_id: "site-1-v1",
+          },
+        },
+        State: {
+          Status: "created",
+        },
+        HostConfig: {
+          NetworkMode: "vivd_vivd-network",
+          NanoCpus: 1_000_000_000,
+          Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+        },
+        NetworkSettings: {
+          Networks: {
+            "vivd_vivd-network": {},
+          },
+        },
+        Created: new Date().toISOString(),
+      };
     });
 
     await (provider as any).createFreshContainer({

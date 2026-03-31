@@ -166,6 +166,7 @@ export function resolveNetworkNameFromList(
   configuredNetwork: string,
   networks: DockerNetworkSummary[],
   warn: (message: string) => void,
+  preferredNetworkName?: string | null,
 ): string {
   const normalizedConfigured = configuredNetwork.trim();
   if (!normalizedConfigured) return configuredNetwork;
@@ -187,6 +188,19 @@ export function resolveNetworkNameFromList(
     return resolved;
   }
 
+  const normalizedPreferred = preferredNetworkName?.trim() || "";
+  if (suffixMatches.length > 1 && normalizedPreferred) {
+    const preferredMatch = suffixMatches.find(
+      (network) => network.Name?.trim() === normalizedPreferred,
+    );
+    if (preferredMatch?.Name) {
+      warn(
+        `[DockerMachines] Resolved configured network ${normalizedConfigured} to preferred Docker network ${preferredMatch.Name}`,
+      );
+      return preferredMatch.Name;
+    }
+  }
+
   return configuredNetwork;
 }
 
@@ -194,13 +208,24 @@ export async function resolveContainerNetworkNameWorkflow(deps: {
   configuredNetwork: string;
   listNetworks: () => Promise<DockerNetworkSummary[]>;
   warn: (message: string) => void;
+  getPreferredNetworkName?: () => Promise<string | null>;
 }): Promise<string> {
   try {
     const networks = await deps.listNetworks();
+    const suffixMatches = networks.filter((network) => {
+      const name = network.Name?.trim();
+      const normalizedConfigured = deps.configuredNetwork.trim();
+      return !!name && !!normalizedConfigured && name.endsWith(`_${normalizedConfigured}`);
+    });
+    const preferredNetworkName =
+      suffixMatches.length > 1 && deps.getPreferredNetworkName
+        ? await deps.getPreferredNetworkName()
+        : null;
     return resolveNetworkNameFromList(
       deps.configuredNetwork,
       networks,
       deps.warn,
+      preferredNetworkName,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
