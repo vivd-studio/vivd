@@ -480,9 +480,23 @@ export function useActiveTurnAnchor({
     const resizeObserver = new ResizeObserver(() => {
       window.requestAnimationFrame(() => {
         if (skipNextResizeAutoScrollRef.current) {
+          const currentBottomPosition = Math.max(
+            0,
+            viewport.scrollHeight - viewport.clientHeight,
+          );
+          const anchoredBottomPosition = autoScrollMarkRef.current?.top;
+
+          if (
+            anchoredBottomPosition != null &&
+            Math.abs(currentBottomPosition - anchoredBottomPosition) <
+              SCROLL_POSITION_EPSILON_PX
+          ) {
+            skipNextResizeAutoScrollRef.current = false;
+            scheduleSync();
+            return;
+          }
+
           skipNextResizeAutoScrollRef.current = false;
-          scheduleSync();
-          return;
         }
 
         if (!pendingAnchorRequest && !userScrolledRef.current) {

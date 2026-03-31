@@ -1,6 +1,5 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageList } from "./MessageList";
 
@@ -135,20 +134,30 @@ describe("MessageList latest-user anchoring", () => {
     userMessageContentScrollHeightById["user-2"] = 80;
     resizeObserverCallbacks.length = 0;
     oscillatingActiveTurnRowIds.clear();
+    let nextAnimationFrameId = 1;
+    const cancelledAnimationFrameIds = new Set<number>();
 
     Object.defineProperty(window, "requestAnimationFrame", {
       configurable: true,
       writable: true,
       value: (callback: FrameRequestCallback) => {
-        callback(0);
-        return 1;
+        const frameId = nextAnimationFrameId++;
+        queueMicrotask(() => {
+          if (cancelledAnimationFrameIds.has(frameId)) {
+            return;
+          }
+          callback(0);
+        });
+        return frameId;
       },
     });
 
     Object.defineProperty(window, "cancelAnimationFrame", {
       configurable: true,
       writable: true,
-      value: vi.fn(),
+      value: (frameId: number) => {
+        cancelledAnimationFrameIds.add(frameId);
+      },
     });
 
     Object.defineProperty(window, "ResizeObserver", {
@@ -620,10 +629,11 @@ describe("MessageList latest-user anchoring", () => {
     viewport!.scrollTop = 20;
     fireEvent.scroll(viewport!);
 
-    const resumeButton = container.querySelector(
-      "[aria-label='Jump to latest message']",
-    );
-    expect(resumeButton).toBeInTheDocument();
+    let resumeButton: Element | null = null;
+    await waitFor(() => {
+      resumeButton = container.querySelector("[aria-label='Jump to latest message']");
+      expect(resumeButton).toBeInTheDocument();
+    });
 
     viewportExtraScrollHeight.value = 120;
     resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
@@ -656,11 +666,13 @@ describe("MessageList latest-user anchoring", () => {
     viewport!.scrollTop = 20;
     fireEvent.scroll(viewport!);
 
-    expect(
-      container.querySelector("[aria-label='Jump to latest message']"),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        container.querySelector("[aria-label='Jump to latest message']"),
+      ).toBeInTheDocument();
+    });
 
-    viewport!.scrollTop = 72;
+    viewport!.scrollTop = viewport!.scrollHeight - viewport!.clientHeight - 8;
     fireEvent.scroll(viewport!);
 
     await waitFor(() => {
@@ -681,44 +693,45 @@ describe("MessageList latest-user anchoring", () => {
   });
 
   it("does not lose auto-follow after a delayed scroll sync with no user interaction", async () => {
-    vi.useFakeTimers();
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
 
-    const { container } = render(<MessageList />);
+    try {
+      const { container } = render(<MessageList />);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
+      await waitFor(() => {
+        expect(scrollToMock).toHaveBeenCalledTimes(1);
+      });
 
-    await waitFor(() => {
-      expect(scrollToMock).toHaveBeenCalledTimes(1);
-    });
+      scrollToMock.mockClear();
 
-    scrollToMock.mockClear();
+      const viewport = container.querySelector<HTMLElement>(
+        "[data-chat-scroll-viewport]",
+      );
+      expect(viewport).not.toBeNull();
 
-    const viewport = container.querySelector<HTMLElement>("[data-chat-scroll-viewport]");
-    expect(viewport).not.toBeNull();
+      now += 1600;
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1600);
-    });
+      viewportExtraScrollHeight.value = 120;
+      fireEvent.scroll(viewport!);
 
-    viewportExtraScrollHeight.value = 120;
-    fireEvent.scroll(viewport!);
+      expect(
+        container.querySelector("[aria-label='Jump to latest message']"),
+      ).not.toBeInTheDocument();
 
-    expect(
-      container.querySelector("[aria-label='Jump to latest message']"),
-    ).not.toBeInTheDocument();
+      resizeObserverCallbacks.forEach((callback) =>
+        callback([], {} as ResizeObserver),
+      );
 
-    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    expect(scrollToMock).toHaveBeenCalledWith({
-      top: 200,
-      behavior: "auto",
-    });
+      await waitFor(() => {
+        expect(scrollToMock).toHaveBeenCalledWith({
+          top: 200,
+          behavior: "auto",
+        });
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("stops retrying the active-turn measurement when layout shifts keep changing the row height", async () => {
