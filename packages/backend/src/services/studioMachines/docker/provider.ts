@@ -1,6 +1,4 @@
-import crypto from "node:crypto";
 import { listStudioVisitMsByIdentity } from "../visitStore";
-import net from "node:net";
 import type {
   ManagedStudioMachineProvider,
   StudioMachineParkResult,
@@ -12,66 +10,66 @@ import type {
   StudioRuntimeAuthIdentity,
   StudioMachineUrlResult,
 } from "../types";
-import {
-  STUDIO_ACCESS_TOKEN_ENV_KEY,
-  trimToken,
-} from "../fly/machineModel";
+import { trimToken } from "../fly/machineModel";
 import { DockerApiClient } from "./apiClient";
 import { DockerProviderConfig } from "./providerConfig";
 import { DockerStudioImageResolver } from "./imageResolver";
 import { DockerRuntimeRouteService } from "./runtimeRouteService";
 import type {
-  DockerContainerCreateConfig,
   DockerContainerInfo,
-  DockerContainerStateStatus,
-  DockerImageInfo,
-  DockerNetworkSummary,
   DockerContainerSummary,
+  DockerImageInfo,
 } from "./types";
-import { sleep } from "../fly/utils";
 import {
-  getDefinedStudioMachineEnv,
-  parseStudioMachineEnvKeyList,
-  withMissingStudioMachineEnvKeys,
-} from "../env";
-
-type StudioIdentity = {
-  organizationId: string;
-  projectSlug: string;
-  version: number;
-};
-
-type DockerResolvedImageState = {
-  requestedRef: string;
-  imageId: string | null;
-  repoDigest: string | null;
-  versionLabel: string | null;
-  revisionLabel: string | null;
-  source: "local" | "pulled" | "cached" | "unknown";
-  checkedAt: string;
-};
-
-type ContainerImageComparison = {
-  drift: boolean;
-  comparable: boolean;
-};
-
-const STUDIO_IMAGE_REF_LABEL = "vivd_image";
-const STUDIO_IMAGE_ID_LABEL = "vivd_image_id";
-const STUDIO_IMAGE_DIGEST_LABEL = "vivd_image_digest";
-const STUDIO_IMAGE_VERSION_LABEL = "vivd_image_version";
-const STUDIO_IMAGE_REVISION_LABEL = "vivd_image_revision";
-const OCI_IMAGE_VERSION_LABEL = "org.opencontainers.image.version";
-const OCI_IMAGE_REVISION_LABEL = "org.opencontainers.image.revision";
-
-type ContainerReconcileNeeds = {
-  image: boolean;
-  resources: boolean;
-  accessToken: boolean;
-  network: boolean;
-  mainBackendUrl: boolean;
-  env: boolean;
-};
+  buildResolvedImageState,
+  compareContainerImageState,
+  containerStateStatus,
+  findContainer,
+  getContainerAccessToken,
+  getContainerConfiguredImage,
+  getContainerCreatedAt,
+  getContainerEnv,
+  getContainerExternalPort,
+  getContainerIdentity,
+  getContainerLabels,
+  getContainerName,
+  getContainerRouteId,
+  getContainerRuntimeImageId,
+  getContainerStudioId,
+  getContainerUpdatedAt,
+  getImageLabel,
+  hasContainerDrift,
+  isLikelyRemoteImageReference,
+  isRunningContainer,
+  isStoppedContainer,
+  mapContainerState,
+  OCI_IMAGE_REVISION_LABEL,
+  OCI_IMAGE_VERSION_LABEL,
+  resolveContainerReconcileState,
+  selectRepoDigestForRef,
+  STUDIO_IMAGE_DIGEST_LABEL,
+  STUDIO_IMAGE_REVISION_LABEL,
+  STUDIO_IMAGE_VERSION_LABEL,
+  type DockerResolvedImageState,
+  type StudioIdentity,
+} from "./containerModel";
+import {
+  allocatePublicPortWorkflow,
+  buildStudioEnvDriftSubsetFromDesiredEnv,
+  buildStudioEnvWorkflow,
+  createFreshContainerWorkflow,
+  ensureContainerRunningWorkflow,
+  ensureImageAvailableForCreateWorkflow,
+  ensureRunningInnerWorkflow,
+  recreateContainerWorkflow,
+  resolveContainerNetworkNameWorkflow,
+  resolveManagedMainBackendUrl,
+  restartInnerWorkflow,
+  type CreateFreshContainerOptions,
+  type RecreateContainerOptions,
+  type WaitForReadyOptions,
+  waitForReadyWorkflow,
+} from "./runtimeWorkflow";
 
 async function mapLimit<T>(
   items: T[],
@@ -93,493 +91,6 @@ async function mapLimit<T>(
   );
 
   await Promise.all(runners);
-}
-
-const STUDIO_INTERNAL_PORT = 3100;
-const DEFAULT_ENV_PASSTHROUGH =
-  "GOOGLE_API_KEY,OPENROUTER_API_KEY,GOOGLE_CLOUD_PROJECT,VERTEX_LOCATION,GOOGLE_APPLICATION_CREDENTIALS,GOOGLE_APPLICATION_CREDENTIALS_JSON,VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH,OPENCODE_MODEL_STANDARD,OPENCODE_MODEL_ADVANCED,OPENCODE_MODEL_PRO,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY,R2_SECRET_KEY,VIVD_BUCKET_MODE,VIVD_LOCAL_S3_BUCKET,VIVD_LOCAL_S3_ENDPOINT_URL,VIVD_LOCAL_S3_ACCESS_KEY,VIVD_LOCAL_S3_SECRET_KEY,VIVD_LOCAL_S3_REGION,VIVD_S3_BUCKET,VIVD_S3_ENDPOINT_URL,VIVD_S3_ACCESS_KEY_ID,VIVD_S3_SECRET_ACCESS_KEY,VIVD_S3_SESSION_TOKEN,VIVD_S3_REGION,VIVD_S3_PREFIX,VIVD_S3_SOURCE_URI,VIVD_S3_OPENCODE_PREFIX,VIVD_S3_OPENCODE_URI,VIVD_S3_OPENCODE_STORAGE_URI,VIVD_S3_SYNC_INTERVAL_SECONDS,VIVD_SYNC_TRIGGER_FILE,VIVD_SYNC_PAUSE_FILE,VIVD_SYNC_PAUSE_MAX_AGE_SECONDS,VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS,VIVD_SHUTDOWN_CHILD_WAIT_SECONDS,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,AWS_DEFAULT_REGION,AWS_REGION,DEVSERVER_INSTALL_TIMEOUT_MS,VIVD_PACKAGE_CACHE_DIR,DEVSERVER_NODE_MODULES_CACHE,VIVD_ARTIFACT_BUILDER_ENABLED,GITHUB_SYNC_ENABLED,GITHUB_SYNC_STRICT,GITHUB_ORG,GITHUB_TOKEN,GITHUB_REPO_PREFIX,GITHUB_REPO_VISIBILITY,GITHUB_API_URL,GITHUB_GIT_HOST,GITHUB_REMOTE_NAME";
-
-function getConfiguredDockerStudioEnvPassthroughKeys(): string[] {
-  return parseStudioMachineEnvKeyList(
-    process.env.DOCKER_STUDIO_ENV_PASSTHROUGH || DEFAULT_ENV_PASSTHROUGH,
-  );
-}
-
-function parseEnvList(values: string[] | undefined): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const value of values || []) {
-    const idx = value.indexOf("=");
-    if (idx <= 0) continue;
-    env[value.slice(0, idx)] = value.slice(idx + 1);
-  }
-  return env;
-}
-
-function isPortAvailable(port: number, hostname: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.unref();
-
-    server.on("error", () => resolve(false));
-    server.listen({ port, host: hostname }, () => {
-      server.close(() => resolve(true));
-    });
-  });
-}
-
-function isContainerInfo(
-  container: DockerContainerSummary | DockerContainerInfo,
-): container is DockerContainerInfo {
-  return "Config" in container || "Name" in container;
-}
-
-function getContainerLabels(
-  container: DockerContainerSummary | DockerContainerInfo,
-): Record<string, string> {
-  if (isContainerInfo(container)) {
-    return container.Config?.Labels ?? {};
-  }
-  return container.Labels ?? {};
-}
-
-function getContainerEnv(
-  container: DockerContainerInfo,
-): Record<string, string> {
-  return parseEnvList(container.Config?.Env);
-}
-
-function getContainerName(
-  container: DockerContainerSummary | DockerContainerInfo,
-): string | null {
-  if (isContainerInfo(container) && typeof container.Name === "string" && container.Name.trim()) {
-    return container.Name.replace(/^\/+/, "");
-  }
-  if ("Names" in container && Array.isArray(container.Names) && container.Names.length > 0) {
-    const first = container.Names[0];
-    if (typeof first === "string" && first.trim()) {
-      return first.replace(/^\/+/, "");
-    }
-  }
-  return null;
-}
-
-function getContainerConfiguredImage(
-  container: DockerContainerSummary | DockerContainerInfo,
-  desiredImage?: string,
-): string | null {
-  const labels = getContainerLabels(container);
-  const fromLabel = trimToken(labels[STUDIO_IMAGE_REF_LABEL]);
-  if (fromLabel) return fromLabel;
-
-  const raw =
-    (isContainerInfo(container)
-      ? trimToken(container.Config?.Image)
-      : trimToken(container.Image)) || null;
-  if (!raw) return null;
-
-  const digestIndex = !desiredImage?.includes("@") ? raw.indexOf("@") : -1;
-  return digestIndex === -1 ? raw : trimToken(raw.slice(0, digestIndex));
-}
-
-function getImageLabels(image: DockerImageInfo): Record<string, string> {
-  return image.Config?.Labels ?? {};
-}
-
-function getImageLabel(image: DockerImageInfo, key: string): string | null {
-  return trimToken(getImageLabels(image)[key]);
-}
-
-function imageReferenceBase(imageRef: string): string {
-  const withoutDigest = imageRef.split("@", 1)[0] || imageRef;
-  const lastSlash = withoutDigest.lastIndexOf("/");
-  const lastColon = withoutDigest.lastIndexOf(":");
-  return lastColon > lastSlash ? withoutDigest.slice(0, lastColon) : withoutDigest;
-}
-
-function digestValue(value: string | null | undefined): string | null {
-  const trimmed = trimToken(value);
-  if (!trimmed) return null;
-  if (trimmed.startsWith("sha256:")) return trimmed;
-  const atIndex = trimmed.indexOf("@");
-  if (atIndex >= 0) return trimToken(trimmed.slice(atIndex + 1));
-  return null;
-}
-
-function selectRepoDigestForRef(
-  repoDigests: string[] | undefined,
-  requestedRef: string,
-): string | null {
-  const desiredBase = imageReferenceBase(requestedRef);
-  for (const entry of repoDigests || []) {
-    const trimmed = trimToken(entry);
-    if (!trimmed) continue;
-    const base = trimmed.split("@", 1)[0] || trimmed;
-    if (base === desiredBase) return trimmed;
-  }
-  return trimToken(repoDigests?.find((entry) => trimToken(entry)));
-}
-
-function isLikelyRemoteImageReference(imageRef: string): boolean {
-  const firstSegment = imageReferenceBase(imageRef).split("/", 1)[0] || "";
-  return (
-    firstSegment.includes(".") ||
-    firstSegment.includes(":") ||
-    firstSegment === "localhost"
-  );
-}
-
-function getContainerRuntimeImageId(
-  container: DockerContainerSummary | DockerContainerInfo,
-): string | null {
-  if (isContainerInfo(container)) {
-    const fromInspect = trimToken(container.Image);
-    if (fromInspect) return fromInspect;
-  }
-  return trimToken(getContainerLabels(container)[STUDIO_IMAGE_ID_LABEL]);
-}
-
-function getContainerRecordedImageDigest(
-  container: DockerContainerSummary | DockerContainerInfo,
-): string | null {
-  return trimToken(getContainerLabels(container)[STUDIO_IMAGE_DIGEST_LABEL]);
-}
-
-function compareContainerImageState(options: {
-  container: DockerContainerInfo;
-  desiredImage: string;
-  desiredImageState?: DockerResolvedImageState | null;
-}): ContainerImageComparison {
-  const currentImageId = getContainerRuntimeImageId(options.container);
-  const desiredImageId = trimToken(options.desiredImageState?.imageId);
-  if (currentImageId && desiredImageId) {
-    return {
-      drift: currentImageId !== desiredImageId,
-      comparable: true,
-    };
-  }
-
-  const currentDigest = digestValue(getContainerRecordedImageDigest(options.container));
-  const desiredDigest = digestValue(options.desiredImageState?.repoDigest);
-  if (currentDigest && desiredDigest) {
-    return {
-      drift: currentDigest !== desiredDigest,
-      comparable: true,
-    };
-  }
-
-  const currentImage = getContainerConfiguredImage(options.container, options.desiredImage);
-  if (!currentImage) {
-    return { drift: false, comparable: false };
-  }
-
-  return {
-    drift: currentImage !== options.desiredImage,
-    comparable: currentImage !== options.desiredImage,
-  };
-}
-
-function getContainerAccessToken(container: DockerContainerInfo): string | null {
-  return trimToken(getContainerEnv(container)[STUDIO_ACCESS_TOKEN_ENV_KEY]);
-}
-
-function getContainerIdentity(
-  container: DockerContainerSummary | DockerContainerInfo,
-): StudioIdentity | null {
-  const labels = getContainerLabels(container);
-  const env = isContainerInfo(container) ? getContainerEnv(container) : {};
-
-  const organizationId =
-    trimToken(labels["vivd_organization_id"]) ||
-    trimToken(env.VIVD_TENANT_ID) ||
-    "default";
-  const projectSlug =
-    trimToken(labels["vivd_project_slug"]) ||
-    trimToken(env.VIVD_PROJECT_SLUG);
-  const versionRaw =
-    trimToken(labels["vivd_project_version"]) ||
-    trimToken(env.VIVD_PROJECT_VERSION);
-  const version = versionRaw ? Number.parseInt(versionRaw, 10) : Number.NaN;
-
-  if (!projectSlug || !Number.isFinite(version) || version <= 0) return null;
-  return { organizationId, projectSlug, version };
-}
-
-function getContainerStudioId(
-  container: DockerContainerInfo,
-  fallback?: string | null,
-): string {
-  const labels = getContainerLabels(container);
-  const env = getContainerEnv(container);
-  return (
-    trimToken(labels["vivd_studio_id"]) ||
-    trimToken(env.STUDIO_ID) ||
-    trimToken(fallback) ||
-    crypto.randomUUID()
-  );
-}
-
-function getContainerRouteId(
-  container: DockerContainerSummary | DockerContainerInfo,
-): string | null {
-  return trimToken(getContainerLabels(container)["vivd_route_id"]);
-}
-
-function getContainerExternalPort(
-  container: DockerContainerSummary | DockerContainerInfo,
-): number | null {
-  const fromLabel = trimToken(getContainerLabels(container)["vivd_external_port"]);
-  if (fromLabel) {
-    const parsed = Number.parseInt(fromLabel, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-
-  const bindings = container.HostConfig?.PortBindings?.[`${STUDIO_INTERNAL_PORT}/tcp`];
-  const fromBinding = bindings?.find((binding) => {
-    const hostPort = trimToken(binding.HostPort);
-    if (!hostPort) return false;
-    const parsed = Number.parseInt(hostPort, 10);
-    return Number.isFinite(parsed) && parsed > 0;
-  });
-  if (fromBinding?.HostPort) {
-    const parsed = Number.parseInt(fromBinding.HostPort, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-
-  return null;
-}
-
-function containerStateStatus(
-  container: DockerContainerSummary | DockerContainerInfo,
-): DockerContainerStateStatus {
-  const raw =
-    ("State" in container && typeof container.State === "object"
-      ? container.State?.Status
-      : undefined) ||
-    ("State" in container && typeof container.State === "string"
-      ? container.State
-      : undefined) ||
-    "unknown";
-  return raw;
-}
-
-function mapContainerState(
-  container: DockerContainerSummary | DockerContainerInfo,
-): string | null {
-  const raw = containerStateStatus(container);
-  if (raw === "running") return "started";
-  if (raw === "restarting") return "starting";
-  if (raw === "removing") return "destroying";
-  if (raw === "exited") return "stopped";
-  if (raw === "dead") return "destroyed";
-  return raw || null;
-}
-
-function isRunningContainer(
-  container: DockerContainerSummary | DockerContainerInfo,
-): boolean {
-  return containerStateStatus(container) === "running";
-}
-
-function isStoppedContainer(
-  container: DockerContainerSummary | DockerContainerInfo,
-): boolean {
-  const state = containerStateStatus(container);
-  return state === "created" || state === "exited";
-}
-
-function resolveContainerReconcileState(options: {
-  container: DockerContainerInfo;
-  desiredImage: string;
-  desiredImageState?: DockerResolvedImageState | null;
-  desiredAccessToken?: string | null;
-  desiredNanoCpus: number;
-  desiredMemoryBytes: number;
-  desiredNetworkName: string;
-  desiredMainBackendUrl?: string | null;
-  desiredEnvSubset?: Record<string, string>;
-  generateStudioAccessToken: () => string;
-}): { accessToken: string; needs: ContainerReconcileNeeds } {
-  const currentToken = getContainerAccessToken(options.container);
-  const desiredToken = trimToken(options.desiredAccessToken);
-  const accessToken =
-    currentToken || desiredToken || options.generateStudioAccessToken();
-
-  const imageComparison = compareContainerImageState({
-    container: options.container,
-    desiredImage: options.desiredImage,
-    desiredImageState: options.desiredImageState,
-  });
-  const currentEnv = getContainerEnv(options.container);
-  const currentNanoCpus = options.container.HostConfig?.NanoCpus || 0;
-  const currentMemory = options.container.HostConfig?.Memory || 0;
-  const currentNetworkMode = trimToken(options.container.HostConfig?.NetworkMode) || "";
-  const currentNetworks = options.container.NetworkSettings?.Networks;
-  const currentNetworkAttached = currentNetworks
-    ? Boolean(currentNetworks[options.desiredNetworkName])
-    : true;
-  const currentMainBackendUrl = trimToken(currentEnv.MAIN_BACKEND_URL) || null;
-
-  return {
-    accessToken,
-    needs: {
-      image: imageComparison.drift,
-      resources:
-        currentNanoCpus !== options.desiredNanoCpus ||
-        currentMemory !== options.desiredMemoryBytes,
-      accessToken: currentToken !== accessToken,
-      network:
-        currentNetworkMode !== options.desiredNetworkName || !currentNetworkAttached,
-      mainBackendUrl:
-        !!options.desiredMainBackendUrl &&
-        currentMainBackendUrl !== options.desiredMainBackendUrl,
-      env: Object.entries(options.desiredEnvSubset || {}).some(([key, value]) => {
-        if (typeof value !== "string") return false;
-        return trimToken(currentEnv[key]) !== trimToken(value);
-      }),
-    },
-  };
-}
-
-function hasContainerDrift(needs: ContainerReconcileNeeds): boolean {
-  return (
-    needs.image ||
-    needs.resources ||
-    needs.accessToken ||
-    needs.network ||
-    needs.mainBackendUrl ||
-    needs.env
-  );
-}
-
-function isMissingImageError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.toLowerCase().includes("no such image");
-}
-
-function isMissingNativeManifestError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.toLowerCase().includes("no matching manifest");
-}
-
-function isContainerNameConflictError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("container name") ||
-    (normalized.includes("conflict") && normalized.includes("already in use"))
-  );
-}
-
-function isContainerNetworkingSetupError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("failed to set up container networking") ||
-    (normalized.includes("network") && normalized.includes("not found"))
-  );
-}
-
-function isContainerPortConflictError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("port is already allocated") ||
-    normalized.includes("bind for 0.0.0.0:") ||
-    normalized.includes("address already in use")
-  );
-}
-
-function getContainerCreatedAt(container: DockerContainerInfo): string | null {
-  const raw = trimToken(container.Created);
-  return raw || null;
-}
-
-function getContainerUpdatedAt(container: DockerContainerInfo): string | null {
-  const startedAt = trimToken(container.State?.StartedAt);
-  if (startedAt && startedAt !== "0001-01-01T00:00:00Z") return startedAt;
-  const finishedAt = trimToken(container.State?.FinishedAt);
-  if (finishedAt && finishedAt !== "0001-01-01T00:00:00Z") return finishedAt;
-  return getContainerCreatedAt(container);
-}
-
-function findContainer(
-  containers: DockerContainerSummary[],
-  organizationId: string,
-  projectSlug: string,
-  version: number,
-): DockerContainerSummary | null {
-  return (
-    containers.find((container) => {
-      const identity = getContainerIdentity(container);
-      return (
-        identity?.organizationId === organizationId &&
-        identity.projectSlug === projectSlug &&
-        identity.version === version
-      );
-    }) || null
-  );
-}
-
-function createContainerSpec(options: {
-  args: StudioMachineStartArgs;
-  studioId: string;
-  accessToken: string;
-  desiredImage: string;
-  desiredImageState?: DockerResolvedImageState | null;
-  routeId: string;
-  externalPort: number;
-  env: Record<string, string>;
-  config: DockerProviderConfig;
-  networkName: string;
-}): DockerContainerCreateConfig {
-  const labels: Record<string, string> = {
-    vivd_managed: "true",
-    vivd_provider: "docker",
-    vivd_organization_id: options.args.organizationId,
-    vivd_project_slug: options.args.projectSlug,
-    vivd_project_version: String(options.args.version),
-    vivd_studio_id: options.studioId,
-    vivd_external_port: String(options.externalPort),
-    [STUDIO_IMAGE_REF_LABEL]:
-      options.desiredImageState?.requestedRef || options.desiredImage,
-    vivd_route_id: options.routeId,
-    vivd_created_at: new Date().toISOString(),
-    ...(options.desiredImageState?.imageId
-      ? { [STUDIO_IMAGE_ID_LABEL]: options.desiredImageState.imageId }
-      : {}),
-    ...(options.desiredImageState?.repoDigest
-      ? { [STUDIO_IMAGE_DIGEST_LABEL]: options.desiredImageState.repoDigest }
-      : {}),
-    ...(options.desiredImageState?.versionLabel
-      ? { [STUDIO_IMAGE_VERSION_LABEL]: options.desiredImageState.versionLabel }
-      : {}),
-    ...(options.desiredImageState?.revisionLabel
-      ? { [STUDIO_IMAGE_REVISION_LABEL]: options.desiredImageState.revisionLabel }
-      : {}),
-  };
-
-  return {
-    Image: options.desiredImage,
-    Env: Object.entries(options.env).map(([key, value]) => `${key}=${value}`),
-    Labels: labels,
-    StopTimeout: options.config.desiredKillTimeoutSeconds,
-    ExposedPorts: {
-      [`${STUDIO_INTERNAL_PORT}/tcp`]: {},
-    },
-    HostConfig: {
-      NetworkMode: options.networkName,
-      NanoCpus: options.config.nanoCpus,
-      Memory: options.config.memoryBytes,
-      PortBindings: {
-        [`${STUDIO_INTERNAL_PORT}/tcp`]: [{ HostPort: String(options.externalPort) }],
-      },
-    },
-    NetworkingConfig: {
-      EndpointsConfig: {
-        [options.networkName]: {},
-      },
-    },
-  };
 }
 
 export class DockerStudioMachineProvider implements ManagedStudioMachineProvider {
@@ -665,18 +176,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     image: DockerImageInfo;
     source: Exclude<DockerResolvedImageState["source"], "cached" | "unknown">;
   }): DockerResolvedImageState {
-    return {
-      requestedRef: options.requestedRef,
-      imageId: trimToken(options.image.Id),
-      repoDigest: selectRepoDigestForRef(
-        options.image.RepoDigests,
-        options.requestedRef,
-      ),
-      versionLabel: getImageLabel(options.image, OCI_IMAGE_VERSION_LABEL),
-      revisionLabel: getImageLabel(options.image, OCI_IMAGE_REVISION_LABEL),
-      source: options.source,
-      checkedAt: new Date().toISOString(),
-    };
+    return buildResolvedImageState(options);
   }
 
   private async tryRefreshDesiredImage(imageRef: string): Promise<boolean> {
@@ -771,130 +271,38 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     this.lastActivityByStudioKey.set(studioKey, Date.now());
   }
 
-  private async getReservedPublicPorts(): Promise<Set<number>> {
-    const reservedPorts = new Set<number>();
-
-    try {
-      const containers = await this.apiClient.listContainers();
-      for (const container of containers) {
-        if (!getContainerIdentity(container)) continue;
-        const port = getContainerExternalPort(container);
-        if (port) reservedPorts.add(port);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[DockerMachines] Failed to read reserved public ports from Docker; falling back to bind checks only: ${message}`,
-      );
-    }
-
-    return reservedPorts;
-  }
-
   private async allocatePublicPort(): Promise<number> {
-    const reservedPorts = await this.getReservedPublicPorts();
-
-    for (let attempt = 0; attempt < 200; attempt++) {
-      const port = this.nextPublicPort++;
-      if (reservedPorts.has(port)) {
-        continue;
-      }
-      if (await isPortAvailable(port, "0.0.0.0")) {
-        return port;
-      }
-    }
-
-    throw new Error("[DockerMachines] Could not allocate a public port for studio runtime");
+    return await allocatePublicPortWorkflow({
+      listContainers: () => this.apiClient.listContainers(),
+      nextPortCandidate: () => this.nextPublicPort++,
+      warn: (message) => console.warn(message),
+    });
   }
 
   private resolveManagedMainBackendUrl(raw: string | null | undefined): string | null {
-    return trimToken(raw) ? this.config.internalMainBackendUrl : null;
+    return resolveManagedMainBackendUrl(raw, this.config.internalMainBackendUrl);
   }
 
   private buildStudioEnv(
     args: StudioMachineStartArgs & { studioId: string; accessToken: string },
   ): Record<string, string> {
-    const workspaceDir =
-      process.env.DOCKER_STUDIO_WORKSPACE_DIR || "/home/studio/project";
-
-    const env: Record<string, string> = {
-      PORT: String(STUDIO_INTERNAL_PORT),
-      STUDIO_ID: args.studioId,
-      [STUDIO_ACCESS_TOKEN_ENV_KEY]: args.accessToken,
-      VIVD_TENANT_ID: args.organizationId,
-      VIVD_PROJECT_SLUG: args.projectSlug,
-      VIVD_PROJECT_VERSION: String(args.version),
-      VIVD_WORKSPACE_DIR: workspaceDir,
-      DEV_SERVER_PORT_START: "5100",
-      OPENCODE_PORT_START: "4096",
-      OPENCODE_IDLE_TIMEOUT_MS: "0",
-    };
-
-    const definedEnv = getDefinedStudioMachineEnv(args.env);
-    const explicitEnvKeys = new Set(Object.keys(args.env));
-    for (const [key, value] of Object.entries(definedEnv)) {
-      env[key] = value;
-    }
-
-    if (
-      !env.VIVD_OPENCODE_DATA_HOME &&
-      process.env.DOCKER_STUDIO_OPENCODE_DATA_HOME
-    ) {
-      env.VIVD_OPENCODE_DATA_HOME = process.env.DOCKER_STUDIO_OPENCODE_DATA_HOME;
-    }
-
-    // Docker-managed studio containers must call back into the control plane over
-    // the compose network, not via the user-facing host that initiated the start.
-    if (env.MAIN_BACKEND_URL) {
-      env.MAIN_BACKEND_URL =
-        this.resolveManagedMainBackendUrl(env.MAIN_BACKEND_URL) ||
-        env.MAIN_BACKEND_URL;
-    }
-
-    const passthrough = getConfiguredDockerStudioEnvPassthroughKeys();
-
-    for (const key of passthrough) {
-      if (explicitEnvKeys.has(key)) continue;
-      const value = process.env[key];
-      if (value) env[key] = value;
-    }
-
-    if (env.GOOGLE_CLOUD_PROJECT && !env.VERTEX_LOCATION) {
-      env.VERTEX_LOCATION = "global";
-    }
-
-    if (!env.VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS) {
-      env.VIVD_SHUTDOWN_SYNC_BUDGET_SECONDS = String(
-        Math.max(5, this.config.desiredKillTimeoutSeconds - 5),
-      );
-    }
-
-    return env;
+    return buildStudioEnvWorkflow(
+      {
+        desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
+        internalMainBackendUrl: this.config.internalMainBackendUrl,
+      },
+      args,
+    );
   }
 
   private buildStudioEnvDriftSubset(
     desiredEnv: Record<string, string>,
     explicitEnvKeys: Iterable<string>,
   ): Record<string, string> {
-    const subset = { ...desiredEnv };
-    delete subset[STUDIO_ACCESS_TOKEN_ENV_KEY];
-
-    const managedMissingKeys = new Set<string>();
-    const explicitKeys = new Set(explicitEnvKeys);
-
-    for (const key of getConfiguredDockerStudioEnvPassthroughKeys()) {
-      if (!explicitKeys.has(key)) {
-        managedMissingKeys.add(key);
-      }
-    }
-
-    if (!explicitKeys.has("VIVD_OPENCODE_DATA_HOME")) {
-      managedMissingKeys.add("VIVD_OPENCODE_DATA_HOME");
-    }
-
-    managedMissingKeys.add("SESSION_TOKEN");
-
-    return withMissingStudioMachineEnvKeys(subset, managedMissingKeys);
+    return buildStudioEnvDriftSubsetFromDesiredEnv(
+      desiredEnv,
+      explicitEnvKeys,
+    );
   }
 
   private async inspectContainer(
@@ -903,43 +311,14 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     return await this.apiClient.inspectContainer(containerId);
   }
 
-  private async waitForReady(options: {
-    containerId: string;
-    routePath: string;
-    timeoutMs: number;
-  }): Promise<void> {
-    const healthUrl = new URL(
-      "health",
-      `${this.config.getInternalProxyUrlForRoutePath(options.routePath)}/`,
-    ).toString();
-    const deadline = Date.now() + options.timeoutMs;
-
-    while (Date.now() < deadline) {
-      const container = await this.inspectContainer(options.containerId).catch(
-        () => null,
-      );
-      const state = container ? containerStateStatus(container) : "unknown";
-      if (state === "exited" || state === "dead") {
-        throw new Error(
-          `[DockerMachines] Container ${options.containerId} stopped while waiting for readiness`,
-        );
-      }
-
-      try {
-        const response = await fetch(healthUrl, {
-          method: "GET",
-          cache: "no-store",
-        });
-        if (response.ok) return;
-      } catch {
-        // Retry until timeout.
-      }
-
-      await sleep(1_000);
-    }
-
-    throw new Error(
-      `[DockerMachines] Timed out waiting for studio to become ready (${options.containerId})`,
+  private async waitForReady(options: WaitForReadyOptions): Promise<void> {
+    return await waitForReadyWorkflow(
+      {
+        inspectContainer: (containerId) => this.inspectContainer(containerId),
+        getInternalProxyUrlForRoutePath: (routePath) =>
+          this.config.getInternalProxyUrlForRoutePath(routePath),
+      },
+      options,
     );
   }
 
@@ -951,177 +330,70 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     );
   }
 
-  private resolveNetworkNameFromList(networks: DockerNetworkSummary[]): string {
-    const configured = this.config.network;
-    const normalizedConfigured = configured.trim();
-    if (!normalizedConfigured) return configured;
-
-    const exactMatch = networks.find(
-      (network) => network.Name?.trim() === normalizedConfigured,
-    );
-    if (exactMatch?.Name) return exactMatch.Name;
-
-    const suffixMatches = networks.filter((network) => {
-      const name = network.Name?.trim();
-      return !!name && name.endsWith(`_${normalizedConfigured}`);
-    });
-    if (suffixMatches.length === 1 && suffixMatches[0]?.Name) {
-      const resolved = suffixMatches[0].Name;
-      console.warn(
-        `[DockerMachines] Resolved configured network ${normalizedConfigured} to existing Docker network ${resolved}`,
-      );
-      return resolved;
-    }
-
-    return configured;
-  }
-
   private async resolveContainerNetworkName(): Promise<string> {
-    try {
-      const networks = await this.apiClient.listNetworks();
-      return this.resolveNetworkNameFromList(networks);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[DockerMachines] Failed to resolve Docker network ${this.config.network}: ${message}`,
-      );
-      return this.config.network;
-    }
+    return await resolveContainerNetworkNameWorkflow({
+      configuredNetwork: this.config.network,
+      listNetworks: () => this.apiClient.listNetworks(),
+      warn: (message) => console.warn(message),
+    });
   }
 
   private async ensureImageAvailableForCreate(
     desiredImage: string,
   ): Promise<string | null> {
-    try {
-      await this.apiClient.pullImage(desiredImage);
-      return null;
-    } catch (error) {
-      if (!isMissingNativeManifestError(error)) throw error;
-
-      const fallbackPlatform = this.config.fallbackPlatform;
-      if (!fallbackPlatform) throw error;
-
-      console.warn(
-        `[DockerMachines] Native manifest unavailable for ${desiredImage}; retrying pull with fallback platform ${fallbackPlatform}`,
-      );
-      await this.apiClient.pullImage(desiredImage, {
-        platform: fallbackPlatform,
-      });
-      return fallbackPlatform;
-    }
+    return await ensureImageAvailableForCreateWorkflow({
+      desiredImage,
+      fallbackPlatform: this.config.fallbackPlatform,
+      pullImage: (image, options) =>
+        options
+          ? this.apiClient.pullImage(image, options)
+          : this.apiClient.pullImage(image),
+      warn: (message) => console.warn(message),
+    });
   }
 
-  private async createFreshContainer(options: {
-    args: StudioMachineStartArgs;
-    desiredImage: string;
-    desiredImageState?: DockerResolvedImageState | null;
-    preferredAccessToken?: string | null;
-    preserveStudioIdFrom?: DockerContainerInfo | null;
-    preserveExternalPortFrom?: DockerContainerInfo | null;
-  }): Promise<DockerContainerInfo> {
-    const studioId =
-      options.preserveStudioIdFrom
-        ? getContainerStudioId(options.preserveStudioIdFrom)
-        : options.args.env.STUDIO_ID || crypto.randomUUID();
-    const accessToken =
-      trimToken(options.preferredAccessToken) ||
-      getContainerAccessToken(options.preserveStudioIdFrom || ({} as DockerContainerInfo)) ||
-      this.config.generateStudioAccessToken();
-    const externalPort =
-      getContainerExternalPort(options.preserveExternalPortFrom || ({} as DockerContainerInfo)) ||
-      (await this.allocatePublicPort());
-    const routeId = this.config.routeIdFor(
-      options.args.organizationId,
-      options.args.projectSlug,
-      options.args.version,
+  private async createFreshContainer(
+    options: CreateFreshContainerOptions,
+  ): Promise<DockerContainerInfo> {
+    return await createFreshContainerWorkflow(
+      {
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
+        containerNameFor: (organizationId, projectSlug, version) =>
+          this.config.containerNameFor(organizationId, projectSlug, version),
+        resolveContainerNetworkName: () => this.resolveContainerNetworkName(),
+        buildStudioEnv: (args) => this.buildStudioEnv(args),
+        getDesiredImageStateForRef: (imageRef) => this.getDesiredImageStateForRef(imageRef),
+        createContainer: (createOptions) =>
+          this.apiClient.createContainer(createOptions),
+        inspectContainer: (containerIdOrName) =>
+          this.inspectContainer(containerIdOrName),
+        listContainers: () => this.apiClient.listContainers(),
+        allocatePublicPort: () => this.allocatePublicPort(),
+        ensureImageAvailableForCreate: (imageRef) =>
+          this.ensureImageAvailableForCreate(imageRef),
+        desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
+        nanoCpus: this.config.nanoCpus,
+        memoryBytes: this.config.memoryBytes,
+        generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+      },
+      options,
     );
-    const networkName = await this.resolveContainerNetworkName();
-    const env = this.buildStudioEnv({
-      ...options.args,
-      studioId,
-      accessToken,
-    });
-    const desiredImageState =
-      options.desiredImageState ||
-      (await this.getDesiredImageStateForRef(options.desiredImage));
-    const spec = createContainerSpec({
-      args: options.args,
-      studioId,
-      accessToken,
-      desiredImage: options.desiredImage,
-      desiredImageState,
-      routeId,
-      externalPort,
-      env,
-      config: this.config,
-      networkName,
-    });
-    const containerName = this.config.containerNameFor(
-      options.args.organizationId,
-      options.args.projectSlug,
-      options.args.version,
-    );
-
-    try {
-      let platform: string | undefined;
-      let created;
-      try {
-        created = await this.apiClient.createContainer({
-          name: containerName,
-          config: spec,
-          platform,
-        });
-      } catch (error) {
-        if (!isMissingImageError(error)) throw error;
-        platform = (await this.ensureImageAvailableForCreate(options.desiredImage)) || undefined;
-        created = await this.apiClient.createContainer({
-          name: containerName,
-          config: spec,
-          platform,
-        });
-      }
-      return await this.inspectContainer(created.Id);
-    } catch (error) {
-      if (!isContainerNameConflictError(error)) {
-        throw error;
-      }
-
-      try {
-        return await this.inspectContainer(containerName);
-      } catch {
-        // Fall through to identity-based lookup.
-      }
-
-      const existing = findContainer(
-        await this.apiClient.listContainers(),
-        options.args.organizationId,
-        options.args.projectSlug,
-        options.args.version,
-      );
-      if (!existing) throw error;
-      return await this.inspectContainer(existing.Id);
-    }
   }
 
-  private async recreateContainer(options: {
-    existing: DockerContainerInfo;
-    args: StudioMachineStartArgs;
-    desiredImage: string;
-    desiredImageState?: DockerResolvedImageState | null;
-    preferredAccessToken?: string | null;
-    preserveExternalPort?: boolean;
-  }): Promise<DockerContainerInfo> {
-    await this.stopContainerIfRunning(options.existing);
-    await this.apiClient.removeContainer(options.existing.Id);
-    return await this.createFreshContainer({
-      args: options.args,
-      desiredImage: options.desiredImage,
-      desiredImageState: options.desiredImageState,
-      preferredAccessToken: options.preferredAccessToken,
-      preserveStudioIdFrom: options.existing,
-      preserveExternalPortFrom:
-        options.preserveExternalPort === false ? null : options.existing,
-    });
+  private async recreateContainer(
+    options: RecreateContainerOptions,
+  ): Promise<DockerContainerInfo> {
+    return await recreateContainerWorkflow(
+      {
+        stopContainer: (containerId, timeoutSeconds) =>
+          this.apiClient.stopContainer(containerId, timeoutSeconds),
+        desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
+        removeContainer: (containerId) => this.apiClient.removeContainer(containerId),
+        createFreshContainer: (createOptions) => this.createFreshContainer(createOptions),
+      },
+      options,
+    );
   }
 
   private async ensureContainerRunning(
@@ -1131,70 +403,35 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     desiredImage: string,
     allowNetworkRecovery = true,
   ): Promise<StudioMachineStartResult> {
-    const studioKey = this.config.key(
-      args.organizationId,
-      args.projectSlug,
-      args.version,
-    );
-    const routeId =
-      getContainerRouteId(container) ||
-      this.config.routeIdFor(args.organizationId, args.projectSlug, args.version);
-    const routePath = await this.routeService.upsertRuntimeRoute({
-      routeId,
-      containerName:
-        getContainerName(container) ||
-        this.config.containerNameFor(args.organizationId, args.projectSlug, args.version),
-      targetPort: STUDIO_INTERNAL_PORT,
-    });
-
-    if (!isRunningContainer(container)) {
-      try {
-        await this.apiClient.startContainer(container.Id);
-      } catch (error) {
-        if (!allowNetworkRecovery || !isContainerNetworkingSetupError(error)) {
-          throw error;
-        }
-
-        const recreated = await this.recreateContainer({
-          existing: container,
-          args,
-          desiredImage,
-          desiredImageState: await this.getDesiredImageStateForRef(desiredImage),
-          preferredAccessToken: accessToken,
-          preserveExternalPort: !isContainerPortConflictError(error),
-        });
-        return await this.ensureContainerRunning(
-          args,
-          recreated,
-          accessToken,
-          desiredImage,
-          false,
-        );
-      }
-    }
-
-    const externalPort = getContainerExternalPort(container);
-    const runtimeUrl = externalPort
-      ? this.config.getPublicUrlForPort(externalPort)
-      : null;
-    const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
-    const backendUrl = this.config.getInternalProxyUrlForRoutePath(routePath);
-
-    await this.waitForReady({
-      containerId: container.Id,
-      routePath,
-      timeoutMs: this.config.startTimeoutMs,
-    });
-
-    this.touchKey(studioKey);
-    return {
-      studioId: getContainerStudioId(container, args.env.STUDIO_ID),
-      url: runtimeUrl ?? compatibilityUrl,
-      backendUrl,
-      runtimeUrl,
-      compatibilityUrl,
+    return await ensureContainerRunningWorkflow(
+      {
+        key: (organizationId, projectSlug, version) =>
+          this.config.key(organizationId, projectSlug, version),
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
+        containerNameFor: (organizationId, projectSlug, version) =>
+          this.config.containerNameFor(organizationId, projectSlug, version),
+        upsertRuntimeRoute: (routeOptions) =>
+          this.routeService.upsertRuntimeRoute(routeOptions),
+        startContainer: (containerId) => this.apiClient.startContainer(containerId),
+        recreateContainer: (recreateOptions) =>
+          this.recreateContainer(recreateOptions),
+        getDesiredImageStateForRef: (imageRef) => this.getDesiredImageStateForRef(imageRef),
+        getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
+        getPublicUrlForRoutePath: (routePath) =>
+          this.config.getPublicUrlForRoutePath(routePath),
+        getInternalProxyUrlForRoutePath: (routePath) =>
+          this.config.getInternalProxyUrlForRoutePath(routePath),
+        startTimeoutMs: this.config.startTimeoutMs,
+        touchKey: (studioKey) => this.touchKey(studioKey),
+        waitForReady: (options) => this.waitForReady(options),
+      },
+      args,
+      container,
       accessToken,
-    };
+      desiredImage,
+      allowNetworkRecovery,
+    );
   }
 
   private async stopIdleContainers(): Promise<void> {
@@ -1271,123 +508,27 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   private async ensureRunningInner(
     args: StudioMachineStartArgs,
   ): Promise<StudioMachineStartResult> {
-    const containers = await this.apiClient.listContainers();
-    const existing = findContainer(
-      containers,
-      args.organizationId,
-      args.projectSlug,
-      args.version,
-    );
-    const desiredImage = await this.getDesiredImage();
-    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage);
-
-    if (!existing) {
-      const created = await this.createFreshContainer({
-        args,
-        desiredImage,
-        desiredImageState,
-      });
-      const accessToken = getContainerAccessToken(created);
-      if (!accessToken) {
-        throw new Error(
-          `[DockerMachines] Missing studio access token after creating container ${created.Id}`,
-        );
-      }
-      return await this.ensureContainerRunning(
-        args,
-        created,
-        accessToken,
-        desiredImage,
-      );
-    }
-
-    let inspected = await this.inspectContainer(existing.Id);
-    const desiredNetworkName = await this.resolveContainerNetworkName();
-    const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
-      args.env.MAIN_BACKEND_URL,
-    );
-    const desiredEnvSubset = this.buildStudioEnvDriftSubset(
-      this.buildStudioEnv({
-        ...args,
-        studioId: getContainerStudioId(inspected, args.env.STUDIO_ID),
-        accessToken: getContainerAccessToken(inspected) || "",
-      }),
-      Object.keys(args.env),
-    );
-    let reconcileState = resolveContainerReconcileState({
-      container: inspected,
-      desiredImage,
-      desiredImageState,
-      desiredNanoCpus: this.config.nanoCpus,
-      desiredMemoryBytes: this.config.memoryBytes,
-      desiredNetworkName,
-      desiredMainBackendUrl,
-      desiredEnvSubset,
-      generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-    });
-
-    if (isRunningContainer(inspected)) {
-      if (
-        reconcileState.needs.accessToken ||
-        reconcileState.needs.mainBackendUrl ||
-        reconcileState.needs.env
-      ) {
-        inspected = await this.recreateContainer({
-          existing: inspected,
-          args,
-          desiredImage,
-          desiredImageState,
-          preferredAccessToken: reconcileState.accessToken,
-        });
-        reconcileState = resolveContainerReconcileState({
-          container: inspected,
-          desiredImage,
-          desiredImageState,
-          desiredNanoCpus: this.config.nanoCpus,
-          desiredMemoryBytes: this.config.memoryBytes,
-          desiredNetworkName,
-          desiredMainBackendUrl,
-          desiredEnvSubset,
-          desiredAccessToken: reconcileState.accessToken,
-          generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-        });
-      }
-
-      return await this.ensureContainerRunning(
-        args,
-        inspected,
-        reconcileState.accessToken,
-        desiredImage,
-      );
-    }
-
-    if (!isStoppedContainer(inspected) || hasContainerDrift(reconcileState.needs)) {
-      inspected = await this.recreateContainer({
-        existing: inspected,
-        args,
-        desiredImage,
-        desiredImageState,
-        preferredAccessToken: reconcileState.accessToken,
-      });
-      reconcileState = resolveContainerReconcileState({
-        container: inspected,
-        desiredImage,
-        desiredImageState,
-        desiredNanoCpus: this.config.nanoCpus,
-        desiredMemoryBytes: this.config.memoryBytes,
-        desiredNetworkName,
-        desiredMainBackendUrl,
-        desiredEnvSubset,
-        desiredAccessToken: reconcileState.accessToken,
+    return await ensureRunningInnerWorkflow(
+      {
+        listContainers: () => this.apiClient.listContainers(),
+        getDesiredImage: () => this.getDesiredImage(),
+        getDesiredImageStateForRef: (imageRef) => this.getDesiredImageStateForRef(imageRef),
+        createFreshContainer: (createOptions) => this.createFreshContainer(createOptions),
+        inspectContainer: (containerId) => this.inspectContainer(containerId),
+        resolveContainerNetworkName: () => this.resolveContainerNetworkName(),
+        resolveManagedMainBackendUrl: (raw) => this.resolveManagedMainBackendUrl(raw),
+        buildStudioEnv: (envArgs) => this.buildStudioEnv(envArgs),
+        buildStudioEnvDriftSubset: (desiredEnv, explicitEnvKeys) =>
+          this.buildStudioEnvDriftSubset(desiredEnv, explicitEnvKeys),
+        nanoCpus: this.config.nanoCpus,
+        memoryBytes: this.config.memoryBytes,
         generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-      });
-    }
-
-    return await this.ensureContainerRunning(
+        recreateContainer: (recreateOptions) =>
+          this.recreateContainer(recreateOptions),
+        ensureContainerRunning: (startArgs, container, accessToken, desiredImage) =>
+          this.ensureContainerRunning(startArgs, container, accessToken, desiredImage),
+      },
       args,
-      inspected,
-      reconcileState.accessToken,
-      desiredImage,
     );
   }
 
@@ -1418,42 +559,19 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   private async restartInner(
     args: StudioMachineRestartArgs,
   ): Promise<StudioMachineStartResult> {
-    const existing = findContainer(
-      await this.apiClient.listContainers(),
-      args.organizationId,
-      args.projectSlug,
-      args.version,
-    );
-    const desiredImage = await this.getDesiredImage();
-    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage);
-
-    let container: DockerContainerInfo;
-    if (existing) {
-      container = await this.recreateContainer({
-        existing: await this.inspectContainer(existing.Id),
-        args,
-        desiredImage,
-        desiredImageState,
-      });
-    } else {
-      container = await this.createFreshContainer({
-        args,
-        desiredImage,
-        desiredImageState,
-      });
-    }
-
-    const accessToken = getContainerAccessToken(container);
-    if (!accessToken) {
-      throw new Error(
-        `[DockerMachines] Missing studio access token after restarting container ${container.Id}`,
-      );
-    }
-    return await this.ensureContainerRunning(
+    return await restartInnerWorkflow(
+      {
+        listContainers: () => this.apiClient.listContainers(),
+        inspectContainer: (containerId) => this.inspectContainer(containerId),
+        getDesiredImage: () => this.getDesiredImage(),
+        getDesiredImageStateForRef: (imageRef) => this.getDesiredImageStateForRef(imageRef),
+        recreateContainer: (recreateOptions) =>
+          this.recreateContainer(recreateOptions),
+        createFreshContainer: (createOptions) => this.createFreshContainer(createOptions),
+        ensureContainerRunning: (restartArgs, container, accessToken, desiredImage) =>
+          this.ensureContainerRunning(restartArgs, container, accessToken, desiredImage),
+      },
       args,
-      container,
-      accessToken,
-      desiredImage,
     );
   }
 
