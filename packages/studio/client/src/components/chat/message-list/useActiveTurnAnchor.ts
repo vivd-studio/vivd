@@ -14,7 +14,7 @@ const CHAT_ANCHOR_TOP_INSET_PX = 40;
 const ACTIVE_TURN_BODY_GAP_PX = 8;
 const MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS = 1;
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 10;
-const MANUAL_SCROLL_RESUME_THRESHOLD_PX = 1;
+const MANUAL_SCROLL_RESUME_THRESHOLD_PX = AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
 const USER_SCROLL_DELTA_THRESHOLD_PX = 1;
 const SCROLL_POSITION_EPSILON_PX = 2;
@@ -414,6 +414,8 @@ export function useActiveTurnAnchor({
         currentScrollTop <
           previousScrollTop - USER_SCROLL_DELTA_THRESHOLD_PX &&
         !isAutoScrollPosition(viewport);
+      const inBottomResumeZone =
+        distanceFromBottom <= MANUAL_SCROLL_RESUME_THRESHOLD_PX;
 
       if (userScrolledUp) {
         setUserScrolledState(true);
@@ -422,7 +424,7 @@ export function useActiveTurnAnchor({
       }
 
       if (didUserScroll) {
-        if (distanceFromBottom <= MANUAL_SCROLL_RESUME_THRESHOLD_PX) {
+        if (inBottomResumeZone) {
           setUserScrolledState(false);
         }
         syncScrollFades();
@@ -441,7 +443,6 @@ export function useActiveTurnAnchor({
         return;
       }
 
-      setUserScrolledState(true);
       syncScrollFades();
     };
 

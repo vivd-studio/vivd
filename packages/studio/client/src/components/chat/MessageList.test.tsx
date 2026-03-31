@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageList } from "./MessageList";
 
 const timelineState = vi.hoisted(() => ({
@@ -103,6 +104,7 @@ vi.mock("./ChatContext", () => ({
 
 describe("MessageList latest-user anchoring", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     scrollToMock.mockReset();
     timelineState.items = [
       {
@@ -136,6 +138,7 @@ describe("MessageList latest-user anchoring", () => {
 
     Object.defineProperty(window, "requestAnimationFrame", {
       configurable: true,
+      writable: true,
       value: (callback: FrameRequestCallback) => {
         callback(0);
         return 1;
@@ -144,6 +147,7 @@ describe("MessageList latest-user anchoring", () => {
 
     Object.defineProperty(window, "cancelAnimationFrame", {
       configurable: true,
+      writable: true,
       value: vi.fn(),
     });
 
@@ -316,6 +320,10 @@ describe("MessageList latest-user anchoring", () => {
         };
       },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("uses auto scrollbar gutter for the empty-state prompt", () => {
@@ -629,6 +637,87 @@ describe("MessageList latest-user anchoring", () => {
         top: 200,
         behavior: "auto",
       });
+    });
+  });
+
+  it("resumes auto-follow when the user scrolls back into the bottom zone", async () => {
+    const { container } = render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    scrollToMock.mockClear();
+
+    const viewport = container.querySelector<HTMLElement>("[data-chat-scroll-viewport]");
+    expect(viewport).not.toBeNull();
+
+    fireEvent.wheel(viewport!, { deltaY: -120 });
+    viewport!.scrollTop = 20;
+    fireEvent.scroll(viewport!);
+
+    expect(
+      container.querySelector("[aria-label='Jump to latest message']"),
+    ).toBeInTheDocument();
+
+    viewport!.scrollTop = 72;
+    fireEvent.scroll(viewport!);
+
+    await waitFor(() => {
+      expect(
+        container.querySelector("[aria-label='Jump to latest message']"),
+      ).not.toBeInTheDocument();
+    });
+
+    viewportExtraScrollHeight.value = 120;
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({
+        top: 200,
+        behavior: "auto",
+      });
+    });
+  });
+
+  it("does not lose auto-follow after a delayed scroll sync with no user interaction", async () => {
+    vi.useFakeTimers();
+
+    const { container } = render(<MessageList />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+    });
+
+    scrollToMock.mockClear();
+
+    const viewport = container.querySelector<HTMLElement>("[data-chat-scroll-viewport]");
+    expect(viewport).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+
+    viewportExtraScrollHeight.value = 120;
+    fireEvent.scroll(viewport!);
+
+    expect(
+      container.querySelector("[aria-label='Jump to latest message']"),
+    ).not.toBeInTheDocument();
+
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(scrollToMock).toHaveBeenCalledWith({
+      top: 200,
+      behavior: "auto",
     });
   });
 
