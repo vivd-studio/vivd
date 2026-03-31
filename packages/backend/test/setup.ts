@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 
@@ -26,5 +27,13 @@ for (const envFile of envFiles) {
     path: envFile,
     override: false,
     quiet: true,
+  });
+}
+
+if (!(process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR || "").trim()) {
+  const tempRoutesDir = mkdtempSync(join(os.tmpdir(), "vivd-fly-routes-"));
+  process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR = tempRoutesDir;
+  process.on("exit", () => {
+    rmSync(tempRoutesDir, { recursive: true, force: true });
   });
 }

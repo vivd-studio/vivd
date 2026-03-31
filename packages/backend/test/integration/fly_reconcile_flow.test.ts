@@ -26,9 +26,6 @@
  *   VIVD_FLY_TEST_IMAGE or VIVD_FLY_TEST_IMAGE_TAG explicitly so this
  *   smoke validates the current Studio image instead of that stale pin.
  */
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect } from "vitest";
 import {
@@ -212,12 +209,6 @@ describe("Fly warm reconciliation flow", () => {
     "updates a drifted machine, leaves it suspended, and wakes it quickly",
     { timeout: 420_000 },
     async () => {
-      const originalRoutesDir = process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR;
-      const tempRoutesDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), "vivd-fly-routes-"),
-      );
-      process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR = tempRoutesDir;
-
       const provider = new FlyStudioMachineProvider();
       const originalConfiguredImage = process.env.FLY_STUDIO_IMAGE;
       const requestedImage = await resolveRequestedImage(provider);
@@ -367,13 +358,6 @@ describe("Fly warm reconciliation flow", () => {
           ).toBeLessThanOrEqual(MAX_WAKE_MS);
         }
       } finally {
-        if (typeof originalRoutesDir === "string" && originalRoutesDir.trim()) {
-          process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR = originalRoutesDir;
-        } else {
-          delete process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR;
-        }
-        fs.rmSync(tempRoutesDir, { recursive: true, force: true });
-
         if (typeof originalConfiguredImage === "string" && originalConfiguredImage.trim()) {
           process.env.FLY_STUDIO_IMAGE = originalConfiguredImage;
         } else {
