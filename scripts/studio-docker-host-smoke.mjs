@@ -116,7 +116,13 @@ function readPositiveIntEnv(name, fallback, env = process.env) {
   return parsed;
 }
 
-async function ensurePortAvailable(port) {
+function canTakeOverPort80(env) {
+  const raw = getOptionalEnv("VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80", env);
+  if (!raw) return false;
+  return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
+}
+
+async function ensurePortBindable(port) {
   await new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once("error", reject);
@@ -129,12 +135,86 @@ async function ensurePortAvailable(port) {
         resolve();
       });
     });
-  }).catch((error) => {
-    throw new Error(
-      `Port ${port} must be free for the Studio host smoke. Stop any existing local stack that is binding http://localhost first.`,
-      { cause: error },
-    );
   });
+}
+
+function listPort80ComposeCaddies() {
+  const result = runCommand(
+    "docker",
+    [
+      "ps",
+      "--format",
+      "{{.ID}}\t{{.Names}}\t{{.Ports}}\t{{.Label \"com.docker.compose.service\"}}",
+    ],
+    { allowFailure: true },
+  );
+
+  return result.stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, name, ports = "", composeService = ""] = line.split("\t");
+      return { id, name, ports, composeService };
+    })
+    .filter(
+      (entry) =>
+        entry.composeService === "caddy" &&
+        /(^|,|\s)(0\.0\.0\.0|127\.0\.0\.1|\[::\]|::):80->80\/tcp/i.test(entry.ports),
+    );
+}
+
+async function acquirePort80(env) {
+  try {
+    await ensurePortBindable(80);
+    return [];
+  } catch {
+    if (!canTakeOverPort80(env)) {
+      throw new Error(
+        "Port 80 is already in use. Re-run with VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 to temporarily pause the local Caddy dev proxy during the smoke.",
+      );
+    }
+
+    const caddies = listPort80ComposeCaddies();
+    if (caddies.length === 0) {
+      throw new Error(
+        "Port 80 is already in use, but no compose-managed Caddy container could be identified for temporary takeover.",
+      );
+    }
+
+    log(
+      `Temporarily stopping port-80 Caddy container(s): ${caddies
+        .map((entry) => entry.name)
+        .join(", ")}`,
+    );
+    for (const entry of caddies) {
+      runCommand("docker", ["stop", entry.id]);
+    }
+
+    try {
+      await ensurePortBindable(80);
+    } catch (error) {
+      throw new Error(
+        "Port 80 is still busy after stopping the local Caddy container(s).",
+        { cause: error },
+      );
+    }
+
+    return caddies;
+  }
+}
+
+function restartContainers(containers) {
+  for (const entry of containers) {
+    try {
+      runCommand("docker", ["start", entry.id]);
+      log(`Restarted ${entry.name}`);
+    } catch (error) {
+      console.error(
+        `[studio-docker-host-smoke] Failed to restart ${entry.name}: ${String(error)}`,
+      );
+    }
+  }
 }
 
 function runDockerCompose(projectName, composeArgs, options = {}) {
@@ -305,7 +385,7 @@ async function main() {
     );
   }
 
-  await ensurePortAvailable(80);
+  const pausedPort80Containers = await acquirePort80(baseEnv);
 
   const composeProject = `vivd-host-smoke-${randomUUID().slice(0, 8)}`;
   const workDir = process.cwd();
@@ -516,6 +596,10 @@ async function main() {
       ["down", "--volumes", "--remove-orphans"],
       { cwd: workDir, env: smokeEnv, allowFailure: true },
     );
+
+    if (pausedPort80Containers.length > 0) {
+      restartContainers(pausedPort80Containers);
+    }
 
     if (succeeded) {
       rmSync(artifactDir, { recursive: true, force: true });

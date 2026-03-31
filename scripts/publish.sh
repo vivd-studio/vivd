@@ -115,7 +115,7 @@ run_release_preflight() {
     npx playwright install chromium
   run_step \
     "Studio Docker-provider host smoke" \
-    env STUDIO_IMAGE=vivd-studio:publish-host-smoke npm run studio:host-smoke
+    env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 npm run studio:host-smoke
 }
 
 while [[ $# -gt 0 ]]; do
