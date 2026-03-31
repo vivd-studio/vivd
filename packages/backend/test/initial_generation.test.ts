@@ -6,6 +6,7 @@ import {
   applyScratchAstroStarter,
   createScratchInitialGenerationManifest,
   getScratchCreationMode,
+  readInitialGenerationManifest,
   writeInitialGenerationManifest,
 } from "../src/generator/initialGeneration";
 
@@ -113,6 +114,30 @@ describe("initial generation helpers", () => {
         mode: "studio_astro",
         state: "draft",
         title: "Acme",
+      });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads back persisted initial-generation session metadata", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vivd-initial-generation-"));
+
+    try {
+      writeInitialGenerationManifest(tmpDir, {
+        ...createScratchInitialGenerationManifest({
+          title: "Acme",
+          description: "A site for Acme",
+        }),
+        state: "generating_initial_site",
+        sessionId: "sess-1",
+        startedAt: "2026-03-31T09:53:06.000Z",
+      });
+
+      expect(readInitialGenerationManifest(tmpDir)).toMatchObject({
+        state: "generating_initial_site",
+        sessionId: "sess-1",
+        startedAt: "2026-03-31T09:53:06.000Z",
       });
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

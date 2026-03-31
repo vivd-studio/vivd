@@ -641,6 +641,32 @@ export const projectGenerationProcedures = {
             });
           studioInitialGenerationStatus = studioInitialGeneration.status;
           studioInitialGenerationSessionId = studioInitialGeneration.sessionId;
+
+          writeInitialGenerationManifest(
+            versionDir,
+            {
+              ...createScratchInitialGenerationManifest({
+                title: draftMeta.title,
+                description: draftMeta.description,
+                businessType: draftMeta.businessType,
+                stylePreset: draftMeta.stylePreset,
+                stylePalette: draftMeta.stylePalette,
+                styleMode: draftMeta.styleMode,
+                siteTheme: draftMeta.siteTheme,
+                referenceUrls: draftMeta.referenceUrls,
+              }),
+              state:
+                studioInitialGenerationStatus === "completed"
+                  ? "completed"
+                  : "generating_initial_site",
+              sessionId: studioInitialGenerationSessionId,
+              startedAt: new Date().toISOString(),
+              completedAt:
+                studioInitialGenerationStatus === "completed"
+                  ? new Date().toISOString()
+                  : null,
+            },
+          );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);

@@ -113,6 +113,32 @@ export default function EmbeddedStudio() {
   const studioVersion =
     Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
   const shouldResumeStudio = resumeStudio || initialGenerationRequested;
+  const canBootstrapStudio = Boolean(project || initialGenerationRequested);
+
+  const initialGenerationStatusQuery = trpc.project.status.useQuery(
+    { slug: projectSlug!, version: studioVersion },
+    {
+      enabled: !!projectSlug && initialGenerationRequested,
+      refetchInterval: (query) => {
+        const polledSessionId =
+          query.state.data && "studioHandoff" in query.state.data
+            ? query.state.data.studioHandoff?.sessionId ?? null
+            : null;
+        return initialGenerationRequested &&
+          !requestedInitialSessionId &&
+          !polledSessionId
+          ? 1_000
+          : false;
+      },
+    },
+  );
+  const polledInitialSessionId =
+    initialGenerationStatusQuery.data &&
+    "studioHandoff" in initialGenerationStatusQuery.data
+      ? initialGenerationStatusQuery.data.studioHandoff?.sessionId ?? null
+      : null;
+  const resolvedInitialSessionId =
+    requestedInitialSessionId ?? polledInitialSessionId ?? null;
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -133,7 +159,7 @@ export default function EmbeddedStudio() {
   const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
     { slug: projectSlug!, version: studioVersion },
     {
-      enabled: !!projectSlug && !!project,
+      enabled: !!projectSlug && canBootstrapStudio,
       // This is a lightweight status check; prefer correctness over caching so we can
       // resume an already-running studio after navigation (or after fullscreen toggles).
       staleTime: 0,
@@ -315,6 +341,30 @@ export default function EmbeddedStudio() {
 
   // Reset local state when navigating between projects.
   useEffect(() => {
+    if (
+      !initialGenerationRequested ||
+      !projectSlug ||
+      requestedInitialSessionId ||
+      !resolvedInitialSessionId
+    ) {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    params.set("sessionId", resolvedInitialSessionId);
+    navigate(`${ROUTES.PROJECT(projectSlug)}?${params.toString()}`, {
+      replace: true,
+    });
+  }, [
+    initialGenerationRequested,
+    location.search,
+    navigate,
+    projectSlug,
+    requestedInitialSessionId,
+    resolvedInitialSessionId,
+  ]);
+
+  useEffect(() => {
     setEditRequested(false);
     setPreviewSurface("publish");
     startStudio.reset();
@@ -335,13 +385,13 @@ export default function EmbeddedStudio() {
 
   // Set document title to project name
   useEffect(() => {
-    if (project?.slug) {
-      document.title = formatDocumentTitle(project.slug);
+    if (project?.slug || projectSlug) {
+      document.title = formatDocumentTitle(project?.slug ?? projectSlug);
     }
     return () => {
       document.title = formatDocumentTitle();
     };
-  }, [project?.slug]);
+  }, [project?.slug, projectSlug]);
 
   const handleEdit = () => {
     if (!projectSlug || !project) return;
@@ -354,7 +404,7 @@ export default function EmbeddedStudio() {
   };
 
   useEffect(() => {
-    if (!initialGenerationRequested || !projectSlug || !project) return;
+    if (!initialGenerationRequested || !projectSlug || !canBootstrapStudio) return;
     if (studioUrlQuery.data?.status === "running") return;
     if (editRequested || startStudio.isPending || startStudio.data) return;
     if (hardRestartStudio.isPending || isRenamePending) return;
@@ -369,7 +419,7 @@ export default function EmbeddedStudio() {
     hardRestartStudio.isPending,
     initialGenerationRequested,
     isRenamePending,
-    project,
+    canBootstrapStudio,
     projectSlug,
     startStudio,
     startStudio.data,
@@ -446,8 +496,8 @@ export default function EmbeddedStudio() {
         version: String(studioVersion),
         ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
       });
-      if (requestedInitialSessionId) {
-        params.set("sessionId", requestedInitialSessionId);
+      if (resolvedInitialSessionId) {
+        params.set("sessionId", resolvedInitialSessionId);
       }
       navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`);
     },
@@ -472,8 +522,8 @@ export default function EmbeddedStudio() {
     if (initialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
-    if (requestedInitialSessionId) {
-      url.searchParams.set("sessionId", requestedInitialSessionId);
+    if (resolvedInitialSessionId) {
+      url.searchParams.set("sessionId", resolvedInitialSessionId);
     }
     // Origin of the host app – used by the studio to construct shareable preview URLs.
     url.searchParams.set("hostOrigin", window.location.origin);
@@ -483,8 +533,8 @@ export default function EmbeddedStudio() {
       version: String(studioVersion),
       ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
     });
-    if (requestedInitialSessionId) {
-      returnToParams.set("sessionId", requestedInitialSessionId);
+    if (resolvedInitialSessionId) {
+      returnToParams.set("sessionId", resolvedInitialSessionId);
     }
     url.searchParams.set(
       "returnTo",
@@ -498,7 +548,7 @@ export default function EmbeddedStudio() {
     initialGenerationRequested,
     projectSlug,
     publicPreviewEnabled,
-    requestedInitialSessionId,
+    resolvedInitialSessionId,
     studioBaseUrl,
     studioVersion,
   ]);
@@ -787,7 +837,25 @@ export default function EmbeddedStudio() {
     );
   }
 
-  if (!project || !projectSlug) {
+  if (!projectSlug) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-muted-foreground">Project not found</div>
+      </div>
+    );
+  }
+
+  if (!project && initialGenerationRequested) {
+    return (
+      <FramedHostShell className="h-full" header={renderEmbeddedHeader({})}>
+        <div className="relative flex h-full min-h-0 flex-col bg-background">
+          <StudioStartupLoading className="h-full min-h-0" />
+        </div>
+      </FramedHostShell>
+    );
+  }
+
+  if (!project) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground">Project not found</div>

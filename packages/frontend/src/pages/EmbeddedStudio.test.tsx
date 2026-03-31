@@ -8,6 +8,7 @@ const {
   useNavigateMock,
   useUtilsMock,
   projectListUseQueryMock,
+  projectStatusUseQueryMock,
   startStudioUseMutationMock,
   hardRestartStudioUseMutationMock,
   touchStudioUseMutationMock,
@@ -29,6 +30,7 @@ const {
   useNavigateMock: vi.fn(),
   useUtilsMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
+  projectStatusUseQueryMock: vi.fn(),
   startStudioUseMutationMock: vi.fn(),
   hardRestartStudioUseMutationMock: vi.fn(),
   touchStudioUseMutationMock: vi.fn(),
@@ -63,6 +65,7 @@ vi.mock("@/lib/trpc", () => ({
     useUtils: useUtilsMock,
     project: {
       list: { useQuery: projectListUseQueryMock },
+      status: { useQuery: projectStatusUseQueryMock },
       startStudio: { useMutation: startStudioUseMutationMock },
       hardRestartStudio: { useMutation: hardRestartStudioUseMutationMock },
       touchStudio: { useMutation: touchStudioUseMutationMock },
@@ -181,6 +184,7 @@ describe("EmbeddedStudio", () => {
     useNavigateMock.mockReset();
     useUtilsMock.mockReset();
     projectListUseQueryMock.mockReset();
+    projectStatusUseQueryMock.mockReset();
     startStudioUseMutationMock.mockReset();
     hardRestartStudioUseMutationMock.mockReset();
     touchStudioUseMutationMock.mockReset();
@@ -228,6 +232,9 @@ describe("EmbeddedStudio", () => {
     });
     getStudioUrlUseQueryMock.mockReturnValue({
       data: { status: "stopped" },
+    });
+    projectStatusUseQueryMock.mockReturnValue({
+      data: undefined,
     });
     externalPreviewUseQueryMock.mockReturnValue({
       data: {
@@ -446,6 +453,32 @@ describe("EmbeddedStudio", () => {
     });
   });
 
+  it("shows startup loading instead of not-found while initial generation waits for the fresh project list", () => {
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1&initialGeneration=1",
+    });
+    projectListUseQueryMock.mockReturnValueOnce({
+      data: { projects: [makeProject("other-site")] },
+      isLoading: false,
+      error: null,
+    });
+    projectStatusUseQueryMock.mockReturnValueOnce({
+      data: {
+        status: "starting_studio",
+        studioHandoff: {
+          mode: "studio_astro",
+          initialGeneration: true,
+          sessionId: null,
+        },
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
+    expect(screen.queryByText("Project not found")).not.toBeInTheDocument();
+  });
+
   it("forwards the requested initial session id into the embedded studio URL", () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1&initialGeneration=1&sessionId=sess-1",
@@ -470,6 +503,42 @@ describe("EmbeddedStudio", () => {
     const returnToUrl = new URL(returnTo!);
     expect(returnToUrl.searchParams.get("initialGeneration")).toBe("1");
     expect(returnToUrl.searchParams.get("sessionId")).toBe("sess-1");
+  });
+
+  it("resolves a missing initial session id from project status on the project page", () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1&initialGeneration=1",
+    });
+    projectStatusUseQueryMock.mockReturnValue({
+      data: {
+        status: "generating_initial_site",
+        studioHandoff: {
+          mode: "studio_astro",
+          initialGeneration: true,
+          sessionId: "sess-polled",
+        },
+      },
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        bootstrapToken: null,
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-polled",
+      { replace: true },
+    );
+
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    const iframeUrl = new URL(iframe.getAttribute("src") ?? "");
+    expect(iframeUrl.searchParams.get("sessionId")).toBe("sess-polled");
   });
 
   it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", () => {

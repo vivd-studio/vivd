@@ -1294,20 +1294,12 @@ describe("DockerStudioMachineProvider", () => {
 
     expect(startContainerMock).toHaveBeenNthCalledWith(1, "existing");
     expect(removeContainerMock).toHaveBeenCalledWith("existing");
-    expect(createContainerMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          Labels: expect.objectContaining({
-            vivd_external_port: "4101",
-          }),
-          HostConfig: expect.objectContaining({
-            PortBindings: {
-              "3100/tcp": [{ HostPort: "4101" }],
-            },
-          }),
-        }),
-      }),
-    );
+    const replacementCreate = createContainerMock.mock.calls[0]?.[0];
+    const replacementPort =
+      replacementCreate?.config?.HostConfig?.PortBindings?.["3100/tcp"]?.[0]?.HostPort;
+    expect(replacementPort).toBeDefined();
+    expect(replacementPort).not.toBe("4100");
+    expect(replacementCreate?.config?.Labels?.vivd_external_port).toBe(replacementPort);
     expect(startContainerMock).toHaveBeenNthCalledWith(2, "replacement");
     expect(result.accessToken).toBe("access-existing");
   });

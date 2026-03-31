@@ -168,11 +168,12 @@ describe("ScratchWizardContext", () => {
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(
         "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-1",
+        { replace: true },
       );
     });
   });
 
-  it("waits for a polled initial session id before redirecting to Studio", async () => {
+  it("hands over to the project route as soon as backend status enters studio startup", async () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);
 
@@ -182,7 +183,14 @@ describe("ScratchWizardContext", () => {
     });
 
     let currentStatus:
-      | { status: string; studioHandoff?: { sessionId?: string | null } }
+      | {
+          status: string;
+          studioHandoff?: {
+            mode?: string;
+            initialGeneration?: boolean;
+            sessionId?: string | null;
+          };
+        }
       | undefined;
     projectStatusUseQueryMock.mockImplementation((input: { slug: string }, options: { enabled: boolean }) => {
       if (!options.enabled || !input.slug) {
@@ -204,23 +212,12 @@ describe("ScratchWizardContext", () => {
       );
     });
 
-    currentStatus = { status: "starting_studio" };
-    view.rerender(
-      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
-        <ScratchWizardProvider>
-          <ScratchWizardTestHarness />
-        </ScratchWizardProvider>
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(navigateMock).not.toHaveBeenCalled();
-    });
-
     currentStatus = {
       status: "starting_studio",
       studioHandoff: {
-        sessionId: "sess-polled",
+        mode: "studio_astro",
+        initialGeneration: true,
+        sessionId: null,
       },
     };
     view.rerender(
@@ -233,8 +230,153 @@ describe("ScratchWizardContext", () => {
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(
-        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-polled",
+        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1",
+        { replace: true },
       );
     });
   });
+
+  it("still hands over to Studio when polling first observes a completed status with a session id", async () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+
+    const pendingStartGeneration = new Promise(() => undefined);
+    startScratchGenerationUseMutationMock.mockReturnValue({
+      mutateAsync: vi.fn().mockReturnValue(pendingStartGeneration),
+    });
+
+    let currentStatus:
+      | {
+          status: string;
+          studioHandoff?: {
+            mode?: string;
+            initialGeneration?: boolean;
+            sessionId?: string | null;
+          };
+        }
+      | undefined;
+    projectStatusUseQueryMock.mockImplementation((input: { slug: string }, options: { enabled: boolean }) => {
+      if (!options.enabled || !input.slug) {
+        return { data: undefined };
+      }
+      return {
+        data: currentStatus,
+      };
+    });
+
+    const view = renderProvider();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => {
+      expect(projectStatusUseQueryMock).toHaveBeenCalledWith(
+        { slug: "site-1", version: 1 },
+        expect.objectContaining({ enabled: true }),
+      );
+    });
+
+    currentStatus = {
+      status: "completed",
+      studioHandoff: {
+        mode: "studio_astro",
+        initialGeneration: true,
+        sessionId: "sess-complete",
+      },
+    };
+    view.rerender(
+      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
+        <ScratchWizardProvider>
+          <ScratchWizardTestHarness />
+        </ScratchWizardProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-complete",
+        { replace: true },
+      );
+    });
+  });
+
+  it("does not let a stale prior handoff suppress navigation for a later project", async () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+
+    createScratchDraftUseMutationMock.mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockResolvedValueOnce({
+          slug: "site-1",
+          version: 1,
+        })
+        .mockResolvedValueOnce({
+          slug: "site-2",
+          version: 1,
+        }),
+    });
+    startScratchGenerationUseMutationMock.mockReturnValue({
+      mutateAsync: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    });
+
+    let currentSlug: string | null = null;
+    projectStatusUseQueryMock.mockImplementation((input: { slug: string }, options: { enabled: boolean }) => {
+      if (!options.enabled || !input.slug) {
+        return { data: undefined };
+      }
+      currentSlug = input.slug;
+      return {
+        data:
+          input.slug === "site-1"
+            ? {
+                status: "starting_studio",
+                studioHandoff: {
+                  mode: "studio_astro",
+                  initialGeneration: true,
+                  sessionId: "sess-1",
+                },
+              }
+            : {
+                status: "starting_studio",
+                studioHandoff: {
+                  mode: "studio_astro",
+                  initialGeneration: true,
+                  sessionId: "sess-2",
+                },
+              },
+      };
+    });
+
+    const view = renderProvider();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => {
+      expect(currentSlug).toBe("site-1");
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-1",
+        { replace: true },
+      );
+    });
+
+    navigateMock.mockClear();
+
+    fireEvent.click(screen.getByRole("button"));
+    view.rerender(
+      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
+        <ScratchWizardProvider>
+          <ScratchWizardTestHarness />
+        </ScratchWizardProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(currentSlug).toBe("site-2");
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/vivd-studio/projects/site-2?view=studio&version=1&initialGeneration=1&sessionId=sess-2",
+        { replace: true },
+      );
+    });
+  });
+
 });

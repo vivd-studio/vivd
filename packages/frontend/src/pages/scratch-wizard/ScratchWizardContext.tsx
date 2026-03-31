@@ -8,7 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { trpc } from "@/lib/trpc";
@@ -64,6 +64,7 @@ type ScratchWizardContextValue = {
     | {
         slug: string;
         version: number;
+        expectsStudioHandoff?: boolean;
         initialSessionId?: string | null;
       }
     | undefined;
@@ -175,9 +176,10 @@ async function uploadFilesBatched(
 
 export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const utils = trpc.useUtils();
   const { config } = useAppConfig();
-  const handoffStartedRef = useRef(false);
+  const lastHandoffDestinationRef = useRef<string | null>(null);
 
   // Set document title
   useEffect(() => {
@@ -195,6 +197,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const [started, setStarted] = useState<{
     slug: string;
     version: number;
+    expectsStudioHandoff?: boolean;
     initialSessionId?: string | null;
   }>();
 
@@ -254,9 +257,6 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
   const navigateToStartedProjectStudio = useCallback(
     (slug: string, version: number, initialSessionId?: string | null) => {
-      if (handoffStartedRef.current) return;
-      handoffStartedRef.current = true;
-
       utils.project.list.invalidate();
 
       const params = new URLSearchParams({
@@ -271,9 +271,24 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
         ? `${ROUTES.PROJECT_STUDIO_FULLSCREEN(slug)}?${params.toString()}`
         : `${ROUTES.PROJECT(slug)}?view=studio&${params.toString()}`;
 
-      navigate(destination);
+      const currentLocation = `${location.pathname}${location.search}`;
+      if (
+        currentLocation === destination ||
+        lastHandoffDestinationRef.current === destination
+      ) {
+        return;
+      }
+
+      lastHandoffDestinationRef.current = destination;
+      navigate(destination, { replace: true });
     },
-    [config.singleProjectMode, navigate, utils.project.list],
+    [
+      config.singleProjectMode,
+      location.pathname,
+      location.search,
+      navigate,
+      utils.project.list,
+    ],
   );
 
   const polledInitialSessionId =
@@ -283,13 +298,17 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!statusData || !started) return;
+    const initialSessionId = started.initialSessionId ?? polledInitialSessionId;
+    const studioHandoffRequested =
+      started.expectsStudioHandoff ||
+      ("studioHandoff" in statusData &&
+        statusData.studioHandoff?.mode === "studio_astro");
     if (
-      statusData.status === "starting_studio" ||
-      statusData.status === "generating_initial_site"
+      studioHandoffRequested &&
+      (statusData.status === "starting_studio" ||
+        statusData.status === "generating_initial_site" ||
+        statusData.status === "completed")
     ) {
-      const initialSessionId =
-        started.initialSessionId ?? polledInitialSessionId;
-      if (!initialSessionId) return;
       navigateToStartedProjectStudio(
         started.slug,
         started.version,
@@ -448,10 +467,17 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
           "studioHandoff" in generationResult
             ? generationResult.studioHandoff?.sessionId ?? null
             : null;
-        if (initialSessionId) {
+        if (
+          "studioHandoff" in generationResult &&
+          generationResult.studioHandoff?.mode === "studio_astro"
+        ) {
           setStarted((current) =>
             current && current.slug === slug && current.version === version
-              ? { ...current, initialSessionId }
+              ? {
+                  ...current,
+                  expectsStudioHandoff: true,
+                  initialSessionId,
+                }
               : current,
           );
         }
@@ -462,9 +488,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
           "studioHandoff" in generationResult &&
           generationResult.studioHandoff?.mode === "studio_astro"
         ) {
-          if (initialSessionId) {
-            navigateToStartedProjectStudio(slug, version, initialSessionId);
-          }
+          navigateToStartedProjectStudio(slug, version, initialSessionId);
           return;
         }
       } catch (error) {

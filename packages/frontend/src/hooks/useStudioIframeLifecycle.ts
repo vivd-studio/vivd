@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   isColorTheme,
   isTheme,
@@ -6,12 +6,16 @@ import {
   type Theme,
 } from "@vivd/shared/types";
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
+import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import {
   getVivdStudioBridgeOrigin,
   parseVivdStudioBridgeMessage,
 } from "@/lib/studioBridge";
 import { useStudioIframeReadyRetry } from "./useStudioIframeReadyRetry";
 import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery";
+
+const EARLY_STALL_RECOVERY_DELAY_MS = 6_000;
+const EARLY_STALL_RECOVERY_TIMEOUT_MS = 4_000;
 
 type UseStudioIframeLifecycleOptions = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -49,6 +53,7 @@ export function useStudioIframeLifecycle({
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
+  const attemptedEarlyRecoveryRef = useRef(false);
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
 
   const postMessageToStudio = useCallback(
@@ -205,6 +210,10 @@ export function useStudioIframeLifecycle({
   });
 
   useEffect(() => {
+    attemptedEarlyRecoveryRef.current = false;
+  }, [reloadNonce, studioBaseUrl]);
+
+  useEffect(() => {
     if (!studioBaseUrl) {
       setStudioReady(false);
       setStudioLoadTimedOut(false);
@@ -222,6 +231,48 @@ export function useStudioIframeLifecycle({
 
     return () => window.clearTimeout(timeout);
   }, [reloadNonce, studioBaseUrl]);
+
+  useEffect(() => {
+    if (!studioBaseUrl || studioReady || attemptedEarlyRecoveryRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled || attemptedEarlyRecoveryRef.current || studioReady) return;
+
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => {
+        controller.abort();
+      }, EARLY_STALL_RECOVERY_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(
+          resolveStudioRuntimeUrl(studioBaseUrl, "health"),
+          {
+            method: "GET",
+            mode: "cors",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        if (!cancelled && response.ok && !studioReady) {
+          attemptedEarlyRecoveryRef.current = true;
+          void reloadStudioIframe();
+        }
+      } catch {
+        // Ignore transient probe failures. The normal timeout recovery still applies.
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }, EARLY_STALL_RECOVERY_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [reloadStudioIframe, studioBaseUrl, studioReady]);
 
   return {
     studioReady,

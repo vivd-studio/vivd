@@ -44,6 +44,32 @@ export default function StudioFullscreen() {
     Number.isFinite(versionOverride) && versionOverride > 0
       ? versionOverride
       : currentVersion;
+  const canBootstrapStudio = Boolean(project || initialGenerationRequested);
+
+  const initialGenerationStatusQuery = trpc.project.status.useQuery(
+    { slug: projectSlug!, version },
+    {
+      enabled: !!projectSlug && initialGenerationRequested,
+      refetchInterval: (query) => {
+        const polledSessionId =
+          query.state.data && "studioHandoff" in query.state.data
+            ? query.state.data.studioHandoff?.sessionId ?? null
+            : null;
+        return initialGenerationRequested &&
+          !requestedInitialSessionId &&
+          !polledSessionId
+          ? 1_000
+          : false;
+      },
+    },
+  );
+  const polledInitialSessionId =
+    initialGenerationStatusQuery.data &&
+    "studioHandoff" in initialGenerationStatusQuery.data
+      ? initialGenerationStatusQuery.data.studioHandoff?.sessionId ?? null
+      : null;
+  const resolvedInitialSessionId =
+    requestedInitialSessionId ?? polledInitialSessionId ?? null;
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -62,7 +88,7 @@ export default function StudioFullscreen() {
   const studioUrlQuery = trpc.project.getStudioUrl.useQuery(
     { slug: projectSlug!, version },
     {
-      enabled: !!projectSlug && !!project,
+      enabled: !!projectSlug && canBootstrapStudio,
       staleTime: 0,
       refetchOnMount: "always",
       refetchOnReconnect: "always",
@@ -159,15 +185,39 @@ export default function StudioFullscreen() {
     },
   });
 
+  useEffect(() => {
+    if (
+      !initialGenerationRequested ||
+      !projectSlug ||
+      requestedInitialSessionId ||
+      !resolvedInitialSessionId
+    ) {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    params.set("sessionId", resolvedInitialSessionId);
+    navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug)}?${params.toString()}`, {
+      replace: true,
+    });
+  }, [
+    initialGenerationRequested,
+    location.search,
+    navigate,
+    projectSlug,
+    requestedInitialSessionId,
+    resolvedInitialSessionId,
+  ]);
+
   // If the studio isn't already running, start it automatically in fullscreen mode.
   useEffect(() => {
-    if (!projectSlug || !project) return;
+    if (!projectSlug || !canBootstrapStudio) return;
     if (studioUrlQuery.data?.status === "running") return;
     if (startStudio.isPending || startStudio.data) return;
     if (hardRestartStudio.isPending) return;
     startStudio.mutate({ slug: projectSlug, version });
   }, [
-    project,
+    canBootstrapStudio,
     projectSlug,
     startStudio,
     startStudio.data,
@@ -237,8 +287,8 @@ export default function StudioFullscreen() {
         version: String(version),
         ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
       });
-      if (requestedInitialSessionId) {
-        params.set("sessionId", requestedInitialSessionId);
+      if (resolvedInitialSessionId) {
+        params.set("sessionId", resolvedInitialSessionId);
       }
       navigate(`${ROUTES.PROJECT(projectSlug!)}?${params.toString()}`);
     },
@@ -261,8 +311,8 @@ export default function StudioFullscreen() {
     if (initialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
-    if (requestedInitialSessionId) {
-      url.searchParams.set("sessionId", requestedInitialSessionId);
+    if (resolvedInitialSessionId) {
+      url.searchParams.set("sessionId", resolvedInitialSessionId);
     }
     url.searchParams.set("hostOrigin", window.location.origin);
     const returnToParams = new URLSearchParams({
@@ -270,8 +320,8 @@ export default function StudioFullscreen() {
       version: String(version),
       ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
     });
-    if (requestedInitialSessionId) {
-      returnToParams.set("sessionId", requestedInitialSessionId);
+    if (resolvedInitialSessionId) {
+      returnToParams.set("sessionId", resolvedInitialSessionId);
     }
     url.searchParams.set(
       "returnTo",
@@ -284,7 +334,7 @@ export default function StudioFullscreen() {
   }, [
     initialGenerationRequested,
     projectSlug,
-    requestedInitialSessionId,
+    resolvedInitialSessionId,
     studioBaseUrl,
     version,
   ]);
@@ -308,7 +358,19 @@ export default function StudioFullscreen() {
     );
   }
 
-  if (!project || !projectSlug) {
+  if (!projectSlug) {
+    return (
+      <div className="flex h-dvh w-screen items-center justify-center">
+        <div className="text-muted-foreground">Project not found</div>
+      </div>
+    );
+  }
+
+  if (!project && initialGenerationRequested) {
+    return <StudioStartupLoading fullScreen />;
+  }
+
+  if (!project) {
     return (
       <div className="flex h-dvh w-screen items-center justify-center">
         <div className="text-muted-foreground">Project not found</div>
