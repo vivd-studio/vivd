@@ -250,6 +250,12 @@ jobs:
           sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
           sudo systemctl stop apache2 2>/dev/null || true
           sudo systemctl stop nginx 2>/dev/null || true
+          pids="$(sudo lsof -t -nP -iTCP:80 -sTCP:LISTEN || true)"
+          if [ -n "$pids" ]; then
+            echo "Killing remaining port-80 listener(s): $pids"
+            echo "$pids" | xargs sudo kill -9
+            sleep 2
+          fi
           sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
 
       - name: Smoke test host-routed Docker machine-provider handoff
