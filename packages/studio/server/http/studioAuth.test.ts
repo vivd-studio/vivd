@@ -293,6 +293,24 @@ describe("resolveStudioBootstrapRedirectTarget", () => {
     ).toBe("/vivd-studio?embedded=1");
   });
 
+  it("ignores upstream host ports when forwarded host points at the tenant origin", () => {
+    const req = createMockRequest({
+      secure: true,
+      headers: {
+        host: "vivd-studio-prod.fly.dev:3111",
+        "x-forwarded-host": "felix-pahlke.vivd.studio",
+        "x-forwarded-prefix": "/_studio/runtime-123",
+      },
+    });
+
+    expect(
+      resolveStudioBootstrapRedirectTarget(
+        req,
+        "https://felix-pahlke.vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
+      ),
+    ).toBe("/_studio/runtime-123/vivd-studio?embedded=1");
+  });
+
   it("rejects cross-origin redirect targets", () => {
     const req = createMockRequest({
       secure: true,
@@ -378,6 +396,36 @@ describe("createStudioBootstrapHandler", () => {
         },
       },
     ]);
+  });
+
+  it("accepts tenant-hosted bootstrap posts routed through a Fly compatibility path", () => {
+    const bootstrapToken = createStudioBootstrapToken({
+      accessToken: "studio-token",
+      studioId: "studio-1",
+    });
+    const handler = createStudioBootstrapHandler({
+      STUDIO_ACCESS_TOKEN: "studio-token",
+      STUDIO_ID: "studio-1",
+    } as any);
+    const req = createMockRequest({
+      path: "/vivd-studio/api/bootstrap",
+      secure: true,
+      headers: {
+        host: "vivd-studio-prod.fly.dev:3111",
+        "x-forwarded-host": "felix-pahlke.vivd.studio",
+        "x-forwarded-prefix": "/_studio/runtime-123",
+      },
+    });
+    req.body = {
+      bootstrapToken,
+      next: "https://felix-pahlke.vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
+    };
+    const res = createMockResponse();
+
+    handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(303);
+    expect(res.redirectedTo).toBe("/_studio/runtime-123/vivd-studio?embedded=1");
   });
 
   it("rejects invalid bootstrap tokens", () => {

@@ -14,7 +14,6 @@ function ensureLeadingSlash(value: string): string {
 function reverseProxyBlock(targetBaseUrl: string, routePath: string): string {
   const target = new URL(targetBaseUrl);
   const upstreamOrigin = target.origin;
-  const upstreamHost = target.host;
   const transportBlock =
     target.protocol === "https:"
       ? `
@@ -24,7 +23,6 @@ function reverseProxyBlock(targetBaseUrl: string, routePath: string): string {
       : "";
 
   return `reverse_proxy ${upstreamOrigin} {
-    header_up Host ${upstreamHost}
     header_up X-Forwarded-Prefix ${routePath}${transportBlock}
 }`;
 }

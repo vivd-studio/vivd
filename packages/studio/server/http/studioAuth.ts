@@ -153,10 +153,15 @@ function getRequestOrigin(req: express.Request): string | null {
 
   const preferredParts = splitHostAndPort(preferred);
   const directParts = splitHostAndPort(directHost);
+  const directPortForSameHost =
+    preferredParts.hostname &&
+    directParts.hostname === preferredParts.hostname
+      ? directParts.port
+      : null;
   const effectivePort =
     preferredParts.port ||
     forwardedPort ||
-    directParts.port;
+    directPortForSameHost;
 
   const host = isDefaultPort(protocol, effectivePort)
     ? preferredParts.hostname

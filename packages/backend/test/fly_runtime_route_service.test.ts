@@ -48,9 +48,7 @@ describe("FlyRuntimeRouteService", () => {
     expect(content).toContain(
       "reverse_proxy https://vivd-studio-prod.fly.dev:3115",
     );
-    expect(content).toContain(
-      "header_up Host vivd-studio-prod.fly.dev:3115",
-    );
+    expect(content).not.toContain("header_up Host");
     expect(content).toContain(
       "header_up X-Forwarded-Prefix /_studio/runtime-1",
     );
