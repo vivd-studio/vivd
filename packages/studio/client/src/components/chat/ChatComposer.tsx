@@ -391,6 +391,8 @@ export function ChatComposer({ className }: ChatComposerProps) {
                 size="icon"
                 variant="destructive"
                 className="h-8 w-8 rounded-full"
+                title="Stop generation"
+                aria-label="Stop generation"
               >
                 <Square className="w-4 h-4" />
               </Button>

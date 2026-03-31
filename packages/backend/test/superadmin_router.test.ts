@@ -856,7 +856,7 @@ describe("superadmin router", () => {
     expect(listStudioImagesFromGhcrMock).toHaveBeenCalledWith(
       expect.objectContaining({
         semverLimit: 12,
-        devLimit: 25,
+        devLimit: 100,
       }),
     );
   });

@@ -240,6 +240,23 @@ jobs:
           OPENCODE_MODEL_PRO: ${{ vars.OPENCODE_MODEL_PRO || secrets.OPENCODE_MODEL_PRO }}
         run: node ./scripts/studio-image-smoke.mjs
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke test host-routed Docker machine-provider handoff
+        env:
+          STUDIO_IMAGE: vivd-studio:release-smoke
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT || secrets.GOOGLE_CLOUD_PROJECT }}
+          VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION || secrets.VERTEX_LOCATION || 'global' }}
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+          VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH: ${{ secrets.VIVD_GOOGLE_APPLICATION_CREDENTIALS_PATH }}
+          OPENCODE_MODEL_STANDARD: ${{ vars.OPENCODE_MODEL_STANDARD || secrets.OPENCODE_MODEL_STANDARD }}
+          OPENCODE_MODEL_ADVANCED: ${{ vars.OPENCODE_MODEL_ADVANCED || secrets.OPENCODE_MODEL_ADVANCED }}
+          OPENCODE_MODEL_PRO: ${{ vars.OPENCODE_MODEL_PRO || secrets.OPENCODE_MODEL_PRO }}
+        run: npm run studio:host-smoke
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:

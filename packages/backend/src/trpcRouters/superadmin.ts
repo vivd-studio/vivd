@@ -56,6 +56,9 @@ import { reloadCaddyConfig } from "../services/system/CaddyAdminService";
 import { publishService } from "../services/publish/PublishService";
 import type { StudioMachineSummary } from "../services/studioMachines/types";
 
+const STUDIO_MACHINE_IMAGE_SEMVER_LIMIT = 12;
+const STUDIO_MACHINE_IMAGE_DEV_LIMIT = 100;
+
 function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
   const headers = new Headers();
   for (const [key, value] of Object.entries(reqHeaders)) {
@@ -498,8 +501,8 @@ export const superAdminRouter = router({
       const listed = await listStudioImagesFromGhcr({
         repository,
         timeoutMs: 10_000,
-        semverLimit: 12,
-        devLimit: 25,
+        semverLimit: STUDIO_MACHINE_IMAGE_SEMVER_LIMIT,
+        devLimit: STUDIO_MACHINE_IMAGE_DEV_LIMIT,
       });
       imageBase = listed.imageBase;
       images = listed.images;

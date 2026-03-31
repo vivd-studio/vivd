@@ -107,6 +107,15 @@ run_release_preflight() {
   run_step \
     "Backend Studio runtime regressions" \
     npm run test:run --workspace=@vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_lifecycle.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
+  run_step \
+    "Build vivd-studio local host-smoke image" \
+    docker build --file packages/studio/Dockerfile --target prod --tag vivd-studio:publish-host-smoke .
+  run_step \
+    "Install Playwright Chromium" \
+    npx playwright install chromium
+  run_step \
+    "Studio Docker-provider host smoke" \
+    env STUDIO_IMAGE=vivd-studio:publish-host-smoke npm run studio:host-smoke
 }
 
 while [[ $# -gt 0 ]]; do
