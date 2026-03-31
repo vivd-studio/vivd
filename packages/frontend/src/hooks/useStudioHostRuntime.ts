@@ -46,6 +46,19 @@ function isDefaultPort(protocol: string, port: string): boolean {
   );
 }
 
+function isLocalDevelopmentHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".local") ||
+    normalized.endsWith(".nip.io")
+  );
+}
+
 export function selectBrowserStudioBaseUrl(
   runtime: StudioRuntimeSession | null,
   currentOrigin: string | null = typeof window === "undefined"
@@ -71,12 +84,16 @@ export function selectBrowserStudioBaseUrl(
     runtimeUrl.protocol,
     runtimeUrl.port,
   );
+  const currentHostIsLocalDevelopment = isLocalDevelopmentHostname(
+    currentUrl.hostname,
+  );
 
-  // HTTPS control-plane pages cannot safely use a direct Docker runtime
-  // on a non-default port. Prefer the path-mounted compatibility route.
+  // Outside local dev, Docker runtimes exposed on non-default ports are a
+  // different browser origin and break bootstrap/health fetches on self-host.
+  // Prefer the path-mounted compatibility route in those cases.
   if (
-    currentUrl.protocol === "https:" &&
-    (runtimeUrl.protocol !== "https:" || runtimeUsesNonDefaultPort)
+    !currentHostIsLocalDevelopment &&
+    (runtimeUrl.protocol !== currentUrl.protocol || runtimeUsesNonDefaultPort)
   ) {
     return compatibilityUrl;
   }

@@ -177,6 +177,7 @@ describe("EmbeddedStudio", () => {
   });
 
   beforeEach(() => {
+    window.history.replaceState({}, "", "/");
     window.sessionStorage.clear();
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     useParamsMock.mockReset();
@@ -356,6 +357,49 @@ describe("EmbeddedStudio", () => {
     expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("host-header")).not.toBeInTheDocument();
     expectNoPreviewSurfaceControls();
+  });
+
+  it("uses the compatibility studio route for raw-ip self-host runtimes on non-default ports", () => {
+    const locationSnapshot = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...locationSnapshot,
+        origin: "http://49.13.48.211",
+        href: "http://49.13.48.211/vivd-studio/projects/site-1?view=studio&version=1",
+        protocol: "http:",
+        host: "49.13.48.211",
+        hostname: "49.13.48.211",
+        pathname: "/vivd-studio/projects/site-1",
+        search: "?view=studio&version=1",
+      },
+    });
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "http://49.13.48.211:4100",
+        runtimeUrl: "http://49.13.48.211:4100",
+        compatibilityUrl: "http://49.13.48.211/_studio/runtime-123",
+        bootstrapToken: null,
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    expect(iframe).toHaveAttribute(
+      "src",
+      expect.stringContaining(
+        "http://49.13.48.211/_studio/runtime-123/vivd-studio?embedded=1",
+      ),
+    );
+    expect(iframe).not.toHaveAttribute(
+      "src",
+      expect.stringContaining("http://49.13.48.211:4100"),
+    );
   });
 
   it("auto-resumes an already running studio without requiring a view query param", () => {

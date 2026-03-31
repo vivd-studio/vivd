@@ -42,6 +42,18 @@ describe("selectBrowserStudioBaseUrl", () => {
     ).toBe("http://app.localhost:4100");
   });
 
+  it("prefers the compatibility route for raw-ip http pages when the direct runtime uses a non-default port", () => {
+    expect(
+      selectBrowserStudioBaseUrl(
+        makeRuntime({
+          runtimeUrl: "http://49.13.48.211:4100",
+          compatibilityUrl: "http://49.13.48.211/_studio/runtime-1",
+        }),
+        "http://49.13.48.211",
+      ),
+    ).toBe("http://49.13.48.211/_studio/runtime-1");
+  });
+
   it("keeps a normal https runtime origin on the default port", () => {
     expect(
       selectBrowserStudioBaseUrl(
