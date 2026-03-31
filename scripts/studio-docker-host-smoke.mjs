@@ -11,6 +11,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright";
 
 const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_PORT_TAKEOVER_TIMEOUT_MS = 30_000;
+const PORT_TAKEOVER_POLL_INTERVAL_MS = 500;
 const DEFAULT_STUDIO_IMAGE = "vivd-studio:release-smoke";
 const DEFAULT_CONTROL_PLANE_ORIGIN = "http://app.localhost";
 const DEFAULT_TENANT_ORIGIN = "http://default.localhost";
@@ -138,6 +140,39 @@ async function ensurePortBindable(port) {
   });
 }
 
+function describeListeningPort(port) {
+  const result = runCommand(
+    "lsof",
+    ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"],
+    { allowFailure: true },
+  );
+  return `${result.stdout}${result.stderr}`.trim();
+}
+
+async function waitForPortBindable(port, timeoutMs) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      await ensurePortBindable(port);
+      return;
+    } catch (error) {
+      lastError = error;
+      await sleep(PORT_TAKEOVER_POLL_INTERVAL_MS);
+    }
+  }
+
+  const portDescription = describeListeningPort(port);
+  const suffix = portDescription
+    ? ` Remaining listener(s):\n${portDescription}`
+    : "";
+  throw new Error(
+    `Port ${port} did not become available within ${timeoutMs}ms.${suffix}`,
+    lastError ? { cause: lastError } : undefined,
+  );
+}
+
 function listPort80ComposeCaddies() {
   const result = runCommand(
     "docker",
@@ -165,6 +200,12 @@ function listPort80ComposeCaddies() {
 }
 
 async function acquirePort80(env) {
+  const takeoverTimeoutMs = readPositiveIntEnv(
+    "VIVD_STUDIO_HOST_SMOKE_PORT_TAKEOVER_TIMEOUT_MS",
+    DEFAULT_PORT_TAKEOVER_TIMEOUT_MS,
+    env,
+  );
+
   try {
     await ensurePortBindable(80);
     return [];
@@ -192,7 +233,7 @@ async function acquirePort80(env) {
     }
 
     try {
-      await ensurePortBindable(80);
+      await waitForPortBindable(80, takeoverTimeoutMs);
     } catch (error) {
       throw new Error(
         "Port 80 is still busy after stopping the local Caddy container(s).",
