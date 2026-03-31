@@ -22,37 +22,27 @@ import type {
 } from "./types";
 import {
   buildResolvedImageState,
-  compareContainerImageState,
-  containerStateStatus,
   findContainer,
   getContainerAccessToken,
-  getContainerConfiguredImage,
-  getContainerCreatedAt,
-  getContainerEnv,
   getContainerExternalPort,
   getContainerIdentity,
   getContainerLabels,
-  getContainerName,
   getContainerRouteId,
-  getContainerRuntimeImageId,
   getContainerStudioId,
-  getContainerUpdatedAt,
-  getImageLabel,
-  hasContainerDrift,
   isLikelyRemoteImageReference,
   isRunningContainer,
-  isStoppedContainer,
-  mapContainerState,
-  OCI_IMAGE_REVISION_LABEL,
-  OCI_IMAGE_VERSION_LABEL,
-  resolveContainerReconcileState,
-  selectRepoDigestForRef,
-  STUDIO_IMAGE_DIGEST_LABEL,
-  STUDIO_IMAGE_REVISION_LABEL,
-  STUDIO_IMAGE_VERSION_LABEL,
   type DockerResolvedImageState,
-  type StudioIdentity,
 } from "./containerModel";
+import {
+  destroyStudioMachineWorkflow,
+  listStudioMachinesWorkflow,
+  parkStudioMachineWorkflow,
+} from "./managementWorkflow";
+import {
+  reconcileStudioMachinesInnerWorkflow,
+  warmReconcileContainerWorkflow,
+  type WarmReconcileContainerOptions,
+} from "./reconcileWorkflow";
 import {
   allocatePublicPortWorkflow,
   buildStudioEnvDriftSubsetFromDesiredEnv,
@@ -71,28 +61,6 @@ import {
   type WaitForReadyOptions,
   waitForReadyWorkflow,
 } from "./runtimeWorkflow";
-
-async function mapLimit<T>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  const concurrency = Math.max(1, Math.floor(limit));
-  let index = 0;
-
-  const runners = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    async () => {
-      while (true) {
-        const i = index++;
-        if (i >= items.length) return;
-        await worker(items[i]!);
-      }
-    },
-  );
-
-  await Promise.all(runners);
-}
 
 export class DockerStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "docker" as const;
@@ -693,191 +661,39 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     return null;
   }
 
-  private async getRuntimeImageMetadata(options: {
-    container: DockerContainerInfo;
-    runtimeImageCache: Map<string, Promise<DockerImageInfo | null>>;
-  }): Promise<{
-    imageId: string | null;
-    imageDigest: string | null;
-    imageVersion: string | null;
-    imageRevision: string | null;
-  }> {
-    const labels = getContainerLabels(options.container);
-    const imageId = getContainerRuntimeImageId(options.container);
-    let imageDigest = trimToken(labels[STUDIO_IMAGE_DIGEST_LABEL]);
-    let imageVersion = trimToken(labels[STUDIO_IMAGE_VERSION_LABEL]);
-    let imageRevision = trimToken(labels[STUDIO_IMAGE_REVISION_LABEL]);
-
-    if ((!imageDigest || !imageVersion || !imageRevision) && imageId) {
-      let inspectPromise = options.runtimeImageCache.get(imageId);
-      if (!inspectPromise) {
-        inspectPromise = this.inspectImageSafe(imageId);
-        options.runtimeImageCache.set(imageId, inspectPromise);
-      }
-
-      const inspected = await inspectPromise;
-      if (inspected) {
-        if (!imageDigest) {
-          imageDigest = selectRepoDigestForRef(
-            inspected.RepoDigests,
-            getContainerConfiguredImage(options.container) || imageId,
-          );
-        }
-        if (!imageVersion) {
-          imageVersion = getImageLabel(inspected, OCI_IMAGE_VERSION_LABEL);
-        }
-        if (!imageRevision) {
-          imageRevision = getImageLabel(inspected, OCI_IMAGE_REVISION_LABEL);
-        }
-      }
-    }
-
-    return {
-      imageId,
-      imageDigest,
-      imageVersion,
-      imageRevision,
-    };
-  }
-
-  private async buildContainerSummary(options: {
-    container: DockerContainerInfo;
-    desiredImageState: DockerResolvedImageState;
-    routePath: string | null;
-    url: string | null;
-    runtimeUrl: string | null;
-    compatibilityUrl: string | null;
-    cpuKind: string;
-    runtimeImageCache: Map<string, Promise<DockerImageInfo | null>>;
-  }): Promise<StudioMachineSummary> {
-    const identity = getContainerIdentity(options.container);
-    if (!identity) {
-      throw new Error(
-        `[DockerMachines] Refusing to summarize non-studio container ${options.container.Id}`,
-      );
-    }
-
-    const configuredImage = getContainerConfiguredImage(
-      options.container,
-      options.desiredImageState.requestedRef,
-    );
-    const imageComparison = compareContainerImageState({
-      container: options.container,
-      desiredImage: options.desiredImageState.requestedRef,
-      desiredImageState: options.desiredImageState,
-    });
-    const runtimeImage = await this.getRuntimeImageMetadata({
-      container: options.container,
-      runtimeImageCache: options.runtimeImageCache,
-    });
-    const nanoCpus = options.container.HostConfig?.NanoCpus || 0;
-    const memoryBytes = options.container.HostConfig?.Memory || 0;
-
-    return {
-      id: options.container.Id,
-      name: getContainerName(options.container),
-      state: mapContainerState(options.container),
-      region: null,
-      cpuKind: nanoCpus > 0 || memoryBytes > 0 ? options.cpuKind : null,
-      cpus: nanoCpus > 0 ? nanoCpus / 1_000_000_000 : null,
-      memoryMb: memoryBytes > 0 ? Math.round(memoryBytes / (1024 * 1024)) : null,
-      organizationId: identity.organizationId,
-      projectSlug: identity.projectSlug,
-      version: identity.version,
-      externalPort: getContainerExternalPort(options.container),
-      routePath: options.routePath,
-      url: options.url,
-      runtimeUrl: options.runtimeUrl,
-      compatibilityUrl: options.compatibilityUrl,
-      image: configuredImage,
-      desiredImage: options.desiredImageState.requestedRef,
-      imageOutdated: imageComparison.drift,
-      imageStatus: imageComparison.drift
-        ? "outdated"
-        : imageComparison.comparable
-          ? "ok"
-          : "unknown",
-      imageId: runtimeImage.imageId,
-      imageDigest: runtimeImage.imageDigest,
-      imageVersion: runtimeImage.imageVersion,
-      imageRevision: runtimeImage.imageRevision,
-      desiredImageId: options.desiredImageState.imageId,
-      desiredImageDigest: options.desiredImageState.repoDigest,
-      desiredImageVersion: options.desiredImageState.versionLabel,
-      desiredImageRevision: options.desiredImageState.revisionLabel,
-      createdAt: getContainerCreatedAt(options.container),
-      updatedAt: getContainerUpdatedAt(options.container),
-    };
-  }
-
   async listStudioMachines(): Promise<StudioMachineSummary[]> {
-    const desiredImage = await this.getDesiredImage();
-    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage);
-    const containers = await this.apiClient.listContainers();
-    const summaries: StudioMachineSummary[] = [];
-    const runtimeImageCache = new Map<string, Promise<DockerImageInfo | null>>();
-
-    for (const container of containers) {
-      const identity = getContainerIdentity(container);
-      if (!identity) continue;
-
-      const inspected = await this.inspectContainer(container.Id);
-      const routeId =
-        getContainerRouteId(inspected) ||
-        this.config.routeIdFor(
-          identity.organizationId,
-          identity.projectSlug,
-          identity.version,
-      );
-      const routePath = this.routeService.getRoutePath(routeId);
-      const running = isRunningContainer(inspected);
-      const externalPort = getContainerExternalPort(inspected);
-      summaries.push(
-        await this.buildContainerSummary({
-          container: inspected,
-          desiredImageState,
-          routePath,
-          url: running
-            ? externalPort
-              ? this.config.getPublicUrlForPort(externalPort)
-              : this.config.getPublicUrlForRoutePath(routePath)
-            : null,
-          runtimeUrl: running && externalPort ? this.config.getPublicUrlForPort(externalPort) : null,
-          compatibilityUrl: this.config.getPublicUrlForRoutePath(routePath),
-          cpuKind: this.config.cpuKindLabel,
-          runtimeImageCache,
-        }),
-      );
-    }
-
-    summaries.sort((left, right) =>
-      (right.createdAt || "").localeCompare(left.createdAt || ""),
-    );
-    return summaries;
+    return await listStudioMachinesWorkflow({
+      getDesiredImage: () => this.getDesiredImage(),
+      getDesiredImageStateForRef: (imageRef) => this.getDesiredImageStateForRef(imageRef),
+      listContainers: () => this.apiClient.listContainers(),
+      inspectContainer: (containerId) => this.inspectContainer(containerId),
+      routeIdFor: (organizationId, projectSlug, version) =>
+        this.config.routeIdFor(organizationId, projectSlug, version),
+      getRoutePath: (routeId) => this.routeService.getRoutePath(routeId),
+      getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
+      getPublicUrlForRoutePath: (routePath) =>
+        this.config.getPublicUrlForRoutePath(routePath),
+      cpuKind: this.config.cpuKindLabel,
+      inspectImageSafe: (imageRefOrId) => this.inspectImageSafe(imageRefOrId),
+    });
   }
 
   async parkStudioMachine(machineId: string): Promise<StudioMachineParkResult> {
-    const container = await this.inspectContainer(machineId);
-    const identity = getContainerIdentity(container);
-    if (!identity) {
-      throw new Error(
-        `[DockerMachines] Refusing to park non-studio container ${machineId}`,
-      );
-    }
-
-    const routeId =
-      getContainerRouteId(container) ||
-      this.config.routeIdFor(
-        identity.organizationId,
-        identity.projectSlug,
-        identity.version,
-      );
-    await this.stopContainerIfRunning(container);
-    await this.routeService.removeRuntimeRoute(routeId);
-    this.lastActivityByStudioKey.delete(
-      this.config.key(identity.organizationId, identity.projectSlug, identity.version),
+    return await parkStudioMachineWorkflow(
+      {
+        inspectContainer: (containerId) => this.inspectContainer(containerId),
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
+        stopContainerIfRunning: (container) => this.stopContainerIfRunning(container),
+        removeRuntimeRoute: (routeId) => this.routeService.removeRuntimeRoute(routeId),
+        key: (organizationId, projectSlug, version) =>
+          this.config.key(organizationId, projectSlug, version),
+        deleteLastActivity: (studioKey) => {
+          this.lastActivityByStudioKey.delete(studioKey);
+        },
+      },
+      machineId,
     );
-    return "stopped";
   }
 
   async reconcileStudioMachine(
@@ -911,122 +727,44 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   }
 
   async destroyStudioMachine(machineId: string): Promise<void> {
-    const container = await this.inspectContainer(machineId);
-    const identity = getContainerIdentity(container);
-    if (!identity) {
-      throw new Error(
-        `[DockerMachines] Refusing to destroy non-studio container ${machineId}`,
-      );
-    }
-
-    const routeId =
-      getContainerRouteId(container) ||
-      this.config.routeIdFor(
-        identity.organizationId,
-        identity.projectSlug,
-        identity.version,
-      );
-    await this.stopContainerIfRunning(container);
-    await this.routeService.removeRuntimeRoute(routeId);
-    await this.apiClient.removeContainer(container.Id);
-    this.lastActivityByStudioKey.delete(
-      this.config.key(identity.organizationId, identity.projectSlug, identity.version),
+    return await destroyStudioMachineWorkflow(
+      {
+        inspectContainer: (containerId) => this.inspectContainer(containerId),
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
+        stopContainerIfRunning: (container) => this.stopContainerIfRunning(container),
+        removeRuntimeRoute: (routeId) => this.routeService.removeRuntimeRoute(routeId),
+        removeContainer: (containerId) => this.apiClient.removeContainer(containerId),
+        key: (organizationId, projectSlug, version) =>
+          this.config.key(organizationId, projectSlug, version),
+        deleteLastActivity: (studioKey) => {
+          this.lastActivityByStudioKey.delete(studioKey);
+        },
+      },
+      machineId,
     );
   }
 
-  private async warmReconcileContainer(options: {
-    container: DockerContainerInfo;
-    identity: StudioIdentity;
-    desiredImage: string;
-    desiredImageState: DockerResolvedImageState;
-    desiredNetworkName: string;
-  }): Promise<void> {
-    const state = containerStateStatus(options.container);
-    if (state === "dead" || state === "removing") return;
-
-    const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
-      getContainerEnv(options.container).MAIN_BACKEND_URL,
-    );
-    let reconcileState = resolveContainerReconcileState({
-      container: options.container,
-      desiredImage: options.desiredImage,
-      desiredImageState: options.desiredImageState,
-      desiredNanoCpus: this.config.nanoCpus,
-      desiredMemoryBytes: this.config.memoryBytes,
-      desiredNetworkName: options.desiredNetworkName,
-      desiredMainBackendUrl,
-      generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-    });
-    const desiredEnvSubset = this.buildStudioEnvDriftSubset(
-      this.buildStudioEnv({
-        organizationId: options.identity.organizationId,
-        projectSlug: options.identity.projectSlug,
-        version: options.identity.version,
-        env: {},
-        studioId: getContainerStudioId(options.container),
-        accessToken: reconcileState.accessToken,
-      }),
-      [],
-    );
-    reconcileState = resolveContainerReconcileState({
-      container: options.container,
-      desiredImage: options.desiredImage,
-      desiredImageState: options.desiredImageState,
-      desiredAccessToken: reconcileState.accessToken,
-      desiredNanoCpus: this.config.nanoCpus,
-      desiredMemoryBytes: this.config.memoryBytes,
-      desiredNetworkName: options.desiredNetworkName,
-      desiredMainBackendUrl,
-      desiredEnvSubset,
-      generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-    });
-
-    if (!hasContainerDrift(reconcileState.needs)) return;
-    if (isRunningContainer(options.container)) {
-      throw new Error(
-        `[DockerMachines] Refusing to warm reconcile running container ${options.container.Id} (state=${state})`,
-      );
-    }
-    if (!isStoppedContainer(options.container)) {
-      throw new Error(
-        `[DockerMachines] Cannot warm reconcile container ${options.container.Id}; expected stopped state but got state=${state}`,
-      );
-    }
-
-    const recreated = await this.recreateContainer({
-      existing: options.container,
-      args: {
-        organizationId: options.identity.organizationId,
-        projectSlug: options.identity.projectSlug,
-        version: options.identity.version,
-        env: {},
-      },
-      desiredImage: options.desiredImage,
-      desiredImageState: options.desiredImageState,
-      preferredAccessToken: reconcileState.accessToken,
-    });
-    const accessToken = getContainerAccessToken(recreated);
-    if (!accessToken) {
-      throw new Error(
-        `[DockerMachines] Missing access token after warm reconcile for ${options.container.Id}`,
-      );
-    }
-
-    await this.ensureContainerRunning(
+  private async warmReconcileContainer(
+    options: WarmReconcileContainerOptions,
+  ): Promise<void> {
+    return await warmReconcileContainerWorkflow(
       {
-        organizationId: options.identity.organizationId,
-        projectSlug: options.identity.projectSlug,
-        version: options.identity.version,
-        env: {},
+        resolveManagedMainBackendUrl: (raw) => this.resolveManagedMainBackendUrl(raw),
+        buildStudioEnv: (envArgs) => this.buildStudioEnv(envArgs),
+        buildStudioEnvDriftSubset: (desiredEnv, explicitEnvKeys) =>
+          this.buildStudioEnvDriftSubset(desiredEnv, explicitEnvKeys),
+        nanoCpus: this.config.nanoCpus,
+        memoryBytes: this.config.memoryBytes,
+        generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+        recreateContainer: (recreateOptions) =>
+          this.recreateContainer(recreateOptions),
+        ensureContainerRunning: (startArgs, container, accessToken, desiredImage) =>
+          this.ensureContainerRunning(startArgs, container, accessToken, desiredImage),
+        stop: (organizationId, projectSlug, version) =>
+          this.stop(organizationId, projectSlug, version),
       },
-      recreated,
-      accessToken,
-      options.desiredImage,
-    );
-    await this.stop(
-      options.identity.organizationId,
-      options.identity.projectSlug,
-      options.identity.version,
+      options,
     );
   }
 
@@ -1050,119 +788,31 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   private async reconcileStudioMachinesInner(options: {
     forceRefreshDesiredImage: boolean;
   }): Promise<StudioMachineReconcileResult> {
-    const desiredImage = await this.getDesiredImage({
-      forceRefresh: options.forceRefreshDesiredImage,
-    });
-    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage, {
-      forceRefresh: options.forceRefreshDesiredImage,
-      preferPull: options.forceRefreshDesiredImage,
-    });
-    const containers = await this.apiClient.listContainers();
-    const desiredNetworkName = await this.resolveContainerNetworkName();
-    const now = Date.now();
-    const dryRun = this.config.reconcilerDryRun;
-
-    const result: StudioMachineReconcileResult = {
-      desiredImage,
-      scanned: 0,
-      warmedOutdatedImages: 0,
-      destroyedOldMachines: 0,
-      skippedRunningMachines: 0,
-      dryRun,
-      errors: [],
-    };
-
-    const studioContainers = containers.flatMap((container) => {
-      const identity = getContainerIdentity(container);
-      return identity ? [{ container, identity }] : [];
-    });
-    result.scanned = studioContainers.length;
-
-    const lastVisitedAtMsByStudioKey = await listStudioVisitMsByIdentity(
-      studioContainers.map(({ identity }) => identity),
-    );
-
-    await mapLimit(
-      studioContainers,
-      this.config.reconcilerConcurrency,
-      async ({ container, identity }) => {
-        const studioKey = this.config.key(
-          identity.organizationId,
-          identity.projectSlug,
-          identity.version,
-        );
-        const lastVisitedAtMs = lastVisitedAtMsByStudioKey.get(studioKey) ?? null;
-        const inspected = await this.inspectContainer(container.Id);
-        const createdAtMs = getContainerCreatedAt(inspected)
-          ? Date.parse(getContainerCreatedAt(inspected)!)
-          : Number.NaN;
-        const inactivityMs = lastVisitedAtMs !== null ? now - lastVisitedAtMs : null;
-        const createdAgeMs = Number.isFinite(createdAtMs) ? now - createdAtMs : null;
-        const shouldGc =
-          (inactivityMs !== null && inactivityMs >= this.config.maxMachineInactivityMs) ||
-          (lastVisitedAtMs === null &&
-            createdAgeMs !== null &&
-            createdAgeMs >= this.config.maxMachineInactivityMs);
-
-        if (shouldGc) {
-          if (dryRun) return;
-          try {
-            await this.destroyStudioMachine(container.Id);
-            result.destroyedOldMachines++;
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            result.errors.push({
-              machineId: container.Id,
-              action: "gc",
-              message,
-            });
-          }
-          return;
-        }
-
-        const desiredMainBackendUrl = this.resolveManagedMainBackendUrl(
-          getContainerEnv(inspected).MAIN_BACKEND_URL,
-        );
-        const reconcileState = resolveContainerReconcileState({
-          container: inspected,
-          desiredImage,
-          desiredImageState,
-          desiredNanoCpus: this.config.nanoCpus,
-          desiredMemoryBytes: this.config.memoryBytes,
-          desiredNetworkName,
-          desiredMainBackendUrl,
-          generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
-        });
-        if (!hasContainerDrift(reconcileState.needs)) return;
-
-        if (isRunningContainer(inspected)) {
-          result.skippedRunningMachines++;
-          return;
-        }
-
-        if (!this.config.warmOutdatedImages) return;
-        if (dryRun) return;
-
-        try {
-          await this.warmReconcileContainer({
-            container: inspected,
-            identity,
-            desiredImage,
-            desiredImageState,
-            desiredNetworkName,
-          });
-          result.warmedOutdatedImages++;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          result.errors.push({
-            machineId: container.Id,
-            action: "warm_reconciled_machine",
-            message,
-          });
-        }
+    return await reconcileStudioMachinesInnerWorkflow(
+      {
+        getDesiredImage: (imageOptions) => this.getDesiredImage(imageOptions),
+        getDesiredImageStateForRef: (imageRef, imageOptions) =>
+          this.getDesiredImageStateForRef(imageRef, imageOptions),
+        listContainers: () => this.apiClient.listContainers(),
+        resolveContainerNetworkName: () => this.resolveContainerNetworkName(),
+        reconcilerDryRun: this.config.reconcilerDryRun,
+        maxMachineInactivityMs: this.config.maxMachineInactivityMs,
+        key: (organizationId, projectSlug, version) =>
+          this.config.key(organizationId, projectSlug, version),
+        listStudioVisitMsByIdentity: (identities) =>
+          listStudioVisitMsByIdentity(identities),
+        reconcilerConcurrency: this.config.reconcilerConcurrency,
+        inspectContainer: (containerId) => this.inspectContainer(containerId),
+        resolveManagedMainBackendUrl: (raw) => this.resolveManagedMainBackendUrl(raw),
+        nanoCpus: this.config.nanoCpus,
+        memoryBytes: this.config.memoryBytes,
+        generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+        warmOutdatedImages: this.config.warmOutdatedImages,
+        warmReconcileContainer: (warmOptions) =>
+          this.warmReconcileContainer(warmOptions),
+        destroyStudioMachine: (machineId) => this.destroyStudioMachine(machineId),
       },
+      options,
     );
-
-    return result;
   }
 }
