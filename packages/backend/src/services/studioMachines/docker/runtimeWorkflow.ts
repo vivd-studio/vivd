@@ -28,7 +28,6 @@ import {
   isContainerNameConflictError,
   isContainerNetworkingSetupError,
   isContainerPortConflictError,
-  isLikelyRemoteImageReference,
   isMissingImageError,
   isMissingNativeManifestError,
   isRunningContainer,
