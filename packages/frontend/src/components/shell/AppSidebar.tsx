@@ -66,10 +66,13 @@ import {
   NAVIGATION_SEARCH_SHORTCUT_LABEL,
   useNavigationSearch,
 } from "./navigationSearchContext";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type SidebarProject = RouterOutputs["project"]["list"]["projects"][number];
 type SwitcherOrganization =
   RouterOutputs["organization"]["listMyOrganizations"]["organizations"][number];
+type InstanceSoftware =
+  RouterOutputs["superadmin"]["getInstanceSoftware"];
 
 const ORG_SWITCH_QUERY_KEY = "__vivd_switch_org";
 
@@ -642,6 +645,58 @@ function UserMenu({ session, onLogout }: UserMenuProps) {
   );
 }
 
+function formatSidebarVersionLabel(software: InstanceSoftware | undefined): string | null {
+  const raw = software?.currentVersion || software?.currentImageTag || null;
+  if (!raw) return null;
+  return raw.startsWith("v") ? raw : `v${raw}`;
+}
+
+function SidebarVersionIndicator({
+  software,
+}: {
+  software: InstanceSoftware | undefined;
+}) {
+  const versionLabel = formatSidebarVersionLabel(software);
+  const hasUpdate = software?.releaseStatus === "available";
+  const latestLabel = software?.latestVersion || software?.latestTag || null;
+  const fallbackLabel = "Version";
+  const visibleLabel = versionLabel || fallbackLabel;
+  const tooltipLabel = versionLabel
+    ? hasUpdate && latestLabel
+      ? `Vivd ${versionLabel} · Update available (${latestLabel})`
+      : `Vivd ${versionLabel}`
+    : "Vivd version info unavailable";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          to={`${ROUTES.SUPERADMIN_BASE}?section=instance#instance-software`}
+          aria-label={tooltipLabel}
+          className={cn(
+            "flex min-h-7 items-center gap-2 rounded-md px-2 text-[10px] text-muted-foreground/70 transition-colors hover:bg-sidebar-accent/40 hover:text-foreground",
+            "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
+          )}
+        >
+          <span className="font-medium tracking-[0.08em] group-data-[collapsible=icon]:hidden">
+            {visibleLabel}
+          </span>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-1.5 rounded-full transition-colors",
+              hasUpdate ? "bg-amber-400/90 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]" : "bg-muted-foreground/25",
+            )}
+          />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="center">
+        <p>{tooltipLabel}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AppSidebar() {
   const { data: session } = authClient.useSession();
   const utils = trpc.useUtils();
@@ -678,6 +733,11 @@ export function AppSidebar() {
 
   const isSuperAdmin = session?.user?.role === "super_admin";
   const showSuperAdmin = isSuperAdmin && !isConfigLoading && config.isSuperAdminHost;
+  const { data: instanceSoftware } = trpc.superadmin.getInstanceSoftware.useQuery(undefined, {
+    enabled: showSuperAdmin,
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const recentProjects = useRecentProjects();
 
@@ -935,6 +995,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
+        {showSuperAdmin ? <SidebarVersionIndicator software={instanceSoftware} /> : null}
         {session && <UserMenu session={session} onLogout={handleLogout} />}
       </SidebarFooter>
 

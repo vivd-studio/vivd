@@ -247,6 +247,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       return {
         studioId: existing.studioId,
         url: this.getPublicUrl(existing.port),
+        backendUrl: this.getPublicUrl(existing.port),
         runtimeUrl: this.getPublicUrl(existing.port),
         compatibilityUrl: null,
         port: existing.port,
@@ -409,6 +410,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return {
       studioId,
       url: this.getPublicUrl(port),
+      backendUrl: this.getPublicUrl(port),
       runtimeUrl: this.getPublicUrl(port),
       compatibilityUrl: null,
       port,
@@ -462,6 +464,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return {
       studioId: studio.studioId,
       url: this.getPublicUrl(studio.port),
+      backendUrl: this.getPublicUrl(studio.port),
       runtimeUrl: this.getPublicUrl(studio.port),
       compatibilityUrl: null,
       accessToken: studio.accessToken,

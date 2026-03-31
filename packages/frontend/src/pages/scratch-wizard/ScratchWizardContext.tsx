@@ -5,6 +5,7 @@ import {
   useMemo,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
@@ -59,7 +60,13 @@ type ScratchWizardContextValue = {
   setReferenceImages: React.Dispatch<React.SetStateAction<File[]>>;
 
   // Generation state
-  started: { slug: string; version: number } | undefined;
+  started:
+    | {
+        slug: string;
+        version: number;
+        initialSessionId?: string | null;
+      }
+    | undefined;
   statusData: { status: string } | undefined;
   isGenerating: boolean;
   progress: number;
@@ -170,6 +177,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { config } = useAppConfig();
+  const handoffStartedRef = useRef(false);
 
   // Set document title
   useEffect(() => {
@@ -184,7 +192,11 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
   const [siteTheme, setSiteTheme] = useState<SiteTheme>(null);
   const [assets, setAssets] = useState<File[]>([]);
   const [referenceImages, setReferenceImages] = useState<File[]>([]);
-  const [started, setStarted] = useState<{ slug: string; version: number }>();
+  const [started, setStarted] = useState<{
+    slug: string;
+    version: number;
+    initialSessionId?: string | null;
+  }>();
 
   // New upload state
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
@@ -240,8 +252,43 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     },
   );
 
+  const navigateToStartedProjectStudio = useCallback(
+    (slug: string, version: number, initialSessionId?: string | null) => {
+      if (handoffStartedRef.current) return;
+      handoffStartedRef.current = true;
+
+      utils.project.list.invalidate();
+
+      const params = new URLSearchParams({
+        version: String(version),
+        initialGeneration: "1",
+      });
+      if (initialSessionId) {
+        params.set("sessionId", initialSessionId);
+      }
+
+      const destination = config.singleProjectMode
+        ? `${ROUTES.PROJECT_STUDIO_FULLSCREEN(slug)}?${params.toString()}`
+        : `${ROUTES.PROJECT(slug)}?view=studio&${params.toString()}`;
+
+      navigate(destination);
+    },
+    [config.singleProjectMode, navigate, utils.project.list],
+  );
+
   useEffect(() => {
     if (!statusData || !started) return;
+    if (
+      statusData.status === "starting_studio" ||
+      statusData.status === "generating_initial_site"
+    ) {
+      navigateToStartedProjectStudio(
+        started.slug,
+        started.version,
+        started.initialSessionId,
+      );
+      return;
+    }
     if (statusData.status === "completed") {
       toast.success("Your first draft is ready");
       utils.project.list.invalidate();
@@ -260,6 +307,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     statusData?.status,
     started?.slug,
     started?.version,
+    navigateToStartedProjectStudio,
     navigate,
     utils.project.list,
   ]);
@@ -386,6 +434,17 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
         // Step 3: Start generation
         setUploadPhase("starting");
         const generationResult = await startGeneration({ slug, version });
+        const initialSessionId =
+          "studioHandoff" in generationResult
+            ? generationResult.studioHandoff?.sessionId ?? null
+            : null;
+        if (initialSessionId) {
+          setStarted((current) =>
+            current && current.slug === slug && current.version === version
+              ? { ...current, initialSessionId }
+              : current,
+          );
+        }
 
         setUploadPhase("generating");
 
@@ -393,18 +452,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
           "studioHandoff" in generationResult &&
           generationResult.studioHandoff?.mode === "studio_astro"
         ) {
-          utils.project.list.invalidate();
-
-          const params = new URLSearchParams({
-            version: String(version),
-            initialGeneration: "1",
-          });
-
-          const destination = config.singleProjectMode
-            ? `${ROUTES.PROJECT_STUDIO_FULLSCREEN(slug)}?${params.toString()}`
-            : `${ROUTES.PROJECT(slug)}?view=studio&${params.toString()}`;
-
-          navigate(destination);
+          navigateToStartedProjectStudio(slug, version, initialSessionId);
           return;
         }
       } catch (error) {
@@ -424,8 +472,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       referenceUrls,
       createDraft,
       startGeneration,
-      config.singleProjectMode,
-      navigate,
+      navigateToStartedProjectStudio,
       utils.project.list,
     ],
   );

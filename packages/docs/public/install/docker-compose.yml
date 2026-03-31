@@ -99,6 +99,9 @@ services:
       - VIVD_SES_REGION=${VIVD_SES_REGION:-}
       - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-docker}
       - SINGLE_PROJECT_MODE=${SINGLE_PROJECT_MODE:-false}
+      - VIVD_SELFHOST_UPDATE_WORKDIR=/srv/selfhost
+      - VIVD_SELFHOST_UPDATE_SERVICES=backend frontend scraper
+      - VIVD_SELFHOST_UPDATE_HELPER_IMAGE=${VIVD_SELFHOST_UPDATE_HELPER_IMAGE:-docker:28-cli}
       - DOCKER_STUDIO_SOCKET_PATH=${DOCKER_STUDIO_SOCKET_PATH:-/var/run/docker.sock}
       - DOCKER_STUDIO_API_BASE_URL=${DOCKER_STUDIO_API_BASE_URL:-}
       - DOCKER_STUDIO_API_VERSION=${DOCKER_STUDIO_API_VERSION:-}
@@ -117,6 +120,7 @@ services:
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./:/srv/selfhost:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:

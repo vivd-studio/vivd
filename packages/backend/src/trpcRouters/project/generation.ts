@@ -35,6 +35,7 @@ import {
 } from "../../services/project/ProjectArtifactsService";
 import { thumbnailService } from "../../services/project/ThumbnailService";
 import { alignProjectArtifactKeyToSlug } from "../../services/project/slugRename";
+import { startStudioInitialGeneration } from "../../services/project/StudioInitialGenerationService";
 import { analyzeImages } from "../../generator/image_analyzer";
 import { scraperClient } from "../../generator/scraper-client";
 import {
@@ -591,6 +592,8 @@ export const projectGenerationProcedures = {
           allowSlugSuffix: false,
           initialStatus: "pending",
         });
+        let studioInitialGenerationStatus = "starting_studio";
+        let studioInitialGenerationSessionId: string | null = null;
 
         try {
           if (Array.isArray(draftMeta.referenceUrls) && draftMeta.referenceUrls.length > 0) {
@@ -627,6 +630,16 @@ export const projectGenerationProcedures = {
             slug,
             version,
           });
+
+          const studioInitialGeneration =
+            await startStudioInitialGeneration({
+              organizationId,
+              projectSlug: slug,
+              version,
+              requestHost: ctx.requestHost,
+            });
+          studioInitialGenerationStatus = studioInitialGeneration.status;
+          studioInitialGenerationSessionId = studioInitialGeneration.sessionId;
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -635,13 +648,17 @@ export const projectGenerationProcedures = {
         }
 
         return {
-          status: "starting_studio",
+          status: studioInitialGenerationStatus,
           slug,
           version,
-          message: "Studio handoff ready.",
+          message:
+            studioInitialGenerationStatus === "completed"
+              ? "Initial generation already completed."
+              : "Studio handoff ready.",
           studioHandoff: {
             mode: "studio_astro" as const,
             initialGeneration: true,
+            sessionId: studioInitialGenerationSessionId,
           },
         };
       }

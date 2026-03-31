@@ -60,6 +60,7 @@ import {
   buildProjectStudioPath,
   getHostAppOrigin,
   openEmbeddedStudioPath,
+  openUrlInNewTab,
 } from "../hostNavigation";
 
 interface MobileActionsMenuProps {
@@ -73,7 +74,6 @@ interface MobileActionsMenuProps {
   projectSlug: string | undefined;
   selectedVersion: number;
   originalUrl: string | null | undefined;
-  fullUrl: string;
   copied: boolean;
   publicPreviewEnabled: boolean;
   currentPreviewPath: string;
@@ -93,6 +93,7 @@ interface MobileActionsMenuProps {
   // Actions
   handleRefresh: () => void;
   handleCopy: () => void;
+  handleOpenPreviewUrl: () => void;
   setPublishDialogOpen: (value: boolean) => void;
   setHistoryPanelOpen: (value: boolean) => void;
 
@@ -146,7 +147,6 @@ export function MobileActionsMenu({
   projectSlug,
   selectedVersion,
   originalUrl,
-  fullUrl,
   copied,
   publicPreviewEnabled,
   currentPreviewPath,
@@ -162,6 +162,7 @@ export function MobileActionsMenu({
   toggleEditMode,
   handleRefresh,
   handleCopy,
+  handleOpenPreviewUrl,
   setPublishDialogOpen,
   setHistoryPanelOpen,
   hasGitChanges,
@@ -197,7 +198,7 @@ export function MobileActionsMenu({
     if (!projectSlug) return;
     const origin = getHostAppOrigin();
     const url = `${origin}/vivd-studio/api/download/${encodeURIComponent(projectSlug)}/${selectedVersion}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    openUrlInNewTab(url);
   };
 
   const handleOpenPlugins = () => {
@@ -380,7 +381,10 @@ export function MobileActionsMenu({
               ? "Copy preview URL"
               : "Preview URL disabled"}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => window.open(fullUrl, "_blank")}>
+        <DropdownMenuItem
+          onClick={handleOpenPreviewUrl}
+          disabled={!canCopyPreviewUrl}
+        >
           <ExternalLink className="w-4 h-4 mr-2" />
           Open in New Tab
         </DropdownMenuItem>
@@ -395,7 +399,7 @@ export function MobileActionsMenu({
           <>
             {originalUrl && (
               <DropdownMenuItem
-                onClick={() => window.open(originalUrl, "_blank")}
+                onClick={() => openUrlInNewTab(originalUrl)}
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 View Original Website

@@ -89,6 +89,14 @@ function makeMachine(overrides: Record<string, unknown> = {}) {
     imageOutdated: false,
     image: "ghcr.io/vivd-studio/vivd-studio:v0.1.0",
     desiredImage: "ghcr.io/vivd-studio/vivd-studio:v0.1.0",
+    imageId: null,
+    imageDigest: null,
+    imageVersion: null,
+    imageRevision: null,
+    desiredImageId: null,
+    desiredImageDigest: null,
+    desiredImageVersion: null,
+    desiredImageRevision: null,
     cpuKind: "shared",
     cpus: 1,
     memoryMb: 1024,
@@ -226,6 +234,38 @@ describe("MachinesTab", () => {
     render(<MachinesTab />);
 
     expect(screen.getByText("No studio machines found.")).toBeInTheDocument();
+  });
+
+  it("renders desired and runtime image identities when metadata is available", () => {
+    listStudioMachinesUseQueryMock.mockReturnValueOnce({
+      data: {
+        provider: "docker",
+        machines: [
+          makeMachine({
+            imageStatus: "outdated",
+            image: "ghcr.io/vivd-studio/vivd-studio:latest",
+            imageVersion: "1.1.33",
+            imageDigest: "ghcr.io/vivd-studio/vivd-studio@sha256:old",
+            desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
+            desiredImageVersion: "1.1.34",
+            desiredImageDigest: "ghcr.io/vivd-studio/vivd-studio@sha256:new",
+            imageOutdated: true,
+          }),
+        ],
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<MachinesTab />);
+
+    expect(screen.getByText(/Resolved on host:/)).toBeInTheDocument();
+    expect(screen.getByText("version 1.1.33")).toBeInTheDocument();
+    expect(
+      screen.getByText("ghcr.io/vivd-studio/vivd-studio@sha256:old"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("desired 1.1.34")).toBeInTheDocument();
   });
 
   it("runs reconcile mutation after confirmation", () => {

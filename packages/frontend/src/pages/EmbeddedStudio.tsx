@@ -49,7 +49,6 @@ import {
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { authClient } from "@/lib/auth-client";
-import { useInitialGenerationBootstrap } from "@/hooks/useInitialGenerationBootstrap";
 import {
   type StudioRuntimeSession,
   useStudioHostRuntime,
@@ -107,6 +106,7 @@ export default function EmbeddedStudio() {
   const resumeStudio = urlParams.get("view") === "studio";
   const versionOverrideRaw = urlParams.get("version");
   const initialGenerationRequested = urlParams.get("initialGeneration") === "1";
+  const requestedInitialSessionId = urlParams.get("sessionId")?.trim() || null;
   const versionOverride = versionOverrideRaw
     ? Number.parseInt(versionOverrideRaw, 10)
     : NaN;
@@ -423,14 +423,6 @@ export default function EmbeddedStudio() {
     }
   };
 
-  const sendInitialGenerationBootstrap = useInitialGenerationBootstrap({
-    enabled: initialGenerationRequested,
-    iframeRef: studioIframeRef,
-    studioBaseUrl,
-    projectSlug,
-    version: studioVersion,
-  });
-
   const {
     studioReady,
     studioLoadTimedOut,
@@ -446,7 +438,6 @@ export default function EmbeddedStudio() {
     colorTheme,
     setTheme,
     setColorTheme,
-    onReady: sendInitialGenerationBootstrap,
     onClose: () => {
       navigate(ROUTES.DASHBOARD);
     },
@@ -455,6 +446,9 @@ export default function EmbeddedStudio() {
         version: String(studioVersion),
         ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
       });
+      if (requestedInitialSessionId) {
+        params.set("sessionId", requestedInitialSessionId);
+      }
       navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug!)}?${params.toString()}`);
     },
     onNavigate: (path) => {
@@ -478,6 +472,9 @@ export default function EmbeddedStudio() {
     if (initialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
+    if (requestedInitialSessionId) {
+      url.searchParams.set("sessionId", requestedInitialSessionId);
+    }
     // Origin of the host app – used by the studio to construct shareable preview URLs.
     url.searchParams.set("hostOrigin", window.location.origin);
     // Used by the "fullscreen/open in new tab" studio view to navigate back.
@@ -486,6 +483,9 @@ export default function EmbeddedStudio() {
       version: String(studioVersion),
       ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
     });
+    if (requestedInitialSessionId) {
+      returnToParams.set("sessionId", requestedInitialSessionId);
+    }
     url.searchParams.set(
       "returnTo",
       new URL(
@@ -498,6 +498,7 @@ export default function EmbeddedStudio() {
     initialGenerationRequested,
     projectSlug,
     publicPreviewEnabled,
+    requestedInitialSessionId,
     studioBaseUrl,
     studioVersion,
   ]);

@@ -42,6 +42,7 @@ import {
   instanceNetworkSettingsService,
   instanceTlsModeSchema,
 } from "../services/system/InstanceNetworkSettingsService";
+import { instanceSoftwareService } from "../services/system/InstanceSoftwareService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
 import {
   listStudioImagesFromGhcr,
@@ -97,6 +98,15 @@ const studioMachineSummarySchema = z.object({
   image: z.string().nullable(),
   desiredImage: z.string(),
   imageOutdated: z.boolean(),
+  imageStatus: z.enum(["ok", "outdated", "unknown"]).optional(),
+  imageId: z.string().nullable().optional(),
+  imageDigest: z.string().nullable().optional(),
+  imageVersion: z.string().nullable().optional(),
+  imageRevision: z.string().nullable().optional(),
+  desiredImageId: z.string().nullable().optional(),
+  desiredImageDigest: z.string().nullable().optional(),
+  desiredImageVersion: z.string().nullable().optional(),
+  desiredImageRevision: z.string().nullable().optional(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
@@ -265,6 +275,11 @@ export const superAdminRouter = router({
     };
   }),
 
+  getInstanceSoftware: superAdminProcedure.query(async () => {
+    const policy = await installProfileService.resolvePolicy();
+    return await instanceSoftwareService.getStatus(policy.installProfile);
+  }),
+
   updateInstanceSettings: superAdminProcedure
     .input(
       z
@@ -355,6 +370,48 @@ export const superAdminRouter = router({
         },
       };
     }),
+
+  startInstanceSoftwareUpdate: superAdminProcedure.mutation(async () => {
+    const policy = await installProfileService.resolvePolicy();
+    if (policy.installProfile !== "solo") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Managed updates are available only for solo self-host installs.",
+      });
+    }
+
+    const software = await instanceSoftwareService.getStatus(policy.installProfile);
+    if (!software.managedUpdate.enabled) {
+      return {
+        started: false as const,
+        error:
+          software.managedUpdate.reason ||
+          "Managed self-host updates are not configured for this installation.",
+        targetTag: null,
+      };
+    }
+
+    if (!software.latestTag) {
+      return {
+        started: false as const,
+        error: "Could not resolve the latest release tag for this installation.",
+        targetTag: null,
+      };
+    }
+
+    if (software.releaseStatus === "current") {
+      return {
+        started: false as const,
+        error: "This installation is already on the latest known release.",
+        targetTag: software.latestTag,
+      };
+    }
+
+    return await instanceSoftwareService.startManagedUpdate({
+      installProfile: policy.installProfile,
+      targetTag: software.latestTag,
+    });
+  }),
 
   listStudioMachines: superAdminProcedure.output(listStudioMachinesOutputSchema).query(async (): Promise<
     | {

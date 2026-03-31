@@ -207,6 +207,7 @@ export async function getStudioMachineUrlWorkflow(
   return {
     studioId: deps.resolveStudioIdFromMachine(existing, null),
     url,
+    backendUrl: url,
     runtimeUrl: url,
     compatibilityUrl: null,
     accessToken,

@@ -98,6 +98,7 @@ export type FlyStudioMachineSummary = {
 export type FlyStudioMachineUrlResult = {
   studioId: string;
   url: string;
+  backendUrl: string | null;
   runtimeUrl: string | null;
   compatibilityUrl: string | null;
   accessToken?: string;

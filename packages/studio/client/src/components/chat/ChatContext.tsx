@@ -69,6 +69,8 @@ export function ChatProvider({
   const previewContext = useOptionalPreview();
   const initialGenerationRequested =
     previewContext?.initialGenerationRequested ?? false;
+  const requestedInitialSessionId =
+    previewContext?.requestedInitialSessionId ?? null;
 
   const selectorMode = previewContext?.selectorMode ?? false;
   const setSelectorMode = previewContext?.setSelectorMode;
@@ -95,7 +97,6 @@ export function ChatProvider({
   const [initialGenerationFailed, setInitialGenerationFailed] = useState<string | null>(
     null,
   );
-  const initialGenerationFallbackAttemptedRef = useRef(false);
   const pendingInitialGenerationDefaultModelRef = useRef(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
@@ -258,6 +259,7 @@ export function ChatProvider({
           modelId: selectedModel.modelId,
         }
       : null,
+    initialSelectedSessionId: requestedInitialSessionId,
     onTaskComplete,
   });
 
@@ -396,49 +398,6 @@ export function ChatProvider({
       return;
     }
 
-    if (pending.kind === "initialGeneration") {
-      if (initialGenerationStarting) {
-        clearPending();
-        return;
-      }
-
-      if (
-        activeQuestionRequest ||
-        isThinking ||
-        runTaskPending ||
-        isPreparingSend ||
-        initialGenerationStarting
-      ) {
-        return;
-      }
-
-      clearPending();
-
-      void (async () => {
-        try {
-          const model = resolveInitialGenerationModel();
-          setInitialGenerationStarting(true);
-          setInitialGenerationFailed(null);
-          clearSessionError();
-
-          const result = await startInitialGenerationMutation.mutateAsync({
-            projectSlug,
-            version,
-            model,
-          });
-
-          setSelectedSessionId(result.sessionId);
-          void refetchSessions();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          setInitialGenerationFailed(message);
-        } finally {
-          setInitialGenerationStarting(false);
-        }
-      })();
-      return;
-    }
-
     const { message: pendingMessage, startNewSession } = pending;
     const targetSessionId = startNewSession ? null : selectedSessionId;
 
@@ -456,79 +415,12 @@ export function ChatProvider({
     previewContext?.clearPendingChatMessage,
     activeQuestionRequest,
     clearSessionError,
-    initialGenerationStarting,
     isPreparingSend,
     isThinking,
-    projectSlug,
-    refetchSessions,
-    resolveInitialGenerationModel,
     runTaskPending,
     selectedSessionId,
     setSelectedSessionId,
-    startInitialGenerationMutation,
     submitPreparedTask,
-    version,
-  ]);
-
-  useEffect(() => {
-    if (!initialGenerationRequested) return;
-    if (initialGenerationFallbackAttemptedRef.current) return;
-    if (previewContext?.pendingChatMessage?.kind === "initialGeneration") return;
-    if (sessionsLoading || isSessionHydrating) return;
-    if (selectedSessionId || sessions.length > 0) return;
-    if (
-      activeQuestionRequest ||
-      isThinking ||
-      runTaskPending ||
-      isPreparingSend ||
-      initialGenerationStarting
-    ) {
-      return;
-    }
-
-    initialGenerationFallbackAttemptedRef.current = true;
-
-    void (async () => {
-      try {
-        const model = resolveInitialGenerationModel();
-        setInitialGenerationStarting(true);
-        setInitialGenerationFailed(null);
-        clearSessionError();
-
-        const result = await startInitialGenerationMutation.mutateAsync({
-          projectSlug,
-          version,
-          model,
-        });
-
-        setSelectedSessionId(result.sessionId);
-        void refetchSessions();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setInitialGenerationFailed(message);
-      } finally {
-        setInitialGenerationStarting(false);
-      }
-    })();
-  }, [
-    activeQuestionRequest,
-    clearSessionError,
-    initialGenerationRequested,
-    initialGenerationStarting,
-    isPreparingSend,
-    isSessionHydrating,
-    isThinking,
-    previewContext?.pendingChatMessage,
-    projectSlug,
-    refetchSessions,
-    resolveInitialGenerationModel,
-    runTaskPending,
-    selectedSessionId,
-    sessions,
-    sessionsLoading,
-    setSelectedSessionId,
-    startInitialGenerationMutation,
-    version,
   ]);
 
   const retryInitialGeneration = useCallback(() => {

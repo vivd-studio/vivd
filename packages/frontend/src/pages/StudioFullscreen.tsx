@@ -7,7 +7,6 @@ import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme";
-import { useInitialGenerationBootstrap } from "@/hooks/useInitialGenerationBootstrap";
 import {
   type StudioRuntimeSession,
   useStudioHostRuntime,
@@ -37,6 +36,7 @@ export default function StudioFullscreen() {
   );
   const versionOverrideRaw = urlParams.get("version");
   const initialGenerationRequested = urlParams.get("initialGeneration") === "1";
+  const requestedInitialSessionId = urlParams.get("sessionId")?.trim() || null;
   const versionOverride = versionOverrideRaw
     ? Number.parseInt(versionOverrideRaw, 10)
     : NaN;
@@ -216,14 +216,6 @@ export default function StudioFullscreen() {
     );
   };
 
-  const sendInitialGenerationBootstrap = useInitialGenerationBootstrap({
-    enabled: initialGenerationRequested,
-    iframeRef: studioIframeRef,
-    studioBaseUrl,
-    projectSlug,
-    version,
-  });
-
   const {
     studioReady,
     studioLoadTimedOut,
@@ -239,13 +231,15 @@ export default function StudioFullscreen() {
     colorTheme,
     setTheme,
     setColorTheme,
-    onReady: sendInitialGenerationBootstrap,
     onClose: () => {
       const params = new URLSearchParams({
         view: "studio",
         version: String(version),
         ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
       });
+      if (requestedInitialSessionId) {
+        params.set("sessionId", requestedInitialSessionId);
+      }
       navigate(`${ROUTES.PROJECT(projectSlug!)}?${params.toString()}`);
     },
     onNavigate: (path) => {
@@ -267,12 +261,18 @@ export default function StudioFullscreen() {
     if (initialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
+    if (requestedInitialSessionId) {
+      url.searchParams.set("sessionId", requestedInitialSessionId);
+    }
     url.searchParams.set("hostOrigin", window.location.origin);
     const returnToParams = new URLSearchParams({
       view: "studio",
       version: String(version),
       ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
     });
+    if (requestedInitialSessionId) {
+      returnToParams.set("sessionId", requestedInitialSessionId);
+    }
     url.searchParams.set(
       "returnTo",
       new URL(
@@ -281,7 +281,13 @@ export default function StudioFullscreen() {
       ).toString(),
     );
     return url.toString();
-  }, [initialGenerationRequested, projectSlug, studioBaseUrl, version]);
+  }, [
+    initialGenerationRequested,
+    projectSlug,
+    requestedInitialSessionId,
+    studioBaseUrl,
+    version,
+  ]);
 
   const studioIframeTarget = useMemo(
     () => `vivd-studio-fullscreen-${projectSlug || "project"}-v${version}`,

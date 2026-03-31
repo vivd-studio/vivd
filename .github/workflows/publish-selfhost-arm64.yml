@@ -183,6 +183,9 @@ jobs:
           target: prod
           platforms: linux/arm64
           push: true
+          build-args: |
+            VIVD_IMAGE_VERSION=${{ needs.detect-changes.outputs.version }}
+            VIVD_IMAGE_REVISION=${{ github.sha }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}-arm64
             ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}-arm64
@@ -259,6 +262,9 @@ jobs:
           target: prod
           platforms: linux/arm64
           push: true
+          build-args: |
+            VIVD_IMAGE_VERSION=${{ needs.detect-changes.outputs.version }}-arm64
+            VIVD_IMAGE_REVISION=${{ github.sha }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version }}-arm64
             ${{ env.IMAGE_PREFIX }}/vivd-server:${{ needs.detect-changes.outputs.version_no_v }}-arm64

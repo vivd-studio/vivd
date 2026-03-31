@@ -218,6 +218,9 @@ jobs:
           target: prod
           platforms: linux/amd64
           load: true
+          build-args: |
+            VIVD_IMAGE_VERSION=${{ needs.detect-changes.outputs.version }}
+            VIVD_IMAGE_REVISION=${{ github.sha }}
           tags: vivd-studio:release-smoke
           cache-from: type=gha,scope=studio
           cache-to: type=gha,mode=max,scope=studio
@@ -393,6 +396,9 @@ jobs:
           target: prod
           platforms: linux/amd64
           load: true
+          build-args: |
+            VIVD_IMAGE_VERSION=${{ needs.detect-changes.outputs.version }}
+            VIVD_IMAGE_REVISION=${{ github.sha }}
           tags: vivd-server:release-smoke
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server

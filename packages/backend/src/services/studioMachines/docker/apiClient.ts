@@ -6,6 +6,7 @@ import type {
   DockerContainerCreateConfig,
   DockerContainerCreateResponse,
   DockerContainerInfo,
+  DockerImageInfo,
   DockerNetworkSummary,
   DockerContainerSummary,
 } from "./types";
@@ -142,6 +143,13 @@ export class DockerApiClient {
     return await this.dockerRequest<DockerContainerInfo>(
       "GET",
       `/containers/${containerId}/json`,
+    );
+  }
+
+  async inspectImage(imageRefOrId: string): Promise<DockerImageInfo> {
+    return await this.dockerRequest<DockerImageInfo>(
+      "GET",
+      `/images/${encodeURIComponent(imageRefOrId)}/json`,
     );
   }
 

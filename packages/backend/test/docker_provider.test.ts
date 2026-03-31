@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DockerApiClient } from "../src/services/studioMachines/docker/apiClient";
 import { DockerStudioMachineProvider } from "../src/services/studioMachines/docker/provider";
 import * as visitStore from "../src/services/studioMachines/visitStore";
 
@@ -50,6 +51,12 @@ describe("DockerStudioMachineProvider", () => {
     } else {
       delete process.env.DOCKER_STUDIO_RECONCILER_CONCURRENCY;
     }
+  });
+
+  beforeEach(() => {
+    vi.spyOn(DockerApiClient.prototype, "inspectImage").mockRejectedValue(
+      new Error("[DockerMachines] image inspect unavailable in test"),
+    );
   });
 
   it("pulls a missing image and retries container creation", async () => {
@@ -1152,6 +1159,159 @@ describe("DockerStudioMachineProvider", () => {
     expect(result.accessToken).toBe("access-existing");
   });
 
+  it("recreates a stale created container with a fresh host port when Docker start fails because the reserved port is already allocated", async () => {
+    delete process.env.DATABASE_URL;
+    const provider = new DockerStudioMachineProvider();
+    const apiClient = (provider as any).apiClient;
+    const routeService = (provider as any).routeService;
+
+    vi.spyOn(routeService, "upsertRuntimeRoute").mockResolvedValue("/_studio/site-1-v1");
+    vi.spyOn(provider as any, "waitForReady").mockResolvedValue(undefined);
+    vi.spyOn(apiClient, "listNetworks").mockResolvedValue([
+      { Name: "vivd_vivd-network" },
+    ]);
+    vi.spyOn(apiClient, "listContainers").mockResolvedValue([
+      {
+        Id: "occupied",
+        Names: ["/studio-other-site-v1-a3f6fad7ba"],
+        Image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "other-site",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-other",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+          vivd_route_id: "other-site-v1",
+          vivd_external_port: "4100",
+        },
+        State: "running",
+        HostConfig: {
+          NetworkMode: "vivd_vivd-network",
+        },
+      },
+    ]);
+    const startContainerMock = vi
+      .spyOn(apiClient, "startContainer")
+      .mockRejectedValueOnce(
+        new Error(
+          "[DockerMachines] failed to set up container networking: driver failed programming external connectivity on endpoint studio-site-1-v1-a3f6fad7ba: Bind for 0.0.0.0:4100 failed: port is already allocated",
+        ),
+      )
+      .mockResolvedValueOnce(undefined);
+    const removeContainerMock = vi
+      .spyOn(apiClient, "removeContainer")
+      .mockResolvedValue(undefined);
+    const createContainerMock = vi
+      .spyOn(apiClient, "createContainer")
+      .mockResolvedValue({ Id: "replacement" });
+    vi.spyOn(apiClient, "inspectContainer").mockResolvedValue({
+      Id: "replacement",
+      Name: "/studio-site-1-v1-a3f6fad7ba",
+      Config: {
+        Image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+        Env: [
+          "STUDIO_ID=studio-existing",
+          "STUDIO_ACCESS_TOKEN=access-existing",
+          "VIVD_TENANT_ID=org-1",
+          "VIVD_PROJECT_SLUG=site-1",
+          "VIVD_PROJECT_VERSION=1",
+        ],
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-existing",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+          vivd_route_id: "site-1-v1",
+          vivd_external_port: "4101",
+        },
+      },
+      State: {
+        Status: "created",
+      },
+      HostConfig: {
+        NetworkMode: "vivd_vivd-network",
+        PortBindings: {
+          "3100/tcp": [{ HostPort: "4101" }],
+        },
+        NanoCpus: 1_000_000_000,
+        Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+      },
+      Created: new Date().toISOString(),
+    });
+
+    const result = await (provider as any).ensureContainerRunning(
+      {
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        env: {},
+      },
+      {
+        Id: "existing",
+        Name: "/studio-site-1-v1-a3f6fad7ba",
+        Config: {
+          Image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+          Env: [
+            "STUDIO_ID=studio-existing",
+            "STUDIO_ACCESS_TOKEN=access-existing",
+            "VIVD_TENANT_ID=org-1",
+            "VIVD_PROJECT_SLUG=site-1",
+            "VIVD_PROJECT_VERSION=1",
+          ],
+          Labels: {
+            vivd_managed: "true",
+            vivd_provider: "docker",
+            vivd_organization_id: "org-1",
+            vivd_project_slug: "site-1",
+            vivd_project_version: "1",
+            vivd_studio_id: "studio-existing",
+            vivd_image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+            vivd_route_id: "site-1-v1",
+            vivd_external_port: "4100",
+          },
+        },
+        State: {
+          Status: "created",
+        },
+        HostConfig: {
+          NetworkMode: "vivd-network",
+          PortBindings: {
+            "3100/tcp": [{ HostPort: "4100" }],
+          },
+          NanoCpus: 1_000_000_000,
+          Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+        },
+        Created: new Date().toISOString(),
+      },
+      "access-existing",
+      "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+    );
+
+    expect(startContainerMock).toHaveBeenNthCalledWith(1, "existing");
+    expect(removeContainerMock).toHaveBeenCalledWith("existing");
+    expect(createContainerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          Labels: expect.objectContaining({
+            vivd_external_port: "4101",
+          }),
+          HostConfig: expect.objectContaining({
+            PortBindings: {
+              "3100/tcp": [{ HostPort: "4101" }],
+            },
+          }),
+        }),
+      }),
+    );
+    expect(startContainerMock).toHaveBeenNthCalledWith(2, "replacement");
+    expect(result.accessToken).toBe("access-existing");
+  });
+
   it("recognizes managed machines from Docker container summaries that include HostConfig", async () => {
     delete process.env.DATABASE_URL;
     const provider = new DockerStudioMachineProvider();
@@ -1358,6 +1518,310 @@ describe("DockerStudioMachineProvider", () => {
     expect(result.warmedOutdatedImages).toBe(2);
   });
 
+  it("reports same-tag image-id drift and exposes actual vs desired runtime image metadata", async () => {
+    delete process.env.DATABASE_URL;
+
+    const provider = new DockerStudioMachineProvider();
+    const apiClient = (provider as any).apiClient;
+
+    vi.spyOn(provider, "getDesiredImage").mockResolvedValue(
+      "ghcr.io/vivd-studio/vivd-studio:latest",
+    );
+    vi.spyOn(apiClient, "inspectImage").mockImplementation(async (ref: string) => {
+      if (ref === "ghcr.io/vivd-studio/vivd-studio:latest") {
+        return {
+          Id: "sha256:new-image",
+          RepoDigests: [
+            "ghcr.io/vivd-studio/vivd-studio@sha256:newdigest",
+          ],
+          Config: {
+            Labels: {
+              "org.opencontainers.image.version": "1.1.34",
+              "org.opencontainers.image.revision": "rev-new",
+            },
+          },
+        };
+      }
+
+      if (ref === "sha256:old-image") {
+        return {
+          Id: "sha256:old-image",
+          RepoDigests: [
+            "ghcr.io/vivd-studio/vivd-studio@sha256:olddigest",
+          ],
+          Config: {
+            Labels: {
+              "org.opencontainers.image.version": "1.1.33",
+              "org.opencontainers.image.revision": "rev-old",
+            },
+          },
+        };
+      }
+
+      throw new Error(`unexpected image inspect for ${ref}`);
+    });
+    vi.spyOn(apiClient, "listContainers").mockResolvedValue([
+      {
+        Id: "existing",
+        Names: ["/studio-site-1-v1-a3f6fad7ba"],
+        Image: "ghcr.io/vivd-studio/vivd-studio:latest",
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-existing",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:latest",
+          vivd_route_id: "site-1-v1",
+        },
+        State: "running",
+        HostConfig: {
+          NetworkMode: "vivd_vivd-network",
+        },
+      },
+    ]);
+    vi.spyOn(apiClient, "inspectContainer").mockResolvedValue({
+      Id: "existing",
+      Image: "sha256:old-image",
+      Name: "/studio-site-1-v1-a3f6fad7ba",
+      Config: {
+        Image: "ghcr.io/vivd-studio/vivd-studio:latest",
+        Env: [
+          "STUDIO_ID=studio-existing",
+          "STUDIO_ACCESS_TOKEN=access-existing",
+          "VIVD_TENANT_ID=org-1",
+          "VIVD_PROJECT_SLUG=site-1",
+          "VIVD_PROJECT_VERSION=1",
+        ],
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-existing",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:latest",
+          vivd_route_id: "site-1-v1",
+        },
+      },
+      State: {
+        Status: "running",
+        StartedAt: new Date().toISOString(),
+      },
+      HostConfig: {
+        NetworkMode: "vivd_vivd-network",
+        NanoCpus: 1_000_000_000,
+        Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+      },
+      Created: new Date().toISOString(),
+    });
+
+    const summaries = await provider.listStudioMachines();
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      image: "ghcr.io/vivd-studio/vivd-studio:latest",
+      imageId: "sha256:old-image",
+      imageDigest: "ghcr.io/vivd-studio/vivd-studio@sha256:olddigest",
+      imageVersion: "1.1.33",
+      desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
+      desiredImageId: "sha256:new-image",
+      desiredImageDigest: "ghcr.io/vivd-studio/vivd-studio@sha256:newdigest",
+      desiredImageVersion: "1.1.34",
+      imageOutdated: true,
+      imageStatus: "outdated",
+    });
+  });
+
+  it("refreshes remote desired image content during reconcile and warms same-tag stopped drift", async () => {
+    delete process.env.DATABASE_URL;
+
+    const provider = new DockerStudioMachineProvider();
+    const apiClient = (provider as any).apiClient;
+
+    vi.spyOn(provider, "getDesiredImage").mockResolvedValue(
+      "ghcr.io/vivd-studio/vivd-studio:latest",
+    );
+    vi.spyOn(visitStore, "listStudioVisitMsByIdentity").mockResolvedValue(new Map());
+    const pullImageMock = vi.spyOn(apiClient, "pullImage").mockResolvedValue(undefined);
+    vi.spyOn(apiClient, "inspectImage").mockResolvedValue({
+      Id: "sha256:new-image",
+      RepoDigests: ["ghcr.io/vivd-studio/vivd-studio@sha256:newdigest"],
+      Config: {
+        Labels: {
+          "org.opencontainers.image.version": "1.1.34",
+          "org.opencontainers.image.revision": "rev-new",
+        },
+      },
+    });
+    vi.spyOn(apiClient, "listContainers").mockResolvedValue([
+      {
+        Id: "container-1",
+        Names: ["/studio-site-1-v1-a3f6fad7ba"],
+        Image: "ghcr.io/vivd-studio/vivd-studio:latest",
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-1",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:latest",
+          vivd_route_id: "site-1-v1",
+        },
+        State: "exited",
+      },
+    ]);
+    vi.spyOn(apiClient, "inspectContainer").mockResolvedValue({
+      Id: "container-1",
+      Image: "sha256:old-image",
+      Name: "/studio-site-1-v1-a3f6fad7ba",
+      Config: {
+        Image: "ghcr.io/vivd-studio/vivd-studio:latest",
+        Env: [
+          "STUDIO_ID=studio-1",
+          "STUDIO_ACCESS_TOKEN=access-1",
+          "VIVD_TENANT_ID=org-1",
+          "VIVD_PROJECT_SLUG=site-1",
+          "VIVD_PROJECT_VERSION=1",
+        ],
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-1",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:latest",
+          vivd_route_id: "site-1-v1",
+        },
+      },
+      State: {
+        Status: "exited",
+      },
+      HostConfig: {
+        NetworkMode: "vivd_vivd-network",
+        NanoCpus: 1_000_000_000,
+        Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+      },
+      Created: new Date().toISOString(),
+    });
+    const warmReconcileMock = vi
+      .spyOn(provider as any, "warmReconcileContainer")
+      .mockResolvedValue(undefined);
+
+    const result = await provider.reconcileStudioMachines({
+      forceRefreshDesiredImage: true,
+    });
+
+    expect(pullImageMock).toHaveBeenCalledWith(
+      "ghcr.io/vivd-studio/vivd-studio:latest",
+    );
+    expect(warmReconcileMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desiredImage: "ghcr.io/vivd-studio/vivd-studio:latest",
+        desiredImageState: expect.objectContaining({
+          imageId: "sha256:new-image",
+          versionLabel: "1.1.34",
+        }),
+      }),
+    );
+    expect(result.warmedOutdatedImages).toBe(1);
+  });
+
+  it("detects rebuilt local-tag drift during reconcile without pulling from a registry", async () => {
+    delete process.env.DATABASE_URL;
+    vi.stubEnv("DOCKER_STUDIO_IMAGE", "vivd-studio:local");
+
+    const provider = new DockerStudioMachineProvider();
+    const apiClient = (provider as any).apiClient;
+
+    vi.spyOn(visitStore, "listStudioVisitMsByIdentity").mockResolvedValue(new Map());
+    const pullImageMock = vi.spyOn(apiClient, "pullImage").mockResolvedValue(undefined);
+    vi.spyOn(apiClient, "inspectImage").mockResolvedValue({
+      Id: "sha256:new-local",
+      RepoDigests: [],
+      Config: {
+        Labels: {
+          "org.opencontainers.image.version": "local-20260331a",
+          "org.opencontainers.image.revision": "rev-local",
+        },
+      },
+    });
+    vi.spyOn(apiClient, "listContainers").mockResolvedValue([
+      {
+        Id: "container-1",
+        Names: ["/studio-site-1-v1-a3f6fad7ba"],
+        Image: "vivd-studio:local",
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-1",
+          vivd_image: "vivd-studio:local",
+          vivd_route_id: "site-1-v1",
+        },
+        State: "exited",
+      },
+    ]);
+    vi.spyOn(apiClient, "inspectContainer").mockResolvedValue({
+      Id: "container-1",
+      Image: "sha256:old-local",
+      Name: "/studio-site-1-v1-a3f6fad7ba",
+      Config: {
+        Image: "vivd-studio:local",
+        Env: [
+          "STUDIO_ID=studio-1",
+          "STUDIO_ACCESS_TOKEN=access-1",
+          "VIVD_TENANT_ID=org-1",
+          "VIVD_PROJECT_SLUG=site-1",
+          "VIVD_PROJECT_VERSION=1",
+        ],
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-1",
+          vivd_image: "vivd-studio:local",
+          vivd_route_id: "site-1-v1",
+        },
+      },
+      State: {
+        Status: "exited",
+      },
+      HostConfig: {
+        NetworkMode: "vivd_vivd-network",
+        NanoCpus: 1_000_000_000,
+        Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+      },
+      Created: new Date().toISOString(),
+    });
+    const warmReconcileMock = vi
+      .spyOn(provider as any, "warmReconcileContainer")
+      .mockResolvedValue(undefined);
+
+    const result = await provider.reconcileStudioMachines({
+      forceRefreshDesiredImage: true,
+    });
+
+    expect(pullImageMock).not.toHaveBeenCalled();
+    expect(warmReconcileMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desiredImage: "vivd-studio:local",
+        desiredImageState: expect.objectContaining({
+          imageId: "sha256:new-local",
+          versionLabel: "local-20260331a",
+        }),
+      }),
+    );
+    expect(result.warmedOutdatedImages).toBe(1);
+  });
+
   it("warm reconciles a drifted stopped container and parks it stopped again", async () => {
     delete process.env.DATABASE_URL;
 
@@ -1507,6 +1971,15 @@ describe("DockerStudioMachineProvider", () => {
         version: 1,
       },
       desiredImage: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+      desiredImageState: {
+        requestedRef: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+        imageId: "sha256:new-image",
+        repoDigest: "ghcr.io/vivd-studio/vivd-studio@sha256:newdigest",
+        versionLabel: "0.8.0",
+        revisionLabel: "rev-new",
+        source: "local",
+        checkedAt: new Date().toISOString(),
+      },
       desiredNetworkName: "vivd_vivd-network",
     });
 

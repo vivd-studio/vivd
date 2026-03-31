@@ -10,11 +10,13 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuItem: ({
     children,
     onClick,
+    disabled,
   }: {
     children: React.ReactNode;
     onClick?: () => void;
+    disabled?: boolean;
   }) => (
-    <button type="button" onClick={onClick}>
+    <button type="button" onClick={onClick} disabled={disabled}>
       {children}
     </button>
   ),
@@ -51,7 +53,6 @@ function createProps() {
     projectSlug: "aurora-studio",
     selectedVersion: 1,
     originalUrl: "http://localhost/",
-    fullUrl: "http://localhost/",
     copied: false,
     publicPreviewEnabled: true,
     currentPreviewPath: "/",
@@ -67,6 +68,7 @@ function createProps() {
     toggleEditMode: vi.fn(),
     handleRefresh: vi.fn(),
     handleCopy: vi.fn(),
+    handleOpenPreviewUrl: vi.fn(),
     setPublishDialogOpen: vi.fn(),
     setHistoryPanelOpen: vi.fn(),
     hasGitChanges: false,
@@ -107,5 +109,15 @@ describe("MobileActionsMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /aurora/i }));
 
     expect(props.setColorTheme).toHaveBeenCalledWith("aurora");
+  });
+
+  it("opens the shareable preview URL via the dedicated toolbar handler", () => {
+    const props = createProps();
+
+    render(<MobileActionsMenu {...props} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open in new tab/i }));
+
+    expect(props.handleOpenPreviewUrl).toHaveBeenCalledTimes(1);
   });
 });

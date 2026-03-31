@@ -225,6 +225,23 @@ describe("useOpencodeChatController", () => {
     });
   });
 
+  it("locks onto an explicitly requested session on mount", async () => {
+    renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+        initialSelectedSessionId: "sess-started",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockOpencodeChat.setSelectedSessionId).toHaveBeenCalledWith(
+        "sess-started",
+      );
+    });
+  });
+
   it("stops a pending new-session start before the first prompt dispatch", async () => {
     const refetchGate = deferred<undefined>();
     mockOpencodeChat.refetchBootstrap.mockReturnValue(refetchGate.promise);

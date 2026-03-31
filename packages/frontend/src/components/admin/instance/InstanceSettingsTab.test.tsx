@@ -1,16 +1,23 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   useUtilsMock,
   getInstanceSettingsUseQueryMock,
+  getInstanceSoftwareUseQueryMock,
   updateInstanceSettingsUseMutationMock,
   updateInstanceSettingsMutateMock,
+  startInstanceSoftwareUpdateUseMutationMock,
+  startInstanceSoftwareUpdateMutateMock,
 } = vi.hoisted(() => ({
   useUtilsMock: vi.fn(),
   getInstanceSettingsUseQueryMock: vi.fn(),
+  getInstanceSoftwareUseQueryMock: vi.fn(),
   updateInstanceSettingsUseMutationMock: vi.fn(),
   updateInstanceSettingsMutateMock: vi.fn(),
+  startInstanceSoftwareUpdateUseMutationMock: vi.fn(),
+  startInstanceSoftwareUpdateMutateMock: vi.fn(),
 }));
 
 vi.mock("@/lib/trpc", () => ({
@@ -20,8 +27,14 @@ vi.mock("@/lib/trpc", () => ({
       getInstanceSettings: {
         useQuery: getInstanceSettingsUseQueryMock,
       },
+      getInstanceSoftware: {
+        useQuery: getInstanceSoftwareUseQueryMock,
+      },
       updateInstanceSettings: {
         useMutation: updateInstanceSettingsUseMutationMock,
+      },
+      startInstanceSoftwareUpdate: {
+        useMutation: startInstanceSoftwareUpdateUseMutationMock,
       },
     },
   },
@@ -36,12 +49,32 @@ vi.mock("sonner", () => ({
 
 import { InstanceSettingsTab } from "./InstanceSettingsTab";
 
+function renderTab(path = "/vivd-studio/superadmin?section=instance") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <InstanceSettingsTab />
+    </MemoryRouter>,
+  );
+}
+
 describe("InstanceSettingsTab", () => {
+  const scrollIntoViewMock = vi.fn();
+
   beforeEach(() => {
     useUtilsMock.mockReset();
     getInstanceSettingsUseQueryMock.mockReset();
+    getInstanceSoftwareUseQueryMock.mockReset();
     updateInstanceSettingsUseMutationMock.mockReset();
     updateInstanceSettingsMutateMock.mockReset();
+    startInstanceSoftwareUpdateUseMutationMock.mockReset();
+    startInstanceSoftwareUpdateMutateMock.mockReset();
+    scrollIntoViewMock.mockReset();
+
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      writable: true,
+      value: scrollIntoViewMock,
+    });
 
     useUtilsMock.mockReturnValue({
       superadmin: {
@@ -99,14 +132,41 @@ describe("InstanceSettingsTab", () => {
       isLoading: false,
     });
 
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: {
+        currentVersion: "1.1.33",
+        currentRevision: "abc123def456",
+        currentImage: "ghcr.io/vivd-studio/vivd-server:1.1.33",
+        currentImageTag: "1.1.33",
+        latestVersion: "1.1.34",
+        latestTag: "1.1.34",
+        latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.34",
+        releaseStatus: "available",
+        managedUpdate: {
+          enabled: false,
+          reason: "Platform deployments stay deployment-managed for now.",
+          helperImage: null,
+          workdir: null,
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
     updateInstanceSettingsUseMutationMock.mockReturnValue({
       isPending: false,
       mutate: updateInstanceSettingsMutateMock,
     });
+
+    startInstanceSoftwareUpdateUseMutationMock.mockReturnValue({
+      isPending: false,
+      mutate: startInstanceSoftwareUpdateMutateMock,
+    });
   });
 
   it("shows network settings as read-only in platform mode", () => {
-    render(<InstanceSettingsTab />);
+    renderTab();
 
     expect(screen.getByText("Multi-org platform profile")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
@@ -115,6 +175,14 @@ describe("InstanceSettingsTab", () => {
         "This shows the currently resolved host and TLS state. Platform host topology stays deployment-managed for now.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("1.1.33")).toBeInTheDocument();
+    expect(screen.getByText("1.1.34")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Review the running deployment version. Platform updates stay deployment-managed for now.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /update to/i })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Public host")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save network" })).toBeDisabled();
     expect(screen.getByText("https://app.example.com")).toBeInTheDocument();
@@ -164,14 +232,47 @@ describe("InstanceSettingsTab", () => {
       isLoading: false,
     });
 
-    render(<InstanceSettingsTab />);
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: {
+        currentVersion: "1.1.33",
+        currentRevision: "abc123def456",
+        currentImage: "ghcr.io/vivd-studio/vivd-server:latest",
+        currentImageTag: "latest",
+        latestVersion: "1.1.34",
+        latestTag: "1.1.34",
+        latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.34",
+        releaseStatus: "unknown",
+        managedUpdate: {
+          enabled: true,
+          reason: null,
+          helperImage: "docker:28-cli",
+          workdir: "/srv/selfhost",
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderTab();
 
     expect(screen.getByText("Single-tenant self-host profile")).toBeInTheDocument();
     expect(screen.getByText(/licensed platform deployments/i)).toBeInTheDocument();
+    expect(screen.getByText("1.1.33")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply latest release" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save profile" })).not.toBeInTheDocument();
     expect(screen.queryByText("Capabilities")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save capabilities" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("scrolls the software section into view when opened via the version link", async () => {
+    renderTab("/vivd-studio/superadmin?section=instance#instance-software");
+
+    expect(screen.getByText("Software")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalled();
+    });
   });
 });

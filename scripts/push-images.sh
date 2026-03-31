@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 IMAGE_PREFIX="${IMAGE_PREFIX:-ghcr.io/vivd-studio}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 IMAGE_TAG_SUFFIX="${IMAGE_TAG_SUFFIX:-}"
+IMAGE_REVISION="$(git rev-parse HEAD)"
 
 print_usage() {
   cat <<'EOF'
@@ -77,6 +78,8 @@ build_and_push() {
     docker buildx build
     --platform "$PLATFORM"
     --file "$dockerfile"
+    --build-arg "VIVD_IMAGE_VERSION=${VERSION}"
+    --build-arg "VIVD_IMAGE_REVISION=${IMAGE_REVISION}"
     --tag "${repo}:${VERSION}${IMAGE_TAG_SUFFIX}"
     --tag "${repo}:${VERSION_NO_V}${IMAGE_TAG_SUFFIX}"
     --tag "${repo}:latest${IMAGE_TAG_SUFFIX}"

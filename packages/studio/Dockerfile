@@ -10,7 +10,7 @@ RUN apt-get update \
 
 # Install opencode CLI (required for SDK to spawn server)
 # Clean up unused musl binary (saves ~120MB)
-RUN npm install -g opencode-ai@1.3.2 \
+RUN npm install -g opencode-ai@1.3.9 \
   && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
   && npm cache clean --force
 
@@ -61,6 +61,11 @@ RUN npm run build -w @vivd/studio
 
 # Stage 4: Production
 FROM base AS prod
+
+ARG VIVD_IMAGE_VERSION=unknown
+ARG VIVD_IMAGE_REVISION=unknown
+LABEL org.opencontainers.image.version=$VIVD_IMAGE_VERSION
+LABEL org.opencontainers.image.revision=$VIVD_IMAGE_REVISION
 
 # Install production deps for the studio workspace (links theme as a workspace dep)
 COPY package.json package-lock.json ./

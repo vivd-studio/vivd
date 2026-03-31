@@ -1,4 +1,5 @@
 import { getVivdHostOrigin, postVivdHostMessage } from "@/lib/hostBridge";
+import { openUrlInNewTab as openBrowserUrlInNewTab } from "@/lib/browserActions";
 
 export function getHostAppOrigin() {
   return getVivdHostOrigin();
@@ -10,10 +11,7 @@ export function buildHostAppUrl(path: string) {
 
 export function openHostPath(path: string) {
   const url = buildHostAppUrl(path);
-  const nextWindow = window.open(url, "_blank", "noopener,noreferrer");
-  if (!nextWindow) {
-    window.location.assign(url);
-  }
+  openBrowserUrlInNewTab(url);
 }
 
 export function openEmbeddedStudioPath(path: string, embedded?: boolean) {
@@ -30,4 +28,8 @@ export function buildProjectStudioPath(
   section: "plugins" | "analytics",
 ) {
   return `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/${section}`;
+}
+
+export function openUrlInNewTab(url: string) {
+  openBrowserUrlInNewTab(url);
 }

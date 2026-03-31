@@ -16,6 +16,7 @@ import {
   resolveStudioRuntimePath,
   withVivdStudioTokenQuery,
 } from "@/lib/studioAuth";
+import { copyTextWithFallback, openUrlInNewTab } from "@/lib/browserActions";
 import {
   POLLING_BACKGROUND,
   POLLING_DEV_SERVER_STARTING,
@@ -52,7 +53,6 @@ import {
 } from "@/lib/vivdPreviewTextPatching";
 import {
   getVivdHostOrigin,
-  isVivdHostMessageEvent,
 } from "@/lib/hostBridge";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 
@@ -129,6 +129,7 @@ interface PreviewContextValue {
   // Handlers
   handleVersionSelect: (version: number) => void;
   handleCopy: () => void;
+  handleOpenPreviewUrl: () => void;
   handleRefresh: () => void;
   navigatePreviewPath: (path: string) => void;
   handlePreviewLocationChange: (href: string) => void;
@@ -140,8 +141,9 @@ interface PreviewContextValue {
 
   // Cross-component chat messaging
   initialGenerationRequested: boolean;
+  requestedInitialSessionId: string | null;
   pendingChatMessage: {
-    kind?: "task" | "initialGeneration";
+    kind?: "task";
     message: string;
     startNewSession?: boolean;
   } | null;
@@ -355,7 +357,7 @@ export function PreviewProvider({
   const [selectedElement, setSelectedElement] =
     useState<SelectedElement | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<{
-    kind?: "task" | "initialGeneration";
+    kind?: "task";
     message: string;
     startNewSession?: boolean;
   } | null>(null);
@@ -376,6 +378,10 @@ export function PreviewProvider({
   const initialGenerationRequested =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("initialGeneration") === "1";
+  const requestedInitialSessionId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("sessionId")?.trim() || null
+      : null;
 
   const utils = trpc.useUtils();
 
@@ -1214,6 +1220,11 @@ export function PreviewProvider({
     setIframePreviewPath("/");
   }, [projectSlug]);
 
+  const markPreviewUrlCopied = useCallback(() => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, []);
+
   const handleCopy = useCallback(() => {
     if (!publicPreviewEnabled) {
       toast.error("Preview URL is disabled for this project");
@@ -1225,16 +1236,28 @@ export function PreviewProvider({
       return;
     }
 
-    navigator.clipboard
-      .writeText(stablePublishPreviewUrl)
+    copyTextWithFallback(stablePublishPreviewUrl)
       .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        markPreviewUrlCopied();
       })
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         toast.error("Failed to copy preview URL", { description: message });
       });
+  }, [markPreviewUrlCopied, publicPreviewEnabled, stablePublishPreviewUrl]);
+
+  const handleOpenPreviewUrl = useCallback(() => {
+    if (!publicPreviewEnabled) {
+      toast.error("Preview URL is disabled for this project");
+      return;
+    }
+
+    if (!stablePublishPreviewUrl) {
+      toast.error("Preview URL is not ready yet");
+      return;
+    }
+
+    openUrlInNewTab(stablePublishPreviewUrl);
   }, [publicPreviewEnabled, stablePublishPreviewUrl]);
 
   const handleTaskComplete = () => {
@@ -1349,19 +1372,6 @@ export function PreviewProvider({
           });
           return;
         }
-      }
-
-      if (
-        isVivdHostMessageEvent(event) &&
-        event.data?.type === "vivd:host:start-initial-generation"
-      ) {
-        setChatOpen(true);
-        setPendingChatMessage({
-          kind: "initialGeneration",
-          message: "",
-          startNewSession: true,
-        });
-        return;
       }
 
       if (iframeWindow && event.source !== iframeWindow) return;
@@ -1518,6 +1528,7 @@ export function PreviewProvider({
     // Handlers
     handleVersionSelect,
     handleCopy,
+    handleOpenPreviewUrl,
     handleRefresh,
     navigatePreviewPath,
     handlePreviewLocationChange,
@@ -1531,6 +1542,7 @@ export function PreviewProvider({
 
     // Cross-component chat messaging
     initialGenerationRequested,
+    requestedInitialSessionId,
     pendingChatMessage,
     pendingNewSessionRequestId,
     sendChatMessage,

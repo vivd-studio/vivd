@@ -109,6 +109,9 @@ services:
       # Studio machines
       - STUDIO_MACHINE_PROVIDER=${STUDIO_MACHINE_PROVIDER:-local}
       - SINGLE_PROJECT_MODE=${SINGLE_PROJECT_MODE:-false}
+      - VIVD_SELFHOST_UPDATE_WORKDIR=/srv/selfhost
+      - VIVD_SELFHOST_UPDATE_SERVICES=${VIVD_SELFHOST_UPDATE_SERVICES:-backend frontend scraper docs}
+      - VIVD_SELFHOST_UPDATE_HELPER_IMAGE=${VIVD_SELFHOST_UPDATE_HELPER_IMAGE:-docker:28-cli}
       # Fly.io studio machines (when STUDIO_MACHINE_PROVIDER=fly)
       - FLY_API_TOKEN=${FLY_API_TOKEN:-}
       - FLY_STUDIO_APP=${FLY_STUDIO_APP:-}
@@ -149,6 +152,7 @@ services:
       - caddy_sites:/etc/caddy/sites.d
       - caddy_runtime_routes:/etc/caddy/runtime.d
       - caddy_caddyfile:/etc/caddy_shared:ro
+      - ./:/srv/selfhost:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:

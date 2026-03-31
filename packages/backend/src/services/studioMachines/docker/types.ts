@@ -23,12 +23,15 @@ export type DockerContainerSummary = {
 
 export type DockerContainerInfo = {
   Id: string;
+  Image?: string;
   Name?: string;
   Config?: {
     Image?: string;
     Env?: string[];
     Labels?: Record<string, string>;
     StopTimeout?: number;
+    WorkingDir?: string;
+    Cmd?: string[];
   };
   State?: {
     Status?: DockerContainerStateStatus;
@@ -43,11 +46,18 @@ export type DockerContainerInfo = {
     NanoCpus?: number;
     Memory?: number;
     AutoRemove?: boolean;
+    Binds?: string[];
     PortBindings?: Record<string, Array<{ HostPort?: string }>>;
   };
   NetworkSettings?: {
     Networks?: Record<string, Record<string, unknown>>;
   };
+  Mounts?: Array<{
+    Type?: string;
+    Source?: string;
+    Destination?: string;
+    RW?: boolean;
+  }>;
   Created?: string;
 };
 
@@ -56,12 +66,15 @@ export type DockerContainerCreateConfig = {
   Env: string[];
   Labels: Record<string, string>;
   StopTimeout?: number;
+  WorkingDir?: string;
+  Cmd?: string[];
   ExposedPorts?: Record<string, Record<string, never>>;
   HostConfig?: {
     NetworkMode?: string;
     NanoCpus?: number;
     Memory?: number;
     AutoRemove?: boolean;
+    Binds?: string[];
     PortBindings?: Record<string, Array<{ HostPort?: string }>>;
   };
   NetworkingConfig?: {
@@ -77,6 +90,15 @@ export type DockerContainerCreateResponse = {
 export type DockerNetworkSummary = {
   Id?: string;
   Name?: string;
+};
+
+export type DockerImageInfo = {
+  Id?: string;
+  RepoDigests?: string[];
+  RepoTags?: string[];
+  Config?: {
+    Labels?: Record<string, string>;
+  };
 };
 
 export type DockerApiError = {

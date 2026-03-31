@@ -70,6 +70,23 @@ function formatMachineSizing(machine: StudioMachine): string {
   return parts.length > 0 ? parts.join(" / ") : "unknown";
 }
 
+function imageStatusFor(
+  machine: StudioMachine,
+): "ok" | "outdated" | "unknown" {
+  if (machine.imageStatus === "ok" || machine.imageStatus === "outdated" || machine.imageStatus === "unknown") {
+    return machine.imageStatus;
+  }
+  return machine.imageOutdated ? "outdated" : "ok";
+}
+
+function preferredImageIdentity(options: {
+  version?: string | null;
+  digest?: string | null;
+  imageId?: string | null;
+}): string | null {
+  return options.version || options.digest || options.imageId || null;
+}
+
 function badgeVariantForState(state: string | null): "default" | "secondary" | "outline" {
   if (!state) return "outline";
   if (state === "started") return "default";
@@ -255,6 +272,14 @@ export function MachinesTab() {
   const activeReconcileMachineId = reconcileMachineMutation.variables?.machineId ?? null;
   const activeParkMachineId = parkMutation.variables?.machineId ?? null;
   const effectiveDesiredImage = machines[0]?.desiredImage || null;
+  const effectiveDesiredImageVersion = machines[0]?.desiredImageVersion ?? null;
+  const effectiveDesiredImageDigest = machines[0]?.desiredImageDigest ?? null;
+  const effectiveDesiredImageId = machines[0]?.desiredImageId ?? null;
+  const effectiveDesiredImageIdentity = preferredImageIdentity({
+    version: effectiveDesiredImageVersion,
+    digest: effectiveDesiredImageDigest,
+    imageId: effectiveDesiredImageId,
+  });
   const desiredImage =
     effectiveDesiredImage ||
     (imageOptionsQuery.data && imageOptionsQuery.data.supported
@@ -268,12 +293,15 @@ export function MachinesTab() {
   const stats = useMemo(() => {
     const byState = new Map<string, number>();
     let outdated = 0;
+    let unknownImageState = 0;
     for (const machine of machines) {
       const key = (machine.state || "unknown").toLowerCase();
       byState.set(key, (byState.get(key) || 0) + 1);
-      if (machine.imageOutdated) outdated++;
+      const imageStatus = imageStatusFor(machine);
+      if (imageStatus === "outdated") outdated++;
+      if (imageStatus === "unknown") unknownImageState++;
     }
-    return { byState, outdated };
+    return { byState, outdated, unknownImageState };
   }, [machines]);
 
   const sortedMachines = useMemo(() => {
@@ -430,6 +458,13 @@ export function MachinesTab() {
                   Effective desired image: <code className="break-all">{desiredImage}</code>
                 </>
               ) : null}
+              {effectiveDesiredImageIdentity ? (
+                <>
+                  <span className="mx-2">•</span>
+                  Resolved on host:{" "}
+                  <code className="break-all">{effectiveDesiredImageIdentity}</code>
+                </>
+              ) : null}
             </div>
 
             {imageOptions?.supported ? (
@@ -516,6 +551,9 @@ export function MachinesTab() {
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge variant="outline">total {machines.length}</Badge>
             <Badge variant="outline">outdated {stats.outdated}</Badge>
+            {stats.unknownImageState > 0 ? (
+              <Badge variant="outline">image unknown {stats.unknownImageState}</Badge>
+            ) : null}
             {Array.from(stats.byState.entries())
               .sort((a, b) => a[0].localeCompare(b[0]))
               .map(([state, count]) => (
@@ -650,12 +688,45 @@ export function MachinesTab() {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <Badge variant={m.imageOutdated ? "destructive" : "secondary"}>
-                          {m.imageOutdated ? "outdated" : "ok"}
+                        <Badge
+                          variant={
+                            imageStatusFor(m) === "outdated"
+                              ? "destructive"
+                              : imageStatusFor(m) === "unknown"
+                                ? "outline"
+                                : "secondary"
+                          }
+                        >
+                          {imageStatusFor(m)}
                         </Badge>
                         <div className="font-mono text-[11px] text-muted-foreground break-all mt-1">
                           {m.image || "unknown"}
                         </div>
+                        {m.imageVersion ? (
+                          <div className="text-[11px] text-muted-foreground mt-1 break-all">
+                            version {m.imageVersion}
+                          </div>
+                        ) : null}
+                        {m.imageDigest || m.imageId ? (
+                          <div className="font-mono text-[11px] text-muted-foreground mt-1 break-all">
+                            {m.imageDigest || m.imageId}
+                          </div>
+                        ) : null}
+                        {imageStatusFor(m) === "outdated" &&
+                        preferredImageIdentity({
+                          version: m.desiredImageVersion,
+                          digest: m.desiredImageDigest,
+                          imageId: m.desiredImageId,
+                        }) ? (
+                          <div className="text-[11px] text-muted-foreground mt-1 break-all">
+                            desired{" "}
+                            {preferredImageIdentity({
+                              version: m.desiredImageVersion,
+                              digest: m.desiredImageDigest,
+                              imageId: m.desiredImageId,
+                            })}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-mono text-xs break-all">{m.id}</div>

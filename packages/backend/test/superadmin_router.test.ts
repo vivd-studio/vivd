@@ -31,6 +31,8 @@ const {
   syncSelfHostedCaddyConfigMock,
   reloadCaddyConfigMock,
   syncGeneratedCaddyConfigsMock,
+  getInstanceSoftwareStatusMock,
+  startManagedInstanceSoftwareUpdateMock,
 } = vi.hoisted(() => {
   const listStudioMachinesMock = vi.fn();
   const getDesiredImageMock = vi.fn();
@@ -81,6 +83,8 @@ const {
     syncSelfHostedCaddyConfigMock: vi.fn(),
     reloadCaddyConfigMock: vi.fn(),
     syncGeneratedCaddyConfigsMock: vi.fn(),
+    getInstanceSoftwareStatusMock: vi.fn(),
+    startManagedInstanceSoftwareUpdateMock: vi.fn(),
   };
 });
 
@@ -163,6 +167,13 @@ vi.mock("../src/services/system/CaddyAdminService", () => ({
 vi.mock("../src/services/publish/PublishService", () => ({
   publishService: {
     syncGeneratedCaddyConfigs: syncGeneratedCaddyConfigsMock,
+  },
+}));
+
+vi.mock("../src/services/system/InstanceSoftwareService", () => ({
+  instanceSoftwareService: {
+    getStatus: getInstanceSoftwareStatusMock,
+    startManagedUpdate: startManagedInstanceSoftwareUpdateMock,
   },
 }));
 
@@ -341,6 +352,8 @@ describe("superadmin router", () => {
     syncSelfHostedCaddyConfigMock.mockReset();
     reloadCaddyConfigMock.mockReset();
     syncGeneratedCaddyConfigsMock.mockReset();
+    getInstanceSoftwareStatusMock.mockReset();
+    startManagedInstanceSoftwareUpdateMock.mockReset();
 
     (studioMachineProviderMock as any).kind = "fly";
     listStudioMachinesMock.mockResolvedValue([]);
@@ -407,6 +420,28 @@ describe("superadmin router", () => {
     syncSelfHostedCaddyConfigMock.mockResolvedValue(false);
     reloadCaddyConfigMock.mockResolvedValue(undefined);
     syncGeneratedCaddyConfigsMock.mockResolvedValue(undefined);
+    getInstanceSoftwareStatusMock.mockResolvedValue({
+      currentVersion: "1.1.33",
+      currentRevision: "abc123def456",
+      currentImage: "ghcr.io/vivd-studio/vivd-server:1.1.33",
+      currentImageTag: "1.1.33",
+      latestVersion: "1.1.34",
+      latestTag: "1.1.34",
+      latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.34",
+      releaseStatus: "available",
+      managedUpdate: {
+        enabled: false,
+        reason: "Platform deployments stay deployment-managed for now.",
+        helperImage: null,
+        workdir: null,
+      },
+    });
+    startManagedInstanceSoftwareUpdateMock.mockResolvedValue({
+      started: true,
+      helperContainerId: "helper-1",
+      helperImage: "docker:28-cli",
+      targetTag: "1.1.34",
+    });
     resolvePolicyMock.mockResolvedValue({
       installProfile: "platform",
       singleProjectMode: false,
@@ -467,6 +502,19 @@ describe("superadmin router", () => {
       desiredImage: null,
       images: [],
     });
+  });
+
+  it("returns instance software status for the active install profile", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.getInstanceSoftware();
+
+    expect(result).toMatchObject({
+      currentVersion: "1.1.33",
+      latestVersion: "1.1.34",
+      releaseStatus: "available",
+    });
+    expect(getInstanceSoftwareStatusMock).toHaveBeenCalledWith("platform");
   });
 
   it("rejects network updates while the effective install profile is platform", async () => {
@@ -666,6 +714,76 @@ describe("superadmin router", () => {
       provider: "fly",
       machines: [],
       error: "fly unavailable",
+    });
+  });
+
+  it("rejects managed instance updates on platform installs", async () => {
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    await expect(caller.startInstanceSoftwareUpdate()).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Managed updates are available only for solo self-host installs.",
+    });
+
+    expect(startManagedInstanceSoftwareUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("starts managed instance updates for solo installs when a newer release exists", async () => {
+    resolvePolicyMock.mockResolvedValue({
+      installProfile: "solo",
+      singleProjectMode: true,
+      capabilities: {
+        multiOrg: false,
+        tenantHosts: false,
+        customDomains: false,
+        orgLimitOverrides: false,
+        orgPluginEntitlements: false,
+        projectPluginEntitlements: false,
+        dedicatedPluginHost: false,
+      },
+      pluginDefaults: {
+        contact_form: {
+          pluginId: "contact_form",
+          state: "enabled",
+          managedBy: "install_profile_default",
+        },
+        analytics: {
+          pluginId: "analytics",
+          state: "enabled",
+          managedBy: "install_profile_default",
+        },
+      },
+      limitDefaults: {},
+      controlPlane: { mode: "path_based" },
+      pluginRuntime: { mode: "same_host_path" },
+    });
+    getInstanceSoftwareStatusMock.mockResolvedValue({
+      currentVersion: "1.1.33",
+      currentRevision: "abc123def456",
+      currentImage: "ghcr.io/vivd-studio/vivd-server:1.1.33",
+      currentImageTag: "1.1.33",
+      latestVersion: "1.1.34",
+      latestTag: "1.1.34",
+      latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.34",
+      releaseStatus: "available",
+      managedUpdate: {
+        enabled: true,
+        reason: null,
+        helperImage: "docker:28-cli",
+        workdir: "/srv/selfhost",
+      },
+    });
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.startInstanceSoftwareUpdate();
+
+    expect(result).toMatchObject({
+      started: true,
+      targetTag: "1.1.34",
+    });
+    expect(startManagedInstanceSoftwareUpdateMock).toHaveBeenCalledWith({
+      installProfile: "solo",
+      targetTag: "1.1.34",
     });
   });
 

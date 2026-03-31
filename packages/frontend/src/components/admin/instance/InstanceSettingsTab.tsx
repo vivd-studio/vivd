@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { HardDriveDownload, Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -129,9 +131,15 @@ function toLimitState(
 }
 
 export function InstanceSettingsTab() {
+  const location = useLocation();
   const utils = trpc.useUtils();
   const settingsQuery = trpc.superadmin.getInstanceSettings.useQuery();
+  const softwareQuery = trpc.superadmin.getInstanceSoftware.useQuery(undefined, {
+    staleTime: 60_000,
+    retry: false,
+  });
   const settings = settingsQuery.data;
+  const software = softwareQuery.data;
 
   const [capabilities, setCapabilities] = useState<CapabilityState>({
     multiOrg: true,
@@ -146,6 +154,7 @@ export function InstanceSettingsTab() {
   const [publicHost, setPublicHost] = useState("");
   const [tlsMode, setTlsMode] = useState<NetworkTlsMode>("off");
   const [acmeEmail, setAcmeEmail] = useState("");
+  const [waitingForUpdate, setWaitingForUpdate] = useState(false);
   const effectiveInstallProfile = settings?.installProfile ?? null;
   const isSoloInstall = effectiveInstallProfile === "solo";
   const isPlatformInstall = effectiveInstallProfile === "platform";
@@ -159,12 +168,63 @@ export function InstanceSettingsTab() {
     setAcmeEmail(settings.network.acmeEmail ?? "");
   }, [settings]);
 
+  useEffect(() => {
+    if (location.hash !== "#instance-software") return;
+    document.getElementById("instance-software")?.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+  }, [location.hash]);
+
   const updateSettings = trpc.superadmin.updateInstanceSettings.useMutation({
     onSuccess: async () => {
       await Promise.all([
         utils.superadmin.getInstanceSettings.invalidate(),
         utils.config.getAppConfig.invalidate(),
       ]);
+    },
+  });
+
+  const startSoftwareUpdate = trpc.superadmin.startInstanceSoftwareUpdate.useMutation({
+    onSuccess: (result) => {
+      if (!result.started) {
+        toast.error("Update not started", {
+          description: result.error,
+        });
+        return;
+      }
+
+      setWaitingForUpdate(true);
+      toast.success("Update started", {
+        description: `Applying ${result.targetTag}. This page will reload once the backend is ready again.`,
+      });
+
+      const pollHealth = async () => {
+        try {
+          const response = await fetch("/vivd-studio/api/health", {
+            cache: "no-store",
+          });
+          if (response.ok) {
+            window.location.reload();
+            return;
+          }
+        } catch {
+          // Backend/frontend may be restarting. Keep polling.
+        }
+
+        window.setTimeout(() => {
+          void pollHealth();
+        }, 2_000);
+      };
+
+      window.setTimeout(() => {
+        void pollHealth();
+      }, 3_000);
+    },
+    onError: (error) => {
+      toast.error("Failed to start update", {
+        description: error.message,
+      });
     },
   });
 
@@ -181,6 +241,20 @@ export function InstanceSettingsTab() {
 
   const networkFieldsDisabled =
     updateSettings.isPending || settingsQuery.isLoading || !isSoloInstall;
+  const currentSoftwareLabel =
+    software?.currentVersion || software?.currentImageTag || "Unknown";
+  const latestSoftwareLabel =
+    software?.latestVersion || software?.latestTag || "Unknown";
+  const shortRevision = software?.currentRevision?.slice(0, 12) || null;
+  const canTriggerManagedUpdate =
+    isSoloInstall &&
+    !!software?.managedUpdate.enabled &&
+    !!software.latestTag &&
+    software.releaseStatus !== "current";
+  const updateButtonLabel =
+    software?.releaseStatus === "available"
+      ? `Update to ${software.latestVersion || software.latestTag}`
+      : "Apply latest release";
 
   const handleSaveCapabilities = () => {
     updateSettings.mutate(
@@ -306,6 +380,125 @@ export function InstanceSettingsTab() {
               ))}
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card
+        id="instance-software"
+        className="scroll-mt-6 border-border/70 shadow-sm"
+      >
+        <CardHeader>
+          <CardTitle>Software</CardTitle>
+          <CardDescription>
+            {isSoloInstall
+              ? "Review the running self-host bundle version and apply newer releases when the managed updater is configured."
+              : "Review the running deployment version. Platform updates stay deployment-managed for now."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Current release</Label>
+              <div className="rounded-md border bg-muted/20 px-3 py-2">
+                <div className="font-medium">{currentSoftwareLabel}</div>
+                <p className="text-sm text-muted-foreground">
+                  {software?.currentImageTag
+                    ? `Configured image tag: ${software.currentImageTag}`
+                    : "The running image does not expose a release tag yet."}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Latest known release</Label>
+              <div className="rounded-md border bg-muted/20 px-3 py-2">
+                <div className="font-medium">
+                  {softwareQuery.isLoading ? "Loading..." : latestSoftwareLabel}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {software?.releaseStatus === "available"
+                    ? "A newer release is available."
+                    : software?.releaseStatus === "current"
+                      ? "This install is already on the latest known release."
+                      : "Latest release metadata is available, but the running version could not be compared reliably."}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {software?.releaseStatus === "available" ? (
+              <Badge variant="secondary">Update available</Badge>
+            ) : null}
+            {software?.releaseStatus === "current" ? (
+              <Badge variant="secondary">Up to date</Badge>
+            ) : null}
+            {software?.releaseStatus === "unknown" ? (
+              <Badge variant="outline">Version comparison unavailable</Badge>
+            ) : null}
+            {shortRevision ? <Badge variant="outline">rev {shortRevision}</Badge> : null}
+            {software?.currentImage ? (
+              <Badge variant="outline">{software.currentImage}</Badge>
+            ) : null}
+          </div>
+
+          {software?.releaseError ? (
+            <p className="text-sm text-muted-foreground">
+              Latest release lookup failed: {software.releaseError}
+            </p>
+          ) : null}
+
+          {isSoloInstall && software?.managedUpdate.reason ? (
+            <p className="text-sm text-muted-foreground">{software.managedUpdate.reason}</p>
+          ) : null}
+
+          {isPlatformInstall ? (
+            <p className="text-sm text-muted-foreground">
+              This page shows the current platform version only. Applying updates remains a
+              deployment-level operation for now.
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                void softwareQuery.refetch();
+              }}
+              disabled={softwareQuery.isFetching || startSoftwareUpdate.isPending || waitingForUpdate}
+            >
+              {softwareQuery.isFetching ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Refreshing
+                </>
+              ) : (
+                <>
+                  <RefreshCcw className="h-4 w-4" />
+                  Check again
+                </>
+              )}
+            </Button>
+
+            {canTriggerManagedUpdate ? (
+              <Button
+                onClick={() => startSoftwareUpdate.mutate()}
+                disabled={startSoftwareUpdate.isPending || waitingForUpdate}
+              >
+                {startSoftwareUpdate.isPending || waitingForUpdate ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Starting update
+                  </>
+                ) : (
+                  <>
+                    <HardDriveDownload className="h-4 w-4" />
+                    {updateButtonLabel}
+                  </>
+                )}
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

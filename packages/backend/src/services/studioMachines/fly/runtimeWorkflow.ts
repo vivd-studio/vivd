@@ -216,6 +216,7 @@ export async function ensureExistingMachineRunningWorkflow(
   return {
     studioId: finalStudioId,
     url,
+    backendUrl: url,
     runtimeUrl: url,
     compatibilityUrl: null,
     port,
@@ -523,6 +524,7 @@ export async function restartInnerWorkflow(
   return {
     studioId,
     url,
+    backendUrl: url,
     runtimeUrl: url,
     compatibilityUrl: null,
     port,
@@ -651,6 +653,7 @@ export async function ensureRunningInnerWorkflow(
   return {
     studioId,
     url,
+    backendUrl: url,
     runtimeUrl: url,
     compatibilityUrl: null,
     port,

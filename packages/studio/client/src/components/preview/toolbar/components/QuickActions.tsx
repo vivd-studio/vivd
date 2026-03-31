@@ -38,17 +38,18 @@ import {
   buildProjectStudioPath,
   getHostAppOrigin,
   openEmbeddedStudioPath,
+  openUrlInNewTab,
 } from "../hostNavigation";
 
 interface QuickActionsProps {
   projectSlug: string | undefined;
   selectedVersion: number;
   previewMode?: "static" | "devserver";
-  fullUrl: string;
   originalUrl: string | null | undefined;
   copied: boolean;
   publicPreviewEnabled: boolean;
   handleCopy: () => void;
+  handleOpenPreviewUrl: () => void;
   handleRestartDevServer?: (options?: { clean?: boolean }) => void;
   isRestartingDevServer?: boolean;
   devServerRestartKind?: "restart" | "clean" | null;
@@ -79,11 +80,11 @@ export function QuickActions({
   projectSlug,
   selectedVersion,
   previewMode,
-  fullUrl,
   originalUrl,
   copied,
   publicPreviewEnabled,
   handleCopy,
+  handleOpenPreviewUrl,
   handleRestartDevServer,
   isRestartingDevServer,
   devServerRestartKind,
@@ -129,7 +130,7 @@ export function QuickActions({
     if (!projectSlug) return;
     const origin = getHostAppOrigin();
     const url = `${origin}/vivd-studio/api/download/${encodeURIComponent(projectSlug)}/${selectedVersion}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    openUrlInNewTab(url);
   };
 
   const handleOpenPlugins = () => {
@@ -253,22 +254,25 @@ export function QuickActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleCopy} disabled={!canCopyPreviewUrl}>
-            {copied ? (
-              <Check className="w-4 h-4 mr-2 text-green-600" />
-            ) : (
-              <Copy className="w-4 h-4 mr-2" />
-            )}
-            {copied
-              ? "Copied!"
-              : publicPreviewEnabled
-                ? "Copy preview URL"
-                : "Preview URL disabled"}
-          </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => window.open(fullUrl, "_blank")}>
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Open in New Tab
-              </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleCopy} disabled={!canCopyPreviewUrl}>
+              {copied ? (
+                <Check className="w-4 h-4 mr-2 text-green-600" />
+              ) : (
+                <Copy className="w-4 h-4 mr-2" />
+              )}
+              {copied
+                ? "Copied!"
+                : publicPreviewEnabled
+                  ? "Copy preview URL"
+                  : "Preview URL disabled"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleOpenPreviewUrl}
+              disabled={!canCopyPreviewUrl}
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Open in New Tab
+            </DropdownMenuItem>
             {projectSlug && (
               <>
                 <DropdownMenuItem onClick={handleDownloadZip}>
@@ -277,7 +281,7 @@ export function QuickActions({
                 </DropdownMenuItem>
                 {originalUrl && (
                   <DropdownMenuItem
-                    onClick={() => window.open(originalUrl, "_blank")}
+                    onClick={() => openUrlInNewTab(originalUrl)}
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
                     View Original Website

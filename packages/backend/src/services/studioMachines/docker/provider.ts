@@ -24,6 +24,7 @@ import type {
   DockerContainerCreateConfig,
   DockerContainerInfo,
   DockerContainerStateStatus,
+  DockerImageInfo,
   DockerNetworkSummary,
   DockerContainerSummary,
 } from "./types";
@@ -39,6 +40,29 @@ type StudioIdentity = {
   projectSlug: string;
   version: number;
 };
+
+type DockerResolvedImageState = {
+  requestedRef: string;
+  imageId: string | null;
+  repoDigest: string | null;
+  versionLabel: string | null;
+  revisionLabel: string | null;
+  source: "local" | "pulled" | "cached" | "unknown";
+  checkedAt: string;
+};
+
+type ContainerImageComparison = {
+  drift: boolean;
+  comparable: boolean;
+};
+
+const STUDIO_IMAGE_REF_LABEL = "vivd_image";
+const STUDIO_IMAGE_ID_LABEL = "vivd_image_id";
+const STUDIO_IMAGE_DIGEST_LABEL = "vivd_image_digest";
+const STUDIO_IMAGE_VERSION_LABEL = "vivd_image_version";
+const STUDIO_IMAGE_REVISION_LABEL = "vivd_image_revision";
+const OCI_IMAGE_VERSION_LABEL = "org.opencontainers.image.version";
+const OCI_IMAGE_REVISION_LABEL = "org.opencontainers.image.revision";
 
 type ContainerReconcileNeeds = {
   image: boolean;
@@ -144,7 +168,7 @@ function getContainerConfiguredImage(
   desiredImage?: string,
 ): string | null {
   const labels = getContainerLabels(container);
-  const fromLabel = trimToken(labels["vivd_image"]);
+  const fromLabel = trimToken(labels[STUDIO_IMAGE_REF_LABEL]);
   if (fromLabel) return fromLabel;
 
   const raw =
@@ -155,6 +179,103 @@ function getContainerConfiguredImage(
 
   const digestIndex = !desiredImage?.includes("@") ? raw.indexOf("@") : -1;
   return digestIndex === -1 ? raw : trimToken(raw.slice(0, digestIndex));
+}
+
+function getImageLabels(image: DockerImageInfo): Record<string, string> {
+  return image.Config?.Labels ?? {};
+}
+
+function getImageLabel(image: DockerImageInfo, key: string): string | null {
+  return trimToken(getImageLabels(image)[key]);
+}
+
+function imageReferenceBase(imageRef: string): string {
+  const withoutDigest = imageRef.split("@", 1)[0] || imageRef;
+  const lastSlash = withoutDigest.lastIndexOf("/");
+  const lastColon = withoutDigest.lastIndexOf(":");
+  return lastColon > lastSlash ? withoutDigest.slice(0, lastColon) : withoutDigest;
+}
+
+function digestValue(value: string | null | undefined): string | null {
+  const trimmed = trimToken(value);
+  if (!trimmed) return null;
+  if (trimmed.startsWith("sha256:")) return trimmed;
+  const atIndex = trimmed.indexOf("@");
+  if (atIndex >= 0) return trimToken(trimmed.slice(atIndex + 1));
+  return null;
+}
+
+function selectRepoDigestForRef(
+  repoDigests: string[] | undefined,
+  requestedRef: string,
+): string | null {
+  const desiredBase = imageReferenceBase(requestedRef);
+  for (const entry of repoDigests || []) {
+    const trimmed = trimToken(entry);
+    if (!trimmed) continue;
+    const base = trimmed.split("@", 1)[0] || trimmed;
+    if (base === desiredBase) return trimmed;
+  }
+  return trimToken(repoDigests?.find((entry) => trimToken(entry)));
+}
+
+function isLikelyRemoteImageReference(imageRef: string): boolean {
+  const firstSegment = imageReferenceBase(imageRef).split("/", 1)[0] || "";
+  return (
+    firstSegment.includes(".") ||
+    firstSegment.includes(":") ||
+    firstSegment === "localhost"
+  );
+}
+
+function getContainerRuntimeImageId(
+  container: DockerContainerSummary | DockerContainerInfo,
+): string | null {
+  if (isContainerInfo(container)) {
+    const fromInspect = trimToken(container.Image);
+    if (fromInspect) return fromInspect;
+  }
+  return trimToken(getContainerLabels(container)[STUDIO_IMAGE_ID_LABEL]);
+}
+
+function getContainerRecordedImageDigest(
+  container: DockerContainerSummary | DockerContainerInfo,
+): string | null {
+  return trimToken(getContainerLabels(container)[STUDIO_IMAGE_DIGEST_LABEL]);
+}
+
+function compareContainerImageState(options: {
+  container: DockerContainerInfo;
+  desiredImage: string;
+  desiredImageState?: DockerResolvedImageState | null;
+}): ContainerImageComparison {
+  const currentImageId = getContainerRuntimeImageId(options.container);
+  const desiredImageId = trimToken(options.desiredImageState?.imageId);
+  if (currentImageId && desiredImageId) {
+    return {
+      drift: currentImageId !== desiredImageId,
+      comparable: true,
+    };
+  }
+
+  const currentDigest = digestValue(getContainerRecordedImageDigest(options.container));
+  const desiredDigest = digestValue(options.desiredImageState?.repoDigest);
+  if (currentDigest && desiredDigest) {
+    return {
+      drift: currentDigest !== desiredDigest,
+      comparable: true,
+    };
+  }
+
+  const currentImage = getContainerConfiguredImage(options.container, options.desiredImage);
+  if (!currentImage) {
+    return { drift: false, comparable: false };
+  }
+
+  return {
+    drift: currentImage !== options.desiredImage,
+    comparable: currentImage !== options.desiredImage,
+  };
 }
 
 function getContainerAccessToken(container: DockerContainerInfo): string | null {
@@ -269,6 +390,7 @@ function isStoppedContainer(
 function resolveContainerReconcileState(options: {
   container: DockerContainerInfo;
   desiredImage: string;
+  desiredImageState?: DockerResolvedImageState | null;
   desiredAccessToken?: string | null;
   desiredNanoCpus: number;
   desiredMemoryBytes: number;
@@ -282,7 +404,11 @@ function resolveContainerReconcileState(options: {
   const accessToken =
     currentToken || desiredToken || options.generateStudioAccessToken();
 
-  const currentImage = getContainerConfiguredImage(options.container, options.desiredImage);
+  const imageComparison = compareContainerImageState({
+    container: options.container,
+    desiredImage: options.desiredImage,
+    desiredImageState: options.desiredImageState,
+  });
   const currentEnv = getContainerEnv(options.container);
   const currentNanoCpus = options.container.HostConfig?.NanoCpus || 0;
   const currentMemory = options.container.HostConfig?.Memory || 0;
@@ -296,7 +422,7 @@ function resolveContainerReconcileState(options: {
   return {
     accessToken,
     needs: {
-      image: currentImage !== options.desiredImage,
+      image: imageComparison.drift,
       resources:
         currentNanoCpus !== options.desiredNanoCpus ||
         currentMemory !== options.desiredMemoryBytes,
@@ -353,6 +479,16 @@ function isContainerNetworkingSetupError(error: unknown): boolean {
   );
 }
 
+function isContainerPortConflictError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("port is already allocated") ||
+    normalized.includes("bind for 0.0.0.0:") ||
+    normalized.includes("address already in use")
+  );
+}
+
 function getContainerCreatedAt(container: DockerContainerInfo): string | null {
   const raw = trimToken(container.Created);
   return raw || null;
@@ -364,53 +500,6 @@ function getContainerUpdatedAt(container: DockerContainerInfo): string | null {
   const finishedAt = trimToken(container.State?.FinishedAt);
   if (finishedAt && finishedAt !== "0001-01-01T00:00:00Z") return finishedAt;
   return getContainerCreatedAt(container);
-}
-
-function summaryFromContainer(options: {
-  container: DockerContainerInfo;
-  desiredImage: string;
-  routePath: string | null;
-  url: string | null;
-  runtimeUrl: string | null;
-  compatibilityUrl: string | null;
-  cpuKind: string;
-}): StudioMachineSummary {
-  const identity = getContainerIdentity(options.container);
-  if (!identity) {
-    throw new Error(
-      `[DockerMachines] Refusing to summarize non-studio container ${options.container.Id}`,
-    );
-  }
-
-  const configuredImage = getContainerConfiguredImage(
-    options.container,
-    options.desiredImage,
-  );
-  const nanoCpus = options.container.HostConfig?.NanoCpus || 0;
-  const memoryBytes = options.container.HostConfig?.Memory || 0;
-
-  return {
-    id: options.container.Id,
-    name: getContainerName(options.container),
-    state: mapContainerState(options.container),
-    region: null,
-    cpuKind: nanoCpus > 0 || memoryBytes > 0 ? options.cpuKind : null,
-    cpus: nanoCpus > 0 ? nanoCpus / 1_000_000_000 : null,
-    memoryMb: memoryBytes > 0 ? Math.round(memoryBytes / (1024 * 1024)) : null,
-    organizationId: identity.organizationId,
-    projectSlug: identity.projectSlug,
-    version: identity.version,
-    externalPort: getContainerExternalPort(options.container),
-    routePath: options.routePath,
-    url: options.url,
-    runtimeUrl: options.runtimeUrl,
-    compatibilityUrl: options.compatibilityUrl,
-    image: configuredImage,
-    desiredImage: options.desiredImage,
-    imageOutdated: !!configuredImage && configuredImage !== options.desiredImage,
-    createdAt: getContainerCreatedAt(options.container),
-    updatedAt: getContainerUpdatedAt(options.container),
-  };
 }
 
 function findContainer(
@@ -436,6 +525,7 @@ function createContainerSpec(options: {
   studioId: string;
   accessToken: string;
   desiredImage: string;
+  desiredImageState?: DockerResolvedImageState | null;
   routeId: string;
   externalPort: number;
   env: Record<string, string>;
@@ -450,9 +540,22 @@ function createContainerSpec(options: {
     vivd_project_version: String(options.args.version),
     vivd_studio_id: options.studioId,
     vivd_external_port: String(options.externalPort),
-    vivd_image: options.desiredImage,
+    [STUDIO_IMAGE_REF_LABEL]:
+      options.desiredImageState?.requestedRef || options.desiredImage,
     vivd_route_id: options.routeId,
     vivd_created_at: new Date().toISOString(),
+    ...(options.desiredImageState?.imageId
+      ? { [STUDIO_IMAGE_ID_LABEL]: options.desiredImageState.imageId }
+      : {}),
+    ...(options.desiredImageState?.repoDigest
+      ? { [STUDIO_IMAGE_DIGEST_LABEL]: options.desiredImageState.repoDigest }
+      : {}),
+    ...(options.desiredImageState?.versionLabel
+      ? { [STUDIO_IMAGE_VERSION_LABEL]: options.desiredImageState.versionLabel }
+      : {}),
+    ...(options.desiredImageState?.revisionLabel
+      ? { [STUDIO_IMAGE_REVISION_LABEL]: options.desiredImageState.revisionLabel }
+      : {}),
   };
 
   return {
@@ -503,6 +606,11 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   private idleCleanupInterval: NodeJS.Timeout | null = null;
   private lastActivityByStudioKey = new Map<string, number>();
   private idleStopInFlight = new Set<string>();
+  private desiredImageStateCache:
+    | { requestedRef: string; state: DockerResolvedImageState; fetchedAt: number }
+    | null = null;
+  private desiredImageStateInflight: Promise<DockerResolvedImageState> | null = null;
+  private desiredImageStateInflightRef: string | null = null;
 
   constructor() {
     if (this.config.idleTimeoutMs > 0) {
@@ -520,14 +628,14 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     if (this.config.reconcilerIntervalMs <= 0) return;
 
     this.reconcilerInterval = setInterval(() => {
-      void this.reconcileStudioMachines().catch((err) => {
+      void this.reconcileStudioMachines({ forceRefreshDesiredImage: true }).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(`[DockerMachines] Reconciler failed: ${message}`);
       });
     }, this.config.reconcilerIntervalMs);
     this.reconcilerInterval.unref?.();
 
-    void this.reconcileStudioMachines().catch((err) => {
+    void this.reconcileStudioMachines({ forceRefreshDesiredImage: true }).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[DockerMachines] Reconciler failed: ${message}`);
     });
@@ -535,19 +643,162 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
 
   invalidateDesiredImageCache(): void {
     this.imageResolver.invalidateDesiredImageCache();
+    this.desiredImageStateCache = null;
+    this.desiredImageStateInflight = null;
+    this.desiredImageStateInflightRef = null;
   }
 
   async getDesiredImage(options?: { forceRefresh?: boolean }): Promise<string> {
     return await this.imageResolver.getDesiredImage(options);
   }
 
+  private async inspectImageSafe(imageRefOrId: string): Promise<DockerImageInfo | null> {
+    try {
+      return await this.apiClient.inspectImage(imageRefOrId);
+    } catch {
+      return null;
+    }
+  }
+
+  private buildResolvedImageState(options: {
+    requestedRef: string;
+    image: DockerImageInfo;
+    source: Exclude<DockerResolvedImageState["source"], "cached" | "unknown">;
+  }): DockerResolvedImageState {
+    return {
+      requestedRef: options.requestedRef,
+      imageId: trimToken(options.image.Id),
+      repoDigest: selectRepoDigestForRef(
+        options.image.RepoDigests,
+        options.requestedRef,
+      ),
+      versionLabel: getImageLabel(options.image, OCI_IMAGE_VERSION_LABEL),
+      revisionLabel: getImageLabel(options.image, OCI_IMAGE_REVISION_LABEL),
+      source: options.source,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  private async tryRefreshDesiredImage(imageRef: string): Promise<boolean> {
+    if (!isLikelyRemoteImageReference(imageRef)) return false;
+    try {
+      await this.ensureImageAvailableForCreate(imageRef);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[DockerMachines] Failed to refresh desired image ${imageRef}: ${message}`,
+      );
+      return false;
+    }
+  }
+
+  private async getDesiredImageStateForRef(
+    imageRef: string,
+    options: { forceRefresh?: boolean; preferPull?: boolean } = {},
+  ): Promise<DockerResolvedImageState> {
+    const forceRefresh = options.forceRefresh === true;
+    const preferPull = options.preferPull === true;
+    const now = Date.now();
+    const refreshMs = 300_000;
+
+    if (
+      !forceRefresh &&
+      this.desiredImageStateCache?.requestedRef === imageRef &&
+      now - this.desiredImageStateCache.fetchedAt < refreshMs
+    ) {
+      return {
+        ...this.desiredImageStateCache.state,
+        source: "cached",
+      };
+    }
+
+    if (
+      this.desiredImageStateInflight &&
+      this.desiredImageStateInflightRef === imageRef
+    ) {
+      return await this.desiredImageStateInflight;
+    }
+
+    const promise = (async () => {
+      const pulled = preferPull
+        ? await this.tryRefreshDesiredImage(imageRef)
+        : false;
+      const inspected = await this.inspectImageSafe(imageRef);
+
+      if (inspected) {
+        const state = this.buildResolvedImageState({
+          requestedRef: imageRef,
+          image: inspected,
+          source: pulled ? "pulled" : "local",
+        });
+        this.desiredImageStateCache = {
+          requestedRef: imageRef,
+          state,
+          fetchedAt: Date.now(),
+        };
+        return state;
+      }
+
+      const unknownState: DockerResolvedImageState = {
+        requestedRef: imageRef,
+        imageId: null,
+        repoDigest: null,
+        versionLabel: null,
+        revisionLabel: null,
+        source: "unknown",
+        checkedAt: new Date().toISOString(),
+      };
+      this.desiredImageStateCache = {
+        requestedRef: imageRef,
+        state: unknownState,
+        fetchedAt: Date.now(),
+      };
+      return unknownState;
+    })().finally(() => {
+      if (this.desiredImageStateInflightRef === imageRef) {
+        this.desiredImageStateInflight = null;
+        this.desiredImageStateInflightRef = null;
+      }
+    });
+
+    this.desiredImageStateInflight = promise;
+    this.desiredImageStateInflightRef = imageRef;
+    return await promise;
+  }
+
   private touchKey(studioKey: string): void {
     this.lastActivityByStudioKey.set(studioKey, Date.now());
   }
 
+  private async getReservedPublicPorts(): Promise<Set<number>> {
+    const reservedPorts = new Set<number>();
+
+    try {
+      const containers = await this.apiClient.listContainers();
+      for (const container of containers) {
+        if (!getContainerIdentity(container)) continue;
+        const port = getContainerExternalPort(container);
+        if (port) reservedPorts.add(port);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[DockerMachines] Failed to read reserved public ports from Docker; falling back to bind checks only: ${message}`,
+      );
+    }
+
+    return reservedPorts;
+  }
+
   private async allocatePublicPort(): Promise<number> {
+    const reservedPorts = await this.getReservedPublicPorts();
+
     for (let attempt = 0; attempt < 200; attempt++) {
       const port = this.nextPublicPort++;
+      if (reservedPorts.has(port)) {
+        continue;
+      }
       if (await isPortAvailable(port, "0.0.0.0")) {
         return port;
       }
@@ -763,6 +1014,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   private async createFreshContainer(options: {
     args: StudioMachineStartArgs;
     desiredImage: string;
+    desiredImageState?: DockerResolvedImageState | null;
     preferredAccessToken?: string | null;
     preserveStudioIdFrom?: DockerContainerInfo | null;
     preserveExternalPortFrom?: DockerContainerInfo | null;
@@ -776,11 +1028,8 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       getContainerAccessToken(options.preserveStudioIdFrom || ({} as DockerContainerInfo)) ||
       this.config.generateStudioAccessToken();
     const externalPort =
-      getContainerExternalPort(
-        options.preserveExternalPortFrom ||
-          options.preserveStudioIdFrom ||
-          ({} as DockerContainerInfo),
-      ) || (await this.allocatePublicPort());
+      getContainerExternalPort(options.preserveExternalPortFrom || ({} as DockerContainerInfo)) ||
+      (await this.allocatePublicPort());
     const routeId = this.config.routeIdFor(
       options.args.organizationId,
       options.args.projectSlug,
@@ -792,11 +1041,15 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       studioId,
       accessToken,
     });
+    const desiredImageState =
+      options.desiredImageState ||
+      (await this.getDesiredImageStateForRef(options.desiredImage));
     const spec = createContainerSpec({
       args: options.args,
       studioId,
       accessToken,
       desiredImage: options.desiredImage,
+      desiredImageState,
       routeId,
       externalPort,
       env,
@@ -854,16 +1107,20 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     existing: DockerContainerInfo;
     args: StudioMachineStartArgs;
     desiredImage: string;
+    desiredImageState?: DockerResolvedImageState | null;
     preferredAccessToken?: string | null;
+    preserveExternalPort?: boolean;
   }): Promise<DockerContainerInfo> {
     await this.stopContainerIfRunning(options.existing);
     await this.apiClient.removeContainer(options.existing.Id);
     return await this.createFreshContainer({
       args: options.args,
       desiredImage: options.desiredImage,
+      desiredImageState: options.desiredImageState,
       preferredAccessToken: options.preferredAccessToken,
       preserveStudioIdFrom: options.existing,
-      preserveExternalPortFrom: options.existing,
+      preserveExternalPortFrom:
+        options.preserveExternalPort === false ? null : options.existing,
     });
   }
 
@@ -902,7 +1159,9 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           existing: container,
           args,
           desiredImage,
+          desiredImageState: await this.getDesiredImageStateForRef(desiredImage),
           preferredAccessToken: accessToken,
+          preserveExternalPort: !isContainerPortConflictError(error),
         });
         return await this.ensureContainerRunning(
           args,
@@ -919,6 +1178,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       ? this.config.getPublicUrlForPort(externalPort)
       : null;
     const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
+    const backendUrl = this.config.getInternalProxyUrlForRoutePath(routePath);
 
     await this.waitForReady({
       containerId: container.Id,
@@ -930,6 +1190,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     return {
       studioId: getContainerStudioId(container, args.env.STUDIO_ID),
       url: runtimeUrl ?? compatibilityUrl,
+      backendUrl,
       runtimeUrl,
       compatibilityUrl,
       accessToken,
@@ -1018,11 +1279,13 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       args.version,
     );
     const desiredImage = await this.getDesiredImage();
+    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage);
 
     if (!existing) {
       const created = await this.createFreshContainer({
         args,
         desiredImage,
+        desiredImageState,
       });
       const accessToken = getContainerAccessToken(created);
       if (!accessToken) {
@@ -1054,6 +1317,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     let reconcileState = resolveContainerReconcileState({
       container: inspected,
       desiredImage,
+      desiredImageState,
       desiredNanoCpus: this.config.nanoCpus,
       desiredMemoryBytes: this.config.memoryBytes,
       desiredNetworkName,
@@ -1072,11 +1336,13 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           existing: inspected,
           args,
           desiredImage,
+          desiredImageState,
           preferredAccessToken: reconcileState.accessToken,
         });
         reconcileState = resolveContainerReconcileState({
           container: inspected,
           desiredImage,
+          desiredImageState,
           desiredNanoCpus: this.config.nanoCpus,
           desiredMemoryBytes: this.config.memoryBytes,
           desiredNetworkName,
@@ -1100,11 +1366,13 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         existing: inspected,
         args,
         desiredImage,
+        desiredImageState,
         preferredAccessToken: reconcileState.accessToken,
       });
       reconcileState = resolveContainerReconcileState({
         container: inspected,
         desiredImage,
+        desiredImageState,
         desiredNanoCpus: this.config.nanoCpus,
         desiredMemoryBytes: this.config.memoryBytes,
         desiredNetworkName,
@@ -1157,6 +1425,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       args.version,
     );
     const desiredImage = await this.getDesiredImage();
+    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage);
 
     let container: DockerContainerInfo;
     if (existing) {
@@ -1164,11 +1433,13 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         existing: await this.inspectContainer(existing.Id),
         args,
         desiredImage,
+        desiredImageState,
       });
     } else {
       container = await this.createFreshContainer({
         args,
         desiredImage,
+        desiredImageState,
       });
     }
 
@@ -1240,9 +1511,11 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       ? this.config.getPublicUrlForPort(externalPort)
       : null;
     const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
+    const backendUrl = this.config.getInternalProxyUrlForRoutePath(routePath);
     return {
       studioId: getContainerStudioId(inspected, null),
       url: runtimeUrl ?? compatibilityUrl,
+      backendUrl,
       runtimeUrl,
       compatibilityUrl,
       accessToken,
@@ -1299,10 +1572,129 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     return null;
   }
 
+  private async getRuntimeImageMetadata(options: {
+    container: DockerContainerInfo;
+    runtimeImageCache: Map<string, Promise<DockerImageInfo | null>>;
+  }): Promise<{
+    imageId: string | null;
+    imageDigest: string | null;
+    imageVersion: string | null;
+    imageRevision: string | null;
+  }> {
+    const labels = getContainerLabels(options.container);
+    const imageId = getContainerRuntimeImageId(options.container);
+    let imageDigest = trimToken(labels[STUDIO_IMAGE_DIGEST_LABEL]);
+    let imageVersion = trimToken(labels[STUDIO_IMAGE_VERSION_LABEL]);
+    let imageRevision = trimToken(labels[STUDIO_IMAGE_REVISION_LABEL]);
+
+    if ((!imageDigest || !imageVersion || !imageRevision) && imageId) {
+      let inspectPromise = options.runtimeImageCache.get(imageId);
+      if (!inspectPromise) {
+        inspectPromise = this.inspectImageSafe(imageId);
+        options.runtimeImageCache.set(imageId, inspectPromise);
+      }
+
+      const inspected = await inspectPromise;
+      if (inspected) {
+        if (!imageDigest) {
+          imageDigest = selectRepoDigestForRef(
+            inspected.RepoDigests,
+            getContainerConfiguredImage(options.container) || imageId,
+          );
+        }
+        if (!imageVersion) {
+          imageVersion = getImageLabel(inspected, OCI_IMAGE_VERSION_LABEL);
+        }
+        if (!imageRevision) {
+          imageRevision = getImageLabel(inspected, OCI_IMAGE_REVISION_LABEL);
+        }
+      }
+    }
+
+    return {
+      imageId,
+      imageDigest,
+      imageVersion,
+      imageRevision,
+    };
+  }
+
+  private async buildContainerSummary(options: {
+    container: DockerContainerInfo;
+    desiredImageState: DockerResolvedImageState;
+    routePath: string | null;
+    url: string | null;
+    runtimeUrl: string | null;
+    compatibilityUrl: string | null;
+    cpuKind: string;
+    runtimeImageCache: Map<string, Promise<DockerImageInfo | null>>;
+  }): Promise<StudioMachineSummary> {
+    const identity = getContainerIdentity(options.container);
+    if (!identity) {
+      throw new Error(
+        `[DockerMachines] Refusing to summarize non-studio container ${options.container.Id}`,
+      );
+    }
+
+    const configuredImage = getContainerConfiguredImage(
+      options.container,
+      options.desiredImageState.requestedRef,
+    );
+    const imageComparison = compareContainerImageState({
+      container: options.container,
+      desiredImage: options.desiredImageState.requestedRef,
+      desiredImageState: options.desiredImageState,
+    });
+    const runtimeImage = await this.getRuntimeImageMetadata({
+      container: options.container,
+      runtimeImageCache: options.runtimeImageCache,
+    });
+    const nanoCpus = options.container.HostConfig?.NanoCpus || 0;
+    const memoryBytes = options.container.HostConfig?.Memory || 0;
+
+    return {
+      id: options.container.Id,
+      name: getContainerName(options.container),
+      state: mapContainerState(options.container),
+      region: null,
+      cpuKind: nanoCpus > 0 || memoryBytes > 0 ? options.cpuKind : null,
+      cpus: nanoCpus > 0 ? nanoCpus / 1_000_000_000 : null,
+      memoryMb: memoryBytes > 0 ? Math.round(memoryBytes / (1024 * 1024)) : null,
+      organizationId: identity.organizationId,
+      projectSlug: identity.projectSlug,
+      version: identity.version,
+      externalPort: getContainerExternalPort(options.container),
+      routePath: options.routePath,
+      url: options.url,
+      runtimeUrl: options.runtimeUrl,
+      compatibilityUrl: options.compatibilityUrl,
+      image: configuredImage,
+      desiredImage: options.desiredImageState.requestedRef,
+      imageOutdated: imageComparison.drift,
+      imageStatus: imageComparison.drift
+        ? "outdated"
+        : imageComparison.comparable
+          ? "ok"
+          : "unknown",
+      imageId: runtimeImage.imageId,
+      imageDigest: runtimeImage.imageDigest,
+      imageVersion: runtimeImage.imageVersion,
+      imageRevision: runtimeImage.imageRevision,
+      desiredImageId: options.desiredImageState.imageId,
+      desiredImageDigest: options.desiredImageState.repoDigest,
+      desiredImageVersion: options.desiredImageState.versionLabel,
+      desiredImageRevision: options.desiredImageState.revisionLabel,
+      createdAt: getContainerCreatedAt(options.container),
+      updatedAt: getContainerUpdatedAt(options.container),
+    };
+  }
+
   async listStudioMachines(): Promise<StudioMachineSummary[]> {
     const desiredImage = await this.getDesiredImage();
+    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage);
     const containers = await this.apiClient.listContainers();
     const summaries: StudioMachineSummary[] = [];
+    const runtimeImageCache = new Map<string, Promise<DockerImageInfo | null>>();
 
     for (const container of containers) {
       const identity = getContainerIdentity(container);
@@ -1320,9 +1712,9 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       const running = isRunningContainer(inspected);
       const externalPort = getContainerExternalPort(inspected);
       summaries.push(
-        summaryFromContainer({
+        await this.buildContainerSummary({
           container: inspected,
-          desiredImage,
+          desiredImageState,
           routePath,
           url: running
             ? externalPort
@@ -1332,6 +1724,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           runtimeUrl: running && externalPort ? this.config.getPublicUrlForPort(externalPort) : null,
           compatibilityUrl: this.config.getPublicUrlForRoutePath(routePath),
           cpuKind: this.config.cpuKindLabel,
+          runtimeImageCache,
         }),
       );
     }
@@ -1381,11 +1774,16 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     const desiredImage = await this.getDesiredImage({
       forceRefresh: options?.forceRefreshDesiredImage === true,
     });
+    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage, {
+      forceRefresh: options?.forceRefreshDesiredImage === true,
+      preferPull: options?.forceRefreshDesiredImage === true,
+    });
     const desiredNetworkName = await this.resolveContainerNetworkName();
     await this.warmReconcileContainer({
       container,
       identity,
       desiredImage,
+      desiredImageState,
       desiredNetworkName,
     });
     return { desiredImage };
@@ -1419,6 +1817,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     container: DockerContainerInfo;
     identity: StudioIdentity;
     desiredImage: string;
+    desiredImageState: DockerResolvedImageState;
     desiredNetworkName: string;
   }): Promise<void> {
     const state = containerStateStatus(options.container);
@@ -1430,6 +1829,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     let reconcileState = resolveContainerReconcileState({
       container: options.container,
       desiredImage: options.desiredImage,
+      desiredImageState: options.desiredImageState,
       desiredNanoCpus: this.config.nanoCpus,
       desiredMemoryBytes: this.config.memoryBytes,
       desiredNetworkName: options.desiredNetworkName,
@@ -1450,6 +1850,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     reconcileState = resolveContainerReconcileState({
       container: options.container,
       desiredImage: options.desiredImage,
+      desiredImageState: options.desiredImageState,
       desiredAccessToken: reconcileState.accessToken,
       desiredNanoCpus: this.config.nanoCpus,
       desiredMemoryBytes: this.config.memoryBytes,
@@ -1480,6 +1881,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         env: {},
       },
       desiredImage: options.desiredImage,
+      desiredImageState: options.desiredImageState,
       preferredAccessToken: reconcileState.accessToken,
     });
     const accessToken = getContainerAccessToken(recreated);
@@ -1529,6 +1931,10 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   }): Promise<StudioMachineReconcileResult> {
     const desiredImage = await this.getDesiredImage({
       forceRefresh: options.forceRefreshDesiredImage,
+    });
+    const desiredImageState = await this.getDesiredImageStateForRef(desiredImage, {
+      forceRefresh: options.forceRefreshDesiredImage,
+      preferPull: options.forceRefreshDesiredImage,
     });
     const containers = await this.apiClient.listContainers();
     const desiredNetworkName = await this.resolveContainerNetworkName();
@@ -1599,6 +2005,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         const reconcileState = resolveContainerReconcileState({
           container: inspected,
           desiredImage,
+          desiredImageState,
           desiredNanoCpus: this.config.nanoCpus,
           desiredMemoryBytes: this.config.memoryBytes,
           desiredNetworkName,
@@ -1620,6 +2027,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
             container: inspected,
             identity,
             desiredImage,
+            desiredImageState,
             desiredNetworkName,
           });
           result.warmedOutdatedImages++;

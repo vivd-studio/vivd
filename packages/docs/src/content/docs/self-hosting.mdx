@@ -258,6 +258,11 @@ docker compose pull
 docker compose up -d
 ```
 
+If you are using the hosted solo self-host bundle, `Instance Settings -> General`
+also shows the currently running Vivd version in the UI. When that bundle is
+mounted with its managed updater path, the same page can trigger the equivalent
+bundle update flow for you from the browser.
+
 If a newer release changes the published bundle files themselves, compare your current files with the latest public bundle assets and merge those changes manually:
 
 - [docker-compose.yml](/install/docker-compose.yml)

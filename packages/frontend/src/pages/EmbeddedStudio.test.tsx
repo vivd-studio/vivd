@@ -446,59 +446,30 @@ describe("EmbeddedStudio", () => {
     });
   });
 
-  it("posts the initial-generation bootstrap message once after studio is ready", () => {
-    const postMessage = vi.fn();
-    const contentWindowMock = { postMessage };
+  it("forwards the requested initial session id into the embedded studio URL", () => {
     useLocationMock.mockReturnValue({
-      search: "?view=studio&version=1&initialGeneration=1",
+      search: "?view=studio&version=1&initialGeneration=1&sessionId=sess-1",
     });
     getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
-        url: "https://app.example.com/_studio/route-1",
-        runtimeUrl: "https://studio.example.com/runtime",
-        compatibilityUrl: "https://app.example.com/_studio/route-1",
+        url: "https://studio.example.com/runtime",
         bootstrapToken: null,
-      },
-    });
-
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
-      configurable: true,
-      get() {
-        return contentWindowMock;
       },
     });
 
     renderEmbeddedStudio();
 
-    screen.getByTitle("Vivd Studio - site-1");
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: { type: "vivd:studio:ready" },
-          origin: "https://studio.example.com",
-          source: contentWindowMock as unknown as MessageEventSource,
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: { type: "vivd:studio:ready" },
-          origin: "https://studio.example.com",
-          source: contentWindowMock as unknown as MessageEventSource,
-        }),
-      );
-    });
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    const iframeUrl = new URL(iframe.getAttribute("src") ?? "");
+    expect(iframeUrl.searchParams.get("initialGeneration")).toBe("1");
+    expect(iframeUrl.searchParams.get("sessionId")).toBe("sess-1");
 
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "vivd:host:start-initial-generation" }),
-      "https://studio.example.com",
-    );
-    expect(
-      postMessage.mock.calls.filter(
-        ([message]) =>
-          message?.type === "vivd:host:start-initial-generation",
-      ),
-    ).toHaveLength(1);
+    const returnTo = iframeUrl.searchParams.get("returnTo");
+    expect(returnTo).toBeTruthy();
+    const returnToUrl = new URL(returnTo!);
+    expect(returnToUrl.searchParams.get("initialGeneration")).toBe("1");
+    expect(returnToUrl.searchParams.get("sessionId")).toBe("sess-1");
   });
 
   it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", () => {
@@ -833,12 +804,13 @@ describe("EmbeddedStudio", () => {
     }
   });
 
-  it("replays initial generation even when a stale session bootstrap flag exists", () => {
-    const postMessage = vi.fn();
-    const contentWindowMock = { postMessage };
+  it("preserves the requested initial session id when switching to fullscreen", () => {
+    const navigateMock = vi.fn();
+    const contentWindowMock = { postMessage: vi.fn() };
     useLocationMock.mockReturnValue({
-      search: "?view=studio&version=1&initialGeneration=1",
+      search: "?view=studio&version=1&initialGeneration=1&sessionId=sess-1",
     });
+    useNavigateMock.mockReturnValue(navigateMock);
     getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
@@ -846,10 +818,6 @@ describe("EmbeddedStudio", () => {
         bootstrapToken: null,
       },
     });
-    window.sessionStorage.setItem(
-      "vivd.initialGenerationBootstrapped:site-1:v1",
-      "1",
-    );
 
     Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
       configurable: true,
@@ -863,18 +831,15 @@ describe("EmbeddedStudio", () => {
     act(() => {
       window.dispatchEvent(
         new MessageEvent("message", {
-          data: { type: "vivd:studio:ready" },
+          data: { type: "vivd:studio:fullscreen" },
           origin: "https://studio.example.com",
           source: contentWindowMock as unknown as MessageEventSource,
         }),
       );
     });
 
-    expect(
-      postMessage.mock.calls.filter(
-        ([message]) =>
-          message?.type === "vivd:host:start-initial-generation",
-      ),
-    ).toHaveLength(1);
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/vivd-studio/projects/site-1/studio-fullscreen?version=1&initialGeneration=1&sessionId=sess-1",
+    );
   });
 });

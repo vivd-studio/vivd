@@ -23,6 +23,7 @@ type UseOpencodeChatControllerArgs = {
   projectSlug: string;
   version?: number;
   selectedModel: ControllerModel;
+  initialSelectedSessionId?: string | null;
   onTaskComplete?: () => void;
 };
 
@@ -38,6 +39,7 @@ export function useOpencodeChatController({
   projectSlug,
   version,
   selectedModel,
+  initialSelectedSessionId,
   onTaskComplete,
 }: UseOpencodeChatControllerArgs) {
   const opencodeChat = useOpencodeChat();
@@ -539,6 +541,7 @@ export function useOpencodeChatController({
 
   useEffect(() => {
     if (
+      initialSelectedSessionId ||
       selectedSessionId ||
       autoSelectLockedRef.current ||
       hasAutoSelectedRunningSessionRef.current ||
@@ -555,20 +558,21 @@ export function useOpencodeChatController({
     providerSetSelectedSessionId(attentionSessionId);
   }, [
     attentionSessionId,
+    initialSelectedSessionId,
     providerSetSelectedSessionId,
     selectedSessionId,
   ]);
 
   useEffect(() => {
-    providerSetSelectedSessionId(null);
+    providerSetSelectedSessionId(initialSelectedSessionId ?? null);
     setLocalSessionError(null);
     setDismissedDerivedErrorKey(null);
     setIsSending(false);
-    autoSelectLockedRef.current = false;
+    autoSelectLockedRef.current = Boolean(initialSelectedSessionId);
     hasAutoSelectedRunningSessionRef.current = false;
     activeRunSessionIdRef.current = null;
     pendingSessionStartRef.current = null;
-  }, [projectSlug, providerSetSelectedSessionId]);
+  }, [initialSelectedSessionId, projectSlug, providerSetSelectedSessionId]);
 
   useEffect(() => {
     setLocalSessionError(null);

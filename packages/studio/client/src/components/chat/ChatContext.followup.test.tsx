@@ -25,9 +25,10 @@ const {
   startInitialGenerationMock: vi.fn(),
   previewState: {
     initialGenerationRequested: false,
+    requestedInitialSessionId: null as string | null,
     pendingChatMessage: null as
       | {
-          kind?: "task" | "initialGeneration";
+          kind?: "task";
           message: string;
           startNewSession?: boolean;
         }
@@ -141,6 +142,7 @@ describe("ChatProvider follow-up behavior", () => {
     stopGenerationMock.mockReset();
     startInitialGenerationMock.mockReset();
     previewState.initialGenerationRequested = false;
+    previewState.requestedInitialSessionId = null;
     previewState.pendingChatMessage = null;
     previewState.clearPendingChatMessage.mockReset();
     previewState.clearPendingChatMessage.mockImplementation(() => {
@@ -377,7 +379,7 @@ describe("ChatProvider follow-up behavior", () => {
     expect(latestContext!.queuedFollowups).toEqual([]);
   });
 
-  it("falls back to auto-start initial generation when the host bridge message is missed", async () => {
+  it("does not auto-start initial generation when the session was already started by the backend", async () => {
     controllerState.selectedSessionId = null;
     controllerState.sessions = [];
     controllerState.sessionsLoading = false;
@@ -392,17 +394,12 @@ describe("ChatProvider follow-up behavior", () => {
     );
 
     await waitFor(() => {
-      expect(startInitialGenerationMock).toHaveBeenCalledWith({
-        projectSlug: "site-1",
-        version: 1,
-        model: undefined,
-      });
+      expect(latestContext?.initialGenerationRequested).toBe(true);
     });
-
-    expect(controllerState.setSelectedSessionId).toHaveBeenCalledWith("sess-new");
+    expect(startInitialGenerationMock).not.toHaveBeenCalled();
   });
 
-  it("passes the default standard model through when initial generation starts with models loaded", async () => {
+  it("passes the default standard model through when initial generation is retried manually", async () => {
     availableModelsState.data = [
       {
         tier: "standard",
@@ -429,6 +426,10 @@ describe("ChatProvider follow-up behavior", () => {
         <CaptureContext />
       </ChatProvider>,
     );
+
+    await act(async () => {
+      latestContext!.retryInitialGeneration();
+    });
 
     await waitFor(() => {
       expect(startInitialGenerationMock).toHaveBeenCalledWith({
@@ -441,57 +442,6 @@ describe("ChatProvider follow-up behavior", () => {
       });
     });
     expect(latestContext?.selectedModel?.modelId).toBe("gpt-4.1-mini");
-  });
-
-  it("keeps the displayed model aligned with the default initial-generation request when models arrive late", async () => {
-    window.localStorage.setItem(
-      "vivd-selected-model",
-      JSON.stringify({ provider: "openai", modelId: "gpt-4.1" }),
-    );
-    controllerState.selectedSessionId = null;
-    controllerState.sessions = [];
-    controllerState.sessionsLoading = false;
-    controllerState.isSessionHydrating = false;
-    previewState.initialGenerationRequested = true;
-    previewState.pendingChatMessage = null;
-
-    const view = render(
-      <ChatProvider projectSlug="site-1" version={1}>
-        <CaptureContext />
-      </ChatProvider>,
-    );
-
-    await waitFor(() => {
-      expect(startInitialGenerationMock).toHaveBeenCalledWith({
-        projectSlug: "site-1",
-        version: 1,
-        model: undefined,
-      });
-    });
-
-    availableModelsState.data = [
-      {
-        tier: "standard",
-        provider: "openai",
-        modelId: "gpt-4.1-mini",
-        label: "Standard",
-      },
-      {
-        tier: "advanced",
-        provider: "openai",
-        modelId: "gpt-4.1",
-        label: "Advanced",
-      },
-    ];
-    view.rerender(
-      <ChatProvider projectSlug="site-1" version={1}>
-        <CaptureContext />
-      </ChatProvider>,
-    );
-
-    await waitFor(() => {
-      expect(latestContext?.selectedModel?.modelId).toBe("gpt-4.1-mini");
-    });
   });
 
   it("pauses auto-send after stop until a queued follow-up is sent manually", async () => {
@@ -550,40 +500,4 @@ describe("ChatProvider follow-up behavior", () => {
     });
   });
 
-  it("keeps a pending initial-generation bootstrap until chat is ready to consume it", async () => {
-    controllerState.runTaskPending = true;
-    previewState.initialGenerationRequested = true;
-    previewState.pendingChatMessage = {
-      kind: "initialGeneration",
-      message: "",
-      startNewSession: true,
-    };
-
-    const view = render(
-      <ChatProvider projectSlug="site-1" version={1}>
-        <CaptureContext />
-      </ChatProvider>,
-    );
-
-    expect(startInitialGenerationMock).not.toHaveBeenCalled();
-    expect(previewState.clearPendingChatMessage).not.toHaveBeenCalled();
-    expect(previewState.pendingChatMessage).not.toBeNull();
-
-    controllerState.runTaskPending = false;
-    view.rerender(
-      <ChatProvider projectSlug="site-1" version={1}>
-        <CaptureContext />
-      </ChatProvider>,
-    );
-
-    await waitFor(() => {
-      expect(startInitialGenerationMock).toHaveBeenCalledWith({
-        projectSlug: "site-1",
-        version: 1,
-        model: undefined,
-      });
-    });
-    expect(previewState.clearPendingChatMessage).toHaveBeenCalledTimes(1);
-    expect(previewState.pendingChatMessage).toBeNull();
-  });
 });

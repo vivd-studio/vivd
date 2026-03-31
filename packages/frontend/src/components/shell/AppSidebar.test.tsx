@@ -8,6 +8,7 @@ const {
   useAppConfigMock,
   useUtilsMock,
   projectListUseQueryMock,
+  getInstanceSoftwareUseQueryMock,
   getMyMembershipUseQueryMock,
   getMyOrganizationUseQueryMock,
   listMyOrganizationsUseQueryMock,
@@ -19,6 +20,7 @@ const {
   useAppConfigMock: vi.fn(),
   useUtilsMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
+  getInstanceSoftwareUseQueryMock: vi.fn(),
   getMyMembershipUseQueryMock: vi.fn(),
   getMyOrganizationUseQueryMock: vi.fn(),
   listMyOrganizationsUseQueryMock: vi.fn(),
@@ -43,6 +45,11 @@ vi.mock("@/lib/trpc", () => ({
     project: {
       list: {
         useQuery: projectListUseQueryMock,
+      },
+    },
+    superadmin: {
+      getInstanceSoftware: {
+        useQuery: getInstanceSoftwareUseQueryMock,
       },
     },
     organization: {
@@ -103,6 +110,7 @@ describe("AppSidebar search", () => {
     useAppConfigMock.mockReset();
     useUtilsMock.mockReset();
     projectListUseQueryMock.mockReset();
+    getInstanceSoftwareUseQueryMock.mockReset();
     getMyMembershipUseQueryMock.mockReset();
     getMyOrganizationUseQueryMock.mockReset();
     listMyOrganizationsUseQueryMock.mockReset();
@@ -213,6 +221,25 @@ describe("AppSidebar search", () => {
             updatedAt: "2026-02-24T05:00:00.000Z",
           },
         ],
+      },
+    });
+
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: {
+        currentVersion: "1.1.33",
+        currentRevision: "abc123def456",
+        currentImage: "ghcr.io/vivd-studio/vivd-server:1.1.33",
+        currentImageTag: "1.1.33",
+        latestVersion: "1.1.34",
+        latestTag: "1.1.34",
+        latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.34",
+        releaseStatus: "available",
+        managedUpdate: {
+          enabled: false,
+          reason: "Platform deployments stay deployment-managed for now.",
+          helperImage: null,
+          workdir: null,
+        },
       },
     });
 
@@ -386,6 +413,104 @@ describe("AppSidebar search", () => {
     renderSidebar({ path: `${ROUTES.SUPERADMIN_BASE}?section=email` });
 
     expect(screen.getByRole("link", { name: /^Email$/i })).toBeInTheDocument();
+  });
+
+  it("shows a subtle sidebar version indicator for super admins", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "platform",
+        instanceAdminLabel: "Super Admin",
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        controlPlaneMode: "host_based",
+        pluginRuntime: { mode: "dedicated_host" },
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: true,
+        controlPlaneHost: null,
+        isSuperAdminHost: true,
+      },
+    });
+
+    renderSidebar();
+
+    const link = screen.getByRole("link", {
+      name: "Vivd v1.1.33 · Update available (1.1.34)",
+    });
+
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute(
+      "href",
+      `${ROUTES.SUPERADMIN_BASE}?section=instance#instance-software`,
+    );
+    expect(screen.getByText("v1.1.33")).toBeInTheDocument();
+  });
+
+  it("keeps the sidebar version link visible when version metadata is unavailable", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "platform",
+        instanceAdminLabel: "Super Admin",
+        capabilities: {
+          multiOrg: true,
+          tenantHosts: true,
+          customDomains: true,
+          orgLimitOverrides: true,
+          orgPluginEntitlements: true,
+          projectPluginEntitlements: true,
+          dedicatedPluginHost: true,
+        },
+        controlPlaneMode: "host_based",
+        pluginRuntime: { mode: "dedicated_host" },
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: true,
+        controlPlaneHost: null,
+        isSuperAdminHost: true,
+      },
+    });
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: undefined,
+    });
+
+    renderSidebar();
+
+    const link = screen.getByRole("link", {
+      name: "Vivd version info unavailable",
+    });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute(
+      "href",
+      `${ROUTES.SUPERADMIN_BASE}?section=instance#instance-software`,
+    );
+    expect(screen.getByText("Version")).toBeInTheDocument();
   });
 
   it("shows instance-first navigation in solo profile", () => {

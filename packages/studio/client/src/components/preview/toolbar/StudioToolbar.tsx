@@ -89,9 +89,9 @@ export function StudioToolbar() {
     editMode,
     hasUnsavedChanges,
     toggleEditMode,
-    fullUrl,
     currentPreviewPath,
     handleCopy,
+    handleOpenPreviewUrl,
     handleRefresh,
     navigatePreviewPath,
     historyPanelOpen,
@@ -662,11 +662,11 @@ export function StudioToolbar() {
               projectSlug={projectSlug}
               selectedVersion={selectedVersion}
               previewMode={previewMode}
-              fullUrl={fullUrl}
               originalUrl={originalUrl}
               copied={copied}
               publicPreviewEnabled={publicPreviewEnabled}
               handleCopy={handleCopy}
+              handleOpenPreviewUrl={handleOpenPreviewUrl}
               handleRestartDevServer={handleRestartDevServer}
               isRestartingDevServer={isRestartingDevServer}
               devServerRestartKind={devServerRestartKind}
@@ -698,7 +698,6 @@ export function StudioToolbar() {
               projectSlug={projectSlug}
               selectedVersion={selectedVersion}
               originalUrl={originalUrl}
-              fullUrl={fullUrl}
               copied={copied}
               publicPreviewEnabled={publicPreviewEnabled}
               currentPreviewPath={currentPreviewPath}
@@ -714,6 +713,7 @@ export function StudioToolbar() {
               toggleEditMode={toggleEditMode}
               handleRefresh={handleRefresh}
               handleCopy={handleCopy}
+              handleOpenPreviewUrl={handleOpenPreviewUrl}
               setPublishDialogOpen={setPublishDialogOpen}
               setHistoryPanelOpen={setHistoryPanelOpen}
               hasGitChanges={hasGitChanges}
