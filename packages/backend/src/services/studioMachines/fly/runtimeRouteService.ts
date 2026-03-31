@@ -23,7 +23,9 @@ function reverseProxyBlock(targetBaseUrl: string, routePath: string): string {
       : "";
 
   return `reverse_proxy ${upstreamOrigin} {
-    header_up X-Forwarded-Prefix ${routePath}${transportBlock}
+    header_up X-Forwarded-Prefix ${routePath}
+    header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+    header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}${transportBlock}
 }`;
 }
 

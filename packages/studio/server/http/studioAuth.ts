@@ -60,18 +60,6 @@ export function getStudioUserActionToken(req: express.Request): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function isHttpsRequest(req: express.Request): boolean {
-  if (req.secure) return true;
-  const xfProto = req.headers[FORWARDED_PROTO_HEADER];
-  if (typeof xfProto === "string") {
-    return xfProto.split(",")[0]?.trim() === "https";
-  }
-  if (Array.isArray(xfProto) && typeof xfProto[0] === "string") {
-    return xfProto[0].split(",")[0]?.trim() === "https";
-  }
-  return false;
-}
-
 function getFirstHeaderValue(value: string | string[] | undefined): string {
   if (typeof value === "string") {
     return value.split(",")[0]?.trim() || "";
@@ -80,6 +68,18 @@ function getFirstHeaderValue(value: string | string[] | undefined): string {
     return value[0].split(",")[0]?.trim() || "";
   }
   return "";
+}
+
+function isHttpsRequest(req: express.Request): boolean {
+  if (req.secure) return true;
+
+  const forwardedProto = getFirstHeaderValue(req.headers[FORWARDED_PROTO_HEADER]);
+  if (forwardedProto === "https") return true;
+
+  const forwardedPort = getFirstHeaderValue(req.headers[FORWARDED_PORT_HEADER]);
+  if (forwardedPort === "443") return true;
+
+  return false;
 }
 
 function getHeaderValue(req: StudioAuthRequestLike, name: string): string {

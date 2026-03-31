@@ -52,6 +52,12 @@ describe("FlyRuntimeRouteService", () => {
     expect(content).toContain(
       "header_up X-Forwarded-Prefix /_studio/runtime-1",
     );
+    expect(content).toContain(
+      "header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}",
+    );
+    expect(content).toContain(
+      "header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}",
+    );
     expect(content).toContain("tls_server_name vivd-studio-prod.fly.dev");
   });
 

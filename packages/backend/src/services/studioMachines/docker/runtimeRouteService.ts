@@ -44,6 +44,8 @@ handle @${matcher} {
     uri strip_prefix ${routePath}
     reverse_proxy ${options.containerName}:${options.targetPort} {
         header_up X-Forwarded-Prefix ${routePath}
+        header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+        header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}
     }
 }
 `;

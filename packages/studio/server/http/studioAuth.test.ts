@@ -311,6 +311,25 @@ describe("resolveStudioBootstrapRedirectTarget", () => {
     ).toBe("/_studio/runtime-123/vivd-studio?embedded=1");
   });
 
+  it("treats forwarded port 443 as https even if an internal proxy rewrites forwarded proto to http", () => {
+    const req = createMockRequest({
+      headers: {
+        host: "vivd-studio-prod.fly.dev",
+        "x-forwarded-host": "vivd.studio",
+        "x-forwarded-port": "443",
+        "x-forwarded-proto": "http",
+        "x-forwarded-prefix": "/_studio/runtime-123",
+      },
+    });
+
+    expect(
+      resolveStudioBootstrapRedirectTarget(
+        req,
+        "https://vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
+      ),
+    ).toBe("/_studio/runtime-123/vivd-studio?embedded=1");
+  });
+
   it("rejects cross-origin redirect targets", () => {
     const req = createMockRequest({
       secure: true,
@@ -419,6 +438,37 @@ describe("createStudioBootstrapHandler", () => {
     req.body = {
       bootstrapToken,
       next: "https://felix-pahlke.vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
+    };
+    const res = createMockResponse();
+
+    handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(303);
+    expect(res.redirectedTo).toBe("/_studio/runtime-123/vivd-studio?embedded=1");
+  });
+
+  it("accepts hosted bootstrap posts when the internal proxy preserves port 443 but rewrites proto to http", () => {
+    const bootstrapToken = createStudioBootstrapToken({
+      accessToken: "studio-token",
+      studioId: "studio-1",
+    });
+    const handler = createStudioBootstrapHandler({
+      STUDIO_ACCESS_TOKEN: "studio-token",
+      STUDIO_ID: "studio-1",
+    } as any);
+    const req = createMockRequest({
+      path: "/vivd-studio/api/bootstrap",
+      headers: {
+        host: "vivd-studio-prod.fly.dev",
+        "x-forwarded-host": "vivd.studio",
+        "x-forwarded-port": "443",
+        "x-forwarded-proto": "http",
+        "x-forwarded-prefix": "/_studio/runtime-123",
+      },
+    });
+    req.body = {
+      bootstrapToken,
+      next: "https://vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
     };
     const res = createMockResponse();
 
