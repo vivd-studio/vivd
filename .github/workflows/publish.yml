@@ -243,6 +243,15 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Free runner port 80 for host smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
+          sudo systemctl stop apache2 2>/dev/null || true
+          sudo systemctl stop nginx 2>/dev/null || true
+          sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
+
       - name: Smoke test host-routed Docker machine-provider handoff
         env:
           STUDIO_IMAGE: vivd-studio:release-smoke

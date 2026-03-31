@@ -210,9 +210,12 @@ async function acquirePort80(env) {
     await ensurePortBindable(80);
     return [];
   } catch {
+    const portDescription = describeListeningPort(80);
     if (!canTakeOverPort80(env)) {
       throw new Error(
-        "Port 80 is already in use. Re-run with VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 to temporarily pause the local Caddy dev proxy during the smoke.",
+        `Port 80 is already in use. Re-run with VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 to temporarily pause the local Caddy dev proxy during the smoke.${
+          portDescription ? ` Current listener(s):\n${portDescription}` : ""
+        }`,
       );
     }
 

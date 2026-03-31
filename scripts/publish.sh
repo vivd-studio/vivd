@@ -9,6 +9,7 @@ CHECK_MODE="release"
 ALLOW_DIRTY=false
 DRY_RUN=false
 TAG_INPUT=""
+RUN_LOCAL_HOST_SMOKE=false
 
 print_usage() {
   cat <<'EOF'
@@ -25,12 +26,15 @@ Options:
   --remote <name>        Git remote to push the tag to. Default: origin
   --allow-dirty          Allow tagging from a dirty worktree. Not recommended.
   --dry-run              Run checks and validations, but do not create or push the tag.
+  --run-host-smoke       Also run the local Docker-provider host/browser smoke.
+                         This is opt-in locally because it may need to take over port 80.
   -h, --help             Show this help.
 
 Examples:
   ./scripts/publish.sh 1.1.10
   ./scripts/publish.sh v1.1.10
   ./scripts/publish.sh --check-mode ci-local 1.1.10
+  ./scripts/publish.sh --run-host-smoke 1.1.10
   ./scripts/publish.sh --dry-run --allow-dirty 1.1.10
 EOF
 }
@@ -107,15 +111,20 @@ run_release_preflight() {
   run_step \
     "Backend Studio runtime regressions" \
     npm run test:run --workspace=@vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_lifecycle.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts
-  run_step \
-    "Build vivd-studio local host-smoke image" \
-    docker build --file packages/studio/Dockerfile --target prod --tag vivd-studio:publish-host-smoke .
-  run_step \
-    "Install Playwright Chromium" \
-    npx playwright install chromium
-  run_step \
-    "Studio Docker-provider host smoke" \
-    env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 npm run studio:host-smoke
+  if [[ "$RUN_LOCAL_HOST_SMOKE" == "true" ]]; then
+    run_step \
+      "Build vivd-studio local host-smoke image" \
+      docker build --file packages/studio/Dockerfile --target prod --tag vivd-studio:publish-host-smoke .
+    run_step \
+      "Install Playwright Chromium" \
+      npx playwright install chromium
+    run_step \
+      "Studio Docker-provider host smoke" \
+      env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 npm run studio:host-smoke
+  else
+    echo
+    echo "==> Local host/browser smoke skipped (use --run-host-smoke to enable it manually)"
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -142,6 +151,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=true
+      shift
+      ;;
+    --run-host-smoke)
+      RUN_LOCAL_HOST_SMOKE=true
       shift
       ;;
     -h|--help)
