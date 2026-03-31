@@ -277,11 +277,19 @@ export type WaitForReadyOptions = {
   timeoutMs: number;
 };
 
+export function getDirectContainerBaseUrl(
+  container: DockerContainerInfo | DockerContainerSummary,
+): string | null {
+  const containerName = getContainerName(container);
+  if (!containerName) return null;
+  return `http://${containerName}:${STUDIO_INTERNAL_PORT}`;
+}
+
 export async function waitForReadyWorkflow(deps: {
   inspectContainer: (containerId: string) => Promise<DockerContainerInfo>;
   getInternalProxyUrlForRoutePath: (routePath: string) => string;
 }, options: WaitForReadyOptions): Promise<void> {
-  const healthUrl = new URL(
+  const proxyHealthUrl = new URL(
     "health",
     `${deps.getInternalProxyUrlForRoutePath(options.routePath)}/`,
   ).toString();
@@ -296,14 +304,26 @@ export async function waitForReadyWorkflow(deps: {
       );
     }
 
-    try {
-      const response = await fetch(healthUrl, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (response.ok) return;
-    } catch {
-      // Retry until timeout.
+    const healthUrls = [
+      container
+        ? new URL("health", `${getDirectContainerBaseUrl(container)}/`).toString()
+        : null,
+      proxyHealthUrl,
+    ].filter((value, index, list): value is string => {
+      return typeof value === "string" && value.length > 0 && list.indexOf(value) === index;
+    });
+
+    for (const healthUrl of healthUrls) {
+      try {
+        const response = await fetch(healthUrl, {
+          method: "GET",
+          cache: "no-store",
+          redirect: "manual",
+        });
+        if (response.ok) return;
+      } catch {
+        // Retry until timeout.
+      }
     }
 
     await sleep(1_000);
@@ -585,7 +605,9 @@ export async function ensureContainerRunningWorkflow(
   const externalPort = getContainerExternalPort(container);
   const runtimeUrl = externalPort ? deps.getPublicUrlForPort(externalPort) : null;
   const compatibilityUrl = deps.getPublicUrlForRoutePath(routePath);
-  const backendUrl = deps.getInternalProxyUrlForRoutePath(routePath);
+  const backendUrl =
+    getDirectContainerBaseUrl(container) ??
+    deps.getInternalProxyUrlForRoutePath(routePath);
 
   await deps.waitForReady({
     containerId: container.Id,

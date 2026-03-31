@@ -276,16 +276,24 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     [config.singleProjectMode, navigate, utils.project.list],
   );
 
+  const polledInitialSessionId =
+    statusData && "studioHandoff" in statusData
+      ? statusData.studioHandoff?.sessionId ?? null
+      : null;
+
   useEffect(() => {
     if (!statusData || !started) return;
     if (
       statusData.status === "starting_studio" ||
       statusData.status === "generating_initial_site"
     ) {
+      const initialSessionId =
+        started.initialSessionId ?? polledInitialSessionId;
+      if (!initialSessionId) return;
       navigateToStartedProjectStudio(
         started.slug,
         started.version,
-        started.initialSessionId,
+        initialSessionId,
       );
       return;
     }
@@ -305,8 +313,10 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     }
   }, [
     statusData?.status,
+    polledInitialSessionId,
     started?.slug,
     started?.version,
+    started?.initialSessionId,
     navigateToStartedProjectStudio,
     navigate,
     utils.project.list,
@@ -452,7 +462,9 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
           "studioHandoff" in generationResult &&
           generationResult.studioHandoff?.mode === "studio_astro"
         ) {
-          navigateToStartedProjectStudio(slug, version, initialSessionId);
+          if (initialSessionId) {
+            navigateToStartedProjectStudio(slug, version, initialSessionId);
+          }
           return;
         }
       } catch (error) {

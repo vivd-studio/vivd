@@ -1391,6 +1391,7 @@ describe("DockerStudioMachineProvider", () => {
     });
     expect(url).toMatchObject({
       url: expect.stringMatching(/\/_studio\/site-1-v1$/),
+      backendUrl: "http://studio-site-1-v1-a3f6fad7ba:3100",
       compatibilityUrl: expect.stringMatching(/\/_studio\/site-1-v1$/),
       accessToken: "access-existing",
     });

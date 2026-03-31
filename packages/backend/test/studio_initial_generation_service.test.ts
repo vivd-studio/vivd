@@ -193,7 +193,7 @@ describe("StudioInitialGenerationService", () => {
     ensureRunningMock.mockResolvedValue({
       studioId: "studio-1",
       url: "http://app.localhost:4100",
-      backendUrl: "http://caddy/_studio/site-1-v1",
+      backendUrl: "http://studio-site-1-v1-a3f6fad7ba:3100",
       runtimeUrl: "http://app.localhost:4100",
       compatibilityUrl: "http://app.localhost/_studio/site-1-v1",
       accessToken: "studio-token-1",
@@ -231,12 +231,12 @@ describe("StudioInitialGenerationService", () => {
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://caddy/_studio/site-1-v1/health",
+      "http://studio-site-1-v1-a3f6fad7ba:3100/health",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://caddy/_studio/site-1-v1/vivd-studio/api/trpc/agent.startInitialGeneration",
+      "http://studio-site-1-v1-a3f6fad7ba:3100/vivd-studio/api/trpc/agent.startInitialGeneration",
       expect.objectContaining({ method: "POST" }),
     );
   });

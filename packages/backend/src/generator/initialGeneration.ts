@@ -89,3 +89,18 @@ export function writeInitialGenerationManifest(
     "utf-8",
   );
 }
+
+export function readInitialGenerationManifest(
+  versionDir: string,
+): ScratchInitialGenerationManifest | null {
+  const manifestPath = getInitialGenerationManifestPath(versionDir);
+  if (!fs.existsSync(manifestPath)) return null;
+
+  try {
+    const raw = fs.readFileSync(manifestPath, "utf-8");
+    const parsed = JSON.parse(raw) as ScratchInitialGenerationManifest | null;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}

@@ -171,4 +171,70 @@ describe("ScratchWizardContext", () => {
       );
     });
   });
+
+  it("waits for a polled initial session id before redirecting to Studio", async () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+
+    const pendingStartGeneration = new Promise(() => undefined);
+    startScratchGenerationUseMutationMock.mockReturnValue({
+      mutateAsync: vi.fn().mockReturnValue(pendingStartGeneration),
+    });
+
+    let currentStatus:
+      | { status: string; studioHandoff?: { sessionId?: string | null } }
+      | undefined;
+    projectStatusUseQueryMock.mockImplementation((input: { slug: string }, options: { enabled: boolean }) => {
+      if (!options.enabled || !input.slug) {
+        return { data: undefined };
+      }
+      return {
+        data: currentStatus,
+      };
+    });
+
+    const view = renderProvider();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => {
+      expect(projectStatusUseQueryMock).toHaveBeenCalledWith(
+        { slug: "site-1", version: 1 },
+        expect.objectContaining({ enabled: true }),
+      );
+    });
+
+    currentStatus = { status: "starting_studio" };
+    view.rerender(
+      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
+        <ScratchWizardProvider>
+          <ScratchWizardTestHarness />
+        </ScratchWizardProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    currentStatus = {
+      status: "starting_studio",
+      studioHandoff: {
+        sessionId: "sess-polled",
+      },
+    };
+    view.rerender(
+      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
+        <ScratchWizardProvider>
+          <ScratchWizardTestHarness />
+        </ScratchWizardProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-polled",
+      );
+    });
+  });
 });

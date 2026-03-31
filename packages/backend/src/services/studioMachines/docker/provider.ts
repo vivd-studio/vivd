@@ -61,6 +61,7 @@ import {
   ensureContainerRunningWorkflow,
   ensureImageAvailableForCreateWorkflow,
   ensureRunningInnerWorkflow,
+  getDirectContainerBaseUrl,
   recreateContainerWorkflow,
   resolveContainerNetworkNameWorkflow,
   resolveManagedMainBackendUrl,
@@ -629,7 +630,9 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       ? this.config.getPublicUrlForPort(externalPort)
       : null;
     const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
-    const backendUrl = this.config.getInternalProxyUrlForRoutePath(routePath);
+    const backendUrl =
+      getDirectContainerBaseUrl(inspected) ??
+      this.config.getInternalProxyUrlForRoutePath(routePath);
     return {
       studioId: getContainerStudioId(inspected, null),
       url: runtimeUrl ?? compatibilityUrl,

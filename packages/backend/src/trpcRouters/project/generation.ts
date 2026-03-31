@@ -42,6 +42,7 @@ import {
   applyScratchAstroStarter,
   createScratchInitialGenerationManifest,
   getScratchCreationMode,
+  readInitialGenerationManifest,
   writeInitialGenerationManifest,
 } from "../../generator/initialGeneration";
 import { installProfileService } from "../../services/system/InstallProfileService";
@@ -832,11 +833,13 @@ export const projectGenerationProcedures = {
         "";
       const source: "url" | "scratch" =
         sourceRaw === "scratch" ? "scratch" : manifest.url ? "url" : "scratch";
+      const versionDir = getVersionDir(organizationId, slug, targetVersion);
+      const initialGenerationManifest =
+        source === "scratch" ? readInitialGenerationManifest(versionDir) : null;
 
       // On preview open, sync from GitHub (best-effort).
       // Skips automatically if there are local uncommitted changes.
       if (status === "completed") {
-        const versionDir = getVersionDir(organizationId, slug, targetVersion);
         if (fs.existsSync(versionDir)) {
           await gitService.syncPullFromGitHub({
             cwd: versionDir,
@@ -872,6 +875,14 @@ export const projectGenerationProcedures = {
         totalVersions: manifest.versions.length,
         versions: manifest.versions,
         errorMessage,
+        studioHandoff:
+          initialGenerationManifest?.mode === "studio_astro"
+            ? {
+                mode: "studio_astro" as const,
+                initialGeneration: true,
+                sessionId: initialGenerationManifest.sessionId ?? null,
+              }
+            : undefined,
       };
     }),
 
