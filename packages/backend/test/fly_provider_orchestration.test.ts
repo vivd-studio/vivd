@@ -211,6 +211,8 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
     (provider as any).config.getPublicUrlForPort = (port: number) =>
       `https://studio.test:${port}`;
+    (provider as any).routeService.upsertRuntimeRoute = async () =>
+      "/_studio/site-1-v1";
     (provider as any).waitForReady = async () => {};
 
     let touchedKey: string | null = null;
@@ -237,7 +239,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
       url: "https://studio.test:4100",
       backendUrl: "https://studio.test:4100",
       runtimeUrl: "https://studio.test:4100",
-      compatibilityUrl: null,
+      compatibilityUrl: "/_studio/site-1-v1",
       port: 4100,
       accessToken: "token-generated",
     });
@@ -310,6 +312,8 @@ describe("FlyStudioMachineProvider orchestration", () => {
     (provider as any).waitForReady = async () => {};
     (provider as any).config.getPublicUrlForPort = (port: number) =>
       `https://studio.test:${port}`;
+    (provider as any).routeService.upsertRuntimeRoute = async () =>
+      "/_studio/site-1-v1";
 
     await provider.ensureRunning(args);
 
@@ -464,6 +468,8 @@ describe("FlyStudioMachineProvider orchestration", () => {
     const result = await ensureExistingMachineRunningWorkflow(
       {
         getMachineExternalPort: () => 4100,
+        routeIdFor: () => "site-1-v1",
+        upsertRuntimeRoute: async () => "/_studio/site-1-v1",
         getDesiredImage: async () => desiredImage,
         trimToken,
         resolveMachineReconcileState: (options) =>
@@ -512,9 +518,42 @@ describe("FlyStudioMachineProvider orchestration", () => {
       url: "https://studio.test:4100",
       backendUrl: "https://studio.test:4100",
       runtimeUrl: "https://studio.test:4100",
-      compatibilityUrl: null,
+      compatibilityUrl: "/_studio/site-1-v1",
       port: 4100,
       accessToken,
+    });
+  });
+
+  it("getUrl recreates a Fly compatibility route for running machines", async () => {
+    const provider = new FlyStudioMachineProvider();
+    const machine = studioMachine({
+      id: "machine-running",
+      state: "started",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+      metadataImage: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+    });
+
+    (provider as any).apiClient.listMachines = async () => [machine];
+    (provider as any).config.routeIdFor = () => "site-1-v1";
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://vivd-studio-prod.fly.dev:${port}`;
+    const upsertRuntimeRoute = vi
+      .spyOn((provider as any).routeService, "upsertRuntimeRoute")
+      .mockResolvedValue("/_studio/site-1-v1");
+
+    const result = await provider.getUrl("org-1", "site-1", 1);
+
+    expect(upsertRuntimeRoute).toHaveBeenCalledWith({
+      routeId: "site-1-v1",
+      targetBaseUrl: "https://vivd-studio-prod.fly.dev:4100",
+    });
+    expect(result).toEqual({
+      studioId: "studio-1",
+      url: "https://vivd-studio-prod.fly.dev:4100",
+      backendUrl: "https://vivd-studio-prod.fly.dev:4100",
+      runtimeUrl: "https://vivd-studio-prod.fly.dev:4100",
+      compatibilityUrl: "/_studio/site-1-v1",
+      accessToken: "token-1",
     });
   });
 

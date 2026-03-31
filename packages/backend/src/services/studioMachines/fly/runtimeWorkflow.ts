@@ -29,6 +29,15 @@ type WaitForReadyArgs = {
 };
 
 export type EnsureExistingMachineRunningDeps = {
+  routeIdFor: (
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ) => string;
+  upsertRuntimeRoute: (options: {
+    routeId: string;
+    targetBaseUrl: string;
+  }) => Promise<string>;
   getMachineExternalPort: (machine: FlyMachine) => number | null;
   getDesiredImage: () => Promise<string>;
   trimToken: (value: string | null | undefined) => string | null;
@@ -209,6 +218,10 @@ export async function ensureExistingMachineRunningWorkflow(
     url,
     timeoutMs: deps.startTimeoutMs,
   });
+  const compatibilityUrl = await deps.upsertRuntimeRoute({
+    routeId: deps.routeIdFor(args.organizationId, args.projectSlug, args.version),
+    targetBaseUrl: url,
+  });
 
   const finalStudioId = deps.resolveStudioIdFromMachine(existing, args.env.STUDIO_ID);
 
@@ -218,7 +231,7 @@ export async function ensureExistingMachineRunningWorkflow(
     url,
     backendUrl: url,
     runtimeUrl: url,
-    compatibilityUrl: null,
+    compatibilityUrl,
     port,
     accessToken,
   };
@@ -379,6 +392,11 @@ export function buildStudioEnvDriftSubsetFromDesiredEnv(
 export type RestartInnerDeps = {
   key: (organizationId: string, projectSlug: string, version: number) => string;
   machineNameFor: (organizationId: string, projectSlug: string, version: number) => string;
+  routeIdFor: (
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ) => string;
   listMachines: () => Promise<FlyMachine[]>;
   findMachineByName: (machines: FlyMachine[], machineName: string) => FlyMachine | null;
   findMachine: (
@@ -415,6 +433,10 @@ export type RestartInnerDeps = {
     config: FlyMachineConfig;
     skipLaunch?: boolean;
   }) => Promise<FlyMachine>;
+  upsertRuntimeRoute: (options: {
+    routeId: string;
+    targetBaseUrl: string;
+  }) => Promise<string>;
   startMachineHandlingReplacement: (machineId: string) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyArgs) => Promise<void>;
@@ -519,6 +541,10 @@ export async function restartInnerWorkflow(
     url,
     timeoutMs: deps.startTimeoutMs,
   });
+  const compatibilityUrl = await deps.upsertRuntimeRoute({
+    routeId: deps.routeIdFor(args.organizationId, args.projectSlug, args.version),
+    targetBaseUrl: url,
+  });
 
   deps.touchKey(studioKey);
   return {
@@ -526,7 +552,7 @@ export async function restartInnerWorkflow(
     url,
     backendUrl: url,
     runtimeUrl: url,
-    compatibilityUrl: null,
+    compatibilityUrl,
     port,
     accessToken,
   };
@@ -535,6 +561,11 @@ export async function restartInnerWorkflow(
 export type EnsureRunningInnerDeps = {
   key: (organizationId: string, projectSlug: string, version: number) => string;
   machineNameFor: (organizationId: string, projectSlug: string, version: number) => string;
+  routeIdFor: (
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ) => string;
   listMachines: () => Promise<FlyMachine[]>;
   findMachineByName: (machines: FlyMachine[], machineName: string) => FlyMachine | null;
   findMachine: (
@@ -565,6 +596,10 @@ export type EnsureRunningInnerDeps = {
     error: unknown,
     machineName: string,
   ) => Promise<FlyMachine | null>;
+  upsertRuntimeRoute: (options: {
+    routeId: string;
+    targetBaseUrl: string;
+  }) => Promise<string>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyArgs) => Promise<void>;
   startTimeoutMs: number;
@@ -648,6 +683,10 @@ export async function ensureRunningInnerWorkflow(
     url,
     timeoutMs: deps.startTimeoutMs,
   });
+  const compatibilityUrl = await deps.upsertRuntimeRoute({
+    routeId: deps.routeIdFor(args.organizationId, args.projectSlug, args.version),
+    targetBaseUrl: url,
+  });
 
   deps.touchKey(studioKey);
   return {
@@ -655,7 +694,7 @@ export async function ensureRunningInnerWorkflow(
     url,
     backendUrl: url,
     runtimeUrl: url,
-    compatibilityUrl: null,
+    compatibilityUrl,
     port,
     accessToken,
   };

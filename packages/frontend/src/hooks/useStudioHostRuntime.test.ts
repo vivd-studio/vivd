@@ -30,6 +30,18 @@ describe("selectBrowserStudioBaseUrl", () => {
     ).toBe("https://vivd.felixpahlke.de/_studio/runtime-1");
   });
 
+  it("preserves a host-relative compatibility route for tenant-hosted Fly runtimes", () => {
+    expect(
+      selectBrowserStudioBaseUrl(
+        makeRuntime({
+          runtimeUrl: "https://vivd-studio-prod.fly.dev:3115",
+          compatibilityUrl: "/_studio/runtime-1",
+        }),
+        "https://felix-pahlke.vivd.studio",
+      ),
+    ).toBe("/_studio/runtime-1");
+  });
+
   it("keeps the direct runtime for local http development hosts", () => {
     expect(
       selectBrowserStudioBaseUrl(

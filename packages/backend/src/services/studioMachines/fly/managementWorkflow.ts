@@ -17,6 +17,12 @@ export async function listStudioMachinesWorkflow(deps: {
   getMachineExternalPort: (machine: FlyMachine) => number | null;
   getConfiguredStudioImage: (machine: FlyMachine, desiredImage?: string) => string | null;
   getMachineMetadata: (machine: FlyMachine) => Record<string, string> | null;
+  routeIdFor: (
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ) => string;
+  getRoutePath: (routeId: string) => string;
   getPublicUrlForPort: (port: number) => string;
 }): Promise<FlyStudioMachineSummary[]> {
   const desiredImage = await deps.getDesiredImage();
@@ -42,6 +48,12 @@ export async function listStudioMachinesWorkflow(deps: {
     const createdAt =
       machine.created_at || deps.getMachineMetadata(machine)?.vivd_created_at || null;
     const updatedAt = machine.updated_at || null;
+    const routeId = deps.routeIdFor(
+      identity.organizationId,
+      identity.projectSlug,
+      identity.version,
+    );
+    const routePath = deps.getRoutePath(routeId);
 
     summaries.push({
       id: machine.id,
@@ -55,10 +67,10 @@ export async function listStudioMachinesWorkflow(deps: {
       projectSlug: identity.projectSlug,
       version: identity.version,
       externalPort: port,
-      routePath: null,
+      routePath,
       url: port ? deps.getPublicUrlForPort(port) : null,
       runtimeUrl: port ? deps.getPublicUrlForPort(port) : null,
-      compatibilityUrl: null,
+      compatibilityUrl: routePath,
       image,
       desiredImage,
       imageOutdated: !!image && image !== desiredImage,
@@ -75,8 +87,14 @@ export async function destroyStudioMachineWorkflow(
   deps: {
     getMachine: (machineId: string) => Promise<FlyMachine>;
     getStudioIdentityFromMachine: (machine: FlyMachine) => StudioIdentity | null;
+    routeIdFor: (
+      organizationId: string,
+      projectSlug: string,
+      version: number,
+    ) => string;
     stopMachine: (machineId: string) => Promise<void>;
     waitForState: (options: { machineId: string; state: "stopped"; timeoutMs: number }) => Promise<void>;
+    removeRuntimeRoute: (routeId: string) => Promise<void>;
     destroyMachine: (machineId: string) => Promise<void>;
     key: (organizationId: string, projectSlug: string, version: number) => string;
     deleteLastActivity: (studioKey: string) => void;
@@ -98,6 +116,9 @@ export async function destroyStudioMachineWorkflow(
       timeoutMs: 60_000,
     });
   }
+  await deps.removeRuntimeRoute(
+    deps.routeIdFor(identity.organizationId, identity.projectSlug, identity.version),
+  );
 
   if (state !== "destroyed" && state !== "destroying") {
     await deps.destroyMachine(machineId);
@@ -141,6 +162,11 @@ export async function stopStudioMachineWorkflow(
   deps: {
     key: (organizationId: string, projectSlug: string, version: number) => string;
     deleteLastActivity: (studioKey: string) => void;
+    routeIdFor: (
+      organizationId: string,
+      projectSlug: string,
+      version: number,
+    ) => string;
     listMachines: () => Promise<FlyMachine[]>;
     findMachineByName: (machines: FlyMachine[], machineName: string) => FlyMachine | null;
     findMachine: (
@@ -151,6 +177,7 @@ export async function stopStudioMachineWorkflow(
     ) => FlyMachine | null;
     machineNameFor: (organizationId: string, projectSlug: string, version: number) => string;
     suspendOrStopMachine: (machineId: string) => Promise<"suspended" | "stopped">;
+    removeRuntimeRoute: (routeId: string) => Promise<void>;
   },
   organizationId: string,
   projectSlug: string,
@@ -169,6 +196,9 @@ export async function stopStudioMachineWorkflow(
   if (existing.state === "started") {
     await deps.suspendOrStopMachine(existing.id);
   }
+  await deps.removeRuntimeRoute(
+    deps.routeIdFor(organizationId, projectSlug, version),
+  );
 }
 
 export async function getStudioMachineUrlWorkflow(
@@ -183,6 +213,15 @@ export async function getStudioMachineUrlWorkflow(
     ) => FlyMachine | null;
     machineNameFor: (organizationId: string, projectSlug: string, version: number) => string;
     getMachineExternalPort: (machine: FlyMachine) => number | null;
+    routeIdFor: (
+      organizationId: string,
+      projectSlug: string,
+      version: number,
+    ) => string;
+    upsertRuntimeRoute: (options: {
+      routeId: string;
+      targetBaseUrl: string;
+    }) => Promise<string>;
     getPublicUrlForPort: (port: number) => string;
     getStudioAccessTokenFromMachine: (machine: FlyMachine) => string | null;
     resolveStudioIdFromMachine: (machine: FlyMachine, fallback?: string | null) => string;
@@ -202,6 +241,10 @@ export async function getStudioMachineUrlWorkflow(
   const port = deps.getMachineExternalPort(existing);
   if (!port) return null;
   const url = deps.getPublicUrlForPort(port);
+  const compatibilityUrl = await deps.upsertRuntimeRoute({
+    routeId: deps.routeIdFor(organizationId, projectSlug, version),
+    targetBaseUrl: url,
+  });
   const accessToken = deps.getStudioAccessTokenFromMachine(existing);
   if (!accessToken) return null;
   return {
@@ -209,7 +252,7 @@ export async function getStudioMachineUrlWorkflow(
     url,
     backendUrl: url,
     runtimeUrl: url,
-    compatibilityUrl: null,
+    compatibilityUrl,
     accessToken,
   };
 }

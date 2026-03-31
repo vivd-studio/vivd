@@ -7,6 +7,12 @@ import {
   sanitizeForFlyAppId,
 } from "./utils";
 
+function normalizePathPrefix(value: string | undefined, fallback: string): string {
+  const raw = (value || "").trim() || fallback;
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLeadingSlash.replace(/\/+$/, "");
+}
+
 export type FlyProviderGuestConfig = {
   cpu_kind: "shared" | "performance";
   cpus: number;
@@ -33,6 +39,18 @@ export class FlyProviderConfig {
 
   generateStudioAccessToken(): string {
     return crypto.randomBytes(32).toString("base64url");
+  }
+
+  routeIdFor(
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ): string {
+    const key = `${organizationId}:${projectSlug}:v${version}`;
+    const hash = crypto.createHash("sha1").update(key).digest("hex").slice(0, 12);
+    const base = sanitizeForFlyAppId(`${projectSlug}-v${version}`);
+    const clippedBase = base.length > 24 ? base.slice(0, 24) : base;
+    return `${clippedBase}-${hash}`;
   }
 
   get token(): string {
@@ -83,6 +101,18 @@ export class FlyProviderConfig {
 
   get publicProtocol(): string {
     return process.env.FLY_STUDIO_PUBLIC_PROTOCOL || "https";
+  }
+
+  get runtimeRoutesDir(): string {
+    return process.env.FLY_STUDIO_RUNTIME_ROUTES_DIR?.trim() || "/etc/caddy/runtime.d";
+  }
+
+  get routePrefix(): string {
+    return normalizePathPrefix(process.env.FLY_STUDIO_ROUTE_PREFIX, "/_studio");
+  }
+
+  routePathFor(routeId: string): string {
+    return `${this.routePrefix}/${routeId}`;
   }
 
   get startTimeoutMs(): number {

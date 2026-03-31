@@ -74,11 +74,16 @@ import {
   waitForState,
 } from "./lifecycle";
 import { FlyProviderConfig } from "./providerConfig";
+import { FlyRuntimeRouteService } from "./runtimeRouteService";
 
 export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "fly" as const;
 
   private readonly config = new FlyProviderConfig();
+  private readonly routeService = new FlyRuntimeRouteService({
+    getRoutesDir: () => this.config.runtimeRoutesDir,
+    getRoutePath: (routeId) => this.config.routePathFor(routeId),
+  });
   private readonly apiClient = new FlyApiClient({
     getToken: () => this.config.token,
     getAppName: () => this.config.appName,
@@ -193,6 +198,15 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       this.idleStopInFlight.add(studioKey);
       try {
         const action = await this.suspendOrStopMachine(machine.id);
+        const identity = getStudioIdentityFromMachine(machine);
+        if (identity) {
+          const routeId = this.config.routeIdFor(
+            identity.organizationId,
+            identity.projectSlug,
+            identity.version,
+          );
+          await this.routeService.removeRuntimeRoute(routeId);
+        }
         this.lastActivityByStudioKey.delete(studioKey);
         const idleSeconds = Math.max(1, Math.round((now - lastActivity) / 1000));
         console.log(
@@ -396,6 +410,9 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   ): Promise<StudioMachineStartResult> {
     return ensureExistingMachineRunningWorkflow(
       {
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
+        upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
         getMachineExternalPort,
         getDesiredImage: () => this.getDesiredImage(),
         trimToken,
@@ -466,6 +483,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           this.config.key(organizationId, projectSlug, version),
         machineNameFor: (organizationId, projectSlug, version) =>
           this.config.machineNameFor(organizationId, projectSlug, version),
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
         listMachines: () => this.apiClient.listMachines(),
         findMachineByName,
         findMachine,
@@ -484,6 +503,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
         normalizeServicesForVivd,
         updateMachineConfig: (options) => this.apiClient.updateMachineConfig(options),
+        upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
         startMachineHandlingReplacement: (machineId) =>
           this.startMachineHandlingReplacement(machineId),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
@@ -504,6 +524,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           this.config.key(organizationId, projectSlug, version),
         machineNameFor: (organizationId, projectSlug, version) =>
           this.config.machineNameFor(organizationId, projectSlug, version),
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
         listMachines: () => this.apiClient.listMachines(),
         findMachineByName,
         findMachine,
@@ -523,6 +545,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
         recoverCreateNameConflict: (error, machineName) =>
           this.recoverCreateNameConflict(error, machineName),
+        upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
         waitForReady: (options) => this.waitForReady(options),
         startTimeoutMs: this.config.startTimeoutMs,
@@ -540,6 +563,9 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       getMachineExternalPort,
       getConfiguredStudioImage,
       getMachineMetadata,
+      routeIdFor: (organizationId, projectSlug, version) =>
+        this.config.routeIdFor(organizationId, projectSlug, version),
+      getRoutePath: (routeId) => this.routeService.getRoutePath(routeId),
       getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
     });
   }
@@ -552,6 +578,13 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     }
 
     const parked = await this.suspendOrStopMachine(machineId);
+    await this.routeService.removeRuntimeRoute(
+      this.config.routeIdFor(
+        identity.organizationId,
+        identity.projectSlug,
+        identity.version,
+      ),
+    );
     this.lastActivityByStudioKey.delete(
       this.config.key(identity.organizationId, identity.projectSlug, identity.version),
     );
@@ -593,8 +626,11 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       {
         getMachine: (id) => this.getMachine(id),
         getStudioIdentityFromMachine,
+        routeIdFor: (organizationId, projectSlug, version) =>
+          this.config.routeIdFor(organizationId, projectSlug, version),
         stopMachine: (id) => this.apiClient.stopMachine(id),
         waitForState: (options) => this.waitForState(options),
+        removeRuntimeRoute: (routeId) => this.routeService.removeRuntimeRoute(routeId),
         destroyMachine: (id) => this.apiClient.destroyMachine(id),
         key: (organizationId, projectSlug, version) =>
           this.config.key(organizationId, projectSlug, version),
@@ -725,10 +761,12 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           this.lastActivityByStudioKey.delete(studioKey);
         },
         listMachines: () => this.apiClient.listMachines(),
+        routeIdFor: (orgId, slug, v) => this.config.routeIdFor(orgId, slug, v),
         findMachineByName,
         findMachine,
         machineNameFor: (orgId, slug, v) => this.config.machineNameFor(orgId, slug, v),
         suspendOrStopMachine: (machineId) => this.suspendOrStopMachine(machineId),
+        removeRuntimeRoute: (routeId) => this.routeService.removeRuntimeRoute(routeId),
       },
       organizationId,
       projectSlug,
@@ -749,6 +787,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           findMachine,
           machineNameFor: (orgId, slug, v) => this.config.machineNameFor(orgId, slug, v),
           getMachineExternalPort,
+          routeIdFor: (orgId, slug, v) => this.config.routeIdFor(orgId, slug, v),
+          upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
           getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
           getStudioAccessTokenFromMachine,
           resolveStudioIdFromMachine,
