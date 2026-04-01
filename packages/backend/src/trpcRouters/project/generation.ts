@@ -46,6 +46,7 @@ import {
   writeInitialGenerationManifest,
 } from "../../generator/initialGeneration";
 import { installProfileService } from "../../services/system/InstallProfileService";
+import { ensureGitRepositoryHasInitialCommit } from "../../generator/gitUtils";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -625,6 +626,10 @@ export const projectGenerationProcedures = {
           );
 
           generationCtx.updateStatus("starting_studio");
+          await ensureGitRepositoryHasInitialCommit(
+            versionDir,
+            "Initial generation",
+          );
           await syncSourceArtifactForStudioStart({
             versionDir,
             organizationId,

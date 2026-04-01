@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
 const REQUIRED_SNAPSHOT_GIT_DIRS = [
   "refs",
@@ -267,27 +266,30 @@ export async function repairOpencodeSnapshotGitDirs(
   return { repaired, rebuilt };
 }
 
-async function main() {
-  const snapshotRoot = process.argv[2];
-  const directory = process.argv[3];
+export async function runSnapshotGitDirRepairCli(options?: {
+  argv?: string[];
+  io?: Pick<typeof console, "log" | "error">;
+  repair?: typeof repairOpencodeSnapshotGitDirs;
+}): Promise<number> {
+  const argv = options?.argv ?? process.argv;
+  const io = options?.io ?? console;
+  const repair = options?.repair ?? repairOpencodeSnapshotGitDirs;
+
+  const snapshotRoot = argv[2];
+  const directory = argv[3];
   if (!snapshotRoot) {
-    console.error("Usage: node snapshotGitDirRepair.js <snapshot-root> [directory]");
-    process.exit(1);
+    io.error("Usage: node snapshotGitDirRepairCli.js <snapshot-root> [directory]");
+    return 1;
   }
 
-  const result = await repairOpencodeSnapshotGitDirs(snapshotRoot, directory);
-  console.log(
-    `[OpenCode] Repaired snapshot git directories: ${result.repaired.length} (rebuilt ${result.rebuilt.length})`,
-  );
-}
-
-const isEntrypoint =
-  typeof process.argv[1] === "string" &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-
-if (isEntrypoint) {
-  main().catch((error) => {
-    console.error("[OpenCode] Failed to repair snapshot git directories:", error);
-    process.exit(1);
-  });
+  try {
+    const result = await repair(snapshotRoot, directory);
+    io.log(
+      `[OpenCode] Repaired snapshot git directories: ${result.repaired.length} (rebuilt ${result.rebuilt.length})`,
+    );
+    return 0;
+  } catch (error) {
+    io.error("[OpenCode] Failed to repair snapshot git directories:", error);
+    return 1;
+  }
 }

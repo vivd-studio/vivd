@@ -776,6 +776,54 @@ function readSessionIdFromUrl(urlString) {
   }
 }
 
+async function probeSessionHistoryForSessionEvidence(frame, timeoutMs) {
+  const sessionToggleButton = frame
+    .getByRole("button", { name: /Show sessions|Hide sessions/i })
+    .first();
+  const sessionListHeading = frame.getByText("Latest Sessions").first();
+  const sessionRow = frame.locator("[data-testid^='session-row-']").first();
+  const sessionActivityIndicator = frame
+    .locator("[data-testid^='session-activity-indicator-']")
+    .first();
+  const chatComposer = frame.locator("textarea").first();
+
+  if (!(await sessionToggleButton.isVisible().catch(() => false))) {
+    return null;
+  }
+
+  const historyInitiallyOpen = await frame
+    .getByRole("button", { name: "Hide sessions" })
+    .isVisible()
+    .catch(() => false);
+
+  if (!historyInitiallyOpen) {
+    await sessionToggleButton.click();
+  }
+
+  try {
+    await expectVisible(
+      sessionListHeading,
+      Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
+      "session history heading",
+    );
+
+    const sessionState = await waitForVisibleState(
+      [
+        { name: "session-activity-indicator", locator: sessionActivityIndicator },
+        { name: "session-row", locator: sessionRow },
+      ],
+      Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
+    );
+
+    return sessionState;
+  } finally {
+    if (!historyInitiallyOpen) {
+      await sessionToggleButton.click().catch(() => undefined);
+      await chatComposer.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
+    }
+  }
+}
+
 async function settleInitialGeneration(page, frame, timeoutMs) {
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
   const sendButton = frame.getByRole("button", { name: "Send message" });
@@ -852,11 +900,17 @@ async function settleInitialGeneration(page, frame, timeoutMs) {
   const sendButtonVisible = await sendButton.isVisible().catch(() => false);
   const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
 
-  if (sessionIdFromUrl && chatComposerVisible) {
-    log(
-      `No visible initial-generation activity appeared within ${settleTimeoutMs}ms, but backend handoff session ${sessionIdFromUrl} is attached in the project URL; continuing with minimal handoff coverage`,
+  if (chatComposerVisible) {
+    const sessionHistoryState = await probeSessionHistoryForSessionEvidence(
+      frame,
+      settleTimeoutMs,
     );
-    return "backend-session-confirmed";
+    if (sessionHistoryState === "session-activity-indicator") {
+      return "observed-session-activity-indicator";
+    }
+    if (sessionHistoryState === "session-row") {
+      return "observed-session-row";
+    }
   }
 
   throw new Error(

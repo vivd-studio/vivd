@@ -70,6 +70,7 @@ export function SessionList({
               <div key={session.id} className="group relative">
                 <button
                   type="button"
+                  data-testid={`session-row-${session.id}`}
                   title={tooltip}
                   onClick={() => onSelectSession(session.id)}
                   className={`flex w-full flex-col rounded-xl border px-3 py-3 text-left transition-colors ${

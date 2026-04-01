@@ -62,6 +62,7 @@ describe("SessionList", () => {
     expect(
       screen.getByTestId("session-activity-indicator-session-1"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("session-row-session-1")).toBeInTheDocument();
     expect(
       screen.queryByTestId("session-activity-indicator-session-2"),
     ).not.toBeInTheDocument();

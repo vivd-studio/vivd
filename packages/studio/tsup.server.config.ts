@@ -13,6 +13,8 @@ export default defineConfig({
       "server/opencode/toolModules/vivdPublishChecklist.ts",
     "opencode/snapshotGitDirRepair":
       "server/opencode/snapshotGitDirRepair.ts",
+    "opencode/snapshotGitDirRepairCli":
+      "server/opencode/snapshotGitDirRepairCli.ts",
     "opencode/toolModules/vivdImageAi":
       "server/opencode/toolModules/vivdImageAi.ts",
   },

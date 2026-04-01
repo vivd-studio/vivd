@@ -246,7 +246,7 @@ repair_opencode_snapshot_gitdirs() {
   # Object storage drops empty git directories, so repaired hydrated snapshot
   # gitdirs before OpenCode starts. The steady-state local path should already
   # be valid and does not go through this branch.
-  OPENCODE_SNAPSHOT_REPAIR_SCRIPT="/app/packages/studio/dist/opencode/snapshotGitDirRepair.js"
+  OPENCODE_SNAPSHOT_REPAIR_SCRIPT="/app/packages/studio/dist/opencode/snapshotGitDirRepairCli.js"
   if command -v node >/dev/null 2>&1 && [ -f "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" ]; then
     node "$OPENCODE_SNAPSHOT_REPAIR_SCRIPT" "$SNAPSHOT_ROOT" "${VIVD_WORKSPACE_DIR:-}"
     return $?
