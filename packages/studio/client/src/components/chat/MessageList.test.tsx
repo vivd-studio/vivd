@@ -21,6 +21,10 @@ const opencodeState = vi.hoisted(() => ({
   selectedMessages: [{ info: { id: "user-1" }, parts: [] }] as any[],
 }));
 
+const interruptedContinueState = vi.hoisted(() => ({
+  value: false,
+}));
+
 const chatState = vi.hoisted(() => ({
   selectedSessionId: "session-1" as string | null,
   input: "",
@@ -94,7 +98,7 @@ vi.mock("@/features/opencodeChat", () => ({
 
 vi.mock("@/features/opencodeChat/render/timeline", () => ({
   buildCanonicalTimelineModel: () => ({ items: timelineState.items }),
-  shouldSuggestInterruptedContinueFromRecords: () => false,
+  shouldSuggestInterruptedContinueFromRecords: () => interruptedContinueState.value,
 }));
 
 vi.mock("./ChatContext", () => ({
@@ -130,6 +134,7 @@ describe("MessageList latest-user anchoring", () => {
     chatState.initialGenerationStarting = false;
     chatState.initialGenerationFailed = null;
     chatState.activeQuestionRequest = null;
+    interruptedContinueState.value = false;
     anchorTopById["optimistic:client-1"] = 120;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
@@ -381,6 +386,28 @@ describe("MessageList latest-user anchoring", () => {
       screen.getByText("Attaching the initial generation session..."),
     ).toBeInTheDocument();
     expect(container.querySelector("textarea")).toBeNull();
+  });
+
+  it("uses explicit continue wording for interrupted initial-generation sessions", () => {
+    interruptedContinueState.value = true;
+    chatState.initialGenerationRequested = true;
+
+    render(<MessageList />);
+
+    expect(
+      screen.getByText("Initial generation stopped before finishing. Click to continue"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the generic continue wording for other interrupted sessions", () => {
+    interruptedContinueState.value = true;
+    chatState.initialGenerationRequested = false;
+
+    render(<MessageList />);
+
+    expect(
+      screen.getByText("Agent interrupted, click to continue"),
+    ).toBeInTheDocument();
   });
 
   it("labels backend usage-check failures without showing a usage-limit headline", () => {

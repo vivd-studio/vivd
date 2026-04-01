@@ -534,7 +534,9 @@ export function shouldSuggestInterruptedContinueFromRecords(options: {
   }
 
   return !hasFinalAgentResponseFromRecords(options.messages, {
-    type: (options.sessionStatus as "idle" | "busy" | "done" | "retry") ?? "idle",
+    type:
+      (options.sessionStatus as "idle" | "busy" | "done" | "retry" | "error") ??
+      "idle",
   });
 }
 

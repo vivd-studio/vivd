@@ -8,7 +8,9 @@ import {
 } from "@vivd/shared";
 import {
   agentEventEmitter,
+  getSessionContent,
   getSessionsStatus,
+  listQuestions,
   listSessions,
   runTask,
   type ModelSelection,
@@ -29,6 +31,8 @@ import {
 const startLocks = new Map<string, Promise<StartInitialGenerationResult>>();
 const monitoredSessions = new Map<string, () => void>();
 const finalizationLocks = new Map<string, Promise<void>>();
+const MONITOR_POLL_MS = 5_000;
+const TERMINAL_IDLE_GRACE_MS = 10_000;
 
 export type StartInitialGenerationOptions = {
   projectSlug: string;
@@ -103,6 +107,127 @@ function writeInitialGenerationManifest(
     `${JSON.stringify(manifest, null, 2)}\n`,
     "utf-8",
   );
+}
+
+function extractErrorMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    extractErrorMessage(record.message) ??
+    extractErrorMessage(record.error)
+  );
+}
+
+function getMessageActivityAt(message: {
+  time?: { updated?: number; completed?: number; created?: number };
+} | null | undefined): number | null {
+  if (!message?.time) {
+    return null;
+  }
+
+  return (
+    message.time.updated ??
+    message.time.completed ??
+    message.time.created ??
+    null
+  );
+}
+
+function normalizeInitialGenerationFailureMessage(message: string | null): string {
+  const trimmed = message?.trim() || "";
+  if (!trimmed) {
+    return "The agent stopped before finishing the initial generation. Open Studio to continue the session.";
+  }
+
+  if (
+    /provider_overloaded|json error injected into sse stream|status code 503|temporarily unavailable/i.test(
+      trimmed,
+    )
+  ) {
+    return "The AI provider stopped this run before the initial site finished. Open Studio to continue the session.";
+  }
+
+  return trimmed;
+}
+
+type MonitoredSessionRecord = {
+  info?: {
+    role?: string;
+    time?: {
+      created?: number;
+      updated?: number;
+      completed?: number;
+    };
+    error?: unknown;
+  };
+};
+
+function deriveMonitoredSessionOutcome(options: {
+  sessionStatus:
+    | { type: "idle" | "busy" | "done" | "retry" | "error"; message?: string }
+    | null;
+  messages: MonitoredSessionRecord[];
+  hasPendingQuestion: boolean;
+  now?: number;
+}): { state: "active" | "completed" | "failed"; errorMessage?: string } {
+  const sessionStatusType = options.sessionStatus?.type ?? "idle";
+  if (sessionStatusType === "busy" || sessionStatusType === "retry") {
+    return { state: "active" };
+  }
+
+  if (options.hasPendingQuestion) {
+    return { state: "active" };
+  }
+
+  const latestAssistant = [...options.messages]
+    .reverse()
+    .find((message) => message?.info?.role === "assistant");
+
+  if (!latestAssistant?.info) {
+    return { state: "active" };
+  }
+
+  const assistantError = extractErrorMessage(latestAssistant.info.error);
+  if (assistantError) {
+    return {
+      state: "failed",
+      errorMessage: normalizeInitialGenerationFailureMessage(assistantError),
+    };
+  }
+
+  if (sessionStatusType === "error") {
+    return {
+      state: "failed",
+      errorMessage: normalizeInitialGenerationFailureMessage(
+        options.sessionStatus?.message ?? null,
+      ),
+    };
+  }
+
+  if (typeof latestAssistant.info.time?.completed === "number") {
+    return { state: "completed" };
+  }
+
+  const latestActivityAt = getMessageActivityAt(latestAssistant.info);
+  if (
+    latestActivityAt != null &&
+    (options.now ?? Date.now()) - latestActivityAt >= TERMINAL_IDLE_GRACE_MS
+  ) {
+    return {
+      state: "failed",
+      errorMessage: normalizeInitialGenerationFailureMessage(null),
+    };
+  }
+
+  return { state: "active" };
 }
 
 function readTextFileIfExists(filePath: string): string | null {
@@ -265,6 +390,115 @@ function startMonitor(options: {
   }
 
   let settled = false;
+  let failureObserved = false;
+  let probeInFlight = false;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  const stopPolling = () => {
+    if (!pollTimer) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  };
+
+  const cleanupMonitor = () => {
+    stopPolling();
+    unsubscribe();
+    if (monitoredSessions.get(options.sessionId) === cleanupMonitor) {
+      monitoredSessions.delete(options.sessionId);
+    }
+  };
+
+  const startPolling = () => {
+    if (pollTimer) return;
+    pollTimer = setInterval(() => {
+      void probeSession();
+    }, MONITOR_POLL_MS);
+    pollTimer.unref?.();
+  };
+
+  const finalizeCompletedSession = () => {
+    if (settled) return;
+    settled = true;
+    stopPolling();
+    void finalizeSessionCompletion(options).finally(() => {
+      cleanupMonitor();
+    });
+  };
+
+  const reportSessionFailure = (message?: string) => {
+    if (settled) return;
+    failureObserved = true;
+    stopPolling();
+    void markSessionFailed({
+      ...options,
+      errorMessage: normalizeInitialGenerationFailureMessage(message ?? null),
+    });
+  };
+
+  const reportSessionResumed = () => {
+    if (settled || !failureObserved) return;
+    failureObserved = false;
+    void markSessionGenerating(options);
+    startPolling();
+  };
+
+  const probeSession = async () => {
+    if (settled || probeInFlight) {
+      return;
+    }
+
+    probeInFlight = true;
+    try {
+      const [statusMap, questions, messages] = await Promise.all([
+        getSessionsStatus(options.workspaceDir),
+        listQuestions(options.workspaceDir).catch(() => []),
+        getSessionContent(options.sessionId, options.workspaceDir).catch(() => []),
+      ]);
+
+      if (settled) {
+        return;
+      }
+
+      const hasPendingQuestion = Array.isArray(questions)
+        ? questions.some((question: { sessionID?: string; sessionId?: string }) => {
+            const sessionId = question.sessionID ?? question.sessionId;
+            return sessionId === options.sessionId;
+          })
+        : false;
+
+      const outcome = deriveMonitoredSessionOutcome({
+        sessionStatus:
+          (statusMap[options.sessionId] as
+            | { type: "idle" | "busy" | "done" | "retry" | "error"; message?: string }
+            | undefined) ?? null,
+        messages: Array.isArray(messages)
+          ? (messages as MonitoredSessionRecord[])
+          : [],
+        hasPendingQuestion,
+      });
+
+      if (outcome.state === "completed") {
+        finalizeCompletedSession();
+        return;
+      }
+
+      if (outcome.state === "failed") {
+        reportSessionFailure(outcome.errorMessage);
+        return;
+      }
+
+      if (failureObserved) {
+        reportSessionResumed();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[InitialGeneration] Failed to probe session ${options.projectSlug}/v${options.version} (${options.sessionId}): ${message}`,
+      );
+    } finally {
+      probeInFlight = false;
+    }
+  };
 
   const unsubscribe = agentEventEmitter.subscribeToSession(
     options.sessionId,
@@ -272,12 +506,7 @@ function startMonitor(options: {
       if (settled) return;
 
       if (event.type === "session.completed") {
-        settled = true;
-        void finalizeSessionCompletion(options).finally(() => {
-          const activeUnsubscribe = monitoredSessions.get(options.sessionId);
-          activeUnsubscribe?.();
-          monitoredSessions.delete(options.sessionId);
-        });
+        finalizeCompletedSession();
         return;
       }
 
@@ -290,20 +519,17 @@ function startMonitor(options: {
           return;
         }
 
-        settled = true;
-        void markSessionFailed({
-          ...options,
-          errorMessage: errorData.message || "Initial generation failed.",
-        }).finally(() => {
-          const activeUnsubscribe = monitoredSessions.get(options.sessionId);
-          activeUnsubscribe?.();
-          monitoredSessions.delete(options.sessionId);
-        });
+        reportSessionFailure(errorData.message || "Initial generation failed.");
+        return;
       }
+
+      reportSessionResumed();
     },
   );
 
-  monitoredSessions.set(options.sessionId, unsubscribe);
+  startPolling();
+  void probeSession();
+  monitoredSessions.set(options.sessionId, cleanupMonitor);
 }
 
 async function markSessionFailed(options: {
@@ -321,6 +547,14 @@ async function markSessionFailed(options: {
   const promise = (async () => {
     const manifest = readInitialGenerationManifest(options.workspaceDir);
     if (manifest.sessionId && manifest.sessionId !== options.sessionId) {
+      return;
+    }
+
+    if (
+      manifest.state === "failed" &&
+      manifest.sessionId === options.sessionId &&
+      (manifest.errorMessage ?? "") === options.errorMessage
+    ) {
       return;
     }
 
@@ -352,6 +586,49 @@ async function markSessionFailed(options: {
 
   finalizationLocks.set(key, promise);
   return await promise;
+}
+
+async function markSessionGenerating(options: {
+  projectSlug: string;
+  version: number;
+  workspaceDir: string;
+  sessionId: string;
+}): Promise<void> {
+  const manifest = readInitialGenerationManifest(options.workspaceDir);
+  if (manifest.sessionId && manifest.sessionId !== options.sessionId) {
+    return;
+  }
+
+  if (
+    manifest.state === "generating_initial_site" &&
+    manifest.sessionId === options.sessionId &&
+    !manifest.errorMessage
+  ) {
+    return;
+  }
+
+  writeInitialGenerationManifest(options.workspaceDir, {
+    ...manifest,
+    state: "generating_initial_site",
+    sessionId: options.sessionId,
+    startedAt: manifest.startedAt ?? new Date().toISOString(),
+    completedAt: null,
+    errorMessage: null,
+  });
+
+  try {
+    await updateBackendInitialGenerationStatus({
+      projectSlug: options.projectSlug,
+      version: options.version,
+      status: "generating_initial_site",
+      sessionId: options.sessionId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[InitialGeneration] Failed to report resumed generating state for ${options.projectSlug}/v${options.version}: ${message}`,
+    );
+  }
 }
 
 async function finalizeSessionCompletion(options: {

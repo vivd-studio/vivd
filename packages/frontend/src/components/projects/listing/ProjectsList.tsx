@@ -41,11 +41,15 @@ export function ProjectsList() {
     isLoading,
     error,
   } = trpc.project.list.useQuery(undefined, {
-    // Poll only while there are non-completed projects.
+    // Poll only while there are active generation states.
     // Avoid spamming the backend (and console) on auth/config errors.
     refetchInterval: (query) => {
       const projects = query.state.data?.projects ?? [];
-      return projects.some((p) => p.status !== "completed") ? 2000 : false;
+      return projects.some(
+        (p) => p.status !== "completed" && p.status !== "failed",
+      )
+        ? 2000
+        : false;
     },
   });
   const { data: tagCatalogData } = trpc.project.listTags.useQuery();

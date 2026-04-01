@@ -29,7 +29,8 @@ export type SessionStatus =
   | { type: "idle" }
   | { type: "busy" }
   | { type: "done" }
-  | { type: "retry"; attempt?: number; message?: string; next?: number };
+  | { type: "retry"; attempt?: number; message?: string; next?: number }
+  | { type: "error"; attempt?: number; message?: string; next?: number };
 
 export type AgentEventData =
   | ThinkingStartedData
@@ -312,12 +313,22 @@ class AgentEventEmitter extends EventEmitter {
 
     if (event.type === "session.error") {
       const data = event.data as SessionErrorData;
-      this.sessionStatuses.set(sessionId, {
-        type: "retry",
-        attempt: data.attempt,
-        message: data.message,
-        next: data.nextRetryAt,
-      });
+      this.sessionStatuses.set(
+        sessionId,
+        data.errorType === "retry"
+          ? {
+              type: "retry",
+              attempt: data.attempt,
+              message: data.message,
+              next: data.nextRetryAt,
+            }
+          : {
+              type: "error",
+              attempt: data.attempt,
+              message: data.message,
+              next: data.nextRetryAt,
+            },
+      );
       this.sessionStatusUpdatedAt.set(sessionId, Date.now());
       return;
     }

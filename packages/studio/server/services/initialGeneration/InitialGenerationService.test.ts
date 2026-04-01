@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   runTaskMock,
+  getSessionContentMock,
   listSessionsMock,
+  listQuestionsMock,
   getSessionsStatusMock,
   subscribeToSessionMock,
   isSessionCompletedMock,
@@ -21,7 +23,9 @@ const {
   getStudioIdMock,
 } = vi.hoisted(() => ({
   runTaskMock: vi.fn(),
+  getSessionContentMock: vi.fn(),
   listSessionsMock: vi.fn(),
+  listQuestionsMock: vi.fn(),
   getSessionsStatusMock: vi.fn(),
   subscribeToSessionMock: vi.fn(),
   isSessionCompletedMock: vi.fn(),
@@ -42,7 +46,9 @@ vi.mock("../../opencode/index.js", () => ({
     subscribeToSession: subscribeToSessionMock,
     isSessionCompleted: isSessionCompletedMock,
   },
+  getSessionContent: getSessionContentMock,
   getSessionsStatus: getSessionsStatusMock,
+  listQuestions: listQuestionsMock,
   listSessions: listSessionsMock,
   runTask: runTaskMock,
 }));
@@ -129,7 +135,9 @@ describe("InitialGenerationService", () => {
     sessionListener = null;
 
     runTaskMock.mockReset();
+    getSessionContentMock.mockReset();
     listSessionsMock.mockReset();
+    listQuestionsMock.mockReset();
     getSessionsStatusMock.mockReset();
     subscribeToSessionMock.mockReset();
     isSessionCompletedMock.mockReset();
@@ -145,7 +153,9 @@ describe("InitialGenerationService", () => {
     getStudioIdMock.mockReset();
 
     runTaskMock.mockResolvedValue({ sessionId: "sess-1" });
+    getSessionContentMock.mockResolvedValue([]);
     listSessionsMock.mockResolvedValue([]);
+    listQuestionsMock.mockResolvedValue([]);
     getSessionsStatusMock.mockResolvedValue({});
     subscribeToSessionMock.mockImplementation((_sessionId, callback) => {
       sessionListener = callback;
@@ -315,5 +325,62 @@ describe("InitialGenerationService", () => {
     const manifest = readManifest(tmpDir);
     expect(manifest.state).toBe("generating_initial_site");
     expect(manifest.sessionId).toBe("sess-existing");
+  });
+
+  it("marks interrupted initial-generation sessions as failed when the runtime goes idle with a terminal assistant error", async () => {
+    vi.useFakeTimers();
+    getSessionsStatusMock.mockResolvedValue({
+      "sess-1": {
+        type: "error",
+        message:
+          'JSON error injected into SSE stream {"code":503,"metadata":{"error_type":"provider_overloaded"}}',
+      },
+    });
+    getSessionContentMock.mockResolvedValue([
+      {
+        info: {
+          id: "msg-user",
+          role: "user",
+          time: {
+            created: Date.now() - 20_000,
+            updated: Date.now() - 20_000,
+            completed: Date.now() - 20_000,
+          },
+        },
+        parts: [{ type: "text", text: "Create the initial site" }],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          role: "assistant",
+          time: {
+            created: Date.now() - 15_000,
+            updated: Date.now() - 15_000,
+          },
+          error: {
+            message:
+              'JSON error injected into SSE stream {"code":503,"metadata":{"error_type":"provider_overloaded"}}',
+          },
+        },
+        parts: [{ type: "reasoning", text: "Thinking" }],
+      },
+    ]);
+
+    await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+    });
+
+    await vi.runOnlyPendingTimersAsync();
+    await flushAsyncWork();
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("failed");
+    expect(manifest.sessionId).toBe("sess-1");
+    expect(manifest.errorMessage).toBe(
+      "The AI provider stopped this run before the initial site finished. Open Studio to continue the session.",
+    );
+    vi.useRealTimers();
   });
 });

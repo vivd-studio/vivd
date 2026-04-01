@@ -94,6 +94,17 @@ interface ProjectCardProps {
   isRegenerating: boolean;
 }
 
+export function isStudioAccessibleProjectStatus(
+  status: string | null | undefined,
+): boolean {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "starting_studio" ||
+    status === "generating_initial_site"
+  );
+}
+
 function isDevDomain(domain: string): boolean {
   return (
     domain === "localhost" ||
@@ -339,15 +350,16 @@ export function ProjectCard({
   const selectedVersionInfo = versions.find(
     (v) => v.version === selectedVersion,
   );
+  const selectedVersionStatus =
+    selectedVersionInfo?.status ??
+    (selectedVersion === project.currentVersion ? project.status : "unknown");
   const isCompleted =
-    selectedVersionInfo?.status === "completed" ||
-    (selectedVersion === project.currentVersion &&
-      project.status === "completed");
+    selectedVersionStatus === "completed";
   const isFailed =
-    selectedVersionInfo?.status === "failed" ||
-    (selectedVersion === project.currentVersion && project.status === "failed");
+    selectedVersionStatus === "failed";
   const isProcessing =
-    !isCompleted && !isFailed && selectedVersionInfo?.status !== "unknown";
+    !isCompleted && !isFailed && selectedVersionStatus !== "unknown";
+  const canOpenStudio = isStudioAccessibleProjectStatus(selectedVersionStatus);
   const totalVersions = project.totalVersions || 1;
   const projectTags = project.tags ?? [];
   const isUrlProject = (project.source || "url") === "url";
@@ -370,7 +382,7 @@ export function ProjectCard({
   let statusColor: "default" | "secondary" | "destructive" | "outline" =
     "secondary";
 
-  switch (project.status) {
+  switch (selectedVersionStatus) {
     case "pending":
       statusLabel = "Pending";
       break;
@@ -411,8 +423,17 @@ export function ProjectCard({
       statusColor = "destructive";
       break;
     default:
-      statusLabel = project.status;
+      statusLabel = selectedVersionStatus;
   }
+
+  const projectStudioRoute =
+    selectedVersion > 0
+      ? `${ROUTES.PROJECT(project.slug)}?version=${selectedVersion}`
+      : ROUTES.PROJECT(project.slug);
+
+  const openProjectStudio = () => {
+    navigate(projectStudioRoute);
+  };
 
   return (
     <>
@@ -421,10 +442,12 @@ export function ProjectCard({
           isProcessing
             ? "border-primary/60 ring-1 ring-primary/20 animate-pulse duration-3000"
             : ""
-        } ${isCompleted ? "cursor-pointer hover:border-primary/40 hover:bg-card" : ""}`}
+        } ${
+          canOpenStudio ? "cursor-pointer hover:border-primary/40 hover:bg-card" : ""
+        }`}
         onClick={() => {
-          if (isCompleted && !isRenamePending) {
-            navigate(`/vivd-studio/projects/${project.slug}`);
+          if (canOpenStudio && !isRenamePending) {
+            openProjectStudio();
           }
         }}
       >
@@ -591,6 +614,18 @@ export function ProjectCard({
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="text-sm font-medium">{statusLabel}...</span>
               </div>
+              {canOpenStudio && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openProjectStudio();
+                  }}
+                >
+                  Open Studio
+                </Button>
+              )}
               {isSuperAdmin && (
                 <Button
                   variant="ghost"
@@ -622,6 +657,18 @@ export function ProjectCard({
                 <div className="text-xs text-muted-foreground">
                   {selectedVersionInfo.errorMessage}
                 </div>
+              )}
+              {canOpenStudio && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openProjectStudio();
+                  }}
+                >
+                  Open Studio
+                </Button>
               )}
             </div>
           )}

@@ -278,6 +278,18 @@ export function buildDerivedSessionError({
     };
   }
 
+  if (sessionStatus?.type === "error") {
+    return {
+      key: `error:${selectedSessionId ?? "none"}:${sessionStatus.attempt ?? 0}:${sessionStatus.message ?? ""}`,
+      error: sanitizeSessionError({
+        type: "task",
+        message: sessionStatus.message,
+        attempt: sessionStatus.attempt,
+        nextRetryAt: sessionStatus.next,
+      }),
+    };
+  }
+
   if (
     selectedSessionId &&
     connectionState === "error" &&

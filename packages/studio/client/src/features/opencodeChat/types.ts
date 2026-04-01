@@ -9,7 +9,8 @@ export type OpenCodeSessionStatus =
   | { type: "idle" }
   | { type: "busy" }
   | { type: "done" }
-  | { type: "retry"; attempt?: number; message?: string; next?: number };
+  | { type: "retry"; attempt?: number; message?: string; next?: number }
+  | { type: "error"; attempt?: number; message?: string; next?: number };
 
 export interface OpenCodeSession {
   id: string;

@@ -917,6 +917,8 @@ export async function getSessionsStatus(directory: string) {
     const emitterAgeMs = emitterUpdatedAt > 0 ? now - emitterUpdatedAt : Infinity;
     const hasFreshEmitterBusy =
       emitter?.type === "busy" && emitterAgeMs <= FRESH_BUSY_STATUS_MAX_AGE_MS;
+    const hasEmitterRetryOrError =
+      emitter?.type === "retry" || emitter?.type === "error";
 
     if (normalized) {
       // Prefer OpenCode's current status over emitter snapshots so stale
@@ -924,7 +926,7 @@ export async function getSessionsStatus(directory: string) {
       if (
         normalized.type === "idle" &&
         emitter &&
-        ((emitter as any).type === "retry" || hasFreshEmitterBusy)
+        (hasEmitterRetryOrError || hasFreshEmitterBusy)
       ) {
         // Keep retry (and very fresh busy right after prompt submit) visible when
         // OpenCode briefly reports idle during status propagation.
@@ -937,7 +939,7 @@ export async function getSessionsStatus(directory: string) {
 
     // Backend payloads can be partial/ambiguous. Keep retry visibility and
     // trust only a short-lived local busy status; otherwise default to idle.
-    if (emitter && ((emitter as any).type === "retry" || hasFreshEmitterBusy)) {
+    if (emitter && (hasEmitterRetryOrError || hasFreshEmitterBusy)) {
       statusMap[session.id] = emitter;
       continue;
     }
@@ -951,7 +953,13 @@ export async function getSessionsStatus(directory: string) {
 function isSessionStatusLike(value: unknown): value is SessionStatus {
   if (!value || typeof value !== "object") return false;
   const type = (value as any).type;
-  return type === "idle" || type === "busy" || type === "done" || type === "retry";
+  return (
+    type === "idle" ||
+    type === "busy" ||
+    type === "done" ||
+    type === "retry" ||
+    type === "error"
+  );
 }
 
 function normalizeSessionStatuses(

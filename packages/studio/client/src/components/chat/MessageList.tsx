@@ -154,6 +154,9 @@ export function MessageList() {
       isThinking,
       isLoading,
     });
+  const interruptedContinueLabel = initialGenerationRequested
+    ? "Initial generation stopped before finishing. Click to continue"
+    : "Agent interrupted, click to continue";
   const activeTurnBodyMinHeight =
     activeTurnUserItem &&
     activeTurnLayout &&
@@ -275,7 +278,7 @@ export function MessageList() {
             onClick={handleContinueSession}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            Agent interrupted, click to continue
+            {interruptedContinueLabel}
           </button>
         </div>
       )}
