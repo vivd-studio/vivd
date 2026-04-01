@@ -242,12 +242,14 @@ async function updateBackendInitialGenerationStatus(options: {
   projectSlug: string;
   version: number;
   status: "generating_initial_site" | "completed" | "failed";
+  sessionId?: string;
   errorMessage?: string;
 }): Promise<void> {
   await callConnectedBackendMutation("studioApi.updateInitialGenerationStatus", {
     slug: options.projectSlug,
     version: options.version,
     status: options.status,
+    ...(options.sessionId ? { sessionId: options.sessionId } : {}),
     ...(options.errorMessage ? { errorMessage: options.errorMessage } : {}),
   });
 }
@@ -335,6 +337,7 @@ async function markSessionFailed(options: {
         projectSlug: options.projectSlug,
         version: options.version,
         status: "failed",
+        sessionId: options.sessionId,
         errorMessage: options.errorMessage,
       });
     } catch (error) {
@@ -438,6 +441,7 @@ async function finalizeSessionCompletion(options: {
         projectSlug: options.projectSlug,
         version: options.version,
         status: "completed",
+        sessionId: options.sessionId,
       });
     } catch (error) {
       const message =
@@ -502,6 +506,7 @@ async function startInitialGenerationInternal(
             projectSlug: options.projectSlug,
             version: options.version,
             status: "generating_initial_site",
+            sessionId: existingSessionId,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -562,6 +567,7 @@ async function startInitialGenerationInternal(
       projectSlug: options.projectSlug,
       version: options.version,
       status: "generating_initial_site",
+      sessionId,
     });
 
     startMonitor({

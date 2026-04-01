@@ -11,6 +11,10 @@ import { router, studioOrgProcedure, studioProjectProcedure } from "../trpc";
 import { usageService, type TokenData } from "../services/usage/UsageService";
 import { limitsService } from "../services/usage/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
+import {
+  readInitialGenerationManifest,
+  writeInitialGenerationManifest,
+} from "../generator/initialGeneration";
 import { thumbnailService } from "../services/project/ThumbnailService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
@@ -396,10 +400,39 @@ export const studioApiRouter = router({
           "completed",
           "failed",
         ]),
+        sessionId: z.string().trim().min(1).max(255).optional(),
         errorMessage: z.string().trim().min(1).max(5000).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const versionDir = getVersionDir(
+        ctx.organizationId!,
+        input.slug,
+        input.version,
+      );
+      const manifest = readInitialGenerationManifest(versionDir);
+      if (manifest?.mode === "studio_astro") {
+        const nextSessionId = input.sessionId ?? manifest.sessionId ?? null;
+        const now = new Date().toISOString();
+        writeInitialGenerationManifest(versionDir, {
+          ...manifest,
+          state: input.status,
+          sessionId: nextSessionId,
+          startedAt:
+            input.status === "generating_initial_site"
+              ? manifest.startedAt ?? now
+              : manifest.startedAt ?? (nextSessionId ? now : null),
+          completedAt:
+            input.status === "completed" || input.status === "failed"
+              ? now
+              : null,
+          errorMessage:
+            input.status === "failed"
+              ? input.errorMessage ?? manifest.errorMessage ?? "Initial generation failed."
+              : null,
+        });
+      }
+
       await projectMetaService.updateVersionStatus({
         organizationId: ctx.organizationId!,
         slug: input.slug,

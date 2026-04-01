@@ -97,6 +97,7 @@ export function ChatProvider({
   const [initialGenerationFailed, setInitialGenerationFailed] = useState<string | null>(
     null,
   );
+  const autoInitialGenerationAttemptedRef = useRef(false);
   const pendingInitialGenerationDefaultModelRef = useRef(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
@@ -424,7 +425,7 @@ export function ChatProvider({
     submitPreparedTask,
   ]);
 
-  const retryInitialGeneration = useCallback(() => {
+  const startInitialGeneration = useCallback(() => {
     if (initialGenerationStarting) return;
 
     previewContext?.clearPendingChatMessage?.();
@@ -462,6 +463,42 @@ export function ChatProvider({
     setSelectedSessionId,
     startInitialGenerationMutation,
     version,
+  ]);
+
+  const retryInitialGeneration = useCallback(() => {
+    autoInitialGenerationAttemptedRef.current = true;
+    startInitialGeneration();
+  }, [startInitialGeneration]);
+
+  useEffect(() => {
+    autoInitialGenerationAttemptedRef.current = false;
+    setInitialGenerationFailed(null);
+  }, [initialGenerationRequested, projectSlug, requestedInitialSessionId, version]);
+
+  useEffect(() => {
+    if (!initialGenerationRequested) return;
+    if (requestedInitialSessionId) return;
+    if (selectedSessionId) return;
+    if (sessionsLoading || isSessionHydrating) return;
+    if (initialGenerationStarting || initialGenerationFailed) return;
+    if (runTaskPending || activeQuestionRequest) return;
+    if (sessions.length > 0) return;
+    if (autoInitialGenerationAttemptedRef.current) return;
+
+    autoInitialGenerationAttemptedRef.current = true;
+    startInitialGeneration();
+  }, [
+    activeQuestionRequest,
+    initialGenerationFailed,
+    initialGenerationRequested,
+    initialGenerationStarting,
+    isSessionHydrating,
+    requestedInitialSessionId,
+    runTaskPending,
+    selectedSessionId,
+    sessions.length,
+    sessionsLoading,
+    startInitialGeneration,
   ]);
 
   useEffect(() => {

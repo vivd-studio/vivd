@@ -23,7 +23,10 @@ vi.mock("../src/services/studioMachines/stableRuntimeEnv", () => ({
   resolveStableStudioMachineEnv: resolveStableStudioMachineEnvMock,
 }));
 
-import { startStudioInitialGeneration } from "../src/services/project/StudioInitialGenerationService";
+import {
+  prepareStudioInitialGenerationHandoff,
+  startStudioInitialGeneration,
+} from "../src/services/project/StudioInitialGenerationService";
 
 function mockResponse(
   payload: unknown,
@@ -52,6 +55,49 @@ describe("StudioInitialGenerationService", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("waits for runtime health and returns a handoff-ready status without starting generation", async () => {
+    vi.useFakeTimers();
+
+    ensureRunningMock.mockResolvedValue({
+      studioId: "studio-1",
+      url: "https://fallback.example/runtime-123",
+      runtimeUrl: "https://studio.example/runtime-123",
+      compatibilityUrl: "https://app.example/_studio/runtime-123",
+      accessToken: "studio-token-1",
+    });
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(mockResponse({ status: "starting" }))
+      .mockResolvedValueOnce(mockResponse({ status: "ok" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = prepareStudioInitialGenerationHandoff({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 1,
+      requestHost: "org-1.vivd.studio",
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(promise).resolves.toEqual({
+      status: "starting_studio",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://studio.example/runtime-123/health",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://studio.example/runtime-123/health",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("waits for the studio runtime to report healthy and then starts initial generation via runtime auth", async () => {

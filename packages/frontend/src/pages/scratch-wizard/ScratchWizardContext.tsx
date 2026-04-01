@@ -311,9 +311,6 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       studioHandoffRequested &&
       studioStartupObserved
     ) {
-      if (!initialSessionId) {
-        return;
-      }
       navigateToStartedProjectStudio(
         started.slug,
         started.version,

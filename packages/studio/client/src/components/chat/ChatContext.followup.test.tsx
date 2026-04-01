@@ -379,12 +379,36 @@ describe("ChatProvider follow-up behavior", () => {
     expect(latestContext!.queuedFollowups).toEqual([]);
   });
 
-  it("does not auto-start initial generation when the session was already started by the backend", async () => {
+  it("auto-starts initial generation after Studio attaches when no session exists yet", async () => {
     controllerState.selectedSessionId = null;
     controllerState.sessions = [];
     controllerState.sessionsLoading = false;
     controllerState.isSessionHydrating = false;
     previewState.initialGenerationRequested = true;
+    previewState.pendingChatMessage = null;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        model: undefined,
+      });
+    });
+  });
+
+  it("does not auto-start initial generation when a session id was already handed off", async () => {
+    controllerState.selectedSessionId = null;
+    controllerState.sessions = [];
+    controllerState.sessionsLoading = false;
+    controllerState.isSessionHydrating = false;
+    previewState.initialGenerationRequested = true;
+    previewState.requestedInitialSessionId = "sess-started";
     previewState.pendingChatMessage = null;
 
     render(
@@ -426,6 +450,11 @@ describe("ChatProvider follow-up behavior", () => {
         <CaptureContext />
       </ChatProvider>,
     );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledTimes(1);
+    });
+    startInitialGenerationMock.mockClear();
 
     await act(async () => {
       latestContext!.retryInitialGeneration();

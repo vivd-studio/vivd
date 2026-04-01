@@ -173,7 +173,7 @@ describe("ScratchWizardContext", () => {
     });
   });
 
-  it("waits for an initial session id before handing over on polled studio startup", async () => {
+  it("hands over to Studio on polled startup even before a session id is known", async () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);
 
@@ -228,27 +228,9 @@ describe("ScratchWizardContext", () => {
       </MemoryRouter>,
     );
 
-    expect(navigateMock).not.toHaveBeenCalled();
-
-    currentStatus = {
-      status: "generating_initial_site",
-      studioHandoff: {
-        mode: "studio_astro",
-        initialGeneration: true,
-        sessionId: "sess-polled",
-      },
-    };
-    view.rerender(
-      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
-        <ScratchWizardProvider>
-          <ScratchWizardTestHarness />
-        </ScratchWizardProvider>
-      </MemoryRouter>,
-    );
-
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(
-        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-polled",
+        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1",
         { replace: true },
       );
     });

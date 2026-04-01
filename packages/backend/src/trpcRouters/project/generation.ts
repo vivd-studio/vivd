@@ -35,7 +35,7 @@ import {
 } from "../../services/project/ProjectArtifactsService";
 import { thumbnailService } from "../../services/project/ThumbnailService";
 import { alignProjectArtifactKeyToSlug } from "../../services/project/slugRename";
-import { startStudioInitialGeneration } from "../../services/project/StudioInitialGenerationService";
+import { prepareStudioInitialGenerationHandoff } from "../../services/project/StudioInitialGenerationService";
 import { analyzeImages } from "../../generator/image_analyzer";
 import { scraperClient } from "../../generator/scraper-client";
 import {
@@ -594,9 +594,6 @@ export const projectGenerationProcedures = {
           allowSlugSuffix: false,
           initialStatus: "pending",
         });
-        let studioInitialGenerationStatus = "starting_studio";
-        let studioInitialGenerationSessionId: string | null = null;
-
         try {
           if (Array.isArray(draftMeta.referenceUrls) && draftMeta.referenceUrls.length > 0) {
             generationCtx.updateStatus("capturing_references");
@@ -637,41 +634,12 @@ export const projectGenerationProcedures = {
             version,
           });
 
-          const studioInitialGeneration =
-            await startStudioInitialGeneration({
-              organizationId,
-              projectSlug: slug,
-              version,
-              requestHost: ctx.requestHost,
-            });
-          studioInitialGenerationStatus = studioInitialGeneration.status;
-          studioInitialGenerationSessionId = studioInitialGeneration.sessionId;
-
-          writeInitialGenerationManifest(
-            versionDir,
-            {
-              ...createScratchInitialGenerationManifest({
-                title: draftMeta.title,
-                description: draftMeta.description,
-                businessType: draftMeta.businessType,
-                stylePreset: draftMeta.stylePreset,
-                stylePalette: draftMeta.stylePalette,
-                styleMode: draftMeta.styleMode,
-                siteTheme: draftMeta.siteTheme,
-                referenceUrls: draftMeta.referenceUrls,
-              }),
-              state:
-                studioInitialGenerationStatus === "completed"
-                  ? "completed"
-                  : "generating_initial_site",
-              sessionId: studioInitialGenerationSessionId,
-              startedAt: new Date().toISOString(),
-              completedAt:
-                studioInitialGenerationStatus === "completed"
-                  ? new Date().toISOString()
-                  : null,
-            },
-          );
+          await prepareStudioInitialGenerationHandoff({
+            organizationId,
+            projectSlug: slug,
+            version,
+            requestHost: ctx.requestHost,
+          });
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -680,17 +648,14 @@ export const projectGenerationProcedures = {
         }
 
         return {
-          status: studioInitialGenerationStatus,
+          status: "starting_studio",
           slug,
           version,
-          message:
-            studioInitialGenerationStatus === "completed"
-              ? "Initial generation already completed."
-              : "Studio handoff ready.",
+          message: "Studio handoff ready.",
           studioHandoff: {
             mode: "studio_astro" as const,
             initialGeneration: true,
-            sessionId: studioInitialGenerationSessionId,
+            sessionId: null,
           },
         };
       }

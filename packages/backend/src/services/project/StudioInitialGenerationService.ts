@@ -16,6 +16,10 @@ type StudioInitialGenerationStartResult = {
   status: string;
 };
 
+type StudioInitialGenerationHandoffResult = {
+  status: "starting_studio";
+};
+
 type StudioRuntimeConnection = {
   url: string;
   backendUrl?: string | null;
@@ -114,6 +118,60 @@ async function isStudioRuntimeReady(studioBaseUrl: string): Promise<{
   }
 }
 
+async function ensureStudioRuntimeReadyForHandoff(options: {
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+  requestHost?: string | null;
+}): Promise<{
+  runtime: StudioRuntimeConnection;
+  studioBaseUrl: string;
+  accessToken: string;
+}> {
+  const studioRuntimeEnv = await resolveStableStudioMachineEnv({
+    providerKind: studioMachineProvider.kind,
+    organizationId: options.organizationId,
+    projectSlug: options.projectSlug,
+    requestHost: options.requestHost,
+  });
+
+  const runtime = await studioMachineProvider.ensureRunning({
+    organizationId: options.organizationId,
+    projectSlug: options.projectSlug,
+    version: options.version,
+    env: studioRuntimeEnv,
+  });
+
+  const accessToken = runtime.accessToken?.trim();
+  if (!accessToken) {
+    throw new Error("Studio runtime started without an access token");
+  }
+
+  const studioBaseUrl = getStudioCallBaseUrl(runtime);
+  const startedAt = Date.now();
+  let lastError: Error | null = null;
+
+  while (Date.now() - startedAt < STUDIO_READY_TIMEOUT_MS) {
+    const readiness = await isStudioRuntimeReady(studioBaseUrl);
+    if (readiness.ready) {
+      return {
+        runtime,
+        studioBaseUrl,
+        accessToken,
+      };
+    }
+
+    lastError = readiness.error;
+    await sleep(STUDIO_POLL_INTERVAL_MS);
+  }
+
+  throw new Error(
+    `Timed out waiting for studio handoff readiness for ${options.projectSlug}/v${options.version}${
+      lastError ? `: ${lastError.message}` : ""
+    }`,
+  );
+}
+
 async function tryStartInitialGenerationOnStudio(options: {
   studioBaseUrl: string;
   accessToken: string;
@@ -194,6 +252,18 @@ async function tryStartInitialGenerationOnStudio(options: {
   }
 }
 
+export async function prepareStudioInitialGenerationHandoff(options: {
+  organizationId: string;
+  projectSlug: string;
+  version: number;
+  requestHost?: string | null;
+}): Promise<StudioInitialGenerationHandoffResult> {
+  await ensureStudioRuntimeReadyForHandoff(options);
+  return {
+    status: "starting_studio",
+  };
+}
+
 export async function startStudioInitialGeneration(options: {
   organizationId: string;
   projectSlug: string;
@@ -201,37 +271,12 @@ export async function startStudioInitialGeneration(options: {
   requestHost?: string | null;
   model?: StudioInitialGenerationModelSelection;
 }): Promise<StudioInitialGenerationStartResult> {
-  const studioRuntimeEnv = await resolveStableStudioMachineEnv({
-    providerKind: studioMachineProvider.kind,
-    organizationId: options.organizationId,
-    projectSlug: options.projectSlug,
-    requestHost: options.requestHost,
-  });
-
-  const runtime = await studioMachineProvider.ensureRunning({
-    organizationId: options.organizationId,
-    projectSlug: options.projectSlug,
-    version: options.version,
-    env: studioRuntimeEnv,
-  });
-
-  const accessToken = runtime.accessToken?.trim();
-  if (!accessToken) {
-    throw new Error("Studio runtime started without an access token");
-  }
-
-  const studioBaseUrl = getStudioCallBaseUrl(runtime);
+  const { studioBaseUrl, accessToken } =
+    await ensureStudioRuntimeReadyForHandoff(options);
   const startedAt = Date.now();
   let lastError: Error | null = null;
 
   while (Date.now() - startedAt < STUDIO_READY_TIMEOUT_MS) {
-    const readiness = await isStudioRuntimeReady(studioBaseUrl);
-    if (!readiness.ready) {
-      lastError = readiness.error;
-      await sleep(STUDIO_POLL_INTERVAL_MS);
-      continue;
-    }
-
     const startAttempt = await tryStartInitialGenerationOnStudio({
       studioBaseUrl,
       accessToken,
