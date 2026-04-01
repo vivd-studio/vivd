@@ -18,6 +18,7 @@ const DEFAULT_CONTROL_PLANE_HOSTNAME = "app.localhost";
 const DEFAULT_TENANT_HOSTNAME = "default.localhost";
 const DEFAULT_DOCS_HOSTNAME = "docs.localhost";
 const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
+const MAX_AUTH_SETTLE_ATTEMPTS = 3;
 const DEFAULT_CHEAP_OPENROUTER_MODEL = "openrouter/google/gemini-2.5-flash-lite";
 const FAILING_CONSOLE_PATTERNS = [
   /invalid bootstrap target/i,
@@ -384,6 +385,22 @@ async function waitForVisibleState(candidates, timeoutMs) {
   return null;
 }
 
+async function detectAuthMode(page, timeoutMs) {
+  return waitForVisibleState(
+    [
+      {
+        name: "signup",
+        locator: page.getByRole("button", { name: "Create Admin Account" }),
+      },
+      {
+        name: "login",
+        locator: page.getByRole("button", { name: "Login" }),
+      },
+    ],
+    timeoutMs,
+  );
+}
+
 async function completeAuthOnCurrentPage({
   page,
   origin,
@@ -392,11 +409,8 @@ async function completeAuthOnCurrentPage({
 }) {
   const signupButton = page.getByRole("button", { name: "Create Admin Account" });
   const loginButton = page.getByRole("button", { name: "Login" });
-  const authMode = await waitForVisibleState(
-    [
-      { name: "signup", locator: signupButton },
-      { name: "login", locator: loginButton },
-    ],
+  const authMode = await detectAuthMode(
+    page,
     Math.min(timeoutMs, DEFAULT_AUTH_WAIT_TIMEOUT_MS),
   );
 
@@ -420,16 +434,53 @@ async function completeAuthOnCurrentPage({
   return authMode;
 }
 
+async function authenticateUntilReady({
+  page,
+  origin,
+  targetPath,
+  credentials,
+  timeoutMs,
+}) {
+  const targetUrl = `${origin}${targetPath}`;
+  await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+
+  for (let attempt = 1; attempt <= MAX_AUTH_SETTLE_ATTEMPTS; attempt += 1) {
+    const authMode = await detectAuthMode(
+      page,
+      Math.min(timeoutMs, DEFAULT_AUTH_WAIT_TIMEOUT_MS),
+    );
+
+    if (!authMode) {
+      return;
+    }
+
+    log(
+      `Auth settle attempt ${attempt}/${MAX_AUTH_SETTLE_ATTEMPTS} on ${targetPath}: ${authMode}`,
+    );
+    await completeAuthOnCurrentPage({
+      page,
+      origin,
+      credentials,
+      timeoutMs,
+    });
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+  }
+
+  throw new Error(
+    `Authentication did not settle after ${MAX_AUTH_SETTLE_ATTEMPTS} attempts for ${targetUrl}; current URL is ${page.url()}`,
+  );
+}
+
 async function authenticateOnHost({
   page,
   origin,
   credentials,
   timeoutMs,
 }) {
-  await page.goto(`${origin}/vivd-studio`, { waitUntil: "domcontentloaded" });
-  await completeAuthOnCurrentPage({
+  await authenticateUntilReady({
     page,
     origin,
+    targetPath: "/vivd-studio",
     credentials,
     timeoutMs,
   });
@@ -459,14 +510,12 @@ async function ensureScratchWizardVisible({
     log(
       `Scratch route showed ${visibleState} screen; completing auth and retrying scratch navigation`,
     );
-    await completeAuthOnCurrentPage({
+    await authenticateUntilReady({
       page,
       origin: controlPlaneOrigin,
+      targetPath: "/vivd-studio/projects/new/scratch",
       credentials,
       timeoutMs,
-    });
-    await page.goto(`${controlPlaneOrigin}/vivd-studio/projects/new/scratch`, {
-      waitUntil: "domcontentloaded",
     });
     await expectVisible(scratchHeading, timeoutMs, "scratch wizard");
     return;
