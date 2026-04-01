@@ -40,6 +40,28 @@ function log(message) {
   console.log(`[studio-docker-host-smoke] ${message}`);
 }
 
+function isStudioProjectRouteUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      /^\/vivd-studio\/projects\/[^/]+$/u.test(url.pathname) &&
+      url.searchParams.get("view") === "studio" &&
+      url.searchParams.get("initialGeneration") === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isTrpcProcedureUrl(value, procedureName) {
+  try {
+    const url = new URL(value);
+    return url.pathname.includes(`/vivd-studio/api/trpc/${procedureName}`);
+  } catch {
+    return false;
+  }
+}
+
 function runCommand(command, args, options = {}) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
@@ -606,6 +628,87 @@ async function ensureScratchWizardVisible({
   );
 }
 
+async function readTrpcResponseSummary(response) {
+  const text = await response.text().catch(() => "");
+  let parsed = null;
+
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const payload = Array.isArray(parsed) ? parsed[0] : parsed;
+  const errorMessage =
+    payload?.error?.json?.message ??
+    payload?.error?.message ??
+    null;
+
+  return {
+    url: response.url(),
+    status: response.status(),
+    ok: response.ok() && !errorMessage,
+    errorMessage,
+    result: payload?.result?.data?.json ?? payload?.result?.data ?? null,
+    rawText: text || null,
+  };
+}
+
+async function readScratchSubmitState(page) {
+  return await page
+    .evaluate(() => {
+      const titleInput = document.querySelector('input[placeholder="Acme Studio"]');
+      const descriptionInput = document.querySelector(
+        'textarea[placeholder="Describe the website you want to create."]',
+      );
+      const submitButton = document.querySelector('form button[type="submit"]');
+      const bodyText = document.body?.innerText ?? "";
+      const statusLabel =
+        [
+          "Creating project…",
+          "Uploading assets…",
+          "Starting generation…",
+          "Generating…",
+        ].find((candidate) => bodyText.includes(candidate)) ?? null;
+      const projectText =
+        bodyText
+          .split(/\n/u)
+          .map((line) => line.trim())
+          .find((line) => line.startsWith("Project:")) ?? null;
+      const authScreen = bodyText.includes("Create Admin Account")
+        ? "signup"
+        : bodyText.includes("Login")
+          ? "login"
+          : null;
+
+      return {
+        authScreen,
+        statusLabel,
+        projectText,
+        titleDisabled:
+          titleInput instanceof HTMLInputElement ? titleInput.disabled : null,
+        descriptionDisabled:
+          descriptionInput instanceof HTMLTextAreaElement
+            ? descriptionInput.disabled
+            : null,
+        submitDisabled:
+          submitButton instanceof HTMLButtonElement
+            ? submitButton.disabled
+            : null,
+      };
+    })
+    .catch(() => ({
+      authScreen: null,
+      statusLabel: null,
+      projectText: null,
+      titleDisabled: null,
+      descriptionDisabled: null,
+      submitDisabled: null,
+    }));
+}
+
 async function createScratchProject({
   page,
   controlPlaneOrigin,
@@ -641,23 +744,132 @@ async function createScratchProject({
     .getByPlaceholder("Describe the website you want to create.")
     .fill(description);
 
+  let createDraftResponseSummary = null;
+  let startGenerationResponseSummary = null;
+  const createDraftResponsePromise = page
+    .waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        isTrpcProcedureUrl(response.url(), "project.createScratchDraft"),
+      { timeout: Math.min(timeoutMs, 60_000) },
+    )
+    .then(readTrpcResponseSummary)
+    .then((summary) => {
+      createDraftResponseSummary = summary;
+      return summary;
+    })
+    .catch((error) => {
+      createDraftResponseSummary = {
+        waitError: error instanceof Error ? error.message : String(error),
+      };
+      return createDraftResponseSummary;
+    });
+  const startGenerationResponsePromise = page
+    .waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        isTrpcProcedureUrl(response.url(), "project.startScratchGeneration"),
+      { timeout: timeoutMs },
+    )
+    .then(readTrpcResponseSummary)
+    .then((summary) => {
+      startGenerationResponseSummary = summary;
+      return summary;
+    })
+    .catch((error) => {
+      startGenerationResponseSummary = {
+        waitError: error instanceof Error ? error.message : String(error),
+      };
+      return startGenerationResponseSummary;
+    });
+
   const submitStartedAt = Date.now();
   await page.locator("form button[type='submit']").click();
 
-  await page.waitForURL(
-    /\/vivd-studio\/projects\/[^?]+\?view=studio.*initialGeneration=1/,
-    { timeout: timeoutMs },
+  const createDraftResponse = await createDraftResponsePromise;
+  if (createDraftResponse?.waitError) {
+    throw new Error(
+      `Scratch submit never completed createScratchDraft within 60000ms: ${createDraftResponse.waitError}`,
+    );
+  }
+  if (!createDraftResponse?.ok) {
+    throw new Error(
+      `createScratchDraft failed: ${JSON.stringify(createDraftResponse)}`,
+    );
+  }
+
+  let lastProgressLogAt = 0;
+  while (Date.now() - submitStartedAt < timeoutMs) {
+    if (isStudioProjectRouteUrl(page.url())) {
+      const redirectedAt = Date.now();
+      const projectUrl = new URL(page.url());
+      const projectSlug = projectUrl.pathname.split("/").filter(Boolean).pop();
+      assert(projectSlug, "Expected redirected project slug in URL");
+
+      return {
+        projectSlug,
+        handoffMs: redirectedAt - submitStartedAt,
+        createDraftResponse,
+        startGenerationResponse: startGenerationResponseSummary,
+      };
+    }
+
+    const scratchState = await readScratchSubmitState(page);
+    if (scratchState.authScreen) {
+      throw new Error(
+        `Scratch submit unexpectedly returned to ${scratchState.authScreen} at ${page.url()}`,
+      );
+    }
+
+    if (startGenerationResponseSummary?.waitError) {
+      throw new Error(
+        `startScratchGeneration did not return before the scratch handoff completed: ${startGenerationResponseSummary.waitError}`,
+      );
+    }
+    if (startGenerationResponseSummary && !startGenerationResponseSummary.ok) {
+      throw new Error(
+        `startScratchGeneration failed: ${JSON.stringify({
+          pageUrl: page.url(),
+          scratchState,
+          startGenerationResponse: startGenerationResponseSummary,
+        })}`,
+      );
+    }
+
+    if (
+      startGenerationResponseSummary?.ok &&
+      Date.now() - submitStartedAt >= 15_000
+    ) {
+      throw new Error(
+        `Scratch submit received startScratchGeneration success but never navigated to the Studio route: ${JSON.stringify({
+          pageUrl: page.url(),
+          scratchState,
+          startGenerationResponse: startGenerationResponseSummary,
+        })}`,
+      );
+    }
+
+    const elapsedMs = Date.now() - submitStartedAt;
+    if (elapsedMs - lastProgressLogAt >= STUDIO_READY_PROGRESS_LOG_INTERVAL_MS) {
+      lastProgressLogAt = elapsedMs;
+      log(
+        `Still waiting for scratch handoff [${elapsedMs}ms]: pageUrl=${page.url()} statusLabel=${scratchState.statusLabel ?? "none"} projectText=${scratchState.projectText ?? "none"} submitDisabled=${scratchState.submitDisabled} titleDisabled=${scratchState.titleDisabled} descriptionDisabled=${scratchState.descriptionDisabled} startGenerationResponse=${startGenerationResponseSummary ? "received" : "pending"}`,
+      );
+    }
+
+    await sleep(1_000);
+  }
+
+  const scratchState = await readScratchSubmitState(page);
+  await startGenerationResponsePromise.catch(() => undefined);
+  throw new Error(
+    `Scratch submit did not hand off to the Studio route within ${timeoutMs}ms: ${JSON.stringify({
+      pageUrl: page.url(),
+      scratchState,
+      createDraftResponse,
+      startGenerationResponse: startGenerationResponseSummary,
+    })}`,
   );
-
-  const redirectedAt = Date.now();
-  const projectUrl = new URL(page.url());
-  const projectSlug = projectUrl.pathname.split("/").filter(Boolean).pop();
-  assert(projectSlug, "Expected redirected project slug in URL");
-
-  return {
-    projectSlug,
-    handoffMs: redirectedAt - submitStartedAt,
-  };
 }
 
 async function waitForStudioReady(page, timeoutMs) {
@@ -1221,6 +1433,10 @@ async function main() {
     });
     createdProjectSlug = scratch.projectSlug;
     metrics.scratchHandoffMs = scratch.handoffMs;
+    metrics.controlPlaneScratchSubmit = {
+      createDraftResponse: scratch.createDraftResponse ?? null,
+      startGenerationResponse: scratch.startGenerationResponse ?? null,
+    };
     markCheckpoint(metrics.checkpoints, "studio_route_opened", startedAt, {
       projectSlug: createdProjectSlug,
     });

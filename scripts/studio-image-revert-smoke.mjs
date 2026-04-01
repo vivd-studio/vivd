@@ -35,6 +35,19 @@ function log(message) {
   console.log(`[studio-image-revert-smoke] ${message}`);
 }
 
+function logCheckpoint(name, details = {}) {
+  const pairs = Object.entries(details).filter(([, value]) => value !== undefined);
+  if (pairs.length === 0) {
+    log(`Checkpoint: ${name}`);
+    return;
+  }
+  log(
+    `Checkpoint: ${name} (${pairs
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(", ")})`,
+  );
+}
+
 function runCommand(command, args, options = {}) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
@@ -695,6 +708,11 @@ function assertAvailableModel(availableModels, selection) {
   assert.equal(available.modelId, selection.modelId, `${selection.tier} model mismatch`);
 }
 
+async function readFileContains(filePath, needle) {
+  const content = await fs.readFile(filePath, "utf-8");
+  return content.includes(needle);
+}
+
 async function main() {
   const image = getOptionalEnv("STUDIO_IMAGE") || DEFAULT_IMAGE;
   const timeoutMs = getTimeoutMs();
@@ -829,8 +847,13 @@ async function main() {
       firstSessionSummary.diffs.some((diff) => diff.file.includes("index.html")),
       "Expected tracked diff summary to include index.html",
     );
-
     const firstUserMessageId = firstSessionSummary.userMessage.info.id;
+    logCheckpoint("initial_edit_tracked", {
+      sessionId: firstRun.sessionId,
+      messageId: firstUserMessageId,
+      diffFiles: firstSessionSummary.diffs.length,
+    });
+
     const sourceIndexKey = `${sourcePrefix}/index.html`;
     const snapshotPrefix = `${opencodePrefix}/snapshot/`;
     const sessionDiffPrefix = `${opencodePrefix}/storage/session_diff/`;
@@ -838,6 +861,11 @@ async function main() {
     await waitForObjectToContain(s3, bucket, sourceIndexKey, firstMarker, timeoutMs);
     await waitForPrefixToHaveKeys(s3, bucket, snapshotPrefix, timeoutMs);
     await waitForPrefixToHaveKeys(s3, bucket, sessionDiffPrefix, timeoutMs);
+    logCheckpoint("initial_state_synced", {
+      sourceKey: sourceIndexKey,
+      snapshotPrefix,
+      sessionDiffPrefix,
+    });
 
     await stopContainer(firstStudioContainerId);
     firstStudioLogs = getContainerLogs(firstStudioContainerId);
@@ -866,6 +894,9 @@ async function main() {
     const secondClient = createTrpcClient(secondBaseUrl, secondAccessToken);
 
     await waitForFileToContain(rehydratedIndexPath, firstMarker, timeoutMs);
+    logCheckpoint("hydrated_workspace_restored", {
+      marker: firstMarker,
+    });
 
     secondStudioLogs = getContainerLogs(secondStudioContainerId);
     assert.match(
@@ -880,6 +911,17 @@ async function main() {
       version: PROJECT_VERSION,
       sessionId: firstRun.sessionId,
       messageId: firstUserMessageId,
+    });
+
+    const fileContainsMarkerImmediatelyAfterRevert = await readFileContains(
+      rehydratedIndexPath,
+      firstMarker,
+    );
+    logCheckpoint("rehydrate_revert_response", {
+      reverted: revertResult?.reverted,
+      reason:
+        revertResult && "reason" in revertResult ? revertResult.reason : undefined,
+      fileContainsMarkerImmediatelyAfterRevert,
     });
 
     assert.equal(revertResult?.success, true, "Expected revertToMessage to succeed");
@@ -898,6 +940,9 @@ async function main() {
         { cause: error },
       );
     }
+    logCheckpoint("rehydrate_revert_restored_file", {
+      markerRemoved: true,
+    });
 
     const unrevertResult = await secondClient.agent.unrevertSession.mutate({
       projectSlug: PROJECT_SLUG,
@@ -907,6 +952,9 @@ async function main() {
 
     assert.equal(unrevertResult?.success, true, "Expected unrevertSession to succeed");
     await waitForFileToContain(rehydratedIndexPath, firstMarker, timeoutMs);
+    logCheckpoint("rehydrate_unrevert_restored_change", {
+      marker: firstMarker,
+    });
 
     const secondAvailableModels = await secondClient.agent.getAvailableModels.query();
     assertAvailableModel(secondAvailableModels, model);
@@ -939,6 +987,10 @@ async function main() {
       secondSessionSummary.diffs.some((diff) => diff.file.includes("index.html")),
       "Expected post-hydrate tracked diff summary to include index.html",
     );
+    logCheckpoint("post_hydrate_tracking_ok", {
+      sessionId: secondRun.sessionId,
+      diffFiles: secondSessionSummary.diffs.length,
+    });
 
     secondStudioLogs = getContainerLogs(secondStudioContainerId);
     assertNoBrokenSnapshotLogs(secondStudioLogs);
