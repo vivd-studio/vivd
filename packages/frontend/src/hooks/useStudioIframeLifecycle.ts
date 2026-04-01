@@ -18,6 +18,19 @@ import { useStudioIframeTimeoutRecovery } from "./useStudioIframeTimeoutRecovery
 const EARLY_STALL_RECOVERY_DELAY_MS = 6_000;
 const EARLY_STALL_RECOVERY_TIMEOUT_MS = 4_000;
 
+function isIframeStillOnAboutBlank(
+  iframe: HTMLIFrameElement | null,
+): boolean {
+  const targetWindow = iframe?.contentWindow;
+  if (!targetWindow) return false;
+
+  try {
+    return targetWindow.location.href === "about:blank";
+  } catch {
+    return false;
+  }
+}
+
 type UseStudioIframeLifecycleOptions = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   studioBaseUrl: string | null;
@@ -57,6 +70,7 @@ export function useStudioIframeLifecycle({
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
   const attemptedEarlyRecoveryRef = useRef(false);
+  const attemptedEarlyBlankReloadRef = useRef(false);
   const attemptedCrossOriginTimeoutReloadRef = useRef(false);
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
 
@@ -224,6 +238,7 @@ export function useStudioIframeLifecycle({
 
   useEffect(() => {
     attemptedEarlyRecoveryRef.current = false;
+    attemptedEarlyBlankReloadRef.current = false;
     attemptedCrossOriginTimeoutReloadRef.current = false;
   }, [reloadNonce, studioBaseUrl]);
 
@@ -266,6 +281,43 @@ export function useStudioIframeLifecycle({
     studioBaseUrl,
     studioHostProbeBaseUrl,
     studioLoadTimedOut,
+    studioReady,
+  ]);
+
+  useEffect(() => {
+    if (
+      studioHostProbeBaseUrl ||
+      !studioBaseUrl ||
+      studioReady ||
+      attemptedEarlyBlankReloadRef.current
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (
+        cancelled ||
+        studioReady ||
+        attemptedEarlyBlankReloadRef.current ||
+        !isIframeStillOnAboutBlank(iframeRef.current)
+      ) {
+        return;
+      }
+
+      attemptedEarlyBlankReloadRef.current = true;
+      void reloadStudioIframe();
+    }, EARLY_STALL_RECOVERY_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    iframeRef,
+    reloadStudioIframe,
+    studioBaseUrl,
+    studioHostProbeBaseUrl,
     studioReady,
   ]);
 

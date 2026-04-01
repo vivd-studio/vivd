@@ -201,6 +201,45 @@ describe("useStudioIframeLifecycle", () => {
     );
   });
 
+  it("reloads early when a cross-origin studio iframe is still stuck on about:blank", async () => {
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
+    });
+
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = {
+      location: {
+        href: "about:blank",
+      },
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_900);
+    });
+
+    expect(props.reloadStudioIframe).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+
+    expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
+  });
+
   it("polls runtime health after a load timeout and reloads once the runtime is healthy", async () => {
     const fetchMock = vi
       .fn()
@@ -263,6 +302,18 @@ describe("useStudioIframeLifecycle", () => {
       studioHostProbeBaseUrl: null,
     });
     render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = {
+      location: {
+        href: "https://studio.example.com/runtime/vivd-studio",
+      },
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(26_000);

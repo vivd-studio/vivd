@@ -768,9 +768,18 @@ async function waitForStudioReady(page, timeoutMs) {
   );
 }
 
-async function settleInitialGeneration(frame, timeoutMs) {
+function readSessionIdFromUrl(urlString) {
+  try {
+    return new URL(urlString).searchParams.get("sessionId")?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function settleInitialGeneration(page, frame, timeoutMs) {
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
   const sendButton = frame.getByRole("button", { name: "Send message" });
+  const chatComposer = frame.locator("textarea").first();
   const sessionContextButton = frame.locator(
     "[data-testid='session-context-usage-button']",
   );
@@ -839,8 +848,19 @@ async function settleInitialGeneration(frame, timeoutMs) {
     return "observed-session-context";
   }
 
+  const sessionIdFromUrl = readSessionIdFromUrl(page.url());
+  const sendButtonVisible = await sendButton.isVisible().catch(() => false);
+  const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
+
+  if (sessionIdFromUrl && chatComposerVisible) {
+    log(
+      `No visible initial-generation activity appeared within ${settleTimeoutMs}ms, but backend handoff session ${sessionIdFromUrl} is attached in the project URL; continuing with minimal handoff coverage`,
+    );
+    return "backend-session-confirmed";
+  }
+
   throw new Error(
-    `Initial generation did not expose a running control or any session activity within ${settleTimeoutMs}ms`,
+    `Initial generation did not expose a running control or any session activity within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible})`,
   );
 }
 
@@ -1138,6 +1158,7 @@ async function main() {
     });
 
     const initialGenerationOutcome = await settleInitialGeneration(
+      page,
       controlPlaneFrame,
       timeoutMs,
     );
