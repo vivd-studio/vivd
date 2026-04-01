@@ -17,7 +17,7 @@ export type DockerContainerSummary = {
   Created?: number;
   Labels?: Record<string, string>;
   HostConfig?: {
-    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
+    PortBindings?: Record<string, Array<{ HostIp?: string; HostPort?: string }>>;
   };
 };
 
@@ -47,7 +47,7 @@ export type DockerContainerInfo = {
     Memory?: number;
     AutoRemove?: boolean;
     Binds?: string[];
-    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
+    PortBindings?: Record<string, Array<{ HostIp?: string; HostPort?: string }>>;
   };
   NetworkSettings?: {
     Networks?: Record<string, Record<string, unknown>>;
@@ -75,7 +75,7 @@ export type DockerContainerCreateConfig = {
     Memory?: number;
     AutoRemove?: boolean;
     Binds?: string[];
-    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
+    PortBindings?: Record<string, Array<{ HostIp?: string; HostPort?: string }>>;
   };
   NetworkingConfig?: {
     EndpointsConfig?: Record<string, Record<string, never>>;

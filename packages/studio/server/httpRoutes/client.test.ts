@@ -147,4 +147,33 @@ describe("registerStudioClientHttpRoutes", () => {
       });
     }
   });
+
+  it("does not block the shell indefinitely when initial session resolution is slow", async () => {
+    const resolveInitialGenerationSessionId = vi
+      .fn()
+      .mockImplementation(
+        () => new Promise<string | null>((resolve) => setTimeout(() => resolve("sess-late"), 5_000)),
+      );
+    const { app } = createApp({
+      resolveInitialGenerationSessionId,
+    });
+    const { server, baseUrl } = await startServer(app);
+
+    try {
+      const startedAt = Date.now();
+      const response = await fetch(
+        `${baseUrl}/vivd-studio?initialGeneration=1&projectSlug=site-1&version=1`,
+      );
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("studio-shell");
+      expect(elapsedMs).toBeLessThan(4_500);
+      expect(resolveInitialGenerationSessionId).toHaveBeenCalledTimes(1);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
 });

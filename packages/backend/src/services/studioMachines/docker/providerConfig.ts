@@ -178,6 +178,11 @@ export class DockerProviderConfig {
     return Math.max(1024, Number.isFinite(parsed) ? parsed : 4100);
   }
 
+  get hostIp(): string {
+    const raw = process.env.DOCKER_STUDIO_HOST_IP?.trim();
+    return raw || "127.0.0.1";
+  }
+
   get internalProxyBaseUrl(): string {
     const explicit = process.env.DOCKER_STUDIO_INTERNAL_PROXY_BASE_URL?.trim();
     if (explicit) return normalizeOrigin(explicit);

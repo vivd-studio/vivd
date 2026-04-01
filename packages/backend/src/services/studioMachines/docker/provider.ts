@@ -247,6 +247,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       listContainers: () => this.apiClient.listContainers(),
       nextPortCandidate: () => this.nextPublicPort++,
       warn: (message) => console.warn(message),
+      hostIp: this.config.hostIp,
     });
   }
 
@@ -362,6 +363,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
         nanoCpus: this.config.nanoCpus,
         memoryBytes: this.config.memoryBytes,
         generateStudioAccessToken: () => this.config.generateStudioAccessToken(),
+        hostIp: this.config.hostIp,
       },
       options,
     );

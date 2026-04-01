@@ -503,6 +503,7 @@ export function createContainerSpec(options: {
   nanoCpus: number;
   memoryBytes: number;
   networkName: string;
+  hostIp: string;
 }): DockerContainerCreateConfig {
   const labels: Record<string, string> = {
     vivd_managed: "true",
@@ -543,7 +544,9 @@ export function createContainerSpec(options: {
       NanoCpus: options.nanoCpus,
       Memory: options.memoryBytes,
       PortBindings: {
-        [`${STUDIO_INTERNAL_PORT}/tcp`]: [{ HostPort: String(options.externalPort) }],
+        [`${STUDIO_INTERNAL_PORT}/tcp`]: [
+          { HostIp: options.hostIp, HostPort: String(options.externalPort) },
+        ],
       },
     },
     NetworkingConfig: {

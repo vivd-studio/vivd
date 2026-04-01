@@ -268,6 +268,7 @@ export async function allocatePublicPortWorkflow(deps: {
   listContainers: () => Promise<DockerContainerSummary[]>;
   nextPortCandidate: () => number;
   warn: (message: string) => void;
+  hostIp: string;
 }): Promise<number> {
   const reservedPorts = new Set<number>();
 
@@ -288,7 +289,7 @@ export async function allocatePublicPortWorkflow(deps: {
   for (let attempt = 0; attempt < 200; attempt++) {
     const port = deps.nextPortCandidate();
     if (reservedPorts.has(port)) continue;
-    if (await isPortAvailable(port, "0.0.0.0")) {
+    if (await isPortAvailable(port, deps.hostIp)) {
       return port;
     }
   }
@@ -413,6 +414,7 @@ export async function createFreshContainerWorkflow(
     nanoCpus: number;
     memoryBytes: number;
     generateStudioAccessToken: () => string;
+    hostIp: string;
   },
   options: CreateFreshContainerOptions,
 ): Promise<DockerContainerInfo> {
@@ -457,6 +459,7 @@ export async function createFreshContainerWorkflow(
     nanoCpus: deps.nanoCpus,
     memoryBytes: deps.memoryBytes,
     networkName,
+    hostIp: deps.hostIp,
   });
   const containerName = deps.containerNameFor(
     options.args.organizationId,

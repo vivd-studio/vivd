@@ -14,6 +14,8 @@ type StudioClientHttpRoutesDeps = {
   injectBasePathScript: (html: string, basePath: string) => string;
 };
 
+const INITIAL_SESSION_REDIRECT_WAIT_MS = 2_000;
+
 function readRequestUrl(req: express.Request): URL {
   const host = req.get("host") || "localhost";
   return new URL(req.originalUrl || req.url, `http://${host}`);
@@ -56,13 +58,30 @@ async function sendStudioClientIndex(options: {
     isTruthySearchParam(options.req, "initialGeneration") &&
     !readSearchParam(options.req, "sessionId")
   ) {
+    const resolvePromise = options
+      .resolveInitialGenerationSessionId(options.req)
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[InitialGeneration] Failed to resolve initial session during Studio shell request: ${message}`,
+        );
+        return null;
+      });
+
     const sessionId =
-      (await options.resolveInitialGenerationSessionId(options.req)) || null;
+      (await Promise.race([
+        resolvePromise,
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), INITIAL_SESSION_REDIRECT_WAIT_MS),
+        ),
+      ])) || null;
 
     if (sessionId) {
       options.res.redirect(buildRequestUrlWithSessionId(options.req, sessionId));
       return;
     }
+
+    void resolvePromise;
   }
 
   let html = await fs.readFile(options.clientIndexPath, "utf8");
