@@ -349,6 +349,45 @@ function runDockerCompose(projectName, composeArgs, options = {}) {
   );
 }
 
+function listManagedStudioContainersOnNetwork(networkName) {
+  const result = runCommand(
+    "docker",
+    [
+      "ps",
+      "-a",
+      "--filter",
+      `network=${networkName}`,
+      "--filter",
+      "label=vivd_provider=docker",
+      "--format",
+      "{{.ID}}\t{{.Names}}",
+    ],
+    { allowFailure: true },
+  );
+
+  return result.stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, name = ""] = line.split("\t");
+      return { id, name };
+    });
+}
+
+function removeContainers(containers) {
+  for (const entry of containers) {
+    try {
+      runCommand("docker", ["rm", "-f", entry.id]);
+      log(`Removed managed Studio container ${entry.name || entry.id}`);
+    } catch (error) {
+      console.error(
+        `[studio-docker-host-smoke] Failed to remove managed Studio container ${entry.name || entry.id}: ${String(error)}`,
+      );
+    }
+  }
+}
+
 async function waitForHealth(url, timeoutMs) {
   const startedAt = Date.now();
 
@@ -424,12 +463,35 @@ async function completeAuthOnCurrentPage({
 
   await page.getByLabel("Email").fill(credentials.email);
   await page.getByLabel("Password").fill(credentials.password);
-  await (authMode === "signup" ? signupButton : loginButton).click();
+  const submitButton = authMode === "signup" ? signupButton : loginButton;
+  const authResponsePromise = page.waitForResponse(
+    (response) => {
+      if (response.request().method() !== "POST") return false;
+      try {
+        const url = new URL(response.url());
+        return url.origin === origin && url.pathname.startsWith("/vivd-studio/api/auth/");
+      } catch {
+        return false;
+      }
+    },
+    { timeout: Math.min(timeoutMs, DEFAULT_AUTH_WAIT_TIMEOUT_MS) },
+  );
+
+  await submitButton.click();
+  const authResponse = await authResponsePromise;
+  if (!authResponse.ok()) {
+    const responseBody = await authResponse.text().catch(() => "");
+    throw new Error(
+      `Auth request failed (${authResponse.status()}) on ${authMode}: ${responseBody || authResponse.statusText() || "unknown error"}`,
+    );
+  }
+
   await page.waitForURL(
     (url) => url.origin === origin && url.pathname.startsWith("/vivd-studio"),
-    { timeout: timeoutMs },
-  );
-  await page.waitForLoadState("domcontentloaded");
+    { timeout: Math.min(timeoutMs, DEFAULT_AUTH_WAIT_TIMEOUT_MS) },
+  ).catch(() => undefined);
+  await page.waitForLoadState("domcontentloaded").catch(() => undefined);
+  await sleep(500);
 
   return authMode;
 }
@@ -977,6 +1039,13 @@ async function main() {
 
     if (browser) {
       await browser.close().catch(() => undefined);
+    }
+
+    const managedStudioContainers = listManagedStudioContainersOnNetwork(
+      smokeEnv.DOCKER_STUDIO_NETWORK,
+    );
+    if (managedStudioContainers.length > 0) {
+      removeContainers(managedStudioContainers);
     }
 
     runDockerCompose(
