@@ -13,7 +13,7 @@ import {
 } from "@/hooks/useStudioHostRuntime";
 import { useStudioIframeLifecycle } from "@/hooks/useStudioIframeLifecycle";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
-import { readStudioRuntimeOrigins } from "@/lib/studioRuntimeSession";
+import { createStudioRuntimeSession } from "@/lib/studioRuntimeSession";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -97,30 +97,12 @@ export default function StudioFullscreen() {
 
   const queryStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (studioUrlQuery.data?.status !== "running") return null;
-    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
-      studioUrlQuery.data,
-    );
-    return {
-      url: studioUrlQuery.data.url,
-      runtimeUrl,
-      compatibilityUrl,
-      bootstrapToken: studioUrlQuery.data.bootstrapToken,
-      userActionToken: studioUrlQuery.data.userActionToken,
-    };
+    return createStudioRuntimeSession(studioUrlQuery.data);
   }, [studioUrlQuery.data]);
 
   const startedStudioRuntime = useMemo<StudioRuntimeSession | null>(() => {
     if (!startStudio.data?.success) return null;
-    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
-      startStudio.data,
-    );
-    return {
-      url: startStudio.data.url,
-      runtimeUrl,
-      compatibilityUrl,
-      bootstrapToken: startStudio.data.bootstrapToken,
-      userActionToken: startStudio.data.userActionToken,
-    };
+    return createStudioRuntimeSession(startStudio.data);
   }, [startStudio.data]);
 
   const preferredStudioRuntime = useMemo(
@@ -143,17 +125,7 @@ export default function StudioFullscreen() {
 
     const result = await studioUrlQuery.refetch();
     if (result.data?.status !== "running") return null;
-    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(
-      result.data,
-    );
-
-    return {
-      url: result.data.url,
-      runtimeUrl,
-      compatibilityUrl,
-      bootstrapToken: result.data.bootstrapToken,
-      userActionToken: result.data.userActionToken,
-    };
+    return createStudioRuntimeSession(result.data);
   }, [projectSlug, studioUrlQuery]);
 
   const {
@@ -253,17 +225,7 @@ export default function StudioFullscreen() {
       return;
     }
 
-    const { runtimeUrl, compatibilityUrl } = readStudioRuntimeOrigins(result);
-    replaceRuntime(
-      {
-        url: result.url,
-        runtimeUrl,
-        compatibilityUrl,
-        bootstrapToken: result.bootstrapToken,
-        userActionToken: result.userActionToken,
-      },
-      { reload: true },
-    );
+    replaceRuntime(createStudioRuntimeSession(result), { reload: true });
   };
 
   const {

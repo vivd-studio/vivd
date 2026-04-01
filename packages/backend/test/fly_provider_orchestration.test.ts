@@ -1,4 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { shouldCreateStudioCompatibilityRoutesMock } = vi.hoisted(() => ({
+  shouldCreateStudioCompatibilityRoutesMock: vi.fn(),
+}));
+
+vi.mock("../src/services/studioMachines/compatibilityRoutePolicy", () => ({
+  shouldCreateStudioCompatibilityRoutes: shouldCreateStudioCompatibilityRoutesMock,
+}));
+
 import { FlyStudioMachineProvider } from "../src/services/studioMachines/fly/provider";
 import {
   buildStudioEnvWorkflow,
@@ -75,9 +84,14 @@ function studioMachine(options: {
 }
 
 describe("FlyStudioMachineProvider orchestration", () => {
+  beforeEach(() => {
+    shouldCreateStudioCompatibilityRoutesMock.mockResolvedValue(true);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    shouldCreateStudioCompatibilityRoutesMock.mockReset();
   });
 
   it("stopIdleMachines swallows list-machines failures", async () => {
@@ -242,6 +256,48 @@ describe("FlyStudioMachineProvider orchestration", () => {
       compatibilityUrl: "/_studio/site-1-v1",
       port: 4100,
       accessToken: "token-generated",
+    });
+  });
+
+  it("ensureRunningInner skips Fly compatibility route creation in platform mode", async () => {
+    shouldCreateStudioCompatibilityRoutesMock.mockResolvedValue(false);
+
+    const provider = new FlyStudioMachineProvider();
+    const expectedRouteId = (provider as any).config.routeIdFor("org-1", "site-1", 1);
+
+    (provider as any).apiClient.listMachines = async (): Promise<FlyMachine[]> => [];
+    (provider as any).allocatePort = () => 4100;
+    (provider as any).getDesiredImage = async () => "ghcr.io/vivd-studio/vivd-studio:v1.2.3";
+    (provider as any).config.generateStudioAccessToken = () => "token-generated";
+    (provider as any).buildStudioEnv = ({ studioId, accessToken }: any) => ({
+      PORT: "3100",
+      STUDIO_ID: studioId,
+      STUDIO_ACCESS_TOKEN: accessToken,
+      VIVD_TENANT_ID: "org-1",
+      VIVD_PROJECT_SLUG: "site-1",
+      VIVD_PROJECT_VERSION: "1",
+    });
+    (provider as any).apiClient.createMachine = async () => ({ id: "machine-1" } as FlyMachine);
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+    (provider as any).waitForReady = async () => {};
+
+    const upsertRuntimeRoute = vi.spyOn(
+      (provider as any).routeService,
+      "upsertRuntimeRoute",
+    );
+    const removeRuntimeRoute = vi
+      .spyOn((provider as any).routeService, "removeRuntimeRoute")
+      .mockResolvedValue(undefined);
+
+    const result = await (provider as any).ensureRunningInner(args);
+
+    expect(upsertRuntimeRoute).not.toHaveBeenCalled();
+    expect(removeRuntimeRoute).toHaveBeenCalledWith(expectedRouteId);
+    expect(result).toMatchObject({
+      url: "https://studio.test:4100",
+      runtimeUrl: "https://studio.test:4100",
+      compatibilityUrl: null,
     });
   });
 

@@ -1,5 +1,14 @@
 import os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { shouldCreateStudioCompatibilityRoutesMock } = vi.hoisted(() => ({
+  shouldCreateStudioCompatibilityRoutesMock: vi.fn(),
+}));
+
+vi.mock("../src/services/studioMachines/compatibilityRoutePolicy", () => ({
+  shouldCreateStudioCompatibilityRoutes: shouldCreateStudioCompatibilityRoutesMock,
+}));
+
 import { DockerApiClient } from "../src/services/studioMachines/docker/apiClient";
 import { DockerStudioMachineProvider } from "../src/services/studioMachines/docker/provider";
 import * as visitStore from "../src/services/studioMachines/visitStore";
@@ -19,6 +28,7 @@ describe("DockerStudioMachineProvider", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    shouldCreateStudioCompatibilityRoutesMock.mockReset();
 
     if (typeof envSnapshot.DATABASE_URL === "string") {
       process.env.DATABASE_URL = envSnapshot.DATABASE_URL;
@@ -55,6 +65,7 @@ describe("DockerStudioMachineProvider", () => {
   });
 
   beforeEach(() => {
+    shouldCreateStudioCompatibilityRoutesMock.mockResolvedValue(true);
     vi.spyOn(DockerApiClient.prototype, "inspectImage").mockRejectedValue(
       new Error("[DockerMachines] image inspect unavailable in test"),
     );
@@ -523,6 +534,7 @@ describe("DockerStudioMachineProvider", () => {
     const provider = new DockerStudioMachineProvider();
     const apiClient = (provider as any).apiClient;
 
+    vi.spyOn(apiClient, "listNetworks").mockResolvedValue([]);
     vi.spyOn(apiClient, "createContainer").mockRejectedValueOnce(
       new Error(
         '[DockerMachines] Conflict. The container name "/studio-site-1-v1-a3f6fad7ba" is already in use by container "existing".',
@@ -530,7 +542,7 @@ describe("DockerStudioMachineProvider", () => {
     );
     const inspectContainerMock = vi
       .spyOn(apiClient, "inspectContainer")
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         Id: "existing",
         Name: "/studio-site-1-v1-a3f6fad7ba",
         Config: {
@@ -1485,6 +1497,99 @@ describe("DockerStudioMachineProvider", () => {
       accessToken: "access-existing",
     });
     expect(isRunning).toBe(true);
+  });
+
+  it("hides Docker compatibility routes in platform mode and removes stale runtime routes", async () => {
+    shouldCreateStudioCompatibilityRoutesMock.mockResolvedValue(false);
+    delete process.env.DATABASE_URL;
+    const provider = new DockerStudioMachineProvider();
+    const apiClient = (provider as any).apiClient;
+    const runtimeUrl = (provider as any).config.getPublicUrlForPort(4100);
+
+    vi.spyOn(provider, "getDesiredImage").mockResolvedValue(
+      "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+    );
+    vi.spyOn(apiClient, "listContainers").mockResolvedValue([
+      {
+        Id: "existing",
+        Names: ["/studio-site-1-v1-a3f6fad7ba"],
+        Image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-existing",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+          vivd_route_id: "site-1-v1",
+        },
+        State: "running",
+        HostConfig: {
+          NetworkMode: "vivd_vivd-network",
+        },
+      },
+    ]);
+    vi.spyOn(apiClient, "inspectContainer").mockResolvedValue({
+      Id: "existing",
+      Name: "/studio-site-1-v1-a3f6fad7ba",
+      Config: {
+        Image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+        Env: [
+          "STUDIO_ID=studio-existing",
+          "STUDIO_ACCESS_TOKEN=access-existing",
+          "VIVD_TENANT_ID=org-1",
+          "VIVD_PROJECT_SLUG=site-1",
+          "VIVD_PROJECT_VERSION=1",
+          "MAIN_BACKEND_URL=http://backend:3000/vivd-studio",
+        ],
+        Labels: {
+          vivd_managed: "true",
+          vivd_provider: "docker",
+          vivd_organization_id: "org-1",
+          vivd_project_slug: "site-1",
+          vivd_project_version: "1",
+          vivd_studio_id: "studio-existing",
+          vivd_image: "ghcr.io/vivd-studio/vivd-studio:0.8.0",
+          vivd_route_id: "site-1-v1",
+        },
+      },
+      State: {
+        Status: "running",
+        StartedAt: new Date().toISOString(),
+      },
+      HostConfig: {
+        NetworkMode: "vivd_vivd-network",
+        PortBindings: {
+          "3100/tcp": [{ HostPort: "4100" }],
+        },
+        NanoCpus: 1_000_000_000,
+        Memory: DEFAULT_DOCKER_STUDIO_MEMORY_BYTES,
+      },
+      Created: new Date().toISOString(),
+    });
+
+    const removeRuntimeRoute = vi
+      .spyOn((provider as any).routeService, "removeRuntimeRoute")
+      .mockResolvedValue(undefined);
+
+    const summaries = await provider.listStudioMachines();
+    const url = await provider.getUrl("org-1", "site-1", 1);
+
+    expect(removeRuntimeRoute).toHaveBeenCalledWith("site-1-v1");
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      routePath: null,
+      compatibilityUrl: null,
+      runtimeUrl,
+    });
+    expect(url).toMatchObject({
+      url: runtimeUrl,
+      runtimeUrl,
+      compatibilityUrl: null,
+      backendUrl: "http://studio-site-1-v1-a3f6fad7ba:3100",
+      accessToken: "access-existing",
+    });
   });
 
   it("uses the configured reconcile concurrency when warming drifted containers", async () => {

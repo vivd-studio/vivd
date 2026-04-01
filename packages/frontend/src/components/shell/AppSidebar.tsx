@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { buildDocsUrl } from "@/lib/docsUrl";
+import { buildHostOrigin } from "@/lib/localHostRouting";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { getProjectLastModified } from "@/lib/project-utils";
 import { useAppConfig } from "@/lib/AppConfigContext";
@@ -76,21 +77,8 @@ type InstanceSoftware =
 
 const ORG_SWITCH_QUERY_KEY = "__vivd_switch_org";
 
-function inferSchemeForHost(host: string): "http" | "https" {
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host.endsWith(".nip.io")
-  ) {
-    return "http";
-  }
-  return "https";
-}
-
-function buildTenantStudioUrl(host: string): string {
-  return `${inferSchemeForHost(host)}://${host}/vivd-studio`;
+function buildTenantStudioUrl(host: string, currentHost?: string): string {
+  return `${buildHostOrigin(host, currentHost)}/vivd-studio`;
 }
 
 function inferControlPlaneHostFallback(currentHost: string): string | null {
@@ -798,7 +786,7 @@ export function AppSidebar() {
           await utils.invalidate();
           const tenantHost = result.tenantHost;
           if (tenantHost) {
-            window.location.assign(buildTenantStudioUrl(tenantHost));
+            window.location.assign(buildTenantStudioUrl(tenantHost, window.location.host));
           } else {
             navigate(ROUTES.DASHBOARD);
           }
@@ -831,7 +819,7 @@ export function AppSidebar() {
       console.info(
         `[OrgSwitch] redirecting from ${window.location.host} to ${tenantHost}`,
       );
-      window.location.assign(buildTenantStudioUrl(tenantHost));
+      window.location.assign(buildTenantStudioUrl(tenantHost, window.location.host));
     };
 
     if (!config.canSelectOrganization) {
@@ -849,7 +837,9 @@ export function AppSidebar() {
         return;
       }
 
-      const controlPlaneUrl = new URL(buildTenantStudioUrl(controlPlaneHost));
+      const controlPlaneUrl = new URL(
+        buildTenantStudioUrl(controlPlaneHost, window.location.host),
+      );
       controlPlaneUrl.searchParams.set(ORG_SWITCH_QUERY_KEY, target.id);
       console.info(
         `[OrgSwitch] redirecting from ${window.location.host} to control plane ${controlPlaneHost} to switch org`,

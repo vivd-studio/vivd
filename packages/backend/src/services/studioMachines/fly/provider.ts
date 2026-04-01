@@ -75,6 +75,7 @@ import {
 } from "./lifecycle";
 import { FlyProviderConfig } from "./providerConfig";
 import { FlyRuntimeRouteService } from "./runtimeRouteService";
+import { shouldCreateStudioCompatibilityRoutes } from "../compatibilityRoutePolicy";
 
 export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "fly" as const;
@@ -408,11 +409,18 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     args: StudioMachineStartArgs,
     studioKey: string,
   ): Promise<StudioMachineStartResult> {
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
     return ensureExistingMachineRunningWorkflow(
       {
         routeIdFor: (organizationId, projectSlug, version) =>
           this.config.routeIdFor(organizationId, projectSlug, version),
-        upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
+        upsertRuntimeRoute: compatibilityRoutesEnabled
+          ? (options) => this.routeService.upsertRuntimeRoute(options)
+          : async (options) => {
+              await this.routeService.removeRuntimeRoute(options.routeId);
+              return null;
+            },
         getMachineExternalPort,
         getDesiredImage: () => this.getDesiredImage(),
         trimToken,
@@ -477,6 +485,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   }
 
   private async restartInner(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
     return restartInnerWorkflow(
       {
         key: (organizationId, projectSlug, version) =>
@@ -503,7 +513,12 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
         normalizeServicesForVivd,
         updateMachineConfig: (options) => this.apiClient.updateMachineConfig(options),
-        upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
+        upsertRuntimeRoute: compatibilityRoutesEnabled
+          ? (options) => this.routeService.upsertRuntimeRoute(options)
+          : async (options) => {
+              await this.routeService.removeRuntimeRoute(options.routeId);
+              return null;
+            },
         startMachineHandlingReplacement: (machineId) =>
           this.startMachineHandlingReplacement(machineId),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
@@ -518,6 +533,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   private async ensureRunningInner(
     args: StudioMachineStartArgs,
   ): Promise<StudioMachineStartResult> {
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
     return ensureRunningInnerWorkflow(
       {
         key: (organizationId, projectSlug, version) =>
@@ -545,7 +562,12 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         desiredKillTimeoutSeconds: this.config.desiredKillTimeoutSeconds,
         recoverCreateNameConflict: (error, machineName) =>
           this.recoverCreateNameConflict(error, machineName),
-        upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
+        upsertRuntimeRoute: compatibilityRoutesEnabled
+          ? (options) => this.routeService.upsertRuntimeRoute(options)
+          : async (options) => {
+              await this.routeService.removeRuntimeRoute(options.routeId);
+              return null;
+            },
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
         waitForReady: (options) => this.waitForReady(options),
         startTimeoutMs: this.config.startTimeoutMs,
@@ -556,7 +578,10 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   }
 
   async listStudioMachines(): Promise<FlyStudioMachineSummary[]> {
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
     return listStudioMachinesWorkflow({
+      compatibilityRoutesEnabled,
       getDesiredImage: () => this.getDesiredImage(),
       listMachines: () => this.apiClient.listMachines(),
       getStudioIdentityFromMachine,
@@ -780,6 +805,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     version: number,
   ): Promise<StudioMachineUrlResult | null> {
     try {
+      const compatibilityRoutesEnabled =
+        await shouldCreateStudioCompatibilityRoutes();
       return getStudioMachineUrlWorkflow(
         {
           listMachines: () => this.apiClient.listMachines(),
@@ -788,7 +815,12 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           machineNameFor: (orgId, slug, v) => this.config.machineNameFor(orgId, slug, v),
           getMachineExternalPort,
           routeIdFor: (orgId, slug, v) => this.config.routeIdFor(orgId, slug, v),
-          upsertRuntimeRoute: (options) => this.routeService.upsertRuntimeRoute(options),
+          upsertRuntimeRoute: compatibilityRoutesEnabled
+            ? (options) => this.routeService.upsertRuntimeRoute(options)
+            : async (options) => {
+                await this.routeService.removeRuntimeRoute(options.routeId);
+                return null;
+              },
           getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
           getStudioAccessTokenFromMachine,
           resolveStudioIdFromMachine,

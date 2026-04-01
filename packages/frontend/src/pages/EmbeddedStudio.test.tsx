@@ -380,7 +380,8 @@ describe("EmbeddedStudio", () => {
     getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
-        url: "http://49.13.48.211:4100",
+        url: "http://49.13.48.211/_studio/runtime-123",
+        browserUrl: "http://49.13.48.211/_studio/runtime-123",
         runtimeUrl: "http://49.13.48.211:4100",
         compatibilityUrl: "http://49.13.48.211/_studio/runtime-123",
         bootstrapToken: null,

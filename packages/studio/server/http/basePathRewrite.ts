@@ -50,6 +50,72 @@ function rewriteCssRootRelativeUrls(
   );
 }
 
+export function rewriteViteHmrWebSocketUrl(
+  rawUrl: string,
+  basePath: string,
+  pageUrl: string,
+  protocols?: string | string[],
+): string {
+  const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+  if (!rawUrl || !base || base === "/") return rawUrl;
+
+  const protocolList = Array.isArray(protocols)
+    ? protocols
+    : typeof protocols === "string"
+      ? [protocols]
+      : [];
+  if (!protocolList.includes("vite-hmr")) {
+    return rawUrl;
+  }
+
+  let page: URL;
+  try {
+    page = new URL(pageUrl);
+  } catch {
+    return rawUrl;
+  }
+
+  const rewriteToMountedBase = (socketProtocol: string, search = "", hash = "") => {
+    return `${socketProtocol}//${page.host}${base}/${search}${hash}`.replace(
+      `${base}//`,
+      `${base}/`,
+    );
+  };
+
+  try {
+    const parsed = new URL(rawUrl, page.href);
+    const normalizedPath = parsed.pathname || "/";
+    if (
+      parsed.host === page.host &&
+      (normalizedPath === "/" || normalizedPath === `${base}/`) &&
+      parsed.searchParams.has("token")
+    ) {
+      if (normalizedPath === `${base}/`) {
+        return rawUrl;
+      }
+      return rewriteToMountedBase(parsed.protocol, parsed.search, parsed.hash);
+    }
+    return rawUrl;
+  } catch {
+    const invalidFallbackMatch = rawUrl.match(
+      /^(wss?):\/\/[^/]+:undefined(\/?(?:\?[^#]*)?(?:#.*)?)$/i,
+    );
+    if (!invalidFallbackMatch) {
+      return rawUrl;
+    }
+
+    const [, socketProtocol, suffix = ""] = invalidFallbackMatch;
+    const queryIndex = suffix.indexOf("?");
+    const hashIndex = suffix.indexOf("#");
+    const search =
+      queryIndex >= 0
+        ? suffix.slice(queryIndex, hashIndex >= 0 ? hashIndex : undefined)
+        : "";
+    const hash = hashIndex >= 0 ? suffix.slice(hashIndex) : "";
+    return rewriteToMountedBase(`${socketProtocol}:`, search, hash);
+  }
+}
+
 export function rewriteRootAssetUrlsInText(text: string, basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
   const baseNoLeadingSlash = base.replace(/^\/+/, "");
@@ -149,15 +215,7 @@ export function rewriteRootAssetUrlsInText(text: string, basePath: string): stri
 export function stripDevServerToolingFromHtml(html: string): string {
   return html
     .replace(
-      /<script\b[^>]*\bsrc=(["'])([^"']*\/@vite\/client[^"']*)\1[^>]*>\s*<\/script>/gi,
-      "",
-    )
-    .replace(
       /<script\b[^>]*\bsrc=(["'])([^"']*dev-toolbar\/entrypoint\.js[^"']*)\1[^>]*>\s*<\/script>/gi,
-      "",
-    )
-    .replace(
-      /<link\b[^>]*\bhref=(["'])([^"']*\/@vite\/client[^"']*)\1[^>]*>/gi,
       "",
     )
     .replace(
@@ -168,7 +226,7 @@ export function stripDevServerToolingFromHtml(html: string): string {
 
 function createBasePathRewriteScript(basePath: string): string {
   const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
-  return `<script data-vivd-basepath>(function(B){if(window.__vivdBasePath)return;window.__vivdBasePath=B;var defined=function(x){return typeof x!=='undefined'};var shouldRewrite=function(u){if(!u||typeof u!=='string')return false;if(u===B||u.startsWith(B+'/')||u.startsWith('//')||u.startsWith('http:')||u.startsWith('https:')||u.startsWith('#')||u.startsWith('mailto:')||u.startsWith('tel:')||u.startsWith('javascript:')||u.startsWith('data:'))return false;return u.startsWith('/');};var rewrite=function(u){return shouldRewrite(u)?B+u:u;};document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(a){var h=a.getAttribute('href');var isDownload=a.hasAttribute('download');var isPdf=h&&/\\.pdf(?:[?#&]|$)/i.test(h);if(isDownload||isPdf){if(shouldRewrite(h))a.setAttribute('href',rewrite(h));return;}if(shouldRewrite(h)){e.preventDefault();window.location.href=rewrite(h);}}},true);document.addEventListener('submit',function(e){var f=e.target;if(f&&f.tagName==='FORM'){var action=f.getAttribute('action');if(shouldRewrite(action))f.setAttribute('action',rewrite(action));}},true);if(defined(window.fetch)){var oFetch=window.fetch;window.fetch=function(u,o){return oFetch(rewrite(typeof u==='string'?u:u),o);};}if(defined(window.XMLHttpRequest)){var oOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){return oOpen.call(this,m,rewrite(u));};}if(defined(window.history)){var oPush=history.pushState;var oReplace=history.replaceState;history.pushState=function(s,t,u){return oPush.call(this,s,t,rewrite(u));};history.replaceState=function(s,t,u){return oReplace.call(this,s,t,rewrite(u));};}})('${base}');</script>`;
+  return `<script data-vivd-basepath>(function(B){if(window.__vivdBasePath)return;window.__vivdBasePath=B;var defined=function(x){return typeof x!=='undefined'};var shouldRewrite=function(u){if(!u||typeof u!=='string')return false;if(u===B||u.startsWith(B+'/')||u.startsWith('//')||u.startsWith('http:')||u.startsWith('https:')||u.startsWith('#')||u.startsWith('mailto:')||u.startsWith('tel:')||u.startsWith('javascript:')||u.startsWith('data:'))return false;return u.startsWith('/');};var rewrite=function(u){return shouldRewrite(u)?B+u:u;};var rewriteViteHmrWebSocketUrl=${rewriteViteHmrWebSocketUrl.toString()};document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(a){var h=a.getAttribute('href');var isDownload=a.hasAttribute('download');var isPdf=h&&/\\.pdf(?:[?#&]|$)/i.test(h);if(isDownload||isPdf){if(shouldRewrite(h))a.setAttribute('href',rewrite(h));return;}if(shouldRewrite(h)){e.preventDefault();window.location.href=rewrite(h);}}},true);document.addEventListener('submit',function(e){var f=e.target;if(f&&f.tagName==='FORM'){var action=f.getAttribute('action');if(shouldRewrite(action))f.setAttribute('action',rewrite(action));}},true);if(defined(window.fetch)){var oFetch=window.fetch;window.fetch=function(u,o){return oFetch(rewrite(typeof u==='string'?u:u),o);};}if(defined(window.XMLHttpRequest)){var oOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){return oOpen.call(this,m,rewrite(u));};}if(defined(window.WebSocket)){var NativeWebSocket=window.WebSocket;var WrappedWebSocket=function(u,p){var nextUrl=typeof u==='string'?rewriteViteHmrWebSocketUrl(u,B,window.location.href,p):u;if(arguments.length>1){return new NativeWebSocket(nextUrl,p);}return new NativeWebSocket(nextUrl);};WrappedWebSocket.prototype=NativeWebSocket.prototype;if(typeof Object.setPrototypeOf==='function'){Object.setPrototypeOf(WrappedWebSocket,NativeWebSocket);}['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(key){if(typeof NativeWebSocket[key]!=='undefined'){WrappedWebSocket[key]=NativeWebSocket[key];}});window.WebSocket=WrappedWebSocket;}if(defined(window.history)){var oPush=history.pushState;var oReplace=history.replaceState;history.pushState=function(s,t,u){return oPush.call(this,s,t,rewrite(u));};history.replaceState=function(s,t,u){return oReplace.call(this,s,t,rewrite(u));};}})('${base}');</script>`;
 }
 
 export function injectBasePathScript(html: string, basePath: string): string {

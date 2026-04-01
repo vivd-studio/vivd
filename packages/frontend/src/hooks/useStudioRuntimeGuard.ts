@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
+import { createStudioRuntimeSession } from "@/lib/studioRuntimeSession";
 
 type EnsureStudioRunningResult =
   | {
       success: true;
       url: string;
+      browserUrl?: string | null;
       runtimeUrl?: string | null;
       compatibilityUrl?: string | null;
       bootstrapToken: string | null;
@@ -38,6 +40,7 @@ type UseStudioRuntimeGuardOptions = {
   ensureStudioRunning: () => Promise<EnsureStudioRunningResult>;
   onRecovered: (next: {
     url: string;
+    browserUrl?: string | null;
     runtimeUrl?: string | null;
     compatibilityUrl?: string | null;
     bootstrapToken: string | null;
@@ -138,13 +141,7 @@ export function useStudioRuntimeGuard({
       if (guardGenerationRef.current !== guardGeneration) return;
 
       if (result.success) {
-        onRecoveredRef.current({
-          url: result.url,
-          runtimeUrl: result.runtimeUrl ?? result.url,
-          compatibilityUrl: result.compatibilityUrl ?? null,
-          bootstrapToken: result.bootstrapToken ?? null,
-          userActionToken: result.userActionToken ?? null,
-        });
+        onRecoveredRef.current(createStudioRuntimeSession(result));
         return;
       }
       onRecoveryErrorRef.current?.(result.error || "Failed to wake studio runtime");

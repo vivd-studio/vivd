@@ -98,6 +98,19 @@ function extractRequestHost(req: trpcExpress.CreateExpressContextOptions["req"])
   return null;
 }
 
+function extractRequestProtocol(
+  req: trpcExpress.CreateExpressContextOptions["req"],
+): string | null {
+  const forwarded = readForwardedHost(req.headers["x-forwarded-proto"]);
+  if (forwarded) return forwarded.toLowerCase();
+
+  if (typeof req.protocol === "string" && req.protocol.trim()) {
+    return req.protocol.trim().toLowerCase();
+  }
+
+  return null;
+}
+
 export const createContext = async ({
   req,
   res,
@@ -396,6 +409,7 @@ export const createContext = async ({
     res,
     session,
     requestHost: resolvedHost.requestHost,
+    requestProtocol: extractRequestProtocol(req),
     requestDomain: resolvedHost.requestDomain,
     isSuperAdminHost: resolvedHost.isSuperAdminHost,
     hostKind: resolvedHost.hostKind,

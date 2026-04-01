@@ -4,6 +4,7 @@ import { useStudioRuntimeGuard } from "./useStudioRuntimeGuard";
 
 export type StudioRuntimeSession = {
   url: string;
+  browserUrl?: string | null;
   runtimeUrl?: string | null;
   compatibilityUrl?: string | null;
   bootstrapToken: string | null;
@@ -14,6 +15,7 @@ type EnsureStudioRunningResult =
   | {
       success: true;
       url: string;
+      browserUrl?: string | null;
       runtimeUrl?: string | null;
       compatibilityUrl?: string | null;
       bootstrapToken: string | null;
@@ -39,66 +41,29 @@ type ReplaceRuntimeOptions = {
   reload?: boolean;
 };
 
-function isDefaultPort(protocol: string, port: string): boolean {
-  return (
-    (protocol === "https:" && (port === "" || port === "443")) ||
-    (protocol === "http:" && (port === "" || port === "80"))
-  );
-}
-
-function isLocalDevelopmentHostname(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase();
-  if (!normalized) return false;
-
-  return (
-    normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized.endsWith(".localhost") ||
-    normalized.endsWith(".local") ||
-    normalized.endsWith(".nip.io")
-  );
+function pickFirstDefinedUrl(
+  candidates: Array<string | null | undefined>,
+): string | null {
+  for (const candidate of candidates) {
+    const normalized = candidate?.trim();
+    if (normalized) return normalized;
+  }
+  return null;
 }
 
 export function selectBrowserStudioBaseUrl(
   runtime: StudioRuntimeSession | null,
-  currentOrigin: string | null = typeof window === "undefined"
-    ? null
-    : window.location.origin,
 ): string | null {
-  const directRuntimeUrl = runtime?.runtimeUrl ?? runtime?.url ?? null;
-  const compatibilityUrl = runtime?.compatibilityUrl ?? null;
-
-  if (!directRuntimeUrl) return compatibilityUrl;
-  if (!compatibilityUrl || !currentOrigin) return directRuntimeUrl;
-
-  let runtimeUrl: URL;
-  let currentUrl: URL;
-  try {
-    runtimeUrl = new URL(directRuntimeUrl, currentOrigin);
-    currentUrl = new URL(currentOrigin);
-  } catch {
-    return directRuntimeUrl;
-  }
-
-  const runtimeUsesNonDefaultPort = !isDefaultPort(
-    runtimeUrl.protocol,
-    runtimeUrl.port,
+  return pickFirstDefinedUrl(
+    runtime
+      ? [
+          runtime.browserUrl,
+          runtime.url,
+          runtime.runtimeUrl,
+          runtime.compatibilityUrl,
+        ]
+      : [],
   );
-  const currentHostIsLocalDevelopment = isLocalDevelopmentHostname(
-    currentUrl.hostname,
-  );
-
-  // Outside local dev, Docker runtimes exposed on non-default ports are a
-  // different browser origin and break bootstrap/health fetches on self-host.
-  // Prefer the path-mounted compatibility route in those cases.
-  if (
-    !currentHostIsLocalDevelopment &&
-    (runtimeUrl.protocol !== currentUrl.protocol || runtimeUsesNonDefaultPort)
-  ) {
-    return compatibilityUrl;
-  }
-
-  return directRuntimeUrl;
 }
 
 export function useStudioHostRuntime({

@@ -18,63 +18,63 @@ function makeRuntime(
 }
 
 describe("selectBrowserStudioBaseUrl", () => {
-  it("prefers the compatibility route for https pages when the direct runtime uses a non-default port", () => {
+  it("prefers the explicit backend-resolved browser URL", () => {
     expect(
       selectBrowserStudioBaseUrl(
         makeRuntime({
-          runtimeUrl: "https://vivd.felixpahlke.de:4100",
-          compatibilityUrl: "https://vivd.felixpahlke.de/_studio/runtime-1",
-        }),
-        "https://vivd.felixpahlke.de",
-      ),
-    ).toBe("https://vivd.felixpahlke.de/_studio/runtime-1");
-  });
-
-  it("preserves a host-relative compatibility route for tenant-hosted Fly runtimes", () => {
-    expect(
-      selectBrowserStudioBaseUrl(
-        makeRuntime({
+          browserUrl: "https://vivd-studio-prod.fly.dev:3115",
           runtimeUrl: "https://vivd-studio-prod.fly.dev:3115",
           compatibilityUrl: "/_studio/runtime-1",
         }),
-        "https://felix-pahlke.vivd.studio",
+      ),
+    ).toBe("https://vivd-studio-prod.fly.dev:3115");
+  });
+
+  it("preserves a host-relative compatibility browser URL", () => {
+    expect(
+      selectBrowserStudioBaseUrl(
+        makeRuntime({
+          browserUrl: "/_studio/runtime-1",
+          runtimeUrl: "https://vivd-studio-prod.fly.dev:3115",
+          compatibilityUrl: "/_studio/runtime-1",
+        }),
       ),
     ).toBe("/_studio/runtime-1");
   });
 
-  it("keeps the direct runtime for local http development hosts", () => {
+  it("falls back to the existing session url", () => {
     expect(
       selectBrowserStudioBaseUrl(
         makeRuntime({
+          url: "https://studio.example.com/runtime",
+          runtimeUrl: "https://studio.example.com/runtime",
+          compatibilityUrl: "https://app.example.com/_studio/runtime-1",
+        }),
+      ),
+    ).toBe("https://studio.example.com/runtime");
+  });
+
+  it("falls back to the direct runtime url when needed", () => {
+    expect(
+      selectBrowserStudioBaseUrl(
+        makeRuntime({
+          url: "",
           runtimeUrl: "http://app.localhost:4100",
           compatibilityUrl: "http://app.localhost/_studio/runtime-1",
         }),
-        "http://app.localhost",
       ),
     ).toBe("http://app.localhost:4100");
   });
 
-  it("prefers the compatibility route for raw-ip http pages when the direct runtime uses a non-default port", () => {
+  it("falls back to the compatibility url when it is the only browser-safe path left", () => {
     expect(
       selectBrowserStudioBaseUrl(
         makeRuntime({
-          runtimeUrl: "http://49.13.48.211:4100",
+          url: "",
+          runtimeUrl: null,
           compatibilityUrl: "http://49.13.48.211/_studio/runtime-1",
         }),
-        "http://49.13.48.211",
       ),
     ).toBe("http://49.13.48.211/_studio/runtime-1");
-  });
-
-  it("keeps a normal https runtime origin on the default port", () => {
-    expect(
-      selectBrowserStudioBaseUrl(
-        makeRuntime({
-          runtimeUrl: "https://studio.example.com",
-          compatibilityUrl: "https://app.example.com/_studio/runtime-1",
-        }),
-        "https://app.example.com",
-      ),
-    ).toBe("https://studio.example.com");
   });
 });

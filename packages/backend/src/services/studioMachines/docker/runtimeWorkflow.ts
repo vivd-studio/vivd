@@ -298,7 +298,7 @@ export async function allocatePublicPortWorkflow(deps: {
 
 export type WaitForReadyOptions = {
   containerId: string;
-  routePath: string;
+  routePath: string | null;
   timeoutMs: number;
 };
 
@@ -314,10 +314,6 @@ export async function waitForReadyWorkflow(deps: {
   inspectContainer: (containerId: string) => Promise<DockerContainerInfo>;
   getInternalProxyUrlForRoutePath: (routePath: string) => string;
 }, options: WaitForReadyOptions): Promise<void> {
-  const proxyHealthUrl = new URL(
-    "health",
-    `${deps.getInternalProxyUrlForRoutePath(options.routePath)}/`,
-  ).toString();
   const deadline = Date.now() + options.timeoutMs;
 
   while (Date.now() < deadline) {
@@ -333,7 +329,12 @@ export async function waitForReadyWorkflow(deps: {
       container
         ? new URL("health", `${getDirectContainerBaseUrl(container)}/`).toString()
         : null,
-      proxyHealthUrl,
+      options.routePath
+        ? new URL(
+            "health",
+            `${deps.getInternalProxyUrlForRoutePath(options.routePath)}/`,
+          ).toString()
+        : null,
     ].filter((value, index, list): value is string => {
       return typeof value === "string" && value.length > 0 && list.indexOf(value) === index;
     });
@@ -563,7 +564,7 @@ export async function ensureContainerRunningWorkflow(
       routeId: string;
       containerName: string;
       targetPort: number;
-    }) => Promise<string>;
+    }) => Promise<string | null>;
     startContainer: (containerId: string) => Promise<void>;
     recreateContainer: (
       options: RecreateContainerOptions,
@@ -629,10 +630,10 @@ export async function ensureContainerRunningWorkflow(
 
   const externalPort = getContainerExternalPort(container);
   const runtimeUrl = externalPort ? deps.getPublicUrlForPort(externalPort) : null;
-  const compatibilityUrl = deps.getPublicUrlForRoutePath(routePath);
+  const compatibilityUrl = routePath ? deps.getPublicUrlForRoutePath(routePath) : null;
   const backendUrl =
     getDirectContainerBaseUrl(container) ??
-    deps.getInternalProxyUrlForRoutePath(routePath);
+    (routePath ? deps.getInternalProxyUrlForRoutePath(routePath) : null);
 
   await deps.waitForReady({
     containerId: container.Id,
@@ -643,7 +644,14 @@ export async function ensureContainerRunningWorkflow(
   deps.touchKey(studioKey);
   return {
     studioId: getContainerStudioId(container, args.env.STUDIO_ID),
-    url: runtimeUrl ?? compatibilityUrl,
+    url:
+      runtimeUrl ??
+      compatibilityUrl ??
+      (() => {
+        throw new Error(
+          `[DockerMachines] Missing browser URL for ${args.projectSlug}/v${args.version}`,
+        );
+      })(),
     backendUrl,
     runtimeUrl,
     compatibilityUrl,

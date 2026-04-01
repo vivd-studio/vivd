@@ -37,7 +37,7 @@ export type EnsureExistingMachineRunningDeps = {
   upsertRuntimeRoute: (options: {
     routeId: string;
     targetBaseUrl: string;
-  }) => Promise<string>;
+  }) => Promise<string | null>;
   getMachineExternalPort: (machine: FlyMachine) => number | null;
   getDesiredImage: () => Promise<string>;
   trimToken: (value: string | null | undefined) => string | null;
@@ -436,7 +436,7 @@ export type RestartInnerDeps = {
   upsertRuntimeRoute: (options: {
     routeId: string;
     targetBaseUrl: string;
-  }) => Promise<string>;
+  }) => Promise<string | null>;
   startMachineHandlingReplacement: (machineId: string) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyArgs) => Promise<void>;
@@ -599,7 +599,7 @@ export type EnsureRunningInnerDeps = {
   upsertRuntimeRoute: (options: {
     routeId: string;
     targetBaseUrl: string;
-  }) => Promise<string>;
+  }) => Promise<string | null>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyArgs) => Promise<void>;
   startTimeoutMs: number;

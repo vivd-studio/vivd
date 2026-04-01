@@ -4,32 +4,16 @@ import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import {
+  buildHostOrigin,
+  inferSchemeForHost,
+  isLocalDevelopmentHost,
+  resolveLocalDevelopmentHost,
+} from "@/lib/localHostRouting";
 import { ROUTES } from "./paths";
 import { CenteredLoading as Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { EmailVerificationPrompt } from "@/components/auth/EmailVerificationPrompt";
-
-function stripPort(host: string): string {
-  return host.trim().toLowerCase().replace(/:\d+$/, "");
-}
-
-function isLocalDevelopmentHost(host: string): boolean {
-  const normalizedHost = stripPort(host);
-  return (
-    normalizedHost === "localhost" ||
-    normalizedHost === "127.0.0.1" ||
-    normalizedHost.endsWith(".localhost") ||
-    normalizedHost.endsWith(".local") ||
-    normalizedHost.endsWith(".nip.io")
-  );
-}
-
-function inferSchemeForHost(host: string): "http" | "https" {
-  if (isLocalDevelopmentHost(host)) {
-    return "http";
-  }
-  return "https";
-}
 
 function normalizeHostForComparison(host: string | null | undefined): string {
   return (host || "").trim().toLowerCase();
@@ -47,18 +31,25 @@ export function getCanonicalControlPlaneUrl(options: {
 
   const controlPlaneHost = normalizeHostForComparison(options.controlPlaneHost);
   const currentHost = normalizeHostForComparison(options.currentHost);
-  if (!controlPlaneHost || !currentHost || currentHost === controlPlaneHost) {
+  const resolvedControlPlaneHost = normalizeHostForComparison(
+    resolveLocalDevelopmentHost(controlPlaneHost, currentHost),
+  );
+  if (
+    !resolvedControlPlaneHost ||
+    !currentHost ||
+    currentHost === resolvedControlPlaneHost
+  ) {
     return null;
   }
   if (
-    !isLocalDevelopmentHost(controlPlaneHost) ||
+    !isLocalDevelopmentHost(resolvedControlPlaneHost) ||
     !isLocalDevelopmentHost(currentHost)
   ) {
     return null;
   }
 
-  const scheme = inferSchemeForHost(controlPlaneHost);
-  return `${scheme}://${controlPlaneHost}${options.pathname}${options.search || ""}${options.hash || ""}`;
+  const scheme = inferSchemeForHost(resolvedControlPlaneHost);
+  return `${scheme}://${resolvedControlPlaneHost}${options.pathname}${options.search || ""}${options.hash || ""}`;
 }
 
 function ExternalRedirect({ to }: { to: string }) {
@@ -102,7 +93,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!config.hasHostOrganizationAccess) {
     const controlPlaneUrl = config.controlPlaneHost
-      ? `${inferSchemeForHost(config.controlPlaneHost)}://${config.controlPlaneHost}${ROUTES.DASHBOARD}`
+      ? `${buildHostOrigin(
+          config.controlPlaneHost,
+          typeof window === "undefined" ? null : window.location.host,
+        )}${ROUTES.DASHBOARD}`
       : ROUTES.DASHBOARD;
 
     return (

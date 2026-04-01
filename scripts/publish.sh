@@ -9,7 +9,7 @@ CHECK_MODE="release"
 ALLOW_DIRTY=false
 DRY_RUN=false
 TAG_INPUT=""
-RUN_LOCAL_HOST_SMOKE=false
+RUN_LOCAL_HOST_SMOKE=true
 
 print_usage() {
   cat <<'EOF'
@@ -26,15 +26,16 @@ Options:
   --remote <name>        Git remote to push the tag to. Default: origin
   --allow-dirty          Allow tagging from a dirty worktree. Not recommended.
   --dry-run              Run checks and validations, but do not create or push the tag.
-  --run-host-smoke       Also run the local Docker-provider host/browser smoke.
-                         This is opt-in locally because it may need to take over port 80.
+  --run-host-smoke       Force-enable the local Docker-provider host/browser smoke.
+                         This is the default for release preflight.
+  --skip-host-smoke      Skip the local Docker-provider host/browser smoke.
   -h, --help             Show this help.
 
 Examples:
   ./scripts/publish.sh 1.1.10
   ./scripts/publish.sh v1.1.10
   ./scripts/publish.sh --check-mode ci-local 1.1.10
-  ./scripts/publish.sh --run-host-smoke 1.1.10
+  ./scripts/publish.sh --skip-host-smoke 1.1.10
   ./scripts/publish.sh --dry-run --allow-dirty 1.1.10
 EOF
 }
@@ -120,10 +121,10 @@ run_release_preflight() {
       npx playwright install chromium
     run_step \
       "Studio Docker-provider host smoke" \
-      env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_TAKEOVER_PORT_80=1 npm run studio:host-smoke
+      env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_PORT=18080 npm run studio:host-smoke
   else
     echo
-    echo "==> Local host/browser smoke skipped (use --run-host-smoke to enable it manually)"
+    echo "==> Local host/browser smoke skipped (--skip-host-smoke)"
   fi
 }
 
@@ -155,6 +156,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --run-host-smoke)
       RUN_LOCAL_HOST_SMOKE=true
+      shift
+      ;;
+    --skip-host-smoke)
+      RUN_LOCAL_HOST_SMOKE=false
       shift
       ;;
     -h|--help)

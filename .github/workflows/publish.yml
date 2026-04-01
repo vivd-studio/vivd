@@ -243,24 +243,10 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Free runner port 80 for host smoke
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
-          sudo systemctl stop apache2 2>/dev/null || true
-          sudo systemctl stop nginx 2>/dev/null || true
-          pids="$(sudo lsof -t -nP -iTCP:80 -sTCP:LISTEN || true)"
-          if [ -n "$pids" ]; then
-            echo "Killing remaining port-80 listener(s): $pids"
-            echo "$pids" | xargs sudo kill -9
-            sleep 2
-          fi
-          sudo lsof -nP -iTCP:80 -sTCP:LISTEN || true
-
       - name: Smoke test host-routed Docker machine-provider handoff
         env:
           STUDIO_IMAGE: vivd-studio:release-smoke
+          VIVD_STUDIO_HOST_SMOKE_PORT: 18080
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT || secrets.GOOGLE_CLOUD_PROJECT }}

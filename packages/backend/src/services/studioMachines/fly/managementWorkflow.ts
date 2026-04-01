@@ -11,6 +11,7 @@ type StudioIdentity = {
 };
 
 export async function listStudioMachinesWorkflow(deps: {
+  compatibilityRoutesEnabled: boolean;
   getDesiredImage: () => Promise<string>;
   listMachines: () => Promise<FlyMachine[]>;
   getStudioIdentityFromMachine: (machine: FlyMachine) => StudioIdentity | null;
@@ -48,12 +49,15 @@ export async function listStudioMachinesWorkflow(deps: {
     const createdAt =
       machine.created_at || deps.getMachineMetadata(machine)?.vivd_created_at || null;
     const updatedAt = machine.updated_at || null;
-    const routeId = deps.routeIdFor(
-      identity.organizationId,
-      identity.projectSlug,
-      identity.version,
-    );
-    const routePath = deps.getRoutePath(routeId);
+    const routePath = deps.compatibilityRoutesEnabled
+      ? deps.getRoutePath(
+          deps.routeIdFor(
+            identity.organizationId,
+            identity.projectSlug,
+            identity.version,
+          ),
+        )
+      : null;
 
     summaries.push({
       id: machine.id,
@@ -221,7 +225,7 @@ export async function getStudioMachineUrlWorkflow(
     upsertRuntimeRoute: (options: {
       routeId: string;
       targetBaseUrl: string;
-    }) => Promise<string>;
+    }) => Promise<string | null>;
     getPublicUrlForPort: (port: number) => string;
     getStudioAccessTokenFromMachine: (machine: FlyMachine) => string | null;
     resolveStudioIdFromMachine: (machine: FlyMachine, fallback?: string | null) => string;

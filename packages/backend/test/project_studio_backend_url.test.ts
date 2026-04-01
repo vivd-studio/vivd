@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-  const {
-    ensureRunningMock,
-    restartMock,
-    recordStudioVisitMock,
-    getResolvedBrandingMock,
-    projectPluginFindManyMock,
-    organizationFindFirstMock,
+const {
+  ensureRunningMock,
+  restartMock,
+  recordStudioVisitMock,
+  getResolvedBrandingMock,
+  projectPluginFindManyMock,
+  organizationFindFirstMock,
+  getInstallProfileMock,
   dbSelectMock,
   dbSelectFromMock,
   dbSelectWhereMock,
@@ -17,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
   const getResolvedBrandingMock = vi.fn();
   const projectPluginFindManyMock = vi.fn();
   const organizationFindFirstMock = vi.fn();
+  const getInstallProfileMock = vi.fn();
   const dbSelectWhereMock = vi.fn().mockResolvedValue([]);
   const dbSelectFromMock = vi.fn(() => ({ where: dbSelectWhereMock }));
   const dbSelectMock = vi.fn(() => ({ from: dbSelectFromMock }));
@@ -28,6 +30,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
     getResolvedBrandingMock,
     projectPluginFindManyMock,
     organizationFindFirstMock,
+    getInstallProfileMock,
     dbSelectMock,
     dbSelectFromMock,
     dbSelectWhereMock,
@@ -48,6 +51,12 @@ vi.mock("../src/services/studioMachines", () => ({
 
 vi.mock("../src/services/studioMachines/visitStore", () => ({
   recordStudioVisit: recordStudioVisitMock,
+}));
+
+vi.mock("../src/services/system/InstallProfileService", () => ({
+  installProfileService: {
+    getInstallProfile: getInstallProfileMock,
+  },
 }));
 
 vi.mock("../src/services/email/templateBranding", () => ({
@@ -100,6 +109,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       },
     },
     requestHost: "felixpahlke.vivd.studio",
+    requestProtocol: "https",
     requestDomain: "felixpahlke.vivd.studio",
     isSuperAdminHost: true,
     hostKind: "tenant_host",
@@ -128,6 +138,7 @@ describe("project studio callback URL wiring", () => {
     getResolvedBrandingMock.mockReset();
     projectPluginFindManyMock.mockReset();
     organizationFindFirstMock.mockReset();
+    getInstallProfileMock.mockReset();
     dbSelectMock.mockClear();
     dbSelectFromMock.mockClear();
     dbSelectWhereMock.mockClear();
@@ -141,6 +152,7 @@ describe("project studio callback URL wiring", () => {
     projectPluginFindManyMock.mockResolvedValue([]);
     getResolvedBrandingMock.mockResolvedValue({ supportEmail: null });
     organizationFindFirstMock.mockResolvedValue({ githubRepoPrefix: null });
+    getInstallProfileMock.mockResolvedValue("platform");
     recordStudioVisitMock.mockResolvedValue(undefined);
     ensureRunningMock.mockResolvedValue({
       studioId: "studio-1",
@@ -229,5 +241,56 @@ describe("project studio callback URL wiring", () => {
         }),
       }),
     );
+  });
+
+  it("returns a direct browser URL for platform installs even when a compatibility route exists", async () => {
+    ensureRunningMock.mockResolvedValueOnce({
+      studioId: "studio-1",
+      url: "https://vivd-studio-prod.fly.dev:3115",
+      runtimeUrl: "https://vivd-studio-prod.fly.dev:3115",
+      compatibilityUrl: "/_studio/runtime-1",
+      port: 3115,
+      accessToken: "access-1",
+    });
+
+    const caller = studioRouter.createCaller(makeContext());
+    const result = await caller.startStudio({ slug: "site-1", version: 1 });
+
+    expect(result).toMatchObject({
+      success: true,
+      url: "https://vivd-studio-prod.fly.dev:3115",
+      browserUrl: "https://vivd-studio-prod.fly.dev:3115",
+      runtimeUrl: "https://vivd-studio-prod.fly.dev:3115",
+      compatibilityUrl: "/_studio/runtime-1",
+    });
+  });
+
+  it("returns the compatibility browser URL for solo installs that need same-host routing", async () => {
+    getInstallProfileMock.mockResolvedValueOnce("solo");
+    ensureRunningMock.mockResolvedValueOnce({
+      studioId: "studio-1",
+      url: "https://vivd.felixpahlke.de:4100",
+      runtimeUrl: "https://vivd.felixpahlke.de:4100",
+      compatibilityUrl: "https://vivd.felixpahlke.de/_studio/runtime-1",
+      port: 4100,
+      accessToken: "access-1",
+    });
+
+    const caller = studioRouter.createCaller(
+      makeContext({
+        requestHost: "vivd.felixpahlke.de",
+        requestProtocol: "https",
+        requestDomain: "vivd.felixpahlke.de",
+      }),
+    );
+    const result = await caller.startStudio({ slug: "site-1", version: 1 });
+
+    expect(result).toMatchObject({
+      success: true,
+      url: "https://vivd.felixpahlke.de/_studio/runtime-1",
+      browserUrl: "https://vivd.felixpahlke.de/_studio/runtime-1",
+      runtimeUrl: "https://vivd.felixpahlke.de:4100",
+      compatibilityUrl: "https://vivd.felixpahlke.de/_studio/runtime-1",
+    });
   });
 });

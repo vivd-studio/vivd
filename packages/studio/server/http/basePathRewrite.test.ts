@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { rewriteRootAssetUrlsInText } from "./basePathRewrite";
+import {
+  rewriteRootAssetUrlsInText,
+  rewriteViteHmrWebSocketUrl,
+  stripDevServerToolingFromHtml,
+} from "./basePathRewrite";
 
 describe("rewriteRootAssetUrlsInText", () => {
   it("rewrites root-relative src attributes", () => {
@@ -45,5 +49,45 @@ describe("rewriteRootAssetUrlsInText", () => {
     ).toContain(
       'src="/_studio/runtime-123/vivd-studio/api/preview-bridge.js"',
     );
+  });
+
+  it("rewrites same-origin Vite HMR websocket URLs onto the mounted base path", () => {
+    expect(
+      rewriteViteHmrWebSocketUrl(
+        "wss://default.vivd.studio/?token=test-token",
+        "/_studio/runtime-123",
+        "https://default.vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
+        "vite-hmr",
+      ),
+    ).toBe("wss://default.vivd.studio/_studio/runtime-123/?token=test-token");
+  });
+
+  it("rewrites the invalid localhost:undefined Vite fallback onto the mounted base path", () => {
+    expect(
+      rewriteViteHmrWebSocketUrl(
+        "wss://localhost:undefined/?token=test-token",
+        "/_studio/runtime-123",
+        "https://default.vivd.studio/_studio/runtime-123/vivd-studio?embedded=1",
+        "vite-hmr",
+      ),
+    ).toBe("wss://default.vivd.studio/_studio/runtime-123/?token=test-token");
+  });
+});
+
+describe("stripDevServerToolingFromHtml", () => {
+  it("preserves @vite/client while removing Astro dev-toolbar assets", () => {
+    const html = `
+      <head>
+        <script type="module" src="/@vite/client"></script>
+        <script type="module" src="/node_modules/astro/dev-toolbar/entrypoint.js"></script>
+        <link rel="stylesheet" href="/node_modules/astro/dev-toolbar/app.css">
+      </head>
+    `;
+
+    const stripped = stripDevServerToolingFromHtml(html);
+
+    expect(stripped).toContain("/@vite/client");
+    expect(stripped).not.toContain("dev-toolbar/entrypoint.js");
+    expect(stripped).not.toContain("dev-toolbar/app.css");
   });
 });

@@ -62,6 +62,7 @@ import {
   type WaitForReadyOptions,
   waitForReadyWorkflow,
 } from "./runtimeWorkflow";
+import { shouldCreateStudioCompatibilityRoutes } from "../compatibilityRoutePolicy";
 
 export class DockerStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "docker" as const;
@@ -388,6 +389,8 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     desiredImage: string,
     allowNetworkRecovery = true,
   ): Promise<StudioMachineStartResult> {
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
     return await ensureContainerRunningWorkflow(
       {
         key: (organizationId, projectSlug, version) =>
@@ -396,8 +399,12 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
           this.config.routeIdFor(organizationId, projectSlug, version),
         containerNameFor: (organizationId, projectSlug, version) =>
           this.config.containerNameFor(organizationId, projectSlug, version),
-        upsertRuntimeRoute: (routeOptions) =>
-          this.routeService.upsertRuntimeRoute(routeOptions),
+        upsertRuntimeRoute: compatibilityRoutesEnabled
+          ? (routeOptions) => this.routeService.upsertRuntimeRoute(routeOptions)
+          : async (routeOptions) => {
+              await this.routeService.removeRuntimeRoute(routeOptions.routeId);
+              return null;
+            },
         startContainer: (containerId) => this.apiClient.startContainer(containerId),
         recreateContainer: (recreateOptions) =>
           this.recreateContainer(recreateOptions),
@@ -608,18 +615,34 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     const routeId =
       getContainerRouteId(inspected) ||
       this.config.routeIdFor(organizationId, projectSlug, version);
-    const routePath = this.routeService.getRoutePath(routeId);
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
+    if (!compatibilityRoutesEnabled) {
+      await this.routeService.removeRuntimeRoute(routeId);
+    }
+    const routePath = compatibilityRoutesEnabled
+      ? this.routeService.getRoutePath(routeId)
+      : null;
     const externalPort = getContainerExternalPort(inspected);
     const runtimeUrl = externalPort
       ? this.config.getPublicUrlForPort(externalPort)
       : null;
-    const compatibilityUrl = this.config.getPublicUrlForRoutePath(routePath);
+    const compatibilityUrl = routePath
+      ? this.config.getPublicUrlForRoutePath(routePath)
+      : null;
     const backendUrl =
       getDirectContainerBaseUrl(inspected) ??
-      this.config.getInternalProxyUrlForRoutePath(routePath);
+      (routePath ? this.config.getInternalProxyUrlForRoutePath(routePath) : null);
     return {
       studioId: getContainerStudioId(inspected, null),
-      url: runtimeUrl ?? compatibilityUrl,
+      url:
+        runtimeUrl ??
+        compatibilityUrl ??
+        (() => {
+          throw new Error(
+            `[DockerMachines] Missing browser URL for ${organizationId}:${projectSlug}/v${version}`,
+          );
+        })(),
       backendUrl,
       runtimeUrl,
       compatibilityUrl,
@@ -678,7 +701,10 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   }
 
   async listStudioMachines(): Promise<StudioMachineSummary[]> {
+    const compatibilityRoutesEnabled =
+      await shouldCreateStudioCompatibilityRoutes();
     return await listStudioMachinesWorkflow({
+      compatibilityRoutesEnabled,
       getDesiredImage: () => this.getDesiredImage(),
       getDesiredImageStateForRef: (imageRef) => this.getDesiredImageStateForRef(imageRef),
       listContainers: () => this.apiClient.listContainers(),

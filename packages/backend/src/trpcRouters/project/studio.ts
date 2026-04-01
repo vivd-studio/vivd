@@ -5,9 +5,12 @@ import { studioMachineProvider } from "../../services/studioMachines";
 import { recordStudioVisit } from "../../services/studioMachines/visitStore";
 import { createStudioUserActionToken } from "../../lib/studioUserActionToken";
 import { resolveStableStudioMachineEnv } from "../../services/studioMachines/stableRuntimeEnv";
+import { installProfileService } from "../../services/system/InstallProfileService";
+import { resolveStudioBrowserUrl } from "../../services/studioMachines/runtimeAccessResolver";
 
 const studioRuntimeResolvedContractSchema = z.object({
   url: z.string(),
+  browserUrl: z.string().nullable(),
   runtimeUrl: z.string().nullable(),
   compatibilityUrl: z.string().nullable(),
   bootstrapToken: z.string().nullable(),
@@ -16,6 +19,7 @@ const studioRuntimeResolvedContractSchema = z.object({
 
 const studioRuntimePendingContractSchema = z.object({
   url: z.null(),
+  browserUrl: z.null(),
   runtimeUrl: z.null(),
   compatibilityUrl: z.null(),
   bootstrapToken: z.null(),
@@ -47,6 +51,7 @@ const studioRuntimeStartSchema = z.union([
 const studioRuntimeRunningSchema = z.object({
   running: z.boolean(),
   url: z.string().nullable(),
+  browserUrl: z.string().nullable(),
   runtimeUrl: z.string().nullable(),
   compatibilityUrl: z.string().nullable(),
   bootstrapToken: z.string().nullable(),
@@ -54,6 +59,32 @@ const studioRuntimeRunningSchema = z.object({
 
 type StudioRuntimeStatusContract = z.infer<typeof studioRuntimeStatusSchema>;
 type StudioRuntimeStartContract = z.infer<typeof studioRuntimeStartSchema>;
+
+async function resolveRuntimeContractUrls(options: {
+  url: string;
+  runtimeUrl?: string | null;
+  compatibilityUrl?: string | null;
+  requestHost?: string | null;
+  requestProtocol?: string | null;
+}) {
+  const runtimeUrl = options.runtimeUrl ?? options.url;
+  const compatibilityUrl = options.compatibilityUrl ?? null;
+  const browserUrl = resolveStudioBrowserUrl({
+    installProfile: await installProfileService.getInstallProfile(),
+    providerKind: studioMachineProvider.kind,
+    requestHost: options.requestHost,
+    requestProtocol: options.requestProtocol,
+    runtimeUrl,
+    compatibilityUrl,
+  });
+
+  return {
+    browserUrl,
+    runtimeUrl,
+    compatibilityUrl,
+    url: browserUrl ?? runtimeUrl ?? compatibilityUrl ?? options.url,
+  };
+}
 
 function createStudioRuntimeBootstrapToken(options: {
   studioId: string;
@@ -116,10 +147,15 @@ export const studioProcedures = {
         input.version,
       );
       if (existing) {
-        return {
+        const resolvedUrls = await resolveRuntimeContractUrls({
           url: existing.url,
           runtimeUrl: existing.runtimeUrl ?? existing.url,
           compatibilityUrl: existing.compatibilityUrl ?? null,
+          requestHost: ctx.requestHost,
+          requestProtocol: ctx.requestProtocol,
+        });
+        return {
+          ...resolvedUrls,
           bootstrapToken: createStudioRuntimeBootstrapToken({
             studioId: existing.studioId,
             accessToken: existing.accessToken || null,
@@ -137,6 +173,7 @@ export const studioProcedures = {
       // For now, return null - studio needs to be started explicitly
       return {
         url: null,
+        browserUrl: null,
         runtimeUrl: null,
         compatibilityUrl: null,
         bootstrapToken: null,
@@ -192,11 +229,17 @@ export const studioProcedures = {
           );
         }
 
-        return {
-          success: true as const,
+        const resolvedUrls = await resolveRuntimeContractUrls({
           url,
           runtimeUrl: runtimeUrl ?? url,
           compatibilityUrl: compatibilityUrl ?? null,
+          requestHost: ctx.requestHost,
+          requestProtocol: ctx.requestProtocol,
+        });
+
+        return {
+          success: true as const,
+          ...resolvedUrls,
           port,
           studioId,
           bootstrapToken: createStudioRuntimeBootstrapToken({
@@ -215,6 +258,7 @@ export const studioProcedures = {
         return {
           success: false as const,
           url: null,
+          browserUrl: null,
           runtimeUrl: null,
           compatibilityUrl: null,
           bootstrapToken: null,
@@ -269,11 +313,17 @@ export const studioProcedures = {
           );
         }
 
-        return {
-          success: true as const,
+        const resolvedUrls = await resolveRuntimeContractUrls({
           url,
           runtimeUrl: runtimeUrl ?? url,
           compatibilityUrl: compatibilityUrl ?? null,
+          requestHost: ctx.requestHost,
+          requestProtocol: ctx.requestProtocol,
+        });
+
+        return {
+          success: true as const,
+          ...resolvedUrls,
           port,
           studioId,
           bootstrapToken: createStudioRuntimeBootstrapToken({
@@ -292,6 +342,7 @@ export const studioProcedures = {
         return {
           success: false as const,
           url: null,
+          browserUrl: null,
           runtimeUrl: null,
           compatibilityUrl: null,
           bootstrapToken: null,
@@ -365,11 +416,23 @@ export const studioProcedures = {
         input.slug,
         input.version,
       );
+      const resolvedUrls = info
+        ? await resolveRuntimeContractUrls({
+            url: info.url,
+            runtimeUrl: info.runtimeUrl ?? info.url,
+            compatibilityUrl: info.compatibilityUrl ?? null,
+            requestHost: ctx.requestHost,
+            requestProtocol: ctx.requestProtocol,
+          })
+        : {
+            url: null,
+            browserUrl: null,
+            runtimeUrl: null,
+            compatibilityUrl: null,
+          };
       return {
         running,
-        url: info?.url || null,
-        runtimeUrl: info?.runtimeUrl ?? info?.url ?? null,
-        compatibilityUrl: info?.compatibilityUrl ?? null,
+        ...resolvedUrls,
         bootstrapToken:
           info?.studioId && info?.accessToken
             ? createStudioRuntimeBootstrapToken({

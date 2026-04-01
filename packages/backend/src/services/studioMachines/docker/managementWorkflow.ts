@@ -151,6 +151,7 @@ async function buildContainerSummaryWorkflow(deps: {
 }
 
 export async function listStudioMachinesWorkflow(deps: {
+  compatibilityRoutesEnabled: boolean;
   getDesiredImage: () => Promise<string>;
   getDesiredImageStateForRef: (
     imageRef: string,
@@ -179,14 +180,16 @@ export async function listStudioMachinesWorkflow(deps: {
     if (!identity) continue;
 
     const inspected = await deps.inspectContainer(container.Id);
-    const routeId =
-      getContainerRouteId(inspected) ||
-      deps.routeIdFor(
-        identity.organizationId,
-        identity.projectSlug,
-        identity.version,
-      );
-    const routePath = deps.getRoutePath(routeId);
+    const routePath = deps.compatibilityRoutesEnabled
+      ? deps.getRoutePath(
+          getContainerRouteId(inspected) ||
+            deps.routeIdFor(
+              identity.organizationId,
+              identity.projectSlug,
+              identity.version,
+            ),
+        )
+      : null;
     const running = inspected.State?.Status === "running";
     const externalPort = getContainerExternalPort(inspected);
     summaries.push(
@@ -197,10 +200,12 @@ export async function listStudioMachinesWorkflow(deps: {
         url: running
           ? externalPort
             ? deps.getPublicUrlForPort(externalPort)
-            : deps.getPublicUrlForRoutePath(routePath)
+            : routePath
+              ? deps.getPublicUrlForRoutePath(routePath)
+              : null
           : null,
         runtimeUrl: running && externalPort ? deps.getPublicUrlForPort(externalPort) : null,
-        compatibilityUrl: deps.getPublicUrlForRoutePath(routePath),
+        compatibilityUrl: routePath ? deps.getPublicUrlForRoutePath(routePath) : null,
         cpuKind: deps.cpuKind,
         runtimeImageCache,
         inspectImageSafe: deps.inspectImageSafe,

@@ -166,7 +166,10 @@ describe("router guards", () => {
 
     expect(screen.getByText("Wrong tenant host")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Go to control plane" });
-    expect(link.getAttribute("href")).toBe(`http://app.localhost${ROUTES.DASHBOARD}`);
+    const currentPort = window.location.port ? `:${window.location.port}` : "";
+    expect(link.getAttribute("href")).toBe(
+      `http://app.localhost${currentPort}${ROUTES.DASHBOARD}`,
+    );
   });
 
   it("computes a canonical control-plane redirect for host-based local platform routes", () => {
@@ -184,12 +187,38 @@ describe("router guards", () => {
     );
   });
 
+  it("preserves the current local dev port when redirecting to the control plane", () => {
+    expect(
+      getCanonicalControlPlaneUrl({
+        controlPlaneMode: "host_based",
+        controlPlaneHost: "app.localhost",
+        currentHost: "default.localhost:18080",
+        pathname: ROUTES.PROJECT("site-1"),
+        search: "?view=studio&version=1",
+        hash: "",
+      }),
+    ).toBe(
+      `http://app.localhost:18080${ROUTES.PROJECT("site-1")}?view=studio&version=1`,
+    );
+  });
+
   it("does not compute a redirect when already on the canonical control-plane host", () => {
     expect(
       getCanonicalControlPlaneUrl({
         controlPlaneMode: "host_based",
         controlPlaneHost: "app.localhost",
         currentHost: "app.localhost",
+        pathname: ROUTES.DASHBOARD,
+      }),
+    ).toBeNull();
+  });
+
+  it("does not compute a redirect when already on the local control-plane host with a non-default port", () => {
+    expect(
+      getCanonicalControlPlaneUrl({
+        controlPlaneMode: "host_based",
+        controlPlaneHost: "app.localhost",
+        currentHost: "app.localhost:18080",
         pathname: ROUTES.DASHBOARD,
       }),
     ).toBeNull();
