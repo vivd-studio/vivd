@@ -847,13 +847,35 @@ async function settleInitialGeneration(page, frame, timeoutMs) {
   if (visibleState === "stop") {
     log("Initial generation is running; stopping it after a short settle window");
     await sleep(5_000);
-    await stopButton.click();
-    await expectVisible(
-      sendButton,
-      settleTimeoutMs,
-      "send button after stop",
+    const postStopState = await waitForVisibleState(
+      [
+        { name: "stop", locator: stopButton },
+        { name: "user-message", locator: firstUserMessage },
+        { name: "session-context", locator: sessionContextButton },
+        { name: "agent-question", locator: agentQuestionHeader },
+      ],
+      Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
     );
-    return "stopped";
+
+    if (postStopState === "stop") {
+      await stopButton.click({ timeout: 5_000 });
+      await expectVisible(
+        sendButton,
+        settleTimeoutMs,
+        "send button after stop",
+      );
+      return "stopped";
+    }
+
+    if (postStopState === "user-message") {
+      return "observed-user-message";
+    }
+    if (postStopState === "agent-question") {
+      return "observed-agent-question";
+    }
+    if (postStopState === "session-context") {
+      return "observed-session-context";
+    }
   }
 
   if (

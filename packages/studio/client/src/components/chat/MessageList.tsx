@@ -105,6 +105,12 @@ export function MessageList() {
     [sessionError, sessionErrorNow],
   );
   const showEmptyState = selectedMessages.length === 0 && !isSessionHydrating;
+  const initialGenerationAwaitingSession =
+    initialGenerationRequested &&
+    !initialGenerationFailed &&
+    !selectedSessionId &&
+    selectedMessages.length === 0 &&
+    !activeQuestionRequest;
   const {
     latestUserMessageId,
     historicalItems,
@@ -354,6 +360,7 @@ export function MessageList() {
               onSuggestionClick={onSuggestionClick}
               initialGenerationRequested={initialGenerationRequested}
               initialGenerationStarting={initialGenerationStarting}
+              initialGenerationAwaitingSession={initialGenerationAwaitingSession}
               initialGenerationFailed={initialGenerationFailed}
               onRetryInitialGeneration={retryInitialGeneration}
             />

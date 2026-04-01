@@ -9,6 +9,9 @@ import {
   buildDerivedSessionError,
   deriveChatActivityState,
   findStaleRunningToolState,
+  getMostRecentPendingAssistantActivityAt,
+  isActiveSessionStatus,
+  PENDING_ASSISTANT_GRACE_MS,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
 import { sessionQuestionRequest } from "./questions/requestTree";
@@ -24,6 +27,7 @@ type UseOpencodeChatControllerArgs = {
   version?: number;
   selectedModel: ControllerModel;
   initialSelectedSessionId?: string | null;
+  initialGenerationRequested?: boolean;
   onTaskComplete?: () => void;
 };
 
@@ -40,6 +44,7 @@ export function useOpencodeChatController({
   version,
   selectedModel,
   initialSelectedSessionId,
+  initialGenerationRequested = false,
   onTaskComplete,
 }: UseOpencodeChatControllerArgs) {
   const opencodeChat = useOpencodeChat();
@@ -53,6 +58,10 @@ export function useOpencodeChatController({
     string | null
   >(null);
   const [isSending, setIsSending] = useState(false);
+  const [activityNow, setActivityNow] = useState(() => Date.now());
+  const [suppressedSessionId, setSuppressedSessionId] = useState<string | null>(
+    null,
+  );
   const autoSelectLockedRef = useRef(false);
   const hasAutoSelectedRunningSessionRef = useRef(false);
   const activeRunSessionIdRef = useRef<string | null>(null);
@@ -116,6 +125,10 @@ export function useOpencodeChatController({
   );
   const staleRunningToolState = useMemo(
     () => findStaleRunningToolState(selectedMessages),
+    [selectedMessages],
+  );
+  const mostRecentPendingAssistantActivityAt = useMemo(
+    () => getMostRecentPendingAssistantActivityAt(selectedMessages),
     [selectedMessages],
   );
 
@@ -185,6 +198,7 @@ export function useOpencodeChatController({
       await refetchSelectedSessionSnapshot();
     },
     onError: (error) => {
+      setSuppressedSessionId(null);
       setLocalSessionError(
         sanitizeSessionError({
           type: "task",
@@ -280,6 +294,13 @@ export function useOpencodeChatController({
 
       setLocalSessionError(null);
       setDismissedDerivedErrorKey(null);
+      if (targetSessionId) {
+        setSuppressedSessionId((current) =>
+          current === targetSessionId ? null : current,
+        );
+      } else {
+        setSuppressedSessionId(null);
+      }
 
       void (async () => {
         let pendingRequestId: number | null = null;
@@ -425,6 +446,9 @@ export function useOpencodeChatController({
     if (pendingStart) {
       pendingStart.cancelled = true;
       if (pendingStart.sessionId) {
+        setSuppressedSessionId(pendingStart.sessionId);
+      }
+      if (pendingStart.sessionId) {
         abortSessionMutation.mutate({
           sessionId: pendingStart.sessionId,
           projectSlug,
@@ -435,6 +459,7 @@ export function useOpencodeChatController({
     }
 
     if (!selectedSessionId) return;
+    setSuppressedSessionId(selectedSessionId);
     abortSessionMutation.mutate({
       sessionId: selectedSessionId,
       projectSlug,
@@ -475,8 +500,11 @@ export function useOpencodeChatController({
         sessionStatus: currentSessionStatus,
         connectionState: connection.state,
         connectionMessage: connection.message,
+        now: activityNow,
+        suppressPendingAssistant: suppressedSessionId === selectedSessionId,
       }),
     [
+      activityNow,
       selectedSessionId,
       selectedMessages,
       sessionMessagesIsError,
@@ -484,6 +512,7 @@ export function useOpencodeChatController({
       currentSessionStatus,
       connection.state,
       connection.message,
+      suppressedSessionId,
     ],
   );
 
@@ -511,16 +540,69 @@ export function useOpencodeChatController({
           createSessionMutation.isPending ||
           runTaskMutation.isPending ||
           isSending,
+        now: activityNow,
+        suppressPendingAssistant: suppressedSessionId === selectedSessionId,
       }),
     [
+      activityNow,
       selectedMessages,
       currentSessionStatus,
       hasOptimisticUserMessage,
       createSessionMutation.isPending,
       runTaskMutation.isPending,
       isSending,
+      selectedSessionId,
+      suppressedSessionId,
     ],
   );
+
+  useEffect(() => {
+    setActivityNow(Date.now());
+  }, [currentSessionStatus, selectedMessages, selectedSessionId]);
+
+  useEffect(() => {
+    if (
+      !selectedSessionId ||
+      suppressedSessionId !== selectedSessionId ||
+      !isActiveSessionStatus(currentSessionStatus)
+    ) {
+      return;
+    }
+
+    setSuppressedSessionId(null);
+  }, [currentSessionStatus, selectedSessionId, suppressedSessionId]);
+
+  useEffect(() => {
+    if (
+      !selectedSessionId ||
+      suppressedSessionId === selectedSessionId ||
+      isActiveSessionStatus(currentSessionStatus) ||
+      mostRecentPendingAssistantActivityAt == null
+    ) {
+      return;
+    }
+
+    const expiryAt =
+      mostRecentPendingAssistantActivityAt + PENDING_ASSISTANT_GRACE_MS;
+    const delayMs = Math.max(0, expiryAt - Date.now());
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+      setActivityNow(Date.now());
+    }, delayMs + 10);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    currentSessionStatus,
+    mostRecentPendingAssistantActivityAt,
+    selectedSessionId,
+    suppressedSessionId,
+  ]);
 
   useEffect(() => {
     if (!activityState.isThinking || !selectedSessionId) {
@@ -550,17 +632,23 @@ export function useOpencodeChatController({
       return;
     }
 
-    if (!attentionSessionId) {
+    const fallbackSessionId =
+      initialGenerationRequested ? sessions[0]?.id ?? null : null;
+    const nextSessionId = attentionSessionId ?? fallbackSessionId;
+
+    if (!nextSessionId) {
       return;
     }
 
     hasAutoSelectedRunningSessionRef.current = true;
-    providerSetSelectedSessionId(attentionSessionId);
+    providerSetSelectedSessionId(nextSessionId);
   }, [
     attentionSessionId,
+    initialGenerationRequested,
     initialSelectedSessionId,
     providerSetSelectedSessionId,
     selectedSessionId,
+    sessions,
   ]);
 
   useEffect(() => {
@@ -572,6 +660,7 @@ export function useOpencodeChatController({
     hasAutoSelectedRunningSessionRef.current = false;
     activeRunSessionIdRef.current = null;
     pendingSessionStartRef.current = null;
+    setSuppressedSessionId(null);
   }, [initialSelectedSessionId, projectSlug, providerSetSelectedSessionId]);
 
   useEffect(() => {

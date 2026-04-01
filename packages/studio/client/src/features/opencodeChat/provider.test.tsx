@@ -24,6 +24,7 @@ const {
   subscriptionCallbacks: {
     onStarted: undefined as undefined | (() => void),
     onData: undefined as undefined | ((event: any) => void),
+    onError: undefined as undefined | ((error: Error) => void),
   },
 }));
 
@@ -59,7 +60,11 @@ vi.mock("@/lib/trpc", () => {
         events: {
           useSubscription: (
             input: unknown,
-            options: { onStarted?: () => void; onData?: (event: unknown) => void },
+            options: {
+              onStarted?: () => void;
+              onData?: (event: unknown) => void;
+              onError?: (error: Error) => void;
+            },
           ) => {
             const subscriptionKey = JSON.stringify(input);
             useSubscriptionMock(input);
@@ -67,6 +72,7 @@ vi.mock("@/lib/trpc", () => {
             subscriptionCallbacks.onData = options.onData as
               | ((event: any) => void)
               | undefined;
+            subscriptionCallbacks.onError = options.onError;
             React.useEffect(() => {
               options.onStarted?.();
             }, [subscriptionKey]);
@@ -85,6 +91,7 @@ describe("OpencodeChatProvider", () => {
     useSubscriptionMock.mockReset();
     subscriptionCallbacks.onStarted = undefined;
     subscriptionCallbacks.onData = undefined;
+    subscriptionCallbacks.onError = undefined;
     mockBootstrapRefetch.mockResolvedValue(undefined);
     mockSessionMessagesRefetch.mockResolvedValue(undefined);
     mockSessionMessagesFetch.mockResolvedValue([]);
@@ -232,6 +239,43 @@ describe("OpencodeChatProvider", () => {
     });
 
     expect(mockBootstrapRefetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("restarts the subscription after a stream error instead of leaving the connection terminal", async () => {
+    vi.useFakeTimers();
+
+    render(
+      <OpencodeChatProvider projectSlug="site-1" version={1}>
+        <div>chat</div>
+      </OpencodeChatProvider>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(useSubscriptionMock).toHaveBeenLastCalledWith({
+      projectSlug: "site-1",
+      version: 1,
+      replayBuffered: false,
+      subscriptionInstance: 0,
+    });
+
+    act(() => {
+      subscriptionCallbacks.onError?.(new Error("stream lost"));
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(useSubscriptionMock).toHaveBeenLastCalledWith({
+      projectSlug: "site-1",
+      version: 1,
+      replayBuffered: false,
+      subscriptionInstance: 1,
+    });
   });
 
   it("reconciles non-selected active sessions during a queued refresh", async () => {

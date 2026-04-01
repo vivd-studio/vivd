@@ -22,7 +22,7 @@ const opencodeState = vi.hoisted(() => ({
 }));
 
 const chatState = vi.hoisted(() => ({
-  selectedSessionId: "session-1",
+  selectedSessionId: "session-1" as string | null,
   input: "",
   handleSend: vi.fn(),
   handleStopGeneration: vi.fn(),
@@ -63,8 +63,8 @@ const chatState = vi.hoisted(() => ({
   },
   usageLimitStatus: null,
   isUsageBlocked: false,
-  initialGenerationRequested: false,
-  initialGenerationStarting: false,
+  initialGenerationRequested: false as boolean,
+  initialGenerationStarting: false as boolean,
   initialGenerationFailed: null,
   retryInitialGeneration: vi.fn(),
 }));
@@ -125,6 +125,11 @@ describe("MessageList latest-user anchoring", () => {
     chatState.selectorMode = false;
     chatState.usageLimitStatus = null;
     chatState.isUsageBlocked = false;
+    chatState.selectedSessionId = "session-1";
+    chatState.initialGenerationRequested = false;
+    chatState.initialGenerationStarting = false;
+    chatState.initialGenerationFailed = null;
+    chatState.activeQuestionRequest = null;
     anchorTopById["optimistic:client-1"] = 120;
     anchorTopById["user-1"] = 120;
     anchorTopById["user-2"] = 280;
@@ -359,6 +364,23 @@ describe("MessageList latest-user anchoring", () => {
         .querySelector("[data-chat-scroll-viewport]")
         ?.getAttribute("data-scrollbar-gutter-mode"),
     ).toBe("stable");
+  });
+
+  it("shows an initial-generation waiting state instead of the idle composer before a session attaches", () => {
+    timelineState.items = [];
+    opencodeState.selectedMessages = [];
+    chatState.selectedSessionId = null;
+    chatState.initialGenerationRequested = true;
+    chatState.initialGenerationStarting = false;
+    chatState.initialGenerationFailed = null;
+    chatState.activeQuestionRequest = null;
+
+    const { container } = render(<MessageList />);
+
+    expect(
+      screen.getByText("Attaching the initial generation session..."),
+    ).toBeInTheDocument();
+    expect(container.querySelector("textarea")).toBeNull();
   });
 
   it("labels backend usage-check failures without showing a usage-limit headline", () => {

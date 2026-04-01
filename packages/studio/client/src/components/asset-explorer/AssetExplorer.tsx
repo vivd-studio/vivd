@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -113,8 +113,12 @@ export function AssetExplorer({
   >(null);
 
   // Shared Asset Actions state from PreviewContext
-  const { setEditingTextFile, setEditingAsset, setPendingDeleteAsset } =
-    usePreview();
+  const {
+    currentPreviewPath,
+    setEditingTextFile,
+    setEditingAsset,
+    setPendingDeleteAsset,
+  } = usePreview();
 
   const [isCreateImageOpen, setIsCreateImageOpen] = useState(false);
   const [createImagePrompt, setCreateImagePrompt] = useState("");
@@ -142,15 +146,15 @@ export function AssetExplorer({
   // Check both paths in parallel for initial detection
   const publicImagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "public/images" },
-    { enabled: !initialPathDetected },
+    { enabled: !initialPathDetected, staleTime: 0 },
   );
   const imagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "images" },
-    { enabled: !initialPathDetected },
+    { enabled: !initialPathDetected, staleTime: 0 },
   );
   const uploadsCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: STUDIO_UPLOADS_PATH },
-    { enabled: !initialPathDetected },
+    { enabled: !initialPathDetected, staleTime: 0 },
   );
 
   // Detect initial path
@@ -195,14 +199,25 @@ export function AssetExplorer({
       version,
       relativePath: currentPath ?? "images",
     },
-    { enabled: viewMode === "gallery" && currentPath !== null },
+    { enabled: viewMode === "gallery" && currentPath !== null, staleTime: 0 },
   );
 
   // Query for create image dialog - use detected path (public/images for Astro, images for HTML)
   const allImagesQuery = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: currentPath ?? "images" },
-    { enabled: isCreateImageOpen && currentPath !== null },
+    { enabled: isCreateImageOpen && currentPath !== null, staleTime: 0 },
   );
+
+  const lastPreviewPathRef = useRef(currentPreviewPath);
+
+  useEffect(() => {
+    if (lastPreviewPathRef.current === currentPreviewPath) {
+      return;
+    }
+
+    lastPreviewPathRef.current = currentPreviewPath;
+    void utils.assets.invalidate();
+  }, [currentPreviewPath, utils.assets]);
 
   const availableImages =
     allImagesQuery.data?.items?.filter(

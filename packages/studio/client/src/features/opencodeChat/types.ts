@@ -137,6 +137,7 @@ export interface OpenCodeChatState {
 
 export type OpenCodeChatAction =
   | { type: "bootstrap.loaded"; payload: OpenCodeChatBootstrap }
+  | { type: "bootstrap.refreshed"; payload: OpenCodeChatBootstrap }
   | {
       type: "session.messages.loaded";
       payload: { sessionId: string; messages: OpenCodeSessionMessageRecord[] };

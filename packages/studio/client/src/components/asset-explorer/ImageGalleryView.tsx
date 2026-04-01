@@ -46,11 +46,16 @@ export function ImageGalleryView({
     setViewingPdfPath,
   } = usePreview();
 
-  const { data, isLoading } = trpc.assets.listAssets.useQuery({
-    slug: projectSlug,
-    version,
-    relativePath: currentPath,
-  });
+  const { data, isLoading } = trpc.assets.listAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      relativePath: currentPath,
+    },
+    {
+      staleTime: 0,
+    },
+  );
 
   const handleItemClick = useCallback(
     (item: AssetItem) => {

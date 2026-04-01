@@ -11,6 +11,7 @@ const useUtilsMock = vi.fn();
 const invalidateMock = vi.fn();
 const refetchMock = vi.fn();
 const fetchMock = vi.fn();
+let currentPreviewPath = "/";
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -37,6 +38,7 @@ vi.mock("@/hooks/usePermissions", () => ({
 
 vi.mock("@/components/preview/PreviewContext", () => ({
   usePreview: () => ({
+    currentPreviewPath,
     setEditingTextFile: vi.fn(),
     setEditingAsset: vi.fn(),
     setPendingDeleteAsset: vi.fn(),
@@ -126,6 +128,7 @@ function createFileList(files: File[]): FileList {
 describe("AssetExplorer", () => {
   beforeEach(() => {
     localStorage.clear();
+    currentPreviewPath = "/";
     invalidateMock.mockReset();
     refetchMock.mockReset();
     fetchMock.mockReset();
@@ -221,5 +224,45 @@ describe("AssetExplorer", () => {
     expect(fetchMock.mock.calls[0]?.[0]).not.toContain(
       "path=.vivd%2Fuploads",
     );
+  });
+
+  it("revalidates asset queries when the preview route changes", async () => {
+    const { rerender } = render(<AssetExplorer projectSlug="demo" version={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
+        "data-path",
+        "public/images",
+      );
+    });
+
+    expect(invalidateMock).not.toHaveBeenCalled();
+
+    currentPreviewPath = "/pricing";
+    rerender(<AssetExplorer projectSlug="demo" version={1} />);
+
+    await waitFor(() => {
+      expect(invalidateMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("marks the explorer asset queries as immediately stale", () => {
+    render(<AssetExplorer projectSlug="demo" version={1} />);
+
+    const findQueryOptionsForPath = (relativePath: string) =>
+      listAssetsUseQueryMock.mock.calls.find((call) => {
+        const input = call[0] as { relativePath?: string } | undefined;
+        return input?.relativePath === relativePath;
+      })?.[1];
+
+    expect(findQueryOptionsForPath("public/images")).toMatchObject({
+      staleTime: 0,
+    });
+    expect(findQueryOptionsForPath("images")).toMatchObject({
+      staleTime: 0,
+    });
+    expect(findQueryOptionsForPath(".vivd/uploads")).toMatchObject({
+      staleTime: 0,
+    });
   });
 });

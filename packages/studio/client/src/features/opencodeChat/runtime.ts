@@ -14,6 +14,8 @@ type DeriveChatActivityStateArgs = {
   sessionStatus: OpenCodeSessionStatus | null;
   hasOptimisticUserMessage: boolean;
   isSubmitting: boolean;
+  now?: number;
+  suppressPendingAssistant?: boolean;
 };
 
 type BuildDerivedSessionErrorArgs = {
@@ -24,6 +26,8 @@ type BuildDerivedSessionErrorArgs = {
   sessionStatus: OpenCodeSessionStatus | null;
   connectionState: OpenCodeConnectionState;
   connectionMessage?: string;
+  now?: number;
+  suppressPendingAssistant?: boolean;
 };
 
 export type DerivedSessionError = {
@@ -35,6 +39,8 @@ export type StaleRunningToolState = {
   messageId: string;
   reason: "completed_message" | "superseded_message";
 };
+
+export const PENDING_ASSISTANT_GRACE_MS = 15_000;
 
 export function isActiveSessionStatus(
   status: OpenCodeSessionStatus | null | undefined,
@@ -65,11 +71,85 @@ export function hasPendingAssistantMessage(
   messages: OpenCodeSessionMessageRecord[],
 ): boolean {
   return messages.some((message) => {
-    return (
-      message.info?.role === "assistant" &&
-      typeof message.info?.time?.completed !== "number"
-    );
+    return isPendingAssistantMessageInfo(message.info);
   });
+}
+
+function isPendingAssistantMessageInfo(
+  message: OpenCodeMessage | null | undefined,
+): boolean {
+  return (
+    message?.role === "assistant" &&
+    typeof message.time?.completed !== "number"
+  );
+}
+
+function getMessageActivityAt(
+  message: OpenCodeMessage | null | undefined,
+): number | null {
+  const updatedAt =
+    typeof message?.time?.updated === "number" ? message.time.updated : null;
+  const createdAt =
+    typeof message?.time?.created === "number" ? message.time.created : null;
+  return updatedAt ?? createdAt;
+}
+
+export function isLivePendingAssistantMessageInfo(
+  message: OpenCodeMessage | null | undefined,
+  options?: {
+    sessionStatus?: OpenCodeSessionStatus | null;
+    now?: number;
+  },
+): boolean {
+  if (!isPendingAssistantMessageInfo(message)) {
+    return false;
+  }
+
+  if (isActiveSessionStatus(options?.sessionStatus)) {
+    return true;
+  }
+
+  const activityAt = getMessageActivityAt(message);
+  if (activityAt == null) {
+    return false;
+  }
+
+  return (options?.now ?? Date.now()) - activityAt <= PENDING_ASSISTANT_GRACE_MS;
+}
+
+export function getMostRecentPendingAssistantActivityAt(
+  messages: OpenCodeSessionMessageRecord[],
+): number | null {
+  let latest: number | null = null;
+
+  for (const message of messages) {
+    if (!isPendingAssistantMessageInfo(message.info)) {
+      continue;
+    }
+
+    const activityAt = getMessageActivityAt(message.info);
+    if (activityAt == null) {
+      continue;
+    }
+
+    if (latest == null || activityAt > latest) {
+      latest = activityAt;
+    }
+  }
+
+  return latest;
+}
+
+export function hasLivePendingAssistantMessage(
+  messages: OpenCodeSessionMessageRecord[],
+  options?: {
+    sessionStatus?: OpenCodeSessionStatus | null;
+    now?: number;
+  },
+): boolean {
+  return messages.some((message) =>
+    isLivePendingAssistantMessageInfo(message.info, options),
+  );
 }
 
 function isRunningToolPart(part: unknown): boolean {
@@ -130,10 +210,17 @@ export function deriveChatActivityState({
   sessionStatus,
   hasOptimisticUserMessage,
   isSubmitting,
+  now,
+  suppressPendingAssistant = false,
 }: DeriveChatActivityStateArgs) {
   const sessionActive = isActiveSessionStatus(sessionStatus);
   const lastMessageRole = getLastMessageRole(messages);
-  const hasPendingAssistant = hasPendingAssistantMessage(messages);
+  const hasPendingAssistant = suppressPendingAssistant
+    ? false
+    : hasLivePendingAssistantMessage(messages, {
+        sessionStatus,
+        now,
+      });
   const isStreaming = hasPendingAssistant;
   const isWaiting =
     hasOptimisticUserMessage ||
@@ -159,8 +246,10 @@ export function buildDerivedSessionError({
   sessionStatus,
   connectionState,
   connectionMessage,
+  now,
+  suppressPendingAssistant = false,
 }: BuildDerivedSessionErrorArgs): DerivedSessionError {
-  if (selectedSessionId && sessionMessagesIsError) {
+  if (selectedSessionId && sessionMessagesIsError && messages.length === 0) {
     const message =
       sessionMessagesError &&
       typeof sessionMessagesError === "object" &&
@@ -192,7 +281,12 @@ export function buildDerivedSessionError({
   if (
     selectedSessionId &&
     connectionState === "error" &&
-    (isActiveSessionStatus(sessionStatus) || hasPendingAssistantMessage(messages))
+    (isActiveSessionStatus(sessionStatus) ||
+      (!suppressPendingAssistant &&
+        hasLivePendingAssistantMessage(messages, {
+          sessionStatus,
+          now,
+        })))
   ) {
     return {
       key: `stream:${selectedSessionId}:${connectionMessage ?? ""}`,
@@ -238,20 +332,21 @@ export function selectLikelyActiveSessionIds(args: {
   sessionStatusById: Record<string, OpenCodeSessionStatus>;
   messagesById: Record<string, OpenCodeMessage>;
   messagesBySessionId: Record<string, string[]>;
-}): string[] {
+}, options?: { now?: number }): string[] {
   return args.sessions
     .filter((session) => {
-      if (isActiveSessionStatus(args.sessionStatusById[session.id] ?? null)) {
+      const sessionStatus = args.sessionStatusById[session.id] ?? null;
+      if (isActiveSessionStatus(sessionStatus)) {
         return true;
       }
 
       const messageIds = args.messagesBySessionId[session.id] ?? [];
       return messageIds.some((messageId) => {
         const message = args.messagesById[messageId];
-        return (
-          message?.role === "assistant" &&
-          typeof message.time?.completed !== "number"
-        );
+        return isLivePendingAssistantMessageInfo(message, {
+          sessionStatus,
+          now: options?.now,
+        });
       });
     })
     .map((session) => session.id);

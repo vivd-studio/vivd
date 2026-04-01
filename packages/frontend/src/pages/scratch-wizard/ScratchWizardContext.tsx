@@ -303,12 +303,17 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       started.expectsStudioHandoff ||
       ("studioHandoff" in statusData &&
         statusData.studioHandoff?.mode === "studio_astro");
+    const studioStartupObserved =
+      statusData.status === "starting_studio" ||
+      statusData.status === "generating_initial_site" ||
+      statusData.status === "completed";
     if (
       studioHandoffRequested &&
-      (statusData.status === "starting_studio" ||
-        statusData.status === "generating_initial_site" ||
-        statusData.status === "completed")
+      studioStartupObserved
     ) {
+      if (!initialSessionId) {
+        return;
+      }
       navigateToStartedProjectStudio(
         started.slug,
         started.version,

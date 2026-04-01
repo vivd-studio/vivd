@@ -37,6 +37,11 @@ interface OpencodeServerInfo {
   directory: string;
 }
 
+type OpencodeReadyCheck = {
+  label: string;
+  url: string;
+};
+
 const DEFAULT_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_READY_TIMEOUT_MS = 120_000;
 
@@ -396,8 +401,8 @@ class OpencodeServerManager {
     return path.resolve(projectDir);
   }
 
-  private async waitForServerReady(
-    url: string,
+  private async waitForReadyChecks(
+    checks: OpencodeReadyCheck[],
     proc: ChildProcess,
     timeoutMs = READY_TIMEOUT_MS,
   ): Promise<void> {
@@ -414,17 +419,20 @@ class OpencodeServerManager {
       attempt += 1;
 
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1_000);
-
-        const response = await fetch(`${url}/config`, {
-          method: "GET",
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeout);
-        // We don't care about the payload — any HTTP response means the server is accepting requests.
-        void response.body?.cancel?.();
+        for (const check of checks) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 1_000);
+          try {
+            const response = await fetch(check.url, {
+              method: "GET",
+              signal: controller.signal,
+            });
+            // We don't care about the payload — any HTTP response means the server is accepting requests.
+            void response.body?.cancel?.();
+          } finally {
+            clearTimeout(timeout);
+          }
+        }
         return;
       } catch {
         // Ignore and retry.
@@ -434,9 +442,36 @@ class OpencodeServerManager {
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
     }
 
+    const labels = checks.map((check) => check.label).join(", ");
     throw new Error(
-      `[OpenCode] Timed out waiting ${timeoutMs}ms for server to be ready at ${url}`,
+      `[OpenCode] Timed out waiting ${timeoutMs}ms for readiness checks (${labels})`,
     );
+  }
+
+  private getWorkspaceReadyChecks(
+    url: string,
+    workspaceDir: string,
+  ): OpencodeReadyCheck[] {
+    const pathUrl = new URL("/path", url);
+    pathUrl.searchParams.set("directory", workspaceDir);
+
+    const sessionStatusUrl = new URL("/session/status", url);
+    sessionStatusUrl.searchParams.set("directory", workspaceDir);
+
+    return [
+      {
+        label: "global config",
+        url: `${url}/config`,
+      },
+      {
+        label: "workspace path",
+        url: pathUrl.toString(),
+      },
+      {
+        label: "workspace session status",
+        url: sessionStatusUrl.toString(),
+      },
+    ];
   }
 
   private async spawnServer(
@@ -498,7 +533,10 @@ class OpencodeServerManager {
     proc.unref();
 
     try {
-      await this.waitForServerReady(url, proc);
+      await this.waitForReadyChecks(
+        this.getWorkspaceReadyChecks(url, workspaceDir),
+        proc,
+      );
     } catch (error) {
       try {
         await this.killProcessTree(proc.pid!);

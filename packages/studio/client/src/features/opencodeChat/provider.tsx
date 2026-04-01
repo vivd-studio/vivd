@@ -66,6 +66,7 @@ type OpencodeChatContextValue = {
 const OpencodeChatContext = createContext<OpencodeChatContextValue | null>(null);
 const STALE_VISIBILITY_REFRESH_MS = 15_000;
 const STREAM_HEARTBEAT_TIMEOUT_MS = 15_000;
+const STREAM_RECONNECT_DELAY_MS = 1_000;
 
 export function useOpencodeChat() {
   const context = useContext(OpencodeChatContext);
@@ -91,8 +92,10 @@ export function OpencodeChatProvider({
   version,
 }: OpencodeChatProviderProps) {
   const lastEventIdRef = useRef<string | null>(null);
+  const hasBootstrappedRef = useRef(false);
   const subscriptionBatcherRef = useRef(createSubscriptionBatcherState());
   const flushTimerRef = useRef<number | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
   const lastFlushAtRef = useRef(0);
   const refreshQueueRef = useRef<ReturnType<typeof createRefreshQueue> | null>(null);
   const bootstrapReadyRef = useRef(false);
@@ -125,9 +128,12 @@ export function OpencodeChatProvider({
   useEffect(() => {
     if (!bootstrapQuery.data) return;
     dispatch({
-      type: "bootstrap.loaded",
+      type: hasBootstrappedRef.current
+        ? "bootstrap.refreshed"
+        : "bootstrap.loaded",
       payload: bootstrapQuery.data,
     });
+    hasBootstrappedRef.current = true;
   }, [bootstrapQuery.data]);
 
   const sessionMessagesQuery = trpc.agentChat.sessionMessages.useQuery(
@@ -224,11 +230,38 @@ export function OpencodeChatProvider({
   }, []);
 
   const restartEventSubscription = useCallback(() => {
+    if (reconnectTimerRef.current != null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     lastSubscriptionActivityAtRef.current = Date.now();
     startTransition(() => {
       setSubscriptionInstance((value) => value + 1);
     });
   }, []);
+
+  const scheduleEventSubscriptionRestart = useCallback(
+    (message?: string) => {
+      if (reconnectTimerRef.current != null) {
+        return;
+      }
+
+      lastSubscriptionActivityAtRef.current = Date.now();
+      dispatch({
+        type: "connection.updated",
+        payload: {
+          state: "reconnecting",
+          ...(message ? { message } : {}),
+        },
+      });
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        restartEventSubscription();
+      }, STREAM_RECONNECT_DELAY_MS);
+    },
+    [restartEventSubscription],
+  );
 
   const addOptimisticUserMessage = useCallback(
     (options: { content: string; sessionId: string | null; createdAt?: number }) => {
@@ -307,6 +340,10 @@ export function OpencodeChatProvider({
       if (flushTimerRef.current != null) {
         window.clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
+      }
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
       drainSubscriptionEvents(subscriptionBatcherRef.current);
       refreshQueueRef.current?.dispose();
@@ -416,6 +453,10 @@ export function OpencodeChatProvider({
     {
       enabled: Boolean(bootstrapQuery.data),
       onStarted: () => {
+        if (reconnectTimerRef.current != null) {
+          window.clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
         lastSubscriptionActivityAtRef.current = Date.now();
         flushQueuedEvents();
         queueRefresh();
@@ -437,13 +478,7 @@ export function OpencodeChatProvider({
       },
       onError: (error) => {
         flushQueuedEvents();
-        dispatch({
-          type: "connection.updated",
-          payload: {
-            state: "error",
-            message: error.message,
-          },
-        });
+        scheduleEventSubscriptionRestart(error.message);
       },
     },
   );

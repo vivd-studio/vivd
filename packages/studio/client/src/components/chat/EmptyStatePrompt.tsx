@@ -6,6 +6,7 @@ interface EmptyStatePromptProps {
   onSuggestionClick?: (suggestion: string) => void;
   initialGenerationRequested?: boolean;
   initialGenerationStarting?: boolean;
+  initialGenerationAwaitingSession?: boolean;
   initialGenerationFailed?: string | null;
   onRetryInitialGeneration?: () => void;
 }
@@ -20,9 +21,15 @@ export function EmptyStatePrompt({
   onSuggestionClick,
   initialGenerationRequested = false,
   initialGenerationStarting = false,
+  initialGenerationAwaitingSession = false,
   initialGenerationFailed = null,
   onRetryInitialGeneration,
 }: EmptyStatePromptProps) {
+  const showInitialGenerationWaitingState =
+    initialGenerationRequested &&
+    !initialGenerationFailed &&
+    (initialGenerationStarting || initialGenerationAwaitingSession);
+
   return (
     <div className="flex flex-col items-center text-center py-8 h-full">
       {/* Header */}
@@ -35,10 +42,12 @@ export function EmptyStatePrompt({
 
       {initialGenerationRequested ? (
         <div className="mb-6 flex w-full max-w-md flex-col items-center gap-3 px-6">
-          {initialGenerationStarting ? (
+          {showInitialGenerationWaitingState ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Starting initial site generation...
+              {initialGenerationStarting
+                ? "Starting initial site generation..."
+                : "Attaching the initial generation session..."}
             </div>
           ) : null}
           {initialGenerationFailed ? (
@@ -58,10 +67,11 @@ export function EmptyStatePrompt({
         </div>
       ) : null}
 
-      {/* Unified Chat Composer */}
-      <div className="mb-8 w-full">
-        <ChatInputRegion composerClassName="pb-0" />
-      </div>
+      {!showInitialGenerationWaitingState ? (
+        <div className="mb-8 w-full">
+          <ChatInputRegion composerClassName="pb-0" />
+        </div>
+      ) : null}
 
       {/* Subtle suggestions - no background, just text */}
       <div className="w-full max-w-md px-4">

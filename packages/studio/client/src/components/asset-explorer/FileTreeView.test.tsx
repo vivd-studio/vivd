@@ -204,6 +204,21 @@ describe("FileTreeView", () => {
     });
   });
 
+  it("marks the file tree query as immediately stale", () => {
+    render(<FileTreeView projectSlug="demo" version={1} />);
+
+    expect(listAllAssetsUseQueryMock).toHaveBeenCalledWith(
+      {
+        slug: "demo",
+        version: 1,
+        rootPath: "",
+      },
+      expect.objectContaining({
+        staleTime: 0,
+      }),
+    );
+  });
+
   it("uploads external drops on a folder row into that folder", async () => {
     const onFilesUpload = vi.fn().mockResolvedValue(undefined);
     const file = new File(["demo"], "logo.png", { type: "image/png" });

@@ -191,11 +191,16 @@ export function FileTreeView({
     return () => cancelAnimationFrame(frameId);
   }, [expandedPaths, highlightedPath]);
 
-  const { data, isLoading, refetch } = trpc.assets.listAllAssets.useQuery({
-    slug: projectSlug,
-    version,
-    rootPath: "",
-  });
+  const { data, isLoading, refetch } = trpc.assets.listAllAssets.useQuery(
+    {
+      slug: projectSlug,
+      version,
+      rootPath: "",
+    },
+    {
+      staleTime: 0,
+    },
+  );
 
   const moveMutation = trpc.assets.moveAsset.useMutation({
     onSuccess: () => {

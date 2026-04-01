@@ -8,6 +8,7 @@
   "scripts": {
     "publish:tag": "./scripts/publish.sh",
     "build:studio:local": "./scripts/build-studio-local.sh",
+    "studio:image:revert-smoke": "node ./scripts/studio-image-revert-smoke.mjs",
     "studio:host-smoke": "node ./scripts/studio-docker-host-smoke.mjs",
     "studio:host-smoke:debug": "VIVD_STUDIO_HOST_SMOKE_HEADLESS=0 VIVD_STUDIO_HOST_SMOKE_DEVTOOLS=1 VIVD_STUDIO_HOST_SMOKE_SLOW_MO_MS=250 VIVD_STUDIO_HOST_SMOKE_PAUSE_ON_FAILURE=1 node ./scripts/studio-docker-host-smoke.mjs",
     "studio:host-smoke:inspect": "PWDEBUG=1 VIVD_STUDIO_HOST_SMOKE_HEADLESS=0 VIVD_STUDIO_HOST_SMOKE_DEVTOOLS=1 VIVD_STUDIO_HOST_SMOKE_SLOW_MO_MS=250 VIVD_STUDIO_HOST_SMOKE_PAUSE_ON_FAILURE=1 node ./scripts/studio-docker-host-smoke.mjs",

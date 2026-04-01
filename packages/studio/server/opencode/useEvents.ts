@@ -428,7 +428,9 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
             console.error("[useEvents] Error while handling event:", event, error);
             callbacks.onSessionError?.({
               type: "event_processing",
-              message: formatErrorMessage(error, "Failed to process session event"),
+              message:
+                formatErrorMessage(error, "Failed to process session event") ||
+                "Failed to process session event",
             });
           }
         }
@@ -436,7 +438,9 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
         console.error("[useEvents] Error in event stream:", error);
         callbacks.onSessionError?.({
           type: "stream",
-          message: formatErrorMessage(error, "Event stream disconnected"),
+          message:
+            formatErrorMessage(error, "Event stream disconnected") ||
+            "Event stream disconnected",
         });
       }
     })();
@@ -473,7 +477,8 @@ function getToolError(part: any): string | undefined {
     part?.output?.error,
   ];
   for (const candidate of candidates) {
-    const message = formatErrorMessage(candidate);
+    if (candidate == null) continue;
+    const message = formatErrorMessage(candidate, undefined);
     if (message) return message;
   }
   return undefined;
@@ -481,8 +486,8 @@ function getToolError(part: any): string | undefined {
 
 function formatErrorMessage(
   value: unknown,
-  fallback = "Unknown error",
-): string {
+  fallback?: string,
+): string | undefined {
   if (value == null) return fallback;
   if (value instanceof Error) {
     return value.message || fallback;

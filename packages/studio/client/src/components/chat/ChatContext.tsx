@@ -260,6 +260,7 @@ export function ChatProvider({
         }
       : null,
     initialSelectedSessionId: requestedInitialSessionId,
+    initialGenerationRequested,
     onTaskComplete,
   });
 

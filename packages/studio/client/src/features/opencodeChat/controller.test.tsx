@@ -35,7 +35,7 @@ const {
       lastEventId: null as string | null,
     },
     questionRequestsBySessionId: {},
-    sessions: [],
+    sessions: [] as any[],
     bootstrapLoading: false,
     selectedSessionId: null as string | null,
     selectedMessages: [] as any[],
@@ -166,6 +166,17 @@ describe("useOpencodeChatController", () => {
     mockOpencodeChat.removeOptimisticUserMessage.mockReset();
 
     mockOpencodeChat.selectedSessionId = null;
+    mockOpencodeChat.selectedMessages = [];
+    mockOpencodeChat.sessionStatus = null;
+    mockOpencodeChat.questionRequestsBySessionId = {};
+    mockOpencodeChat.state.sessionStatusById = {};
+    mockOpencodeChat.state.connection = {
+      state: "connected",
+      message: undefined,
+    };
+    mockOpencodeChat.state.lastEventTime = null;
+    mockOpencodeChat.state.lastEventType = null;
+    mockOpencodeChat.state.lastEventId = null;
     mockOpencodeChat.refetchBootstrap.mockResolvedValue(undefined);
     mockOpencodeChat.refetchSelectedSessionMessages.mockResolvedValue(undefined);
     mockOpencodeChat.addOptimisticUserMessage.mockReturnValue("client-1");
@@ -238,6 +249,36 @@ describe("useOpencodeChatController", () => {
     await waitFor(() => {
       expect(mockOpencodeChat.setSelectedSessionId).toHaveBeenCalledWith(
         "sess-started",
+      );
+    });
+  });
+
+  it("auto-selects the newest session during initial generation even before attention signals arrive", async () => {
+    mockOpencodeChat.sessions = [
+      {
+        id: "sess-latest",
+        title: "Newest session",
+        time: { updated: Date.UTC(2026, 3, 1, 12, 0) },
+      },
+      {
+        id: "sess-older",
+        title: "Older session",
+        time: { updated: Date.UTC(2026, 3, 1, 11, 0) },
+      },
+    ];
+
+    renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+        initialGenerationRequested: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockOpencodeChat.setSelectedSessionId).toHaveBeenCalledWith(
+        "sess-latest",
       );
     });
   });
@@ -350,6 +391,55 @@ describe("useOpencodeChatController", () => {
       expect(mockOpencodeChat.refetchSelectedSessionMessages).toHaveBeenCalledTimes(
         1,
       );
+    });
+  });
+
+  it("clears the local working state immediately after stopping a selected session even if a fresh assistant shell is still visible", async () => {
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.sessionStatus = { type: "idle" } as any;
+    mockOpencodeChat.selectedMessages = [
+      {
+        info: {
+          id: "msg-user",
+          sessionID: "sess-1",
+          role: "user",
+          time: { created: Date.now() - 2_000 },
+        },
+        parts: [],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          sessionID: "sess-1",
+          role: "assistant",
+          time: { created: Date.now() - 1_000 },
+        },
+        parts: [],
+      },
+    ];
+
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+      }),
+    );
+
+    expect(result.current.isThinking).toBe(true);
+
+    act(() => {
+      result.current.stopGeneration();
+    });
+
+    expect(abortSessionMutate).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      projectSlug: "site-1",
+      version: 1,
+    });
+
+    await waitFor(() => {
+      expect(result.current.isThinking).toBe(false);
     });
   });
 

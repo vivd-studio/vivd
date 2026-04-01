@@ -13,6 +13,7 @@ import { OPEN_CODE_CHAT_INITIAL_STATE } from "../types";
 import {
   createStateFromBootstrap,
   mergeSessionMessagesIntoState,
+  reconcileStateFromBootstrap,
 } from "./bootstrap";
 
 function compareStrings(a: string, b: string): number {
@@ -68,15 +69,65 @@ function sortQuestionRequests(
   return [...questions].sort((left, right) => compareStrings(left.id, right.id));
 }
 
+function shouldPreserveExistingStringField(
+  existing: string,
+  incoming: string,
+): boolean {
+  if (!incoming && existing) {
+    return true;
+  }
+
+  return (
+    existing.length > incoming.length &&
+    (existing.startsWith(incoming) || existing.includes(incoming))
+  );
+}
+
+function mergeSnapshotPart(
+  existingPart: OpenCodePart | undefined,
+  incomingPart: OpenCodePart,
+): OpenCodePart {
+  if (!existingPart) {
+    return incomingPart;
+  }
+
+  const merged: OpenCodePart = {
+    ...existingPart,
+    ...incomingPart,
+  };
+
+  for (const [field, existingValue] of Object.entries(existingPart)) {
+    const incomingValue = incomingPart[field];
+    if (
+      typeof existingValue === "string" &&
+      typeof incomingValue === "string" &&
+      shouldPreserveExistingStringField(existingValue, incomingValue)
+    ) {
+      merged[field] = existingValue;
+    }
+  }
+
+  return merged;
+}
+
 function upsertSession(
   state: OpenCodeChatState,
   session: OpenCodeSession,
 ): OpenCodeChatState {
+  const existingSession = state.sessionsById[session.id];
   const sessionsById = {
     ...state.sessionsById,
     [session.id]: {
-      ...state.sessionsById[session.id],
+      ...existingSession,
       ...session,
+      ...(existingSession?.time || session.time
+        ? {
+            time: {
+              ...existingSession?.time,
+              ...session.time,
+            },
+          }
+        : {}),
     },
   };
 
@@ -239,11 +290,20 @@ function upsertMessage(
   state: OpenCodeChatState,
   message: OpenCodeMessage,
 ): OpenCodeChatState {
+  const existingMessage = state.messagesById[message.id];
   const messagesById = {
     ...state.messagesById,
     [message.id]: {
-      ...state.messagesById[message.id],
+      ...existingMessage,
       ...message,
+      ...(existingMessage?.time || message.time
+        ? {
+            time: {
+              ...existingMessage?.time,
+              ...message.time,
+            },
+          }
+        : {}),
     },
   };
   const existingIds = state.messagesBySessionId[message.sessionID] ?? [];
@@ -555,6 +615,9 @@ function applyCanonicalEvent(
 export function upsertSessionMessagesIntoState(
   state: OpenCodeChatState,
   messages: OpenCodeSessionMessageRecord[],
+  options?: {
+    preserveExistingParts?: boolean;
+  },
 ): OpenCodeChatState {
   return messages.reduce((currentState, record) => {
     const info = record.info;
@@ -563,11 +626,22 @@ export function upsertSessionMessagesIntoState(
     let nextState = upsertMessage(currentState, info);
     const parts = sortParts(record.parts ?? []);
     if (parts.length > 0) {
+      const currentParts =
+        options?.preserveExistingParts
+          ? nextState.partsByMessageId[info.id] ?? []
+          : [];
+      const partsById = new Map<string, OpenCodePart>();
+      for (const currentPart of currentParts) {
+        partsById.set(currentPart.id, currentPart);
+      }
+      for (const part of parts) {
+        partsById.set(part.id, mergeSnapshotPart(partsById.get(part.id), part));
+      }
       nextState = {
         ...nextState,
         partsByMessageId: {
           ...nextState.partsByMessageId,
-          [info.id]: parts,
+          [info.id]: sortParts(Array.from(partsById.values())),
         },
       };
     }
@@ -582,6 +656,9 @@ export function openCodeChatReducer(
   switch (action.type) {
     case "bootstrap.loaded":
       return createStateFromBootstrap(action.payload);
+
+    case "bootstrap.refreshed":
+      return reconcileStateFromBootstrap(state, action.payload);
 
     case "session.messages.loaded":
       return mergeSessionMessagesIntoState(

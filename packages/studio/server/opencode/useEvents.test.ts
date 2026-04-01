@@ -380,6 +380,51 @@ describe("useEvents", () => {
     );
   });
 
+  it("does not fabricate an error for completed tool events", async () => {
+    const onToolCallFinished = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-2b",
+          info: { id: "assistant-2b", role: "assistant" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-2b",
+          part: {
+            id: "tool-2b",
+            messageID: "assistant-2b",
+            type: "tool",
+            tool: "bash",
+            status: "completed",
+            output: "ok",
+          },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-2b",
+      onToolCallFinished,
+    });
+    await start();
+    await flushEventLoop();
+    stop();
+
+    expect(onToolCallFinished).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "tool-2b",
+        tool: "bash",
+        status: "completed",
+      }),
+    );
+    expect(onToolCallFinished.mock.calls[0]?.[0]?.error).toBeUndefined();
+  });
+
   it("does not emit idle completion after a terminal session.status error", async () => {
     const onSessionError = vi.fn();
     const onIdle = vi.fn();

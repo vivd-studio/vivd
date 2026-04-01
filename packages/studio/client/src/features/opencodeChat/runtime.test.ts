@@ -29,19 +29,46 @@ function createMessage(
 }
 
 describe("opencodeChat runtime", () => {
-  it("derives streaming from pending assistant output even if the session status already looks terminal", () => {
+  it("does not keep a stale pending assistant shell streaming once the session status is terminal and the grace window has expired", () => {
+    const now = Date.UTC(2026, 3, 1, 12, 0, 20);
     const state = deriveChatActivityState({
       messages: [
-        createMessage({ id: "u1", role: "user" }),
-        createMessage({ id: "a1", role: "assistant" }),
+        createMessage({ id: "u1", role: "user", time: { created: now - 40_000 } }),
+        createMessage({
+          id: "a1",
+          role: "assistant",
+          time: { created: now - 30_000 },
+        }),
       ],
       sessionStatus: { type: "done" },
       hasOptimisticUserMessage: false,
       isSubmitting: false,
+      now,
+    });
+
+    expect(state.isStreaming).toBe(false);
+    expect(state.isWaiting).toBe(false);
+    expect(state.isThinking).toBe(false);
+  });
+
+  it("keeps streaming during the grace window when a pending assistant message is still fresh", () => {
+    const now = Date.UTC(2026, 3, 1, 12, 0, 20);
+    const state = deriveChatActivityState({
+      messages: [
+        createMessage({ id: "u1", role: "user", time: { created: now - 5_000 } }),
+        createMessage({
+          id: "a1",
+          role: "assistant",
+          time: { created: now - 3_000 },
+        }),
+      ],
+      sessionStatus: { type: "done" },
+      hasOptimisticUserMessage: false,
+      isSubmitting: false,
+      now,
     });
 
     expect(state.isStreaming).toBe(true);
-    expect(state.isWaiting).toBe(false);
     expect(state.isThinking).toBe(true);
   });
 
@@ -73,22 +100,41 @@ describe("opencodeChat runtime", () => {
     expect(error?.error.message).toContain("Live updates were interrupted");
   });
 
-  it("derives a safe stream error when a pending assistant message exists after the session status has already gone terminal", () => {
+  it("does not surface a stream error for a stale pending assistant shell after the session has already gone terminal", () => {
+    const now = Date.UTC(2026, 3, 1, 12, 0, 20);
     const error = buildDerivedSessionError({
       selectedSessionId: "sess-1",
       messages: [
-        createMessage({ id: "u1", role: "user" }),
-        createMessage({ id: "a1", role: "assistant" }),
+        createMessage({ id: "u1", role: "user", time: { created: now - 30_000 } }),
+        createMessage({
+          id: "a1",
+          role: "assistant",
+          time: { created: now - 20_000 },
+        }),
       ],
       sessionMessagesIsError: false,
       sessionMessagesError: null,
       sessionStatus: { type: "done" },
       connectionState: "error",
       connectionMessage: "socket gone",
+      now,
     });
 
-    expect(error?.error.type).toBe("stream");
-    expect(error?.error.message).toContain("Live updates were interrupted");
+    expect(error).toBeNull();
+  });
+
+  it("does not surface a load error when cached messages are already visible during a background refresh failure", () => {
+    const error = buildDerivedSessionError({
+      selectedSessionId: "sess-1",
+      messages: [createMessage({ id: "a1", role: "assistant" })],
+      sessionMessagesIsError: true,
+      sessionMessagesError: new Error("Failed to load session"),
+      sessionStatus: { type: "busy" },
+      connectionState: "connected",
+      connectionMessage: undefined,
+    });
+
+    expect(error).toBeNull();
   });
 
   it("selects the most recent active session", () => {
@@ -158,6 +204,7 @@ describe("opencodeChat runtime", () => {
   });
 
   it("treats a session with a cached pending assistant message as active even when its status looks idle", () => {
+    const now = Date.UTC(2026, 3, 1, 12, 0, 20);
     const activeSessionIds = selectLikelyActiveSessionIds({
       sessions: [
         { id: "sess-1", time: { updated: 20 } },
@@ -172,15 +219,41 @@ describe("opencodeChat runtime", () => {
           id: "msg-1",
           sessionID: "sess-1",
           role: "assistant",
-          time: { created: 1 },
+          time: { created: now - 5_000 },
         },
       },
       messagesBySessionId: {
         "sess-1": ["msg-1"],
       },
-    });
+    }, { now });
 
     expect(activeSessionIds).toEqual(["sess-1"]);
+  });
+
+  it("does not keep a stale cached pending assistant message active forever once it ages past the grace window", () => {
+    const now = Date.UTC(2026, 3, 1, 12, 0, 20);
+    const activeSessionIds = selectLikelyActiveSessionIds(
+      {
+        sessions: [{ id: "sess-1", time: { updated: 20 } }],
+        sessionStatusById: {
+          "sess-1": { type: "idle" },
+        },
+        messagesById: {
+          "msg-1": {
+            id: "msg-1",
+            sessionID: "sess-1",
+            role: "assistant",
+            time: { created: now - 30_000 },
+          },
+        },
+        messagesBySessionId: {
+          "sess-1": ["msg-1"],
+        },
+      },
+      { now },
+    );
+
+    expect(activeSessionIds).toEqual([]);
   });
 
   it("selects the most recent session needing attention when a question is pending", () => {

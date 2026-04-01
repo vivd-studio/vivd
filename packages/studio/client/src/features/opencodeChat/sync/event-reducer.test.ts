@@ -325,6 +325,337 @@ describe("openCodeChatReducer", () => {
       .toEqual(["msg-new"]);
   });
 
+  it("preserves already-seen active session messages when a refresh snapshot lags behind", () => {
+    const activeState = openCodeChatReducer(
+      openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+        type: "event.received",
+        payload: {
+          type: "session.status",
+          properties: {
+            sessionID: "sess-1",
+            status: { type: "busy" },
+          },
+        },
+      }),
+      {
+        type: "events.receivedBatch",
+        payload: [
+          {
+            type: "message.updated",
+            properties: {
+              info: {
+                id: "msg-1",
+                sessionID: "sess-1",
+                role: "assistant",
+                time: { created: 100, completed: 200 },
+              },
+            },
+          },
+          {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "already seen",
+              },
+            },
+          },
+          {
+            type: "message.updated",
+            properties: {
+              info: {
+                id: "msg-2",
+                sessionID: "sess-1",
+                role: "assistant",
+                time: { created: 300 },
+              },
+            },
+          },
+          {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "part-2",
+                messageID: "msg-2",
+                type: "text",
+                text: "latest live step",
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    const refreshed = openCodeChatReducer(activeState, {
+      type: "session.messages.loaded",
+      payload: {
+        sessionId: "sess-1",
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "already seen",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(selectMessagesForSession(refreshed, "sess-1").map((message) => message.id))
+      .toEqual(["msg-1", "msg-2"]);
+    expect(selectMessagesForSession(refreshed, "sess-1")[1]?.parts[0]?.text).toBe(
+      "latest live step",
+    );
+  });
+
+  it("reconciles bootstrap refreshes without wiping active session transcript state", () => {
+    const activeState = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "bootstrap.loaded",
+      payload: {
+        sessions: [{ id: "sess-1", time: { updated: 20 } }],
+        statuses: {
+          "sess-1": { type: "busy" },
+        },
+        questions: [],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "first step",
+              },
+            ],
+          },
+          {
+            info: {
+              id: "msg-2",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 200 },
+            },
+            parts: [
+              {
+                id: "part-2",
+                messageID: "msg-2",
+                type: "text",
+                text: "second step",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const refreshed = openCodeChatReducer(activeState, {
+      type: "bootstrap.refreshed",
+      payload: {
+        sessions: [{ id: "sess-1", time: { updated: 30 } }],
+        statuses: {
+          "sess-1": { type: "busy" },
+        },
+        questions: [],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "first step",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(selectMessagesForSession(refreshed, "sess-1").map((message) => message.id))
+      .toEqual(["msg-1", "msg-2"]);
+    expect(refreshed.sessionStatusById["sess-1"]).toEqual({ type: "busy" });
+  });
+
+  it("preserves already-seen terminal session messages when a later refresh snapshot lags behind", () => {
+    const completedState = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "bootstrap.loaded",
+      payload: {
+        sessions: [{ id: "sess-1", time: { updated: 40 } }],
+        statuses: {
+          "sess-1": { type: "done" },
+        },
+        questions: [],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100, completed: 200 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "first visible action",
+              },
+            ],
+          },
+          {
+            info: {
+              id: "msg-2",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 300, completed: 400 },
+            },
+            parts: [
+              {
+                id: "part-2",
+                messageID: "msg-2",
+                type: "text",
+                text: "second visible action",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const refreshed = openCodeChatReducer(completedState, {
+      type: "session.messages.loaded",
+      payload: {
+        sessionId: "sess-1",
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100, completed: 200 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "first visible action",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(selectMessagesForSession(refreshed, "sess-1").map((message) => message.id))
+      .toEqual(["msg-1", "msg-2"]);
+  });
+
+  it("preserves already-seen terminal session parts when a bootstrap refresh snapshot shrinks a message", () => {
+    const completedState = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
+      type: "bootstrap.loaded",
+      payload: {
+        sessions: [{ id: "sess-1", time: { updated: 40 } }],
+        statuses: {
+          "sess-1": { type: "done" },
+        },
+        questions: [],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100, completed: 200 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "I inspected the project structure and starter files",
+              },
+              {
+                id: "part-2",
+                messageID: "msg-1",
+                type: "text",
+                text: "Listed src/pages, src/layouts, and src/styles",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const refreshed = openCodeChatReducer(completedState, {
+      type: "bootstrap.refreshed",
+      payload: {
+        sessions: [{ id: "sess-1", time: { updated: 50 } }],
+        statuses: {
+          "sess-1": { type: "done" },
+        },
+        questions: [],
+        messages: [
+          {
+            info: {
+              id: "msg-1",
+              sessionID: "sess-1",
+              role: "assistant",
+              time: { created: 100, completed: 200 },
+            },
+            parts: [
+              {
+                id: "part-1",
+                messageID: "msg-1",
+                type: "text",
+                text: "I inspected the project structure",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(selectMessagesForSession(refreshed, "sess-1")[0]?.parts).toEqual([
+      {
+        id: "part-1",
+        messageID: "msg-1",
+        type: "text",
+        text: "I inspected the project structure and starter files",
+      },
+      {
+        id: "part-2",
+        messageID: "msg-1",
+        type: "text",
+        text: "Listed src/pages, src/layouts, and src/styles",
+      },
+    ]);
+  });
+
   it("removes messages and parts when canonical removal events arrive", () => {
     const bootstrapped = openCodeChatReducer(OPEN_CODE_CHAT_INITIAL_STATE, {
       type: "bootstrap.loaded",
