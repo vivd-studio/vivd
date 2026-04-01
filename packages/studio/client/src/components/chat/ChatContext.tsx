@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { POLLING_INFREQUENT } from "@/app/config/polling";
 import { DEFAULT_STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS } from "@studio/shared/opencodeContextPolicy";
+import { isLikelyTrpcTimeoutError } from "@/lib/trpcTimeouts";
 import { useOptionalPreview } from "../preview/PreviewContext";
 import type {
   ChatContextValue,
@@ -40,6 +41,20 @@ import {
 import { useOpencodeChatController } from "@/features/opencodeChat";
 
 const ChatContext = createContext<ChatContextValue | null>(null);
+
+const AUTO_INITIAL_GENERATION_MAX_ATTEMPTS = 4;
+const AUTO_INITIAL_GENERATION_RETRY_DELAY_MS = 4_000;
+const RETRYABLE_INITIAL_GENERATION_ERROR_PATTERN =
+  /failed to fetch|load failed|networkerror|network request failed|timed out|temporarily unavailable|status code 5\d\d|manifest not found|not ready|econnrefused|econnreset|socket hang up/i;
+
+function isRetryableInitialGenerationStartError(error: unknown): boolean {
+  if (isLikelyTrpcTimeoutError(error)) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return RETRYABLE_INITIAL_GENERATION_ERROR_PATTERN.test(message);
+}
 
 export function useChatContext() {
   const context = useContext(ChatContext);
@@ -98,6 +113,10 @@ export function ChatProvider({
     null,
   );
   const autoInitialGenerationAttemptedRef = useRef(false);
+  const autoInitialGenerationAttemptCountRef = useRef(0);
+  const autoInitialGenerationRetryTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const pendingInitialGenerationDefaultModelRef = useRef(false);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
@@ -163,6 +182,13 @@ export function ChatProvider({
   const setFollowupBehavior = useCallback((behavior: FollowupBehavior) => {
     setFollowupBehaviorState(behavior);
     localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, behavior);
+  }, []);
+
+  const clearAutoInitialGenerationRetryTimer = useCallback(() => {
+    if (autoInitialGenerationRetryTimerRef.current) {
+      clearTimeout(autoInitialGenerationRetryTimerRef.current);
+      autoInitialGenerationRetryTimerRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -425,12 +451,27 @@ export function ChatProvider({
     submitPreparedTask,
   ]);
 
-  const startInitialGeneration = useCallback(() => {
+  const startInitialGeneration = useCallback((options?: { auto?: boolean }) => {
     if (initialGenerationStarting) return;
+
+    if (
+      initialGenerationRequested &&
+      (requestedInitialSessionId || selectedSessionId || sessions.length > 0)
+    ) {
+      clearAutoInitialGenerationRetryTimer();
+      return;
+    }
 
     previewContext?.clearPendingChatMessage?.();
     previewContext?.setChatOpen(true);
     setInitialGenerationFailed(null);
+
+    if (options?.auto) {
+      autoInitialGenerationAttemptCountRef.current += 1;
+    } else {
+      autoInitialGenerationAttemptCountRef.current = 0;
+      clearAutoInitialGenerationRetryTimer();
+    }
 
     void (async () => {
       try {
@@ -448,32 +489,69 @@ export function ChatProvider({
         void refetchSessions();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const isAutoAttempt = options?.auto ?? false;
+        if (
+          isAutoAttempt &&
+          isRetryableInitialGenerationStartError(error) &&
+          autoInitialGenerationAttemptCountRef.current <
+            AUTO_INITIAL_GENERATION_MAX_ATTEMPTS &&
+          !requestedInitialSessionId &&
+          !selectedSessionId &&
+          sessions.length === 0
+        ) {
+          clearAutoInitialGenerationRetryTimer();
+          autoInitialGenerationRetryTimerRef.current = setTimeout(() => {
+            autoInitialGenerationRetryTimerRef.current = null;
+            startInitialGeneration({ auto: true });
+          }, AUTO_INITIAL_GENERATION_RETRY_DELAY_MS);
+          return;
+        }
+
         setInitialGenerationFailed(message);
       } finally {
         setInitialGenerationStarting(false);
       }
     })();
   }, [
+    clearAutoInitialGenerationRetryTimer,
     clearSessionError,
     initialGenerationStarting,
+    initialGenerationRequested,
     previewContext,
     projectSlug,
     refetchSessions,
     resolveInitialGenerationModel,
+    requestedInitialSessionId,
     setSelectedSessionId,
+    selectedSessionId,
+    sessions.length,
     startInitialGenerationMutation,
     version,
   ]);
 
   const retryInitialGeneration = useCallback(() => {
     autoInitialGenerationAttemptedRef.current = true;
-    startInitialGeneration();
+    startInitialGeneration({ auto: false });
   }, [startInitialGeneration]);
 
   useEffect(() => {
     autoInitialGenerationAttemptedRef.current = false;
+    autoInitialGenerationAttemptCountRef.current = 0;
+    clearAutoInitialGenerationRetryTimer();
     setInitialGenerationFailed(null);
-  }, [initialGenerationRequested, projectSlug, requestedInitialSessionId, version]);
+  }, [
+    clearAutoInitialGenerationRetryTimer,
+    initialGenerationRequested,
+    projectSlug,
+    requestedInitialSessionId,
+    version,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearAutoInitialGenerationRetryTimer();
+    };
+  }, [clearAutoInitialGenerationRetryTimer]);
 
   useEffect(() => {
     if (!initialGenerationRequested) return;
@@ -486,7 +564,7 @@ export function ChatProvider({
     if (autoInitialGenerationAttemptedRef.current) return;
 
     autoInitialGenerationAttemptedRef.current = true;
-    startInitialGeneration();
+    startInitialGeneration({ auto: true });
   }, [
     activeQuestionRequest,
     initialGenerationFailed,
@@ -503,9 +581,10 @@ export function ChatProvider({
 
   useEffect(() => {
     if (selectedSessionId) {
+      clearAutoInitialGenerationRetryTimer();
       setInitialGenerationFailed(null);
     }
-  }, [selectedSessionId]);
+  }, [clearAutoInitialGenerationRetryTimer, selectedSessionId]);
 
   const submitCurrentInput = useCallback(
     async (options?: { forceSend?: boolean }) => {
