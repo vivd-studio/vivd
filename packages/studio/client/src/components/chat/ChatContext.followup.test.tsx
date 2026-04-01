@@ -474,49 +474,6 @@ describe("ChatProvider follow-up behavior", () => {
     expect(latestContext?.selectedModel?.modelId).toBe("gpt-4.1-mini");
   });
 
-  it("retries auto-started initial generation after a transient startup failure", async () => {
-    vi.useFakeTimers();
-    controllerState.selectedSessionId = null;
-    controllerState.sessions = [];
-    controllerState.sessionsLoading = false;
-    controllerState.isSessionHydrating = false;
-    previewState.initialGenerationRequested = true;
-    previewState.pendingChatMessage = null;
-
-    startInitialGenerationMock
-      .mockRejectedValueOnce(new Error("Failed to fetch"))
-      .mockResolvedValueOnce({
-        sessionId: "sess-retry",
-        reused: false,
-        status: "generating_initial_site",
-      });
-
-    render(
-      <ChatProvider projectSlug="site-1" version={1}>
-        <CaptureContext />
-      </ChatProvider>,
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(startInitialGenerationMock).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(startInitialGenerationMock).toHaveBeenCalledTimes(2);
-    expect(startInitialGenerationMock).toHaveBeenLastCalledWith({
-      projectSlug: "site-1",
-      version: 1,
-      model: undefined,
-    });
-  });
-
   it("pauses auto-send after stop until a queued follow-up is sent manually", async () => {
     window.localStorage.setItem(FOLLOWUP_BEHAVIOR_STORAGE_KEY, "queue");
     controllerState.isThinking = true;

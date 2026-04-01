@@ -18,6 +18,7 @@ import { serverManager as opencodeServerManager } from "./opencode/serverManager
 import { usageReporter } from "./services/reporting/UsageReporter.js";
 import { workspaceStateReporter } from "./services/reporting/WorkspaceStateReporter.js";
 import { registerStudioRuntimeHttpRoutes } from "./httpRoutes/runtime.js";
+import { initialGenerationService } from "./services/initialGeneration/InitialGenerationService.js";
 import {
   injectBasePathScript,
   rewriteRootAssetUrlsInText,
@@ -388,11 +389,50 @@ async function startServer() {
 
   const clientPath = path.join(__dirname, "client");
   const clientIndexPath = path.join(clientPath, "index.html");
+  const runtimeProjectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+  const runtimeProjectVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
+  let workspaceReadyPromise: Promise<void> | null = null;
   registerStudioClientHttpRoutes({
     app,
     requireStudioAuth,
     clientPath,
     clientIndexPath,
+    resolveInitialGenerationSessionId: async (req) => {
+      if (workspaceReadyPromise) {
+        await workspaceReadyPromise;
+      }
+
+      if (!workspace.isInitialized()) {
+        return null;
+      }
+
+      const projectSlug =
+        runtimeProjectSlug ||
+        getSingleRouteParam(req.query.projectSlug as string | string[] | undefined) ||
+        "";
+      const requestedVersionRaw = getSingleRouteParam(
+        req.query.version as string | string[] | undefined,
+      );
+      const requestedVersion = Number.parseInt(requestedVersionRaw || "", 10);
+      const version =
+        Number.isFinite(runtimeProjectVersion) && runtimeProjectVersion > 0
+          ? runtimeProjectVersion
+          : Number.isFinite(requestedVersion) && requestedVersion > 0
+            ? requestedVersion
+            : 1;
+
+      if (!projectSlug) {
+        return null;
+      }
+
+      const result = await initialGenerationService.startInitialGeneration({
+        projectSlug,
+        version,
+        workspaceDir: workspace.getProjectPath(),
+      });
+
+      return result.sessionId ?? null;
+    },
     getProxyBasePath,
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
@@ -424,40 +464,45 @@ async function startServer() {
     });
   });
 
-  if (WORKSPACE_DIR) {
-    console.log(`Using workspace directory: ${WORKSPACE_DIR}`);
-    await workspace.open(WORKSPACE_DIR);
-    console.log(`Workspace ready at: ${workspace.getProjectPath()}`);
-  } else if (REPO_URL) {
-    console.log(`Cloning repository: ${REPO_URL}`);
-    await cloneWorkspaceWithRetry({
-      workspace,
-      repoUrl: REPO_URL,
-      gitToken: GIT_TOKEN,
-      branch: BRANCH,
-    });
-    console.log(`Repository cloned to: ${workspace.getProjectPath()}`);
-  } else {
-    console.log(
-      "No VIVD_WORKSPACE_DIR/WORKSPACE_DIR or REPO_URL provided. Workspace not initialized."
-    );
-  }
+  workspaceReadyPromise = (async () => {
+    if (WORKSPACE_DIR) {
+      console.log(`Using workspace directory: ${WORKSPACE_DIR}`);
+      await workspace.open(WORKSPACE_DIR);
+      console.log(`Workspace ready at: ${workspace.getProjectPath()}`);
+    } else if (REPO_URL) {
+      console.log(`Cloning repository: ${REPO_URL}`);
+      await cloneWorkspaceWithRetry({
+        workspace,
+        repoUrl: REPO_URL,
+        gitToken: GIT_TOKEN,
+        branch: BRANCH,
+      });
+      console.log(`Repository cloned to: ${workspace.getProjectPath()}`);
+    } else {
+      console.log(
+        "No VIVD_WORKSPACE_DIR/WORKSPACE_DIR or REPO_URL provided. Workspace not initialized."
+      );
+      return;
+    }
 
-  const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
-  const projectVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
-  const canReportWorkspaceState =
-    workspace.isInitialized() &&
-    projectSlug.length > 0 &&
-    Number.isFinite(projectVersion) &&
-    projectVersion > 0;
+    const projectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
+    const projectVersion = Number.parseInt(process.env.VIVD_PROJECT_VERSION || "", 10);
+    const canReportWorkspaceState =
+      workspace.isInitialized() &&
+      projectSlug.length > 0 &&
+      Number.isFinite(projectVersion) &&
+      projectVersion > 0;
 
-  if (canReportWorkspaceState) {
-    workspaceStateReporter.start({
-      workspace,
-      slug: projectSlug,
-      version: projectVersion,
-    });
-  }
+    if (canReportWorkspaceState) {
+      workspaceStateReporter.start({
+        workspace,
+        slug: projectSlug,
+        version: projectVersion,
+      });
+    }
+  })();
+
+  await workspaceReadyPromise;
 
   // Graceful shutdown
   const shutdown = async () => {
