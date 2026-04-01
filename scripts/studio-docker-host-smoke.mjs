@@ -20,6 +20,8 @@ const DEFAULT_DOCS_HOSTNAME = "docs.localhost";
 const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
 const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
 const DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS = 15_000;
+const DEFAULT_STUDIO_READY_TIMEOUT_MS = 90_000;
+const STUDIO_READY_PROGRESS_LOG_INTERVAL_MS = 15_000;
 const MAX_AUTH_SETTLE_ATTEMPTS = 3;
 const DEFAULT_CHEAP_OPENROUTER_MODEL = "openrouter/google/gemini-2.5-flash-lite";
 const FAILING_CONSOLE_PATTERNS = [
@@ -645,22 +647,106 @@ async function createScratchProject({
 }
 
 async function waitForStudioReady(page, timeoutMs) {
-  await expectVisible(
-    page.locator("iframe[title^='Vivd Studio -']"),
-    timeoutMs,
-    "studio iframe",
-  );
+  const readyTimeoutMs = Math.min(timeoutMs, DEFAULT_STUDIO_READY_TIMEOUT_MS);
+  const iframeLocator = page.locator("iframe[title^='Vivd Studio -']");
+  const startedAt = Date.now();
+  let lastProgressLogAt = 0;
 
+  while (Date.now() - startedAt < readyTimeoutMs) {
+    const iframeVisible = await iframeLocator.first().isVisible().catch(() => false);
+    const bootingVisible = await page
+      .getByText(/Booting studio/i)
+      .isVisible()
+      .catch(() => false);
+    const preparingVisible = await page
+      .getByText(/Preparing your editor and dev server/i)
+      .isVisible()
+      .catch(() => false);
+    const iframeSrc = await iframeLocator.first().getAttribute("src").catch(() => null);
+    const elapsedMs = Date.now() - startedAt;
+
+    if (!iframeVisible) {
+      if (elapsedMs - lastProgressLogAt >= STUDIO_READY_PROGRESS_LOG_INTERVAL_MS) {
+        lastProgressLogAt = elapsedMs;
+        log(
+          `Still waiting for Studio iframe [${elapsedMs}ms]: bootingVisible=${bootingVisible} preparingVisible=${preparingVisible} iframeVisible=${iframeVisible} iframeSrc=${iframeSrc ?? "unknown"}`,
+        );
+      }
+
+      await sleep(1_000);
+      continue;
+    }
+
+    const frame = page.frameLocator("iframe[title^='Vivd Studio -']");
+    const newSessionButton = frame.getByRole("button", { name: "New session" });
+    const chatComposer = frame.locator("textarea").first();
+    const sendButton = frame.getByRole("button", { name: "Send message" });
+    const stopButton = frame.getByRole("button", { name: "Stop generation" });
+    const sessionContextButton = frame.locator(
+      "[data-testid='session-context-usage-button']",
+    );
+    const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
+    const newSessionVisible = await newSessionButton.isVisible().catch(() => false);
+    const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
+    const sendButtonVisible = await sendButton.isVisible().catch(() => false);
+    const stopButtonVisible = await stopButton.isVisible().catch(() => false);
+    const sessionContextVisible = await sessionContextButton.isVisible().catch(() => false);
+    const firstUserMessageVisible = await firstUserMessage.isVisible().catch(() => false);
+    const hasInteractiveSignal =
+      newSessionVisible ||
+      sendButtonVisible ||
+      stopButtonVisible ||
+      sessionContextVisible ||
+      firstUserMessageVisible;
+
+    if (chatComposerVisible && hasInteractiveSignal) {
+      return frame;
+    }
+
+    if (
+      elapsedMs - lastProgressLogAt >= STUDIO_READY_PROGRESS_LOG_INTERVAL_MS
+    ) {
+      lastProgressLogAt = elapsedMs;
+      log(
+        `Still waiting for Studio UI [${elapsedMs}ms]: bootingVisible=${bootingVisible} preparingVisible=${preparingVisible} iframeVisible=${iframeVisible} newSessionVisible=${newSessionVisible} sendButtonVisible=${sendButtonVisible} stopButtonVisible=${stopButtonVisible} sessionContextVisible=${sessionContextVisible} firstUserMessageVisible=${firstUserMessageVisible} chatComposerVisible=${chatComposerVisible} iframeSrc=${iframeSrc ?? "unknown"}`,
+      );
+    }
+
+    await sleep(1_000);
+  }
+
+  const iframeSrc = await iframeLocator.first().getAttribute("src").catch(() => null);
   const frame = page.frameLocator("iframe[title^='Vivd Studio -']");
-
-  await expectVisible(
-    frame.getByRole("button", { name: "New session" }),
-    timeoutMs,
-    "studio toolbar",
+  const sendButton = frame.getByRole("button", { name: "Send message" });
+  const stopButton = frame.getByRole("button", { name: "Stop generation" });
+  const sessionContextButton = frame.locator(
+    "[data-testid='session-context-usage-button']",
   );
-  await expectVisible(frame.locator("textarea").first(), timeoutMs, "chat composer");
+  const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
+  const diagnostics = {
+    pageUrl: page.url(),
+    iframeSrc,
+    bootingVisible: await page.getByText(/Booting studio/i).isVisible().catch(() => false),
+    preparingVisible: await page
+      .getByText(/Preparing your editor and dev server/i)
+      .isVisible()
+      .catch(() => false),
+    newSessionVisible: await frame
+      .getByRole("button", { name: "New session" })
+      .isVisible()
+      .catch(() => false),
+    sendButtonVisible: await sendButton.isVisible().catch(() => false),
+    stopButtonVisible: await stopButton.isVisible().catch(() => false),
+    sessionContextVisible: await sessionContextButton.isVisible().catch(() => false),
+    firstUserMessageVisible: await firstUserMessage.isVisible().catch(() => false),
+    chatComposerVisible: await frame.locator("textarea").first().isVisible().catch(() => false),
+  };
 
-  return frame;
+  throw new Error(
+    `Studio did not become ready within ${readyTimeoutMs}ms after the iframe appeared. Diagnostics: ${JSON.stringify(
+      diagnostics,
+    )}`,
+  );
 }
 
 async function settleInitialGeneration(frame, timeoutMs) {
