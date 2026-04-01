@@ -252,7 +252,7 @@ repair_opencode_snapshot_gitdirs() {
     return $?
   fi
 
-  find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r repo; do
+  find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 2 -type d | while read -r repo; do
     if [ -f "$repo/HEAD" ] && [ -f "$repo/config" ] && [ -d "$repo/objects" ]; then
       mkdir -p "$repo/refs/heads" "$repo/refs/tags" "$repo/branches" "$repo/objects/info" "$repo/objects/pack" "$repo/info"
     fi

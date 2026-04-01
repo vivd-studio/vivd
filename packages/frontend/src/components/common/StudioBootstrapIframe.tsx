@@ -1,6 +1,7 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 
 const STUDIO_USER_ACTION_TOKEN_PARAM = "userActionToken";
+const BOOTSTRAP_RETRY_DELAYS_MS = [1_500, 4_000];
 
 type StudioBootstrapIframeProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -37,14 +38,76 @@ export function StudioBootstrapIframe({
 }: StudioBootstrapIframeProps) {
   const bootstrapFormRef = useRef<HTMLFormElement | null>(null);
   const shouldBootstrap = Boolean(bootstrapAction && bootstrapToken);
+  const lastSubmittedFingerprintRef = useRef<string | null>(null);
+  const bootstrapFingerprint = useMemo(
+    () =>
+      shouldBootstrap
+        ? [
+            submissionKey,
+            bootstrapAction || "",
+            bootstrapToken || "",
+            userActionToken || "",
+            cleanSrc,
+          ].join("::")
+        : null,
+    [
+      bootstrapAction,
+      bootstrapToken,
+      cleanSrc,
+      shouldBootstrap,
+      submissionKey,
+      userActionToken,
+    ],
+  );
+
+  const isIframeAwaitingBootstrap = () => {
+    const iframe = iframeRef.current;
+    const frameWindow = iframe?.contentWindow;
+    if (!frameWindow) return true;
+
+    try {
+      return frameWindow.location.href === "about:blank";
+    } catch {
+      return false;
+    }
+  };
 
   useEffect(() => {
-    if (!shouldBootstrap) return;
+    if (!shouldBootstrap || !bootstrapFingerprint) {
+      lastSubmittedFingerprintRef.current = null;
+      return;
+    }
 
     const form = bootstrapFormRef.current;
     if (!form) return;
-    form.submit();
-  }, [shouldBootstrap, submissionKey]);
+
+    const submitBootstrap = () => {
+      form.submit();
+      lastSubmittedFingerprintRef.current = bootstrapFingerprint;
+    };
+
+    const iframeAwaitingBootstrap = isIframeAwaitingBootstrap();
+    if (iframeAwaitingBootstrap || lastSubmittedFingerprintRef.current === null) {
+      submitBootstrap();
+    }
+
+    const timers = BOOTSTRAP_RETRY_DELAYS_MS.map((delayMs) =>
+      window.setTimeout(() => {
+        if (
+          lastSubmittedFingerprintRef.current === bootstrapFingerprint &&
+          isIframeAwaitingBootstrap()
+        ) {
+          submitBootstrap();
+        }
+      }, delayMs),
+    );
+
+    return () => {
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [bootstrapFingerprint, iframeRef, shouldBootstrap]);
 
   return (
     <>

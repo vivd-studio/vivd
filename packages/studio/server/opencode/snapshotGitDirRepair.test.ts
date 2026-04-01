@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { repairOpencodeSnapshotGitDirs } from "./snapshotGitDirRepair.js";
+import {
+  repairOpencodeSnapshotGitDirs,
+  resolveSnapshotGitDirPath,
+} from "./snapshotGitDirRepair.js";
 
 function runGit(args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }) {
   const result = spawnSync("git", args, {
@@ -25,10 +28,8 @@ describe("repairOpencodeSnapshotGitDirs", () => {
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-snapshot-repair-"));
     const repoDir = path.join(tmpRoot, "repo");
     const snapshotRoot = path.join(tmpRoot, "snapshot");
-    const snapshotGitDir = path.join(snapshotRoot, "project-id");
 
     await fs.mkdir(repoDir, { recursive: true });
-    await fs.mkdir(snapshotGitDir, { recursive: true });
     await fs.writeFile(path.join(repoDir, "index.html"), "<h1>before</h1>\n", "utf-8");
 
     runGit(["init"], { cwd: repoDir });
@@ -36,6 +37,13 @@ describe("repairOpencodeSnapshotGitDirs", () => {
     runGit(["config", "user.name", "Vivd Studio"], { cwd: repoDir });
     runGit(["add", "index.html"], { cwd: repoDir });
     runGit(["commit", "-m", "init"], { cwd: repoDir });
+    const worktree = runGit(["rev-parse", "--show-toplevel"], { cwd: repoDir });
+    const snapshotGitDir = resolveSnapshotGitDirPath(
+      snapshotRoot,
+      "project-id",
+      worktree,
+    );
+    await fs.mkdir(snapshotGitDir, { recursive: true });
 
     runGit(["init"], {
       env: {
@@ -75,17 +83,21 @@ describe("repairOpencodeSnapshotGitDirs", () => {
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-snapshot-rebuild-"));
     const repoDir = path.join(tmpRoot, "repo");
     const snapshotRoot = path.join(tmpRoot, "snapshot");
-    const snapshotGitDir = path.join(snapshotRoot, "project-id");
 
     await fs.mkdir(repoDir, { recursive: true });
-    await fs.mkdir(snapshotGitDir, { recursive: true });
     await fs.writeFile(path.join(repoDir, "index.html"), "<h1>before</h1>\n", "utf-8");
 
     runGit(["init"], { cwd: repoDir });
     runGit(["config", "user.email", "studio@vivd.local"], { cwd: repoDir });
     runGit(["config", "user.name", "Vivd Studio"], { cwd: repoDir });
-    await fs.mkdir(path.join(repoDir, ".git"), { recursive: true });
     await fs.writeFile(path.join(repoDir, ".git", "opencode"), "project-id\n", "utf-8");
+    const worktree = runGit(["rev-parse", "--show-toplevel"], { cwd: repoDir });
+    const snapshotGitDir = resolveSnapshotGitDirPath(
+      snapshotRoot,
+      "project-id",
+      worktree,
+    );
+    await fs.mkdir(snapshotGitDir, { recursive: true });
 
     runGit(["init"], {
       env: {
@@ -127,16 +139,22 @@ describe("repairOpencodeSnapshotGitDirs", () => {
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-snapshot-init-"));
     const repoDir = path.join(tmpRoot, "repo");
     const snapshotRoot = path.join(tmpRoot, "snapshot");
-    const snapshotGitDir = path.join(snapshotRoot, "project-id");
+    const snapshotProjectDir = path.join(snapshotRoot, "project-id");
 
     await fs.mkdir(repoDir, { recursive: true });
-    await fs.mkdir(path.join(snapshotGitDir, "info"), { recursive: true });
+    await fs.mkdir(path.join(snapshotProjectDir, "info"), { recursive: true });
     await fs.writeFile(path.join(repoDir, "index.html"), "<h1>before</h1>\n", "utf-8");
 
     runGit(["init"], { cwd: repoDir });
     runGit(["config", "user.email", "studio@vivd.local"], { cwd: repoDir });
     runGit(["config", "user.name", "Vivd Studio"], { cwd: repoDir });
     await fs.writeFile(path.join(repoDir, ".git", "opencode"), "project-id\n", "utf-8");
+    const worktree = runGit(["rev-parse", "--show-toplevel"], { cwd: repoDir });
+    const snapshotGitDir = resolveSnapshotGitDirPath(
+      snapshotRoot,
+      "project-id",
+      worktree,
+    );
 
     const result = await repairOpencodeSnapshotGitDirs(snapshotRoot, repoDir);
     expect(result.repaired).toEqual([snapshotGitDir]);
@@ -146,5 +164,35 @@ describe("repairOpencodeSnapshotGitDirs", () => {
     expect(
       runGit(["--git-dir", snapshotGitDir, "--work-tree", repoDir, "write-tree"], { cwd: repoDir }),
     ).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it("does not wipe the project snapshot parent directory when repairing the nested gitdir", async () => {
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-opencode-snapshot-parent-"));
+    const repoDir = path.join(tmpRoot, "repo");
+    const snapshotRoot = path.join(tmpRoot, "snapshot");
+    const snapshotProjectDir = path.join(snapshotRoot, "project-id");
+
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.mkdir(path.join(snapshotProjectDir, "info"), { recursive: true });
+    await fs.writeFile(path.join(snapshotProjectDir, "keep.txt"), "keep\n", "utf-8");
+    await fs.writeFile(path.join(repoDir, "index.html"), "<h1>before</h1>\n", "utf-8");
+
+    runGit(["init"], { cwd: repoDir });
+    runGit(["config", "user.email", "studio@vivd.local"], { cwd: repoDir });
+    runGit(["config", "user.name", "Vivd Studio"], { cwd: repoDir });
+    await fs.writeFile(path.join(repoDir, ".git", "opencode"), "project-id\n", "utf-8");
+    const worktree = runGit(["rev-parse", "--show-toplevel"], { cwd: repoDir });
+    const snapshotGitDir = resolveSnapshotGitDirPath(
+      snapshotRoot,
+      "project-id",
+      worktree,
+    );
+
+    const result = await repairOpencodeSnapshotGitDirs(snapshotRoot, repoDir);
+    expect(result.repaired).toEqual([snapshotGitDir]);
+    expect(result.rebuilt).toEqual([snapshotGitDir]);
+    await expect(fs.readFile(path.join(snapshotProjectDir, "keep.txt"), "utf-8")).resolves.toBe(
+      "keep\n",
+    );
   });
 });

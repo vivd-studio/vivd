@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const {
   getClientAndDirectoryMock,
@@ -209,6 +212,66 @@ describe("revertToUserMessage", () => {
       reverted: false,
       messageId: "msg-user",
       trackedFiles: [],
+    });
+  });
+
+  it("treats the revert as successful when tracked files changed on disk", async () => {
+    const tmpRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), "vivd-opencode-revert-result-"),
+    );
+    const projectDir = path.join(tmpRoot, "project");
+    const filePath = path.join(projectDir, "index.html");
+    await fs.mkdir(projectDir, { recursive: true });
+    await fs.writeFile(filePath, "AFTER\n", "utf-8");
+
+    getClientAndDirectoryMock.mockResolvedValueOnce({
+      directory: `${projectDir}/`,
+      client: {
+        session: {
+          get: sessionGetMock,
+          messages: sessionMessagesMock,
+          revert: sessionRevertMock,
+        },
+      },
+    });
+    sessionGetMock.mockResolvedValueOnce({
+      data: { revert: { messageID: "msg-user" } },
+      error: undefined,
+    });
+    sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: { id: "msg-user", role: "user" },
+          parts: [{ id: "part-user", type: "text" }],
+        },
+        {
+          info: { id: "msg-assistant", role: "assistant", parentID: "msg-user" },
+          parts: [
+            {
+              id: "part-patch",
+              type: "patch",
+              hash: "snap-1",
+              files: [filePath],
+            },
+          ],
+        },
+      ],
+      error: undefined,
+    });
+    sessionRevertMock.mockImplementationOnce(async () => {
+      await fs.writeFile(filePath, "BEFORE\n", "utf-8");
+      return {
+        data: { revert: { messageID: "msg-user" } },
+        error: undefined,
+      };
+    });
+
+    const result = await revertToUserMessage("sess-1", "msg-user", projectDir);
+
+    expect(result).toEqual({
+      reverted: true,
+      messageId: "msg-user",
+      trackedFiles: [filePath],
     });
   });
 

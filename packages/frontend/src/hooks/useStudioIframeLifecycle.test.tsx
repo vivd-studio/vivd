@@ -254,7 +254,7 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
   });
 
-  it("does not probe runtime health from the host when the studio only exposes a cross-origin browser url", async () => {
+  it("falls back to a one-shot iframe reload when the studio only exposes a cross-origin browser url", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -269,6 +269,12 @@ describe("useStudioIframeLifecycle", () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(props.reloadStudioIframe).not.toHaveBeenCalled();
+    expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(26_000);
+    });
+
+    expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
   });
 });

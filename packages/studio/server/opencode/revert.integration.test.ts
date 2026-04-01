@@ -39,7 +39,10 @@ import {
   unrevertSession,
 } from "./index.js";
 import { agentEventEmitter } from "./eventEmitter.js";
-import { repairOpencodeSnapshotGitDirs } from "./snapshotGitDirRepair.js";
+import {
+  repairOpencodeSnapshotGitDirs,
+  resolveSnapshotGitDirPath,
+} from "./snapshotGitDirRepair.js";
 import { serverManager } from "./serverManager.js";
 import { workspaceEventPump } from "./events/workspaceEventPump.js";
 
@@ -338,9 +341,26 @@ async function copyOpencodePersistedState(options: {
     .catch(() => [] as Dirent[]);
   for (const entry of snapshotEntries) {
     if (!entry.isDirectory()) continue;
-    const repoDir = path.join(toSnapshotDir, entry.name);
-    await fs.rm(path.join(repoDir, "refs"), { recursive: true, force: true });
-    await fs.rm(path.join(repoDir, "branches"), { recursive: true, force: true });
+    const projectDir = path.join(toSnapshotDir, entry.name);
+    const nestedEntries = await fs
+      .readdir(projectDir, { withFileTypes: true })
+      .catch(() => [] as Dirent[]);
+    const candidates = [projectDir];
+    for (const nestedEntry of nestedEntries) {
+      if (!nestedEntry.isDirectory()) continue;
+      candidates.push(path.join(projectDir, nestedEntry.name));
+    }
+
+    for (const repoDir of candidates) {
+      const isGitDir = await fs
+        .stat(path.join(repoDir, "HEAD"))
+        .then((stat) => stat.isFile())
+        .catch(() => false);
+      if (!isGitDir) continue;
+
+      await fs.rm(path.join(repoDir, "refs"), { recursive: true, force: true });
+      await fs.rm(path.join(repoDir, "branches"), { recursive: true, force: true });
+    }
   }
   await repairOpencodeSnapshotGitDirs(toSnapshotDir, options.repoDir);
 }
@@ -363,8 +383,25 @@ async function readOpencodeProjectId(repoDir: string): Promise<string> {
   ).trim();
 }
 
-async function breakSnapshotObjects(snapshotRoot: string, projectId: string): Promise<void> {
-  const snapshotGitDir = path.join(snapshotRoot, projectId);
+async function breakSnapshotObjects(
+  snapshotRoot: string,
+  projectId: string,
+  directory: string,
+): Promise<void> {
+  const worktreeResult = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: directory,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (worktreeResult.status !== 0) {
+    throw new Error(
+      worktreeResult.stderr ||
+        worktreeResult.stdout ||
+        "Failed to resolve git worktree for snapshot test",
+    );
+  }
+  const worktree = (worktreeResult.stdout || "").trim();
+  const snapshotGitDir = resolveSnapshotGitDirPath(snapshotRoot, projectId, worktree);
   await fs.rm(path.join(snapshotGitDir, "objects"), {
     recursive: true,
     force: true,
@@ -719,7 +756,7 @@ describe("OpenCode revert/unrevert integration", () => {
           "snapshot",
         );
         const projectId = await readOpencodeProjectId(repoDir);
-        await breakSnapshotObjects(rehydratedSnapshotRoot, projectId);
+        await breakSnapshotObjects(rehydratedSnapshotRoot, projectId, repoDir);
         await repairOpencodeSnapshotGitDirs(rehydratedSnapshotRoot, repoDir);
 
         setOpencodeHomeEnv(rehydratedHomeDir);

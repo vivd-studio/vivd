@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +32,7 @@ export type SnapshotGitState = {
   projectId: string;
   worktree: string;
   snapshotRoot: string;
+  snapshotProjectDir: string;
   snapshotGitDir: string;
 };
 
@@ -49,6 +51,18 @@ function resolveDefaultSnapshotRoot(): string {
   const xdgDataHome = (process.env.XDG_DATA_HOME || "").trim();
   const dataHome = xdgDataHome || path.join(os.homedir(), ".local", "share");
   return path.join(dataHome, "opencode", "snapshot");
+}
+
+function hashSnapshotWorktree(worktree: string): string {
+  return crypto.createHash("sha1").update(worktree).digest("hex");
+}
+
+export function resolveSnapshotGitDirPath(
+  snapshotRoot: string,
+  projectId: string,
+  worktree: string,
+): string {
+  return path.join(snapshotRoot, projectId, hashSnapshotWorktree(worktree));
 }
 
 async function resolveGitPaths(
@@ -87,11 +101,17 @@ export async function resolveOpencodeSnapshotGitState(
     return null;
   }
 
+  const snapshotProjectDir = path.join(snapshotRoot, projectId);
   return {
     projectId,
     worktree: gitPaths.worktree,
     snapshotRoot,
-    snapshotGitDir: path.join(snapshotRoot, projectId),
+    snapshotProjectDir,
+    snapshotGitDir: resolveSnapshotGitDirPath(
+      snapshotRoot,
+      projectId,
+      gitPaths.worktree,
+    ),
   };
 }
 
@@ -114,6 +134,33 @@ async function ensureSnapshotGitDirStructure(repoDir: string): Promise<void> {
       fs.mkdir(path.join(repoDir, relativeDir), { recursive: true }),
     ),
   );
+}
+
+async function listSnapshotGitDirCandidates(snapshotRoot: string): Promise<string[]> {
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const projectDir = path.join(snapshotRoot, entry.name);
+    candidates.push(projectDir);
+
+    const nestedEntries = await fs
+      .readdir(projectDir, { withFileTypes: true })
+      .catch(() => [] as Dirent[]);
+    for (const nestedEntry of nestedEntries) {
+      if (!nestedEntry.isDirectory()) continue;
+      candidates.push(path.join(projectDir, nestedEntry.name));
+    }
+  }
+
+  return candidates;
 }
 
 export function snapshotGitDirHasObject(
@@ -183,13 +230,7 @@ export async function repairOpencodeSnapshotGitDirs(
   snapshotRoot: string,
   directory?: string,
 ): Promise<SnapshotGitRepairResult> {
-  let entries: Dirent[];
-  try {
-    entries = await fs.readdir(snapshotRoot, { withFileTypes: true });
-  } catch {
-    entries = [];
-  }
-
+  const candidates = await listSnapshotGitDirCandidates(snapshotRoot);
   const currentProject = directory
     ? await resolveOpencodeSnapshotGitState(directory, snapshotRoot)
     : null;
@@ -197,9 +238,7 @@ export async function repairOpencodeSnapshotGitDirs(
   const rebuilt: string[] = [];
   const seen = new Set<string>();
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const repoDir = path.join(snapshotRoot, entry.name);
+  for (const repoDir of candidates) {
     if (!(await isSnapshotGitDir(repoDir))) continue;
 
     await ensureSnapshotGitDirStructure(repoDir);

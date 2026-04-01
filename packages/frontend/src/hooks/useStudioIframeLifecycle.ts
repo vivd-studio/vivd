@@ -57,6 +57,7 @@ export function useStudioIframeLifecycle({
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
   const attemptedEarlyRecoveryRef = useRef(false);
+  const attemptedCrossOriginTimeoutReloadRef = useRef(false);
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
 
   const postMessageToStudio = useCallback(
@@ -223,6 +224,7 @@ export function useStudioIframeLifecycle({
 
   useEffect(() => {
     attemptedEarlyRecoveryRef.current = false;
+    attemptedCrossOriginTimeoutReloadRef.current = false;
   }, [reloadNonce, studioBaseUrl]);
 
   useEffect(() => {
@@ -243,6 +245,29 @@ export function useStudioIframeLifecycle({
 
     return () => window.clearTimeout(timeout);
   }, [reloadNonce, studioBaseUrl]);
+
+  useEffect(() => {
+    if (
+      !studioLoadTimedOut ||
+      studioReady ||
+      studioHostProbeBaseUrl ||
+      !studioBaseUrl ||
+      attemptedCrossOriginTimeoutReloadRef.current
+    ) {
+      return;
+    }
+
+    attemptedCrossOriginTimeoutReloadRef.current = true;
+    setStudioLoadTimedOut(false);
+    setStudioLoadErrored(false);
+    void reloadStudioIframe();
+  }, [
+    reloadStudioIframe,
+    studioBaseUrl,
+    studioHostProbeBaseUrl,
+    studioLoadTimedOut,
+    studioReady,
+  ]);
 
   useEffect(() => {
     if (

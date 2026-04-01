@@ -1,5 +1,7 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { useEvents, type ToolCall } from "./useEvents.js";
 import {
   agentEventEmitter,
@@ -213,6 +215,60 @@ function getTrackedFilesFromUnifiedDiff(diffText: string | undefined): string[] 
   }
 
   return [...files];
+}
+
+function resolveTrackedFilePath(worktree: string, file: string): string {
+  return path.isAbsolute(file) ? file : path.join(worktree, file);
+}
+
+async function fingerprintTrackedFile(
+  worktree: string,
+  file: string,
+): Promise<string> {
+  const target = resolveTrackedFilePath(worktree, file);
+  try {
+    const stat = await fs.lstat(target);
+    if (stat.isSymbolicLink()) {
+      return `symlink:${await fs.readlink(target)}`;
+    }
+    if (!stat.isFile()) {
+      return `type:${stat.mode.toString(8)}`;
+    }
+
+    const content = await fs.readFile(target);
+    return `file:${crypto.createHash("sha1").update(content).digest("hex")}`;
+  } catch (error) {
+    const code =
+      typeof error === "object" &&
+      error &&
+      "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : "unknown";
+    return `missing:${code}`;
+  }
+}
+
+async function captureTrackedFileFingerprints(
+  worktree: string,
+  files: string[],
+): Promise<Map<string, string>> {
+  const pairs = await Promise.all(
+    files.map(async (file) => [file, await fingerprintTrackedFile(worktree, file)] as const),
+  );
+  return new Map(pairs);
+}
+
+function didTrackedFileFingerprintsChange(
+  before: Map<string, string>,
+  after: Map<string, string>,
+): boolean {
+  for (const [file, fingerprint] of before) {
+    if (after.get(file) !== fingerprint) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function getSessionTokenTotal(
@@ -1014,6 +1070,10 @@ export async function revertToUserMessage(
 
   let patchHistory: RevertPatchHistory = { files: [], hashes: [] };
   let priorRevertMessageId: string | undefined;
+  const trackedFileFingerprintsBefore = await captureTrackedFileFingerprints(
+    directory,
+    patchHistory.files,
+  );
   try {
     const messagesRes = await client.session.messages({
       sessionID: sessionId,
@@ -1028,6 +1088,10 @@ export async function revertToUserMessage(
   } catch {
     // Best-effort only.
   }
+  const trackedFilesBefore =
+    patchHistory.files.length > 0
+      ? await captureTrackedFileFingerprints(directory, patchHistory.files)
+      : trackedFileFingerprintsBefore;
 
   const missingSnapshotHashes = await getMissingSnapshotHashes(
     directory,
@@ -1069,9 +1133,18 @@ export async function revertToUserMessage(
   const revertDiff =
     typeof result.data?.revert?.diff === "string" ? result.data.revert.diff : undefined;
   const trackedFilesFromResult = getTrackedFilesFromUnifiedDiff(revertDiff);
-  const reverted =
+  const trackedFilesAfter =
+    patchHistory.files.length > 0
+      ? await captureTrackedFileFingerprints(directory, patchHistory.files)
+      : trackedFilesBefore;
+  const revertedByMetadata =
     afterRevertMessageId === userMessageId &&
     priorRevertMessageId !== afterRevertMessageId;
+  const revertedByWorkspaceChange = didTrackedFileFingerprintsChange(
+    trackedFilesBefore,
+    trackedFilesAfter,
+  );
+  const reverted = revertedByMetadata || revertedByWorkspaceChange;
   const trackedFiles = reverted
     ? trackedFilesFromResult.length > 0
       ? trackedFilesFromResult

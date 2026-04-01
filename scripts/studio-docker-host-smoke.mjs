@@ -428,6 +428,20 @@ async function waitForVisibleState(candidates, timeoutMs) {
   return null;
 }
 
+async function readIframeNavigationState(iframeLocator) {
+  const iframe = iframeLocator.first();
+  const iframeAttrSrc = await iframe.getAttribute("src").catch(() => null);
+  const iframeHandle = await iframe.elementHandle().catch(() => null);
+  const iframeFrame = iframeHandle
+    ? await iframeHandle.contentFrame().catch(() => null)
+    : null;
+
+  return {
+    iframeAttrSrc,
+    iframeFrameUrl: iframeFrame?.url() ?? null,
+  };
+}
+
 async function detectAuthMode(page, timeoutMs) {
   return waitForVisibleState(
     [
@@ -662,14 +676,16 @@ async function waitForStudioReady(page, timeoutMs) {
       .getByText(/Preparing your editor and dev server/i)
       .isVisible()
       .catch(() => false);
-    const iframeSrc = await iframeLocator.first().getAttribute("src").catch(() => null);
+    const { iframeAttrSrc, iframeFrameUrl } = await readIframeNavigationState(
+      iframeLocator,
+    );
     const elapsedMs = Date.now() - startedAt;
 
     if (!iframeVisible) {
       if (elapsedMs - lastProgressLogAt >= STUDIO_READY_PROGRESS_LOG_INTERVAL_MS) {
         lastProgressLogAt = elapsedMs;
         log(
-          `Still waiting for Studio iframe [${elapsedMs}ms]: bootingVisible=${bootingVisible} preparingVisible=${preparingVisible} iframeVisible=${iframeVisible} iframeSrc=${iframeSrc ?? "unknown"}`,
+          `Still waiting for Studio iframe [${elapsedMs}ms]: bootingVisible=${bootingVisible} preparingVisible=${preparingVisible} iframeVisible=${iframeVisible} iframeAttrSrc=${iframeAttrSrc ?? "unknown"} iframeFrameUrl=${iframeFrameUrl ?? "unknown"}`,
         );
       }
 
@@ -708,14 +724,16 @@ async function waitForStudioReady(page, timeoutMs) {
     ) {
       lastProgressLogAt = elapsedMs;
       log(
-        `Still waiting for Studio UI [${elapsedMs}ms]: bootingVisible=${bootingVisible} preparingVisible=${preparingVisible} iframeVisible=${iframeVisible} newSessionVisible=${newSessionVisible} sendButtonVisible=${sendButtonVisible} stopButtonVisible=${stopButtonVisible} sessionContextVisible=${sessionContextVisible} firstUserMessageVisible=${firstUserMessageVisible} chatComposerVisible=${chatComposerVisible} iframeSrc=${iframeSrc ?? "unknown"}`,
+        `Still waiting for Studio UI [${elapsedMs}ms]: bootingVisible=${bootingVisible} preparingVisible=${preparingVisible} iframeVisible=${iframeVisible} newSessionVisible=${newSessionVisible} sendButtonVisible=${sendButtonVisible} stopButtonVisible=${stopButtonVisible} sessionContextVisible=${sessionContextVisible} firstUserMessageVisible=${firstUserMessageVisible} chatComposerVisible=${chatComposerVisible} iframeAttrSrc=${iframeAttrSrc ?? "unknown"} iframeFrameUrl=${iframeFrameUrl ?? "unknown"}`,
       );
     }
 
     await sleep(1_000);
   }
 
-  const iframeSrc = await iframeLocator.first().getAttribute("src").catch(() => null);
+  const { iframeAttrSrc, iframeFrameUrl } = await readIframeNavigationState(
+    iframeLocator,
+  );
   const frame = page.frameLocator("iframe[title^='Vivd Studio -']");
   const sendButton = frame.getByRole("button", { name: "Send message" });
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
@@ -725,7 +743,8 @@ async function waitForStudioReady(page, timeoutMs) {
   const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
   const diagnostics = {
     pageUrl: page.url(),
-    iframeSrc,
+    iframeAttrSrc,
+    iframeFrameUrl,
     bootingVisible: await page.getByText(/Booting studio/i).isVisible().catch(() => false),
     preparingVisible: await page
       .getByText(/Preparing your editor and dev server/i)
@@ -756,12 +775,14 @@ async function settleInitialGeneration(frame, timeoutMs) {
     "[data-testid='session-context-usage-button']",
   );
   const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
+  const agentQuestionHeader = frame.getByText(/Agent Question/i).first();
   const settleTimeoutMs = Math.min(timeoutMs, DEFAULT_GENERATION_SETTLE_TIMEOUT_MS);
   const visibleState = await waitForVisibleState(
     [
       { name: "stop", locator: stopButton },
       { name: "user-message", locator: firstUserMessage },
       { name: "session-context", locator: sessionContextButton },
+      { name: "agent-question", locator: agentQuestionHeader },
     ],
     settleTimeoutMs,
   );
@@ -778,7 +799,11 @@ async function settleInitialGeneration(frame, timeoutMs) {
     return "stopped";
   }
 
-  if (visibleState === "user-message" || visibleState === "session-context") {
+  if (
+    visibleState === "user-message" ||
+    visibleState === "session-context" ||
+    visibleState === "agent-question"
+  ) {
     log(
       `Observed initial-generation session activity via ${visibleState}; checking briefly for a stop opportunity`,
     );
@@ -788,6 +813,7 @@ async function settleInitialGeneration(frame, timeoutMs) {
         { name: "stop", locator: stopButton },
         { name: "user-message", locator: firstUserMessage },
         { name: "session-context", locator: sessionContextButton },
+        { name: "agent-question", locator: agentQuestionHeader },
       ],
       Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
     );
@@ -804,9 +830,13 @@ async function settleInitialGeneration(frame, timeoutMs) {
       return "stopped-after-activity";
     }
 
-    return visibleState === "user-message"
-      ? "observed-user-message"
-      : "observed-session-context";
+    if (visibleState === "user-message") {
+      return "observed-user-message";
+    }
+    if (visibleState === "agent-question") {
+      return "observed-agent-question";
+    }
+    return "observed-session-context";
   }
 
   throw new Error(
@@ -824,6 +854,75 @@ function collectNonFatalConsoleMessages(messages) {
   return messages.filter((entry) =>
     NON_FATAL_CONSOLE_PATTERNS.some((pattern) => pattern.test(entry.text)),
   );
+}
+
+function isStudioBootstrapUrl(url) {
+  return typeof url === "string" && url.includes("/vivd-studio/api/bootstrap");
+}
+
+function recordBootstrapResponse(target, response) {
+  const request = response.request();
+  if (!isStudioBootstrapUrl(request.url())) return;
+
+  target.push({
+    kind: "response",
+    method: request.method(),
+    url: request.url(),
+    status: response.status(),
+    ok: response.ok(),
+  });
+}
+
+function recordBootstrapRequestFailure(target, request) {
+  if (!isStudioBootstrapUrl(request.url())) return;
+
+  target.push({
+    kind: "requestfailed",
+    method: request.method(),
+    url: request.url(),
+    failureText: request.failure()?.errorText ?? "unknown",
+  });
+}
+
+function recordChildFrameNavigation(target, frame, page) {
+  if (frame.parentFrame() !== page.mainFrame()) return;
+
+  target.push({
+    url: frame.url(),
+    name: frame.name(),
+  });
+}
+
+async function readBootstrapFormState(page) {
+  return await page
+    .evaluate(() => {
+      const form = document.querySelector('form[target^="vivd-studio-"]');
+      if (!form) return null;
+
+      const nextField = form.querySelector('input[name="next"]');
+      const bootstrapTokenField = form.querySelector('input[name="bootstrapToken"]');
+      const userActionTokenField = form.querySelector(
+        'input[name="userActionToken"]',
+      );
+
+      return {
+        action:
+          form instanceof HTMLFormElement && form.action ? form.action : null,
+        target:
+          form instanceof HTMLFormElement && form.target ? form.target : null,
+        next:
+          nextField instanceof HTMLInputElement && nextField.value
+            ? nextField.value
+            : null,
+        hasBootstrapToken:
+          bootstrapTokenField instanceof HTMLInputElement &&
+          Boolean(bootstrapTokenField.value),
+        hasUserActionToken:
+          userActionTokenField instanceof HTMLInputElement &&
+          Boolean(userActionTokenField.value),
+      };
+    })
+    .catch(() => null);
 }
 
 function formatErrorForLog(error) {
@@ -940,6 +1039,8 @@ async function main() {
   const consoleMessages = [];
   const pageErrors = [];
   const metrics = { checkpoints: [] };
+  const bootstrapEvents = [];
+  const iframeNavigations = [];
   const startedAt = Date.now();
   let succeeded = false;
   let fatalError = null;
@@ -991,6 +1092,15 @@ async function main() {
         location: message.location(),
       });
     });
+    page.on("response", (response) => {
+      recordBootstrapResponse(bootstrapEvents, response);
+    });
+    page.on("requestfailed", (request) => {
+      recordBootstrapRequestFailure(bootstrapEvents, request);
+    });
+    page.on("framenavigated", (frame) => {
+      recordChildFrameNavigation(iframeNavigations, frame, page);
+    });
     page.on("pageerror", (error) => {
       pageErrors.push(error instanceof Error ? error.message : String(error));
     });
@@ -1018,6 +1128,7 @@ async function main() {
     markCheckpoint(metrics.checkpoints, "studio_route_opened", startedAt, {
       projectSlug: createdProjectSlug,
     });
+    metrics.controlPlaneBootstrapForm = await readBootstrapFormState(page);
 
     const studioReadyStartedAt = Date.now();
     const controlPlaneFrame = await waitForStudioReady(page, timeoutMs);
@@ -1056,6 +1167,15 @@ async function main() {
         location: message.location(),
       });
     });
+    tenantPage.on("response", (response) => {
+      recordBootstrapResponse(bootstrapEvents, response);
+    });
+    tenantPage.on("requestfailed", (request) => {
+      recordBootstrapRequestFailure(bootstrapEvents, request);
+    });
+    tenantPage.on("framenavigated", (frame) => {
+      recordChildFrameNavigation(iframeNavigations, frame, tenantPage);
+    });
     tenantPage.on("pageerror", (error) => {
       pageErrors.push(error instanceof Error ? error.message : String(error));
     });
@@ -1076,6 +1196,7 @@ async function main() {
       `${tenantOrigin}/vivd-studio/projects/${createdProjectSlug}?view=studio&version=1`,
       { waitUntil: "domcontentloaded" },
     );
+    metrics.tenantBootstrapForm = await readBootstrapFormState(tenantPage);
     const tenantReadyStartedAt = Date.now();
     await waitForStudioReady(tenantPage, timeoutMs);
     metrics.tenantStudioReadyMs = Date.now() - tenantReadyStartedAt;
@@ -1126,6 +1247,12 @@ async function main() {
       }
       if (pageErrors.length > 0) {
         metrics.pageErrors = pageErrors;
+      }
+      if (bootstrapEvents.length > 0) {
+        metrics.bootstrapEvents = bootstrapEvents;
+      }
+      if (iframeNavigations.length > 0) {
+        metrics.iframeNavigations = iframeNavigations;
       }
       writeFileSync(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, "utf8");
       log(`Saved partial metrics to ${metricsPath}`);
