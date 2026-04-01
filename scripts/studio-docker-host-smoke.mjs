@@ -19,6 +19,7 @@ const DEFAULT_TENANT_HOSTNAME = "default.localhost";
 const DEFAULT_DOCS_HOSTNAME = "docs.localhost";
 const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
 const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
+const DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS = 15_000;
 const MAX_AUTH_SETTLE_ATTEMPTS = 3;
 const DEFAULT_CHEAP_OPENROUTER_MODEL = "openrouter/google/gemini-2.5-flash-lite";
 const FAILING_CONSOLE_PATTERNS = [
@@ -665,19 +666,19 @@ async function waitForStudioReady(page, timeoutMs) {
 async function settleInitialGeneration(frame, timeoutMs) {
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
   const sendButton = frame.getByRole("button", { name: "Send message" });
+  const sessionContextButton = frame.locator(
+    "[data-testid='session-context-usage-button']",
+  );
+  const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
   const settleTimeoutMs = Math.min(timeoutMs, DEFAULT_GENERATION_SETTLE_TIMEOUT_MS);
   const visibleState = await waitForVisibleState(
     [
       { name: "stop", locator: stopButton },
-      { name: "send", locator: sendButton },
+      { name: "user-message", locator: firstUserMessage },
+      { name: "session-context", locator: sessionContextButton },
     ],
     settleTimeoutMs,
   );
-
-  if (visibleState === "send") {
-    log("Initial generation already settled; send button is visible");
-    return "already-settled";
-  }
 
   if (visibleState === "stop") {
     log("Initial generation is running; stopping it after a short settle window");
@@ -691,8 +692,39 @@ async function settleInitialGeneration(frame, timeoutMs) {
     return "stopped";
   }
 
+  if (visibleState === "user-message" || visibleState === "session-context") {
+    log(
+      `Observed initial-generation session activity via ${visibleState}; checking briefly for a stop opportunity`,
+    );
+
+    const followupState = await waitForVisibleState(
+      [
+        { name: "stop", locator: stopButton },
+        { name: "user-message", locator: firstUserMessage },
+        { name: "session-context", locator: sessionContextButton },
+      ],
+      Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
+    );
+
+    if (followupState === "stop") {
+      log("Stop control appeared after session activity; stopping generation");
+      await sleep(5_000);
+      await stopButton.click();
+      await expectVisible(
+        sendButton,
+        settleTimeoutMs,
+        "send button after stop",
+      );
+      return "stopped-after-activity";
+    }
+
+    return visibleState === "user-message"
+      ? "observed-user-message"
+      : "observed-session-context";
+  }
+
   throw new Error(
-    `Initial generation did not expose either Stop generation or Send message within ${settleTimeoutMs}ms`,
+    `Initial generation did not expose a running control or any session activity within ${settleTimeoutMs}ms`,
   );
 }
 

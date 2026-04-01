@@ -42,7 +42,7 @@ describe("useStudioRuntimeGuard", () => {
     render(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio.example.com"
+        studioProbeBaseUrl="https://studio.example.com"
         touchStudio={touchStudio}
         ensureStudioRunning={ensureStudioRunning}
         onRecovered={onRecovered}
@@ -57,6 +57,7 @@ describe("useStudioRuntimeGuard", () => {
     expect(ensureStudioRunning).toHaveBeenCalledTimes(1);
     expect(onRecovered).toHaveBeenCalledWith({
       url: "https://studio.example.com",
+      browserUrl: null,
       runtimeUrl: "https://studio.example.com",
       compatibilityUrl: null,
       bootstrapToken: "token-1",
@@ -83,7 +84,7 @@ describe("useStudioRuntimeGuard", () => {
     render(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio.example.com"
+        studioProbeBaseUrl="https://studio.example.com"
         touchStudio={touchStudio}
         ensureStudioRunning={ensureStudioRunning}
         onRecovered={onRecovered}
@@ -110,7 +111,7 @@ describe("useStudioRuntimeGuard", () => {
     const { rerender } = render(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio.example.com"
+        studioProbeBaseUrl="https://studio.example.com"
         touchStudio={touchStudioInitial}
         ensureStudioRunning={ensureStudioRunning}
         onRecovered={onRecovered}
@@ -129,7 +130,7 @@ describe("useStudioRuntimeGuard", () => {
     rerender(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio.example.com"
+        studioProbeBaseUrl="https://studio.example.com"
         touchStudio={touchStudioNext}
         ensureStudioRunning={ensureStudioRunning}
         onRecovered={onRecovered}
@@ -163,7 +164,7 @@ describe("useStudioRuntimeGuard", () => {
     render(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio.example.com"
+        studioProbeBaseUrl="https://studio.example.com"
         touchStudio={touchStudio}
         ensureStudioRunning={ensureStudioRunning}
         onRecovered={onRecovered}
@@ -189,6 +190,7 @@ describe("useStudioRuntimeGuard", () => {
     expect(ensureStudioRunning).toHaveBeenCalledTimes(1);
     expect(onRecovered).toHaveBeenCalledWith({
       url: "https://studio-recovered.example.com",
+      browserUrl: null,
       runtimeUrl: "https://studio-recovered.example.com",
       compatibilityUrl: null,
       bootstrapToken: "token-2",
@@ -234,7 +236,7 @@ describe("useStudioRuntimeGuard", () => {
     const { rerender } = render(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio-a.example.com"
+        studioProbeBaseUrl="https://studio-a.example.com"
         touchStudio={vi.fn()}
         ensureStudioRunning={ensureStudioRunningA}
         onRecovered={onRecoveredA}
@@ -256,7 +258,7 @@ describe("useStudioRuntimeGuard", () => {
     rerender(
       <GuardHarness
         enabled
-        studioBaseUrl="https://studio-b.example.com"
+        studioProbeBaseUrl="https://studio-b.example.com"
         touchStudio={vi.fn()}
         ensureStudioRunning={ensureStudioRunningB}
         onRecovered={onRecoveredB}
@@ -281,7 +283,7 @@ describe("useStudioRuntimeGuard", () => {
     render(
       <GuardHarness
         enabled
-        studioBaseUrl="https://app.example.com/_studio/route-1/"
+        studioProbeBaseUrl="https://app.example.com/_studio/route-1/"
         touchStudio={vi.fn()}
         ensureStudioRunning={vi.fn()}
         onRecovered={vi.fn()}
@@ -301,5 +303,27 @@ describe("useStudioRuntimeGuard", () => {
         cache: "no-store",
       }),
     );
+  });
+
+  it("stays idle when no host-safe probe url is available", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GuardHarness
+        enabled={false}
+        studioProbeBaseUrl={null}
+        touchStudio={vi.fn()}
+        ensureStudioRunning={vi.fn()}
+        onRecovered={vi.fn()}
+        timing={timing}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

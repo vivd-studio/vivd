@@ -279,8 +279,12 @@ describe("EmbeddedStudio", () => {
       isRecovering: false,
     });
     resolveStudioRuntimeUrlMock.mockImplementation((baseUrl: string, path?: string) => {
-      if (!path) return baseUrl;
-      return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+      const resolvedBase = new URL(baseUrl, window.location.origin).toString();
+      if (!path) return resolvedBase;
+      return new URL(
+        path.replace(/^\/+/, ""),
+        resolvedBase.endsWith("/") ? resolvedBase : `${resolvedBase}/`,
+      ).toString();
     });
 
     projectListUseQueryMock.mockReturnValue({
@@ -654,7 +658,7 @@ describe("EmbeddedStudio", () => {
     getStudioUrlUseQueryMock.mockReturnValue({
       data: {
         status: "running",
-        url: "http://app.localhost/_studio/runtime-123",
+        url: "/_studio/runtime-123",
         bootstrapToken: null,
       },
     });
@@ -680,7 +684,7 @@ describe("EmbeddedStudio", () => {
     expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "vivd:host:theme" }),
-      "http://app.localhost",
+      window.location.origin,
     );
   });
 
@@ -712,7 +716,7 @@ describe("EmbeddedStudio", () => {
       getStudioUrlUseQueryMock.mockReturnValue({
         data: {
           status: "running",
-          url: "http://app.localhost/_studio/runtime-123",
+          url: "/_studio/runtime-123",
           bootstrapToken: null,
         },
       });
@@ -744,7 +748,7 @@ describe("EmbeddedStudio", () => {
       expect(screen.queryByTestId("studio-startup-loading")).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: "vivd:host:theme" }),
-        "http://app.localhost",
+        window.location.origin,
       );
     } finally {
       vi.useRealTimers();
@@ -779,7 +783,7 @@ describe("EmbeddedStudio", () => {
       getStudioUrlUseQueryMock.mockReturnValue({
         data: {
           status: "running",
-          url: "http://app.localhost/_studio/runtime-123",
+          url: "/_studio/runtime-123",
           bootstrapToken: null,
         },
       });
@@ -820,7 +824,7 @@ describe("EmbeddedStudio", () => {
       ).not.toBeInTheDocument();
       expect(postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: "vivd:host:theme" }),
-        "http://app.localhost",
+        window.location.origin,
       );
     } finally {
       vi.useRealTimers();
@@ -861,7 +865,7 @@ describe("EmbeddedStudio", () => {
       getStudioUrlUseQueryMock.mockReturnValue({
         data: {
           status: "running",
-          url: "http://app.localhost/_studio/runtime-123",
+          url: "/_studio/runtime-123",
           bootstrapToken: null,
         },
       });
@@ -892,7 +896,7 @@ describe("EmbeddedStudio", () => {
         screen.getByText("Studio is taking longer than usual"),
       ).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://app.localhost/_studio/runtime-123/health",
+        `${window.location.origin}/_studio/runtime-123/health`,
         expect.objectContaining({
           method: "GET",
           mode: "cors",

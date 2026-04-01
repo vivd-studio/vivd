@@ -51,6 +51,19 @@ function pickFirstDefinedUrl(
   return null;
 }
 
+function resolveWindowRelativeOrigin(
+  candidate: string | null | undefined,
+): string | null {
+  const normalized = candidate?.trim();
+  if (!normalized || typeof window === "undefined") return null;
+
+  try {
+    return new URL(normalized, window.location.href).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function selectBrowserStudioBaseUrl(
   runtime: StudioRuntimeSession | null,
 ): string | null {
@@ -63,6 +76,25 @@ export function selectBrowserStudioBaseUrl(
           runtime.compatibilityUrl,
         ]
       : [],
+  );
+}
+
+export function selectHostProbeStudioBaseUrl(
+  runtime: StudioRuntimeSession | null,
+): string | null {
+  if (!runtime || typeof window === "undefined") return null;
+
+  const candidates = [
+    runtime.compatibilityUrl,
+    runtime.browserUrl,
+    runtime.url,
+    runtime.runtimeUrl,
+  ];
+
+  return pickFirstDefinedUrl(
+    candidates.filter((candidate) => {
+      return resolveWindowRelativeOrigin(candidate) === window.location.origin;
+    }),
   );
 }
 
@@ -130,10 +162,11 @@ export function useStudioHostRuntime({
   );
 
   const studioBaseUrl = selectBrowserStudioBaseUrl(studioRuntime);
+  const studioHostProbeBaseUrl = selectHostProbeStudioBaseUrl(studioRuntime);
 
   const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
-    enabled: Boolean(studioBaseUrl),
-    studioBaseUrl,
+    enabled: Boolean(studioHostProbeBaseUrl),
+    studioProbeBaseUrl: studioHostProbeBaseUrl,
     touchStudio,
     ensureStudioRunning,
     onRecovered: handleStudioRecovered,
@@ -153,6 +186,7 @@ export function useStudioHostRuntime({
   return {
     studioRuntime,
     studioBaseUrl,
+    studioHostProbeBaseUrl,
     studioRuntimeUrl,
     studioCompatibilityUrl,
     studioBootstrapToken,

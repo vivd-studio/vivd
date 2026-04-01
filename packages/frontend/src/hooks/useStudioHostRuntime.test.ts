@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   selectBrowserStudioBaseUrl,
+  selectHostProbeStudioBaseUrl,
   type StudioRuntimeSession,
 } from "./useStudioHostRuntime";
 
@@ -76,5 +77,33 @@ describe("selectBrowserStudioBaseUrl", () => {
         }),
       ),
     ).toBe("http://49.13.48.211/_studio/runtime-1");
+  });
+});
+
+describe("selectHostProbeStudioBaseUrl", () => {
+  it("prefers the same-origin compatibility route for host probes", () => {
+    expect(
+      selectHostProbeStudioBaseUrl(
+        makeRuntime({
+          browserUrl: "http://localhost:4100",
+          url: "http://localhost:4100",
+          runtimeUrl: "http://localhost:4100",
+          compatibilityUrl: "/_studio/runtime-1",
+        }),
+      ),
+    ).toBe("/_studio/runtime-1");
+  });
+
+  it("returns null when the runtime only exposes a cross-origin direct URL", () => {
+    expect(
+      selectHostProbeStudioBaseUrl(
+        makeRuntime({
+          browserUrl: "http://localhost:4100",
+          url: "http://localhost:4100",
+          runtimeUrl: "http://localhost:4100",
+          compatibilityUrl: null,
+        }),
+      ),
+    ).toBeNull();
   });
 });

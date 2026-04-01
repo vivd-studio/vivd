@@ -8,6 +8,7 @@ import {
 import { isStudioIframeShellLoaded } from "@/lib/studioIframeReady";
 import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import {
+  canPostMessageToVivdStudio,
   getVivdStudioBridgeOrigin,
   parseVivdStudioBridgeMessage,
 } from "@/lib/studioBridge";
@@ -20,6 +21,7 @@ const EARLY_STALL_RECOVERY_TIMEOUT_MS = 4_000;
 type UseStudioIframeLifecycleOptions = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   studioBaseUrl: string | null;
+  studioHostProbeBaseUrl: string | null;
   reloadNonce: number;
   reloadStudioIframe: () => Promise<void> | void;
   theme: Theme;
@@ -37,6 +39,7 @@ type UseStudioIframeLifecycleOptions = {
 export function useStudioIframeLifecycle({
   iframeRef,
   studioBaseUrl,
+  studioHostProbeBaseUrl,
   reloadNonce,
   reloadStudioIframe,
   theme,
@@ -58,6 +61,15 @@ export function useStudioIframeLifecycle({
 
   const postMessageToStudio = useCallback(
     (message: Record<string, unknown>) => {
+      if (
+        !canPostMessageToVivdStudio({
+          iframe: iframeRef.current,
+          studioOrigin,
+        })
+      ) {
+        return;
+      }
+
       const targetWindow = iframeRef.current?.contentWindow;
       if (!targetWindow || !studioOrigin) return;
 
@@ -204,8 +216,8 @@ export function useStudioIframeLifecycle({
   }, [reloadStudioIframe]);
 
   useStudioIframeTimeoutRecovery({
-    enabled: Boolean(studioLoadTimedOut && studioBaseUrl && !studioReady),
-    studioBaseUrl,
+    enabled: Boolean(studioLoadTimedOut && studioHostProbeBaseUrl && !studioReady),
+    studioProbeBaseUrl: studioHostProbeBaseUrl,
     onHealthyRuntimeDetected: handleHealthyRuntimeTimeoutRecovery,
   });
 
@@ -233,7 +245,11 @@ export function useStudioIframeLifecycle({
   }, [reloadNonce, studioBaseUrl]);
 
   useEffect(() => {
-    if (!studioBaseUrl || studioReady || attemptedEarlyRecoveryRef.current) {
+    if (
+      !studioHostProbeBaseUrl ||
+      studioReady ||
+      attemptedEarlyRecoveryRef.current
+    ) {
       return;
     }
 
@@ -248,7 +264,7 @@ export function useStudioIframeLifecycle({
 
       try {
         const response = await fetch(
-          resolveStudioRuntimeUrl(studioBaseUrl, "health"),
+          resolveStudioRuntimeUrl(studioHostProbeBaseUrl, "health"),
           {
             method: "GET",
             mode: "cors",
@@ -272,7 +288,7 @@ export function useStudioIframeLifecycle({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [reloadStudioIframe, studioBaseUrl, studioReady]);
+  }, [reloadStudioIframe, studioHostProbeBaseUrl, studioReady]);
 
   return {
     studioReady,

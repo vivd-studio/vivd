@@ -130,6 +130,7 @@ export default function StudioFullscreen() {
 
   const {
     studioBaseUrl,
+    studioHostProbeBaseUrl,
     studioBootstrapToken,
     studioUserActionToken,
     studioBootstrapAction,
@@ -237,6 +238,7 @@ export default function StudioFullscreen() {
   } = useStudioIframeLifecycle({
     iframeRef: studioIframeRef,
     studioBaseUrl,
+    studioHostProbeBaseUrl,
     reloadNonce: studioReloadNonce,
     reloadStudioIframe,
     theme,

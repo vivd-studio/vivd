@@ -35,7 +35,7 @@ const DEFAULT_TIMING: StudioRuntimeGuardTiming = {
 
 type UseStudioRuntimeGuardOptions = {
   enabled: boolean;
-  studioBaseUrl: string | null;
+  studioProbeBaseUrl: string | null;
   touchStudio: () => void;
   ensureStudioRunning: () => Promise<EnsureStudioRunningResult>;
   onRecovered: (next: {
@@ -54,7 +54,7 @@ type HealthCheckMode = "normal" | "retry-on-fail";
 
 export function useStudioRuntimeGuard({
   enabled,
-  studioBaseUrl,
+  studioProbeBaseUrl,
   touchStudio,
   ensureStudioRunning,
   onRecovered,
@@ -97,10 +97,10 @@ export function useStudioRuntimeGuard({
     recoveryInFlightRef.current = false;
     lastRecoveryAtRef.current = 0;
     setIsRecovering(false);
-  }, [studioBaseUrl, enabled]);
+  }, [studioProbeBaseUrl, enabled]);
 
   const pingStudioHealth = useCallback(async () => {
-    if (!studioBaseUrl) return false;
+    if (!studioProbeBaseUrl) return false;
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
@@ -108,19 +108,22 @@ export function useStudioRuntimeGuard({
     }, mergedTiming.healthTimeoutMs);
 
     try {
-      const response = await fetch(resolveStudioRuntimeUrl(studioBaseUrl, "health"), {
-        method: "GET",
-        mode: "cors",
-        cache: "no-store",
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        resolveStudioRuntimeUrl(studioProbeBaseUrl, "health"),
+        {
+          method: "GET",
+          mode: "cors",
+          cache: "no-store",
+          signal: controller.signal,
+        },
+      );
       return response.ok;
     } catch {
       return false;
     } finally {
       window.clearTimeout(timeout);
     }
-  }, [studioBaseUrl, mergedTiming.healthTimeoutMs]);
+  }, [studioProbeBaseUrl, mergedTiming.healthTimeoutMs]);
 
   const recoverStudio = useCallback(async (guardGeneration: number) => {
     if (recoveryInFlightRef.current) return;
@@ -162,7 +165,7 @@ export function useStudioRuntimeGuard({
 
   const runHealthCheck = useCallback(
     async (mode: HealthCheckMode = "normal") => {
-      if (!enabled || !studioBaseUrl || checkInFlightRef.current) return;
+      if (!enabled || !studioProbeBaseUrl || checkInFlightRef.current) return;
 
       const guardGeneration = guardGenerationRef.current;
       checkInFlightRef.current = true;
@@ -214,12 +217,12 @@ export function useStudioRuntimeGuard({
       mergedTiming.retryDelayMs,
       pingStudioHealth,
       recoverStudio,
-      studioBaseUrl,
+      studioProbeBaseUrl,
     ],
   );
 
   useEffect(() => {
-    if (!enabled || !studioBaseUrl) return;
+    if (!enabled || !studioProbeBaseUrl) return;
 
     void runHealthCheck("retry-on-fail");
 
@@ -250,7 +253,7 @@ export function useStudioRuntimeGuard({
     enabled,
     mergedTiming.heartbeatIntervalMs,
     runHealthCheck,
-    studioBaseUrl,
+    studioProbeBaseUrl,
   ]);
 
   return {

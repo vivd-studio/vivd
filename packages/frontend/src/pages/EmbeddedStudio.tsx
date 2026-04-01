@@ -281,6 +281,7 @@ export default function EmbeddedStudio() {
 
   const {
     studioBaseUrl,
+    studioHostProbeBaseUrl,
     studioBootstrapToken,
     studioUserActionToken,
     studioBootstrapAction,
@@ -444,6 +445,7 @@ export default function EmbeddedStudio() {
   } = useStudioIframeLifecycle({
     iframeRef: studioIframeRef,
     studioBaseUrl,
+    studioHostProbeBaseUrl,
     reloadNonce: studioReloadNonce,
     reloadStudioIframe,
     theme,

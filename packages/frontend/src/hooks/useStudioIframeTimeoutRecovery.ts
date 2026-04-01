@@ -7,7 +7,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 4_000;
 
 type UseStudioIframeTimeoutRecoveryOptions = {
   enabled: boolean;
-  studioBaseUrl: string | null;
+  studioProbeBaseUrl: string | null;
   onHealthyRuntimeDetected: () => void;
   pollIntervalMs?: number;
   requestTimeoutMs?: number;
@@ -15,13 +15,13 @@ type UseStudioIframeTimeoutRecoveryOptions = {
 
 export function useStudioIframeTimeoutRecovery({
   enabled,
-  studioBaseUrl,
+  studioProbeBaseUrl,
   onHealthyRuntimeDetected,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 }: UseStudioIframeTimeoutRecoveryOptions) {
   useEffect(() => {
-    if (!enabled || !studioBaseUrl) return;
+    if (!enabled || !studioProbeBaseUrl) return;
 
     let cancelled = false;
     let timer: number | null = null;
@@ -33,12 +33,15 @@ export function useStudioIframeTimeoutRecovery({
       }, requestTimeoutMs);
 
       try {
-        const response = await fetch(resolveStudioRuntimeUrl(studioBaseUrl, "health"), {
+        const response = await fetch(
+          resolveStudioRuntimeUrl(studioProbeBaseUrl, "health"),
+          {
           method: "GET",
           mode: "cors",
           cache: "no-store",
           signal: controller.signal,
-        });
+          },
+        );
         if (!cancelled && response.ok) {
           onHealthyRuntimeDetected();
           return;
@@ -63,5 +66,11 @@ export function useStudioIframeTimeoutRecovery({
         window.clearTimeout(timer);
       }
     };
-  }, [enabled, onHealthyRuntimeDetected, pollIntervalMs, requestTimeoutMs, studioBaseUrl]);
+  }, [
+    enabled,
+    onHealthyRuntimeDetected,
+    pollIntervalMs,
+    requestTimeoutMs,
+    studioProbeBaseUrl,
+  ]);
 }

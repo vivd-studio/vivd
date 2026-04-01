@@ -18,6 +18,7 @@ function createLifecycleProps(
   return {
     iframeRef: createRef<HTMLIFrameElement>(),
     studioBaseUrl: "https://app.example.com/_studio/route-1",
+    studioHostProbeBaseUrl: "https://app.example.com/_studio/route-1",
     reloadNonce: 0,
     reloadStudioIframe: vi.fn(),
     theme: "light",
@@ -111,6 +112,7 @@ describe("useStudioIframeLifecycle", () => {
   it("keeps requesting a ready handshake for cross-origin iframes until the studio responds", async () => {
     const props = createLifecycleProps({
       studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
     });
     const postMessage = vi.fn();
 
@@ -150,6 +152,53 @@ describe("useStudioIframeLifecycle", () => {
 
     expect(latestValue?.studioReady).toBe(true);
     expect(props.onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits to post bridge messages until a cross-origin iframe has committed to the studio origin", async () => {
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
+    });
+    const postMessage = vi.fn();
+    let committedToStudioOrigin = false;
+
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = {
+      postMessage,
+      get location() {
+        if (committedToStudioOrigin) {
+          throw new Error("Cross-origin frame");
+        }
+        return {
+          origin: window.location.origin,
+          pathname: "/",
+        };
+      },
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(postMessage).not.toHaveBeenCalled();
+
+    committedToStudioOrigin = true;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:ready-check" },
+      "https://studio.example.com",
+    );
   });
 
   it("polls runtime health after a load timeout and reloads once the runtime is healthy", async () => {
@@ -203,5 +252,23 @@ describe("useStudioIframeLifecycle", () => {
       }),
     );
     expect(props.reloadStudioIframe).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not probe runtime health from the host when the studio only exposes a cross-origin browser url", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const props = createLifecycleProps({
+      studioBaseUrl: "https://studio.example.com/runtime",
+      studioHostProbeBaseUrl: null,
+    });
+    render(<LifecycleHarness {...props} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(26_000);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(props.reloadStudioIframe).not.toHaveBeenCalled();
   });
 });
