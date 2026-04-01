@@ -18,6 +18,7 @@ const DEFAULT_CONTROL_PLANE_HOSTNAME = "app.localhost";
 const DEFAULT_TENANT_HOSTNAME = "default.localhost";
 const DEFAULT_DOCS_HOSTNAME = "docs.localhost";
 const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
+const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
 const MAX_AUTH_SETTLE_ATTEMPTS = 3;
 const DEFAULT_CHEAP_OPENROUTER_MODEL = "openrouter/google/gemini-2.5-flash-lite";
 const FAILING_CONSOLE_PATTERNS = [
@@ -661,15 +662,37 @@ async function waitForStudioReady(page, timeoutMs) {
   return frame;
 }
 
-async function stopInitialGeneration(frame, timeoutMs) {
+async function settleInitialGeneration(frame, timeoutMs) {
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
-  await expectVisible(stopButton, timeoutMs, "stop generation button");
-  await sleep(5_000);
-  await stopButton.click();
-  await expectVisible(
-    frame.getByRole("button", { name: "Send message" }),
-    timeoutMs,
-    "send button after stop",
+  const sendButton = frame.getByRole("button", { name: "Send message" });
+  const settleTimeoutMs = Math.min(timeoutMs, DEFAULT_GENERATION_SETTLE_TIMEOUT_MS);
+  const visibleState = await waitForVisibleState(
+    [
+      { name: "stop", locator: stopButton },
+      { name: "send", locator: sendButton },
+    ],
+    settleTimeoutMs,
+  );
+
+  if (visibleState === "send") {
+    log("Initial generation already settled; send button is visible");
+    return "already-settled";
+  }
+
+  if (visibleState === "stop") {
+    log("Initial generation is running; stopping it after a short settle window");
+    await sleep(5_000);
+    await stopButton.click();
+    await expectVisible(
+      sendButton,
+      settleTimeoutMs,
+      "send button after stop",
+    );
+    return "stopped";
+  }
+
+  throw new Error(
+    `Initial generation did not expose either Stop generation or Send message within ${settleTimeoutMs}ms`,
   );
 }
 
@@ -885,9 +908,13 @@ async function main() {
       projectSlug: createdProjectSlug,
     });
 
-    await stopInitialGeneration(controlPlaneFrame, timeoutMs);
-    markCheckpoint(metrics.checkpoints, "initial_generation_stopped", startedAt, {
+    const initialGenerationOutcome = await settleInitialGeneration(
+      controlPlaneFrame,
+      timeoutMs,
+    );
+    markCheckpoint(metrics.checkpoints, "initial_generation_settled", startedAt, {
       projectSlug: createdProjectSlug,
+      outcome: initialGenerationOutcome,
     });
     await controlPlaneFrame.locator("textarea").first().fill(
       "Smoke follow-up draft only. Do not send.",
