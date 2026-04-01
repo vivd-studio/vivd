@@ -423,6 +423,21 @@ describe("opencode index session behavior", () => {
     expect(sessionPromptAsyncMock.mock.calls[0]?.[0]).not.toHaveProperty("system");
   });
 
+  it("can skip the session-start system prompt for new sessions", async () => {
+    await runTask("start scratch build", "/workspace/project", undefined, undefined, {
+      skipSessionStartSystemPrompt: true,
+    });
+
+    expect(getSystemPromptForSessionStartMock).not.toHaveBeenCalled();
+    expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "sess-new",
+        directory: "/workspace/project/",
+      }),
+    );
+    expect(sessionPromptAsyncMock.mock.calls[0]?.[0]).not.toHaveProperty("system");
+  });
+
   it("auto-compacts oversized sessions after the run finishes", async () => {
     sessionMessagesMock
       .mockResolvedValueOnce({

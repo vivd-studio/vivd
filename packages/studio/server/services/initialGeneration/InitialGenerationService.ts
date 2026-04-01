@@ -539,6 +539,13 @@ async function startInitialGenerationInternal(
       options.workspaceDir,
       undefined,
       options.model,
+      {
+        // The scratch initial-generation prompt already carries the full
+        // project-building instruction set. Skipping the extra Vivd
+        // session-start prompt keeps this path closer to upstream OpenCode
+        // and avoids doubling the prompt surface on the most fragile first run.
+        skipSessionStartSystemPrompt: true,
+      },
     );
 
     const sessionId = result.sessionId;

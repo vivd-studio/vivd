@@ -219,6 +219,7 @@ describe("InitialGenerationService", () => {
       tmpDir,
       undefined,
       { provider: "openai", modelId: "gpt-5.4" },
+      { skipSessionStartSystemPrompt: true },
     );
 
     const startedManifest = readManifest(tmpDir);

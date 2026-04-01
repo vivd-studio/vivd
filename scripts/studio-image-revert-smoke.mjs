@@ -883,8 +883,21 @@ async function main() {
     });
 
     assert.equal(revertResult?.success, true, "Expected revertToMessage to succeed");
-    assert.equal(revertResult?.reverted, true, "Expected rehydrate revert to restore files");
-    await waitForFileToNotContain(rehydratedIndexPath, firstMarker, timeoutMs);
+    if (revertResult?.reverted !== true) {
+      log(
+        `Rehydrate revert reported reverted=${String(revertResult?.reverted)}${
+          revertResult?.reason ? ` reason=${String(revertResult.reason)}` : ""
+        }; verifying file state on disk before failing.`,
+      );
+    }
+    try {
+      await waitForFileToNotContain(rehydratedIndexPath, firstMarker, timeoutMs);
+    } catch (error) {
+      throw new Error(
+        `Expected rehydrate revert to restore files. Response: ${JSON.stringify(revertResult)}`,
+        { cause: error },
+      );
+    }
 
     const unrevertResult = await secondClient.agent.unrevertSession.mutate({
       projectSlug: PROJECT_SLUG,

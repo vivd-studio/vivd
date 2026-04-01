@@ -439,6 +439,7 @@ export async function runTask(
   model?: ModelSelection,
   options?: {
     tools?: Record<string, boolean>;
+    skipSessionStartSystemPrompt?: boolean;
   },
 ): Promise<{ sessionId: string }> {
   console.log(
@@ -653,7 +654,8 @@ export async function runTask(
   }
 
   try {
-    const systemPrompt = isNewSession
+    const systemPrompt =
+      isNewSession && !options?.skipSessionStartSystemPrompt
       ? await agentInstructionsService.getSystemPromptForSessionStart({
           projectSlug: (process.env.VIVD_PROJECT_SLUG || "").trim() || undefined,
           projectVersion: Number.parseInt(
