@@ -271,11 +271,20 @@ Optional Docker Studio tuning:
 
 ```env
 DOCKER_STUDIO_CPUS=1
-DOCKER_STUDIO_MEMORY_MB=2048
+# Optional explicit override. Leave unset to use Vivd's auto-sized default.
+DOCKER_STUDIO_MEMORY_MB=2560
+DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB=1536
+DOCKER_STUDIO_MEMORY_AUTO_MIN_MB=2048
+DOCKER_STUDIO_MEMORY_AUTO_MAX_MB=3072
 DOCKER_STUDIO_NETWORK=vivd-network
 DOCKER_STUDIO_ROUTE_PREFIX=/_studio
 DOCKER_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:latest
 ```
+
+If `DOCKER_STUDIO_MEMORY_MB` is unset, Vivd auto-sizes Docker-managed Studio
+RAM from the detected host or cgroup memory budget, subtracts a default
+`1536 MiB` reserve for the rest of the stack, and clamps the result to
+`2048-3072 MiB`. On a `4 GiB` host that yields `2560 MiB` by default.
 
 ## Notes
 

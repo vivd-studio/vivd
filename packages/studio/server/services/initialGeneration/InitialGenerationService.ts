@@ -34,6 +34,8 @@ const monitoredSessions = new Map<string, () => void>();
 const finalizationLocks = new Map<string, Promise<void>>();
 const MONITOR_POLL_MS = 5_000;
 const TERMINAL_IDLE_GRACE_MS = 10_000;
+const DEFAULT_INITIAL_GENERATION_MANIFEST_WAIT_MS = 10_000;
+const INITIAL_GENERATION_MANIFEST_POLL_MS = 250;
 
 export type StartInitialGenerationOptions = {
   projectSlug: string;
@@ -95,6 +97,58 @@ function readInitialGenerationManifest(
   return JSON.parse(
     fs.readFileSync(manifestPath, "utf-8"),
   ) as ScratchInitialGenerationManifest;
+}
+
+function getInitialGenerationManifestWaitMs(): number {
+  const raw = Number.parseInt(
+    process.env.VIVD_INITIAL_GENERATION_MANIFEST_WAIT_MS || "",
+    10,
+  );
+  if (!Number.isFinite(raw) || raw < 0) {
+    return DEFAULT_INITIAL_GENERATION_MANIFEST_WAIT_MS;
+  }
+  return raw;
+}
+
+function listVivdDirEntries(workspaceDir: string): string {
+  const vivdDir = path.join(workspaceDir, ".vivd");
+  try {
+    const entries = fs.readdirSync(vivdDir).sort();
+    return entries.length > 0 ? entries.join(", ") : "(empty)";
+  } catch {
+    return "(missing)";
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readInitialGenerationManifestWithRetry(
+  workspaceDir: string,
+): Promise<ScratchInitialGenerationManifest> {
+  const manifestPath = getManifestPath(workspaceDir);
+  const deadline = Date.now() + getInitialGenerationManifestWaitMs();
+  let warned = false;
+
+  while (Date.now() <= deadline) {
+    if (fs.existsSync(manifestPath)) {
+      return readInitialGenerationManifest(workspaceDir);
+    }
+
+    if (!warned) {
+      warned = true;
+      console.warn(
+        `[InitialGeneration] Waiting for manifest in ${workspaceDir} (${INITIAL_GENERATION_MANIFEST_RELATIVE_PATH})`,
+      );
+    }
+
+    await delay(INITIAL_GENERATION_MANIFEST_POLL_MS);
+  }
+
+  throw new Error(
+    `Initial generation manifest not found: ${INITIAL_GENERATION_MANIFEST_RELATIVE_PATH} (workspace=${workspaceDir}, .vivd=${listVivdDirEntries(workspaceDir)})`,
+  );
 }
 
 function writeInitialGenerationManifest(
@@ -755,7 +809,9 @@ async function finalizeSessionCompletion(options: {
 async function startInitialGenerationInternal(
   options: StartInitialGenerationOptions,
 ): Promise<StartInitialGenerationResult> {
-  const manifest = readInitialGenerationManifest(options.workspaceDir);
+  const manifest = await readInitialGenerationManifestWithRetry(
+    options.workspaceDir,
+  );
   const existingSessionId = manifest.sessionId?.trim() || null;
 
   if (existingSessionId) {

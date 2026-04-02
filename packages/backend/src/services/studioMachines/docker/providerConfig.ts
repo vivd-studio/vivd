@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
 import { soloSelfHostDefaults } from "@vivd/shared/config";
 import { instanceNetworkSettingsService } from "../../system/InstanceNetworkSettingsService";
 import {
@@ -8,10 +10,37 @@ import {
   sanitizeForFlyAppId,
 } from "../fly/utils";
 
+const BYTES_PER_MEBIBYTE = 1024 * 1024;
+const CGROUP_MEMORY_LIMIT_PATHS = [
+  "/sys/fs/cgroup/memory.max",
+  "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+];
+
 function parsePositiveFloat(value: string | undefined, fallback: number): number {
   const parsed = Number.parseFloat(value || "");
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function parseOptionalPositiveInt(value: string | undefined): number | null {
+  const trimmed = value?.trim() || "";
+  if (!trimmed) return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function parseCgroupMemoryLimitBytes(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "max" || !/^\d+$/.test(trimmed)) return null;
+
+  const parsed = BigInt(trimmed);
+  if (parsed <= 0n || parsed > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(parsed);
 }
 
 function normalizeOrigin(raw: string): string {
@@ -63,9 +92,54 @@ function normalizeDockerPlatform(value: string | undefined): string | null {
   return trimmed;
 }
 
+type DockerProviderConfigDeps = {
+  totalSystemMemoryBytes?: () => number;
+  readTextFile?: (path: string) => string;
+};
+
 export class DockerProviderConfig {
+  private readonly deps: DockerProviderConfigDeps;
+
+  constructor(deps: DockerProviderConfigDeps = {}) {
+    this.deps = deps;
+  }
+
   key(organizationId: string, projectSlug: string, version: number): string {
     return `${organizationId}:${projectSlug}:v${version}`;
+  }
+
+  private get totalSystemMemoryBytes(): number {
+    const detected = this.deps.totalSystemMemoryBytes?.() ?? os.totalmem();
+    if (!Number.isFinite(detected) || detected <= 0) {
+      return 2048 * BYTES_PER_MEBIBYTE;
+    }
+    return detected;
+  }
+
+  private readCgroupMemoryLimitBytes(): number | null {
+    const readTextFile =
+      this.deps.readTextFile ??
+      ((filePath: string) => fs.readFileSync(filePath, "utf8"));
+
+    for (const filePath of CGROUP_MEMORY_LIMIT_PATHS) {
+      try {
+        const parsed = parseCgroupMemoryLimitBytes(readTextFile(filePath));
+        if (parsed !== null) return parsed;
+      } catch {
+        // Ignore missing/unreadable cgroup files and fall back to other signals.
+      }
+    }
+
+    return null;
+  }
+
+  private get memoryBudgetMb(): number {
+    const cgroupLimitBytes = this.readCgroupMemoryLimitBytes();
+    const effectiveBudgetBytes =
+      cgroupLimitBytes !== null
+        ? Math.min(this.totalSystemMemoryBytes, cgroupLimitBytes)
+        : this.totalSystemMemoryBytes;
+    return Math.max(1, Math.floor(effectiveBudgetBytes / BYTES_PER_MEBIBYTE));
   }
 
   containerNameFor(
@@ -297,12 +371,37 @@ export class DockerProviderConfig {
     return Math.max(1, Math.round(this.cpuLimit * 1_000_000_000));
   }
 
+  get autoMemoryReserveMb(): number {
+    return parsePositiveInt(
+      process.env.DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB,
+      1536,
+    );
+  }
+
+  get autoMemoryMinMb(): number {
+    return parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB, 2048);
+  }
+
+  get autoMemoryMaxMb(): number {
+    return Math.max(
+      this.autoMemoryMinMb,
+      parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB, 3072),
+    );
+  }
+
   get memoryMb(): number {
-    return parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_MB, 2048);
+    const configured = parseOptionalPositiveInt(process.env.DOCKER_STUDIO_MEMORY_MB);
+    if (configured !== null) return configured;
+
+    return clamp(
+      this.memoryBudgetMb - this.autoMemoryReserveMb,
+      this.autoMemoryMinMb,
+      this.autoMemoryMaxMb,
+    );
   }
 
   get memoryBytes(): number {
-    return this.memoryMb * 1024 * 1024;
+    return this.memoryMb * BYTES_PER_MEBIBYTE;
   }
 
   get builderCpuLimit(): number {
@@ -318,7 +417,7 @@ export class DockerProviderConfig {
   }
 
   get builderMemoryBytes(): number {
-    return this.builderMemoryMb * 1024 * 1024;
+    return this.builderMemoryMb * BYTES_PER_MEBIBYTE;
   }
 
   get cpuKindLabel(): string {

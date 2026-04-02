@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   startMachineHandlingReplacement,
   waitForReady,
+  waitForState,
 } from "../src/services/studioMachines/fly/lifecycle";
 import type { FlyMachine } from "../src/services/studioMachines/fly/types";
 
@@ -162,6 +163,58 @@ describe("Fly lifecycle helpers", () => {
     await result;
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(getMachine).toHaveBeenCalledTimes(2);
+  });
+
+  it("waitForReady backs off and continues when Fly rate limits machine polling", async () => {
+    vi.useFakeTimers();
+
+    const getMachine = vi
+      .fn<() => Promise<FlyMachine>>()
+      .mockRejectedValueOnce(
+        new Error("[FlyMachines] resource_exhausted: rate limit exceeded"),
+      )
+      .mockResolvedValueOnce(machine("started"));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "ok" }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = waitForReady({
+      machineId: "machine-1",
+      url: "http://example.test",
+      timeoutMs: 5_000,
+      getMachine: async () => getMachine(),
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await result;
+
+    expect(getMachine).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waitForState backs off and continues when Fly rate limits machine polling", async () => {
+    vi.useFakeTimers();
+
+    const getMachine = vi
+      .fn<() => Promise<FlyMachine>>()
+      .mockRejectedValueOnce(
+        new Error("[FlyMachines] resource_exhausted: rate limit exceeded"),
+      )
+      .mockResolvedValueOnce(machine("suspended"));
+
+    const result = waitForState({
+      machineId: "machine-1",
+      state: "suspended",
+      timeoutMs: 5_000,
+      getMachine: async () => getMachine(),
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await result;
+
     expect(getMachine).toHaveBeenCalledTimes(2);
   });
 });

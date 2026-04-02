@@ -378,6 +378,40 @@ describe("InitialGenerationService", () => {
     expect(manifest.sessionId).toBe("sess-existing");
   });
 
+  it("waits briefly for the initial-generation manifest to appear before failing", async () => {
+    vi.stubEnv("VIVD_INITIAL_GENERATION_MANIFEST_WAIT_MS", "500");
+    runTaskMock.mockResolvedValueOnce({ sessionId: "sess-manifest-wait" });
+    fs.rmSync(path.join(tmpDir, MANIFEST_PATH), { force: true });
+
+    const timer = setTimeout(() => {
+      writeManifest(tmpDir);
+    }, 50);
+
+    try {
+      const result = await initialGenerationService.startInitialGeneration({
+        projectSlug: "site-1",
+        version: 1,
+        workspaceDir: tmpDir,
+        model: { provider: "openai", modelId: "gpt-5.4" },
+      });
+
+      expect(result).toEqual({
+        sessionId: "sess-manifest-wait",
+        reused: false,
+        status: "generating_initial_site",
+      });
+      expect(runTaskMock).toHaveBeenCalledTimes(1);
+
+      sessionListener?.({
+        type: "session.completed",
+        data: { kind: "session.completed" },
+      });
+      await flushAsyncWork();
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
   it("marks interrupted initial-generation sessions as failed when the runtime goes idle with a terminal assistant error", async () => {
     vi.useFakeTimers();
     getSessionsStatusMock.mockResolvedValue({
@@ -423,6 +457,7 @@ describe("InitialGenerationService", () => {
       workspaceDir: tmpDir,
     });
 
+    await flushAsyncWork();
     await vi.runOnlyPendingTimersAsync();
     await flushAsyncWork();
 

@@ -66,6 +66,13 @@ describe("DockerProviderConfig.apiVersion", () => {
 
 describe("DockerProviderConfig.memoryMb", () => {
   const originalDockerStudioMemoryMb = process.env.DOCKER_STUDIO_MEMORY_MB;
+  const originalDockerStudioMemoryAutoReserveMb =
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB;
+  const originalDockerStudioMemoryAutoMinMb =
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB;
+  const originalDockerStudioMemoryAutoMaxMb =
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB;
+  const gib = 1024 * 1024 * 1024;
 
   afterEach(() => {
     if (typeof originalDockerStudioMemoryMb === "string") {
@@ -73,11 +80,97 @@ describe("DockerProviderConfig.memoryMb", () => {
     } else {
       delete process.env.DOCKER_STUDIO_MEMORY_MB;
     }
+
+    if (typeof originalDockerStudioMemoryAutoReserveMb === "string") {
+      process.env.DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB =
+        originalDockerStudioMemoryAutoReserveMb;
+    } else {
+      delete process.env.DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB;
+    }
+
+    if (typeof originalDockerStudioMemoryAutoMinMb === "string") {
+      process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB =
+        originalDockerStudioMemoryAutoMinMb;
+    } else {
+      delete process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB;
+    }
+
+    if (typeof originalDockerStudioMemoryAutoMaxMb === "string") {
+      process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB =
+        originalDockerStudioMemoryAutoMaxMb;
+    } else {
+      delete process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB;
+    }
   });
 
-  it("defaults Docker-managed studio memory to 2048 MiB", () => {
+  it("uses an explicit studio memory override when configured", () => {
+    process.env.DOCKER_STUDIO_MEMORY_MB = "2816";
+
+    const config = new DockerProviderConfig({
+      totalSystemMemoryBytes: () => 8 * gib,
+      readTextFile: () => {
+        throw new Error("unreachable");
+      },
+    });
+
+    expect(config.memoryMb).toBe(2816);
+  });
+
+  it("auto-sizes studio memory on 4 GiB hosts to leave headroom", () => {
     delete process.env.DOCKER_STUDIO_MEMORY_MB;
 
-    expect(new DockerProviderConfig().memoryMb).toBe(2048);
+    const config = new DockerProviderConfig({
+      totalSystemMemoryBytes: () => 4 * gib,
+      readTextFile: () => {
+        throw new Error("missing");
+      },
+    });
+
+    expect(config.memoryMb).toBe(2560);
+  });
+
+  it("uses the cgroup memory limit when the backend container is constrained", () => {
+    delete process.env.DOCKER_STUDIO_MEMORY_MB;
+
+    const config = new DockerProviderConfig({
+      totalSystemMemoryBytes: () => 8 * gib,
+      readTextFile: (filePath) => {
+        if (filePath === "/sys/fs/cgroup/memory.max") {
+          return String(4 * gib);
+        }
+        throw new Error("missing");
+      },
+    });
+
+    expect(config.memoryMb).toBe(2560);
+  });
+
+  it("caps the auto-sized studio memory on larger hosts", () => {
+    delete process.env.DOCKER_STUDIO_MEMORY_MB;
+
+    const config = new DockerProviderConfig({
+      totalSystemMemoryBytes: () => 16 * gib,
+      readTextFile: () => {
+        throw new Error("missing");
+      },
+    });
+
+    expect(config.memoryMb).toBe(3072);
+  });
+
+  it("lets self-hosters tune the auto-sizing reserve and clamp", () => {
+    delete process.env.DOCKER_STUDIO_MEMORY_MB;
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB = "1024";
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB = "2304";
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB = "3328";
+
+    const config = new DockerProviderConfig({
+      totalSystemMemoryBytes: () => 6 * gib,
+      readTextFile: () => {
+        throw new Error("missing");
+      },
+    });
+
+    expect(config.memoryMb).toBe(3328);
   });
 });

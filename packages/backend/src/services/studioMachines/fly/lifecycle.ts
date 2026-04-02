@@ -2,6 +2,17 @@ import type { FlyMachine, FlyMachineState } from "./types";
 import { sleep } from "./utils";
 
 const READY_POLL_INTERVAL_MS = 250;
+const TRANSIENT_MACHINE_POLL_BACKOFF_MS = 1_000;
+
+function isFlyRateLimitError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("resource_exhausted") ||
+    normalized.includes("rate limit exceeded") ||
+    normalized.includes("429")
+  );
+}
 
 export function isMachineGettingReplacedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -36,7 +47,16 @@ export async function startMachineHandlingReplacement(options: {
   let lastError: string | null = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    const machine = await options.getMachine(options.machineId);
+    let machine: FlyMachine;
+    try {
+      machine = await options.getMachine(options.machineId);
+    } catch (error) {
+      if (!isFlyRateLimitError(error)) {
+        throw error;
+      }
+      await sleep(TRANSIENT_MACHINE_POLL_BACKOFF_MS);
+      continue;
+    }
     const state = machine.state || "unknown";
     lastState = state;
 
@@ -72,7 +92,16 @@ export async function waitForReady(options: {
 }): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < options.timeoutMs) {
-    const machine = await options.getMachine(options.machineId);
+    let machine: FlyMachine;
+    try {
+      machine = await options.getMachine(options.machineId);
+    } catch (error) {
+      if (!isFlyRateLimitError(error)) {
+        throw error;
+      }
+      await sleep(TRANSIENT_MACHINE_POLL_BACKOFF_MS);
+      continue;
+    }
     const state = machine.state || "unknown";
 
     if (state === "destroyed" || state === "destroying") {
@@ -107,7 +136,16 @@ export async function waitForState(options: {
 }): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < options.timeoutMs) {
-    const machine = await options.getMachine(options.machineId);
+    let machine: FlyMachine;
+    try {
+      machine = await options.getMachine(options.machineId);
+    } catch (error) {
+      if (!isFlyRateLimitError(error)) {
+        throw error;
+      }
+      await sleep(TRANSIENT_MACHINE_POLL_BACKOFF_MS);
+      continue;
+    }
     const state = machine.state || "unknown";
 
     if (state === options.state) return;

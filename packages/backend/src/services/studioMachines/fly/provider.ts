@@ -75,8 +75,17 @@ import {
 import { FlyProviderConfig } from "./providerConfig";
 import { FlyRuntimeRouteService } from "./runtimeRouteService";
 import { shouldCreateStudioCompatibilityRoutes } from "../compatibilityRoutePolicy";
+import { parseNonNegativeInt, sleep } from "./utils";
 
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
+const DEFAULT_PARK_RUNTIME_CLEANUP_DRAIN_MS = 3_000;
+
+function getParkRuntimeCleanupDrainMs(): number {
+  return parseNonNegativeInt(
+    process.env.VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS,
+    DEFAULT_PARK_RUNTIME_CLEANUP_DRAIN_MS,
+  );
+}
 
 export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "fly" as const;
@@ -621,6 +630,26 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     const identity = getStudioIdentityFromMachine(machine);
     if (!identity) {
       throw new Error(`[FlyMachines] Refusing to park non-studio machine ${machineId}`);
+    }
+
+    if ((machine.state || "unknown") === "started") {
+      const port = getMachineExternalPort(machine);
+      const accessToken = getStudioAccessTokenFromMachine(machine);
+      if (port && accessToken) {
+        const url = this.config.getPublicUrlForPort(port);
+        try {
+          await this.requestRuntimeCleanup(url, accessToken);
+          const drainMs = getParkRuntimeCleanupDrainMs();
+          if (drainMs > 0) {
+            await sleep(drainMs);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[FlyMachines] Runtime cleanup before park failed for ${machineId}: ${message}`,
+          );
+        }
+      }
     }
 
     const parked = await this.suspendOrStopMachine(machineId);

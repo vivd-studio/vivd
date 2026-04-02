@@ -220,6 +220,43 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(calls).toEqual(["park:machine-1"]);
   });
 
+  it("parkStudioMachine requests runtime cleanup before suspending a started machine", async () => {
+    vi.stubEnv("VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS", "0");
+
+    const provider = new FlyStudioMachineProvider();
+    const machine = studioMachine({
+      id: "machine-1",
+      state: "started",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+    });
+
+    (provider as any).getMachine = async () => machine;
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    const cleanupMock = vi
+      .spyOn(provider as any, "requestRuntimeCleanup")
+      .mockResolvedValue(undefined);
+    const suspendOrStopMock = vi
+      .spyOn(provider as any, "suspendOrStopMachine")
+      .mockResolvedValue("suspended");
+    const removeRuntimeRouteMock = vi
+      .spyOn((provider as any).routeService, "removeRuntimeRoute")
+      .mockResolvedValue(undefined);
+
+    const result = await provider.parkStudioMachine("machine-1");
+
+    expect(result).toBe("suspended");
+    expect(cleanupMock).toHaveBeenCalledWith(
+      "https://studio.test:4100",
+      "token-1",
+    );
+    expect(suspendOrStopMock).toHaveBeenCalledWith("machine-1");
+    expect(removeRuntimeRouteMock).toHaveBeenCalledWith(
+      (provider as any).config.routeIdFor("org-1", "site-1", 1),
+    );
+  });
+
   it("ensureRunningInner creates a machine with expected metadata and returns start result", async () => {
     const provider = new FlyStudioMachineProvider();
 
