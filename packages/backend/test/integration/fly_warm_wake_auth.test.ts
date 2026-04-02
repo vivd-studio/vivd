@@ -390,6 +390,21 @@ async function verifyBootstrapAuth(options: {
   expect(followUp.status).toBe(200);
 }
 
+async function notifyPreviewLeave(options: {
+  baseUrl: string;
+  accessToken: string;
+}): Promise<void> {
+  const response = await requestRuntime({
+    url: `${options.baseUrl}/vivd-studio/api/cleanup/preview-leave`,
+    method: "POST",
+    headers: {
+      [STUDIO_AUTH_HEADER]: options.accessToken,
+    },
+  });
+
+  expect(response.status).toBe(200);
+}
+
 async function verifyConnectedBackendCallbacks(machineId: string): Promise<void> {
   const script = `
 const backendUrl = (process.env.MAIN_BACKEND_URL || "").trim();
@@ -629,6 +644,10 @@ describe.sequential("Fly warm wake + auth", () => {
           }
           await verifyConnectedBackendCallbacks(machineId);
         }
+        await notifyPreviewLeave({
+          baseUrl: coldStart.url,
+          accessToken: coldStart.accessToken!,
+        });
 
         // Fly will refuse/ignore suspend requests that arrive immediately after
         // the auth/bootstrap traffic we generate in this smoke. Give the edge

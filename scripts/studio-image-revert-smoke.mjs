@@ -182,7 +182,7 @@ function getPreferredModelTiers() {
   const raw =
     getOptionalEnv("VIVD_STUDIO_REVERT_SMOKE_MODEL_TIERS") ||
     getOptionalEnv("VIVD_STUDIO_SMOKE_MODEL_TIERS") ||
-    "standard,advanced,pro";
+    "advanced,standard,pro";
 
   return raw
     .split(",")
@@ -373,6 +373,30 @@ function extractSummaryDiffs(message) {
   );
 }
 
+function extractPatchPartsAfterUserMessage(messages, userMessageId) {
+  const patchParts = [];
+  let collect = false;
+
+  for (const message of messages) {
+    if (!collect) {
+      if (message?.info?.id !== userMessageId) {
+        continue;
+      }
+      collect = true;
+      continue;
+    }
+
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+    for (const part of parts) {
+      if (part?.type === "patch") {
+        patchParts.push(part);
+      }
+    }
+  }
+
+  return patchParts;
+}
+
 async function waitForUserMessageWithDiffs(client, sessionId, timeoutMs) {
   return waitForCondition(
     `tracked file diffs for session ${sessionId}`,
@@ -400,6 +424,46 @@ async function waitForUserMessageWithDiffs(client, sessionId, timeoutMs) {
       return { messages, userMessage, diffs };
     },
   );
+}
+
+async function getPatchHistory(client, sessionId, userMessageId) {
+  const messages = await client.agent.getSessionContent.query({
+    sessionId,
+    projectSlug: PROJECT_SLUG,
+    version: PROJECT_VERSION,
+  });
+  return extractPatchPartsAfterUserMessage(messages, userMessageId);
+}
+
+async function waitForPatchHistoryIfPresent(client, sessionId, userMessageId, timeoutMs) {
+  try {
+    return await waitForCondition(
+      `patch history for session ${sessionId}`,
+      Math.min(timeoutMs, 15_000),
+      async () => {
+        const patchParts = await getPatchHistory(client, sessionId, userMessageId);
+        return patchParts.length > 0 ? patchParts : null;
+      },
+    );
+  } catch {
+    return await getPatchHistory(client, sessionId, userMessageId);
+  }
+}
+
+function summarizeSessionMessagesForDebug(messages) {
+  return messages.map((message) => ({
+    id: message?.info?.id,
+    role: message?.info?.role,
+    summaryDiffFiles: extractSummaryDiffs(message).map((diff) => diff.file),
+    parts: Array.isArray(message?.parts)
+      ? message.parts.map((part) => ({
+          type: part?.type,
+          id: part?.id,
+          files: Array.isArray(part?.files) ? part.files : undefined,
+          hash: typeof part?.hash === "string" ? part.hash : undefined,
+        }))
+      : [],
+  }));
 }
 
 async function waitForFileToContain(filePath, expected, timeoutMs) {
@@ -875,6 +939,18 @@ async function verifyRevertCycle(options) {
     true,
     `Expected ${options.label} revertToMessage to succeed`,
   );
+  if (revertResult?.reverted !== true && fileContainsMarkerImmediatelyAfterRevert) {
+    const messages = await options.client.agent.getSessionContent.query({
+      sessionId: options.sessionId,
+      projectSlug: PROJECT_SLUG,
+      version: PROJECT_VERSION,
+    });
+    throw new Error(
+      `Expected ${options.label} revert to restore files immediately, but revert returned a no-op. Response: ${JSON.stringify(revertResult)} Session: ${JSON.stringify(
+        summarizeSessionMessagesForDebug(messages),
+      )}`,
+    );
+  }
   try {
     await waitForFileToNotContain(
       options.indexPath,
@@ -1003,10 +1079,17 @@ async function runRehydrateVerification(options) {
       `Expected ${options.label} tracked diff summary to include index.html`,
     );
     const postHydrateMessageId = sessionSummary.userMessage.info.id;
+    const postHydratePatchParts = await waitForPatchHistoryIfPresent(
+      client,
+      run.sessionId,
+      postHydrateMessageId,
+      options.timeoutMs,
+    );
     logCheckpoint(`${options.label}_post_hydrate_tracking_ok`, {
       sessionId: run.sessionId,
       messageId: postHydrateMessageId,
       diffFiles: sessionSummary.diffs.length,
+      patchParts: postHydratePatchParts.length,
     });
 
     await verifyRevertCycle({
@@ -1178,10 +1261,17 @@ async function main() {
       "Expected tracked diff summary to include index.html",
     );
     const firstUserMessageId = firstSessionSummary.userMessage.info.id;
+    const firstPatchParts = await waitForPatchHistoryIfPresent(
+      firstClient,
+      firstRun.sessionId,
+      firstUserMessageId,
+      timeoutMs,
+    );
     logCheckpoint("initial_edit_tracked", {
       sessionId: firstRun.sessionId,
       messageId: firstUserMessageId,
       diffFiles: firstSessionSummary.diffs.length,
+      patchParts: firstPatchParts.length,
     });
 
     await verifyRevertCycle({
