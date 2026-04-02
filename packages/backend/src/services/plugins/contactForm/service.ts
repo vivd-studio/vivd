@@ -51,6 +51,8 @@ export interface ContactFormPluginPayload {
 
 export interface ContactFormPluginInfoPayload {
   pluginId: "contact_form";
+  entitled: boolean;
+  entitlementState: "disabled" | "enabled" | "suspended";
   enabled: boolean;
   instanceId: string | null;
   status: string | null;
@@ -310,6 +312,7 @@ class ContactFormPluginService {
       entitlement.turnstileEnabled &&
       !!entitlement.turnstileSiteKey &&
       !!entitlement.turnstileSecretKey;
+    const entitled = entitlement.state === "enabled";
     const snippetTurnstileSiteKey = turnstileConfigured
       ? entitlement.turnstileSiteKey
       : null;
@@ -332,6 +335,8 @@ class ContactFormPluginService {
     if (!existing) {
       return {
         pluginId: "contact_form",
+        entitled,
+        entitlementState: entitlement.state,
         enabled: false,
         instanceId: null,
         status: null,
@@ -346,10 +351,48 @@ class ContactFormPluginService {
           turnstileConfigured,
         }),
         recipients,
+        instructions: entitled
+          ? [
+              "Contact Form access is enabled for this instance, but no plugin instance exists yet for this project.",
+              "Enable it in Studio/Control-Plane Plugins UI first (Project → Plugins → Contact Form).",
+              "After enabling, call vivd_plugins_contact_info again to get project-specific token + snippets.",
+            ]
+          : [
+              "Contact Form access is currently disabled for this project.",
+              "Ask a super-admin to enable Contact Form in Instance Settings -> Plugins (solo) or Super Admin -> Plugins (platform).",
+              "After access is enabled, call vivd_plugins_contact_info again to get install instructions.",
+            ],
+      };
+    }
+
+    if (!entitled) {
+      const normalizedConfig =
+        normalizedExistingConfig ?? normalizeContactFormConfig(existing.configJson);
+      return {
+        pluginId: "contact_form",
+        entitled,
+        entitlementState: entitlement.state,
+        enabled: false,
+        instanceId: existing.id,
+        status: existing.status,
+        publicToken: existing.publicToken,
+        config: normalizedConfig,
+        snippets: getContactFormSnippets(existing.publicToken, submitEndpoint, {
+          formFields: normalizedConfig.formFields,
+          turnstileSiteKey: snippetTurnstileSiteKey,
+        }),
+        usage: buildUsage({
+          submitEndpoint,
+          config: normalizedConfig,
+          inferredAutoSourceHosts,
+          turnstileEnabled: entitlement.turnstileEnabled,
+          turnstileConfigured,
+        }),
+        recipients,
         instructions: [
-          "Contact Form plugin is not enabled for this project yet.",
-          "Enable it in Studio/Control-Plane Plugins UI first (Project → Plugins → Contact Form).",
-          "After enabling, call vivd_plugins_contact_info again to get project-specific token + snippets.",
+          "Contact Form plugin instance exists, but entitlement is not enabled for this project.",
+          "Ask a super-admin to enable Contact Form in Instance Settings -> Plugins (solo) or Super Admin -> Plugins (platform).",
+          "Keep the snippet in place; submissions will resume once entitlement is enabled again.",
         ],
       };
     }
@@ -359,6 +402,8 @@ class ContactFormPluginService {
         normalizedExistingConfig ?? normalizeContactFormConfig(existing.configJson);
       return {
         pluginId: "contact_form",
+        entitled,
+        entitlementState: entitlement.state,
         enabled: false,
         instanceId: existing.id,
         status: existing.status,
@@ -388,6 +433,8 @@ class ContactFormPluginService {
       normalizedExistingConfig ?? normalizeContactFormConfig(existing.configJson);
     return {
       pluginId: "contact_form",
+      entitled,
+      entitlementState: entitlement.state,
       enabled: true,
       instanceId: existing.id,
       status: existing.status,

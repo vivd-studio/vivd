@@ -10,7 +10,7 @@ type PendingAnchorRequest = {
   behavior: ScrollBehavior;
 };
 
-const CHAT_ANCHOR_TOP_INSET_PX = 40;
+const CHAT_ANCHOR_TOP_INSET_PX = 56;
 const ACTIVE_TURN_BODY_GAP_PX = 8;
 const MAX_PENDING_ANCHOR_LAYOUT_ADJUSTMENTS = 1;
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 10;

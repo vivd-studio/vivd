@@ -274,4 +274,10 @@ describe("InstanceSoftwareService", () => {
       'docker compose -f "${UPDATE_WORKDIR}/docker-compose.yml" --project-directory "${UPDATE_WORKDIR}" -p "${UPDATE_COMPOSE_PROJECT}" "$@"',
     );
   });
+
+  it("prunes superseded docker images after a successful update", () => {
+    expect(buildManagedSelfHostUpdateScript()).toContain(
+      'docker image prune -af >/dev/null 2>&1 || true',
+    );
+  });
 });

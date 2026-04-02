@@ -3,12 +3,27 @@ import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useParamsMock, analyticsInfoUseQueryMock, analyticsSummaryUseQueryMock } =
+const {
+  analyticsEnsureMutateMock,
+  useParamsMock,
+  analyticsEnsureUseMutationMock,
+  analyticsInfoUseQueryMock,
+  analyticsSummaryUseQueryMock,
+  projectListUseQueryMock,
+  useUtilsMock,
+} =
   vi.hoisted(() => ({
+    analyticsEnsureMutateMock: vi.fn(),
     useParamsMock: vi.fn(),
+    analyticsEnsureUseMutationMock: vi.fn(),
     analyticsInfoUseQueryMock: vi.fn(),
     analyticsSummaryUseQueryMock: vi.fn(),
+    projectListUseQueryMock: vi.fn(),
+    useUtilsMock: vi.fn(),
   }));
+const { useSessionMock } = vi.hoisted(() => ({
+  useSessionMock: vi.fn(),
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -43,7 +58,11 @@ vi.mock("@/components/settings/SettingsPageShell", () => ({
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    useUtils: useUtilsMock,
     plugins: {
+      analyticsEnsure: {
+        useMutation: analyticsEnsureUseMutationMock,
+      },
       analyticsInfo: {
         useQuery: analyticsInfoUseQueryMock,
       },
@@ -51,6 +70,24 @@ vi.mock("@/lib/trpc", () => ({
         useQuery: analyticsSummaryUseQueryMock,
       },
     },
+    project: {
+      list: {
+        useQuery: projectListUseQueryMock,
+      },
+    },
+  },
+}));
+
+vi.mock("@/lib/auth-client", () => ({
+  authClient: {
+    useSession: useSessionMock,
+  },
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -202,11 +239,20 @@ function makeSummary() {
 
 describe("ProjectAnalytics", () => {
   beforeEach(() => {
+    analyticsEnsureMutateMock.mockReset();
     useParamsMock.mockReset();
+    analyticsEnsureUseMutationMock.mockReset();
     analyticsInfoUseQueryMock.mockReset();
     analyticsSummaryUseQueryMock.mockReset();
+    projectListUseQueryMock.mockReset();
+    useUtilsMock.mockReset();
+    useSessionMock.mockReset();
 
     useParamsMock.mockReturnValue({ projectSlug: "leonord" });
+    analyticsEnsureUseMutationMock.mockReturnValue({
+      mutate: analyticsEnsureMutateMock,
+      isPending: false,
+    });
     analyticsInfoUseQueryMock.mockReturnValue({
       data: { enabled: true },
       error: null,
@@ -219,6 +265,25 @@ describe("ProjectAnalytics", () => {
       isLoading: false,
       isFetching: false,
       refetch: vi.fn().mockResolvedValue(undefined),
+    });
+    projectListUseQueryMock.mockReturnValue({
+      data: {
+        projects: [{ slug: "leonord", title: "Leonord" }],
+      },
+    });
+    useUtilsMock.mockReturnValue({
+      plugins: {
+        analyticsInfo: {
+          invalidate: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          role: "super_admin",
+        },
+      },
     });
   });
 
@@ -252,5 +317,35 @@ describe("ProjectAnalytics", () => {
     expect(screen.getByText("Daily performance")).toBeInTheDocument();
     expect(screen.getByText("Top pages")).toBeInTheDocument();
     expect(screen.getByText("Lead sources")).toBeInTheDocument();
+  });
+
+  it("offers project enablement when analytics is entitled but not initialized yet", () => {
+    analyticsInfoUseQueryMock.mockReturnValueOnce({
+      data: {
+        entitled: true,
+        enabled: false,
+        instanceId: null,
+      },
+      error: null,
+      isLoading: false,
+      refetch: vi.fn().mockResolvedValue(undefined),
+    });
+
+    render(
+      <MemoryRouter>
+        <ProjectAnalytics />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText(
+        "Analytics is available for this instance but has not been enabled for this project yet.",
+      ),
+    ).toBeInTheDocument();
+    screen.getByRole("button", { name: "Enable for this project" }).click();
+    expect(analyticsEnsureMutateMock).toHaveBeenCalledWith({ slug: "leonord" });
+    expect(
+      screen.queryByText("Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."),
+    ).not.toBeInTheDocument();
   });
 });

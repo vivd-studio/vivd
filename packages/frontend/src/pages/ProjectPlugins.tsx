@@ -39,6 +39,7 @@ import {
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { formatDocumentTitle } from "@/lib/brand";
+import { authClient } from "@/lib/auth-client";
 
 type SnippetKind = "html" | "astro";
 type ContactFormFieldType = "text" | "email" | "textarea";
@@ -189,6 +190,7 @@ export default function ProjectPlugins() {
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
   const utils = trpc.useUtils();
+  const { data: session } = authClient.useSession();
   const isEmbedded = useMemo(
     () => new URLSearchParams(location.search).get("embedded") === "1",
     [location.search],
@@ -235,6 +237,20 @@ export default function ProjectPlugins() {
       });
     },
   });
+  const contactEnsureMutation = trpc.plugins.contactEnsure.useMutation({
+    onSuccess: async () => {
+      toast.success("Contact Form enabled for this project");
+      await Promise.all([
+        utils.plugins.catalog.invalidate({ slug }),
+        utils.plugins.contactInfo.invalidate({ slug }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error("Failed to enable Contact Form", {
+        description: error.message,
+      });
+    },
+  });
   const requestRecipientVerificationMutation =
     trpc.plugins.contactRequestRecipientVerification.useMutation({
       onSuccess: async (result) => {
@@ -264,6 +280,20 @@ export default function ProjectPlugins() {
         });
       },
     });
+  const analyticsEnsureMutation = trpc.plugins.analyticsEnsure.useMutation({
+    onSuccess: async () => {
+      toast.success("Analytics enabled for this project");
+      await Promise.all([
+        utils.plugins.catalog.invalidate({ slug }),
+        utils.plugins.analyticsInfo.invalidate({ slug }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error("Failed to enable Analytics", {
+        description: error.message,
+      });
+    },
+  });
 
   const contactCatalogEntry = useMemo(
     () =>
@@ -279,6 +309,13 @@ export default function ProjectPlugins() {
   const analyticsInfo = analyticsInfoQuery.data;
   const analyticsEnabled = !!analyticsInfo?.enabled;
   const pluginEnabled = !!contactInfo?.enabled;
+  const canManageProjectPlugins = session?.user?.role === "super_admin";
+  const contactEntitled = contactInfo?.entitled ?? false;
+  const analyticsEntitled = analyticsInfo?.entitled ?? false;
+  const contactNeedsProjectEnable =
+    contactEntitled && !pluginEnabled && !contactInfo?.instanceId;
+  const analyticsNeedsProjectEnable =
+    analyticsEntitled && !analyticsEnabled && !analyticsInfo?.instanceId;
   const snippets = contactInfo?.snippets;
   const inferredAutoSourceHosts = contactInfo?.usage?.inferredAutoSourceHosts || [];
   const recipientDirectory = contactInfo?.recipients;
@@ -473,11 +510,19 @@ export default function ProjectPlugins() {
     `/vivd-studio/projects/${projectSlug}/analytics`;
   const analyticsLink = isEmbedded ? `${analyticsPath}?embedded=1` : analyticsPath;
   const contactDisabledCopy =
-    config.installProfile === "solo"
+    contactNeedsProjectEnable
+      ? canManageProjectPlugins
+        ? "Contact Form is available for this instance but has not been enabled for this project yet."
+        : "Contact Form is available for this instance, but a super-admin still needs to enable it for this project."
+      : config.installProfile === "solo"
       ? "Contact Form is disabled for this instance. Open Instance Settings -> Plugins to enable it."
       : "Contact Form access is managed in Super Admin. Ask a super-admin to enable access for this project.";
   const analyticsDisabledCopy =
-    config.installProfile === "solo"
+    analyticsNeedsProjectEnable
+      ? canManageProjectPlugins
+        ? "Analytics is available for this instance but has not been enabled for this project yet."
+        : "Analytics is available for this instance, but a super-admin still needs to enable it for this project."
+      : config.installProfile === "solo"
       ? "Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."
       : "Analytics access is managed in Super Admin. Ask a super-admin to enable Analytics for this project.";
 
@@ -520,9 +565,32 @@ export default function ProjectPlugins() {
                   "Collect visitor inquiries and store submissions in Vivd."}
               </CardDescription>
             </div>
-            <Badge variant={pluginEnabled ? "default" : "secondary"}>
-              {pluginEnabled ? "Enabled" : "Disabled"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {contactNeedsProjectEnable && canManageProjectPlugins ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => contactEnsureMutation.mutate({ slug })}
+                  disabled={contactEnsureMutation.isPending}
+                >
+                  {contactEnsureMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      Enabling...
+                    </>
+                  ) : (
+                    "Enable for this project"
+                  )}
+                </Button>
+              ) : null}
+              <Badge variant={pluginEnabled ? "default" : "secondary"}>
+                {pluginEnabled
+                  ? "Enabled"
+                  : contactNeedsProjectEnable
+                    ? "Available"
+                    : "Disabled"}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
 
@@ -914,13 +982,34 @@ export default function ProjectPlugins() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              {analyticsNeedsProjectEnable && canManageProjectPlugins ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => analyticsEnsureMutation.mutate({ slug })}
+                  disabled={analyticsEnsureMutation.isPending}
+                >
+                  {analyticsEnsureMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      Enabling...
+                    </>
+                  ) : (
+                    "Enable for this project"
+                  )}
+                </Button>
+              ) : null}
               {analyticsEnabled ? (
                 <Button asChild size="sm" variant="outline">
                   <Link to={analyticsLink}>Open dashboard</Link>
                 </Button>
               ) : null}
               <Badge variant={analyticsEnabled ? "default" : "secondary"}>
-                {analyticsEnabled ? "Enabled" : "Disabled"}
+                {analyticsEnabled
+                  ? "Enabled"
+                  : analyticsNeedsProjectEnable
+                    ? "Available"
+                    : "Disabled"}
               </Badge>
             </div>
           </div>

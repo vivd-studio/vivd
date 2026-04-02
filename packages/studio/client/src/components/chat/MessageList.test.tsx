@@ -74,7 +74,7 @@ const chatState = vi.hoisted(() => ({
 }));
 
 const scrollToMock = vi.fn();
-const CHAT_ANCHOR_TOP_INSET_PX = 40;
+const CHAT_ANCHOR_TOP_INSET_PX = 56;
 const viewportExtraScrollHeight = vi.hoisted(() => ({ value: 0 }));
 const anchorTopById = vi.hoisted(() => ({
   "optimistic:client-1": 120,
@@ -443,7 +443,7 @@ describe("MessageList latest-user anchoring", () => {
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({
-        top: 80,
+        top: 64,
         behavior: "auto",
       });
     });
@@ -451,7 +451,7 @@ describe("MessageList latest-user anchoring", () => {
     const activeTurnBody = document.querySelector<HTMLElement>(
       "[data-chat-active-turn-body='user-1']",
     );
-    expect(activeTurnBody?.style.minHeight).toBe("220px");
+    expect(activeTurnBody?.style.minHeight).toBe("204px");
   });
 
   it("does not re-anchor on follow-up renders until a new latest user message appears", async () => {
@@ -492,7 +492,7 @@ describe("MessageList latest-user anchoring", () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(2);
       expect(scrollToMock).toHaveBeenLastCalledWith({
-        top: 240,
+        top: 224,
         behavior: "smooth",
       });
     });
@@ -500,7 +500,7 @@ describe("MessageList latest-user anchoring", () => {
     const activeTurnBody = document.querySelector<HTMLElement>(
       "[data-chat-active-turn-body='user-2']",
     );
-    expect(activeTurnBody?.style.minHeight).toBe("220px");
+    expect(activeTurnBody?.style.minHeight).toBe("204px");
   });
 
   it("does not issue another scroll while the active turn layout updates", async () => {
@@ -526,7 +526,7 @@ describe("MessageList latest-user anchoring", () => {
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenLastCalledWith({
-        top: 240,
+        top: 224,
         behavior: "smooth",
       });
     });
@@ -559,7 +559,7 @@ describe("MessageList latest-user anchoring", () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(1);
       expect(scrollToMock).toHaveBeenLastCalledWith({
-        top: 80,
+        top: 64,
         behavior: "auto",
       });
     });
@@ -585,7 +585,7 @@ describe("MessageList latest-user anchoring", () => {
     const activeTurnBody = document.querySelector<HTMLElement>(
       "[data-chat-active-turn-body='user-1']",
     );
-    expect(activeTurnBody?.style.minHeight).toBe("220px");
+    expect(activeTurnBody?.style.minHeight).toBe("204px");
   });
 
   it("keeps the context indicator outside the scrollable transcript content", () => {
@@ -635,7 +635,7 @@ describe("MessageList latest-user anchoring", () => {
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({
-        top: 200,
+        top: 184,
         behavior: "auto",
       });
     });
@@ -693,7 +693,7 @@ describe("MessageList latest-user anchoring", () => {
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({
-        top: 200,
+        top: 184,
         behavior: "auto",
       });
     });
@@ -735,7 +735,7 @@ describe("MessageList latest-user anchoring", () => {
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({
-        top: 200,
+        top: 184,
         behavior: "auto",
       });
     });
@@ -774,7 +774,7 @@ describe("MessageList latest-user anchoring", () => {
 
       await waitFor(() => {
         expect(scrollToMock).toHaveBeenCalledWith({
-          top: 200,
+          top: 184,
           behavior: "auto",
         });
       });
@@ -791,7 +791,7 @@ describe("MessageList latest-user anchoring", () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledTimes(1);
       expect(scrollToMock).toHaveBeenLastCalledWith({
-        top: 80,
+        top: 64,
         behavior: "auto",
       });
     });
@@ -799,7 +799,7 @@ describe("MessageList latest-user anchoring", () => {
     const activeTurnBody = document.querySelector<HTMLElement>(
       "[data-chat-active-turn-body='user-1']",
     );
-    expect(["200px", "220px"]).toContain(activeTurnBody?.style.minHeight ?? "");
+    expect(["184px", "204px"]).toContain(activeTurnBody?.style.minHeight ?? "");
   });
 
   it("does not show a long-message toggle for short user prompts", async () => {

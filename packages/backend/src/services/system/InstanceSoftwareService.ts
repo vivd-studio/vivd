@@ -193,6 +193,7 @@ export function buildManagedSelfHostUpdateScript(): string {
     "}",
     'run_compose pull ${UPDATE_SERVICES}',
     'run_compose up -d --force-recreate ${UPDATE_SERVICES}',
+    'docker image prune -af >/dev/null 2>&1 || true',
   ].join("\n");
 }
 

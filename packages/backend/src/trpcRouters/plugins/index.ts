@@ -1,6 +1,7 @@
 import { router } from "../../trpc";
 import { catalogPluginProcedure } from "./catalog";
 import {
+  analyticsEnsurePluginProcedure,
   analyticsInfoPluginProcedure,
   analyticsSummaryPluginProcedure,
   analyticsUpdateConfigPluginProcedure,
@@ -19,6 +20,7 @@ export const pluginsRouter = router({
   contactUpdateConfig: contactUpdateConfigPluginProcedure,
   contactRequestRecipientVerification:
     contactRequestRecipientVerificationPluginProcedure,
+  analyticsEnsure: analyticsEnsurePluginProcedure,
   analyticsInfo: analyticsInfoPluginProcedure,
   analyticsUpdateConfig: analyticsUpdateConfigPluginProcedure,
   analyticsSummary: analyticsSummaryPluginProcedure,

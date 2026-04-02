@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { BarChart3, RefreshCw } from "lucide-react";
+import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { ROUTES } from "@/app/router";
@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { formatDocumentTitle } from "@/lib/brand";
+import { authClient } from "@/lib/auth-client";
+import { toast } from "sonner";
 
 type AnalyticsRange = 7 | 30;
 type AnalyticsSummary = RouterOutputs["plugins"]["analyticsSummary"];
@@ -127,8 +129,10 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 
 export default function ProjectAnalytics() {
   const { config } = useAppConfig();
+  const { data: session } = authClient.useSession();
   const { projectSlug } = useParams<{ projectSlug: string }>();
   const location = useLocation();
+  const utils = trpc.useUtils();
   const slug = projectSlug || "";
   const [rangeDays, setRangeDays] = useState<AnalyticsRange>(30);
   const isEmbedded = useMemo(
@@ -146,6 +150,21 @@ export default function ProjectAnalytics() {
   const projectTitle =
     projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
   const analyticsEnabled = !!analyticsInfoQuery.data?.enabled;
+  const analyticsEntitled = analyticsInfoQuery.data?.entitled ?? false;
+  const analyticsNeedsProjectEnable =
+    analyticsEntitled && !analyticsEnabled && !analyticsInfoQuery.data?.instanceId;
+  const canEnableProjectAnalytics = session?.user?.role === "super_admin";
+  const analyticsEnsureMutation = trpc.plugins.analyticsEnsure.useMutation({
+    onSuccess: async () => {
+      toast.success("Analytics enabled for this project");
+      await utils.plugins.analyticsInfo.invalidate({ slug });
+    },
+    onError: (error) => {
+      toast.error("Failed to enable Analytics", {
+        description: error.message,
+      });
+    },
+  });
 
   const analyticsSummaryQuery = trpc.plugins.analyticsSummary.useQuery(
     { slug, rangeDays },
@@ -258,7 +277,11 @@ export default function ProjectAnalytics() {
               <CardTitle>Website + Lead Analytics</CardTitle>
             </div>
             <Badge variant={analyticsEnabled ? "default" : "secondary"}>
-              {analyticsEnabled ? "Enabled" : "Disabled"}
+              {analyticsEnabled
+                ? "Enabled"
+                : analyticsNeedsProjectEnable
+                  ? "Available"
+                  : "Disabled"}
             </Badge>
           </div>
           {analyticsEnabled ? (
@@ -301,9 +324,34 @@ export default function ProjectAnalytics() {
 
           {!analyticsEnabled ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              {config.installProfile === "solo"
-                ? "Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."
-                : "Analytics is not enabled for this project. Ask a super-admin to enable Analytics in Super Admin -> Plugins."}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  {analyticsNeedsProjectEnable
+                    ? canEnableProjectAnalytics
+                      ? "Analytics is available for this instance but has not been enabled for this project yet."
+                      : "Analytics is available for this instance, but a super-admin still needs to enable it for this project."
+                    : config.installProfile === "solo"
+                      ? "Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."
+                      : "Analytics is not enabled for this project. Ask a super-admin to enable Analytics in Super Admin -> Plugins."}
+                </span>
+                {analyticsNeedsProjectEnable && canEnableProjectAnalytics ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => analyticsEnsureMutation.mutate({ slug })}
+                    disabled={analyticsEnsureMutation.isPending}
+                  >
+                    {analyticsEnsureMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        Enabling...
+                      </>
+                    ) : (
+                      "Enable for this project"
+                    )}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
