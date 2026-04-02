@@ -9,6 +9,11 @@ on:
       tag:
         description: "Tag to use for images (e.g., v1.0.0)"
         required: true
+      skip_fly_release_smoke:
+        description: "Skip the Fly release smoke job for this run"
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
@@ -31,6 +36,7 @@ jobs:
       build_docs: ${{ steps.changes.outputs.build_docs }}
       build_scraper: ${{ steps.changes.outputs.build_scraper }}
       build_caddy: ${{ steps.changes.outputs.build_caddy }}
+      skip_fly_release_smoke: ${{ steps.publish_flags.outputs.skip_fly_release_smoke }}
       any: ${{ steps.changes.outputs.any }}
 
     steps:
@@ -52,6 +58,34 @@ jobs:
           VERSION_NO_V="${VERSION#v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+
+      - name: Determine publish flags
+        id: publish_flags
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT_TAG="${{ steps.tag.outputs.version }}"
+          SKIP_FLY_RELEASE_SMOKE=false
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.skip_fly_release_smoke }}" = "true" ]; then
+            SKIP_FLY_RELEASE_SMOKE=true
+          else
+            TAG_OBJECT_TYPE="$(git cat-file -t "$CURRENT_TAG" 2>/dev/null || true)"
+            if [ "$TAG_OBJECT_TYPE" = "tag" ]; then
+              TAG_CONTENTS="$(git for-each-ref "refs/tags/$CURRENT_TAG" --format='%(contents)')"
+              if printf '%s\n' "$TAG_CONTENTS" | grep -q '^publish\.skip_fly_release_smoke=true$'; then
+                SKIP_FLY_RELEASE_SMOKE=true
+              fi
+            fi
+          fi
+
+          echo "skip_fly_release_smoke=${SKIP_FLY_RELEASE_SMOKE}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Publish flags"
+            echo "- skip_fly_release_smoke: ${SKIP_FLY_RELEASE_SMOKE}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Determine changed images
         id: changes
@@ -320,7 +354,7 @@ jobs:
 
   studio-fly-reconcile-smoke:
     needs: [detect-changes, validate-release, build-studio]
-    if: needs.detect-changes.outputs.build_studio == 'true'
+    if: needs.detect-changes.outputs.build_studio == 'true' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

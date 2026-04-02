@@ -38,6 +38,10 @@ import { FlyStudioMachineProvider } from "../../src/services/studioMachines/fly/
 import { buildStudioEnvDriftSubsetFromDesiredEnv } from "../../src/services/studioMachines/fly/runtimeWorkflow";
 import { resolveStableStudioMachineEnv } from "../../src/services/studioMachines/stableRuntimeEnv";
 import type { FlyMachine } from "../../src/services/studioMachines/fly/types";
+import {
+  cleanupStaleFlyTestMachines,
+  runWithFlyCapacityContext,
+} from "./flyTestMachineCleanup";
 
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const RUN_TESTS = process.env.VIVD_RUN_FLY_RECONCILE_FLOW_TESTS === "1";
@@ -231,6 +235,10 @@ describe("Fly warm reconciliation flow", () => {
     { timeout: 420_000 },
     async () => {
       const provider = new FlyStudioMachineProvider();
+      await cleanupStaleFlyTestMachines({
+        provider,
+        logPrefix: "[Fly reconcile smoke][stale GC]",
+      });
       const originalConfiguredImage = process.env.FLY_STUDIO_IMAGE;
       const requestedImage = await resolveRequestedImage(provider);
 
@@ -260,11 +268,15 @@ describe("Fly warm reconciliation flow", () => {
           TEST_DRIFT_IMAGE || `${imageBaseWithoutTag(desiredImage)}:latest`;
         process.env.FLY_STUDIO_IMAGE = driftImage;
         try {
-          const coldStart = await provider.ensureRunning({
-            organizationId,
-            projectSlug,
-            version,
-            env: startEnv,
+          const coldStart = await runWithFlyCapacityContext({
+            context: `starting drift image for ${organizationId}:${projectSlug}/v${version}`,
+            run: () =>
+              provider.ensureRunning({
+                organizationId,
+                projectSlug,
+                version,
+                env: startEnv,
+              }),
           });
           await notifyPreviewLeave({
             baseUrl: coldStart.url,
@@ -284,11 +296,15 @@ describe("Fly warm reconciliation flow", () => {
           }
           driftImage = fallbackDriftImage;
           process.env.FLY_STUDIO_IMAGE = driftImage;
-          const coldStart = await provider.ensureRunning({
-            organizationId,
-            projectSlug,
-            version,
-            env: startEnv,
+          const coldStart = await runWithFlyCapacityContext({
+            context: `starting fallback drift image for ${organizationId}:${projectSlug}/v${version}`,
+            run: () =>
+              provider.ensureRunning({
+                organizationId,
+                projectSlug,
+                version,
+                env: startEnv,
+              }),
           });
           await notifyPreviewLeave({
             baseUrl: coldStart.url,
@@ -327,7 +343,10 @@ describe("Fly warm reconciliation flow", () => {
 
         process.env.FLY_STUDIO_IMAGE = desiredImage;
         const { desiredImage: reconciledDesiredImage } =
-          await provider.warmReconcileStudioMachine(machineId);
+          await runWithFlyCapacityContext({
+            context: `warm reconciling ${organizationId}:${projectSlug}/v${version}`,
+            run: () => provider.warmReconcileStudioMachine(machineId),
+          });
 
         const after = await getMachine(provider, machineId);
         expect(after.state).toBe("suspended");
@@ -369,11 +388,15 @@ describe("Fly warm reconciliation flow", () => {
         ).toBe(false);
 
         const wakeStartedAt = Date.now();
-        const wake = await provider.ensureRunning({
-          organizationId,
-          projectSlug,
-          version,
-          env: startEnv,
+        const wake = await runWithFlyCapacityContext({
+          context: `waking reconciled machine for ${organizationId}:${projectSlug}/v${version}`,
+          run: () =>
+            provider.ensureRunning({
+              organizationId,
+              projectSlug,
+              version,
+              env: startEnv,
+            }),
         });
         const wakeReadyMs = Date.now() - wakeStartedAt;
 

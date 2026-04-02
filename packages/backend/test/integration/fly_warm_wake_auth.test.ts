@@ -38,6 +38,10 @@ import { describe, expect, it } from "vitest";
 import { createStudioBootstrapToken } from "@vivd/shared/studio";
 import { FlyStudioMachineProvider } from "../../src/services/studioMachines/fly/provider";
 import type { FlyMachine } from "../../src/services/studioMachines/fly/types";
+import {
+  cleanupStaleFlyTestMachines,
+  runWithFlyCapacityContext,
+} from "./flyTestMachineCleanup";
 
 const RUN_TESTS = process.env.VIVD_RUN_FLY_WARM_WAKE_AUTH_TESTS === "1";
 const FLY_API_TOKEN = (process.env.FLY_API_TOKEN || "").trim();
@@ -568,6 +572,10 @@ describe.sequential("Fly warm wake + auth", () => {
     { timeout: 900_000 },
     async () => {
       const provider = new FlyStudioMachineProvider();
+      await cleanupStaleFlyTestMachines({
+        provider,
+        logPrefix: "[Fly warm wake smoke][stale GC]",
+      });
       const requestedImage = await resolveRequestedImage(provider);
       const originalConfiguredImage = process.env.FLY_STUDIO_IMAGE;
 
@@ -593,11 +601,15 @@ describe.sequential("Fly warm wake + auth", () => {
         }
 
         const coldStartedAt = Date.now();
-        const coldStart = await provider.ensureRunning({
-          organizationId,
-          projectSlug,
-          version,
-          env: startEnv,
+        const coldStart = await runWithFlyCapacityContext({
+          context: `cold-starting ${organizationId}:${projectSlug}/v${version}`,
+          run: () =>
+            provider.ensureRunning({
+              organizationId,
+              projectSlug,
+              version,
+              env: startEnv,
+            }),
         });
         const coldReadyMs = Date.now() - coldStartedAt;
 
@@ -661,11 +673,15 @@ describe.sequential("Fly warm wake + auth", () => {
         expect(machineAfterPark.state).toBe("suspended");
 
         const wakeStartedAt = Date.now();
-        const woke = await provider.ensureRunning({
-          organizationId,
-          projectSlug,
-          version,
-          env: startEnv,
+        const woke = await runWithFlyCapacityContext({
+          context: `warm-waking ${organizationId}:${projectSlug}/v${version}`,
+          run: () =>
+            provider.ensureRunning({
+              organizationId,
+              projectSlug,
+              version,
+              env: startEnv,
+            }),
         });
         const wakeReadyMs = Date.now() - wakeStartedAt;
 

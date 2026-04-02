@@ -10,6 +10,7 @@ ALLOW_DIRTY=false
 DRY_RUN=false
 TAG_INPUT=""
 RUN_LOCAL_HOST_SMOKE=true
+RUN_FLY_RELEASE_SMOKE=true
 
 print_usage() {
   cat <<'EOF'
@@ -29,6 +30,10 @@ Options:
   --run-host-smoke       Force-enable the local Docker-provider host/browser smoke.
                          This is the default for release preflight.
   --skip-host-smoke      Skip the local Docker-provider host/browser smoke.
+  --skip-fly-release-smoke
+                         Skip the GitHub Fly release smoke job for this tag.
+                         The tag is created as an annotated tag so CI can read
+                         the publish metadata.
   -h, --help             Show this help.
 
 Examples:
@@ -36,6 +41,7 @@ Examples:
   ./scripts/publish.sh v1.1.10
   ./scripts/publish.sh --check-mode ci-local 1.1.10
   ./scripts/publish.sh --skip-host-smoke 1.1.10
+  ./scripts/publish.sh --skip-fly-release-smoke 1.1.10
   ./scripts/publish.sh --dry-run --allow-dirty 1.1.10
 EOF
 }
@@ -55,6 +61,17 @@ normalize_tag() {
   else
     printf 'v%s\n' "$raw"
   fi
+}
+
+build_tag_message() {
+  local tag="$1"
+  cat <<EOF
+Release $tag
+
+publish.check_mode=${CHECK_MODE}
+publish.run_host_smoke=${RUN_LOCAL_HOST_SMOKE}
+publish.skip_fly_release_smoke=$([[ "${RUN_FLY_RELEASE_SMOKE}" == "true" ]] && printf 'false' || printf 'true')
+EOF
 }
 
 ensure_valid_tag() {
@@ -162,6 +179,10 @@ while [[ $# -gt 0 ]]; do
       RUN_LOCAL_HOST_SMOKE=false
       shift
       ;;
+    --skip-fly-release-smoke)
+      RUN_FLY_RELEASE_SMOKE=false
+      shift
+      ;;
     -h|--help)
       print_usage
       exit 0
@@ -219,14 +240,25 @@ esac
 
 echo
 echo "Ready to publish $TAG from $(git rev-parse --short HEAD)."
+echo "Publish metadata:"
+echo "  check_mode=$CHECK_MODE"
+echo "  run_host_smoke=$RUN_LOCAL_HOST_SMOKE"
+echo "  skip_fly_release_smoke=$([[ "$RUN_FLY_RELEASE_SMOKE" == "true" ]] && printf 'false' || printf 'true')"
 
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "Dry run enabled. Skipping git tag creation and push."
   exit 0
 fi
 
-run_step "Create tag $TAG" git tag "$TAG"
+TAG_MESSAGE_FILE="$(mktemp)"
+trap 'rm -f "$TAG_MESSAGE_FILE"' EXIT
+build_tag_message "$TAG" >"$TAG_MESSAGE_FILE"
+
+run_step "Create annotated tag $TAG" git tag -a "$TAG" -F "$TAG_MESSAGE_FILE"
 run_step "Push tag $TAG to $REMOTE" git push "$REMOTE" "refs/tags/$TAG"
+
+rm -f "$TAG_MESSAGE_FILE"
+trap - EXIT
 
 echo
 echo "Published $TAG."
