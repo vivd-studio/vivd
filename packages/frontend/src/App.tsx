@@ -1,20 +1,24 @@
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
-import { formatDocumentTitle } from "@/lib/brand";
+import { getRouteDocumentTitle } from "@/lib/brand";
 import { Toaster } from "@/components/ui/sonner";
 import { CenteredLoading } from "@/components/common";
 import { AppRoutes } from "@/app/router";
 import { RouteTransitionLoading } from "@/app/router/RouteTransitionLoading";
 
+function DocumentTitleManager() {
+  const location = useLocation();
+  useEffect(() => {
+    document.title = getRouteDocumentTitle(location.pathname, location.search);
+  }, [location.pathname, location.search]);
+
+  return null;
+}
+
 export default function App() {
   const { isPending: isSessionPending } = authClient.useSession();
-
-  useEffect(() => {
-    document.title = formatDocumentTitle();
-  }, []);
-
   const {
     data: hasUsersData,
     isLoading: isHasUsersLoading,
@@ -39,6 +43,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <DocumentTitleManager />
       <RouteTransitionLoading />
       <AppRoutes hasUsers={hasUsers} />
       <Toaster />

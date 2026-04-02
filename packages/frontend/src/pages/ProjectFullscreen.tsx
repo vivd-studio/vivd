@@ -296,13 +296,14 @@ export default function ProjectFullscreen() {
   }, [resumeStudio]);
 
   useEffect(() => {
-    if (project?.slug) {
-      document.title = formatDocumentTitle(project.slug);
+    const projectLabel = project?.title ?? project?.slug;
+    if (projectLabel) {
+      document.title = formatDocumentTitle(`${projectLabel} Preview`);
     }
     return () => {
       document.title = formatDocumentTitle();
     };
-  }, [project?.slug]);
+  }, [project?.slug, project?.title]);
 
   const handleClose = () => {
     navigate(ROUTES.DASHBOARD);

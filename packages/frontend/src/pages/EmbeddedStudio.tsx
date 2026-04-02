@@ -358,13 +358,14 @@ export default function EmbeddedStudio() {
 
   // Set document title to project name
   useEffect(() => {
-    if (project?.slug || projectSlug) {
-      document.title = formatDocumentTitle(project?.slug ?? projectSlug);
+    const projectLabel = project?.title ?? project?.slug ?? projectSlug;
+    if (projectLabel) {
+      document.title = formatDocumentTitle(projectLabel);
     }
     return () => {
       document.title = formatDocumentTitle();
     };
-  }, [project?.slug, projectSlug]);
+  }, [project?.slug, project?.title, projectSlug]);
 
   const handleEdit = () => {
     if (!projectSlug || !project) return;

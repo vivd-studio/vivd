@@ -183,7 +183,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
   // Set document title
   useEffect(() => {
-    document.title = formatDocumentTitle("Scratch Wizard");
+    document.title = formatDocumentTitle("Create Site");
     return () => {
       document.title = BRAND_NAME;
     };

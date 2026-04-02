@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { BarChart3, RefreshCw } from "lucide-react";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
+import { formatDocumentTitle } from "@/lib/brand";
 
 type AnalyticsRange = 7 | 30;
 type AnalyticsSummary = RouterOutputs["plugins"]["analyticsSummary"];
@@ -139,6 +140,11 @@ export default function ProjectAnalytics() {
     { slug },
     { enabled: !!projectSlug },
   );
+  const projectListQuery = trpc.project.list.useQuery(undefined, {
+    enabled: !!projectSlug,
+  });
+  const projectTitle =
+    projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
   const analyticsEnabled = !!analyticsInfoQuery.data?.enabled;
 
   const analyticsSummaryQuery = trpc.plugins.analyticsSummary.useQuery(
@@ -208,6 +214,14 @@ export default function ProjectAnalytics() {
     }
     void Promise.all(refetches);
   };
+
+  useEffect(() => {
+    if (!projectSlug) return;
+    document.title = formatDocumentTitle(`${projectTitle} Analytics`);
+    return () => {
+      document.title = formatDocumentTitle();
+    };
+  }, [projectSlug, projectTitle]);
 
   if (!projectSlug) {
     return <div className="text-sm text-muted-foreground">Missing project slug.</div>;

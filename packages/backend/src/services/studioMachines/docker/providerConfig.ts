@@ -246,6 +246,12 @@ export class DockerProviderConfig {
     return new URL(this.publicBaseUrl).hostname;
   }
 
+  get publicPort(): string {
+    const parsed = new URL(this.publicBaseUrl);
+    if (parsed.port) return parsed.port;
+    return parsed.protocol === "https:" ? "443" : "80";
+  }
+
   get publicPortStart(): number {
     const raw = process.env.DOCKER_STUDIO_PUBLIC_PORT_START || "4100";
     const parsed = Number.parseInt(raw, 10);

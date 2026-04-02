@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { SettingsPageShell, FormContent } from "@/components/settings/SettingsPageShell";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import { formatDocumentTitle } from "@/lib/brand";
 
 type SnippetKind = "html" | "astro";
 type ContactFormFieldType = "text" | "email" | "textarea";
@@ -206,6 +207,19 @@ export default function ProjectPlugins() {
     { slug },
     { enabled: !!projectSlug },
   );
+  const projectListQuery = trpc.project.list.useQuery(undefined, {
+    enabled: !!projectSlug,
+  });
+  const projectTitle =
+    projectListQuery.data?.projects?.find((project) => project.slug === slug)?.title ?? slug;
+
+  useEffect(() => {
+    if (!projectSlug) return;
+    document.title = formatDocumentTitle(`${projectTitle} Plugins`);
+    return () => {
+      document.title = formatDocumentTitle();
+    };
+  }, [projectSlug, projectTitle]);
 
   const updateContactConfigMutation = trpc.plugins.contactUpdateConfig.useMutation({
     onSuccess: async () => {

@@ -53,4 +53,32 @@ describe("DockerRuntimeRouteService", () => {
       "header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}",
     );
   });
+
+  it("uses resolved public proto and port when the deployment has a fixed public origin", async () => {
+    const service = new DockerRuntimeRouteService({
+      getRoutesDir: () => routesDir,
+      getRoutePath: () => "/_studio/runtime-1",
+      getForwardedProto: () => "https",
+      getForwardedPort: () => "443",
+    });
+
+    await service.upsertRuntimeRoute({
+      routeId: "runtime-1",
+      containerName: "studio-runtime-1",
+      targetPort: 3100,
+    });
+
+    const content = fs.readFileSync(
+      path.join(routesDir, "studio-runtime-1.caddy"),
+      "utf-8",
+    );
+    expect(content).toContain("header_up X-Forwarded-Proto https");
+    expect(content).toContain("header_up X-Forwarded-Port 443");
+    expect(content).not.toContain(
+      "header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}",
+    );
+    expect(content).not.toContain(
+      "header_up X-Forwarded-Port {http.request.header.X-Forwarded-Port}",
+    );
+  });
 });

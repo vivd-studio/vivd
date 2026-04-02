@@ -79,6 +79,8 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
   private readonly routeService = new DockerRuntimeRouteService({
     getRoutesDir: () => this.config.runtimeRoutesDir,
     getRoutePath: (routeId) => this.config.routePathFor(routeId),
+    getForwardedProto: () => this.config.publicProtocol,
+    getForwardedPort: () => this.config.publicPort,
   });
 
   private inflight = new Map<string, Promise<StudioMachineStartResult>>();
