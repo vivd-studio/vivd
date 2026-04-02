@@ -309,7 +309,7 @@ describe("registerStudioRuntimeHttpRoutes", () => {
           Boolean(matcher("/vivd-studio/api/projects/demo/v1")),
         ),
     );
-    const handler = matchingLayers[1]?.handle;
+    const handler = matchingLayers[matchingLayers.length - 1]?.handle;
     if (!handler) {
       throw new Error("Expected project file route handler");
     }
@@ -359,7 +359,7 @@ describe("registerStudioRuntimeHttpRoutes", () => {
           Boolean(matcher("/vivd-studio/api/assets/demo/1")),
         ),
     );
-    const handler = matchingLayers[1]?.handle;
+    const handler = matchingLayers[matchingLayers.length - 1]?.handle;
     if (!handler) {
       throw new Error("Expected asset file route handler");
     }
