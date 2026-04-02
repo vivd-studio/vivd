@@ -8,6 +8,7 @@ import { detectProjectType } from "../services/project/projectType.js";
 import { devServerService } from "../services/project/DevServerService.js";
 import { serverManager as opencodeServerManager } from "../opencode/serverManager.js";
 import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
+import { workspaceStateReporter } from "../services/reporting/WorkspaceStateReporter.js";
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
 import { createStudioBootstrapHandler } from "../http/studioAuth.js";
@@ -113,6 +114,11 @@ export function registerStudioRuntimeHttpRoutes(
     devPreviewProxy,
   } = deps;
 
+  const resumeWorkspaceStateReporting: express.RequestHandler = (_req, _res, next) => {
+    workspaceStateReporter.resume();
+    next();
+  };
+
   const serveWorkspaceFile = (
     req: express.Request,
     res: express.Response,
@@ -171,11 +177,12 @@ export function registerStudioRuntimeHttpRoutes(
   });
 
   // Cleanup endpoint for sendBeacon on page leave (fire-and-forget)
-  app.post("/vivd-studio/api/cleanup/preview-leave", requireStudioAuth(), (_req, res) => {
+  app.post("/vivd-studio/api/cleanup/preview-leave", requireStudioAuth(), async (_req, res) => {
     try {
+      await workspaceStateReporter.pause();
       if (workspace.isInitialized()) {
         const projectDir = workspace.getProjectPath();
-        void opencodeServerManager.stopServer(projectDir);
+        await opencodeServerManager.stopServer(projectDir);
       }
     } catch (err) {
       console.warn("[Cleanup] preview-leave failed:", err);
@@ -191,20 +198,31 @@ export function registerStudioRuntimeHttpRoutes(
 
   // Serve workspace files in a backend-compatible path:
   // /vivd-studio/api/projects/:slug/v:version/<file>
-  app.use("/vivd-studio/api/projects", requireStudioAuth(), async (req, res, next) => {
-    return serveWorkspaceFile(req, res, next, { routeKind: "projects" });
-  });
+  app.use(
+    "/vivd-studio/api/projects",
+    requireStudioAuth(),
+    resumeWorkspaceStateReporting,
+    async (req, res, next) => {
+      return serveWorkspaceFile(req, res, next, { routeKind: "projects" });
+    },
+  );
 
   // Serve raw asset files in a backend-compatible path:
   // /vivd-studio/api/assets/:slug/:version/<file>
-  app.use("/vivd-studio/api/assets", requireStudioAuth(), async (req, res, next) => {
-    return serveWorkspaceFile(req, res, next, { routeKind: "assets" });
-  });
+  app.use(
+    "/vivd-studio/api/assets",
+    requireStudioAuth(),
+    resumeWorkspaceStateReporting,
+    async (req, res, next) => {
+      return serveWorkspaceFile(req, res, next, { routeKind: "assets" });
+    },
+  );
 
   // Dropped file upload endpoint (for chat drag-and-drop)
   app.post(
     "/vivd-studio/api/upload-dropped-file/:slug/:version",
     requireStudioAuth(),
+    resumeWorkspaceStateReporting,
     upload.single("file"),
     async (req, res) => {
       try {

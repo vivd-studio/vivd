@@ -84,7 +84,7 @@ export type EnsureExistingMachineRunningDeps = {
     config: FlyMachineConfig;
     skipLaunch?: boolean;
   }) => Promise<FlyMachine>;
-  startMachineHandlingReplacement: (machineId: string) => Promise<void>;
+  startMachineHandlingReplacement: (machineId: string, timeoutMs?: number) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyArgs) => Promise<void>;
   startTimeoutMs: number;
@@ -437,7 +437,7 @@ export type RestartInnerDeps = {
     routeId: string;
     targetBaseUrl: string;
   }) => Promise<string | null>;
-  startMachineHandlingReplacement: (machineId: string) => Promise<void>;
+  startMachineHandlingReplacement: (machineId: string, timeoutMs?: number) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyArgs) => Promise<void>;
   startTimeoutMs: number;

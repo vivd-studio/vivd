@@ -1,4 +1,3 @@
-import type { MachineReconcileNeeds } from "./machineModel";
 import type { FlyMachine, FlyMachineState } from "./types";
 import { sleep } from "./utils";
 
@@ -28,14 +27,18 @@ export async function startMachineHandlingReplacement(options: {
   machineId: string;
   getMachine: (machineId: string) => Promise<FlyMachine>;
   startMachine: (machineId: string) => Promise<void>;
+  timeoutMs?: number;
 }): Promise<void> {
   const startedAt = Date.now();
-  const timeoutMs = 60_000;
+  const timeoutMs = options.timeoutMs ?? 60_000;
   let delayMs = 750;
+  let lastState: string | null = null;
+  let lastError: string | null = null;
 
   while (Date.now() - startedAt < timeoutMs) {
     const machine = await options.getMachine(options.machineId);
     const state = machine.state || "unknown";
+    lastState = state;
 
     if (state === "destroyed" || state === "destroying") {
       throw new Error(`[FlyMachines] Machine ${options.machineId} was destroyed`);
@@ -48,6 +51,7 @@ export async function startMachineHandlingReplacement(options: {
       return;
     } catch (err) {
       if (!isMachineTemporarilyBusyError(err)) throw err;
+      lastError = err instanceof Error ? err.message : String(err);
       // Fall through to retry loop while the machine settles into a startable state.
     }
 
@@ -56,7 +60,7 @@ export async function startMachineHandlingReplacement(options: {
   }
 
   throw new Error(
-    `[FlyMachines] Timed out waiting for machine to finish replacement (${options.machineId})`,
+    `[FlyMachines] Timed out waiting for machine to finish replacement (${options.machineId}; lastState=${lastState || "unknown"}${lastError ? `; lastError=${lastError}` : ""})`,
   );
 }
 
@@ -175,39 +179,4 @@ export async function suspendOrStopMachine(options: {
     // best-effort
   }
   return "stopped";
-}
-
-export async function waitForReconcileDriftToClear(options: {
-  machineId: string;
-  desiredImage: string;
-  timeoutMs: number;
-  getMachine: (machineId: string) => Promise<FlyMachine>;
-  resolveMachineReconcileState: (options: {
-    machine: FlyMachine;
-    desiredImage: string;
-    preferredAccessToken?: string | null;
-  }) => { accessToken: string; needs: MachineReconcileNeeds };
-  hasMachineDrift: (needs: MachineReconcileNeeds) => boolean;
-}): Promise<MachineReconcileNeeds | null> {
-  const startedAt = Date.now();
-  let lastNeeds: MachineReconcileNeeds | null = null;
-
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const machine = await options.getMachine(options.machineId);
-    const state = machine.state || "unknown";
-    if (state === "destroyed" || state === "destroying") {
-      throw new Error(`[FlyMachines] Machine ${options.machineId} was destroyed`);
-    }
-
-    const reconcileState = options.resolveMachineReconcileState({
-      machine,
-      desiredImage: options.desiredImage,
-    });
-    lastNeeds = reconcileState.needs;
-
-    if (!options.hasMachineDrift(lastNeeds)) return null;
-    await sleep(500);
-  }
-
-  return lastNeeds;
 }

@@ -39,6 +39,7 @@ import { buildStudioEnvDriftSubsetFromDesiredEnv } from "../../src/services/stud
 import { resolveStableStudioMachineEnv } from "../../src/services/studioMachines/stableRuntimeEnv";
 import type { FlyMachine } from "../../src/services/studioMachines/fly/types";
 
+const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const RUN_TESTS = process.env.VIVD_RUN_FLY_RECONCILE_FLOW_TESTS === "1";
 const FLY_API_TOKEN = (process.env.FLY_API_TOKEN || "").trim();
 const FLY_STUDIO_APP = (process.env.FLY_STUDIO_APP || "").trim();
@@ -210,6 +211,20 @@ async function getMachine(
   return (provider as any).getMachine(machineId) as Promise<FlyMachine>;
 }
 
+async function notifyPreviewLeave(options: {
+  baseUrl: string;
+  accessToken: string;
+}): Promise<void> {
+  const response = await fetch(`${options.baseUrl}/vivd-studio/api/cleanup/preview-leave`, {
+    method: "POST",
+    headers: {
+      [STUDIO_AUTH_HEADER]: options.accessToken,
+    },
+  });
+
+  expect(response.status).toBe(200);
+}
+
 describe("Fly warm reconciliation flow", () => {
   it.skipIf(!SHOULD_RUN)(
     "updates a drifted machine, leaves it suspended, and wakes it quickly",
@@ -245,11 +260,15 @@ describe("Fly warm reconciliation flow", () => {
           TEST_DRIFT_IMAGE || `${imageBaseWithoutTag(desiredImage)}:latest`;
         process.env.FLY_STUDIO_IMAGE = driftImage;
         try {
-          await provider.ensureRunning({
+          const coldStart = await provider.ensureRunning({
             organizationId,
             projectSlug,
             version,
             env: startEnv,
+          });
+          await notifyPreviewLeave({
+            baseUrl: coldStart.url,
+            accessToken: coldStart.accessToken!,
           });
         } catch (error) {
           if (!isManifestUnknownError(error)) {
@@ -265,11 +284,15 @@ describe("Fly warm reconciliation flow", () => {
           }
           driftImage = fallbackDriftImage;
           process.env.FLY_STUDIO_IMAGE = driftImage;
-          await provider.ensureRunning({
+          const coldStart = await provider.ensureRunning({
             organizationId,
             projectSlug,
             version,
             env: startEnv,
+          });
+          await notifyPreviewLeave({
+            baseUrl: coldStart.url,
+            accessToken: coldStart.accessToken!,
           });
         }
 
@@ -290,7 +313,8 @@ describe("Fly warm reconciliation flow", () => {
         await sleep(POST_START_PARK_DRAIN_MS);
 
         // Suspend the machine first (matches production warm reconciliation path).
-        await provider.stop(organizationId, projectSlug, version);
+        const parked = await provider.parkStudioMachine(machineId);
+        expect(parked).toBe("suspended");
         await waitForState(provider, machineId, "suspended", 90_000);
 
         const drifted = await getMachine(provider, machineId);

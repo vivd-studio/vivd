@@ -24,25 +24,35 @@ class WorkspaceStateReporter {
   start(options: WorkspaceStateReporterStartOptions): void {
     if (!isConnectedMode()) return;
     if (!options.slug || !Number.isFinite(options.version) || options.version < 1) return;
-    if (this.running) return;
 
     this.options = options;
-    this.running = true;
-    const intervalMs = this.getIntervalMs();
-    this.intervalHandle = setInterval(() => {
-      void this.reportNow();
-    }, intervalMs);
-    this.intervalHandle.unref?.();
-
+    if (this.running) return;
+    this.startInterval();
     void this.reportNow();
   }
 
-  async shutdown(): Promise<void> {
+  async pause(): Promise<void> {
     this.running = false;
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
     }
+    if (this.inflight) {
+      await this.inflight.catch(() => {});
+    }
+  }
+
+  resume(): void {
+    if (!isConnectedMode()) return;
+    if (!this.options) return;
+    if (this.running) return;
+
+    this.startInterval();
+    void this.reportNow();
+  }
+
+  async shutdown(): Promise<void> {
+    await this.pause();
     await this.reportNow();
     if (this.inflight) {
       await this.inflight.catch(() => {});
@@ -120,6 +130,15 @@ class WorkspaceStateReporter {
 
     this.inflight = run;
     await run;
+  }
+
+  private startInterval(): void {
+    this.running = true;
+    const intervalMs = this.getIntervalMs();
+    this.intervalHandle = setInterval(() => {
+      void this.reportNow();
+    }, intervalMs);
+    this.intervalHandle.unref?.();
   }
 
   private getIntervalMs(): number {

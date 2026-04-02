@@ -429,7 +429,12 @@ describe("FlyStudioMachineProvider orchestration", () => {
       .mockResolvedValueOnce({
         ...suspendedMachine,
         state: "stopped",
-      });
+      })
+      .mockImplementation(async () => ({
+        ...suspendedMachine,
+        state: "stopped",
+        config: updatedConfig ?? suspendedMachine.config,
+      }));
     (provider as any).getMachine = getMachineMock;
     const stopMachineMock = vi
       .spyOn((provider as any).apiClient, "stopMachine")
@@ -440,7 +445,6 @@ describe("FlyStudioMachineProvider orchestration", () => {
       updatedConfig = config;
       return { ...suspendedMachine, config };
     };
-    (provider as any).waitForReconcileDriftToClear = async () => null;
     (provider as any).startMachineHandlingReplacement = async () => {};
     (provider as any).waitForReady = async () => {};
     (provider as any).suspendOrStopMachine = async () => "suspended";
@@ -450,7 +454,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
     await provider.warmReconcileStudioMachine("m5");
 
     expect(stopMachineMock).toHaveBeenCalledWith("m5");
-    expect(getMachineMock).toHaveBeenCalledTimes(2);
+    expect(getMachineMock).toHaveBeenCalledTimes(3);
     expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
       "openrouter/google/gemini-3-flash-preview",
     );

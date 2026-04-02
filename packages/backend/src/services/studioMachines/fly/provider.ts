@@ -70,7 +70,6 @@ import {
   startMachineHandlingReplacement,
   suspendOrStopMachine,
   waitForReady,
-  waitForReconcileDriftToClear,
   waitForState,
 } from "./lifecycle";
 import { FlyProviderConfig } from "./providerConfig";
@@ -283,11 +282,15 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     });
   }
 
-  private async startMachineHandlingReplacement(machineId: string): Promise<void> {
+  private async startMachineHandlingReplacement(
+    machineId: string,
+    timeoutMs?: number,
+  ): Promise<void> {
     await startMachineHandlingReplacement({
       machineId,
       getMachine: (id) => this.getMachine(id),
       startMachine: (id) => this.apiClient.startMachine(id),
+      timeoutMs: timeoutMs ?? this.config.startTimeoutMs,
     });
   }
 
@@ -298,19 +301,6 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       suspendMachine: (id) => this.apiClient.suspendMachine(id),
       stopMachine: (id) => this.apiClient.stopMachine(id),
       waitForState: (options) => this.waitForState(options),
-    });
-  }
-
-  private async waitForReconcileDriftToClear(options: {
-    machineId: string;
-    desiredImage: string;
-    timeoutMs: number;
-  }): Promise<MachineReconcileNeeds | null> {
-    return waitForReconcileDriftToClear({
-      ...options,
-      getMachine: (id) => this.getMachine(id),
-      resolveMachineReconcileState: (input) => this.resolveMachineReconcileState(input),
-      hasMachineDrift,
     });
   }
 
@@ -435,8 +425,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         buildReconciledMetadata,
         buildReconciledMachineConfig: (options) => this.buildReconciledMachineConfig(options),
         updateMachineConfig: (options) => this.apiClient.updateMachineConfig(options),
-        startMachineHandlingReplacement: (machineId) =>
-          this.startMachineHandlingReplacement(machineId),
+        startMachineHandlingReplacement: (machineId, timeoutMs) =>
+          this.startMachineHandlingReplacement(machineId, timeoutMs),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
         waitForReady: (options) => this.waitForReady(options),
         startTimeoutMs: this.config.startTimeoutMs,
@@ -519,8 +509,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
               await this.routeService.removeRuntimeRoute(options.routeId);
               return null;
             },
-        startMachineHandlingReplacement: (machineId) =>
-          this.startMachineHandlingReplacement(machineId),
+        startMachineHandlingReplacement: (machineId, timeoutMs) =>
+          this.startMachineHandlingReplacement(machineId, timeoutMs),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
         waitForReady: (options) => this.waitForReady(options),
         startTimeoutMs: this.config.startTimeoutMs,
@@ -690,12 +680,11 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         buildReconciledMetadata,
         buildReconciledMachineConfig: (options) => this.buildReconciledMachineConfig(options),
         updateMachineConfig: (options) => this.apiClient.updateMachineConfig(options),
-        waitForReconcileDriftToClear: (options) =>
-          this.waitForReconcileDriftToClear(options),
         getMachineDriftLabels,
         trimToken,
         getMachineMetadataValue,
-        startMachineHandlingReplacement: (id) => this.startMachineHandlingReplacement(id),
+        startMachineHandlingReplacement: (id, timeoutMs) =>
+          this.startMachineHandlingReplacement(id, timeoutMs),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
         waitForReady: (options) => this.waitForReady(options),
         startTimeoutMs: this.config.startTimeoutMs,
@@ -761,12 +750,10 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       buildReconciledMetadata,
       buildReconciledMachineConfig: (options) => this.buildReconciledMachineConfig(options),
       updateMachineConfig: (options) => this.apiClient.updateMachineConfig(options),
-      waitForReconcileDriftToClear: (options) =>
-        this.waitForReconcileDriftToClear(options),
       trimToken,
       getMachineMetadataValue,
-      startMachineHandlingReplacement: (machineId) =>
-        this.startMachineHandlingReplacement(machineId),
+      startMachineHandlingReplacement: (machineId, timeoutMs) =>
+        this.startMachineHandlingReplacement(machineId, timeoutMs),
       getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
       waitForReady: (options) => this.waitForReady(options),
       startTimeoutMs: this.config.startTimeoutMs,

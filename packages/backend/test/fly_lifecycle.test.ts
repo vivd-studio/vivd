@@ -78,6 +78,36 @@ describe("Fly lifecycle helpers", () => {
     expect(getMachine).toHaveBeenCalledTimes(2);
   });
 
+  it("honors an explicit replacement timeout override", async () => {
+    vi.useFakeTimers();
+
+    const getMachine = vi
+      .fn<() => Promise<FlyMachine>>()
+      .mockResolvedValue(machine("replacing"));
+    const startMachine = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(
+        new Error("[FlyMachines] failed_precondition: machine getting replaced"),
+      );
+
+    const result = startMachineHandlingReplacement({
+      machineId: "machine-1",
+      getMachine: async () => getMachine(),
+      startMachine,
+      timeoutMs: 120_000,
+    });
+    const rejection = expect(result).rejects.toThrow(
+      "[FlyMachines] Timed out waiting for machine to finish replacement",
+    );
+
+    await vi.advanceTimersByTimeAsync(70_000);
+    await Promise.resolve();
+    expect(getMachine).toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await rejection;
+  });
+
   it("retries when Fly reports the machine is still active", async () => {
     vi.useFakeTimers();
 

@@ -47,6 +47,16 @@ type WaitForReadyOptions = {
   timeoutMs: number;
 };
 
+function hasOnlyImageDrift(needs: MachineReconcileNeeds): boolean {
+  return (
+    needs.image &&
+    !needs.services &&
+    !needs.guest &&
+    !needs.accessToken &&
+    !needs.env
+  );
+}
+
 async function waitForMachineToLeaveReplacingState(options: {
   machineId: string;
   getMachine: (machineId: string) => Promise<FlyMachine>;
@@ -129,15 +139,10 @@ export type WarmReconcileStudioMachineDeps = {
     config: FlyMachineConfig;
     skipLaunch?: boolean;
   }) => Promise<FlyMachine>;
-  waitForReconcileDriftToClear: (options: {
-    machineId: string;
-    desiredImage: string;
-    timeoutMs: number;
-  }) => Promise<MachineReconcileNeeds | null>;
   getMachineDriftLabels: (needs: MachineReconcileNeeds) => string[];
   trimToken: (value: string | null | undefined) => string | null;
   getMachineMetadataValue: (machine: FlyMachine, key: string) => string | null;
-  startMachineHandlingReplacement: (machineId: string) => Promise<void>;
+  startMachineHandlingReplacement: (machineId: string, timeoutMs?: number) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyOptions) => Promise<void>;
   startTimeoutMs: number;
@@ -149,11 +154,12 @@ export async function warmReconcileStudioMachineWorkflow(
   machineId: string,
 ): Promise<{ desiredImage: string }> {
   const desiredImage = await deps.getDesiredImage();
+  const replacementTimeoutMs = deps.startTimeoutMs;
 
   const machine = await waitForMachineToLeaveReplacingState({
     machineId,
     getMachine: deps.getMachine,
-    timeoutMs: 60_000,
+    timeoutMs: replacementTimeoutMs,
   });
   const identity = deps.getStudioIdentityFromMachine(machine);
   if (!identity) {
@@ -211,7 +217,7 @@ export async function warmReconcileStudioMachineWorkflow(
     current = await waitForMachineToLeaveReplacingState({
       machineId,
       getMachine: deps.getMachine,
-      timeoutMs: 60_000,
+      timeoutMs: replacementTimeoutMs,
     });
     currentState = current.state || "unknown";
     const currentStudioId = deps.resolveStudioIdFromMachine(current, studioId);
@@ -279,23 +285,28 @@ export async function warmReconcileStudioMachineWorkflow(
     skipLaunch: true,
   });
 
-  const remainingDrift = await deps.waitForReconcileDriftToClear({
-    machineId,
+  const refreshedAfterConfigUpdate = await deps.getMachine(machineId);
+  const postUpdateDrift = deps.resolveMachineReconcileState({
+    machine: refreshedAfterConfigUpdate,
     desiredImage,
-    timeoutMs: 10_000,
-  });
-  if (remainingDrift) {
-    const driftLabels = deps.getMachineDriftLabels(remainingDrift).join(",");
-    const refreshed = await deps.getMachine(machineId);
+    preferredAccessToken: accessToken,
+    desiredEnvSubset: currentReconcileEnv.desiredEnvSubset,
+  }).needs;
+  if (deps.hasMachineDrift(postUpdateDrift) && !hasOnlyImageDrift(postUpdateDrift)) {
+    const driftLabels = deps.getMachineDriftLabels(postUpdateDrift).join(",");
     const configImage =
-      typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
-    const metadataImage = deps.trimToken(deps.getMachineMetadataValue(refreshed, "vivd_image"));
+      typeof refreshedAfterConfigUpdate.config?.image === "string"
+        ? refreshedAfterConfigUpdate.config.image
+        : null;
+    const metadataImage = deps.trimToken(
+      deps.getMachineMetadataValue(refreshedAfterConfigUpdate, "vivd_image"),
+    );
     console.warn(
       `[FlyMachines] Warm reconcile drift did not clear for ${machineId} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${driftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
     );
   }
 
-  await deps.startMachineHandlingReplacement(machineId);
+  await deps.startMachineHandlingReplacement(machineId, replacementTimeoutMs);
   const url = deps.getPublicUrlForPort(port);
   await deps.waitForReady({
     machineId,
@@ -383,14 +394,9 @@ export type ReconcileStudioMachinesInnerDeps = {
     config: FlyMachineConfig;
     skipLaunch?: boolean;
   }) => Promise<FlyMachine>;
-  waitForReconcileDriftToClear: (options: {
-    machineId: string;
-    desiredImage: string;
-    timeoutMs: number;
-  }) => Promise<MachineReconcileNeeds | null>;
   trimToken: (value: string | null | undefined) => string | null;
   getMachineMetadataValue: (machine: FlyMachine, key: string) => string | null;
-  startMachineHandlingReplacement: (machineId: string) => Promise<void>;
+  startMachineHandlingReplacement: (machineId: string, timeoutMs?: number) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyOptions) => Promise<void>;
   startTimeoutMs: number;
@@ -401,6 +407,7 @@ export async function reconcileStudioMachinesInnerWorkflow(
   deps: ReconcileStudioMachinesInnerDeps,
 ): Promise<FlyStudioMachineReconcileResult> {
   const desiredImage = await deps.getDesiredImage();
+  const replacementTimeoutMs = deps.startTimeoutMs;
   const machines = await deps.listMachines();
   const now = Date.now();
   const maxInactivityMs = deps.maxMachineInactivityMs;
@@ -625,25 +632,28 @@ export async function reconcileStudioMachinesInnerWorkflow(
         skipLaunch: true,
       });
 
-      const remainingDrift = await deps.waitForReconcileDriftToClear({
-        machineId: machine.id,
+      const refreshedAfterConfigUpdate = await deps.getMachine(machine.id);
+      const postUpdateDrift = deps.resolveMachineReconcileState({
+        machine: refreshedAfterConfigUpdate,
         desiredImage,
-        timeoutMs: 10_000,
-      });
-      if (remainingDrift) {
-        const remainingDriftLabels = deps.getMachineDriftLabels(remainingDrift).join(",");
-        const refreshed = await deps.getMachine(machine.id);
+        preferredAccessToken: accessToken,
+        desiredEnvSubset: currentReconcileEnv.desiredEnvSubset,
+      }).needs;
+      if (deps.hasMachineDrift(postUpdateDrift) && !hasOnlyImageDrift(postUpdateDrift)) {
+        const remainingDriftLabels = deps.getMachineDriftLabels(postUpdateDrift).join(",");
         const configImage =
-          typeof refreshed.config?.image === "string" ? refreshed.config.image : null;
+          typeof refreshedAfterConfigUpdate.config?.image === "string"
+            ? refreshedAfterConfigUpdate.config.image
+            : null;
         const metadataImage = deps.trimToken(
-          deps.getMachineMetadataValue(refreshed, "vivd_image"),
+          deps.getMachineMetadataValue(refreshedAfterConfigUpdate, "vivd_image"),
         );
         console.warn(
           `[FlyMachines] Warm reconcile drift did not clear for ${machine.id} (${identity.organizationId}:${identity.projectSlug}/v${identity.version}) after config update (drift=${remainingDriftLabels}) desiredImage=${desiredImage} configImage=${configImage} vivd_image=${metadataImage}`,
         );
       }
 
-      await deps.startMachineHandlingReplacement(machine.id);
+      await deps.startMachineHandlingReplacement(machine.id, replacementTimeoutMs);
       const url = deps.getPublicUrlForPort(port);
       await deps.waitForReady({
         machineId: machine.id,
