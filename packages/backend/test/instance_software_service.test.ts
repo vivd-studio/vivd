@@ -136,7 +136,7 @@ describe("InstanceSoftwareService", () => {
       name: "vivd-selfhost-updater-2000",
       config: expect.objectContaining({
         Image: "docker:28-cli",
-        WorkingDir: "/workspace",
+        WorkingDir: "/Users/test/vivd",
         Cmd: ["sh", "-lc", buildManagedSelfHostUpdateScript()],
         Env: expect.arrayContaining([
           "TARGET_TAG=1.1.34",
@@ -148,7 +148,10 @@ describe("InstanceSoftwareService", () => {
         ]),
         HostConfig: {
           AutoRemove: true,
-          Binds: ["/var/run/docker.sock:/var/run/docker.sock", "/Users/test/vivd:/workspace"],
+          Binds: [
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "/Users/test/vivd:/Users/test/vivd",
+          ],
         },
       }),
     });
@@ -268,7 +271,7 @@ describe("InstanceSoftwareService", () => {
 
   it("pins the compose project in the managed update script", () => {
     expect(buildManagedSelfHostUpdateScript()).toContain(
-      'docker compose -p "${UPDATE_COMPOSE_PROJECT}" "$@"',
+      'docker compose -f "${UPDATE_WORKDIR}/docker-compose.yml" --project-directory "${UPDATE_WORKDIR}" -p "${UPDATE_COMPOSE_PROJECT}" "$@"',
     );
   });
 });

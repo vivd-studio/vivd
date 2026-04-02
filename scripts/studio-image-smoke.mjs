@@ -13,6 +13,7 @@ import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 
 const DEFAULT_IMAGE = "vivd-studio:release-smoke";
 const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_ROUND_TRIP_TIMEOUT_MS = 90_000;
 const DEFAULT_MODEL_TIERS = ["standard", "advanced"];
 const DEFAULT_ROUND_TRIP_ATTEMPTS = 2;
 const PROJECT_SLUG = "ci-studio-smoke";
@@ -198,6 +199,20 @@ function getSmokeTimeoutMs() {
   if (!Number.isFinite(parsed) || parsed < 30_000) {
     throw new Error(
       "VIVD_STUDIO_SMOKE_TIMEOUT_MS must be an integer >= 30000",
+    );
+  }
+
+  return parsed;
+}
+
+function getRoundTripTimeoutMs() {
+  const raw = (process.env.VIVD_STUDIO_SMOKE_ROUND_TRIP_TIMEOUT_MS || "").trim();
+  if (!raw) return DEFAULT_ROUND_TRIP_TIMEOUT_MS;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 15_000) {
+    throw new Error(
+      "VIVD_STUDIO_SMOKE_ROUND_TRIP_TIMEOUT_MS must be an integer >= 15000",
     );
   }
 
@@ -669,6 +684,7 @@ function cleanupWorkspaceDir(image, workspaceDir) {
 async function main() {
   const image = getOptionalEnv("STUDIO_IMAGE") || DEFAULT_IMAGE;
   const timeoutMs = getSmokeTimeoutMs();
+  const roundTripTimeoutMs = getRoundTripTimeoutMs();
   const modelSelections = getModelSelections();
   const accessToken = getOptionalEnv("STUDIO_ACCESS_TOKEN") || randomUUID();
   const studioId = getOptionalEnv("STUDIO_ID") || "studio-image-smoke";
@@ -679,6 +695,9 @@ async function main() {
   let succeeded = false;
 
   log(`Using image ${image}`);
+  log(
+    `Timeouts: startup=${timeoutMs}ms, promptRoundTrip=${roundTripTimeoutMs}ms`,
+  );
   log(
     modelSelections.length > 0
       ? `Configured model tiers: ${modelSelections
@@ -720,7 +739,7 @@ async function main() {
       }
 
       for (const selection of modelSelections) {
-        await runPromptRoundTrip(client, selection, timeoutMs);
+        await runPromptRoundTrip(client, selection, roundTripTimeoutMs);
       }
     }
 

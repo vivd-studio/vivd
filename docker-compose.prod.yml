@@ -56,6 +56,7 @@ services:
       - PUBLISHED_DIR=/srv/published
       - CADDY_SITES_DIR=/etc/caddy/sites.d
       - CADDY_RUNTIME_ROUTES_DIR=/etc/caddy/runtime.d
+      - CADDY_MAIN_CONFIG_PATH=/etc/caddy_shared/Caddyfile
       - CADDY_ADMIN_URL=http://caddy:2019
       - SCRAPER_URL=${SCRAPER_URL:-http://scraper:3001}
       - SCRAPER_API_KEY=${SCRAPER_API_KEY}

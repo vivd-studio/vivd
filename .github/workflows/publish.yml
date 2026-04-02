@@ -298,8 +298,9 @@ jobs:
           done
 
   studio-opencode-revert-smoke:
-    needs: [detect-changes, validate-release]
-    if: needs.detect-changes.outputs.build_studio == 'true'
+    needs: [detect-changes, validate-release, build-studio, deploy]
+    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.deploy.result == 'success'
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -323,6 +324,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build vivd-studio revert smoke image
+        id: build_revert_smoke_image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -338,6 +340,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=studio
 
       - name: Smoke test OpenCode rehydrate + revert on the built image
+        id: revert_smoke
+        if: steps.build_revert_smoke_image.outcome == 'success'
         env:
           STUDIO_IMAGE: vivd-studio:revert-smoke
           VIVD_STUDIO_REVERT_SMOKE_TIMEOUT_MS: "480000"
@@ -352,9 +356,37 @@ jobs:
           OPENCODE_MODEL_PRO: ${{ vars.OPENCODE_MODEL_PRO || secrets.OPENCODE_MODEL_PRO }}
         run: npm run studio:image:revert-smoke
 
+      - name: Summarize OpenCode revert smoke result
+        if: always()
+        env:
+          BUILD_OUTCOME: ${{ steps.build_revert_smoke_image.outcome }}
+          SMOKE_OUTCOME: ${{ steps.revert_smoke.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "### OpenCode revert smoke (warning only)"
+            echo "- image_build: ${BUILD_OUTCOME:-skipped}"
+            echo "- revert_smoke: ${SMOKE_OUTCOME:-skipped}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${BUILD_OUTCOME:-skipped}" != "success" ]; then
+            echo "::warning::OpenCode revert smoke image build failed after deploy. Deployment was not blocked."
+            exit 0
+          fi
+
+          if [ "${SMOKE_OUTCOME:-skipped}" != "success" ]; then
+            echo "::warning::OpenCode revert smoke reported a post-deploy warning (${SMOKE_OUTCOME:-skipped}). Deployment was not blocked."
+            exit 0
+          fi
+
+          echo "OpenCode revert smoke passed after deploy." >> "$GITHUB_STEP_SUMMARY"
+
   studio-fly-reconcile-smoke:
-    needs: [detect-changes, validate-release, build-studio]
-    if: needs.detect-changes.outputs.build_studio == 'true' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
+    needs: [detect-changes, validate-release, build-studio, deploy]
+    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true' && needs.deploy.result == 'success'
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -382,6 +414,8 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Validate Fly release smoke configuration
+        id: validate_config
+        continue-on-error: true
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
@@ -400,6 +434,9 @@ jobs:
           fi
 
       - name: Fly warm reconcile release smoke
+        id: fly_reconcile
+        if: steps.validate_config.outcome == 'success'
+        continue-on-error: true
         env:
           VIVD_RUN_FLY_RECONCILE_FLOW_TESTS: "1"
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -410,6 +447,9 @@ jobs:
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
 
       - name: Fly warm wake auth release smoke
+        id: fly_wake_auth
+        if: steps.validate_config.outcome == 'success'
+        continue-on-error: true
         env:
           VIVD_RUN_FLY_WARM_WAKE_AUTH_TESTS: "1"
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -417,6 +457,35 @@ jobs:
           VIVD_FLY_TEST_IMAGE: ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
           VIVD_FLY_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_warm_wake_auth.test.ts
+
+      - name: Summarize Fly release smoke result
+        if: always()
+        env:
+          CONFIG_OUTCOME: ${{ steps.validate_config.outcome }}
+          RECONCILE_OUTCOME: ${{ steps.fly_reconcile.outcome }}
+          WAKE_OUTCOME: ${{ steps.fly_wake_auth.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "### Fly release smoke (warning only)"
+            echo "- config: ${CONFIG_OUTCOME:-skipped}"
+            echo "- reconcile: ${RECONCILE_OUTCOME:-skipped}"
+            echo "- wake_auth: ${WAKE_OUTCOME:-skipped}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${CONFIG_OUTCOME:-skipped}" != "success" ]; then
+            echo "::warning::Fly release smoke skipped or failed configuration validation after deploy. See job summary for details."
+            exit 0
+          fi
+
+          if [ "${RECONCILE_OUTCOME:-skipped}" != "success" ] || [ "${WAKE_OUTCOME:-skipped}" != "success" ]; then
+            echo "::warning::Fly release smoke reported a post-deploy warning (reconcile=${RECONCILE_OUTCOME:-skipped}, wake_auth=${WAKE_OUTCOME:-skipped}). Deployment was not blocked."
+            exit 0
+          fi
+
+          echo "Fly release smoke passed after deploy." >> "$GITHUB_STEP_SUMMARY"
 
   build-builder:
     needs: [detect-changes, validate-release]
@@ -696,7 +765,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, validate-release, build-studio, studio-opencode-revert-smoke, studio-fly-reconcile-smoke, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, validate-release, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:

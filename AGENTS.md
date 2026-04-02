@@ -67,8 +67,9 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - `docker-compose.yml`: base stack.
 - `docker-compose.override.yml`: local dev overrides.
-- `docker-compose.prod.yml`: production compose variant.
-- Install profiles: public self-host/install docs currently focus on `solo` = one host (`/`, `/vivd-studio`, same-host `/plugins/*`). `platform` is the multi-org host-based mode used for the hosted product and platform-style deployments;
+- `docker-compose.prod.yml`: production compose variant for platform/hosted-style deployments. It is not the public `solo` self-host install bundle.
+- `packages/docs/public/install/docker-compose.yml`: source of truth for the public `solo` self-host install bundle that the docs/install flow downloads and runs.
+- Install profiles: public self-host/install docs currently focus on `solo` = one host (`/`, `/vivd-studio`, same-host `/plugins/*`). `platform` is the multi-org host-based mode used for the hosted product and platform-style deployments.
 - Licensing guardrail: the repo `LICENSE` Additional Use Grant covers `solo` and substantially similar single-tenant self-host deployments. Do not casually surface, default, or recommend `platform` or other multi-org/shared-control-plane behavior for general self-host flows; treat that as a separately licensed platform deployment.
 
 - Local URLs via Caddy:

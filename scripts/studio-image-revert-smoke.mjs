@@ -190,6 +190,19 @@ function getPreferredModelTiers() {
     .filter(Boolean);
 }
 
+function getRevertableEditAttempts() {
+  const raw = getOptionalEnv("VIVD_STUDIO_REVERT_SMOKE_EDIT_ATTEMPTS");
+  if (!raw) return 3;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error(
+      "VIVD_STUDIO_REVERT_SMOKE_EDIT_ATTEMPTS must be an integer >= 1",
+    );
+  }
+  return parsed;
+}
+
 function selectEditModel() {
   const errors = [];
 
@@ -448,6 +461,100 @@ async function waitForPatchHistoryIfPresent(client, sessionId, userMessageId, ti
   } catch {
     return await getPatchHistory(client, sessionId, userMessageId);
   }
+}
+
+async function runTaskUntilRevertableEdit(options) {
+  const maxAttempts = options.maxAttempts ?? getRevertableEditAttempts();
+  const baselineContent = await fs.readFile(options.indexPath, "utf8");
+  let lastFailure = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (attempt > 1) {
+      await fs.writeFile(options.indexPath, baselineContent, "utf8");
+      logCheckpoint(`${options.label}_retrying_non_revertable_edit`, {
+        attempt,
+        maxAttempts,
+      });
+    }
+
+    const run = await options.client.agent.runTask.mutate({
+      projectSlug: PROJECT_SLUG,
+      version: PROJECT_VERSION,
+      task: options.task,
+      model: {
+        provider: options.model.provider,
+        modelId: options.model.modelId,
+      },
+    });
+
+    assert.equal(run?.success, true, `Expected ${options.label} runTask to succeed`);
+    assert.ok(
+      typeof run?.sessionId === "string" && run.sessionId.length > 0,
+      `Expected ${options.label} runTask to return a sessionId`,
+    );
+
+    await waitForSessionIdle(options.client, run.sessionId, options.timeoutMs);
+    await waitForFileToContain(
+      options.indexPath,
+      options.marker,
+      options.timeoutMs,
+    );
+
+    const sessionSummary = await waitForUserMessageWithDiffs(
+      options.client,
+      run.sessionId,
+      options.timeoutMs,
+    );
+    assert.ok(
+      sessionSummary.diffs.some((diff) => diff.file.includes("index.html")),
+      `Expected ${options.label} tracked diff summary to include index.html`,
+    );
+
+    const userMessageId = sessionSummary.userMessage.info.id;
+    const patchParts = await waitForPatchHistoryIfPresent(
+      options.client,
+      run.sessionId,
+      userMessageId,
+      options.timeoutMs,
+    );
+
+    if (patchParts.length > 0) {
+      return {
+        run,
+        sessionSummary,
+        userMessageId,
+        patchParts,
+        attempt,
+      };
+    }
+
+    const messages = await options.client.agent.getSessionContent.query({
+      sessionId: run.sessionId,
+      projectSlug: PROJECT_SLUG,
+      version: PROJECT_VERSION,
+    });
+    lastFailure = {
+      sessionId: run.sessionId,
+      messageId: userMessageId,
+      diffFiles: sessionSummary.diffs.length,
+      patchParts: 0,
+      session: summarizeSessionMessagesForDebug(messages),
+    };
+    logCheckpoint(`${options.label}_non_revertable_edit_attempt`, {
+      attempt,
+      maxAttempts,
+      sessionId: run.sessionId,
+      messageId: userMessageId,
+      diffFiles: sessionSummary.diffs.length,
+      patchParts: 0,
+    });
+  }
+
+  throw new Error(
+    `Expected ${options.label} edit session to produce revertable patch history after ${maxAttempts} attempt(s). Last failure: ${JSON.stringify(
+      lastFailure,
+    )}`,
+  );
 }
 
 function summarizeSessionMessagesForDebug(messages) {
@@ -1046,56 +1153,29 @@ async function runRehydrateVerification(options) {
     const availableModels = await client.agent.getAvailableModels.query();
     assertAvailableModel(availableModels, options.model);
 
-    const run = await client.agent.runTask.mutate({
-      projectSlug: PROJECT_SLUG,
-      version: PROJECT_VERSION,
+    const postHydrateEdit = await runTaskUntilRevertableEdit({
+      client,
+      label: `${options.label}_post_hydrate_edit`,
       task: `In index.html, add this exact HTML comment as the first line: <!-- ${options.postHydrateMarker} -->. Do not use terminal commands.`,
-      model: {
-        provider: options.model.provider,
-        modelId: options.model.modelId,
-      },
+      model: options.model,
+      marker: options.postHydrateMarker,
+      indexPath: options.indexPath,
+      timeoutMs: options.timeoutMs,
     });
-
-    assert.equal(run?.success, true, `Expected ${options.label} runTask to succeed`);
-    assert.ok(
-      typeof run?.sessionId === "string" && run.sessionId.length > 0,
-      `Expected ${options.label} runTask to return a sessionId`,
-    );
-
-    await waitForSessionIdle(client, run.sessionId, options.timeoutMs);
-    await waitForFileToContain(
-      options.indexPath,
-      options.postHydrateMarker,
-      options.timeoutMs,
-    );
-
-    const sessionSummary = await waitForUserMessageWithDiffs(
-      client,
-      run.sessionId,
-      options.timeoutMs,
-    );
-    assert.ok(
-      sessionSummary.diffs.some((diff) => diff.file.includes("index.html")),
-      `Expected ${options.label} tracked diff summary to include index.html`,
-    );
-    const postHydrateMessageId = sessionSummary.userMessage.info.id;
-    const postHydratePatchParts = await waitForPatchHistoryIfPresent(
-      client,
-      run.sessionId,
-      postHydrateMessageId,
-      options.timeoutMs,
-    );
+    const postHydrateMessageId = postHydrateEdit.userMessageId;
+    const postHydratePatchParts = postHydrateEdit.patchParts;
     logCheckpoint(`${options.label}_post_hydrate_tracking_ok`, {
-      sessionId: run.sessionId,
+      sessionId: postHydrateEdit.run.sessionId,
       messageId: postHydrateMessageId,
-      diffFiles: sessionSummary.diffs.length,
+      diffFiles: postHydrateEdit.sessionSummary.diffs.length,
       patchParts: postHydratePatchParts.length,
+      attempt: postHydrateEdit.attempt,
     });
 
     await verifyRevertCycle({
       client,
       label: `${options.label}_post_hydrate`,
-      sessionId: run.sessionId,
+      sessionId: postHydrateEdit.run.sessionId,
       messageId: postHydrateMessageId,
       indexPath: options.indexPath,
       marker: options.postHydrateMarker,
@@ -1232,46 +1312,25 @@ async function main() {
     const firstAvailableModels = await firstClient.agent.getAvailableModels.query();
     assertAvailableModel(firstAvailableModels, model);
 
-    const firstRun = await firstClient.agent.runTask.mutate({
-      projectSlug: PROJECT_SLUG,
-      version: PROJECT_VERSION,
+    const firstEdit = await runTaskUntilRevertableEdit({
+      client: firstClient,
+      label: "initial_edit",
       task: `In index.html, add this exact HTML comment as the first line: <!-- ${firstMarker} -->. Do not use terminal commands.`,
-      model: {
-        provider: model.provider,
-        modelId: model.modelId,
-      },
+      model,
+      marker: firstMarker,
+      indexPath,
+      timeoutMs,
     });
-
-    assert.equal(firstRun?.success, true, "Expected first runTask to succeed");
-    assert.ok(
-      typeof firstRun?.sessionId === "string" && firstRun.sessionId.length > 0,
-      "Expected first runTask to return a sessionId",
-    );
-
-    await waitForSessionIdle(firstClient, firstRun.sessionId, timeoutMs);
-    await waitForFileToContain(indexPath, firstMarker, timeoutMs);
-
-    const firstSessionSummary = await waitForUserMessageWithDiffs(
-      firstClient,
-      firstRun.sessionId,
-      timeoutMs,
-    );
-    assert.ok(
-      firstSessionSummary.diffs.some((diff) => diff.file.includes("index.html")),
-      "Expected tracked diff summary to include index.html",
-    );
-    const firstUserMessageId = firstSessionSummary.userMessage.info.id;
-    const firstPatchParts = await waitForPatchHistoryIfPresent(
-      firstClient,
-      firstRun.sessionId,
-      firstUserMessageId,
-      timeoutMs,
-    );
+    const firstRun = firstEdit.run;
+    const firstSessionSummary = firstEdit.sessionSummary;
+    const firstUserMessageId = firstEdit.userMessageId;
+    const firstPatchParts = firstEdit.patchParts;
     logCheckpoint("initial_edit_tracked", {
       sessionId: firstRun.sessionId,
       messageId: firstUserMessageId,
       diffFiles: firstSessionSummary.diffs.length,
       patchParts: firstPatchParts.length,
+      attempt: firstEdit.attempt,
     });
 
     await verifyRevertCycle({
