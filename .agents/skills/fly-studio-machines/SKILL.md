@@ -19,6 +19,18 @@ Use this skill when touching Fly Studio lifecycle/auth code or when a prod Studi
 4. Use the local user's `fly` or `flyctl` CLI when available; if backend-host SSH would help and the user has not provided access details yet, ask for them explicitly.
 5. If you touch this area, update or propose the protecting regressions and release smokes instead of leaving the new behavior undocumented.
 
+## Regression Playbook
+
+- If a Fly reconcile or wake smoke starts failing on `suspended` expectations, first prove whether the regression is in backend orchestration or in the Studio runtime image itself.
+- Do that by A/B probing published image tags with the same provider path:
+  - boot the machine with a known-good tag and call `provider.stop(...)` / `provider.parkStudioMachine(...)`
+  - boot the machine with the suspect tag and repeat the exact same path
+  - if the old tag suspends and the new tag falls back to `stopped`, treat it as a runtime-image regression before changing backend lifecycle code
+- Do not assume `:latest` is a safe drift baseline. If the latest published Studio image is itself broken, the warm-reconcile smoke will fail before it even reaches the candidate image. Pin `VIVD_FLY_TEST_DRIFT_IMAGE` / `FLY_STUDIO_RECONCILE_BASELINE_TAG` to the last known-good Studio tag until a fixed release is published.
+- As of April 2, 2026, the release-smoke drift baseline should stay on `v1.1.51-repro.2`: that is the last known-good published Studio tag that completed the real GitHub validate-app fly reconcile smoke. Earlier plain semver tags such as `v1.1.50` are no longer available in GHCR, so using them today silently falls back to older images and obscures what the workflow is actually validating.
+- Be suspicious of Studio boot-path changes that eagerly initialize extra runtime subsystems during normal startup. In particular, eager imports or startup work that pulls OpenCode / initial-generation logic into every Studio boot can change Fly suspend behavior even when backend/Fly orchestration code is unchanged.
+- Do not weaken the suspend contract in tests to get CI green. `fly_reconcile_flow.test.ts` is supposed to prove the real e2e story: drifted machine suspends, warm reconcile updates it, and wake stays fast.
+
 ## Protecting Tests
 
 - `packages/backend/test/fly_provider_reconcile.test.ts`
