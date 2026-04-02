@@ -47,6 +47,8 @@ type WaitForReadyOptions = {
   timeoutMs: number;
 };
 
+const POST_RUNTIME_CLEANUP_DRAIN_MS = 3_000;
+
 function hasOnlyImageDrift(needs: MachineReconcileNeeds): boolean {
   return (
     needs.image &&
@@ -143,6 +145,7 @@ export type WarmReconcileStudioMachineDeps = {
   trimToken: (value: string | null | undefined) => string | null;
   getMachineMetadataValue: (machine: FlyMachine, key: string) => string | null;
   startMachineHandlingReplacement: (machineId: string, timeoutMs?: number) => Promise<void>;
+  requestRuntimeCleanup: (url: string, accessToken: string) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyOptions) => Promise<void>;
   startTimeoutMs: number;
@@ -313,6 +316,8 @@ export async function warmReconcileStudioMachineWorkflow(
     url,
     timeoutMs: Math.min(deps.startTimeoutMs, 120_000),
   });
+  await deps.requestRuntimeCleanup(url, accessToken);
+  await sleep(POST_RUNTIME_CLEANUP_DRAIN_MS);
 
   const parked = await deps.suspendOrStopMachine(machineId);
   if (parked !== "suspended") {
@@ -397,6 +402,7 @@ export type ReconcileStudioMachinesInnerDeps = {
   trimToken: (value: string | null | undefined) => string | null;
   getMachineMetadataValue: (machine: FlyMachine, key: string) => string | null;
   startMachineHandlingReplacement: (machineId: string, timeoutMs?: number) => Promise<void>;
+  requestRuntimeCleanup: (url: string, accessToken: string) => Promise<void>;
   getPublicUrlForPort: (port: number) => string;
   waitForReady: (options: WaitForReadyOptions) => Promise<void>;
   startTimeoutMs: number;
@@ -660,6 +666,8 @@ export async function reconcileStudioMachinesInnerWorkflow(
         url,
         timeoutMs: Math.min(deps.startTimeoutMs, 120_000),
       });
+      await deps.requestRuntimeCleanup(url, accessToken);
+      await sleep(POST_RUNTIME_CLEANUP_DRAIN_MS);
 
       // Park the machine quickly so the next user start is fast, without leaving it running.
       const parked = await deps.suspendOrStopMachine(machine.id);

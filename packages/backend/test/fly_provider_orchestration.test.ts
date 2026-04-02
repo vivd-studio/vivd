@@ -447,6 +447,9 @@ describe("FlyStudioMachineProvider orchestration", () => {
     };
     (provider as any).startMachineHandlingReplacement = async () => {};
     (provider as any).waitForReady = async () => {};
+    const runtimeCleanupMock = vi
+      .spyOn(provider as any, "requestRuntimeCleanup")
+      .mockResolvedValue(undefined);
     (provider as any).suspendOrStopMachine = async () => "suspended";
     (provider as any).config.getPublicUrlForPort = (port: number) =>
       `https://studio.test:${port}`;
@@ -455,6 +458,10 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
     expect(stopMachineMock).toHaveBeenCalledWith("m5");
     expect(getMachineMock).toHaveBeenCalledTimes(3);
+    expect(runtimeCleanupMock).toHaveBeenCalledWith(
+      "https://studio.test:4100",
+      "token-1",
+    );
     expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
       "openrouter/google/gemini-3-flash-preview",
     );
@@ -485,9 +492,11 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
     (provider as any).getDesiredImage = async () => desiredImage;
     (provider as any).getMachine = async () => stoppedMachine;
-    (provider as any).waitForReconcileDriftToClear = async () => null;
     (provider as any).startMachineHandlingReplacement = async () => {};
     (provider as any).waitForReady = async () => {};
+    const runtimeCleanupMock = vi
+      .spyOn(provider as any, "requestRuntimeCleanup")
+      .mockResolvedValue(undefined);
     (provider as any).suspendOrStopMachine = async () => "suspended";
     (provider as any).config.getPublicUrlForPort = (port: number) =>
       `https://studio.test:${port}`;
@@ -502,6 +511,10 @@ describe("FlyStudioMachineProvider orchestration", () => {
 
     expect(updatedConfig?.env?.MAIN_BACKEND_URL).toBe(
       "https://default.vivd.studio/vivd-studio",
+    );
+    expect(runtimeCleanupMock).toHaveBeenCalledWith(
+      "https://studio.test:4100",
+      "token-1",
     );
     expect(updatedConfig?.env?.GITHUB_REPO_PREFIX).toBe("default-");
     expect(updatedConfig?.env?.VIVD_ENABLED_PLUGINS).toBe(

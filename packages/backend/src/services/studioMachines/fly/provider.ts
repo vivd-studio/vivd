@@ -76,6 +76,8 @@ import { FlyProviderConfig } from "./providerConfig";
 import { FlyRuntimeRouteService } from "./runtimeRouteService";
 import { shouldCreateStudioCompatibilityRoutes } from "../compatibilityRoutePolicy";
 
+const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
+
 export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   kind = "fly" as const;
 
@@ -302,6 +304,35 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       stopMachine: (id) => this.apiClient.stopMachine(id),
       waitForState: (options) => this.waitForState(options),
     });
+  }
+
+  private async requestRuntimeCleanup(
+    url: string,
+    accessToken: string,
+  ): Promise<void> {
+    const cleanupUrl = new URL("/vivd-studio/api/cleanup/preview-leave", url);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    timeout.unref?.();
+
+    try {
+      const response = await fetch(cleanupUrl, {
+        method: "POST",
+        headers: {
+          [STUDIO_AUTH_HEADER]: accessToken,
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(
+          `[FlyMachines] Runtime cleanup failed ${response.status}: ${body || "unknown error"}`,
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private buildStudioEnv(
@@ -685,6 +716,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         getMachineMetadataValue,
         startMachineHandlingReplacement: (id, timeoutMs) =>
           this.startMachineHandlingReplacement(id, timeoutMs),
+        requestRuntimeCleanup: (url, accessToken) =>
+          this.requestRuntimeCleanup(url, accessToken),
         getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
         waitForReady: (options) => this.waitForReady(options),
         startTimeoutMs: this.config.startTimeoutMs,
@@ -754,6 +787,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       getMachineMetadataValue,
       startMachineHandlingReplacement: (machineId, timeoutMs) =>
         this.startMachineHandlingReplacement(machineId, timeoutMs),
+      requestRuntimeCleanup: (url, accessToken) =>
+        this.requestRuntimeCleanup(url, accessToken),
       getPublicUrlForPort: (port) => this.config.getPublicUrlForPort(port),
       waitForReady: (options) => this.waitForReady(options),
       startTimeoutMs: this.config.startTimeoutMs,
