@@ -618,6 +618,17 @@ async function waitForPrefixToHaveKeys(client, bucket, prefix, timeoutMs) {
   );
 }
 
+async function waitForObjectKey(client, bucket, key, timeoutMs) {
+  return waitForCondition(
+    `s3://${bucket}/${key} to exist`,
+    timeoutMs,
+    async () => {
+      const keys = await listKeys(client, bucket, key);
+      return keys.includes(key) ? keys : null;
+    },
+  );
+}
+
 function buildStudioEnvArgs(options) {
   const env = {
     PORT: "3100",
@@ -857,6 +868,7 @@ async function main() {
     const sourceIndexKey = `${sourcePrefix}/index.html`;
     const snapshotPrefix = `${opencodePrefix}/snapshot/`;
     const sessionDiffPrefix = `${opencodePrefix}/storage/session_diff/`;
+    const opencodeDbKey = `${opencodePrefix}/opencode.db`;
 
     await waitForObjectToContain(s3, bucket, sourceIndexKey, firstMarker, timeoutMs);
     await waitForPrefixToHaveKeys(s3, bucket, snapshotPrefix, timeoutMs);
@@ -870,6 +882,10 @@ async function main() {
     await stopContainer(firstStudioContainerId);
     firstStudioLogs = getContainerLogs(firstStudioContainerId);
     assertNoBrokenSnapshotLogs(firstStudioLogs);
+    await waitForObjectKey(s3, bucket, opencodeDbKey, timeoutMs);
+    logCheckpoint("initial_opencode_db_synced", {
+      opencodeDbKey,
+    });
     await removeContainer(firstStudioContainerId);
     firstStudioContainerId = null;
 

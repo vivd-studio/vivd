@@ -200,6 +200,26 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(result).toEqual(restarted);
   });
 
+  it("stop resolves the machine by org/slug/version and delegates to parkStudioMachine", async () => {
+    const provider = new FlyStudioMachineProvider();
+    const calls: string[] = [];
+
+    (provider as any).apiClient.listMachines = async (): Promise<FlyMachine[]> => [
+      studioMachine({
+        id: "machine-1",
+        state: "started",
+        image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+      }),
+    ];
+    (provider as any).parkStudioMachine = async (machineId: string) => {
+      calls.push(`park:${machineId}`);
+    };
+
+    await provider.stop("org-1", "site-1", 1);
+
+    expect(calls).toEqual(["park:machine-1"]);
+  });
+
   it("ensureRunningInner creates a machine with expected metadata and returns start result", async () => {
     const provider = new FlyStudioMachineProvider();
 

@@ -371,7 +371,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
           VIVD_FLY_TEST_IMAGE: ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
-          VIVD_FLY_TEST_DRIFT_IMAGE: ${{ needs.detect-changes.outputs.previous_tag && format('{0}/vivd-studio:{1}', env.IMAGE_PREFIX, needs.detect-changes.outputs.previous_tag) || '' }}
+          VIVD_FLY_TEST_DRIFT_IMAGE: ${{ format('{0}/vivd-studio:{1}', env.IMAGE_PREFIX, vars.FLY_STUDIO_RECONCILE_BASELINE_TAG || 'v1.1.51') }}
           VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
 

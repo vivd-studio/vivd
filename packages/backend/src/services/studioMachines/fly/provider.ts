@@ -786,12 +786,10 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
           this.lastActivityByStudioKey.delete(studioKey);
         },
         listMachines: () => this.apiClient.listMachines(),
-        routeIdFor: (orgId, slug, v) => this.config.routeIdFor(orgId, slug, v),
         findMachineByName,
         findMachine,
         machineNameFor: (orgId, slug, v) => this.config.machineNameFor(orgId, slug, v),
-        suspendOrStopMachine: (machineId) => this.suspendOrStopMachine(machineId),
-        removeRuntimeRoute: (routeId) => this.routeService.removeRuntimeRoute(routeId),
+        parkStudioMachine: (machineId) => this.parkStudioMachine(machineId),
       },
       organizationId,
       projectSlug,

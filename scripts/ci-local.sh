@@ -163,6 +163,10 @@ if [[ "$RUN_FLY_INTEGRATION" == "true" ]]; then
     exit 1
   fi
 
+  if [[ -z "${VIVD_FLY_TEST_DRIFT_IMAGE:-}" ]]; then
+    export VIVD_FLY_TEST_DRIFT_IMAGE="ghcr.io/vivd-studio/vivd-studio:${VIVD_FLY_RECONCILE_BASELINE_TAG:-v1.1.51}"
+  fi
+
   export VIVD_RUN_STUDIO_BUCKET_SYNC_TESTS=1
   run_step \
     "Fly machine + bucket sync integration tests" \

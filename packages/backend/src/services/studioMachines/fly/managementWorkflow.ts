@@ -166,11 +166,6 @@ export async function stopStudioMachineWorkflow(
   deps: {
     key: (organizationId: string, projectSlug: string, version: number) => string;
     deleteLastActivity: (studioKey: string) => void;
-    routeIdFor: (
-      organizationId: string,
-      projectSlug: string,
-      version: number,
-    ) => string;
     listMachines: () => Promise<FlyMachine[]>;
     findMachineByName: (machines: FlyMachine[], machineName: string) => FlyMachine | null;
     findMachine: (
@@ -180,29 +175,24 @@ export async function stopStudioMachineWorkflow(
       version: number,
     ) => FlyMachine | null;
     machineNameFor: (organizationId: string, projectSlug: string, version: number) => string;
-    suspendOrStopMachine: (machineId: string) => Promise<"suspended" | "stopped">;
-    removeRuntimeRoute: (routeId: string) => Promise<void>;
+    parkStudioMachine: (machineId: string) => Promise<unknown>;
   },
   organizationId: string,
   projectSlug: string,
   version: number,
 ): Promise<void> {
   const studioKey = deps.key(organizationId, projectSlug, version);
-  deps.deleteLastActivity(studioKey);
-
   const existing = await findExistingStudioMachine(
     deps,
     organizationId,
     projectSlug,
     version,
   );
-  if (!existing) return;
-  if (existing.state === "started") {
-    await deps.suspendOrStopMachine(existing.id);
+  if (!existing) {
+    deps.deleteLastActivity(studioKey);
+    return;
   }
-  await deps.removeRuntimeRoute(
-    deps.routeIdFor(organizationId, projectSlug, version),
-  );
+  await deps.parkStudioMachine(existing.id);
 }
 
 export async function getStudioMachineUrlWorkflow(

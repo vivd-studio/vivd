@@ -18,7 +18,6 @@ import { serverManager as opencodeServerManager } from "./opencode/serverManager
 import { usageReporter } from "./services/reporting/UsageReporter.js";
 import { workspaceStateReporter } from "./services/reporting/WorkspaceStateReporter.js";
 import { registerStudioRuntimeHttpRoutes } from "./httpRoutes/runtime.js";
-import { initialGenerationService } from "./services/initialGeneration/InitialGenerationService.js";
 import {
   injectBasePathScript,
   rewriteRootAssetUrlsInText,
@@ -63,6 +62,20 @@ function getSingleRouteParam(
     if (typeof first === "string" && first.trim()) return first;
   }
   return null;
+}
+
+let initialGenerationServicePromise: Promise<
+  typeof import("./services/initialGeneration/InitialGenerationService.js")["initialGenerationService"]
+> | null = null;
+
+async function getInitialGenerationService() {
+  if (!initialGenerationServicePromise) {
+    initialGenerationServicePromise = import(
+      "./services/initialGeneration/InitialGenerationService.js"
+    ).then((module) => module.initialGenerationService);
+  }
+
+  return initialGenerationServicePromise;
 }
 
 function isTransientGitCloneError(message: string): boolean {
@@ -425,6 +438,7 @@ async function startServer() {
         return null;
       }
 
+      const initialGenerationService = await getInitialGenerationService();
       const result = await initialGenerationService.startInitialGeneration({
         projectSlug,
         version,
