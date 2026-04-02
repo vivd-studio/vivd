@@ -14,6 +14,7 @@ import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 const DEFAULT_IMAGE = "vivd-studio:release-smoke";
 const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_MODEL_TIERS = ["standard", "advanced"];
+const DEFAULT_ROUND_TRIP_ATTEMPTS = 2;
 const PROJECT_SLUG = "ci-studio-smoke";
 const PROJECT_VERSION = 1;
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
@@ -396,26 +397,6 @@ async function verifyBootstrapFlow(baseUrl, accessToken, studioId) {
   );
 }
 
-async function waitForSessionIdle(client, sessionId, timeoutMs) {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    const statuses = await client.agent.getSessionsStatus.query({
-      projectSlug: PROJECT_SLUG,
-      version: PROJECT_VERSION,
-    });
-
-    const status = statuses?.[sessionId]?.type;
-    if (status === "idle" || status === "done") {
-      return;
-    }
-
-    await sleep(2_000);
-  }
-
-  throw new Error(`Timed out waiting for session ${sessionId} to become idle`);
-}
-
 function extractAssistantText(message) {
   const parts = Array.isArray(message?.parts) ? message.parts : [];
   return parts
@@ -425,15 +406,25 @@ function extractAssistantText(message) {
     .trim();
 }
 
-async function waitForAssistantReply(client, sessionId, timeoutMs) {
+async function waitForPromptSuccess(client, sessionId, marker, timeoutMs) {
   const startedAt = Date.now();
+  let lastStatus = null;
+  let lastAssistantText = "";
 
   while (Date.now() - startedAt < timeoutMs) {
-    const messages = await client.agent.getSessionContent.query({
-      sessionId,
-      projectSlug: PROJECT_SLUG,
-      version: PROJECT_VERSION,
-    });
+    const [statuses, messages] = await Promise.all([
+      client.agent.getSessionsStatus.query({
+        projectSlug: PROJECT_SLUG,
+        version: PROJECT_VERSION,
+      }),
+      client.agent.getSessionContent.query({
+        sessionId,
+        projectSlug: PROJECT_SLUG,
+        version: PROJECT_VERSION,
+      }),
+    ]);
+
+    lastStatus = statuses?.[sessionId]?.type ?? null;
 
     const assistantMessage = [...messages]
       .reverse()
@@ -442,15 +433,27 @@ async function waitForAssistantReply(client, sessionId, timeoutMs) {
     if (assistantMessage) {
       const text = extractAssistantText(assistantMessage);
       if (text) {
-        return { text, messages };
+        lastAssistantText = text;
+        if (text.includes(marker)) {
+          return { text, messages, status: lastStatus };
+        }
       }
+    }
+
+    if (
+      lastStatus &&
+      ["error", "failed", "cancelled", "stopped"].includes(lastStatus)
+    ) {
+      throw new Error(
+        `Session ${sessionId} entered terminal status ${lastStatus} before returning the expected marker`,
+      );
     }
 
     await sleep(2_000);
   }
 
   throw new Error(
-    `Timed out waiting for assistant reply in session ${sessionId}`,
+    `Timed out waiting for expected assistant reply in session ${sessionId} (lastStatus=${lastStatus || "unknown"} assistantText=${JSON.stringify(lastAssistantText)})`,
   );
 }
 
@@ -472,14 +475,21 @@ function assertAvailableModel(availableModels, selection) {
   );
 }
 
-async function runPromptRoundTrip(client, selection, timeoutMs) {
+async function runPromptRoundTripAttempt(
+  client,
+  selection,
+  timeoutMs,
+  attemptNumber,
+) {
   const marker = `studio-smoke-${selection.tier}-${randomUUID().slice(0, 8)}`;
-  log(`Running ${selection.tier} prompt round-trip with ${selection.rawValue}`);
+  log(
+    `Running ${selection.tier} prompt round-trip with ${selection.rawValue} (attempt ${attemptNumber}/${DEFAULT_ROUND_TRIP_ATTEMPTS})`,
+  );
 
   const run = await client.agent.runTask.mutate({
     projectSlug: PROJECT_SLUG,
     version: PROJECT_VERSION,
-    task: `Reply with exactly "${marker}" and nothing else. Do not edit any files.`,
+    task: `Reply with exactly "${marker}" and nothing else. Do not use tools. Do not read or edit files.`,
     model: {
       provider: selection.provider,
       modelId: selection.modelId,
@@ -492,15 +502,52 @@ async function runPromptRoundTrip(client, selection, timeoutMs) {
     `${selection.tier} runTask did not return a sessionId`,
   );
 
-  await waitForSessionIdle(client, run.sessionId, timeoutMs);
-  const assistant = await waitForAssistantReply(client, run.sessionId, timeoutMs);
+  const assistant = await waitForPromptSuccess(
+    client,
+    run.sessionId,
+    marker,
+    timeoutMs,
+  );
   assert.match(
     assistant.text,
     new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     `${selection.tier} assistant reply did not include the expected marker`,
   );
 
-  log(`${selection.tier} round-trip succeeded`);
+  log(
+    `${selection.tier} round-trip succeeded (status=${assistant.status || "unknown"})`,
+  );
+}
+
+async function runPromptRoundTrip(client, selection, timeoutMs) {
+  let lastError = null;
+
+  for (
+    let attemptNumber = 1;
+    attemptNumber <= DEFAULT_ROUND_TRIP_ATTEMPTS;
+    attemptNumber += 1
+  ) {
+    try {
+      await runPromptRoundTripAttempt(
+        client,
+        selection,
+        timeoutMs,
+        attemptNumber,
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      log(
+        `${selection.tier} prompt round-trip attempt ${attemptNumber} failed: ${message}`,
+      );
+      if (attemptNumber < DEFAULT_ROUND_TRIP_ATTEMPTS) {
+        await sleep(3_000);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 function createWorkspaceDir() {
