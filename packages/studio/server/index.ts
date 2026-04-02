@@ -17,6 +17,7 @@ import { devServerService } from "./services/project/DevServerService.js";
 import { serverManager as opencodeServerManager } from "./opencode/serverManager.js";
 import { usageReporter } from "./services/reporting/UsageReporter.js";
 import { workspaceStateReporter } from "./services/reporting/WorkspaceStateReporter.js";
+import { runtimeQuiesceCoordinator } from "./services/runtime/RuntimeQuiesceCoordinator.js";
 import { registerStudioRuntimeHttpRoutes } from "./httpRoutes/runtime.js";
 import {
   injectBasePathScript,
@@ -355,10 +356,15 @@ async function startServer() {
   const workspace = new WorkspaceManager();
 
   const requireStudioAuth = () => createRequireStudioAuth(process.env);
+  const markRuntimeActivity: express.RequestHandler = (_req, _res, next) => {
+    void runtimeQuiesceCoordinator.resumeAfterActivity();
+    next();
+  };
 
   // TRPC middleware
   app.use(
     "/trpc",
+    markRuntimeActivity,
     requireStudioAuth(),
     createExpressMiddleware({
       router: appRouter,
@@ -369,6 +375,7 @@ async function startServer() {
   // Backend-compatible tRPC path (frontend expects this)
   app.use(
     "/vivd-studio/api/trpc",
+    markRuntimeActivity,
     requireStudioAuth(),
     createExpressMiddleware({
       router: appRouter,
@@ -378,6 +385,7 @@ async function startServer() {
 
   app.get(
     "/vivd-studio/api/preview-bridge.js",
+    markRuntimeActivity,
     requireStudioAuth(),
     (_req, res) => {
       res.type("application/javascript").send(createPreviewBridgeScript());
@@ -398,6 +406,10 @@ async function startServer() {
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
     devPreviewProxy,
+    onRuntimeActivity: () => {
+      void runtimeQuiesceCoordinator.resumeAfterActivity();
+    },
+    runtimeQuiesceCoordinator,
   });
 
   const clientPath = path.join(__dirname, "client");
@@ -450,6 +462,9 @@ async function startServer() {
     getProxyBasePath,
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
+    onStudioActivity: () => {
+      void runtimeQuiesceCoordinator.resumeAfterActivity();
+    },
   });
 
   // Bind the port before workspace hydration/open completes so Fly and the

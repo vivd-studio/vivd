@@ -12,6 +12,7 @@ type StudioClientHttpRoutesDeps = {
   getProxyBasePath: (req: express.Request) => string | null;
   rewriteRootAssetUrlsInText: (text: string, basePath: string) => string;
   injectBasePathScript: (html: string, basePath: string) => string;
+  onStudioActivity?: () => void;
 };
 
 const INITIAL_SESSION_REDIRECT_WAIT_MS = 2_000;
@@ -105,6 +106,7 @@ export function registerStudioClientHttpRoutes(
     getProxyBasePath,
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
+    onStudioActivity,
   } = deps;
 
   const sendIndex = (req: express.Request, res: express.Response) =>
@@ -118,17 +120,23 @@ export function registerStudioClientHttpRoutes(
       injectBasePathScript,
     });
 
-  app.get("/vivd-studio", requireStudioAuth(), async (req, res) => {
+  const markStudioActivity: express.RequestHandler = (_req, _res, next) => {
+    onStudioActivity?.();
+    next();
+  };
+
+  app.get("/vivd-studio", requireStudioAuth(), markStudioActivity, async (req, res) => {
     await sendIndex(req, res);
   });
 
-  app.get("/vivd-studio/", requireStudioAuth(), async (req, res) => {
+  app.get("/vivd-studio/", requireStudioAuth(), markStudioActivity, async (req, res) => {
     await sendIndex(req, res);
   });
 
   app.use(
     "/vivd-studio",
     requireStudioAuth(),
+    markStudioActivity,
     express.static(clientPath, {
       index: false,
       redirect: false,
@@ -145,6 +153,7 @@ export function registerStudioClientHttpRoutes(
       return next();
     }
 
+    onStudioActivity?.();
     return requireStudioAuth()(req, res, (authError?: unknown) => {
       if (authError) return next(authError);
       void sendIndex(req, res).catch(next);

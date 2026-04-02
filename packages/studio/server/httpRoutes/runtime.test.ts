@@ -10,6 +10,7 @@ import {
   rewriteRootAssetUrlsInText,
 } from "../http/basePathRewrite.js";
 import { devServerService } from "../services/project/DevServerService.js";
+import type { RuntimeQuiesceStatus } from "../services/runtime/RuntimeQuiesceCoordinator.js";
 import { resolveForwardedRuntimeBasePath } from "./runtime";
 import { registerStudioRuntimeHttpRoutes } from "./runtime";
 import { resolveRuntimeRequestedFilePath } from "./runtime";
@@ -19,6 +20,14 @@ function createTestRuntimeApp(options?: {
   projectPath?: string;
   getProxyBasePath?: (req: express.Request) => string | null;
   devPreviewProxy?: express.RequestHandler;
+  onRuntimeActivity?: () => void;
+  runtimeQuiesceCoordinator?: {
+    getQuiesceStatus: () => RuntimeQuiesceStatus;
+    quiesceForSuspend: (
+      options: { projectDir: string | null },
+    ) => Promise<RuntimeQuiesceStatus>;
+    resumeAfterActivity: () => Promise<void> | void;
+  };
 }) {
   const app = express();
   const authMiddleware = vi.fn((_req, _res, next) => next());
@@ -66,6 +75,8 @@ function createTestRuntimeApp(options?: {
       ((_req, res) => {
         res.status(200).send("proxied");
       }),
+    onRuntimeActivity: options?.onRuntimeActivity,
+    runtimeQuiesceCoordinator: options?.runtimeQuiesceCoordinator,
   });
 
   return { app, authMiddleware };
@@ -226,6 +237,41 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     );
 
     expect(routeLayer?.route?.stack[0]?.handle).not.toBe(authMiddleware);
+  });
+
+  it("waits for runtime quiesce before acknowledging preview leave", async () => {
+    const quiesceForSuspend = vi.fn(async () => ({
+      state: "idle" as const,
+      subsystems: {},
+      lastQuiescedAt: "2026-04-02T00:00:00.000Z",
+    }));
+    const { app } = createTestRuntimeApp({
+      initialized: true,
+      projectPath: "/tmp/runtime-project",
+      runtimeQuiesceCoordinator: {
+        getQuiesceStatus: () => ({
+          state: "active" as const,
+          subsystems: {},
+          lastQuiescedAt: null,
+        }),
+        quiesceForSuspend,
+        resumeAfterActivity: vi.fn(),
+      },
+    });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/vivd-studio/api/cleanup/preview-leave`, {
+        method: "POST",
+      });
+
+      expect(response.status).toBe(200);
+      expect(quiesceForSuspend).toHaveBeenCalledWith({
+        projectDir: "/tmp/runtime-project",
+      });
+    } finally {
+      server.close();
+    }
   });
 
   it("registers auth before backend-compatible preview routes", () => {

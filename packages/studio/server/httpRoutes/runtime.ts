@@ -6,9 +6,11 @@ import type { Multer } from "multer";
 
 import { detectProjectType } from "../services/project/projectType.js";
 import { devServerService } from "../services/project/DevServerService.js";
-import { serverManager as opencodeServerManager } from "../opencode/serverManager.js";
 import { projectTouchReporter } from "../services/reporting/ProjectTouchReporter.js";
-import { workspaceStateReporter } from "../services/reporting/WorkspaceStateReporter.js";
+import {
+  runtimeQuiesceCoordinator as defaultRuntimeQuiesceCoordinator,
+  type RuntimeQuiesceCoordinator,
+} from "../services/runtime/RuntimeQuiesceCoordinator.js";
 import { requestBucketSync } from "../services/sync/AgentTaskSyncService.js";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager.js";
 import { createStudioBootstrapHandler } from "../http/studioAuth.js";
@@ -39,6 +41,12 @@ type StudioRuntimeHttpRoutesDeps = {
   rewriteRootAssetUrlsInText: (text: string, basePath: string) => string;
   injectBasePathScript: (html: string, basePath: string) => string;
   devPreviewProxy: express.RequestHandler;
+  onRuntimeActivity?: () => void;
+  runtimeQuiesceCoordinator?: {
+    getQuiesceStatus: RuntimeQuiesceCoordinator["getQuiesceStatus"];
+    quiesceForSuspend: RuntimeQuiesceCoordinator["quiesceForSuspend"];
+    resumeAfterActivity: () => Promise<void> | void;
+  };
 };
 
 export function resolveRuntimeRequestedFilePath(options: {
@@ -112,10 +120,14 @@ export function registerStudioRuntimeHttpRoutes(
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
     devPreviewProxy,
+    onRuntimeActivity,
   } = deps;
+  const runtimeQuiesceCoordinator =
+    deps.runtimeQuiesceCoordinator ?? defaultRuntimeQuiesceCoordinator;
 
-  const resumeWorkspaceStateReporting: express.RequestHandler = (_req, _res, next) => {
-    workspaceStateReporter.resume();
+  const resumeRuntimeAfterActivity: express.RequestHandler = (_req, _res, next) => {
+    onRuntimeActivity?.();
+    void runtimeQuiesceCoordinator.resumeAfterActivity();
     next();
   };
 
@@ -179,19 +191,21 @@ export function registerStudioRuntimeHttpRoutes(
   // Cleanup endpoint for sendBeacon on page leave (fire-and-forget)
   app.post("/vivd-studio/api/cleanup/preview-leave", requireStudioAuth(), async (_req, res) => {
     try {
-      await workspaceStateReporter.pause();
-      if (workspace.isInitialized()) {
-        const projectDir = workspace.getProjectPath();
-        await opencodeServerManager.stopServer(projectDir);
-      }
+      const projectDir = workspace.isInitialized() ? workspace.getProjectPath() : null;
+      await runtimeQuiesceCoordinator.quiesceForSuspend({ projectDir });
     } catch (err) {
       console.warn("[Cleanup] preview-leave failed:", err);
     }
     res.status(200).end();
   });
 
+  app.get("/vivd-studio/api/cleanup/status", requireStudioAuth(), (_req, res) => {
+    res.json(runtimeQuiesceCoordinator.getQuiesceStatus());
+  });
+
   app.post(
     "/vivd-studio/api/bootstrap",
+    resumeRuntimeAfterActivity,
     express.urlencoded({ extended: false }),
     createStudioBootstrapHandler(process.env),
   );
@@ -201,7 +215,7 @@ export function registerStudioRuntimeHttpRoutes(
   app.use(
     "/vivd-studio/api/projects",
     requireStudioAuth(),
-    resumeWorkspaceStateReporting,
+    resumeRuntimeAfterActivity,
     async (req, res, next) => {
       return serveWorkspaceFile(req, res, next, { routeKind: "projects" });
     },
@@ -212,7 +226,7 @@ export function registerStudioRuntimeHttpRoutes(
   app.use(
     "/vivd-studio/api/assets",
     requireStudioAuth(),
-    resumeWorkspaceStateReporting,
+    resumeRuntimeAfterActivity,
     async (req, res, next) => {
       return serveWorkspaceFile(req, res, next, { routeKind: "assets" });
     },
@@ -222,7 +236,7 @@ export function registerStudioRuntimeHttpRoutes(
   app.post(
     "/vivd-studio/api/upload-dropped-file/:slug/:version",
     requireStudioAuth(),
-    resumeWorkspaceStateReporting,
+    resumeRuntimeAfterActivity,
     upload.single("file"),
     async (req, res) => {
       try {
@@ -278,6 +292,7 @@ export function registerStudioRuntimeHttpRoutes(
   app.post(
     "/vivd-studio/api/upload/:slug/:version",
     requireStudioAuth(),
+    resumeRuntimeAfterActivity,
     upload.array("files", 20),
     async (req, res) => {
       try {
@@ -366,6 +381,9 @@ export function registerStudioRuntimeHttpRoutes(
   // Preview route (static files or dev server proxy)
   app.use("/", requireStudioAuth(), async (req, res, next) => {
     try {
+      onRuntimeActivity?.();
+      void runtimeQuiesceCoordinator.resumeAfterActivity();
+
       if (!workspace.isInitialized()) {
         return res.status(503).json({ error: "Workspace not initialized" });
       }
@@ -475,6 +493,7 @@ export function registerStudioRuntimeHttpRoutes(
   app.use(
     "/vivd-studio/api/preview/:slug/v:version",
     requireStudioAuth(),
+    resumeRuntimeAfterActivity,
     async (req, res, next) => {
       try {
         if (!workspace.isInitialized()) {

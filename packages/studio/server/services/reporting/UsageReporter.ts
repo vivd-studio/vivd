@@ -23,11 +23,34 @@ const RETRY_DELAY_MS = 1000;
 const STATUS_MAX_RETRY_ATTEMPTS = 3;
 const STATUS_RETRY_DELAY_MS = 1000;
 
-class UsageReporter {
+/**
+ * Usage status returned from backend.
+ */
+export interface UsageStatus {
+  reason?: "ok" | "backend_unavailable";
+  blocked: boolean;
+  imageGenBlocked: boolean;
+  warnings: string[];
+  usage: {
+    daily: { current: number; limit: number; percentage: number };
+    weekly: { current: number; limit: number; percentage: number };
+    monthly: { current: number; limit: number; percentage: number };
+    imageGen: { current: number; limit: number; percentage: number };
+  };
+  nextReset: {
+    daily: Date | string;
+    weekly: Date | string;
+    monthly: Date | string;
+  };
+}
+
+export class UsageReporter {
   private queue: StudioUsageReport[] = [];
   private flushing = false;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private flushPromise: Promise<void> | null = null;
   private initialized = false;
+  private pausedForSuspend = false;
 
   /**
    * Initialize the reporter. Call this once at startup.
@@ -42,13 +65,24 @@ class UsageReporter {
     }
 
     console.log("[UsageReporter] Connected mode - usage reporting enabled");
+    this.startFlushTimer();
+  }
 
-    // Start periodic flush
-    this.flushTimer = setInterval(() => {
-      this.flush().catch((err) => {
-        console.error("[UsageReporter] Flush error:", err);
-      });
-    }, FLUSH_INTERVAL_MS);
+  async pauseForSuspend(): Promise<void> {
+    this.pausedForSuspend = true;
+    this.stopFlushTimer();
+    if (this.flushPromise) {
+      await this.flushPromise.catch(() => {});
+    }
+  }
+
+  resume(): void {
+    if (!this.initialized) return;
+    if (!isConnectedMode()) return;
+    if (!this.pausedForSuspend) return;
+
+    this.pausedForSuspend = false;
+    this.startFlushTimer();
   }
 
   /**
@@ -83,7 +117,7 @@ class UsageReporter {
     }
 
     // If queue is getting large, trigger immediate flush
-    if (this.queue.length >= 10) {
+    if (!this.pausedForSuspend && this.queue.length >= 10) {
       this.flush().catch((err) => {
         console.error("[UsageReporter] Immediate flush error:", err);
       });
@@ -180,92 +214,6 @@ class UsageReporter {
   }
 
   /**
-   * Flush queued reports to backend.
-   */
-  private async flush(): Promise<void> {
-    if (this.flushing || this.queue.length === 0) {
-      return;
-    }
-
-    this.flushing = true;
-
-    try {
-      const reportsToSend = [...this.queue];
-      this.queue = [];
-
-      const success = await this.sendToBackend(reportsToSend);
-
-      if (!success) {
-        // Re-queue failed reports (at the front)
-        this.queue = [...reportsToSend, ...this.queue];
-        // Trim if too large
-        while (this.queue.length > MAX_QUEUE_SIZE) {
-          this.queue.shift();
-        }
-      }
-    } finally {
-      this.flushing = false;
-    }
-  }
-
-  /**
-   * Send reports to the main backend.
-   */
-  private async sendToBackend(reports: StudioUsageReport[]): Promise<boolean> {
-    const config = getConnectedBackendAuthConfig();
-    if (!config) {
-      console.error("[UsageReporter] Missing backend configuration");
-      return false;
-    }
-
-    let attempt = 0;
-    while (attempt < MAX_RETRY_ATTEMPTS) {
-      attempt++;
-
-      try {
-        // `studioApi.reportUsage` is a tRPC mutation procedure.
-        // The Express adapter expects the raw JSON input body (no `{ json: ... }` wrapper).
-        const response = await fetch(`${config.backendUrl}/api/trpc/studioApi.reportUsage`, {
-          method: "POST",
-          headers: buildConnectedBackendHeaders(config),
-          body: JSON.stringify({
-            studioId: config.studioId,
-            reports,
-          }),
-        });
-
-        if (response.ok) {
-          console.log(`[UsageReporter] Sent ${reports.length} reports to backend`);
-          return true;
-        }
-
-        const errorText = await response.text().catch(() => "Unknown error");
-        console.error(
-          `[UsageReporter] Backend returned ${response.status}: ${errorText}`
-        );
-
-        // Don't retry on auth errors
-        if (response.status === 401 || response.status === 403) {
-          console.error("[UsageReporter] Authentication failed - check studio/backend auth");
-          return false;
-        }
-      } catch (err) {
-        console.error(`[UsageReporter] Network error (attempt ${attempt}):`, err);
-      }
-
-      // Wait before retry
-      if (attempt < MAX_RETRY_ATTEMPTS) {
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
-      }
-    }
-
-    console.error(
-      `[UsageReporter] Failed to send reports after ${MAX_RETRY_ATTEMPTS} attempts`
-    );
-    return false;
-  }
-
-  /**
    * Fetch current usage status from backend.
    * Returns null in standalone mode or on error.
    */
@@ -328,37 +276,128 @@ class UsageReporter {
    * Shutdown the reporter. Call on process exit.
    */
   async shutdown(): Promise<void> {
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
+    this.stopFlushTimer();
+    this.pausedForSuspend = false;
 
     // Final flush
     if (this.queue.length > 0) {
       await this.flush();
+    } else if (this.flushPromise) {
+      await this.flushPromise.catch(() => {});
     }
   }
-}
 
-/**
- * Usage status returned from backend.
- */
-export interface UsageStatus {
-  reason?: "ok" | "backend_unavailable";
-  blocked: boolean;
-  imageGenBlocked: boolean;
-  warnings: string[];
-  usage: {
-    daily: { current: number; limit: number; percentage: number };
-    weekly: { current: number; limit: number; percentage: number };
-    monthly: { current: number; limit: number; percentage: number };
-    imageGen: { current: number; limit: number; percentage: number };
-  };
-  nextReset: {
-    daily: Date | string;
-    weekly: Date | string;
-    monthly: Date | string;
-  };
+  private startFlushTimer(): void {
+    if (this.flushTimer || this.pausedForSuspend) return;
+
+    this.flushTimer = setInterval(() => {
+      this.flush().catch((err) => {
+        console.error("[UsageReporter] Flush error:", err);
+      });
+    }, FLUSH_INTERVAL_MS);
+    this.flushTimer.unref?.();
+  }
+
+  private stopFlushTimer(): void {
+    if (!this.flushTimer) return;
+    clearInterval(this.flushTimer);
+    this.flushTimer = null;
+  }
+
+  /**
+   * Flush queued reports to backend.
+   */
+  private async flush(): Promise<void> {
+    if (this.flushing || this.queue.length === 0) {
+      return this.flushPromise ?? Promise.resolve();
+    }
+
+    let run: Promise<void> | null = null;
+    run = (async () => {
+      this.flushing = true;
+
+      try {
+        const reportsToSend = [...this.queue];
+        this.queue = [];
+
+        const success = await this.sendToBackend(reportsToSend);
+
+        if (!success) {
+          // Re-queue failed reports (at the front)
+          this.queue = [...reportsToSend, ...this.queue];
+          // Trim if too large
+          while (this.queue.length > MAX_QUEUE_SIZE) {
+            this.queue.shift();
+          }
+        }
+      } finally {
+        this.flushing = false;
+        if (run && this.flushPromise === run) {
+          this.flushPromise = null;
+        }
+      }
+    })();
+
+    this.flushPromise = run;
+    await run;
+  }
+
+  /**
+   * Send reports to the main backend.
+   */
+  private async sendToBackend(reports: StudioUsageReport[]): Promise<boolean> {
+    const config = getConnectedBackendAuthConfig();
+    if (!config) {
+      console.error("[UsageReporter] Missing backend configuration");
+      return false;
+    }
+
+    let attempt = 0;
+    while (attempt < MAX_RETRY_ATTEMPTS) {
+      attempt++;
+
+      try {
+        // `studioApi.reportUsage` is a tRPC mutation procedure.
+        // The Express adapter expects the raw JSON input body (no `{ json: ... }` wrapper).
+        const response = await fetch(`${config.backendUrl}/api/trpc/studioApi.reportUsage`, {
+          method: "POST",
+          headers: buildConnectedBackendHeaders(config),
+          body: JSON.stringify({
+            studioId: config.studioId,
+            reports,
+          }),
+        });
+
+        if (response.ok) {
+          console.log(`[UsageReporter] Sent ${reports.length} reports to backend`);
+          return true;
+        }
+
+        const errorText = await response.text().catch(() => "Unknown error");
+        console.error(
+          `[UsageReporter] Backend returned ${response.status}: ${errorText}`
+        );
+
+        // Don't retry on auth errors
+        if (response.status === 401 || response.status === 403) {
+          console.error("[UsageReporter] Authentication failed - check studio/backend auth");
+          return false;
+        }
+      } catch (err) {
+        console.error(`[UsageReporter] Network error (attempt ${attempt}):`, err);
+      }
+
+      // Wait before retry
+      if (attempt < MAX_RETRY_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+      }
+    }
+
+    console.error(
+      `[UsageReporter] Failed to send reports after ${MAX_RETRY_ATTEMPTS} attempts`
+    );
+    return false;
+  }
 }
 
 export const usageReporter = new UsageReporter();

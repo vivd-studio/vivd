@@ -2,6 +2,21 @@
 
 Date: 2026-04-02
 
+## Status
+
+Initial slice landed on 2026-04-02:
+
+- `RuntimeQuiesceCoordinator` exists in `packages/studio/server/services/runtime`
+- `preview-leave` now routes through `quiesceForSuspend()`
+- `WorkspaceStateReporter`, `UsageReporter`, and OpenCode server shutdown are the first integrated subsystems
+- Studio runtime/client/tRPC entrypoints now resume the quiesce state on real activity
+
+Still open:
+
+- Fly provider park/reconcile still keeps a fallback drain sleep
+- release validation still needs to prove the new contract against published Studio images
+- the separate OpenCode revert-smoke session-idle hang is not solved by this plan
+
 ## Why This Exists
 
 Vivd currently parks Studio machines by asking the runtime to clean up and then
