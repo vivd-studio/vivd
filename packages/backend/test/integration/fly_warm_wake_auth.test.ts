@@ -31,6 +31,9 @@
  */
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import http from "node:http";
+import https from "node:https";
+import type { IncomingHttpHeaders } from "node:http";
 import { describe, expect, it } from "vitest";
 import { createStudioBootstrapToken } from "@vivd/shared/studio";
 import { FlyStudioMachineProvider } from "../../src/services/studioMachines/fly/provider";
@@ -71,6 +74,12 @@ type FlyMachineEvent = {
   request?: Record<string, unknown>;
 };
 
+type RuntimeHttpResponse = {
+  status: number;
+  headers: IncomingHttpHeaders;
+  body: string;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -100,6 +109,8 @@ function parseOptionalPositiveIntEnv(name: string): number | null {
 
 const MAX_WAKE_MS = parseOptionalPositiveIntEnv("VIVD_FLY_WAKE_EXPECT_MAX_MS");
 const MAX_COLD_MS = parseOptionalPositiveIntEnv("VIVD_FLY_COLD_EXPECT_MAX_MS");
+const POST_BOOTSTRAP_PARK_DRAIN_MS =
+  parseOptionalPositiveIntEnv("VIVD_FLY_PARK_DRAIN_MS") ?? 8_000;
 
 async function flyApiFetch<T>(
   path: string,
@@ -241,17 +252,70 @@ function summarizeEvents(events: FlyMachineEvent[], limit = 12): string {
     .join("\n");
 }
 
-function readSetCookieHeader(response: Response): string {
-  const headers = response.headers as Headers & {
-    getSetCookie?: () => string[];
-  };
-  if (typeof headers.getSetCookie === "function") {
-    const cookies = headers.getSetCookie();
-    if (cookies.length > 0) {
-      return cookies.join(", ");
-    }
+function getHeaderValue(
+  headers: IncomingHttpHeaders,
+  name: string,
+): string | null {
+  const key = name.toLowerCase();
+  const value = headers[key];
+  if (Array.isArray(value)) {
+    return value.join(", ");
   }
-  return response.headers.get("set-cookie") || "";
+  return typeof value === "string" ? value : null;
+}
+
+function readSetCookieHeaderFromNode(headers: IncomingHttpHeaders): string {
+  const value = headers["set-cookie"];
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+  return typeof value === "string" ? value : "";
+}
+
+async function requestRuntime(options: {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}): Promise<RuntimeHttpResponse> {
+  const target = new URL(options.url);
+  const client = target.protocol === "https:" ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const request = client.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || undefined,
+        path: `${target.pathname}${target.search}`,
+        method: options.method || "GET",
+        headers: {
+          Connection: "close",
+          ...options.headers,
+        },
+        agent: false,
+      },
+      (response) => {
+        response.setEncoding("utf8");
+        const chunks: string[] = [];
+        response.on("data", (chunk: string) => chunks.push(chunk));
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode ?? 0,
+            headers: response.headers,
+            body: chunks.join(""),
+          });
+        });
+      },
+    );
+
+    request.on("error", (error) => reject(error));
+
+    if (options.body) {
+      request.write(options.body);
+    }
+    request.end();
+  });
 }
 
 function extractCookie(setCookieHeader: string, cookieName: string): string {
@@ -266,19 +330,19 @@ async function verifyDirectRuntimeAuth(options: {
   baseUrl: string;
   accessToken: string;
 }): Promise<void> {
-  const unauthorized = await fetch(`${options.baseUrl}/vivd-studio`, {
-    redirect: "manual",
+  const unauthorized = await requestRuntime({
+    url: `${options.baseUrl}/vivd-studio`,
   });
   expect(unauthorized.status).toBe(401);
 
-  const authorized = await fetch(`${options.baseUrl}/vivd-studio`, {
+  const authorized = await requestRuntime({
+    url: `${options.baseUrl}/vivd-studio`,
     headers: {
       [STUDIO_AUTH_HEADER]: options.accessToken,
     },
   });
   expect(authorized.status).toBe(200);
-  const html = await authorized.text();
-  expect(html).toMatch(/<html/i);
+  expect(authorized.body).toMatch(/<html/i);
 }
 
 async function verifyBootstrapAuth(options: {
@@ -291,9 +355,9 @@ async function verifyBootstrapAuth(options: {
     studioId: options.studioId,
   });
 
-  const response = await fetch(`${options.baseUrl}/vivd-studio/api/bootstrap`, {
+  const response = await requestRuntime({
+    url: `${options.baseUrl}/vivd-studio/api/bootstrap`,
     method: "POST",
-    redirect: "manual",
     headers: {
       "Content-Type": "application/json",
     },
@@ -305,13 +369,16 @@ async function verifyBootstrapAuth(options: {
   });
 
   expect(response.status).toBe(303);
-  expect(response.headers.get("location")).toBe("/vivd-studio?embedded=1");
+  expect(getHeaderValue(response.headers, "location")).toBe(
+    "/vivd-studio?embedded=1",
+  );
 
-  const setCookieHeader = readSetCookieHeader(response);
+  const setCookieHeader = readSetCookieHeaderFromNode(response.headers);
   expect(setCookieHeader).toContain(`${STUDIO_AUTH_COOKIE}=`);
   expect(setCookieHeader).toContain(`${STUDIO_USER_ACTION_TOKEN_COOKIE}=`);
 
-  const followUp = await fetch(`${options.baseUrl}/vivd-studio?embedded=1`, {
+  const followUp = await requestRuntime({
+    url: `${options.baseUrl}/vivd-studio?embedded=1`,
     headers: {
       Cookie: [
         extractCookie(setCookieHeader, STUDIO_AUTH_COOKIE),
@@ -562,6 +629,11 @@ describe.sequential("Fly warm wake + auth", () => {
           }
           await verifyConnectedBackendCallbacks(machineId);
         }
+
+        // Fly will refuse/ignore suspend requests that arrive immediately after
+        // the auth/bootstrap traffic we generate in this smoke. Give the edge
+        // and runtime a brief quiet window before asserting warm parking.
+        await sleep(POST_BOOTSTRAP_PARK_DRAIN_MS);
 
         const parked = await provider.parkStudioMachine(machineId);
         expect(parked).toBe("suspended");
