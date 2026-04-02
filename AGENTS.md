@@ -101,7 +101,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 ## Git
 
-- Do not commit or push; make working-tree changes only.
+- Do not commit or push; make working-tree changes only. (Unless specifically requested by the user.)
 - Git commands for inspection are fine.
 
 ## Studio Image Debugging (GHCR dev tags)

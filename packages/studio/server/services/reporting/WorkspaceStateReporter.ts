@@ -28,7 +28,6 @@ class WorkspaceStateReporter {
 
     this.options = options;
     this.running = true;
-
     const intervalMs = this.getIntervalMs();
     this.intervalHandle = setInterval(() => {
       void this.reportNow();
