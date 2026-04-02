@@ -152,6 +152,22 @@ function normalizeVersionLabel(value: string | null | undefined): string | null 
   )}`;
 }
 
+function compareNormalizedSemverLabel(left: string | null, right: string | null): number | null {
+  if (!left || !right) return null;
+
+  const leftMatch = left.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  const rightMatch = right.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!leftMatch || !rightMatch) return null;
+
+  for (let index = 1; index <= 3; index += 1) {
+    const delta =
+      Number.parseInt(leftMatch[index], 10) - Number.parseInt(rightMatch[index], 10);
+    if (delta !== 0) return delta;
+  }
+
+  return 0;
+}
+
 function doesSoftwareMatchTarget(
   software: InstanceSoftware | undefined,
   targetTag: string | null,
@@ -167,8 +183,27 @@ function doesSoftwareMatchTarget(
     return true;
   }
 
+  if (
+    normalizedTarget &&
+    currentCandidates.some((candidate) => {
+      const comparison = compareNormalizedSemverLabel(candidate, normalizedTarget);
+      return comparison != null && comparison > 0;
+    })
+  ) {
+    return true;
+  }
+
   const normalizedLatest = normalizeVersionLabel(software.latestTag || software.latestVersion);
-  return software.releaseStatus === "current" && !!normalizedTarget && normalizedLatest === normalizedTarget;
+  if (software.releaseStatus !== "current" || !normalizedTarget) {
+    return false;
+  }
+
+  if (normalizedLatest === normalizedTarget) {
+    return true;
+  }
+
+  const latestComparison = compareNormalizedSemverLabel(normalizedLatest, normalizedTarget);
+  return latestComparison != null && latestComparison > 0;
 }
 
 function readPendingManagedUpdate(): PendingManagedUpdate | null {

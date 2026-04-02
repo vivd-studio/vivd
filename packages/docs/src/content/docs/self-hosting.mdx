@@ -48,6 +48,28 @@ curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --tls-mode external
 curl -fsSL https://docs.vivd.studio/install.sh | bash -s -- --single-project true
 ```
 
+## First-run setup path
+
+After the stack boots and you can sign in, the next place to go is
+`Instance Settings`.
+
+For a normal `solo` self-host install, the usual setup flow is:
+
+1. Open `Instance Settings -> Network`.
+2. Set the `Public host` to the real domain or IP this install should use.
+3. Choose `HTTPS handled by`:
+   - `Bundled Caddy` if you used the install script or the published bundle directly on your own VPS and want Vivd/Caddy to manage certificates.
+   - `External proxy` if you are deploying through Dockploy, Traefik, or another platform that already terminates TLS.
+   - `Plain HTTP` for localhost or internal-only testing.
+4. If you chose `Bundled Caddy`, enter the ACME email for certificate issuance and renewal notices.
+5. Save, then expect the current UI session to become invalid if the public host changed.
+6. Open the new public URL, sign in again there, and then confirm both `/` and `/vivd-studio` open on the intended public URL.
+7. Open `Instance Settings -> Email` if you also want branded transactional email, support email details, or deliverability/webhook policy.
+
+That is the main self-host setup loop after install. You do not need to hunt through
+advanced env vars first unless you are intentionally overriding the normal `solo` host
+model.
+
 The installer prompts for:
 
 - your primary host or IP
@@ -201,6 +223,17 @@ After the stack starts, open:
 
 If you are testing on `localhost` or another local host, use `http` instead.
 
+Then go straight to `Instance Settings -> Network` and confirm the install-level host
+and HTTPS mode match how you actually deployed it:
+
+- install script / direct bundle on your own server: usually `Bundled Caddy`
+- Dockploy / Traefik / another upstream TLS terminator: usually `External proxy`
+- localhost or internal testing: usually `Plain HTTP`
+
+If you use `Bundled Caddy`, make sure the ACME email is set there as well.
+If you change the public host from that screen, expect to continue on the new URL and
+sign in again there instead of trying to keep using the old origin.
+
 ## Manage the install
 
 The installer writes the stack into `~/vivd` by default.
@@ -239,7 +272,12 @@ If you do need the old data, do not remove the volume. Instead, restore the old
 `POSTGRES_PASSWORD` value so the backend and existing Postgres volume match
 again.
 
-After install, you can also change the main public host and TLS mode in `Instance Settings -> Network`. For the hosted self-host bundle, Vivd rewrites its bundled Caddy config from there. If you still keep an explicit advanced host override env such as `VIVD_APP_URL`, `BETTER_AUTH_URL`, or `CONTROL_PLANE_HOST`, that deployment-level override remains authoritative.
+After install, you can change the main public host and TLS mode in `Instance Settings -> Network`. For the hosted self-host bundle, Vivd rewrites its bundled Caddy config from there. If you still keep an explicit advanced host override env such as `VIVD_APP_URL`, `BETTER_AUTH_URL`, or `CONTROL_PLANE_HOST`, that deployment-level override remains authoritative.
+
+For most operators, this admin-side `Network` screen should be the first place to look
+when the public URL, HTTPS behavior, or certificate email needs to change later.
+If the host actually changes, the old-origin session can stop working immediately; open
+the new domain and sign in again there.
 
 See [Instance Settings](/instance-settings/) for the admin-side meaning of `General`,
 `Network`, `Capabilities`, and `Instance Limits`.

@@ -466,4 +466,96 @@ describe("InstanceSettingsTab", () => {
     });
     expect(window.sessionStorage.getItem("vivd.instance-software.pending-update")).toBeNull();
   });
+
+  it("clears the pending update when the instance comes back on a newer version", async () => {
+    window.sessionStorage.setItem(
+      "vivd.instance-software.pending-update",
+      JSON.stringify({
+        targetTag: "1.1.39",
+        startedAt: Date.now(),
+      }),
+    );
+
+    const locationSnapshot = window.location;
+    const reloadMock = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...locationSnapshot,
+        reload: reloadMock,
+      },
+    });
+
+    getInstanceSettingsUseQueryMock.mockReturnValue({
+      data: {
+        installProfile: "solo",
+        singleProjectMode: false,
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        pluginDefaults: {
+          contact_form: { enabled: true },
+          analytics: { enabled: true },
+        },
+        limitDefaults: {},
+        controlPlane: {
+          mode: "path_based",
+        },
+        pluginRuntime: {
+          mode: "same_host_path",
+        },
+        network: {
+          publicHost: "49.13.48.211",
+          publicOrigin: "http://49.13.48.211",
+          tlsMode: "off",
+          acmeEmail: null,
+          sources: {
+            publicHost: "bootstrap_env",
+            tlsMode: "bootstrap_env",
+            acmeEmail: "default",
+          },
+          deploymentManaged: {
+            publicHost: false,
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    getInstanceSoftwareUseQueryMock.mockReturnValue({
+      data: {
+        currentVersion: "1.1.40",
+        currentRevision: "abc123def456",
+        currentImage: "ghcr.io/vivd-studio/vivd-server:latest",
+        currentImageTag: "latest",
+        latestVersion: "1.1.40",
+        latestTag: "1.1.40",
+        latestImage: "ghcr.io/vivd-studio/vivd-server:1.1.40",
+        releaseStatus: "current",
+        managedUpdate: {
+          enabled: true,
+          reason: null,
+          helperImage: "docker:28-cli",
+          workdir: "/srv/selfhost",
+        },
+      },
+      isLoading: false,
+      isFetching: false,
+      refetch: softwareRefetchMock.mockResolvedValue({}),
+    });
+
+    renderTab();
+
+    await waitFor(() => {
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+    });
+    expect(window.sessionStorage.getItem("vivd.instance-software.pending-update")).toBeNull();
+  });
 });

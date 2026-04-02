@@ -11,6 +11,11 @@ Use it when you need to change how the whole install behaves, not just one proje
 For a standard `solo` self-host install, this is where you adjust the main public host,
 HTTPS handling, and other defaults that affect every project on the instance.
 
+If you just finished installing the self-host bundle, start here with `Network` first.
+That is where you set the install's public host, choose whether HTTPS is handled by
+bundled Caddy or an external proxy, and enter the ACME email when bundled Caddy owns
+certificate management.
+
 <Aside type="note" title="Instance-wide, not project-wide">
   Changes here affect the whole install. Project-specific plugin setup, publish targets,
   and content editing still happen inside each project workspace.
@@ -51,6 +56,7 @@ you switch casually in the UI.
 ## Network
 
 The `Network` section is the most important part for a normal self-host install.
+For most fresh installs, this is the first admin screen to configure.
 
 ### Public host
 
@@ -92,6 +98,15 @@ For the bundled self-host stack, saving network settings updates Vivd's runtime 
 the install and rewrites the bundled self-host Caddy config when UI-managed Caddy mode is
 active.
 
+In practice, that means:
+
+- install-script / direct-bundle VPS deploys can switch the public host and stay on bundled Caddy from this screen
+- Dockploy / Traefik style deploys should keep the public host here but use `External proxy`
+- localhost or raw internal testing can stay on `Plain HTTP`
+
+If the public host changes, expect the current browser session on the old origin to stop
+working. Open the new URL and sign in again there.
+
 ### Deployment overrides still win
 
 If you explicitly set advanced deployment-level host overrides such as
@@ -100,7 +115,8 @@ In that case, the saved UI value acts as fallback state until the override is re
 
 <Aside type="caution" title="Change network settings deliberately">
   After changing the public host or TLS mode, re-check both the public site and
-  `/vivd-studio` on the intended URL before treating the change as complete.
+  `/vivd-studio` on the intended URL before treating the change as complete. If the host
+  changed, do that verification from the new domain after signing in again there.
 </Aside>
 
 ## Capabilities
@@ -158,6 +174,11 @@ Use that area when you need to:
 - review bounce and complaint suppression behavior
 - configure email feedback webhook endpoints
 
+This is separate from the ACME email in `Network`:
+
+- `Network -> ACME email` is only for HTTPS certificate issuance/renewal with bundled Caddy
+- `Email` is for Vivd's own outgoing transactional email identity and deliverability
+
 The self-hosting guide covers the env bootstrap side in [Self-Hosting](/self-hosting/).
 
 ### Domains & publishing
@@ -171,7 +192,10 @@ which domain can actually be published or why a live domain is blocked.
 ## Recommended workflow
 
 1. Set the main public host and TLS mode first.
-2. Confirm the public site and `/vivd-studio` both resolve correctly.
-3. On `platform` deployments, adjust capability gates only if the default product surface is too broad.
-4. Set instance limits before onboarding more projects or users.
-5. Then move to [Domains & Publish Targets](/domains-and-publish-targets/), [Plugins Overview](/plugins/), and [Publish Your Site](/publish-your-site/).
+2. If `Bundled Caddy` is selected, fill in the ACME email before treating HTTPS setup as complete.
+3. If the public host changed, continue on the new URL and sign in again there.
+4. Confirm the public site and `/vivd-studio` both resolve correctly.
+5. Configure `Email` if you want transactional email identity, support/footer details, or feedback webhooks.
+6. On `platform` deployments, adjust capability gates only if the default product surface is too broad.
+7. Set instance limits before onboarding more projects or users.
+8. Then move to [Domains & Publish Targets](/domains-and-publish-targets/), [Plugins Overview](/plugins/), and [Publish Your Site](/publish-your-site/).
