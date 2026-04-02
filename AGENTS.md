@@ -103,6 +103,7 @@ The generator outputs plain HTML (`index.html`) by default. Astro projects are a
 
 - Do not commit or push; make working-tree changes only. (Unless specifically requested by the user.)
 - Git commands for inspection are fine.
+- When suggesting commit messages, prefer conventional commits like `fix(scope): ...`, `refactor(scope): ...`, or `chore(scope): ...` with a rough package/area scope, and only suggest one if the latest changes feel genuinely validated and committable; otherwise say they are not ready to commit yet.
 
 ## Studio Image Debugging (GHCR dev tags)
 
