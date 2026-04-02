@@ -25,6 +25,9 @@ describe("InstanceSoftwareService", () => {
     inspectContainerMock.mockResolvedValue({
       Config: {
         Image: "ghcr.io/vivd-studio/vivd-server:1.1.33",
+        Labels: {
+          "com.docker.compose.project": "vivd",
+        },
       },
       Mounts: [
         {
@@ -79,6 +82,9 @@ describe("InstanceSoftwareService", () => {
     inspectContainerMock.mockResolvedValue({
       Config: {
         Image: "ghcr.io/vivd-studio/vivd-server:1.1.33",
+        Labels: {
+          "com.docker.compose.project": "vivd",
+        },
       },
       Mounts: [
         {
@@ -138,6 +144,7 @@ describe("InstanceSoftwareService", () => {
           "UPDATE_SELFHOST_IMAGE_TAG=1",
           "UPDATE_STUDIO_IMAGE=1",
           "UPDATE_SERVICES=backend frontend scraper",
+          "UPDATE_COMPOSE_PROJECT=vivd",
         ]),
         HostConfig: {
           AutoRemove: true,
@@ -152,6 +159,9 @@ describe("InstanceSoftwareService", () => {
     inspectContainerMock.mockResolvedValue({
       Config: {
         Image: "ghcr.io/vivd-studio/vivd-server:latest",
+        Labels: {
+          "com.docker.compose.project": "vivd",
+        },
       },
       Mounts: [
         {
@@ -204,6 +214,9 @@ describe("InstanceSoftwareService", () => {
     inspectContainerMock.mockResolvedValue({
       Config: {
         Image: "ghcr.io/vivd-studio/vivd-server:latest",
+        Labels: {
+          "com.docker.compose.project": "vivd",
+        },
       },
       Mounts: [
         {
@@ -251,5 +264,11 @@ describe("InstanceSoftwareService", () => {
     expect(pullImageMock).toHaveBeenCalledTimes(2);
     expect(createContainerMock).toHaveBeenCalledTimes(2);
     expect(startContainerMock).toHaveBeenCalledWith("helper-2");
+  });
+
+  it("pins the compose project in the managed update script", () => {
+    expect(buildManagedSelfHostUpdateScript()).toContain(
+      'docker compose -p "${UPDATE_COMPOSE_PROJECT}" "$@"',
+    );
   });
 });

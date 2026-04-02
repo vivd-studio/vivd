@@ -550,9 +550,57 @@ describe("AppSidebar search", () => {
     renderSidebar({ path: `${ROUTES.SUPERADMIN_BASE}?section=instance` });
 
     expect(screen.getByRole("link", { name: /^General$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Organization$/i }));
+    expect(screen.getByRole("link", { name: /^Members$/i })).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /^Organizations$/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("indexes organization routes in solo profile", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: {
+          name: "Admin",
+          email: "admin@example.com",
+          image: null,
+          role: "super_admin",
+        },
+      },
+    });
+    useAppConfigMock.mockReturnValue({
+      isLoading: false,
+      config: {
+        installProfile: "solo",
+        instanceAdminLabel: "Instance Settings",
+        capabilities: {
+          multiOrg: false,
+          tenantHosts: false,
+          customDomains: false,
+          orgLimitOverrides: false,
+          orgPluginEntitlements: false,
+          projectPluginEntitlements: false,
+          dedicatedPluginHost: false,
+        },
+        controlPlaneMode: "path_based",
+        pluginRuntime: { mode: "same_host_path" },
+        hasHostOrganizationAccess: true,
+        canSelectOrganization: false,
+        controlPlaneHost: "localhost",
+        isSuperAdminHost: true,
+      },
+    });
+
+    renderSidebar();
+
+    const dialog = openSearchDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search" }), {
+      target: { value: "organization members" },
+    });
+
+    expect(
+      within(dialog).getByRole("button", { name: /^Members$/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows organization choices on pinned hosts so switching can redirect", () => {

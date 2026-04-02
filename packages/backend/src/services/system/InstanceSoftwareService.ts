@@ -18,6 +18,7 @@ type CurrentRuntimeInfo = {
   currentRevision: string | null;
   currentImage: string | null;
   currentImageTag: string | null;
+  composeProject: string | null;
   updateWorkdirContainerPath: string | null;
   updateWorkdirHostPath: string | null;
 };
@@ -175,8 +176,15 @@ export function buildManagedSelfHostUpdateScript(): string {
     'if [ "${UPDATE_STUDIO_IMAGE:-0}" = "1" ] && [ -n "${TARGET_STUDIO_IMAGE:-}" ]; then',
     '  update_env_var "DOCKER_STUDIO_IMAGE" "${TARGET_STUDIO_IMAGE}"',
     "fi",
-    'docker compose pull ${UPDATE_SERVICES}',
-    'docker compose up -d --force-recreate ${UPDATE_SERVICES}',
+    "run_compose() {",
+    '  if [ -n "${UPDATE_COMPOSE_PROJECT:-}" ]; then',
+    '    docker compose -p "${UPDATE_COMPOSE_PROJECT}" "$@"',
+    "  else",
+    '    docker compose "$@"',
+    "  fi",
+    "}",
+    'run_compose pull ${UPDATE_SERVICES}',
+    'run_compose up -d --force-recreate ${UPDATE_SERVICES}',
   ].join("\n");
 }
 
@@ -300,6 +308,7 @@ export class InstanceSoftwareService {
       console.info("[InstanceSoftwareService] Starting managed self-host update", {
         targetTag,
         helperImage,
+        composeProject: current.composeProject,
         updateServices,
         updateWorkdirHostPath: current.updateWorkdirHostPath,
         rewriteSelfHostImageTag: shouldRewriteSelfHostImageTag,
@@ -311,6 +320,7 @@ export class InstanceSoftwareService {
         targetTag,
         targetStudioImage,
         updateServices,
+        composeProject: current.composeProject,
         socketPath,
         updateWorkdirHostPath: current.updateWorkdirHostPath,
         shouldRewriteSelfHostImageTag,
@@ -394,6 +404,7 @@ export class InstanceSoftwareService {
   private async resolveCurrentRuntime(): Promise<CurrentRuntimeInfo> {
     const updateWorkdirContainerPath = trimToken(this.deps.env.VIVD_SELFHOST_UPDATE_WORKDIR);
     let currentImage = trimToken(this.deps.env.BACKEND_IMAGE);
+    let composeProject: string | null = null;
     let updateWorkdirHostPath: string | null = null;
 
     try {
@@ -402,6 +413,7 @@ export class InstanceSoftwareService {
         const inspected = await this.deps.dockerApiClient.inspectContainer(hostname);
         currentImage =
           trimToken(inspected.Config?.Image) || trimToken(inspected.Image) || currentImage;
+        composeProject = trimToken(inspected.Config?.Labels?.["com.docker.compose.project"]);
 
         if (updateWorkdirContainerPath && Array.isArray(inspected.Mounts)) {
           const matchingMount = inspected.Mounts.find(
@@ -426,6 +438,7 @@ export class InstanceSoftwareService {
       currentRevision: trimToken(this.deps.env.VIVD_IMAGE_REVISION),
       currentImage,
       currentImageTag,
+      composeProject,
       updateWorkdirContainerPath,
       updateWorkdirHostPath,
     };
@@ -455,6 +468,7 @@ export class InstanceSoftwareService {
     targetTag: string;
     targetStudioImage: string;
     updateServices: string[];
+    composeProject: string | null;
     socketPath: string;
     updateWorkdirHostPath: string;
     shouldRewriteSelfHostImageTag: boolean;
@@ -468,6 +482,7 @@ export class InstanceSoftwareService {
         `UPDATE_SELFHOST_IMAGE_TAG=${options.shouldRewriteSelfHostImageTag ? "1" : "0"}`,
         `UPDATE_STUDIO_IMAGE=${options.shouldRewriteStudioImage ? "1" : "0"}`,
         `UPDATE_SERVICES=${options.updateServices.join(" ")}`,
+        `UPDATE_COMPOSE_PROJECT=${options.composeProject || ""}`,
       ],
       Labels: {
         vivd_managed: "true",

@@ -21,6 +21,7 @@ import {
   syncSourceToBucket,
 } from "../sync/ArtifactSyncService.js";
 import { requestConnectedArtifactBuild } from "../sync/ConnectedArtifactBuildService.js";
+import { saveInitialGenerationSnapshot } from "./InitialGenerationSnapshotService.js";
 import { thumbnailGenerationReporter } from "../reporting/ThumbnailGenerationReporter.js";
 import {
   buildConnectedBackendHeaders,
@@ -652,10 +653,22 @@ async function finalizeSessionCompletion(options: {
     }
 
     try {
+      let commitHash: string | undefined;
+      try {
+        const snapshot = await saveInitialGenerationSnapshot(options.workspaceDir);
+        commitHash = snapshot.commitHash ?? undefined;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[InitialGeneration] Failed to save completion snapshot for ${options.projectSlug}/v${options.version}: ${message}`,
+        );
+      }
+
       await syncSourceToBucket({
         projectDir: options.workspaceDir,
         slug: options.projectSlug,
         version: options.version,
+        commitHash,
       });
 
       const projectType = detectProjectType(options.workspaceDir);
@@ -665,6 +678,7 @@ async function finalizeSessionCompletion(options: {
             slug: options.projectSlug,
             version: options.version,
             kind: "preview",
+            commitHash,
           });
           if (requested.requested) {
             if (requested.status === "ready") {
@@ -678,6 +692,7 @@ async function finalizeSessionCompletion(options: {
               projectDir: options.workspaceDir,
               slug: options.projectSlug,
               version: options.version,
+              commitHash,
             });
             thumbnailGenerationReporter.request(
               options.projectSlug,
@@ -693,6 +708,7 @@ async function finalizeSessionCompletion(options: {
             projectDir: options.workspaceDir,
             slug: options.projectSlug,
             version: options.version,
+            commitHash,
           });
           thumbnailGenerationReporter.request(
             options.projectSlug,

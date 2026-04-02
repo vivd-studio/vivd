@@ -260,7 +260,7 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
       );
     }
 
-    if (isOrgAdmin && config.capabilities.multiOrg) {
+    if (isOrgAdmin) {
       items.push(
         {
           id: "platform:organization",
@@ -408,7 +408,6 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
   }, [
     isActive,
     isClientEditor,
-    config.capabilities.multiOrg,
     config.installProfile,
     config.instanceAdminLabel,
     isOrgAdmin,

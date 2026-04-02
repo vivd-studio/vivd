@@ -704,7 +704,7 @@ export function AppSidebar() {
   const isOrgOwner =
     membership?.organizationRole === "owner" ||
     session?.user?.role === "super_admin";
-  const showOrganizationAdmin = isOrgAdmin && config.capabilities.multiOrg;
+  const showOrganizationAdmin = isOrgAdmin;
 
   const { data: orgData } = trpc.organization.getMyOrganization.useQuery(undefined, {
     enabled: !!session && config.hasHostOrganizationAccess,

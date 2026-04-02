@@ -14,6 +14,7 @@ const {
   syncSourceToBucketMock,
   buildAndUploadPreviewMock,
   requestConnectedArtifactBuildMock,
+  saveInitialGenerationSnapshotMock,
   thumbnailRequestMock,
   detectProjectTypeMock,
   isConnectedModeMock,
@@ -32,6 +33,7 @@ const {
   syncSourceToBucketMock: vi.fn(),
   buildAndUploadPreviewMock: vi.fn(),
   requestConnectedArtifactBuildMock: vi.fn(),
+  saveInitialGenerationSnapshotMock: vi.fn(),
   thumbnailRequestMock: vi.fn(),
   detectProjectTypeMock: vi.fn(),
   isConnectedModeMock: vi.fn(),
@@ -60,6 +62,10 @@ vi.mock("../sync/ArtifactSyncService.js", () => ({
 
 vi.mock("../sync/ConnectedArtifactBuildService.js", () => ({
   requestConnectedArtifactBuild: requestConnectedArtifactBuildMock,
+}));
+
+vi.mock("./InitialGenerationSnapshotService.js", () => ({
+  saveInitialGenerationSnapshot: saveInitialGenerationSnapshotMock,
 }));
 
 vi.mock("../reporting/ThumbnailGenerationReporter.js", () => ({
@@ -120,8 +126,9 @@ function readManifest(tmpDir: string) {
 }
 
 async function flushAsyncWork() {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 12; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe("InitialGenerationService", () => {
@@ -144,6 +151,7 @@ describe("InitialGenerationService", () => {
     syncSourceToBucketMock.mockReset();
     buildAndUploadPreviewMock.mockReset();
     requestConnectedArtifactBuildMock.mockReset();
+    saveInitialGenerationSnapshotMock.mockReset();
     thumbnailRequestMock.mockReset();
     detectProjectTypeMock.mockReset();
     isConnectedModeMock.mockReset();
@@ -168,6 +176,10 @@ describe("InitialGenerationService", () => {
     requestConnectedArtifactBuildMock.mockResolvedValue({
       requested: false,
       reason: "disabled",
+    });
+    saveInitialGenerationSnapshotMock.mockResolvedValue({
+      commitHash: "head-1234567",
+      createdCommit: true,
     });
     isConnectedModeMock.mockReturnValue(false);
     getBackendUrlMock.mockReturnValue("");
@@ -243,15 +255,18 @@ describe("InitialGenerationService", () => {
     });
     await flushAsyncWork();
 
+    expect(saveInitialGenerationSnapshotMock).toHaveBeenCalledWith(tmpDir);
     expect(syncSourceToBucketMock).toHaveBeenCalledWith({
       projectDir: tmpDir,
       slug: "site-1",
       version: 1,
+      commitHash: "head-1234567",
     });
     expect(buildAndUploadPreviewMock).toHaveBeenCalledWith({
       projectDir: tmpDir,
       slug: "site-1",
       version: 1,
+      commitHash: "head-1234567",
     });
     expect(thumbnailRequestMock).toHaveBeenCalledWith("site-1", 1);
 
@@ -284,13 +299,49 @@ describe("InitialGenerationService", () => {
       projectDir: tmpDir,
       slug: "site-1",
       version: 1,
+      commitHash: "head-1234567",
     });
     expect(requestConnectedArtifactBuildMock).toHaveBeenCalledWith({
       slug: "site-1",
       version: 1,
       kind: "preview",
+      commitHash: "head-1234567",
     });
     expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
+  });
+
+  it("continues finalization when the completion snapshot save fails", async () => {
+    saveInitialGenerationSnapshotMock.mockRejectedValueOnce(
+      new Error("index.lock still present"),
+    );
+
+    await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+    });
+
+    sessionListener?.({
+      type: "session.completed",
+      data: { kind: "session.completed" },
+    });
+    await flushAsyncWork();
+
+    expect(syncSourceToBucketMock).toHaveBeenCalledWith({
+      projectDir: tmpDir,
+      slug: "site-1",
+      version: 1,
+      commitHash: undefined,
+    });
+    expect(buildAndUploadPreviewMock).toHaveBeenCalledWith({
+      projectDir: tmpDir,
+      slug: "site-1",
+      version: 1,
+      commitHash: undefined,
+    });
+
+    const completedManifest = readManifest(tmpDir);
+    expect(completedManifest.state).toBe("completed");
   });
 
   it("reuses an existing session idempotently instead of creating a duplicate run", async () => {
