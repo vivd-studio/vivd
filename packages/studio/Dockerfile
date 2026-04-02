@@ -12,7 +12,8 @@ RUN apt-get update \
 # Clean up unused musl binary (saves ~120MB)
 RUN npm install -g opencode-ai@1.3.9 \
   && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
-  && npm cache clean --force
+  && npm cache clean --force \
+  && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
 # Configure git for automated commits (required for OpenCode undo/revert)
 RUN git config --global user.email "studio@vivd.local" \
@@ -31,7 +32,8 @@ COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
 RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/studio --include-workspace-root=false \
-  && npm cache clean --force
+  && npm cache clean --force \
+  && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
 # Stage 2: Development
 FROM deps AS dev
@@ -77,7 +79,8 @@ COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
 RUN npm ci -w @vivd/shared -w @vivd/studio --omit=dev --include-workspace-root=false \
-  && npm cache clean --force
+  && npm cache clean --force \
+  && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
 # Copy shared package (runtime dependency)
 COPY packages/shared ./packages/shared
