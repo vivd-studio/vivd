@@ -47,6 +47,10 @@ const TEST_IMAGE_TAG = (process.env.VIVD_FLY_TEST_IMAGE_TAG || "").trim();
 const TEST_DRIFT_IMAGE = (process.env.VIVD_FLY_TEST_DRIFT_IMAGE || "").trim();
 const SHOULD_RUN = RUN_TESTS && FLY_API_TOKEN.length > 0 && FLY_STUDIO_APP.length > 0;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseOptionalPositiveIntEnv(name: string): number | null {
   const raw = (process.env[name] || "").trim();
   if (!raw) return null;
@@ -60,6 +64,8 @@ function parseOptionalPositiveIntEnv(name: string): number | null {
 const MAX_WAKE_MS = parseOptionalPositiveIntEnv(
   "VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS",
 );
+const POST_START_PARK_DRAIN_MS =
+  parseOptionalPositiveIntEnv("VIVD_FLY_RECONCILE_PARK_DRAIN_MS") ?? 8_000;
 
 function stripDigest(image: string | null): string | null {
   if (!image) return null;
@@ -276,6 +282,12 @@ describe("Fly warm reconciliation flow", () => {
         );
         expect(summary).toBeDefined();
         machineId = summary!.id;
+
+        // Let the provider's own readiness traffic drain before parking the
+        // just-started drift image; otherwise Fly can reject/ignore suspend
+        // even though the same machine parks cleanly once that startup traffic
+        // has gone quiet.
+        await sleep(POST_START_PARK_DRAIN_MS);
 
         // Suspend the machine first (matches production warm reconciliation path).
         await provider.stop(organizationId, projectSlug, version);
