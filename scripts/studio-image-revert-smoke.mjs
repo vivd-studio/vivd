@@ -533,8 +533,8 @@ async function ensureBucketExists(client, bucket) {
   }
 }
 
-async function listKeys(client, bucket, prefix) {
-  const keys = [];
+async function listObjects(client, bucket, prefix) {
+  const objects = [];
   let continuationToken;
 
   do {
@@ -548,14 +548,29 @@ async function listKeys(client, bucket, prefix) {
 
     for (const entry of page.Contents ?? []) {
       if (typeof entry.Key === "string") {
-        keys.push(entry.Key);
+        objects.push({
+          key: entry.Key,
+          lastModifiedMs:
+            entry.LastModified instanceof Date ? entry.LastModified.getTime() : null,
+          size: typeof entry.Size === "number" ? entry.Size : null,
+        });
       }
     }
 
     continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (continuationToken);
 
-  return keys.sort();
+  return objects.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+async function listKeys(client, bucket, prefix) {
+  const objects = await listObjects(client, bucket, prefix);
+  return objects.map((entry) => entry.key);
+}
+
+async function getObjectMetadata(client, bucket, key) {
+  const objects = await listObjects(client, bucket, key);
+  return objects.find((entry) => entry.key === key) ?? null;
 }
 
 async function deletePrefix(client, bucket, prefix) {
@@ -625,6 +640,48 @@ async function waitForObjectKey(client, bucket, key, timeoutMs) {
     async () => {
       const keys = await listKeys(client, bucket, key);
       return keys.includes(key) ? keys : null;
+    },
+  );
+}
+
+async function waitForPersistedOpencodeState(
+  client,
+  bucket,
+  {
+    dbKey,
+    walKey,
+    sessionSettledAtMs,
+    shutdownStartedAtMs,
+    timeoutMs,
+  },
+) {
+  return waitForCondition(
+    `persisted OpenCode state for s3://${bucket}/${dbKey} to be current`,
+    timeoutMs,
+    async () => {
+      const [dbMeta, walMeta] = await Promise.all([
+        getObjectMetadata(client, bucket, dbKey),
+        getObjectMetadata(client, bucket, walKey),
+      ]);
+
+      if (!dbMeta) {
+        return null;
+      }
+
+      const walFreshSinceSessionSettled =
+        walMeta?.lastModifiedMs != null && walMeta.lastModifiedMs >= sessionSettledAtMs;
+      const dbFreshSinceShutdown =
+        dbMeta.lastModifiedMs != null && dbMeta.lastModifiedMs >= shutdownStartedAtMs;
+
+      if (!walFreshSinceSessionSettled && !dbFreshSinceShutdown) {
+        return null;
+      }
+
+      return {
+        mode: walFreshSinceSessionSettled ? "wal" : "shutdown-db",
+        dbLastModifiedMs: dbMeta.lastModifiedMs,
+        walLastModifiedMs: walMeta?.lastModifiedMs ?? null,
+      };
     },
   );
 }
@@ -869,6 +926,8 @@ async function main() {
     const snapshotPrefix = `${opencodePrefix}/snapshot/`;
     const sessionDiffPrefix = `${opencodePrefix}/storage/session_diff/`;
     const opencodeDbKey = `${opencodePrefix}/opencode.db`;
+    const opencodeDbWalKey = `${opencodePrefix}/opencode.db-wal`;
+    const sessionSettledAtMs = Date.now();
 
     await waitForObjectToContain(s3, bucket, sourceIndexKey, firstMarker, timeoutMs);
     await waitForPrefixToHaveKeys(s3, bucket, snapshotPrefix, timeoutMs);
@@ -879,12 +938,22 @@ async function main() {
       sessionDiffPrefix,
     });
 
+    const shutdownStartedAtMs = Date.now();
     await stopContainer(firstStudioContainerId);
     firstStudioLogs = getContainerLogs(firstStudioContainerId);
     assertNoBrokenSnapshotLogs(firstStudioLogs);
-    await waitForObjectKey(s3, bucket, opencodeDbKey, timeoutMs);
+    const persistedOpencodeState = await waitForPersistedOpencodeState(s3, bucket, {
+      dbKey: opencodeDbKey,
+      walKey: opencodeDbWalKey,
+      sessionSettledAtMs,
+      shutdownStartedAtMs,
+      timeoutMs,
+    });
     logCheckpoint("initial_opencode_db_synced", {
       opencodeDbKey,
+      persistenceMode: persistedOpencodeState.mode,
+      opencodeDbWalKey:
+        persistedOpencodeState.walLastModifiedMs != null ? opencodeDbWalKey : undefined,
     });
     await removeContainer(firstStudioContainerId);
     firstStudioContainerId = null;
