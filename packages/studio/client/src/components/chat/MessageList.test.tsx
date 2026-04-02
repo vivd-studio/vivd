@@ -105,6 +105,28 @@ vi.mock("./ChatContext", () => ({
   useChatContext: () => chatState,
 }));
 
+function createActiveAgentTimelineItem(overrides: Record<string, unknown> = {}) {
+  return {
+    key: "agent-1",
+    kind: "agent",
+    runId: "turn-1",
+    userMessageId: "user-1",
+    message: undefined,
+    completedAt: undefined,
+    orderedParts: [{ id: "reasoning-1", type: "reasoning", text: "Thinking..." }],
+    actionParts: [{ id: "reasoning-1", type: "reasoning", text: "Thinking..." }],
+    responseParts: [],
+    summaryDiffs: [],
+    hasInterleavedParts: false,
+    runInProgress: true,
+    showWorkedSection: false,
+    workedLabel: undefined,
+    sessionDividerLabel: undefined,
+    fallbackState: "working",
+    ...overrides,
+  };
+}
+
 describe("MessageList latest-user anchoring", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -538,6 +560,76 @@ describe("MessageList latest-user anchoring", () => {
     });
   });
 
+  it("holds the latest-turn anchor while the active turn only has a waiting placeholder", async () => {
+    timelineState.items = [
+      {
+        key: "user-1",
+        kind: "user",
+        message: {
+          id: "user-1",
+          content: "First prompt",
+          createdAt: Date.UTC(2026, 2, 18, 10, 59),
+        },
+      },
+      {
+        key: "agent-1",
+        kind: "agent",
+        runId: "turn-1",
+        userMessageId: "user-1",
+        message: undefined,
+        completedAt: undefined,
+        orderedParts: [],
+        actionParts: [],
+        responseParts: [],
+        summaryDiffs: [],
+        hasInterleavedParts: false,
+        runInProgress: true,
+        showWorkedSection: false,
+        workedLabel: undefined,
+        sessionDividerLabel: undefined,
+        fallbackState: "waiting",
+      },
+    ];
+
+    const { rerender } = render(<MessageList />);
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+      expect(scrollToMock).toHaveBeenLastCalledWith({
+        top: 64,
+        behavior: "auto",
+      });
+    });
+
+    scrollToMock.mockClear();
+    viewportExtraScrollHeight.value = 120;
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(scrollToMock).not.toHaveBeenCalled();
+
+    timelineState.items = [
+      timelineState.items[0],
+      {
+        ...timelineState.items[1],
+        orderedParts: [{ id: "reasoning-1", type: "reasoning", text: "Thinking..." }],
+        actionParts: [{ id: "reasoning-1", type: "reasoning", text: "Thinking..." }],
+      },
+    ];
+    rerender(<MessageList />);
+
+    resizeObserverCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({
+        top: 184,
+        behavior: "auto",
+      });
+    });
+  });
+
   it("does not re-anchor when an optimistic latest-user id is replaced in place", async () => {
     timelineState.items = [
       {
@@ -623,6 +715,8 @@ describe("MessageList latest-user anchoring", () => {
   });
 
   it("auto-follows streamed output while the user stays pinned to the bottom", async () => {
+    timelineState.items = [timelineState.items[0], createActiveAgentTimelineItem()];
+
     render(<MessageList />);
 
     await waitFor(() => {
@@ -642,6 +736,8 @@ describe("MessageList latest-user anchoring", () => {
   });
 
   it("keeps auto-follow paused after a small upward manual scroll near the bottom", async () => {
+    timelineState.items = [timelineState.items[0], createActiveAgentTimelineItem()];
+
     const { container } = render(<MessageList />);
 
     await waitFor(() => {
@@ -663,6 +759,8 @@ describe("MessageList latest-user anchoring", () => {
   });
 
   it("pauses auto-follow after the user scrolls away and resumes from the jump button", async () => {
+    timelineState.items = [timelineState.items[0], createActiveAgentTimelineItem()];
+
     const { container } = render(<MessageList />);
 
     await waitFor(() => {
@@ -700,6 +798,8 @@ describe("MessageList latest-user anchoring", () => {
   });
 
   it("resumes auto-follow when the user scrolls back into the bottom zone", async () => {
+    timelineState.items = [timelineState.items[0], createActiveAgentTimelineItem()];
+
     const { container } = render(<MessageList />);
 
     await waitFor(() => {
@@ -746,6 +846,8 @@ describe("MessageList latest-user anchoring", () => {
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
 
     try {
+      timelineState.items = [timelineState.items[0], createActiveAgentTimelineItem()];
+
       const { container } = render(<MessageList />);
 
       await waitFor(() => {

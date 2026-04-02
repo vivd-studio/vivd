@@ -22,6 +22,7 @@ const SCROLL_POSITION_EPSILON_PX = 2;
 export function useActiveTurnAnchor({
   selectedSessionId,
   latestUserMessageId,
+  activeTurnHasAgentContent,
   isSessionHydrating,
   timelineItemCount,
   showEmptyState,
@@ -30,6 +31,7 @@ export function useActiveTurnAnchor({
 }: {
   selectedSessionId: string | null;
   latestUserMessageId: string | null;
+  activeTurnHasAgentContent: boolean;
   isSessionHydrating: boolean;
   timelineItemCount: number;
   showEmptyState: boolean;
@@ -235,6 +237,10 @@ export function useActiveTurnAnchor({
     );
   }, [getScrollViewport]);
 
+  const shouldHoldLatestTurnAnchor = useCallback(() => {
+    return Boolean(latestUserMessageId) && !activeTurnHasAgentContent;
+  }, [activeTurnHasAgentContent, latestUserMessageId]);
+
   const computeActiveTurnBodyMinHeight = useCallback(
     (messageId: string) => {
       const viewport = getScrollViewport();
@@ -437,6 +443,11 @@ export function useActiveTurnAnchor({
         return;
       }
 
+      if (shouldHoldLatestTurnAnchor()) {
+        syncScrollFades();
+        return;
+      }
+
       if (!didUserScroll && isAutoScrollPosition(viewport)) {
         scrollToBottom();
         syncScrollFades();
@@ -499,7 +510,11 @@ export function useActiveTurnAnchor({
           skipNextResizeAutoScrollRef.current = false;
         }
 
-        if (!pendingAnchorRequest && !userScrolledRef.current) {
+        if (
+          !pendingAnchorRequest &&
+          !userScrolledRef.current &&
+          !shouldHoldLatestTurnAnchor()
+        ) {
           scrollToBottom();
         }
 
@@ -532,6 +547,7 @@ export function useActiveTurnAnchor({
     scrollToBottom,
     selectedSessionId,
     setUserScrolledState,
+    shouldHoldLatestTurnAnchor,
     syncScrollFades,
   ]);
 

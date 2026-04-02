@@ -365,6 +365,35 @@ describe("useOpencodeChatController", () => {
     });
   });
 
+  it("does not report task completion until the active session reaches a terminal status", async () => {
+    const onTaskComplete = vi.fn();
+    mockOpencodeChat.selectedSessionId = "sess-1";
+    mockOpencodeChat.sessionStatus = { type: "busy" } as any;
+
+    const { rerender } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: null,
+        onTaskComplete,
+      }),
+    );
+
+    expect(onTaskComplete).not.toHaveBeenCalled();
+
+    mockOpencodeChat.sessionStatus = null;
+    rerender();
+
+    expect(onTaskComplete).not.toHaveBeenCalled();
+
+    mockOpencodeChat.sessionStatus = { type: "done" } as any;
+    rerender();
+
+    await waitFor(() => {
+      expect(onTaskComplete).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("refetches session status and messages after stopping the selected session", async () => {
     mockOpencodeChat.selectedSessionId = "sess-1";
 

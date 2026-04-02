@@ -18,9 +18,9 @@ describe("studio config", () => {
   it("uses the default soft context limit when env is unset", () => {
     delete process.env.STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS;
 
-    expect(getStudioOpencodeSoftContextLimitTokens()).toBe(250_000);
+    expect(getStudioOpencodeSoftContextLimitTokens()).toBe(200_000);
     expect(getStudioRuntimeConfig()).toEqual({
-      softContextLimitTokens: 250_000,
+      softContextLimitTokens: 200_000,
     });
   });
 
@@ -33,6 +33,6 @@ describe("studio config", () => {
   it("falls back to the default limit when env is invalid", () => {
     process.env.STUDIO_OPENCODE_SOFT_CONTEXT_LIMIT_TOKENS = "nope";
 
-    expect(getStudioOpencodeSoftContextLimitTokens()).toBe(250_000);
+    expect(getStudioOpencodeSoftContextLimitTokens()).toBe(200_000);
   });
 });

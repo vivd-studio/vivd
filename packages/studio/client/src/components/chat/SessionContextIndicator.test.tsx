@@ -6,7 +6,7 @@ import { SessionContextIndicator } from "./SessionContextIndicator";
 const { chatContextState, opencodeState } = vi.hoisted(() => ({
   chatContextState: {
     selectedSessionId: "sess-1" as string | null,
-    softContextLimitTokens: 250_000,
+    softContextLimitTokens: 200_000,
     availableModels: [
       {
         tier: "advanced" as const,
@@ -67,7 +67,7 @@ describe("SessionContextIndicator", () => {
     expect(screen.getByText("64% of working limit")).toBeInTheDocument();
     expect(screen.getByText("510")).toBeInTheDocument();
     expect(screen.getByText("42 ⬡")).toBeInTheDocument();
-    expect(screen.getByText("250,000")).toBeInTheDocument();
+    expect(screen.getByText("200,000")).toBeInTheDocument();
     expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
     expect(screen.queryByText("GPT-4.1")).not.toBeInTheDocument();
     expect(screen.queryByText("Input Tokens")).not.toBeInTheDocument();

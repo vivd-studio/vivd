@@ -11,6 +11,7 @@ import {
   findStaleRunningToolState,
   getMostRecentPendingAssistantActivityAt,
   isActiveSessionStatus,
+  isTerminalSessionStatusType,
   PENDING_ASSISTANT_GRACE_MS,
   selectMostRecentAttentionSessionId,
 } from "./runtime";
@@ -782,20 +783,29 @@ export function useOpencodeChatController({
   ]);
 
   useEffect(() => {
-    if (activityState.isThinking && selectedSessionId) {
+    if (
+      selectedSessionId &&
+      (activityState.isThinking || isActiveSessionStatus(currentSessionStatus))
+    ) {
       activeRunSessionIdRef.current = selectedSessionId;
       return;
     }
 
     if (
-      !activityState.isThinking &&
       activeRunSessionIdRef.current &&
-      activeRunSessionIdRef.current === selectedSessionId
+      activeRunSessionIdRef.current === selectedSessionId &&
+      isTerminalSessionStatusType(sessionStatusType)
     ) {
       activeRunSessionIdRef.current = null;
       onTaskComplete?.();
     }
-  }, [activityState.isThinking, onTaskComplete, selectedSessionId]);
+  }, [
+    activityState.isThinking,
+    currentSessionStatus,
+    onTaskComplete,
+    selectedSessionId,
+    sessionStatusType,
+  ]);
 
   return {
     sessions,

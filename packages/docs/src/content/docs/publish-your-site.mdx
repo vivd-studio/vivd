@@ -7,6 +7,22 @@ import DocShot from "../../components/DocShot.astro";
 
 Publishing is the handoff from draft work inside Studio to the domain your visitors use.
 
+If your site is already live, the same flow is how you update it: make changes in Studio,
+then publish again so the live domain receives the newer version.
+
+## How to update a live site
+
+1. Open the site in Studio and make your changes.
+2. Click the green rocket in the top-right toolbar to open the publish dialog.
+3. If the dialog shows **Save changes**, click it first. This creates the latest saved
+   Studio snapshot that publishing can use.
+4. Review the checklist and fix anything that should not go live yet.
+5. Wait until Vivd finishes preparing the latest build for publishing.
+6. Click **Publish site** once the button becomes available.
+
+That last step republishes the site with your latest saved changes. In other words, updating
+an already-live site still uses the normal publish flow.
+
 ## Before you publish
 
 - Review the latest draft in Studio.
@@ -40,7 +56,9 @@ Use the last review pass to confirm more than just the main desktop hero.
 ## What the publish flow includes
 
 - Previewing the current project state.
+- Saving the latest Studio changes so they become a publishable snapshot.
 - Reviewing the pre-publish checklist.
+- Waiting for the latest build/artifacts to finish preparing.
 - Confirming the target domain.
 - Pushing the selected version live.
 
@@ -49,11 +67,50 @@ field, read [Domains & Publish Targets](/domains-and-publish-targets/).
 
 ## What the checklist is for
 
-The pre-publish checklist is there to catch obvious launch issues before a version goes public. Use it to verify that the site is complete enough for real traffic, not just internally “good enough.”
+The pre-publish checklist is there to catch obvious launch issues before a version goes public.
+Use it to verify that the site is complete enough for real traffic, not just internally
+“good enough.”
+
+Treat it as your last quick review before you click **Publish site**. A useful checklist pass
+usually includes:
+
+- confirming that the main pages and sections are present
+- checking forms, analytics, or other plugin-related setup
+- reviewing contact details, buttons, and navigation
+- confirming the content you want to publish is the latest saved Studio snapshot
+
+If you make more edits after the checklist run, run through the final review again before
+publishing.
+
+## Saving and snapshots
+
+Publishing uses saved Studio state, not half-finished local edits.
+
+- If the dialog says you have unsaved changes, click **Save changes** first.
+- Saving creates the latest snapshot of your work for the publish pipeline.
+- If Studio says you are viewing an older snapshot, switch back to the latest one before
+  publishing so the live site matches what you are looking at.
+
+This is why the publish dialog may show a save action before it lets you continue.
+
+## When the Publish Site button becomes available
+
+After saving, Vivd may need a little time to prepare the latest changes for publishing.
+During that time the dialog can show messages such as build in progress or preparing your
+latest changes.
+
+Wait until:
+
+- the latest snapshot has been prepared
+- the publish checks are no longer blocking you
+- **Publish site** is enabled
+
+Then click **Publish site** to push the update live.
 
 ## Republish flow
 
-After a site is live, you can still return to Studio, refine the project, and publish a newer version when it is ready.
+After a site is live, you can return to Studio at any time, refine the project, save the
+latest snapshot, and publish again when the new version is ready.
 
 ## Expected result
 

@@ -117,6 +117,11 @@ export function MessageList() {
     activeTurnUserItem,
     activeTurnAgentItems,
   } = useMemo(() => splitTimelineAtLatestUser(timeline.items), [timeline.items]);
+  const activeTurnHasAgentContent = activeTurnAgentItems.some(
+    (item) =>
+      item.kind === "agent" &&
+      (item.orderedParts.length > 0 || Boolean(item.message?.content)),
+  );
 
   const {
     scrollViewportRef,
@@ -131,6 +136,7 @@ export function MessageList() {
   } = useActiveTurnAnchor({
     selectedSessionId,
     latestUserMessageId,
+    activeTurnHasAgentContent,
     isSessionHydrating,
     timelineItemCount: timeline.items.length,
     showEmptyState,
