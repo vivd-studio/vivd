@@ -654,6 +654,75 @@ describe("FlyStudioMachineProvider orchestration", () => {
     });
   });
 
+  it("marks activity before waiting for a stopped machine to become ready", async () => {
+    const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
+    const machine = studioMachine({
+      id: "m7",
+      state: "stopped",
+      image: desiredImage,
+      metadataImage: desiredImage,
+    });
+
+    const callOrder: string[] = [];
+
+    await ensureExistingMachineRunningWorkflow(
+      {
+        getMachineExternalPort: () => 4100,
+        routeIdFor: () => "site-1-v1",
+        upsertRuntimeRoute: async () => "/_studio/site-1-v1",
+        getDesiredImage: async () => desiredImage,
+        trimToken,
+        resolveMachineReconcileState: (options) =>
+          resolveMachineReconcileState({
+            ...options,
+            desiredGuest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
+            generateStudioAccessToken: () => "generated-token",
+          }),
+        stopMachine: async () => {},
+        waitForState: async () => {},
+        getMachine: async () => machine,
+        hasMachineDrift,
+        shouldStopSuspendedBeforeReconcile,
+        resolveStudioIdFromMachine,
+        buildStudioEnv: (input) =>
+          buildStudioEnvWorkflow({ desiredKillTimeoutSeconds: 180 }, input),
+        buildReconciledMetadata,
+        buildReconciledMachineConfig: (options) =>
+          buildReconciledMachineConfig({
+            ...options,
+            desiredGuest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
+            normalizeServicesForVivd,
+          }),
+        updateMachineConfig: async ({ config }) => ({
+          ...machine,
+          config,
+        }),
+        startMachineHandlingReplacement: async () => {
+          callOrder.push("start");
+        },
+        getPublicUrlForPort: (port) => `https://studio.test:${port}`,
+        waitForReady: async () => {
+          expect(callOrder).toEqual(["start", "touch"]);
+          callOrder.push("wait");
+        },
+        startTimeoutMs: 60_000,
+        touchKey: () => {
+          callOrder.push("touch");
+        },
+      },
+      machine,
+      {
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        env: {},
+      },
+      "org-1:site-1:v1",
+    );
+
+    expect(callOrder).toEqual(["start", "touch", "wait", "touch"]);
+  });
+
   it("getUrl recreates a Fly compatibility route for running machines", async () => {
     const provider = new FlyStudioMachineProvider();
     const machine = studioMachine({

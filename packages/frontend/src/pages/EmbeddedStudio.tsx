@@ -72,6 +72,9 @@ import {
   Trash2,
 } from "lucide-react";
 
+const EMBEDDED_PROJECT_HEADER_INSET_CLASS =
+  "pl-2 pr-3 py-1 md:pl-2.5 md:pr-4";
+
 /**
  * EmbeddedStudio - Project page inside the main app shell.
  *
@@ -83,7 +86,10 @@ export default function EmbeddedStudio() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, colorTheme, setTheme, setColorTheme } = useTheme();
-  const { toggleSidebar } = useSidebar();
+  const {
+    toggleSidebar,
+    open: sidebarOpen,
+  } = useSidebar();
   const [editRequested, setEditRequested] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<"live" | "publish">("publish");
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
@@ -449,6 +455,7 @@ export default function EmbeddedStudio() {
     studioHostProbeBaseUrl,
     reloadNonce: studioReloadNonce,
     reloadStudioIframe,
+    sidebarOpen,
     theme,
     colorTheme,
     setTheme,
@@ -484,6 +491,7 @@ export default function EmbeddedStudio() {
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(studioVersion));
     url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
+    url.searchParams.set("sidebarOpen", sidebarOpen ? "1" : "0");
     if (initialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
@@ -514,6 +522,7 @@ export default function EmbeddedStudio() {
     projectSlug,
     publicPreviewEnabled,
     resolvedInitialSessionId,
+    sidebarOpen,
     studioBaseUrl,
     studioVersion,
   ]);
@@ -758,7 +767,13 @@ export default function EmbeddedStudio() {
 
     return (
       <HostHeader
-        leadingAccessory={<SidebarTrigger className="rounded-md" />}
+        leadingAccessory={
+          <SidebarTrigger
+            appearance={sidebarOpen ? "panel" : "brand"}
+            revealOnHover={false}
+            className="rounded-md"
+          />
+        }
         leading={
           <>
             <div className="min-w-0 truncate text-sm font-medium sm:hidden">
@@ -812,7 +827,11 @@ export default function EmbeddedStudio() {
 
   if (!project && initialGenerationRequested) {
     return (
-      <FramedHostShell className="h-full" header={renderEmbeddedHeader({})}>
+      <FramedHostShell
+        className="h-full"
+        header={renderEmbeddedHeader({})}
+        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
+      >
         <div className="relative flex h-full min-h-0 flex-col bg-background">
           <StudioStartupLoading className="h-full min-h-0" />
         </div>
@@ -830,7 +849,11 @@ export default function EmbeddedStudio() {
 
   if (startStudio.error) {
     return (
-      <FramedHostShell className="h-full" header={renderEmbeddedHeader({})}>
+      <FramedHostShell
+        className="h-full"
+        header={renderEmbeddedHeader({})}
+        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
+      >
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="flex items-center justify-center">
             <div className="px-6 text-center text-destructive">
@@ -844,7 +867,11 @@ export default function EmbeddedStudio() {
 
   if (startStudio.data && !startStudio.data.success) {
     return (
-      <FramedHostShell className="h-full" header={renderEmbeddedHeader({})}>
+      <FramedHostShell
+        className="h-full"
+        header={renderEmbeddedHeader({})}
+        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
+      >
         <div className={HOST_VIEWPORT_INSET_CLASS}>
           <FramedViewport className="flex flex-col items-center justify-center gap-3">
             <div className="px-6 text-center text-destructive">
@@ -864,6 +891,7 @@ export default function EmbeddedStudio() {
       <FramedHostShell
         className="h-full"
         header={renderEmbeddedHeader({ includeProjectActions: true })}
+        headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className="relative flex h-full min-h-0 flex-col bg-background">
           <StudioStartupLoading className="h-full min-h-0" />
@@ -947,6 +975,7 @@ export default function EmbeddedStudio() {
         <FramedHostShell
           className="h-full"
           header={renderEmbeddedHeader({ includeProjectActions: true })}
+          headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
         >
           <div className={HOST_VIEWPORT_INSET_CLASS}>
             <FramedViewport>

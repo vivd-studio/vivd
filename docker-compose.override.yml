@@ -42,12 +42,20 @@ services:
         - action: rebuild
           path: ./packages/studio
         - action: sync
+          path: ./packages/cli
+          target: /app/packages/cli
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/theme
           target: /app/packages/theme
           ignore:
             - node_modules/
         - action: rebuild
           path: ./packages/backend/package.json
+        - action: rebuild
+          path: ./packages/cli/package.json
         - action: rebuild
           path: ./packages/shared/package.json
         - action: rebuild

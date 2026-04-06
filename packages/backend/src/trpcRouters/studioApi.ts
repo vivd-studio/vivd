@@ -6,6 +6,7 @@
  * machine-scoped Studio runtime token.
  */
 
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, studioOrgProcedure, studioProjectProcedure } from "../trpc";
 import { usageService, type TokenData } from "../services/usage/UsageService";
@@ -26,6 +27,18 @@ import {
 } from "../services/project/ArtifactBuildRequestService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
 import { studioMachineProvider } from "../services/studioMachines";
+import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
+import {
+  ContactFormPluginNotEnabledError,
+  ContactFormRecipientRequiredError,
+  ContactFormRecipientVerificationError,
+} from "../services/plugins/contactForm/service";
+import {
+  ContactRecipientEmailFormatError,
+  ContactRecipientVerificationPendingLimitError,
+  ContactRecipientVerificationSendError,
+} from "../services/plugins/contactForm/recipientVerification";
+import { ContactRecipientVerificationEndpointUnavailableError } from "../services/plugins/contactForm/publicApi";
 import type { ChecklistItem, ChecklistStatus } from "../types/checklistTypes";
 
 /**
@@ -88,6 +101,18 @@ function normalizeChecklistItemNote(note: string | null | undefined): string | u
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function extractRequestHost(rawHost: string | string[] | undefined): string | null {
+  if (typeof rawHost === "string") {
+    const normalized = rawHost.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  if (Array.isArray(rawHost) && rawHost.length > 0) {
+    const normalized = rawHost[0]?.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  return null;
+}
+
 function summarizeChecklistItems(items: ChecklistItem[]): {
   passed: number;
   failed: number;
@@ -144,6 +169,50 @@ async function getEnabledProjectPluginIds(
     .filter((instance) => instance.status === "enabled")
     .map((instance) => instance.pluginId)
     .sort();
+}
+
+const projectInfoInputSchema = z.object({
+  studioId: z.string(),
+  slug: z.string().min(1),
+  version: z.number().int().positive().optional(),
+});
+
+async function buildProjectInfo(options: {
+  organizationId: string;
+  slug: string;
+  version?: number;
+}) {
+  const project = await projectMetaService.getProject(options.organizationId, options.slug);
+  if (!project) {
+    throw new Error(`Project not found: ${options.slug}`);
+  }
+
+  const resolvedVersion = options.version ?? Math.max(1, project.currentVersion || 1);
+  const versionMeta = await projectMetaService.getProjectVersion(
+    options.organizationId,
+    options.slug,
+    resolvedVersion,
+  );
+
+  if (!versionMeta && options.version) {
+    throw new Error(`Project version not found: ${options.slug}/v${resolvedVersion}`);
+  }
+
+  const enabledPluginIds = await getEnabledProjectPluginIds(
+    options.organizationId,
+    options.slug,
+  );
+
+  return {
+    project: {
+      slug: options.slug,
+      title: versionMeta?.title || project.title || options.slug,
+      source: normalizeGenerationSource(versionMeta?.source ?? project.source),
+      currentVersion: Math.max(1, project.currentVersion || resolvedVersion),
+      requestedVersion: resolvedVersion,
+    },
+    enabledPluginIds,
+  };
 }
 
 export const studioApiRouter = router({
@@ -268,6 +337,16 @@ export const studioApiRouter = router({
       return status;
     }),
 
+  getProjectInfo: studioProjectProcedure
+    .input(projectInfoInputSchema)
+    .query(async ({ ctx, input }) => {
+      return buildProjectInfo({
+        organizationId: ctx.organizationId!,
+        slug: input.slug,
+        version: input.version,
+      });
+    }),
+
   /**
    * Return rendered agent instructions for the active project/version.
    * Studio consumes this at session start and injects it as OpenCode `system`.
@@ -366,6 +445,83 @@ export const studioApiRouter = router({
         organizationId: ctx.organizationId!,
         projectSlug: input.slug,
       });
+    }),
+
+  updateProjectContactPluginConfig: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        config: contactFormPluginConfigSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await projectPluginService.updateContactFormConfig({
+          organizationId: ctx.organizationId!,
+          projectSlug: input.slug,
+          config: input.config,
+        });
+      } catch (error) {
+        if (
+          error instanceof ContactFormRecipientVerificationError ||
+          error instanceof ContactFormRecipientRequiredError
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error.message,
+          });
+        }
+        throw error;
+      }
+    }),
+
+  requestProjectContactRecipientVerification: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        email: z.string().trim().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await projectPluginService.requestContactRecipientVerification({
+          organizationId: ctx.organizationId!,
+          projectSlug: input.slug,
+          email: input.email,
+          requestedByUserId: ctx.session?.user.id ?? null,
+          requestHost:
+            ctx.requestHost ??
+            extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
+            extractRequestHost(ctx.req.headers.host),
+        });
+      } catch (error) {
+        if (
+          error instanceof ContactFormPluginNotEnabledError ||
+          error instanceof ContactRecipientEmailFormatError ||
+          error instanceof ContactRecipientVerificationPendingLimitError
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error.message,
+          });
+        }
+        if (error instanceof ContactRecipientVerificationSendError) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message,
+          });
+        }
+        if (error instanceof ContactRecipientVerificationEndpointUnavailableError) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              "Could not generate verification link for this host. Please contact support.",
+          });
+        }
+        throw error;
+      }
     }),
 
   /**

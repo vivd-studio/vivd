@@ -9,9 +9,7 @@ import {
   ChevronRight,
   FolderOpen,
   History,
-  Maximize2,
   MessageSquare,
-  Minimize2,
   PanelLeft,
   Plus,
   Plug,
@@ -33,7 +31,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { VivdIcon } from "@/components/common";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SidebarBrandToggleGlyph, VivdIcon } from "@/components/common";
 
 import { useToolbarState } from "./useToolbarState";
 import {
@@ -47,7 +51,10 @@ import {
   buildProjectStudioPath,
   openEmbeddedStudioPath,
 } from "./hostNavigation";
-import { postVivdHostMessage } from "@/lib/hostBridge";
+import {
+  parseVivdHostMessage,
+  postVivdHostMessage,
+} from "@/lib/hostBridge";
 
 /**
  * StudioToolbar - Standalone toolbar for the single-instance studio.
@@ -60,6 +67,8 @@ export function StudioToolbar() {
 
   const params = new URLSearchParams(window.location.search);
   const fullscreen = params.get("fullscreen") === "1";
+  const initialHostSidebarOpen =
+    params.get("sidebarOpen") === "1" || params.get("sidebarOpen") === "true";
 
   const state = useToolbarState();
   const {
@@ -125,6 +134,7 @@ export function StudioToolbar() {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? 1440 : window.innerWidth,
   );
+  const [hostSidebarOpen, setHostSidebarOpen] = useState(initialHostSidebarOpen);
   const [leadingChromeWidth, setLeadingChromeWidth] = useState(0);
   const [trailingChromeWidth, setTrailingChromeWidth] = useState(0);
   const [showAnalyticsActivationPrompt, setShowAnalyticsActivationPrompt] =
@@ -138,6 +148,19 @@ export function StudioToolbar() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!embedded) return;
+
+    const onMessage = (event: MessageEvent) => {
+      const message = parseVivdHostMessage(event);
+      if (message?.type !== "vivd:host:sidebar") return;
+      setHostSidebarOpen(message.open);
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [embedded]);
 
   useEffect(() => {
     const leadingNode = leadingContentRef.current;
@@ -332,13 +355,6 @@ export function StudioToolbar() {
     previewWorkspaceWidth >= 360 &&
     viewportWidth >= 980;
 
-  const handleToggleFullscreen = () => {
-    if (!embedded) return;
-    postVivdHostMessage({
-      type: fullscreen ? "vivd:studio:exitFullscreen" : "vivd:studio:fullscreen",
-    });
-  };
-
   const handleHardRestart = () => {
     if (!embedded) return;
 
@@ -349,7 +365,6 @@ export function StudioToolbar() {
 
     postVivdHostMessage({
       type: "vivd:studio:hardRestart",
-      slug: projectSlug,
       version: selectedVersion,
     });
   };
@@ -556,27 +571,52 @@ export function StudioToolbar() {
   return (
     <>
       <header className="relative shrink-0 bg-background">
-        <div className="flex flex-wrap items-center gap-1 px-3 py-1 md:flex-nowrap md:px-4">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-1 py-1 md:flex-nowrap",
+            embedded && !fullscreen
+              ? "pl-2 pr-3 md:pl-2.5 md:pr-4"
+              : "px-3 md:px-4",
+          )}
+        >
           <div
             ref={leadingContentRef}
             className="flex min-w-0 shrink items-center gap-2"
             style={maxLeadingWidth ? { maxWidth: maxLeadingWidth } : undefined}
           >
             {embedded && !fullscreen ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 rounded-md"
-                onClick={() => {
-                  postVivdHostMessage({ type: "vivd:studio:toggleSidebar" });
-                }}
-              >
-                <PanelLeft className="h-4 w-4" />
-                <span className="sr-only">Toggle Sidebar</span>
-              </Button>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      data-sidebar-trigger-appearance={hostSidebarOpen ? "panel" : "brand"}
+                      className={cn(
+                        "group/sidebar-trigger shrink-0 rounded-md",
+                        hostSidebarOpen ? "h-7 w-7" : "h-9 w-9",
+                      )}
+                      onClick={() => {
+                        setHostSidebarOpen((current) => !current);
+                        postVivdHostMessage({ type: "vivd:studio:toggleSidebar" });
+                      }}
+                    >
+                      {hostSidebarOpen ? (
+                        <PanelLeft className="h-4 w-4" />
+                      ) : (
+                        <SidebarBrandToggleGlyph />
+                      )}
+                      <span className="sr-only">Toggle Sidebar</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center">
+                    Toggle sidebar
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ) : (
               <div className="flex shrink-0 items-center">
-                <VivdIcon className="h-6 w-6" strokeWidth={12} />
+                <VivdIcon className="!size-6" strokeWidth={12} />
               </div>
             )}
 
@@ -739,22 +779,6 @@ export function StudioToolbar() {
               handleDeleteProject={handleDeleteProject}
               isDeletingProject={isDeletingProject}
             />
-
-            {embedded ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToggleFullscreen}
-                className="h-8 w-8 rounded-lg p-0"
-                title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-              >
-                {fullscreen ? (
-                  <Minimize2 className="w-4 h-4" />
-                ) : (
-                  <Maximize2 className="w-4 h-4" />
-                )}
-              </Button>
-            ) : null}
           </div>
         </div>
 

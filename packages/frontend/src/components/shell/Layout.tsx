@@ -59,7 +59,10 @@ export function Layout() {
     return <CenteredLoading fullScreen />;
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      desktopMode={pageInfo.isProjectPage ? "immersive" : "default"}
+      immersiveKey={pageInfo.isProjectPage ? pageInfo.projectSlug ?? location.pathname : undefined}
+    >
       <NavigationSearchProvider>
         {!isEmbeddedProjectPanel ? <AppSidebar /> : null}
         <div className="flex flex-1 flex-col min-h-0 h-svh overflow-hidden">

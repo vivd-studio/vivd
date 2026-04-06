@@ -5,6 +5,7 @@ import { PanelLeft } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { SidebarBrandToggleGlyph } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +31,21 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 180;
+const SIDEBAR_IMMERSIVE_WAKE_EDGE_PX = 12;
+
+function isWithinAnySidebarPanel(
+  ownerDocument: Document,
+  target: EventTarget | null,
+): boolean {
+  if (!(target instanceof Node)) {
+    return false;
+  }
+
+  return Array.from(
+    ownerDocument.querySelectorAll<HTMLElement>('[data-sidebar="sidebar"]'),
+  ).some((panel) => panel.contains(target));
+}
 
 function readPersistedSidebarOpen(defaultOpen: boolean) {
   if (typeof window === "undefined") {
@@ -82,11 +98,16 @@ function persistSidebarOpen(open: boolean) {
 type SidebarContextProps = {
   state: "expanded" | "collapsed";
   open: boolean;
-  setOpen: (open: boolean) => void;
+  setOpen: (open: boolean | ((open: boolean) => boolean)) => void;
   openMobile: boolean;
-  setOpenMobile: (open: boolean) => void;
+  setOpenMobile: (open: boolean | ((open: boolean) => boolean)) => void;
   isMobile: boolean;
   toggleSidebar: () => void;
+  isImmersiveDesktop: boolean;
+  immersivePeekVisible: boolean;
+  showImmersivePeek: () => void;
+  scheduleHideImmersivePeek: () => void;
+  cancelHideImmersivePeek: () => void;
 };
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
@@ -106,6 +127,8 @@ const SidebarProvider = React.forwardRef<
     defaultOpen?: boolean;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    desktopMode?: "default" | "immersive";
+    immersiveKey?: string;
   }
 >(
   (
@@ -113,6 +136,8 @@ const SidebarProvider = React.forwardRef<
       defaultOpen = true,
       open: openProp,
       onOpenChange: setOpenProp,
+      desktopMode = "default",
+      immersiveKey,
       className,
       style,
       children,
@@ -122,28 +147,79 @@ const SidebarProvider = React.forwardRef<
   ) => {
     const isMobile = useIsMobile();
     const [openMobile, setOpenMobile] = React.useState(false);
+    const [immersivePeekVisible, setImmersivePeekVisible] = React.useState(false);
+    const immersiveHideTimeoutRef = React.useRef<number | null>(null);
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
-    const [_open, _setOpen] = React.useState(() =>
+    const [_persistedOpen, _setPersistedOpen] = React.useState(() =>
       readPersistedSidebarOpen(defaultOpen),
     );
-    const open = openProp ?? _open;
+    const isImmersiveDesktop = desktopMode === "immersive" && !isMobile;
+    const persistedOpen = openProp ?? _persistedOpen;
+    const open = persistedOpen;
+
+    const clearImmersiveHideTimeout = React.useCallback(() => {
+      if (immersiveHideTimeoutRef.current !== null) {
+        window.clearTimeout(immersiveHideTimeoutRef.current);
+        immersiveHideTimeoutRef.current = null;
+      }
+    }, []);
+
+    const showImmersivePeek = React.useCallback(() => {
+      if (!isImmersiveDesktop || open) return;
+      clearImmersiveHideTimeout();
+      setImmersivePeekVisible(true);
+    }, [clearImmersiveHideTimeout, isImmersiveDesktop, open]);
+
+    const scheduleHideImmersivePeek = React.useCallback(() => {
+      if (!isImmersiveDesktop || open) return;
+      clearImmersiveHideTimeout();
+      immersiveHideTimeoutRef.current = window.setTimeout(() => {
+        setImmersivePeekVisible(false);
+        immersiveHideTimeoutRef.current = null;
+      }, SIDEBAR_IMMERSIVE_HIDE_DELAY_MS);
+    }, [clearImmersiveHideTimeout, isImmersiveDesktop, open]);
+
     const setOpen = React.useCallback(
       (value: boolean | ((value: boolean) => boolean)) => {
-        const openState = typeof value === "function" ? value(open) : value;
+        clearImmersiveHideTimeout();
+        setImmersivePeekVisible(false);
+        const openState =
+          typeof value === "function" ? value(persistedOpen) : value;
         if (setOpenProp) {
           setOpenProp(openState);
         } else {
-          _setOpen(openState);
+          _setPersistedOpen(openState);
         }
       },
-      [setOpenProp, open],
+      [
+        clearImmersiveHideTimeout,
+        persistedOpen,
+        setOpenProp,
+      ],
     );
 
     React.useEffect(() => {
       persistSidebarOpen(open);
     }, [open]);
+
+    React.useEffect(() => {
+      clearImmersiveHideTimeout();
+      setImmersivePeekVisible(false);
+    }, [clearImmersiveHideTimeout, immersiveKey]);
+
+    React.useEffect(() => {
+      if (!isImmersiveDesktop || !open) return;
+      clearImmersiveHideTimeout();
+      setImmersivePeekVisible(false);
+    }, [clearImmersiveHideTimeout, isImmersiveDesktop, open]);
+
+    React.useEffect(() => {
+      return () => {
+        clearImmersiveHideTimeout();
+      };
+    }, [clearImmersiveHideTimeout]);
 
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
@@ -181,6 +257,11 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        isImmersiveDesktop,
+        immersivePeekVisible,
+        showImmersivePeek,
+        scheduleHideImmersivePeek,
+        cancelHideImmersivePeek: clearImmersiveHideTimeout,
       }),
       [
         state,
@@ -190,6 +271,11 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        isImmersiveDesktop,
+        immersivePeekVisible,
+        showImmersivePeek,
+        scheduleHideImmersivePeek,
+        clearImmersiveHideTimeout,
       ],
     );
 
@@ -208,6 +294,7 @@ const SidebarProvider = React.forwardRef<
               "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
               className,
             )}
+            data-sidebar-mode={isImmersiveDesktop ? "immersive" : "default"}
             ref={ref}
             {...props}
           >
@@ -239,7 +326,79 @@ const Sidebar = React.forwardRef<
     },
     ref,
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+    const {
+      isMobile,
+      state,
+      open,
+      openMobile,
+      setOpenMobile,
+      isImmersiveDesktop,
+      immersivePeekVisible,
+      showImmersivePeek,
+      scheduleHideImmersivePeek,
+      cancelHideImmersivePeek,
+    } = useSidebar();
+
+    const overlayState = isImmersiveDesktop
+      ? open
+        ? "open"
+        : immersivePeekVisible
+          ? "peek"
+          : "hidden"
+      : "docked";
+
+    const handleBlurWithin = (event: React.FocusEvent<HTMLDivElement>) => {
+      if (!isImmersiveDesktop || open) return;
+
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+        return;
+      }
+
+      scheduleHideImmersivePeek();
+    };
+
+    const handlePointerLeaveWithin = (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isImmersiveDesktop || open) return;
+
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof Node &&
+        event.currentTarget.contains(activeElement)
+      ) {
+        return;
+      }
+
+      scheduleHideImmersivePeek();
+    };
+
+    React.useEffect(() => {
+      if (
+        !isImmersiveDesktop ||
+        side !== "left" ||
+        state !== "collapsed" ||
+        open ||
+        immersivePeekVisible
+      ) {
+        return;
+      }
+
+      const handlePointerMove = (event: PointerEvent) => {
+        if (event.pointerType && event.pointerType !== "mouse") return;
+        if (event.clientX > SIDEBAR_IMMERSIVE_WAKE_EDGE_PX) return;
+        showImmersivePeek();
+      };
+
+      window.addEventListener("pointermove", handlePointerMove, { passive: true });
+      return () => window.removeEventListener("pointermove", handlePointerMove);
+    }, [
+      immersivePeekVisible,
+      isImmersiveDesktop,
+      open,
+      showImmersivePeek,
+      side,
+      state,
+    ]);
 
     if (collapsible === "none") {
       return (
@@ -286,37 +445,92 @@ const Sidebar = React.forwardRef<
         className="group peer hidden text-sidebar-foreground md:block"
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
+        data-overlay-state={overlayState}
         data-variant={variant}
         data-side={side}
+        data-immersive={isImmersiveDesktop ? "true" : "false"}
       >
+        {isImmersiveDesktop && side === "left" && state === "collapsed" ? (
+          <div
+            aria-hidden="true"
+            data-sidebar="hotspot"
+            className="fixed inset-y-0 left-0 z-20 hidden w-3 md:block"
+            onPointerEnter={showImmersivePeek}
+            onPointerLeave={scheduleHideImmersivePeek}
+          />
+        ) : null}
         {/* This is what handles the sidebar gap on desktop */}
         <div
+          data-sidebar="gap"
           className={cn(
-            "relative w-[var(--sidebar-width)] bg-transparent transition-[width] duration-200 ease-linear",
-            "group-data-[collapsible=offcanvas]:w-0",
-            "group-data-[side=right]:rotate-180",
-            variant === "floating" || variant === "inset"
-              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
-              : "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]",
+            "relative bg-transparent transition-[width] duration-200 ease-linear",
+            isImmersiveDesktop
+              ? open
+                ? "w-[var(--sidebar-width)]"
+                : "w-0"
+              : [
+                  "w-[var(--sidebar-width)]",
+                  "group-data-[collapsible=offcanvas]:w-0",
+                  "group-data-[side=right]:rotate-180",
+                  variant === "floating" || variant === "inset"
+                    ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
+                    : "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]",
+                ],
           )}
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-[var(--sidebar-width)] transition-[left,right,width] duration-200 ease-linear md:flex",
-            side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            // Adjust the padding for floating and inset variants.
-            variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+            "fixed inset-y-0 hidden h-svh md:flex",
+            isImmersiveDesktop
+              ? [
+                  "z-30 transition-[width,opacity,transform,visibility] duration-200 ease-out",
+                  side === "left" ? "left-0" : "right-0",
+                  state === "collapsed"
+                    ? variant === "floating" || variant === "inset"
+                      ? "w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
+                      : "w-[var(--sidebar-width-icon)]"
+                    : "w-[var(--sidebar-width)]",
+                  open || immersivePeekVisible
+                    ? "visible translate-x-0 opacity-100"
+                    : side === "left"
+                      ? "invisible -translate-x-2 opacity-0"
+                      : "invisible translate-x-2 opacity-0",
+                  "pointer-events-none data-[overlay-state=open]:pointer-events-auto data-[overlay-state=peek]:pointer-events-auto",
+                  variant === "floating" || variant === "inset" ? "p-2" : "",
+                ]
+              : [
+                  "z-10 w-[var(--sidebar-width)] transition-[left,right,width] duration-200 ease-linear",
+                  side === "left"
+                    ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
+                    : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+                  variant === "floating" || variant === "inset"
+                    ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
+                    : "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+                ],
             className,
           )}
+          onPointerEnter={isImmersiveDesktop ? showImmersivePeek : undefined}
+          onPointerLeave={isImmersiveDesktop ? handlePointerLeaveWithin : undefined}
+          onFocusCapture={isImmersiveDesktop ? showImmersivePeek : undefined}
+          onBlurCapture={isImmersiveDesktop ? handleBlurWithin : undefined}
+          data-overlay-state={overlayState}
+          aria-hidden={isImmersiveDesktop && !open && !immersivePeekVisible}
           {...props}
         >
           <div
             data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
+            className={cn(
+              "flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow",
+              isImmersiveDesktop && !open && [
+                "border-sidebar-border/80 bg-sidebar/95 shadow-xl supports-[backdrop-filter]:bg-sidebar/90 supports-[backdrop-filter]:backdrop-blur-sm",
+                variant === "floating" || variant === "inset"
+                  ? ""
+                  : side === "left"
+                    ? "border-r"
+                    : "border-l",
+              ],
+            )}
+            onPointerEnter={isImmersiveDesktop ? cancelHideImmersivePeek : undefined}
           >
             {children}
           </div>
@@ -329,28 +543,117 @@ Sidebar.displayName = "Sidebar";
 
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button>
->(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar();
+  React.ComponentProps<typeof Button> & {
+    appearance?: "panel" | "brand";
+    revealOnHover?: boolean;
+  }
+>(
+  (
+    {
+      className,
+      onBlur,
+      onClick,
+      appearance = "panel",
+      revealOnHover = true,
+      ...props
+    },
+    ref,
+  ) => {
+  const {
+    toggleSidebar,
+    isImmersiveDesktop,
+    open,
+    showImmersivePeek,
+    scheduleHideImmersivePeek,
+    cancelHideImmersivePeek,
+  } = useSidebar();
 
-  return (
+  const handlePointerLeave = React.useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!revealOnHover || !isImmersiveDesktop || open) return;
+      if (event.currentTarget.closest('[data-sidebar="sidebar"]')) return;
+      if (document.activeElement === event.currentTarget) return;
+      if (
+        isWithinAnySidebarPanel(
+          event.currentTarget.ownerDocument,
+          event.relatedTarget,
+        )
+      ) {
+        return;
+      }
+      scheduleHideImmersivePeek();
+    },
+    [isImmersiveDesktop, open, revealOnHover, scheduleHideImmersivePeek],
+  );
+
+  const handleBlur = React.useCallback(
+    (event: React.FocusEvent<HTMLButtonElement>) => {
+      onBlur?.(event);
+      if (event.defaultPrevented) return;
+      if (!revealOnHover || !isImmersiveDesktop || open) return;
+      if (event.currentTarget.closest('[data-sidebar="sidebar"]')) return;
+      if (
+        isWithinAnySidebarPanel(
+          event.currentTarget.ownerDocument,
+          event.relatedTarget,
+        )
+      ) {
+        return;
+      }
+      scheduleHideImmersivePeek();
+    },
+    [isImmersiveDesktop, onBlur, open, revealOnHover, scheduleHideImmersivePeek],
+  );
+
+  const icon =
+    appearance === "brand" ? (
+      <SidebarBrandToggleGlyph />
+    ) : (
+      <PanelLeft aria-hidden="true" className="!size-4" />
+    );
+
+  const button = (
     <Button
       ref={ref}
       data-sidebar="trigger"
+      data-sidebar-trigger-appearance={appearance}
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)}
+      className={cn(
+        "group/sidebar-trigger",
+        appearance === "brand" ? "h-9 w-9" : "h-7 w-7",
+        className,
+      )}
+      onPointerEnter={
+        isImmersiveDesktop && revealOnHover ? showImmersivePeek : undefined
+      }
+      onPointerLeave={isImmersiveDesktop ? handlePointerLeave : undefined}
+      onFocus={
+        isImmersiveDesktop && revealOnHover ? showImmersivePeek : undefined
+      }
+      onBlur={isImmersiveDesktop ? handleBlur : onBlur}
       onClick={(event) => {
+        cancelHideImmersivePeek();
         onClick?.(event);
         toggleSidebar();
       }}
       {...props}
     >
-      <PanelLeft />
+      {icon}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );
-});
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right" align="center">
+        Toggle sidebar
+      </TooltipContent>
+    </Tooltip>
+  );
+  },
+);
 SidebarTrigger.displayName = "SidebarTrigger";
 
 const SidebarRail = React.forwardRef<
@@ -366,7 +669,6 @@ const SidebarRail = React.forwardRef<
       aria-label="Toggle Sidebar"
       tabIndex={-1}
       onClick={toggleSidebar}
-      title="Toggle Sidebar"
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
         "[[data-side=left]_&]:cursor-w-resize [[data-side=right]_&]:cursor-e-resize",

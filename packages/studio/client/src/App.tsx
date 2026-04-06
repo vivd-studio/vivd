@@ -1,7 +1,7 @@
 import { PreviewProvider, PreviewContent } from "@/components/preview";
 import { Toaster } from "@/components/ui/sonner";
 import {
-  isVivdHostMessageEvent,
+  parseVivdHostMessage,
   postVivdHostMessage,
 } from "@/lib/hostBridge";
 import { useCallback, useEffect } from "react";
@@ -49,8 +49,8 @@ export function App() {
     postStudioReady();
 
     const onMessage = (event: MessageEvent) => {
-      if (!isVivdHostMessageEvent(event)) return;
-      if (event.data?.type !== "vivd:host:ready-check") return;
+      const message = parseVivdHostMessage(event);
+      if (message?.type !== "vivd:host:ready-check") return;
 
       postStudioReady();
     };

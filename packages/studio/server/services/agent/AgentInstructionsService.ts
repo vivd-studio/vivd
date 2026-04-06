@@ -46,7 +46,18 @@ function formatEnabledPluginsFromEnv(): string {
   return list.map((pluginId) => `- ${pluginId}`).join("\n");
 }
 
-function buildFallbackInstructions(projectSlug: string): string {
+function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: boolean): string {
+  const cliSection = connectedCliAvailable
+    ? `3. **Vivd CLI and plugin-first features**:
+   - The \`vivd\` CLI is available in this Studio runtime and is the preferred way to inspect project/plugin state.
+   - Use the \`vivd\` CLI as the default way to interact with the Vivd platform the website is running on.
+   - Use \`vivd project info\`, \`vivd plugins catalog\`, \`vivd plugins contact info\`, \`vivd plugins contact help\`, \`vivd plugins analytics info\`, and \`vivd publish checklist show\` before inferring platform state from files alone.
+   - If the needed plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`
+    : `3. **Plugin-first features**:
+   - Vivd supports first-party plugins such as Contact Form and Analytics.
+   - Prefer plugin-backed solutions over custom implementations for those features.
+   - If the needed plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`;
+
   return `# Project: ${projectSlug}
 
 Your name is vivd. You work in vivd-studio and are responsible for building the customer's website. This is a live production website. Code changes will be deployed to the internet.
@@ -56,10 +67,7 @@ Your name is vivd. You work in vivd-studio and are responsible for building the 
 1. **Production ready**: All code must be production-quality, mobile responsive, and free of placeholders.
 2. **Enabled plugins for this project**:
 ${formatEnabledPluginsFromEnv()}
-3. **Plugin-first features**:
-   - Vivd supports first-party plugins such as Contact Form and Analytics.
-   - Prefer plugin-backed solutions over custom implementations for those features.
-   - If the needed plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.
+${cliSection}
 4. **AGENTS.md is living memory**:
    - Treat the project-root \`AGENTS.md\` file as living project memory.
    - Update it proactively when project-specific information becomes important, especially where content lives and how to add, remove, or edit it.
@@ -95,12 +103,12 @@ class AgentInstructionsService {
       parseProjectVersion(options?.projectVersion) ?? readProjectVersionFromEnv();
 
     if (!isConnectedMode()) {
-      return buildFallbackInstructions(projectSlug);
+      return buildFallbackInstructions(projectSlug, false);
     }
 
     const config = getConnectedBackendAuthConfig();
     if (!config) {
-      return buildFallbackInstructions(projectSlug);
+      return buildFallbackInstructions(projectSlug, false);
     }
 
     const cacheKey = this.buildCacheKey(projectSlug, projectVersion);
@@ -161,7 +169,7 @@ class AgentInstructionsService {
       if (cached?.instructions) {
         return cached.instructions;
       }
-      return buildFallbackInstructions(projectSlug);
+      return buildFallbackInstructions(projectSlug, true);
     }
   }
 }

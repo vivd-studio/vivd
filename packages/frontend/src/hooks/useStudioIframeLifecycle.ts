@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import type { VivdHostBridgeMessage } from "@vivd/shared/studio";
 import {
   isColorTheme,
   isTheme,
@@ -37,6 +38,7 @@ type UseStudioIframeLifecycleOptions = {
   studioHostProbeBaseUrl: string | null;
   reloadNonce: number;
   reloadStudioIframe: () => Promise<void> | void;
+  sidebarOpen?: boolean;
   theme: Theme;
   colorTheme: ColorTheme;
   setTheme: (theme: Theme) => void;
@@ -55,6 +57,7 @@ export function useStudioIframeLifecycle({
   studioHostProbeBaseUrl,
   reloadNonce,
   reloadStudioIframe,
+  sidebarOpen,
   theme,
   colorTheme,
   setTheme,
@@ -75,7 +78,7 @@ export function useStudioIframeLifecycle({
   const studioOrigin = getVivdStudioBridgeOrigin(studioBaseUrl);
 
   const postMessageToStudio = useCallback(
-    (message: Record<string, unknown>) => {
+    (message: VivdHostBridgeMessage) => {
       if (
         !canPostMessageToVivdStudio({
           iframe: iframeRef.current,
@@ -101,6 +104,14 @@ export function useStudioIframeLifecycle({
     });
   }, [colorTheme, postMessageToStudio, theme]);
 
+  const syncSidebarToStudio = useCallback(() => {
+    if (typeof sidebarOpen !== "boolean") return;
+    postMessageToStudio({
+      type: "vivd:host:sidebar",
+      open: sidebarOpen,
+    });
+  }, [postMessageToStudio, sidebarOpen]);
+
   const requestStudioReadyCheck = useCallback(() => {
     postMessageToStudio({ type: "vivd:host:ready-check" });
   }, [postMessageToStudio]);
@@ -108,7 +119,8 @@ export function useStudioIframeLifecycle({
   const requestStudioBridgeSync = useCallback(() => {
     requestStudioReadyCheck();
     syncThemeToStudio();
-  }, [requestStudioReadyCheck, syncThemeToStudio]);
+    syncSidebarToStudio();
+  }, [requestStudioReadyCheck, syncSidebarToStudio, syncThemeToStudio]);
 
   const markStudioReady = useCallback(() => {
     setStudioReady(true);
@@ -144,6 +156,10 @@ export function useStudioIframeLifecycle({
   useEffect(() => {
     syncThemeToStudio();
   }, [syncThemeToStudio]);
+
+  useEffect(() => {
+    syncSidebarToStudio();
+  }, [syncSidebarToStudio]);
 
   useEffect(() => {
     requestStudioBridgeSync();

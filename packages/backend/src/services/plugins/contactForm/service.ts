@@ -355,12 +355,12 @@ class ContactFormPluginService {
           ? [
               "Contact Form access is enabled for this instance, but no plugin instance exists yet for this project.",
               "Enable it in Studio/Control-Plane Plugins UI first (Project → Plugins → Contact Form).",
-              "After enabling, call vivd_plugins_contact_info again to get project-specific token + snippets.",
+              "After enabling, run `vivd plugins contact info` again to get the project-specific token, config, and snippets.",
             ]
           : [
               "Contact Form access is currently disabled for this project.",
               "Ask a super-admin to enable Contact Form in Instance Settings -> Plugins (solo) or Super Admin -> Plugins (platform).",
-              "After access is enabled, call vivd_plugins_contact_info again to get install instructions.",
+              "After access is enabled, run `vivd plugins contact info` again to get install instructions.",
             ],
       };
     }

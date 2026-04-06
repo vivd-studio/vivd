@@ -226,6 +226,8 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   private inflightStarts = new Map<string, Promise<StudioMachineStartResult>>();
   private nextPort = STUDIO_PORT_START;
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private sharedBuildPromise: Promise<void> | null = null;
+  private cliBuildPromise: Promise<void> | null = null;
   private studioBuildPromise: Promise<void> | null = null;
 
   constructor() {
@@ -287,10 +289,11 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       `[StudioMachine] Starting local studio for ${args.organizationId}:${args.projectSlug}/v${args.version} on port ${port}`
     );
 
-    const studioPath = this.resolveStudioPackagePath();
-    await this.ensureStudioBuilt(studioPath);
-
     const workspaceDir = getVersionDir(args.organizationId, args.projectSlug, args.version);
+    const sharedPath = this.resolveSharedPackagePath();
+    const cliPath = this.resolveCliPackagePath();
+    const studioPath = this.resolveStudioPackagePath();
+    await this.ensureSharedBuilt(sharedPath);
 
     const env: Record<string, string> = {
       ...process.env,
@@ -312,6 +315,9 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     for (const [k, v] of Object.entries(args.env)) {
       if (typeof v === "string") env[k] = v;
     }
+
+    await this.ensureCliAvailable(cliPath, env);
+    await this.ensureStudioBuilt(studioPath);
 
     const opencodeDataHome =
       env.VIVD_OPENCODE_DATA_HOME ||
@@ -828,6 +834,14 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return path.resolve(__dirname, "../../../../studio");
   }
 
+  private resolveSharedPackagePath(): string {
+    return path.resolve(__dirname, "../../../../shared");
+  }
+
+  private resolveCliPackagePath(): string {
+    return path.resolve(__dirname, "../../../../cli");
+  }
+
   private async allocatePort(): Promise<number> {
     for (let i = 0; i < 50; i++) {
       const port = this.nextPort++;
@@ -877,6 +891,71 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     );
   }
 
+  private async ensureSharedBuilt(sharedPath: string): Promise<void> {
+    const sourceEntry = path.join(sharedPath, "src", "index.ts");
+    if (!fs.existsSync(sourceEntry)) {
+      throw new Error(
+        `Shared sources are missing at ${sharedPath} (expected ${sourceEntry}).`,
+      );
+    }
+
+    const distEntry = path.join(sharedPath, "dist", "index.js");
+    if (fs.existsSync(distEntry)) return;
+
+    if (!this.sharedBuildPromise) {
+      this.sharedBuildPromise = this.buildWorkspacePackage(
+        "@vivd/shared",
+        sharedPath,
+        "[SharedBuild]",
+      ).finally(() => {
+        this.sharedBuildPromise = null;
+      });
+    }
+
+    await this.sharedBuildPromise;
+
+    if (!fs.existsSync(distEntry)) {
+      throw new Error(
+        "Shared build completed but expected output was not found (dist/index.js).",
+      );
+    }
+  }
+
+  private async ensureCliAvailable(cliPath: string, env: Record<string, string>): Promise<void> {
+    const sourceEntry = path.join(cliPath, "src", "index.ts");
+    if (!fs.existsSync(sourceEntry)) {
+      throw new Error(
+        `CLI sources are missing at ${cliPath} (expected ${sourceEntry}). ` +
+          `If you're running Docker dev, rebuild the backend image or ensure ./packages/cli is synced into the backend container.`,
+      );
+    }
+
+    const distEntry = path.join(cliPath, "dist", "index.js");
+    if (!fs.existsSync(distEntry)) {
+      if (!this.cliBuildPromise) {
+        this.cliBuildPromise = this.buildWorkspacePackage(
+          "@vivd/cli",
+          cliPath,
+          "[CliBuild]",
+        ).finally(() => {
+          this.cliBuildPromise = null;
+        });
+      }
+
+      await this.cliBuildPromise;
+    }
+
+    if (!fs.existsSync(distEntry)) {
+      throw new Error(
+        "CLI build completed but expected output was not found (dist/index.js).",
+      );
+    }
+
+    const wrapperPath = path.join(cliPath, "dist", "vivd");
+    await this.writeCliWrapper(wrapperPath, distEntry);
+    env.PATH = this.prependPathEntry(path.dirname(wrapperPath), env.PATH);
+  }
+
   private async ensureStudioBuilt(studioPath: string): Promise<void> {
     const serverEntry = path.join(studioPath, "server", "index.ts");
     if (!fs.existsSync(serverEntry)) {
@@ -904,12 +983,16 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     }
   }
 
-  private async buildStudio(studioPath: string): Promise<void> {
-    console.log("[StudioMachine] Building @vivd/studio (missing dist/)...");
+  private async buildWorkspacePackage(
+    packageName: string,
+    packagePath: string,
+    logPrefix: string,
+  ): Promise<void> {
+    console.log(`[StudioMachine] Building ${packageName} (missing dist/)...`);
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn("npm", ["run", "build"], {
-        cwd: studioPath,
+        cwd: packagePath,
         env: process.env,
         shell: true,
         stdio: "pipe",
@@ -926,13 +1009,13 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       proc.stdout?.on("data", (data) => {
         const text = data.toString();
         recordOutput(text);
-        console.log(`[StudioBuild] ${text.trim()}`);
+        console.log(`${logPrefix} ${text.trim()}`);
       });
 
       proc.stderr?.on("data", (data) => {
         const text = data.toString();
         recordOutput(text);
-        console.error(`[StudioBuild] ${text.trim()}`);
+        console.error(`${logPrefix} ${text.trim()}`);
       });
 
       proc.on("error", (err) => {
@@ -943,9 +1026,41 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
         if (code === 0) return resolve();
         const lastLine = recentOutput.length ? recentOutput[recentOutput.length - 1] : undefined;
         const suffix = lastLine ? `\nLast output: ${lastLine}` : "";
-        reject(new Error(`Studio build failed (exit code: ${code})${suffix}`));
+        reject(new Error(`${packageName} build failed (exit code: ${code})${suffix}`));
       });
     });
+  }
+
+  private async buildStudio(studioPath: string): Promise<void> {
+    await this.buildWorkspacePackage("@vivd/studio", studioPath, "[StudioBuild]");
+  }
+
+  private async writeCliWrapper(wrapperPath: string, cliEntryPath: string): Promise<void> {
+    const wrapperSource = `#!/bin/sh
+exec node "${cliEntryPath}" "$@"
+`;
+    await fs.promises.mkdir(path.dirname(wrapperPath), { recursive: true });
+    await fs.promises.writeFile(wrapperPath, wrapperSource, {
+      encoding: "utf8",
+      mode: 0o755,
+    });
+    await fs.promises.chmod(wrapperPath, 0o755).catch(() => undefined);
+  }
+
+  private prependPathEntry(entry: string, currentPath: string | undefined): string {
+    const normalizedEntry = entry.trim();
+    if (!normalizedEntry) return currentPath || "";
+
+    const parts = (currentPath || "")
+      .split(path.delimiter)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.includes(normalizedEntry)) {
+      return [normalizedEntry, ...parts.filter((part) => part !== normalizedEntry)].join(
+        path.delimiter,
+      );
+    }
+    return [normalizedEntry, ...parts].join(path.delimiter);
   }
 
   private stopOldestStudio(): void {

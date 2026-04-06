@@ -94,20 +94,35 @@ vi.mock("@/components/theme", () => ({
 }));
 
 vi.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button type="button">Sidebar</button>,
+  SidebarTrigger: ({
+    appearance,
+  }: {
+    appearance?: "panel" | "brand";
+  }) => (
+    <button
+      type="button"
+      aria-label="Toggle Sidebar"
+      data-appearance={appearance ?? "panel"}
+    >
+      Sidebar
+    </button>
+  ),
   useSidebar: useSidebarMock,
 }));
 
 vi.mock("@/components/shell", () => ({
   HeaderProfileMenu: () => <div data-testid="profile-menu" />,
   HostHeader: ({
+    leadingAccessory,
     leading,
     trailing,
   }: {
+    leadingAccessory?: ReactNode;
     leading?: ReactNode;
     trailing?: ReactNode;
   }) => (
     <div data-testid="host-header">
+      {leadingAccessory}
       {leading}
       {trailing}
     </div>
@@ -274,6 +289,7 @@ describe("EmbeddedStudio", () => {
     });
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
+      open: false,
     });
     useStudioRuntimeGuardMock.mockReturnValue({
       isRecovering: false,
@@ -334,11 +350,38 @@ describe("EmbeddedStudio", () => {
     renderEmbeddedStudio();
 
     expect(screen.getByTestId("host-header")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
+      "data-appearance",
+      "brand",
+    );
     expect(screen.getByTitle("Preview - site-1")).toHaveAttribute(
       "src",
       "/vivd-studio/api/preview/site-1/v1/",
     );
     expectNoPreviewSurfaceControls();
+  });
+
+  it("uses the brand-style sidebar trigger in the embedded studio header", () => {
+    renderEmbeddedStudio();
+
+    expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
+      "data-appearance",
+      "brand",
+    );
+  });
+
+  it("uses the standard sidebar trigger in the embedded studio header when the sidebar is open", () => {
+    useSidebarMock.mockReturnValue({
+      toggleSidebar: vi.fn(),
+      open: true,
+    });
+
+    renderEmbeddedStudio();
+
+    expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
+      "data-appearance",
+      "panel",
+    );
   });
 
   it("hides the host header once the embedded studio iframe is active", () => {
@@ -633,6 +676,29 @@ describe("EmbeddedStudio", () => {
     ) as HTMLInputElement | null;
     expect(userActionTokenField?.value).toBe("user-action-token-1");
     expect(HTMLFormElement.prototype.submit).toHaveBeenCalledOnce();
+  });
+
+  it("passes the host sidebar state through to the embedded studio iframe", () => {
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
+    useSidebarMock.mockReturnValue({
+      toggleSidebar: vi.fn(),
+      open: true,
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        bootstrapToken: null,
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    const iframeUrl = new URL(iframe.getAttribute("src") ?? "");
+    expect(iframeUrl.searchParams.get("sidebarOpen")).toBe("1");
   });
 
   it("treats a same-origin studio iframe load as ready when the shell document is present", () => {

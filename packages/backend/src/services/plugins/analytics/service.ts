@@ -1011,12 +1011,12 @@ class AnalyticsPluginService {
           ? [
               "Analytics entitlement is enabled, but no plugin instance exists yet for this project.",
               "Ask a super-admin to enable the Analytics plugin in Super Admin -> Plugins.",
-              "Then call vivd_plugins_analytics_info again to get the project-specific snippet.",
+              "Then run `vivd plugins analytics info` again to get the project-specific snippet.",
             ]
           : [
               "Analytics plugin access is currently disabled for this project.",
               "Ask a super-admin to enable Analytics in Super Admin -> Plugins.",
-              "After access is enabled, call vivd_plugins_analytics_info again to get install instructions.",
+              "After access is enabled, run `vivd plugins analytics info` again to get install instructions.",
             ],
       };
     }

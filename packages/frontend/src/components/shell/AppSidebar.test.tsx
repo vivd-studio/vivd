@@ -77,13 +77,19 @@ import { NavigationSearchProvider } from "./NavigationSearch";
 function renderSidebar({
   path = ROUTES.DASHBOARD,
   sidebarOpen = true,
+  desktopMode = "default",
 }: {
   path?: string;
   sidebarOpen?: boolean;
+  desktopMode?: "default" | "immersive";
 } = {}) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <SidebarProvider open={sidebarOpen}>
+      <SidebarProvider
+        open={sidebarOpen}
+        desktopMode={desktopMode}
+        immersiveKey={desktopMode === "immersive" ? "project-alpha" : undefined}
+      >
         <NavigationSearchProvider>
           <AppSidebar />
         </NavigationSearchProvider>
@@ -837,6 +843,25 @@ describe("AppSidebar search", () => {
     expect(
       screen.getByRole("dialog", { name: "Search navigation" }),
     ).toBeInTheDocument();
+  });
+
+  it("uses the brand-style sidebar toggle inside the immersive collapsed rail", () => {
+    renderSidebar({
+      path: ROUTES.PROJECT("alpha"),
+      sidebarOpen: false,
+      desktopMode: "immersive",
+    });
+
+    const headerTrigger = document.querySelector(
+      '[data-sidebar="header"] [data-sidebar="trigger"]',
+    ) as HTMLElement | null;
+
+    expect(headerTrigger).toBeInTheDocument();
+    expect(headerTrigger).toHaveAccessibleName("Toggle Sidebar");
+    expect(headerTrigger).toHaveAttribute(
+      "data-sidebar-trigger-appearance",
+      "brand",
+    );
   });
 
   it("shows a persistent docs link derived from the current host", () => {

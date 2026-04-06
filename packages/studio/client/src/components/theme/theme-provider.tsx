@@ -6,7 +6,7 @@ import {
   type Theme,
 } from "@vivd/shared/types";
 import {
-  isVivdHostMessageEvent,
+  parseVivdHostMessage,
   postVivdHostMessage,
 } from "@/lib/hostBridge";
 
@@ -123,11 +123,11 @@ export function ThemeProvider({
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (!isVivdHostMessageEvent(event)) return;
-      if (event.data?.type !== "vivd:host:theme") return;
+      const message = parseVivdHostMessage(event);
+      if (message?.type !== "vivd:host:theme") return;
 
-      const nextTheme = event.data?.theme;
-      const nextColorTheme = event.data?.colorTheme;
+      const nextTheme = message.theme;
+      const nextColorTheme = message.colorTheme;
 
       if (isTheme(nextTheme)) {
         setThemeState((prev) => (prev === nextTheme ? prev : nextTheme));

@@ -21,6 +21,7 @@ function createLifecycleProps(
     studioHostProbeBaseUrl: "https://app.example.com/_studio/route-1",
     reloadNonce: 0,
     reloadStudioIframe: vi.fn(),
+    sidebarOpen: false,
     theme: "light",
     colorTheme: "vivd-sharp",
     setTheme: vi.fn(),
@@ -79,6 +80,10 @@ describe("useStudioIframeLifecycle", () => {
     expect(latestValue?.studioReady).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(
       { type: "vivd:host:theme", theme: "light", colorTheme: "vivd-sharp" },
+      "https://app.example.com",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:sidebar", open: false },
       "https://app.example.com",
     );
     expect(props.onReady).toHaveBeenCalledTimes(1);

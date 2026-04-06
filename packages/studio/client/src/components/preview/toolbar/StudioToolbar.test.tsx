@@ -125,6 +125,7 @@ describe("StudioToolbar", () => {
   });
 
   beforeEach(() => {
+    window.history.replaceState({}, "", "/");
     mockUseToolbarState.mockReset();
     mockUsePermissions.mockReset();
     mockUseTheme.mockReset();
@@ -206,6 +207,64 @@ describe("StudioToolbar", () => {
     expect(
       screen.queryByTestId("sessions-button-activity-indicator"),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses the embedded vivd-mark sidebar toggle without showing a separate fullscreen button", () => {
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      embedded: true,
+    });
+
+    render(<StudioToolbar />);
+
+    const toggle = document.querySelector(
+      '[data-sidebar-trigger-appearance="brand"]',
+    );
+
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAccessibleName(/Toggle Sidebar/);
+    expect(toggle).toHaveAttribute("data-sidebar-trigger-appearance", "brand");
+    expect(
+      toggle?.querySelector('[data-sidebar-brand-glyph="brand"]'),
+    ).toHaveClass("!size-6");
+    expect(screen.queryByTitle(/fullscreen/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a tooltip on the embedded sidebar toggle", async () => {
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      embedded: true,
+    });
+
+    render(<StudioToolbar />);
+
+    const toggle = document.querySelector(
+      '[data-sidebar-trigger-appearance="brand"]',
+    ) as HTMLElement | null;
+
+    expect(toggle).toBeInTheDocument();
+
+    fireEvent.pointerMove(toggle!);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Toggle sidebar");
+  });
+
+  it("uses the plain sidebar toggle when the host sidebar is already open", () => {
+    window.history.replaceState({}, "", "/?sidebarOpen=1");
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      embedded: true,
+    });
+
+    render(<StudioToolbar />);
+
+    const toggle = document.querySelector(
+      '[data-sidebar-trigger-appearance="panel"]',
+    );
+
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAccessibleName(/Toggle Sidebar/);
+    expect(screen.queryByRole("img", { name: "vivd" })).not.toBeInTheDocument();
   });
 
   it("shows an inline Projects breadcrumb when the toolbar has enough room", () => {

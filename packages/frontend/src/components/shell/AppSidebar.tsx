@@ -61,6 +61,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -691,10 +692,11 @@ export function AppSidebar() {
   const { config, isLoading: isConfigLoading } = useAppConfig();
   const location = useLocation();
   const navigate = useNavigate();
-  const { state } = useSidebar();
+  const { state, isImmersiveDesktop } = useSidebar();
   const { openSearch } = useNavigationSearch();
 
   const isCollapsed = state === "collapsed";
+  const showImmersiveSidebarToggle = isCollapsed && isImmersiveDesktop;
   const [showAllProjects, setShowAllProjects] = React.useState(false);
 
   const { data: membership } = trpc.organization.getMyMembership.useQuery(undefined, {
@@ -877,14 +879,20 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <OrganizationSwitcher
-          org={org ? { id: org.id, name: org.name, status: org.status } : null}
-          organizations={organizations}
-          allowOrganizationChoices={config.capabilities.multiOrg}
-          canSelectOrganization={config.canSelectOrganization}
-          isSwitching={setActiveOrganizationMutation.isPending}
-          onSelectOrganization={handleSelectOrganization}
-        />
+        {showImmersiveSidebarToggle ? (
+          <div className="flex w-full items-center justify-center">
+            <SidebarTrigger appearance="brand" className="-mt-0.5 rounded-md" />
+          </div>
+        ) : (
+          <OrganizationSwitcher
+            org={org ? { id: org.id, name: org.name, status: org.status } : null}
+            organizations={organizations}
+            allowOrganizationChoices={config.capabilities.multiOrg}
+            canSelectOrganization={config.canSelectOrganization}
+            isSwitching={setActiveOrganizationMutation.isPending}
+            onSelectOrganization={handleSelectOrganization}
+          />
+        )}
       </SidebarHeader>
 
       <SidebarContent>

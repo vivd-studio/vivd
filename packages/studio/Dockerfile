@@ -29,9 +29,10 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
+COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
@@ -39,15 +40,19 @@ RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/studio --include-workspace-ro
 FROM deps AS dev
 COPY packages/shared ./packages/shared
 COPY packages/theme ./packages/theme
+COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
 # Ensure shared is built (runtime imports come from `@vivd/shared/dist/*`)
 RUN npm run build -w @vivd/shared
+RUN npm run build -w @vivd/cli
 
 WORKDIR /app/packages/studio
 COPY packages/studio/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY packages/studio/selfHostDefaults.sh /usr/local/bin/selfHostDefaults.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/selfHostDefaults.sh
+RUN printf '%s\n' '#!/bin/sh' 'exec node /app/packages/cli/dist/index.js "$@"' > /usr/local/bin/vivd \
+  && chmod +x /usr/local/bin/vivd
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 EXPOSE 3100 3101
 CMD ["npm", "run", "dev"]
@@ -56,9 +61,11 @@ CMD ["npm", "run", "dev"]
 FROM deps AS build
 COPY packages/shared ./packages/shared
 COPY packages/theme ./packages/theme
+COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
 RUN npm run build -w @vivd/shared
+RUN npm run build -w @vivd/cli
 RUN npm run build -w @vivd/studio
 
 # Stage 4: Production
@@ -76,23 +83,28 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
+COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/studio --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
 # Copy shared package (runtime dependency)
 COPY packages/shared ./packages/shared
+COPY packages/cli ./packages/cli
 
 # Copy built outputs
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/cli/dist ./packages/cli/dist
 COPY --from=build /app/packages/studio/dist ./packages/studio/dist
 
 WORKDIR /app/packages/studio
 COPY packages/studio/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY packages/studio/selfHostDefaults.sh /usr/local/bin/selfHostDefaults.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/selfHostDefaults.sh
+RUN printf '%s\n' '#!/bin/sh' 'exec node /app/packages/cli/dist/index.js "$@"' > /usr/local/bin/vivd \
+  && chmod +x /usr/local/bin/vivd
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 EXPOSE 3100
 CMD ["npm", "start"]

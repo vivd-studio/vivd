@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { LocalStudioMachineProvider } from "../src/services/studioMachines/local";
 import type {
@@ -144,5 +147,31 @@ describe("LocalStudioMachineProvider orchestration", () => {
     await expect(provider.resolveRuntimeAuth("studio-1", "wrong")).resolves.toBeNull();
 
     provider.stopAll();
+  });
+
+  it("injects a local vivd wrapper into the spawned studio PATH", async () => {
+    const provider = new LocalStudioMachineProvider();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-local-cli-"));
+    const cliDir = path.join(tmpDir, "cli");
+    await fs.mkdir(path.join(cliDir, "dist"), { recursive: true });
+    await fs.mkdir(path.join(cliDir, "src"), { recursive: true });
+    await fs.writeFile(path.join(cliDir, "src", "index.ts"), "export {};\n");
+    await fs.writeFile(path.join(cliDir, "dist", "index.js"), 'console.log("vivd");\n');
+
+    const env: Record<string, string> = {
+      PATH: "/usr/bin:/bin",
+    };
+
+    try {
+      await (provider as any).ensureCliAvailable(cliDir, env);
+
+      const wrapperPath = path.join(cliDir, "dist", "vivd");
+      const wrapper = await fs.readFile(wrapperPath, "utf8");
+      expect(wrapper).toContain(`node "${path.join(cliDir, "dist", "index.js")}"`);
+      expect(env.PATH?.split(path.delimiter)[0]).toBe(path.join(cliDir, "dist"));
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+      provider.stopAll();
+    }
   });
 });

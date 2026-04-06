@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   Sidebar,
+  SidebarContent,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -18,10 +20,67 @@ function TestSidebar({
 }) {
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <Sidebar>
+      <Sidebar collapsible="icon">
         <div>Navigation</div>
       </Sidebar>
       <SidebarTrigger />
+    </SidebarProvider>
+  );
+}
+
+function TestImmersiveSidebar({
+  defaultOpen = false,
+  immersiveKey = "project-alpha",
+}: {
+  defaultOpen?: boolean;
+  immersiveKey?: string;
+}) {
+  return (
+    <SidebarProvider
+      defaultOpen={defaultOpen}
+      desktopMode="immersive"
+      immersiveKey={immersiveKey}
+    >
+      <Sidebar collapsible="icon">
+        <div>Navigation</div>
+      </Sidebar>
+      <SidebarTrigger appearance="brand" />
+    </SidebarProvider>
+  );
+}
+
+function TestImmersiveSidebarWithHeaderTrigger() {
+  return (
+    <SidebarProvider
+      defaultOpen={false}
+      desktopMode="immersive"
+      immersiveKey="project-alpha"
+    >
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
+          <div className="flex w-full items-center justify-center">
+            <SidebarTrigger appearance="brand" />
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <div data-testid="sidebar-body">Navigation</div>
+        </SidebarContent>
+      </Sidebar>
+    </SidebarProvider>
+  );
+}
+
+function TestImmersivePassiveBrandTrigger() {
+  return (
+    <SidebarProvider
+      defaultOpen={false}
+      desktopMode="immersive"
+      immersiveKey="project-alpha"
+    >
+      <Sidebar collapsible="icon">
+        <div>Navigation</div>
+      </Sidebar>
+      <SidebarTrigger appearance="brand" revealOnHover={false} />
     </SidebarProvider>
   );
 }
@@ -36,6 +95,14 @@ function TestSidebarTooltip() {
       </SidebarMenu>
     </SidebarProvider>
   );
+}
+
+function getSidebarRoot() {
+  return document.querySelector("[data-state][data-overlay-state]") as HTMLElement;
+}
+
+function getSidebarGap() {
+  return document.querySelector('[data-sidebar="gap"]') as HTMLElement;
 }
 
 describe("SidebarProvider persistence", () => {
@@ -63,15 +130,16 @@ describe("SidebarProvider persistence", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("restores the desktop sidebar state from localStorage on mount", () => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, "false");
 
     render(<TestSidebar />);
 
-    expect(screen.getByText("Navigation").closest("[data-state]")).toHaveAttribute(
-      "data-state",
-      "collapsed",
-    );
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "collapsed");
   });
 
   it("persists the updated sidebar state and restores it after remount", () => {
@@ -85,10 +153,7 @@ describe("SidebarProvider persistence", () => {
     unmount();
     render(<TestSidebar />);
 
-    expect(screen.getByText("Navigation").closest("[data-state]")).toHaveAttribute(
-      "data-state",
-      "collapsed",
-    );
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "collapsed");
   });
 
   it("closes collapsed sidebar tooltips when the pointer leaves the trigger", async () => {
@@ -107,5 +172,169 @@ describe("SidebarProvider persistence", () => {
     await waitFor(() => {
       expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     });
+  });
+
+  it("shows a tooltip on the sidebar trigger", async () => {
+    render(<TestSidebar />);
+
+    fireEvent.pointerMove(screen.getByRole("button", { name: "Toggle Sidebar" }));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Toggle sidebar");
+  });
+
+  it("uses the persisted desktop sidebar state in immersive mode", () => {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, "true");
+
+    const { unmount } = render(<TestImmersiveSidebar defaultOpen={false} />);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "expanded");
+    expect(getSidebarRoot()).toHaveAttribute("data-overlay-state", "open");
+    expect(getSidebarGap().className).toContain("w-[var(--sidebar-width)]");
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("true");
+
+    unmount();
+    render(<TestSidebar />);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "expanded");
+  });
+
+  it("supports the brand-style sidebar trigger appearance", () => {
+    render(<TestImmersiveSidebar />);
+
+    const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+
+    expect(trigger).toHaveAttribute("data-sidebar-trigger-appearance", "brand");
+    expect(
+      trigger.querySelector('[data-sidebar-brand-glyph="brand"]'),
+    ).toBeInTheDocument();
+    expect(
+      trigger.querySelector('[data-sidebar-brand-glyph="panel"]'),
+    ).toBeInTheDocument();
+  });
+
+  it("starts hidden in immersive mode when the shared sidebar preference is collapsed", () => {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, "false");
+
+    render(<TestImmersiveSidebar defaultOpen={true} />);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "collapsed");
+    expect(getSidebarRoot()).toHaveAttribute("data-overlay-state", "hidden");
+    expect(getSidebarGap().className).toContain("w-0");
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("false");
+  });
+
+  it("does not reveal the immersive sidebar when hover-reveal is disabled on the trigger", () => {
+    render(<TestImmersivePassiveBrandTrigger />);
+
+    const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+
+    fireEvent.pointerEnter(trigger);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-overlay-state", "hidden");
+  });
+
+  it("reveals the collapsed rail on hover and hides it after a short delay", () => {
+    vi.useFakeTimers();
+    render(<TestImmersiveSidebar />);
+
+    const hotspot = document.querySelector('[data-sidebar="hotspot"]') as HTMLElement;
+    const sidebarRoot = getSidebarRoot();
+
+    fireEvent.pointerEnter(hotspot);
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+
+    fireEvent.pointerLeave(hotspot);
+    act(() => {
+      vi.advanceTimersByTime(179);
+    });
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "hidden");
+  });
+
+  it("reveals the collapsed rail when the pointer moves near the left edge", () => {
+    render(<TestImmersiveSidebar />);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-overlay-state", "hidden");
+
+    fireEvent.pointerMove(window, { clientX: 11, pointerType: "mouse" });
+
+    expect(getSidebarRoot()).toHaveAttribute("data-overlay-state", "peek");
+  });
+
+  it("keeps the rail visible while moving from the hover hotspot into the sidebar", () => {
+    vi.useFakeTimers();
+    render(<TestImmersiveSidebar />);
+
+    const hotspot = document.querySelector('[data-sidebar="hotspot"]') as HTMLElement;
+    const sidebarRoot = getSidebarRoot();
+    const sidebarPanel = document.querySelector('[data-sidebar="sidebar"]') as HTMLElement;
+
+    fireEvent.pointerEnter(hotspot);
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+
+    fireEvent.pointerLeave(hotspot);
+    fireEvent.pointerEnter(sidebarPanel);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+  });
+
+  it("keeps the rail visible while moving from the sidebar brand trigger into the sidebar body", () => {
+    vi.useFakeTimers();
+    render(<TestImmersiveSidebarWithHeaderTrigger />);
+
+    const sidebarRoot = getSidebarRoot();
+    const sidebarBody = screen.getByTestId("sidebar-body");
+    const sidebarTrigger = document.querySelector(
+      '[data-sidebar="header"] [data-sidebar="trigger"]',
+    ) as HTMLElement;
+
+    fireEvent.pointerEnter(sidebarTrigger);
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+
+    fireEvent.pointerLeave(sidebarTrigger, { relatedTarget: sidebarBody });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+  });
+
+  it("uses the existing trigger to persist immersive open and collapsed state across routes", () => {
+    const immersiveRender = render(<TestImmersiveSidebar defaultOpen={false} />);
+
+    const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+    const sidebarRoot = getSidebarRoot();
+    const sidebarGap = getSidebarGap();
+
+    fireEvent.focus(trigger);
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
+
+    fireEvent.click(trigger);
+    expect(sidebarRoot).toHaveAttribute("data-state", "expanded");
+    expect(sidebarRoot).toHaveAttribute("data-overlay-state", "open");
+    expect(sidebarGap.className).toContain("w-[var(--sidebar-width)]");
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("true");
+
+    immersiveRender.unmount();
+    const defaultRender = render(<TestSidebar defaultOpen={false} />);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "expanded");
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Sidebar" }));
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("false");
+
+    defaultRender.unmount();
+    render(<TestImmersiveSidebar defaultOpen={true} />);
+
+    expect(getSidebarRoot()).toHaveAttribute("data-state", "collapsed");
+    expect(getSidebarRoot()).toHaveAttribute("data-overlay-state", "hidden");
+    expect(getSidebarGap().className).toContain("w-0");
   });
 });

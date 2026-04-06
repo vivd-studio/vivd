@@ -213,6 +213,7 @@ export async function ensureExistingMachineRunningWorkflow(
   }
 
   const url = deps.getPublicUrlForPort(port);
+  deps.touchKey(studioKey);
   await deps.waitForReady({
     machineId: existing.id,
     url,
@@ -536,6 +537,7 @@ export async function restartInnerWorkflow(
   await deps.startMachineHandlingReplacement(existing.id);
 
   const url = deps.getPublicUrlForPort(port);
+  deps.touchKey(studioKey);
   await deps.waitForReady({
     machineId: existing.id,
     url,
@@ -678,6 +680,7 @@ export async function ensureRunningInnerWorkflow(
   }
 
   const url = deps.getPublicUrlForPort(port);
+  deps.touchKey(studioKey);
   await deps.waitForReady({
     machineId: create.id,
     url,

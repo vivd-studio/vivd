@@ -32,10 +32,14 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("- contact_form");
     expect(result.instructions).toContain("- analytics");
     expect(result.instructions).toContain("Enabled plugins for this project");
-    expect(result.instructions).toContain("Plugin-first features");
-    expect(result.instructions).toContain("vivd_plugins_catalog");
-    expect(result.instructions).toContain("vivd_plugins_*_info");
-    expect(result.instructions).toContain("it can tell you whether the plugin is enabled");
+    expect(result.instructions).toContain("Vivd CLI and plugin-first features");
+    expect(result.instructions).toContain(
+      "Use the `vivd` CLI as the default way to interact with the Vivd platform the website is running on.",
+    );
+    expect(result.instructions).toContain("vivd plugins catalog");
+    expect(result.instructions).toContain("vivd plugins contact info");
+    expect(result.instructions).toContain("vivd plugins contact help");
+    expect(result.instructions).toContain("vivd publish checklist show");
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");

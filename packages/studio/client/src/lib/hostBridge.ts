@@ -1,3 +1,9 @@
+import {
+  parseVivdHostBridgeMessageData,
+  type VivdHostBridgeMessage,
+  type VivdStudioBridgeMessage,
+} from "@vivd/shared/studio";
+
 function resolveOrigin(value: string | null): string | null {
   if (!value) return null;
 
@@ -28,7 +34,14 @@ export function isVivdHostMessageEvent(event: MessageEvent): boolean {
   return event.source === window.parent && event.origin === getVivdHostOrigin();
 }
 
-export function postVivdHostMessage(message: unknown): void {
+export function parseVivdHostMessage(
+  event: MessageEvent,
+): VivdHostBridgeMessage | null {
+  if (!isVivdHostMessageEvent(event)) return null;
+  return parseVivdHostBridgeMessageData(event.data);
+}
+
+export function postVivdHostMessage(message: VivdStudioBridgeMessage): void {
   if (window.parent === window) return;
   window.parent.postMessage(message, getVivdHostOrigin());
 }

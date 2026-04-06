@@ -638,6 +638,7 @@ export async function ensureContainerRunningWorkflow(
     getDirectContainerBaseUrl(container) ??
     (routePath ? deps.getInternalProxyUrlForRoutePath(routePath) : null);
 
+  deps.touchKey(studioKey);
   await deps.waitForReady({
     containerId: container.Id,
     routePath,

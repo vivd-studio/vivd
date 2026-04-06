@@ -110,4 +110,71 @@ describe("docker runtime workflow", () => {
       accessToken: "access-token-1",
     });
   });
+
+  it("marks activity before waiting for a stopped container to become ready", async () => {
+    const callOrder: string[] = [];
+
+    await expect(
+      ensureContainerRunningWorkflow(
+        {
+          key: () => "org-1:site-1:v1",
+          routeIdFor: () => "site-1-v1",
+          containerNameFor: () => "studio-site-1-v1-a3f6fad7ba",
+          upsertRuntimeRoute: vi.fn().mockResolvedValue("/_studio/site-1-v1"),
+          startContainer: vi.fn().mockImplementation(async () => {
+            callOrder.push("start");
+          }),
+          recreateContainer: vi.fn(),
+          getDesiredImageStateForRef: vi.fn(),
+          getPublicUrlForPort: vi.fn().mockReturnValue("https://studio.example:4100"),
+          getPublicUrlForRoutePath: vi
+            .fn()
+            .mockReturnValue("https://app.example/_studio/site-1-v1"),
+          getInternalProxyUrlForRoutePath: vi
+            .fn()
+            .mockReturnValue("http://caddy/_studio/site-1-v1"),
+          startTimeoutMs: 60_000,
+          touchKey: vi.fn().mockImplementation(() => {
+            callOrder.push("touch");
+          }),
+          waitForReady: vi.fn().mockImplementation(async () => {
+            expect(callOrder).toEqual(["start", "touch"]);
+            callOrder.push("wait");
+          }),
+        },
+        {
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          version: 1,
+          env: {},
+        },
+        {
+          Id: "container-1",
+          Name: "/studio-site-1-v1-a3f6fad7ba",
+          Config: {
+            Env: ["STUDIO_ID=studio-1"],
+            Labels: {
+              vivd_studio_id: "studio-1",
+              vivd_route_id: "site-1-v1",
+            },
+          },
+          State: {
+            Status: "exited",
+          },
+          HostConfig: {
+            PortBindings: {
+              "3100/tcp": [{ HostPort: "4100" }],
+            },
+          },
+        } as any,
+        "access-token-1",
+        "ghcr.io/vivd-studio/vivd-studio:latest",
+      ),
+    ).resolves.toMatchObject({
+      studioId: "studio-1",
+      url: "https://studio.example:4100",
+    });
+
+    expect(callOrder).toEqual(["start", "touch", "wait", "touch"]);
+  });
 });
