@@ -2,11 +2,19 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
-import { CenteredLoading } from "@/components/common";
+import { CenteredLoading, VivdIcon } from "@/components/common";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { Button } from "@/components/ui/button";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { useTheme } from "@/components/theme";
+import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import {
   type StudioRuntimeSession,
   useStudioHostRuntime,
@@ -70,6 +78,19 @@ export default function StudioFullscreen() {
       : null;
   const resolvedInitialSessionId =
     requestedInitialSessionId ?? polledInitialSessionId ?? null;
+  const studioReturnPath = useMemo(() => {
+    if (!projectSlug) return ROUTES.DASHBOARD;
+
+    const params = new URLSearchParams({
+      view: "studio",
+      version: String(version),
+      ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+    });
+    if (resolvedInitialSessionId) {
+      params.set("sessionId", resolvedInitialSessionId);
+    }
+    return `${ROUTES.PROJECT(projectSlug)}?${params.toString()}`;
+  }, [initialGenerationRequested, projectSlug, resolvedInitialSessionId, version]);
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -229,6 +250,43 @@ export default function StudioFullscreen() {
     replaceRuntime(createStudioRuntimeSession(result), { reload: true });
   };
 
+  const renderLoadingHeader = () => (
+    <HostHeader
+      leadingAccessory={
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-md"
+          onClick={() => navigate(studioReturnPath)}
+          title="Back to project"
+        >
+          <VivdIcon className="h-4 w-4" />
+          <span className="sr-only">Back to project</span>
+        </Button>
+      }
+      leading={
+        <>
+          <div className="min-w-0 truncate text-sm font-medium sm:hidden">
+            {projectSlug}
+          </div>
+          <Breadcrumb className="hidden sm:flex">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <HeaderBreadcrumbTextLink to={studioReturnPath}>
+                  Projects
+                </HeaderBreadcrumbTextLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </>
+      }
+    />
+  );
+
   const {
     studioReady,
     studioLoadTimedOut,
@@ -246,15 +304,7 @@ export default function StudioFullscreen() {
     setTheme,
     setColorTheme,
     onClose: () => {
-      const params = new URLSearchParams({
-        view: "studio",
-        version: String(version),
-        ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
-      });
-      if (resolvedInitialSessionId) {
-        params.set("sessionId", resolvedInitialSessionId);
-      }
-      navigate(`${ROUTES.PROJECT(projectSlug!)}?${params.toString()}`);
+      navigate(studioReturnPath);
     },
     onNavigate: (path) => {
       navigate(path);
@@ -331,7 +381,12 @@ export default function StudioFullscreen() {
   }
 
   if (!project && initialGenerationRequested) {
-    return <StudioStartupLoading fullScreen />;
+    return (
+      <StudioStartupLoading
+        fullScreen
+        header={renderLoadingHeader()}
+      />
+    );
   }
 
   if (!project) {
@@ -354,7 +409,10 @@ export default function StudioFullscreen() {
 
   if (!studioIframeSrc) {
     return (
-      <StudioStartupLoading fullScreen />
+      <StudioStartupLoading
+        fullScreen
+        header={renderLoadingHeader()}
+      />
     );
   }
 
@@ -419,7 +477,10 @@ export default function StudioFullscreen() {
               </div>
             </div>
           ) : (
-            <StudioStartupLoading fullScreen />
+            <StudioStartupLoading
+              className="h-full min-h-0"
+              header={renderLoadingHeader()}
+            />
           )}
         </div>
       ) : null}

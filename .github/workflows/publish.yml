@@ -299,8 +299,8 @@ jobs:
           docker push "$CANDIDATE_TAG"
 
   studio-opencode-revert-smoke:
-    needs: [detect-changes, build-studio]
-    if: needs.detect-changes.outputs.build_studio == 'true'
+    needs: [build-studio]
+    if: needs.build-studio.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -370,8 +370,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   studio-fly-reconcile-smoke:
-    needs: [detect-changes, validate-release, build-studio]
-    if: needs.detect-changes.outputs.build_studio == 'true' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
+    needs: [detect-changes, build-studio]
+    if: needs.build-studio.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -428,6 +428,69 @@ jobs:
           VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
 
+      - name: Summarize Fly reconcile release smoke result
+        if: always()
+        env:
+          CONFIG_OUTCOME: ${{ steps.validate_config.outcome }}
+          RECONCILE_OUTCOME: ${{ steps.fly_reconcile.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "### Fly Studio reconcile release gate"
+            echo "- config: ${CONFIG_OUTCOME:-skipped}"
+            echo "- reconcile: ${RECONCILE_OUTCOME:-skipped}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  studio-fly-warm-wake-auth-smoke:
+    needs: [detect-changes, build-studio]
+    if: needs.build-studio.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 23
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Validate Fly warm-wake auth smoke configuration
+        id: validate_config
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${FLY_API_TOKEN}" ]; then
+            echo "::error::Missing FLY_API_TOKEN secret for Fly release validation."
+            exit 1
+          fi
+
+          if [ -z "${FLY_STUDIO_APP}" ]; then
+            echo "::error::Missing FLY_STUDIO_VALIDATE_APP repo variable/secret for Fly release validation."
+            exit 1
+          fi
+
       - name: Fly warm wake auth release smoke
         id: fly_wake_auth
         env:
@@ -438,26 +501,24 @@ jobs:
           VIVD_FLY_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_warm_wake_auth.test.ts
 
-      - name: Summarize Fly release smoke result
+      - name: Summarize Fly warm-wake auth release smoke result
         if: always()
         env:
           CONFIG_OUTCOME: ${{ steps.validate_config.outcome }}
-          RECONCILE_OUTCOME: ${{ steps.fly_reconcile.outcome }}
           WAKE_OUTCOME: ${{ steps.fly_wake_auth.outcome }}
         shell: bash
         run: |
           set -euo pipefail
 
           {
-            echo "### Fly Studio release gate"
+            echo "### Fly Studio warm-wake auth release gate"
             echo "- config: ${CONFIG_OUTCOME:-skipped}"
-            echo "- reconcile: ${RECONCILE_OUTCOME:-skipped}"
             echo "- wake_auth: ${WAKE_OUTCOME:-skipped}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-studio:
-    needs: [detect-changes, build-studio, studio-opencode-revert-smoke, studio-fly-reconcile-smoke]
-    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && needs.studio-opencode-revert-smoke.result == 'success' && (needs.detect-changes.outputs.skip_fly_release_smoke == 'true' || needs.studio-fly-reconcile-smoke.result == 'success')
+    needs: [detect-changes, build-studio, studio-opencode-revert-smoke, studio-fly-reconcile-smoke, studio-fly-warm-wake-auth-smoke]
+    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && needs.studio-opencode-revert-smoke.result == 'success' && (needs.detect-changes.outputs.skip_fly_release_smoke == 'true' || (needs.studio-fly-reconcile-smoke.result == 'success' && needs.studio-fly-warm-wake-auth-smoke.result == 'success'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -768,7 +829,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, validate-release, build-studio, studio-fly-reconcile-smoke, publish-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, validate-release, publish-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && (needs.detect-changes.outputs.build_studio != 'true' || needs.publish-studio.result == 'success')
     runs-on: ubuntu-latest
     steps:

@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -273,8 +272,8 @@ export default function SuperAdmin() {
 
     if (section === "org") {
       return (
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
-          <Card className="border-border/70 shadow-sm xl:sticky xl:top-4">
+        <div className="grid gap-6 xl:min-h-0 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
+          <Card className="border-border/70 shadow-sm xl:sticky xl:top-4 xl:flex xl:max-h-[calc(100svh-8rem)] xl:min-h-0 xl:flex-col">
             <CardHeader className="gap-4 border-b bg-muted/20">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
@@ -318,7 +317,7 @@ export default function SuperAdmin() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-0">
+            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               {orgsLoading ? (
                 <div className="px-6 py-10">
                   <LoadingSpinner
@@ -342,8 +341,8 @@ export default function SuperAdmin() {
                   </p>
                 </div>
               ) : (
-                <ScrollArea className="max-h-[calc(100vh-20rem)]">
-                  <div className="space-y-2 p-3">
+                <div className="max-h-[min(24rem,60svh)] overflow-y-auto overscroll-contain p-3 xl:min-h-0 xl:flex-1 xl:max-h-none">
+                  <div className="space-y-2">
                     {filteredOrganizations.map((org) => (
                       <button
                         key={org.id}
@@ -390,7 +389,7 @@ export default function SuperAdmin() {
                       </button>
                     ))}
                   </div>
-                </ScrollArea>
+                </div>
               )}
             </CardContent>
           </Card>

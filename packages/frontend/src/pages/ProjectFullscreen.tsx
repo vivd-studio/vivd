@@ -739,11 +739,7 @@ export default function ProjectFullscreen() {
           ),
         })}
       >
-        <div className={HOST_VIEWPORT_INSET_CLASS}>
-          <FramedViewport className="bg-background/80">
-            <StudioStartupLoading fullScreen className="h-full min-h-0" />
-          </FramedViewport>
-        </div>
+        <StudioStartupLoading className="h-full min-h-0" />
       </FramedHostShell>
     );
   }
@@ -959,7 +955,17 @@ export default function ProjectFullscreen() {
                   </div>
                 </div>
               ) : (
-                <StudioStartupLoading fullScreen className="h-full min-h-0" />
+                <StudioStartupLoading
+                  className="h-full min-h-0"
+                  header={renderFullscreenHeader({
+                    actionSlot: (
+                      <Button disabled size="sm" className="h-8 rounded-md px-3">
+                        <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent animate-spin" />
+                        Booting studio…
+                      </Button>
+                    ),
+                  })}
+                />
               )}
             </div>
           ) : null}

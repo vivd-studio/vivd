@@ -965,7 +965,11 @@ export default function EmbeddedStudio() {
                     </div>
                   </div>
                 ) : (
-                  <StudioStartupLoading className="h-full min-h-0" />
+                  <StudioStartupLoading
+                    className="h-full min-h-0"
+                    header={renderEmbeddedHeader({ includeProjectActions: true })}
+                    headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
+                  />
                 )}
               </div>
             ) : null}
