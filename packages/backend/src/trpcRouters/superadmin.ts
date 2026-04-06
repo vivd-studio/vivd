@@ -26,7 +26,11 @@ import {
   emailTemplateBrandingPatchInputSchema,
   emailTemplateBrandingService,
 } from "../services/email/templateBranding";
-import { PLUGIN_IDS } from "../services/plugins/registry";
+import {
+  PLUGIN_IDS,
+  type PluginId,
+  listPluginCatalogEntries,
+} from "../services/plugins/registry";
 import {
   getSystemSettingValue,
   setSystemSettingValue,
@@ -71,6 +75,10 @@ function headersFromNode(reqHeaders: Record<string, unknown>): Headers {
     }
   }
   return headers;
+}
+
+function toIsoString(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null;
 }
 
 const organizationRoleSchema = z.enum([
@@ -264,6 +272,7 @@ export const superAdminRouter = router({
           },
         ]),
       ),
+      pluginCatalog: listPluginCatalogEntries(),
       limitDefaults: policy.limitDefaults,
       controlPlane: policy.controlPlane,
       pluginRuntime: policy.pluginRuntime,
@@ -360,6 +369,7 @@ export const superAdminRouter = router({
             },
           ]),
         ),
+        pluginCatalog: listPluginCatalogEntries(),
         limitDefaults: policy.limitDefaults,
         controlPlane: policy.controlPlane,
         pluginRuntime: policy.pluginRuntime,
@@ -778,15 +788,171 @@ export const superAdminRouter = router({
     )
     .query(async ({ input }) => {
       const payload = input ?? {};
-      const result = await pluginEntitlementService.listProjectAccess({
-        pluginId: payload.pluginId ?? "contact_form",
-        search: payload.search,
-        state: payload.state,
-        organizationId: payload.organizationId,
-        limit: payload.limit,
-        offset: payload.offset,
-      });
-      return result;
+      const selectedCatalog = (
+        payload.pluginId
+          ? listPluginCatalogEntries().filter(
+              (plugin) => plugin.pluginId === payload.pluginId,
+            )
+          : listPluginCatalogEntries()
+      ).sort((left, right) => left.sortOrder - right.sortOrder);
+
+      const accessByPlugin = await Promise.all(
+        selectedCatalog.map(async (plugin) => ({
+          plugin,
+          result: await pluginEntitlementService.listProjectAccess({
+            pluginId: plugin.pluginId,
+            search: payload.search,
+            state: payload.state,
+            organizationId: payload.organizationId,
+            limit: 500,
+            offset: 0,
+          }),
+        })),
+      );
+
+      const projectMap = new Map<
+        string,
+        {
+          organizationId: string;
+          organizationSlug: string;
+          organizationName: string;
+          projectSlug: string;
+          projectTitle: string;
+          isDeployed: boolean;
+          deployedDomain: string | null;
+          plugins: Map<
+            string,
+            {
+              organizationId: string;
+              pluginId: PluginId;
+              projectSlug: string;
+              catalog: (typeof selectedCatalog)[number];
+              effectiveScope: "instance" | "organization" | "project" | "none";
+              state: "disabled" | "enabled" | "suspended";
+              managedBy: "manual_superadmin" | "plan" | "self_serve";
+              monthlyEventLimit: number | null;
+              hardStop: boolean;
+              turnstileEnabled: boolean;
+              turnstileReady: boolean;
+              usageThisMonth: number;
+              projectPluginStatus: "enabled" | "disabled" | null;
+              updatedAt: string | null;
+            }
+          >;
+        }
+      >();
+
+      for (const { plugin, result } of accessByPlugin) {
+        for (const row of result.rows) {
+          const key = `${row.organizationId}:${row.projectSlug}`;
+          const existing = projectMap.get(key);
+          if (existing) {
+            existing.plugins.set(plugin.pluginId, {
+              organizationId: row.organizationId,
+              pluginId: plugin.pluginId,
+              projectSlug: row.projectSlug,
+              catalog: plugin,
+              effectiveScope: row.effectiveScope,
+              state: row.state,
+              managedBy: row.managedBy,
+              monthlyEventLimit: row.monthlyEventLimit,
+              hardStop: row.hardStop,
+              turnstileEnabled: row.turnstileEnabled,
+              turnstileReady: row.turnstileReady,
+              usageThisMonth: row.usageThisMonth,
+              projectPluginStatus: row.projectPluginStatus,
+              updatedAt: toIsoString(row.updatedAt),
+            });
+            continue;
+          }
+
+          projectMap.set(key, {
+            organizationId: row.organizationId,
+            organizationSlug: row.organizationSlug,
+            organizationName: row.organizationName,
+            projectSlug: row.projectSlug,
+            projectTitle: row.projectTitle,
+            isDeployed: row.isDeployed,
+            deployedDomain: row.deployedDomain,
+            plugins: new Map([
+              [
+                plugin.pluginId,
+                {
+                  organizationId: row.organizationId,
+                  pluginId: plugin.pluginId,
+                  projectSlug: row.projectSlug,
+                  catalog: plugin,
+                  effectiveScope: row.effectiveScope,
+                  state: row.state,
+                  managedBy: row.managedBy,
+                  monthlyEventLimit: row.monthlyEventLimit,
+                  hardStop: row.hardStop,
+                  turnstileEnabled: row.turnstileEnabled,
+                  turnstileReady: row.turnstileReady,
+                  usageThisMonth: row.usageThisMonth,
+                  projectPluginStatus: row.projectPluginStatus,
+                  updatedAt: toIsoString(row.updatedAt),
+                },
+              ],
+            ]),
+          });
+        }
+      }
+
+      const groupedRows = Array.from(projectMap.values())
+        .map((project) => {
+          const plugins = selectedCatalog.map((plugin) => {
+            return (
+              project.plugins.get(plugin.pluginId) ?? {
+                organizationId: project.organizationId,
+                pluginId: plugin.pluginId,
+                projectSlug: project.projectSlug,
+                catalog: plugin,
+                effectiveScope: "none" as const,
+                state: "disabled" as const,
+                managedBy: "manual_superadmin" as const,
+                monthlyEventLimit: null,
+                hardStop: true,
+                turnstileEnabled: false,
+                turnstileReady: false,
+                usageThisMonth: 0,
+                projectPluginStatus: null,
+                updatedAt: null,
+              }
+            );
+          });
+          const updatedAt = plugins.reduce<string | null>((latest, plugin) => {
+            if (!plugin.updatedAt) return latest;
+            if (!latest) return plugin.updatedAt;
+            return plugin.updatedAt > latest ? plugin.updatedAt : latest;
+          }, null);
+
+          return {
+            organizationId: project.organizationId,
+            organizationSlug: project.organizationSlug,
+            organizationName: project.organizationName,
+            projectSlug: project.projectSlug,
+            projectTitle: project.projectTitle,
+            isDeployed: project.isDeployed,
+            deployedDomain: project.deployedDomain,
+            plugins,
+            updatedAt,
+          };
+        })
+        .sort((left, right) => {
+          const orgOrder = left.organizationName.localeCompare(right.organizationName);
+          if (orgOrder !== 0) return orgOrder;
+          return left.projectSlug.localeCompare(right.projectSlug);
+        });
+
+      const offset = Math.max(0, payload.offset ?? 0);
+      const limit = Math.max(1, Math.min(500, payload.limit ?? 100));
+
+      return {
+        pluginCatalog: selectedCatalog,
+        rows: groupedRows.slice(offset, offset + limit),
+        total: groupedRows.length,
+      };
     }),
 
   pluginsUpsertEntitlement: superAdminProcedure
@@ -879,19 +1045,12 @@ export const superAdminRouter = router({
         input.state === "enabled" &&
         input.ensurePluginWhenEnabled !== false
       ) {
-        if (input.pluginId === "contact_form") {
-          const ensured = await projectPluginService.ensureContactFormPlugin({
-            organizationId: input.organizationId,
-            projectSlug: input.projectSlug!,
-          });
-          ensuredPluginInstanceId = ensured.instanceId;
-        } else if (input.pluginId === "analytics") {
-          const ensured = await projectPluginService.ensureAnalyticsPlugin({
-            organizationId: input.organizationId,
-            projectSlug: input.projectSlug!,
-          });
-          ensuredPluginInstanceId = ensured.instanceId;
-        }
+        const ensured = await projectPluginService.ensurePluginInstance({
+          organizationId: input.organizationId,
+          projectSlug: input.projectSlug!,
+          pluginId: input.pluginId,
+        });
+        ensuredPluginInstanceId = ensured.instanceId;
       }
 
       const isTurnstileDisabledAfterUpsert =

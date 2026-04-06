@@ -21,6 +21,8 @@ import { domainService } from "../services/publish/DomainService";
 import { organizationIdSchema } from "../lib/organizationIdentifiers";
 import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
 import { installProfileService } from "../services/system/InstallProfileService";
+import { PLUGIN_IDS, listPluginCatalogEntries } from "../services/plugins/registry";
+import type { OrganizationProjectPluginItem } from "../services/plugins/surfaceTypes";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 
@@ -244,6 +246,7 @@ export const organizationRouter = router({
 
   pluginsOverview: orgAdminProcedure.query(async ({ ctx }) => {
     const organizationId = ctx.organizationId!;
+    const pluginCatalog = listPluginCatalogEntries();
     const projects = await db.query.projectMeta.findMany({
       where: eq(projectMeta.organizationId, organizationId),
       columns: {
@@ -266,13 +269,15 @@ export const organizationRouter = router({
           where: and(
             eq(projectPluginInstance.organizationId, organizationId),
             inArray(projectPluginInstance.projectSlug, projectSlugs),
-            inArray(projectPluginInstance.pluginId, ["contact_form", "analytics"]),
+            inArray(projectPluginInstance.pluginId, PLUGIN_IDS),
           ),
           columns: {
+            id: true,
             projectSlug: true,
             pluginId: true,
             status: true,
             configJson: true,
+            updatedAt: true,
           },
         }),
         db
@@ -316,27 +321,25 @@ export const organizationRouter = router({
         }),
       ]);
 
-    const contactByProjectSlug = new Map<
+    const instanceByProjectPluginId = new Map<
       string,
       {
+        id: string;
         status: string;
         configJson: unknown;
+        updatedAt: Date;
       }
     >();
-    const analyticsByProjectSlug = new Map<string, { status: string }>();
     for (const pluginInstance of pluginInstances) {
-      if (pluginInstance.pluginId === "contact_form") {
-        contactByProjectSlug.set(pluginInstance.projectSlug, {
+      instanceByProjectPluginId.set(
+        `${pluginInstance.projectSlug}:${pluginInstance.pluginId}`,
+        {
+          id: pluginInstance.id,
           status: pluginInstance.status,
           configJson: pluginInstance.configJson,
-        });
-        continue;
-      }
-      if (pluginInstance.pluginId === "analytics") {
-        analyticsByProjectSlug.set(pluginInstance.projectSlug, {
-          status: pluginInstance.status,
-        });
-      }
+          updatedAt: pluginInstance.updatedAt,
+        },
+      );
     }
 
     const pendingRecipientsByProjectSlug = new Map<string, number>(
@@ -382,10 +385,8 @@ export const organizationRouter = router({
 
     const rows = projects.map((project) => {
       const projectSlug = project.slug;
-      const contact = contactByProjectSlug.get(projectSlug);
-      const analytics = analyticsByProjectSlug.get(projectSlug);
+      const contact = instanceByProjectPluginId.get(`${projectSlug}:contact_form`);
       const contactStatus = toPluginInstanceStatus(contact?.status ?? null);
-      const analyticsStatus = toPluginInstanceStatus(analytics?.status ?? null);
       const configuredRecipientCount = contact
         ? getConfiguredRecipientCount(contact.configJson)
         : 0;
@@ -426,21 +427,47 @@ export const organizationRouter = router({
         });
       }
 
+      const plugins = pluginCatalog.map((catalog): OrganizationProjectPluginItem => {
+        const instance = instanceByProjectPluginId.get(
+          `${projectSlug}:${catalog.pluginId}`,
+        );
+        const status = toPluginInstanceStatus(instance?.status ?? null);
+        const summaryLines: string[] = [];
+        const badges: OrganizationProjectPluginItem["badges"] = [];
+
+        if (catalog.pluginId === "contact_form" && status === "enabled") {
+          summaryLines.push(`Recipients configured: ${configuredRecipientCount}`);
+          if (pendingRecipientCount > 0) {
+            summaryLines.push(`Pending verification: ${pendingRecipientCount}`);
+          }
+          if (turnstileEnabled) {
+            badges.push({
+              label: turnstileReady ? "Turnstile ready" : "Turnstile syncing",
+              tone: turnstileReady ? "success" : "destructive",
+            });
+          }
+        }
+
+        return {
+          pluginId: catalog.pluginId,
+          catalog,
+          installState: status === "enabled" ? "enabled" : "disabled",
+          entitled: status === "enabled",
+          entitlementState: status === "enabled" ? "enabled" : "disabled",
+          instanceId: instance?.id ?? null,
+          instanceStatus: instance?.status ?? null,
+          updatedAt: instance?.updatedAt?.toISOString() ?? null,
+          summaryLines,
+          badges,
+        };
+      });
+
       return {
         projectSlug,
         projectTitle: project.title,
-        updatedAt: project.updatedAt,
+        updatedAt: project.updatedAt.toISOString(),
         deployedDomain: deployedByProjectSlug.get(projectSlug)?.domain ?? null,
-        contactForm: {
-          status: contactStatus,
-          configuredRecipientCount,
-          pendingRecipientCount,
-          turnstileEnabled,
-          turnstileReady,
-        },
-        analytics: {
-          status: analyticsStatus,
-        },
+        plugins,
         issues,
       };
     });
@@ -450,7 +477,7 @@ export const organizationRouter = router({
         if (right.issues.length !== left.issues.length) {
           return right.issues.length - left.issues.length;
         }
-        return right.updatedAt.getTime() - left.updatedAt.getTime();
+        return right.updatedAt.localeCompare(left.updatedAt);
       }),
     };
   }),

@@ -2,7 +2,7 @@
 
 Date: 2026-04-06  
 Owner: backend + frontend + studio  
-Status: proposed implementation plan
+Status: phase 1 landed; shared-contract and panel-extraction follow-ups remain
 
 This document turns the existing plugin-architecture review into a concrete refactor plan for the next step: making first-party plugins show up automatically in the main listing surfaces without duplicating plugin metadata and list wiring in multiple places.
 

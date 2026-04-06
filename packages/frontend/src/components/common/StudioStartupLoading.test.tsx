@@ -15,10 +15,14 @@ describe("StudioStartupLoading", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("studio-startup-chat-panel")).toBeInTheDocument();
     expect(screen.getByTestId("studio-startup-preview-panel")).toBeInTheDocument();
-    expect(screen.getByText("Loading studio")).toBeInTheDocument();
+    expect(screen.getByText("Starting studio")).toBeInTheDocument();
     expect(
-      screen.getByText("Preparing your editor and dev server."),
+      screen.getByText("This can take a little longer on first startup."),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("studio-startup-spinner")).not.toHaveClass(
+      "rounded-full",
+      "border",
+    );
   });
 
   it("renders a provided header using existing host chrome", () => {

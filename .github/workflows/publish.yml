@@ -374,6 +374,8 @@ jobs:
     if: needs.build-studio.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      FLY_STUDIO_PORT_START: 3100
     permissions:
       contents: read
     steps:
@@ -448,6 +450,8 @@ jobs:
     if: needs.build-studio.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      FLY_STUDIO_PORT_START: 3600
     permissions:
       contents: read
     steps:

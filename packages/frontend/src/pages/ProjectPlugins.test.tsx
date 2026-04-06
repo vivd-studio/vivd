@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,8 @@ const {
   contactInfoUseQueryMock,
   contactRequestRecipientVerificationUseMutationMock,
   contactUpdateConfigUseMutationMock,
+  genericEnsureMutateMock,
+  genericEnsureUseMutationMock,
   projectListUseQueryMock,
   useParamsMock,
   useUtilsMock,
@@ -26,6 +28,8 @@ const {
   contactInfoUseQueryMock: vi.fn(),
   contactRequestRecipientVerificationUseMutationMock: vi.fn(),
   contactUpdateConfigUseMutationMock: vi.fn(),
+  genericEnsureMutateMock: vi.fn(),
+  genericEnsureUseMutationMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
   useParamsMock: vi.fn(),
   useUtilsMock: vi.fn(),
@@ -96,6 +100,9 @@ vi.mock("@/lib/trpc", () => ({
       analyticsEnsure: {
         useMutation: analyticsEnsureUseMutationMock,
       },
+      ensure: {
+        useMutation: genericEnsureUseMutationMock,
+      },
       contactUpdateConfig: {
         useMutation: contactUpdateConfigUseMutationMock,
       },
@@ -137,6 +144,8 @@ describe("ProjectPlugins", () => {
     contactInfoUseQueryMock.mockReset();
     contactRequestRecipientVerificationUseMutationMock.mockReset();
     contactUpdateConfigUseMutationMock.mockReset();
+    genericEnsureMutateMock.mockReset();
+    genericEnsureUseMutationMock.mockReset();
     projectListUseQueryMock.mockReset();
     useParamsMock.mockReset();
     useSessionMock.mockReset();
@@ -165,16 +174,45 @@ describe("ProjectPlugins", () => {
     });
     catalogUseQueryMock.mockReturnValue({
       data: {
-        available: [
+        plugins: [
           {
             pluginId: "contact_form",
-            name: "Contact Form",
-            description: "Collect visitor inquiries and store submissions in Vivd.",
+            installState: "available",
+            instanceId: null,
+            instanceStatus: null,
+            updatedAt: null,
+            catalog: {
+              pluginId: "contact_form",
+              name: "Contact Form",
+              description: "Collect visitor inquiries and store submissions in Vivd.",
+              dashboardPath: null,
+            },
           },
           {
             pluginId: "analytics",
-            name: "Analytics",
-            description: "Track page traffic and visitor behavior for your project.",
+            installState: "available",
+            instanceId: null,
+            instanceStatus: null,
+            updatedAt: null,
+            catalog: {
+              pluginId: "analytics",
+              name: "Analytics",
+              description: "Track page traffic and visitor behavior for your project.",
+              dashboardPath: "/analytics",
+            },
+          },
+          {
+            pluginId: "search_console",
+            installState: "enabled",
+            instanceId: "ppi-search-1",
+            instanceStatus: "enabled",
+            updatedAt: "2026-02-22T10:00:00.000Z",
+            catalog: {
+              pluginId: "search_console",
+              name: "Search Console",
+              description: "Inspect search indexing and performance signals.",
+              dashboardPath: "/plugins/search-console",
+            },
           },
         ],
       },
@@ -249,6 +287,11 @@ describe("ProjectPlugins", () => {
       mutate: analyticsEnsureMutateMock,
       isPending: false,
     });
+    genericEnsureUseMutationMock.mockReturnValue({
+      mutate: genericEnsureMutateMock,
+      isPending: false,
+      variables: undefined,
+    });
     contactUpdateConfigUseMutationMock.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -287,7 +330,26 @@ describe("ProjectPlugins", () => {
     });
     expect(enableButtons).toHaveLength(2);
 
-    enableButtons[0]?.click();
+    fireEvent.click(enableButtons[0]!);
     expect(contactEnsureMutateMock).toHaveBeenCalledWith({ slug: "site-1" });
+  });
+
+  it("renders generic registry-backed plugin cards beyond contact form and analytics", () => {
+    render(
+      <MemoryRouter>
+        <ProjectPlugins />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Search Console")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This plugin is enabled, but it does not expose in-app configuration here yet.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open dashboard" })).toHaveAttribute(
+      "href",
+      "/vivd-studio/projects/site-1/plugins/search-console",
+    );
   });
 });

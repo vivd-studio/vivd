@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ import { authClient } from "@/lib/auth-client";
 
 type SnippetKind = "html" | "astro";
 type ContactFormFieldType = "text" | "email" | "textarea";
+type ProjectPluginCatalogItem = RouterOutputs["plugins"]["catalog"]["plugins"][number];
 
 type EditableContactFormField = {
   key: string;
@@ -185,6 +186,23 @@ function SnippetCard({
   );
 }
 
+function getPluginInstallBadgeVariant(
+  state: ProjectPluginCatalogItem["installState"],
+): "default" | "secondary" | "outline" {
+  if (state === "enabled") return "default";
+  if (state === "available") return "outline";
+  return "secondary";
+}
+
+function getPluginInstallBadgeLabel(
+  state: ProjectPluginCatalogItem["installState"],
+): string {
+  if (state === "enabled") return "Enabled";
+  if (state === "available") return "Available";
+  if (state === "suspended") return "Suspended";
+  return "Disabled";
+}
+
 export default function ProjectPlugins() {
   const { config } = useAppConfig();
   const { projectSlug } = useParams<{ projectSlug: string }>();
@@ -294,15 +312,40 @@ export default function ProjectPlugins() {
       });
     },
   });
+  const genericEnsureMutation = trpc.plugins.ensure.useMutation({
+    onSuccess: async (_, variables) => {
+      toast.success("Plugin enabled for this project");
+      await utils.plugins.catalog.invalidate({ slug });
+      if (variables.pluginId === "contact_form") {
+        await utils.plugins.contactInfo.invalidate({ slug });
+      }
+      if (variables.pluginId === "analytics") {
+        await utils.plugins.analyticsInfo.invalidate({ slug });
+      }
+    },
+    onError: (error) => {
+      toast.error("Failed to enable plugin", {
+        description: error.message,
+      });
+    },
+  });
 
   const contactCatalogEntry = useMemo(
     () =>
-      catalogQuery.data?.available.find((plugin) => plugin.pluginId === "contact_form"),
-    [catalogQuery.data?.available],
+      catalogQuery.data?.plugins.find((plugin) => plugin.pluginId === "contact_form"),
+    [catalogQuery.data?.plugins],
   );
   const analyticsCatalogEntry = useMemo(
-    () => catalogQuery.data?.available.find((plugin) => plugin.pluginId === "analytics"),
-    [catalogQuery.data?.available],
+    () => catalogQuery.data?.plugins.find((plugin) => plugin.pluginId === "analytics"),
+    [catalogQuery.data?.plugins],
+  );
+  const genericCatalogEntries = useMemo(
+    () =>
+      (catalogQuery.data?.plugins ?? []).filter(
+        (plugin) =>
+          plugin.pluginId !== "contact_form" && plugin.pluginId !== "analytics",
+      ),
+    [catalogQuery.data?.plugins],
   );
 
   const contactInfo = contactInfoQuery.data;
@@ -559,9 +602,9 @@ export default function ProjectPlugins() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>{contactCatalogEntry?.name || "Contact Form"}</CardTitle>
+              <CardTitle>{contactCatalogEntry?.catalog.name || "Contact Form"}</CardTitle>
               <CardDescription>
-                {contactCatalogEntry?.description ||
+                {contactCatalogEntry?.catalog.description ||
                   "Collect visitor inquiries and store submissions in Vivd."}
               </CardDescription>
             </div>
@@ -975,9 +1018,9 @@ export default function ProjectPlugins() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>{analyticsCatalogEntry?.name || "Analytics"}</CardTitle>
+              <CardTitle>{analyticsCatalogEntry?.catalog.name || "Analytics"}</CardTitle>
               <CardDescription>
-                {analyticsCatalogEntry?.description ||
+                {analyticsCatalogEntry?.catalog.description ||
                   "Track page traffic and visitor behavior for your project."}
               </CardDescription>
             </div>
@@ -1032,6 +1075,81 @@ export default function ProjectPlugins() {
           )}
         </CardContent>
       </Card>
+
+      {genericCatalogEntries.map((plugin) => {
+        const dashboardPath = plugin.catalog.dashboardPath
+          ? `/vivd-studio/projects/${projectSlug}${plugin.catalog.dashboardPath}`
+          : null;
+        const dashboardLink =
+          dashboardPath && isEmbedded ? `${dashboardPath}?embedded=1` : dashboardPath;
+        const isEnablePending =
+          genericEnsureMutation.isPending &&
+          genericEnsureMutation.variables?.pluginId === plugin.pluginId;
+
+        return (
+          <Card key={plugin.pluginId}>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle>{plugin.catalog.name}</CardTitle>
+                  <CardDescription>{plugin.catalog.description}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {plugin.installState === "available" && canManageProjectPlugins ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        genericEnsureMutation.mutate({
+                          slug,
+                          pluginId: plugin.pluginId,
+                        })
+                      }
+                      disabled={isEnablePending}
+                    >
+                      {isEnablePending ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          Enabling...
+                        </>
+                      ) : (
+                        "Enable for this project"
+                      )}
+                    </Button>
+                  ) : null}
+                  {plugin.installState === "enabled" && dashboardLink ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={dashboardLink}>Open dashboard</Link>
+                    </Button>
+                  ) : null}
+                  <Badge variant={getPluginInstallBadgeVariant(plugin.installState)}>
+                    {getPluginInstallBadgeLabel(plugin.installState)}
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {plugin.installState === "enabled"
+                  ? "This plugin is enabled, but it does not expose in-app configuration here yet."
+                  : plugin.installState === "available"
+                    ? "This plugin is available for this project but has not been enabled yet."
+                    : plugin.installState === "suspended"
+                      ? "This plugin is suspended for this project."
+                      : config.installProfile === "solo"
+                        ? "This plugin is disabled for this instance."
+                        : "This plugin is not currently available for this project."}
+              </p>
+              {plugin.instanceId ? (
+                <div className="text-xs text-muted-foreground">
+                  Instance status: {plugin.instanceStatus ?? "unknown"}
+                  {plugin.updatedAt ? ` · Updated ${new Date(plugin.updatedAt).toLocaleString()}` : ""}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        );
+      })}
       </FormContent>
     </SettingsPageShell>
   );

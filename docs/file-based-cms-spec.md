@@ -33,7 +33,6 @@ This direction fits the product constraints better than a control-plane CMS:
 
 - Put CMS source of truth in project files, not in Vivd platform storage.
 - Support multiple collections with different schemas.
-- Support singletons and page-backed content, not only repeatable collections.
 - Support localized content fields.
 - Support file and image attachments, including PDFs and similar documents.
 - Support active/inactive entry states so content can be hidden without deletion.
@@ -41,6 +40,29 @@ This direction fits the product constraints better than a control-plane CMS:
 - Give Studio users a structured editor that is derived from the same schemas.
 - Make preview and build consume the same normalized content contract.
 - Keep the solution portable so a checked-out project runs outside the Vivd platform.
+- Leave room for singleton, page-backed, reference-heavy, and richer asset workflows after the first release without having to replace the core file contract.
+
+## V1 Scope
+
+V1 should start with collections.
+
+Required in v1:
+
+- multiple collection models with different schemas
+- schema-driven Studio UI for browsing and editing collection entries
+- automatic field rendering in Studio from the active collection schema, so the same editor surface can adapt to different collection types without custom per-model UI
+- localized text fields inside collection entries where needed
+- image and document/file fields inside collection entries where needed
+- active/inactive entry states
+- CLI validation, status, and scaffolding for the collection-first contract
+- Astro adapter/build integration for collection content
+
+Explicitly out of scope for v1:
+
+- singleton model support as a required shipped feature
+- page-backed model support as a required shipped feature
+- full schema-editing UI for non-technical users
+- broad model-specific UI beyond what the first collection workflows need
 
 ## Non-Goals
 
@@ -55,9 +77,8 @@ This direction fits the product constraints better than a control-plane CMS:
 
 ### Functional
 
-- A project can define any number of content models.
+- A project can define any number of collection models.
 - Each model has its own schema and its own storage path.
-- A model can be a collection, singleton, or page-backed collection.
 - Entries support primitive fields, nested objects, arrays, enums, references, rich text, and assets.
 - Fields can be localized per configured locale.
 - Entries can be marked active or inactive.
@@ -65,6 +86,10 @@ This direction fits the product constraints better than a control-plane CMS:
 - The agent can create or edit schema and entry files directly.
 - Validation can be run locally and inside Studio through the CLI.
 - Build and preview can turn content files into objects that page code can import/query.
+
+The broader architecture should still leave room for later singleton and page-backed model kinds without forcing a contract reset.
+
+The Studio editor contract should be schema-rendered rather than hand-authored per collection type. Adding or changing a collection schema should be enough for the UI to render the corresponding editing controls, subject to the supported field types of the current release.
 
 ### Non-Functional
 
@@ -113,23 +138,17 @@ Recommended top-level structure:
 content/
   vivd.content.yaml
   models/
-    pages.yaml
     products.yaml
-    site.yaml
-  pages/
-    home/
-      index.yaml
-      body.en.md
-      body.de.md
+    categories.yaml
   collections/
     products/
       alpine-boot/
         index.yaml
         description.en.md
         description.de.md
-  singletons/
-    site/
-      index.yaml
+    categories/
+      winter-boots/
+        index.yaml
   media/
     products/
       alpine-boot/
@@ -154,6 +173,8 @@ Rule:
 - `content/` is canonical and may be edited by humans, the agent, and Studio UI
 - `.vivd/content/` is generated and must not be hand-edited
 
+Future model kinds such as `singletons/` or `pages/` can be added later without changing the collection-first v1 contract.
+
 ## File Contract
 
 ### Root Config
@@ -167,15 +188,25 @@ locales:
   - en
   - de
 models:
-  - key: pages
-    kind: page
-    schema: ./models/pages.yaml
   - key: products
     kind: collection
     schema: ./models/products.yaml
+  - key: categories
+    kind: collection
+    schema: ./models/categories.yaml
+```
+
+V1 only requires `kind: collection`.
+
+Later phases may extend the same root config to additional model kinds such as:
+
+```yaml
   - key: site
     kind: singleton
     schema: ./models/site.yaml
+  - key: pages
+    kind: page
+    schema: ./models/pages.yaml
 ```
 
 ### Model Schema
@@ -343,6 +374,13 @@ Important separation:
 
 Studio should render a structured CMS UI directly from the schema files.
 
+That means the editing surface is generated from the collection schema:
+
+- the UI reads the model definition and renders the matching controls automatically
+- different collection types can reuse the same editor shell while showing different fields
+- adding a new supported field to a schema should update the editing UI without requiring a bespoke screen for that collection
+- unsupported field types should fail clearly in validation and in the Studio UI instead of silently disappearing
+
 Recommended first UI surface:
 
 - left sidebar with models
@@ -354,9 +392,11 @@ Recommended first UI surface:
 
 V1 recommendation:
 
+- the first shipped UI should be collection-focused
 - users edit entries in Studio UI
 - schema files are still mainly agent/developer-authored
 - schema editing UI can come later
+- singleton-specific and page-specific editing surfaces can come later on the same foundation
 
 ## Agent Workflow
 
@@ -367,7 +407,7 @@ Agent instructions should say:
 - treat `content/` as the CMS source of truth when `content/vivd.content.yaml` exists
 - do not hand-edit `.vivd/content/`
 - create or update models in `content/models/*.yaml`
-- create or update entries in `content/pages/`, `content/collections/`, or `content/singletons/`
+- create or update collection entries in `content/collections/`
 - place attachments in `content/media/`
 - run `vivd cms validate` after changing schema or entries
 - use generated runtime helpers or approved render helpers instead of inventing raw file-system reads in page code
@@ -381,7 +421,7 @@ The CLI should support validation and scaffolding, but it should not become the 
 Recommended minimum commands:
 
 - `vivd cms validate`
-- `vivd cms scaffold model <key> --kind <collection|singleton|page>`
+- `vivd cms scaffold model <key> --kind <collection>`
 - `vivd cms scaffold entry <model-key> <entry-key>`
 - `vivd cms build-artifacts`
 - `vivd cms status --json`
@@ -413,7 +453,6 @@ Recommended runtime/helper surface:
 
 - `getCmsCollection(modelKey, options?)`
 - `getCmsEntry(modelKey, entryKey)`
-- `getCmsSingleton(modelKey)`
 - `resolveCmsAsset(assetRef)`
 
 Default behavior:
@@ -464,9 +503,10 @@ Rules:
 - inactive entries remain editable in Studio
 - inactive entries are visible in entry lists with clear UI treatment
 - inactive entries are excluded from default public rendering
-- inactive page entries should not generate public routes by default
 
 ## References
+
+The file contract and UI architecture should leave room for cross-collection references even if the first shipped collection workflows do not need the full UX on day one.
 
 Collections should be able to reference other collections.
 
@@ -516,15 +556,15 @@ Rejected for now. Astro/build-backed projects are the right first target. Other 
 
 ### Phase 1
 
-- finalize the file contract
-- implement validator and scaffolder
+- finalize the collection-first file contract
+- implement validator and scaffolder for collection models
 - add generated artifact builder for `.vivd/content/`
 
 ### Phase 2
 
-- add Studio read-only CMS browser
-- add entry editing UI based on schema
-- add asset picker/uploader
+- add Studio read-only collection browser
+- add collection-entry editing UI based on schema
+- add asset picker/uploader for collection workflows
 
 ### Phase 3
 
@@ -534,6 +574,7 @@ Rejected for now. Astro/build-backed projects are the right first target. Other 
 
 ### Phase 4
 
+- add singleton/page model support if still desired
 - add reference pickers, locale completeness UX, and status filtering polish
 - evaluate whether schema-editing UI is worth doing
 
@@ -550,10 +591,11 @@ Rejected for now. Astro/build-backed projects are the right first target. Other 
 The recommended v1 is:
 
 - file-first source of truth in `content/`
+- collections-first scope for the first release
 - declarative YAML schemas
 - entry directories with YAML metadata plus Markdown sidecars for long copy
 - repo-owned media files for images and documents
-- Studio UI rendered from those schemas
+- Studio UI rendered from those schemas, starting with collection workflows
 - direct agent file edits
 - `vivd` CLI for validation/scaffolding
 - Astro Content Collections plus a thin adapter as the build/render foundation

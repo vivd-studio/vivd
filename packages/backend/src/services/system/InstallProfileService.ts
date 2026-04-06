@@ -4,7 +4,11 @@ import type {
   PluginEntitlementManagedBy,
   PluginEntitlementState,
 } from "../plugins/PluginEntitlementService";
-import { PLUGIN_IDS, type PluginId } from "../plugins/registry";
+import {
+  PLUGIN_IDS,
+  getPluginDefaultEnabledByProfile,
+  type PluginId,
+} from "../plugins/registry";
 import {
   getSystemSettingJsonValue,
   getSystemSettingValue,
@@ -40,11 +44,17 @@ const instancePluginDefaultSchema = z.object({
 export type InstancePluginDefault = z.infer<typeof instancePluginDefaultSchema>;
 export type InstancePluginDefaults = Partial<Record<PluginId, InstancePluginDefault>>;
 
+function buildInstancePluginDefaultsShape(): Record<
+  PluginId,
+  z.ZodOptional<typeof instancePluginDefaultSchema>
+> {
+  return Object.fromEntries(
+    PLUGIN_IDS.map((pluginId) => [pluginId, instancePluginDefaultSchema.optional()]),
+  ) as Record<PluginId, z.ZodOptional<typeof instancePluginDefaultSchema>>;
+}
+
 export const instancePluginDefaultsSchema = z
-  .object({
-    contact_form: instancePluginDefaultSchema.optional(),
-    analytics: instancePluginDefaultSchema.optional(),
-  })
+  .object(buildInstancePluginDefaultsShape())
   .strict();
 
 export interface InstanceLimitDefaults extends Partial<LimitsConfig> {
@@ -100,17 +110,6 @@ const PROFILE_DEFAULT_CAPABILITIES: Record<InstallProfile, InstanceCapabilityPol
     orgPluginEntitlements: true,
     projectPluginEntitlements: true,
     dedicatedPluginHost: true,
-  },
-};
-
-const PROFILE_DEFAULT_PLUGIN_DEFAULTS: Record<InstallProfile, Record<PluginId, boolean>> = {
-  solo: {
-    contact_form: true,
-    analytics: true,
-  },
-  platform: {
-    contact_form: false,
-    analytics: false,
   },
 };
 
@@ -181,7 +180,7 @@ function normalizePluginDefaults(
 
   return Object.fromEntries(
     PLUGIN_IDS.map((pluginId) => {
-      const defaultEnabled = PROFILE_DEFAULT_PLUGIN_DEFAULTS[profile][pluginId];
+      const defaultEnabled = getPluginDefaultEnabledByProfile(pluginId, profile);
       const entry = configured[pluginId];
       const enabled =
         typeof entry?.enabled === "boolean" ? entry.enabled : defaultEnabled;

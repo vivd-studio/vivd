@@ -250,7 +250,7 @@ export default function StudioFullscreen() {
     replaceRuntime(createStudioRuntimeSession(result), { reload: true });
   };
 
-  const renderLoadingHeader = () => (
+  const renderLoadingHeader = (studioStatusLabel: string) => (
     <HostHeader
       leadingAccessory={
         <Button
@@ -279,6 +279,12 @@ export default function StudioFullscreen() {
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <span className="text-sm text-muted-foreground">
+                  {studioStatusLabel}
+                </span>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -384,7 +390,7 @@ export default function StudioFullscreen() {
     return (
       <StudioStartupLoading
         fullScreen
-        header={renderLoadingHeader()}
+        header={renderLoadingHeader("Starting studio...")}
       />
     );
   }
@@ -411,7 +417,9 @@ export default function StudioFullscreen() {
     return (
       <StudioStartupLoading
         fullScreen
-        header={renderLoadingHeader()}
+        header={renderLoadingHeader(
+          hardRestartStudio.isPending ? "Restarting studio..." : "Starting studio...",
+        )}
       />
     );
   }
@@ -479,7 +487,9 @@ export default function StudioFullscreen() {
           ) : (
             <StudioStartupLoading
               className="h-full min-h-0"
-              header={renderLoadingHeader()}
+              header={renderLoadingHeader(
+                hardRestartStudio.isPending ? "Restarting studio..." : "Starting studio...",
+              )}
             />
           )}
         </div>

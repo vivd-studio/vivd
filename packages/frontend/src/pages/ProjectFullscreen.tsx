@@ -444,9 +444,11 @@ export default function ProjectFullscreen() {
   const renderFullscreenHeader = ({
     actionSlot,
     includeProjectActions = false,
+    studioStatusLabel,
   }: {
     actionSlot?: ReactNode;
     includeProjectActions?: boolean;
+    studioStatusLabel?: string;
   }) => {
     const projectActions = includeProjectActions ? (
       <>
@@ -642,6 +644,16 @@ export default function ProjectFullscreen() {
                 <BreadcrumbItem>
                   <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
                 </BreadcrumbItem>
+                {studioStatusLabel ? (
+                  <>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <span className="text-sm text-muted-foreground">
+                        {studioStatusLabel}
+                      </span>
+                    </BreadcrumbItem>
+                  </>
+                ) : null}
               </BreadcrumbList>
             </Breadcrumb>
           </>
@@ -737,6 +749,9 @@ export default function ProjectFullscreen() {
               Booting studio…
             </Button>
           ),
+          studioStatusLabel: hardRestartStudio.isPending
+            ? "Restarting studio..."
+            : "Starting studio...",
         })}
       >
         <StudioStartupLoading className="h-full min-h-0" />
@@ -964,6 +979,9 @@ export default function ProjectFullscreen() {
                         Booting studio…
                       </Button>
                     ),
+                    studioStatusLabel: hardRestartStudio.isPending
+                      ? "Restarting studio..."
+                      : "Starting studio...",
                   })}
                 />
               )}

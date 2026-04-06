@@ -139,7 +139,15 @@ vi.mock("@/components/projects/publish/PublishSiteDialog", () => ({
 }));
 
 vi.mock("@/components/common/StudioStartupLoading", () => ({
-  StudioStartupLoading: () => <div data-testid="studio-startup-loading" />,
+  StudioStartupLoading: ({
+    header,
+  }: {
+    header?: ReactNode;
+  }) => (
+    <div data-testid="studio-startup-loading">
+      {header}
+    </div>
+  ),
 }));
 
 vi.mock("@/hooks/useStudioRuntimeGuard", () => ({
@@ -384,7 +392,7 @@ describe("EmbeddedStudio", () => {
     );
   });
 
-  it("hides the host header once the embedded studio iframe is active", () => {
+  it("shows the loading header while the embedded studio iframe is still booting", () => {
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1",
     });
@@ -402,7 +410,8 @@ describe("EmbeddedStudio", () => {
 
     expect(screen.getByTitle("Vivd Studio - site-1")).toBeInTheDocument();
     expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("host-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("host-header")).toBeInTheDocument();
+    expect(screen.getByText("Starting studio...")).toBeInTheDocument();
     expectNoPreviewSurfaceControls();
   });
 
@@ -465,10 +474,11 @@ describe("EmbeddedStudio", () => {
 
     expect(screen.getByTitle("Vivd Studio - site-1")).toBeInTheDocument();
     expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("host-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("host-header")).toBeInTheDocument();
+    expect(screen.getByText("Starting studio...")).toBeInTheDocument();
   });
 
-  it("keeps the host header and shows a loading action while studio is booting after edit", () => {
+  it("keeps the host header and shows loading state in the breadcrumb while studio is booting after edit", () => {
     const startStudioMutate = vi.fn();
     startStudioUseMutationMock.mockReturnValue({
       mutate: startStudioMutate,
@@ -488,6 +498,7 @@ describe("EmbeddedStudio", () => {
     });
     expect(screen.getByTestId("host-header")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Starting..." })).toBeDisabled();
+    expect(screen.getByText("Starting studio...")).toBeInTheDocument();
     expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
   });
 

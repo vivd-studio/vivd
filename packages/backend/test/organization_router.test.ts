@@ -472,17 +472,30 @@ describe("organization router", () => {
       projectSlug: "site-1",
       projectTitle: "Site One",
       deployedDomain: "site-1.example.com",
-      contactForm: {
-        status: "enabled",
-        configuredRecipientCount: 0,
-        pendingRecipientCount: 2,
-        turnstileEnabled: true,
-        turnstileReady: false,
-      },
-      analytics: {
-        status: "not_installed",
-      },
     });
+    expect(result.rows[0]?.plugins).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: "contact_form",
+          installState: "enabled",
+          summaryLines: expect.arrayContaining([
+            "Recipients configured: 0",
+            "Pending verification: 2",
+          ]),
+          badges: expect.arrayContaining([
+            expect.objectContaining({
+              label: "Turnstile syncing",
+              tone: "destructive",
+            }),
+          ]),
+        }),
+        expect.objectContaining({
+          pluginId: "analytics",
+          installState: "disabled",
+          instanceId: null,
+        }),
+      ]),
+    );
     expect(result.rows[0]?.issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining([
         "contact_no_recipients",

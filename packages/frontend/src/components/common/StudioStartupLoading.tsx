@@ -50,14 +50,15 @@ function PreviewPanel() {
       <FramedViewport className="relative">
         <div className="absolute inset-0 flex items-center justify-center bg-background">
           <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-background shadow-sm">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
+            <Loader2
+              className="h-8 w-8 animate-spin text-primary"
+              data-testid="studio-startup-spinner"
+            />
 
             <div className="space-y-1">
-              <p className="text-sm font-medium">Loading studio</p>
+              <p className="text-sm font-medium">Starting studio</p>
               <p className="text-xs text-muted-foreground">
-                Preparing your editor and dev server.
+                This can take a little longer on first startup.
               </p>
             </div>
           </div>

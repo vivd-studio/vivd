@@ -14,9 +14,9 @@ const {
   listStudioImagesFromGhcrMock,
   normalizeGhcrRepositoryMock,
   upsertEntitlementMock,
+  listProjectAccessMock,
   getProjectEntitlementRowMock,
-  ensureContactFormPluginMock,
-  ensureAnalyticsPluginMock,
+  ensurePluginInstanceMock,
   getTurnstileAutomationIssueMock,
   prepareTurnstileWidgetMock,
   deleteTurnstileWidgetMock,
@@ -66,9 +66,9 @@ const {
     listStudioImagesFromGhcrMock: vi.fn(),
     normalizeGhcrRepositoryMock: vi.fn(),
     upsertEntitlementMock: vi.fn(),
+    listProjectAccessMock: vi.fn(),
     getProjectEntitlementRowMock: vi.fn(),
-    ensureContactFormPluginMock: vi.fn(),
-    ensureAnalyticsPluginMock: vi.fn(),
+    ensurePluginInstanceMock: vi.fn(),
     getTurnstileAutomationIssueMock: vi.fn(),
     prepareTurnstileWidgetMock: vi.fn(),
     deleteTurnstileWidgetMock: vi.fn(),
@@ -185,15 +185,14 @@ vi.mock("../src/services/studioMachines/fly/ghcr", () => ({
 vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   pluginEntitlementService: {
     upsertEntitlement: upsertEntitlementMock,
-    listProjectAccess: vi.fn(),
+    listProjectAccess: listProjectAccessMock,
     getProjectEntitlementRow: getProjectEntitlementRowMock,
   },
 }));
 
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
-    ensureContactFormPlugin: ensureContactFormPluginMock,
-    ensureAnalyticsPlugin: ensureAnalyticsPluginMock,
+    ensurePluginInstance: ensurePluginInstanceMock,
   },
 }));
 
@@ -335,9 +334,9 @@ describe("superadmin router", () => {
     listStudioImagesFromGhcrMock.mockReset();
     normalizeGhcrRepositoryMock.mockReset();
     upsertEntitlementMock.mockReset();
+    listProjectAccessMock.mockReset();
     getProjectEntitlementRowMock.mockReset();
-    ensureContactFormPluginMock.mockReset();
-    ensureAnalyticsPluginMock.mockReset();
+    ensurePluginInstanceMock.mockReset();
     getTurnstileAutomationIssueMock.mockReset();
     prepareTurnstileWidgetMock.mockReset();
     deleteTurnstileWidgetMock.mockReset();
@@ -387,12 +386,13 @@ describe("superadmin router", () => {
       imageBase: "ghcr.io/vivd-studio/vivd-studio",
     });
     upsertEntitlementMock.mockResolvedValue(makeEntitlement());
-    getProjectEntitlementRowMock.mockResolvedValue(null);
-    ensureContactFormPluginMock.mockResolvedValue({
-      instanceId: "ppi-1",
+    listProjectAccessMock.mockResolvedValue({
+      rows: [],
+      total: 0,
     });
-    ensureAnalyticsPluginMock.mockResolvedValue({
-      instanceId: "ppi-analytics-1",
+    getProjectEntitlementRowMock.mockResolvedValue(null);
+    ensurePluginInstanceMock.mockResolvedValue({
+      instanceId: "ppi-1",
     });
     getTurnstileAutomationIssueMock.mockReturnValue(null);
     prepareTurnstileWidgetMock.mockResolvedValue({
@@ -1004,9 +1004,10 @@ describe("superadmin router", () => {
         changedByUserId: "user-1",
       }),
     );
-    expect(ensureContactFormPluginMock).toHaveBeenCalledWith({
+    expect(ensurePluginInstanceMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+      pluginId: "contact_form",
     });
     expect(result.ensuredPluginInstanceId).toBe("ppi-1");
   });
@@ -1023,11 +1024,14 @@ describe("superadmin router", () => {
       ensurePluginWhenEnabled: false,
     });
 
-    expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
+    expect(ensurePluginInstanceMock).not.toHaveBeenCalled();
     expect(result.ensuredPluginInstanceId).toBeNull();
   });
 
   it("ensures an analytics plugin instance when enabling analytics for a project", async () => {
+    ensurePluginInstanceMock.mockResolvedValueOnce({
+      instanceId: "ppi-analytics-1",
+    });
     upsertEntitlementMock.mockResolvedValueOnce(
       makeEntitlement({
         pluginId: "analytics",
@@ -1043,12 +1047,97 @@ describe("superadmin router", () => {
       state: "enabled",
     });
 
-    expect(ensureAnalyticsPluginMock).toHaveBeenCalledWith({
+    expect(ensurePluginInstanceMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "analytics",
+    });
+    expect(result.ensuredPluginInstanceId).toBe("ppi-analytics-1");
+  });
+
+  it("groups project plugin access rows across all registered plugins", async () => {
+    listProjectAccessMock
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            organizationId: "org-1",
+            organizationSlug: "org-1",
+            organizationName: "Org One",
+            projectSlug: "site-1",
+            projectTitle: "Site 1",
+            isDeployed: true,
+            deployedDomain: "site-1.example.com",
+            effectiveScope: "project",
+            state: "enabled",
+            managedBy: "manual_superadmin",
+            monthlyEventLimit: 100,
+            hardStop: true,
+            turnstileEnabled: true,
+            turnstileReady: true,
+            usageThisMonth: 10,
+            projectPluginStatus: "enabled",
+            updatedAt: new Date("2026-02-22T10:00:00.000Z"),
+          },
+        ],
+        total: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            organizationId: "org-1",
+            organizationSlug: "org-1",
+            organizationName: "Org One",
+            projectSlug: "site-1",
+            projectTitle: "Site 1",
+            isDeployed: true,
+            deployedDomain: "site-1.example.com",
+            effectiveScope: "project",
+            state: "disabled",
+            managedBy: "manual_superadmin",
+            monthlyEventLimit: null,
+            hardStop: true,
+            turnstileEnabled: false,
+            turnstileReady: false,
+            usageThisMonth: 0,
+            projectPluginStatus: "disabled",
+            updatedAt: new Date("2026-02-22T11:00:00.000Z"),
+          },
+        ],
+        total: 1,
+      });
+    const caller = superAdminRouter.createCaller(makeContext());
+
+    const result = await caller.pluginsListAccess({
+      limit: 500,
+      offset: 0,
+    });
+
+    expect(listProjectAccessMock).toHaveBeenCalledTimes(2);
+    expect(result.pluginCatalog.map((plugin) => plugin.pluginId)).toEqual([
+      "contact_form",
+      "analytics",
+    ]);
+    expect(result.total).toBe(1);
+    expect(result.rows[0]).toMatchObject({
       organizationId: "org-1",
       projectSlug: "site-1",
     });
-    expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
-    expect(result.ensuredPluginInstanceId).toBe("ppi-analytics-1");
+    expect(result.rows[0]?.plugins).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: "contact_form",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          state: "enabled",
+        }),
+        expect.objectContaining({
+          pluginId: "analytics",
+          organizationId: "org-1",
+          projectSlug: "site-1",
+          state: "disabled",
+        }),
+      ]),
+    );
   });
 
   it("prepares turnstile widget credentials when enabling turnstile", async () => {

@@ -582,8 +582,10 @@ export default function EmbeddedStudio() {
 
   const renderEmbeddedHeader = ({
     includeProjectActions = false,
+    studioStatusLabel,
   }: {
     includeProjectActions?: boolean;
+    studioStatusLabel?: string;
   }) => {
     const showStudioStartupAction =
       editRequested &&
@@ -790,6 +792,16 @@ export default function EmbeddedStudio() {
                 <BreadcrumbItem>
                   <BreadcrumbPage>{projectSlug}</BreadcrumbPage>
                 </BreadcrumbItem>
+                {studioStatusLabel ? (
+                  <>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <span className="text-sm text-muted-foreground">
+                        {studioStatusLabel}
+                      </span>
+                    </BreadcrumbItem>
+                  </>
+                ) : null}
               </BreadcrumbList>
             </Breadcrumb>
           </>
@@ -829,7 +841,7 @@ export default function EmbeddedStudio() {
     return (
       <FramedHostShell
         className="h-full"
-        header={renderEmbeddedHeader({})}
+        header={renderEmbeddedHeader({ studioStatusLabel: "Starting studio..." })}
         headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className="relative flex h-full min-h-0 flex-col bg-background">
@@ -890,7 +902,12 @@ export default function EmbeddedStudio() {
     return (
       <FramedHostShell
         className="h-full"
-        header={renderEmbeddedHeader({ includeProjectActions: true })}
+        header={renderEmbeddedHeader({
+          includeProjectActions: true,
+          studioStatusLabel: hardRestartStudio.isPending
+            ? "Restarting studio..."
+            : "Starting studio...",
+        })}
         headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
       >
         <div className="relative flex h-full min-h-0 flex-col bg-background">
@@ -967,7 +984,12 @@ export default function EmbeddedStudio() {
                 ) : (
                   <StudioStartupLoading
                     className="h-full min-h-0"
-                    header={renderEmbeddedHeader({ includeProjectActions: true })}
+                    header={renderEmbeddedHeader({
+                      includeProjectActions: true,
+                      studioStatusLabel: hardRestartStudio.isPending
+                        ? "Restarting studio..."
+                        : "Starting studio...",
+                    })}
                     headerClassName={EMBEDDED_PROJECT_HEADER_INSET_CLASS}
                   />
                 )}

@@ -29,16 +29,40 @@ describe("OrganizationPluginsTab", () => {
             projectTitle: "Acme Site",
             updatedAt: "2026-02-25T11:00:00.000Z",
             deployedDomain: "acme.example.com",
-            contactForm: {
-              status: "enabled",
-              configuredRecipientCount: 0,
-              pendingRecipientCount: 2,
-              turnstileEnabled: true,
-              turnstileReady: false,
-            },
-            analytics: {
-              status: "enabled",
-            },
+            plugins: [
+              {
+                pluginId: "contact_form",
+                catalog: {
+                  pluginId: "contact_form",
+                  name: "Contact Form",
+                  description: "Collect visitor inquiries and store submissions in Vivd.",
+                },
+                installState: "enabled",
+                instanceId: "ppi-1",
+                summaryLines: [
+                  "Recipients configured: 0",
+                  "Pending verification: 2",
+                ],
+                badges: [
+                  {
+                    label: "Turnstile syncing",
+                    tone: "destructive",
+                  },
+                ],
+              },
+              {
+                pluginId: "analytics",
+                catalog: {
+                  pluginId: "analytics",
+                  name: "Analytics",
+                  description: "Track page traffic and visitor behavior for your project.",
+                },
+                installState: "disabled",
+                instanceId: null,
+                summaryLines: [],
+                badges: [],
+              },
+            ],
             issues: [
               {
                 code: "contact_no_recipients",
@@ -66,6 +90,7 @@ describe("OrganizationPluginsTab", () => {
 
     expect(screen.getByText("Acme Site")).toBeInTheDocument();
     expect(screen.getByText("Published: acme.example.com")).toBeInTheDocument();
+    expect(screen.getByText("Contact Form")).toBeInTheDocument();
     expect(screen.getByText("Recipients configured: 0")).toBeInTheDocument();
     expect(screen.getByText("Pending verification: 2")).toBeInTheDocument();
     expect(screen.getByText("Turnstile syncing")).toBeInTheDocument();
@@ -78,20 +103,20 @@ describe("OrganizationPluginsTab", () => {
     );
   });
 
-  it("filters rows by project and issue search terms", () => {
+  it("filters rows by project, plugin, and issue search terms", () => {
     render(
       <MemoryRouter>
         <OrganizationPluginsTab />
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("Search projects or issues"), {
+    fireEvent.change(screen.getByPlaceholderText("Search projects, plugins, or issues"), {
       target: { value: "unrelated term" },
     });
     expect(screen.getByText("No projects match this search.")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText("Search projects or issues"), {
-      target: { value: "verified recipients" },
+    fireEvent.change(screen.getByPlaceholderText("Search projects, plugins, or issues"), {
+      target: { value: "turnstile syncing" },
     });
     expect(screen.getByText("Acme Site")).toBeInTheDocument();
   });

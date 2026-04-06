@@ -1,5 +1,6 @@
 import { router } from "../../trpc";
 import { catalogPluginProcedure } from "./catalog";
+import { ensurePluginProcedure } from "./generic";
 import {
   analyticsEnsurePluginProcedure,
   analyticsInfoPluginProcedure,
@@ -15,6 +16,7 @@ import {
 
 export const pluginsRouter = router({
   catalog: catalogPluginProcedure,
+  ensure: ensurePluginProcedure,
   contactEnsure: contactEnsurePluginProcedure,
   contactInfo: contactInfoPluginProcedure,
   contactUpdateConfig: contactUpdateConfigPluginProcedure,

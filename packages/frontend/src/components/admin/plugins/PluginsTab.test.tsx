@@ -48,6 +48,79 @@ vi.mock("sonner", () => ({
 
 import { PluginsTab } from "./PluginsTab";
 
+const pluginCatalog = [
+  {
+    pluginId: "contact_form",
+    name: "Contact Form",
+    description: "Submissions with optional Turnstile protection.",
+    usageLabel: "Submissions",
+    limitPrompt: "Set monthly submission limit.",
+    supportsMonthlyLimit: true,
+    supportsTurnstile: true,
+  },
+  {
+    pluginId: "analytics",
+    name: "Analytics",
+    description: "Tracking script and event ingestion.",
+    usageLabel: "Events",
+    limitPrompt: "Set monthly event limit.",
+    supportsMonthlyLimit: true,
+    supportsTurnstile: false,
+  },
+];
+
+function makePluginRow(
+  pluginId: "contact_form" | "analytics",
+  overrides: Record<string, unknown> = {},
+) {
+  const catalog = pluginCatalog.find((plugin) => plugin.pluginId === pluginId)!;
+  return {
+    organizationId: "org-1",
+    pluginId,
+    projectSlug: "site-1",
+    catalog,
+    effectiveScope: "project",
+    state: "disabled",
+    managedBy: "manual_superadmin",
+    monthlyEventLimit: null,
+    hardStop: true,
+    turnstileEnabled: false,
+    turnstileReady: false,
+    usageThisMonth: 0,
+    projectPluginStatus: "disabled",
+    updatedAt: "2026-02-22T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function makeProjectRow(
+  overrides: Record<string, unknown> = {},
+  plugins = [
+    makePluginRow("contact_form", {
+      state: "enabled",
+      projectPluginStatus: "enabled",
+      usageThisMonth: 10,
+      monthlyEventLimit: 100,
+      turnstileEnabled: true,
+      turnstileReady: true,
+    }),
+    makePluginRow("analytics"),
+  ],
+) {
+  return {
+    organizationId: "org-1",
+    organizationSlug: "org-1",
+    organizationName: "Org One",
+    projectSlug: "site-1",
+    projectTitle: "Site 1",
+    isDeployed: true,
+    deployedDomain: "site-1.example.com",
+    plugins,
+    updatedAt: "2026-02-22T11:00:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("PluginsTab", () => {
   beforeEach(() => {
     useUtilsMock.mockReset();
@@ -84,7 +157,9 @@ describe("PluginsTab", () => {
 
     listAccessUseQueryMock.mockReturnValue({
       data: {
+        pluginCatalog,
         rows: [],
+        total: 0,
       },
       error: null,
       isLoading: false,
@@ -99,68 +174,16 @@ describe("PluginsTab", () => {
   });
 
   it("renders one row per project with grouped plugin controls", () => {
-    listAccessUseQueryMock.mockImplementation((input: { pluginId: string }) => {
-      if (input.pluginId === "contact_form") {
-        return {
-          data: {
-            rows: [
-              {
-                organizationId: "org-1",
-                organizationSlug: "org-1",
-                organizationName: "Org One",
-                projectSlug: "site-1",
-                projectTitle: "Site 1",
-                isDeployed: true,
-                deployedDomain: "site-1.example.com",
-                effectiveScope: "project",
-                state: "enabled",
-                managedBy: "manual_superadmin",
-                monthlyEventLimit: 100,
-                hardStop: true,
-                turnstileEnabled: true,
-                turnstileReady: true,
-                usageThisMonth: 10,
-                projectPluginStatus: "enabled",
-                updatedAt: "2026-02-22T10:00:00.000Z",
-              },
-            ],
-          },
-          error: null,
-          isLoading: false,
-          isFetching: false,
-          refetch: vi.fn(),
-        };
-      }
-
-      return {
-        data: {
-          rows: [
-            {
-              organizationId: "org-1",
-              organizationSlug: "org-1",
-              organizationName: "Org One",
-              projectSlug: "site-1",
-              projectTitle: "Site 1",
-              isDeployed: true,
-              deployedDomain: "site-1.example.com",
-              effectiveScope: "project",
-              state: "disabled",
-              managedBy: "manual_superadmin",
-              monthlyEventLimit: null,
-              hardStop: true,
-              turnstileEnabled: false,
-              turnstileReady: false,
-              usageThisMonth: 0,
-              projectPluginStatus: "disabled",
-              updatedAt: "2026-02-22T11:00:00.000Z",
-            },
-          ],
-        },
-        error: null,
-        isLoading: false,
-        isFetching: false,
-        refetch: vi.fn(),
-      };
+    listAccessUseQueryMock.mockReturnValue({
+      data: {
+        pluginCatalog,
+        rows: [makeProjectRow()],
+        total: 1,
+      },
+      error: null,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
     });
 
     render(<PluginsTab />);
@@ -179,56 +202,37 @@ describe("PluginsTab", () => {
     expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 
-  it("queries plugin access for both Contact Form and Analytics", () => {
+  it("queries grouped plugin access once", () => {
     render(<PluginsTab />);
 
     expect(listAccessUseQueryMock).toHaveBeenCalledWith({
-      pluginId: "contact_form",
       search: undefined,
-      state: undefined,
-      limit: 500,
-      offset: 0,
-    });
-    expect(listAccessUseQueryMock).toHaveBeenCalledWith({
-      pluginId: "analytics",
-      search: undefined,
-      state: undefined,
       limit: 500,
       offset: 0,
     });
   });
 
   it("can set all plugins on a project row", async () => {
-    listAccessUseQueryMock.mockImplementation((input: { pluginId: string }) => {
-      return {
-        data: {
-          rows: [
-            {
-              organizationId: "org-1",
-              organizationSlug: "org-1",
-              organizationName: "Org One",
-              projectSlug: "site-1",
-              projectTitle: "Site 1",
-              isDeployed: true,
-              deployedDomain: "site-1.example.com",
-              effectiveScope: "project",
-              state: input.pluginId === "contact_form" ? "enabled" : "disabled",
-              managedBy: "manual_superadmin",
-              monthlyEventLimit: null,
-              hardStop: true,
-              turnstileEnabled: false,
-              turnstileReady: false,
-              usageThisMonth: 0,
+    listAccessUseQueryMock.mockReturnValue({
+      data: {
+        pluginCatalog,
+        rows: [
+          makeProjectRow({}, [
+            makePluginRow("contact_form", {
+              state: "enabled",
               projectPluginStatus: "enabled",
-              updatedAt: "2026-02-22T10:00:00.000Z",
-            },
-          ],
-        },
-        error: null,
-        isLoading: false,
-        isFetching: false,
-        refetch: vi.fn(),
-      };
+            }),
+            makePluginRow("analytics", {
+              state: "disabled",
+            }),
+          ]),
+        ],
+        total: 1,
+      },
+      error: null,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
     });
 
     render(<PluginsTab />);
@@ -257,37 +261,39 @@ describe("PluginsTab", () => {
   });
 
   it("paginates projects with a page size of 100", async () => {
-    listAccessUseQueryMock.mockImplementation((input: { pluginId: string }) => {
-      const rows = Array.from({ length: 101 }, (_unused, index) => {
-        const projectNumber = String(index + 1).padStart(3, "0");
-        return {
-          organizationId: "org-1",
-          organizationSlug: "org-1",
-          organizationName: "Org One",
+    const rows = Array.from({ length: 101 }, (_unused, index) => {
+      const projectNumber = String(index + 1).padStart(3, "0");
+      return makeProjectRow(
+        {
           projectSlug: `site-${projectNumber}`,
           projectTitle: `Site ${projectNumber}`,
           isDeployed: false,
           deployedDomain: null,
-          effectiveScope: "project",
-          state: input.pluginId === "contact_form" ? "enabled" : "disabled",
-          managedBy: "manual_superadmin",
-          monthlyEventLimit: null,
-          hardStop: true,
-          turnstileEnabled: false,
-          turnstileReady: false,
-          usageThisMonth: 0,
-          projectPluginStatus: "enabled",
-          updatedAt: "2026-02-22T10:00:00.000Z",
-        };
-      });
+        },
+        [
+          makePluginRow("contact_form", {
+            projectSlug: `site-${projectNumber}`,
+            state: "enabled",
+            projectPluginStatus: "enabled",
+          }),
+          makePluginRow("analytics", {
+            projectSlug: `site-${projectNumber}`,
+            state: "disabled",
+          }),
+        ],
+      );
+    });
 
-      return {
-        data: { rows },
-        error: null,
-        isLoading: false,
-        isFetching: false,
-        refetch: vi.fn(),
-      };
+    listAccessUseQueryMock.mockReturnValue({
+      data: {
+        pluginCatalog,
+        rows,
+        total: rows.length,
+      },
+      error: null,
+      isLoading: false,
+      isFetching: false,
+      refetch: vi.fn(),
     });
 
     render(<PluginsTab />);

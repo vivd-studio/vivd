@@ -23,63 +23,14 @@ import {
 } from "@/components/ui/select";
 
 type AccessStateFilter = "all" | "enabled" | "disabled" | "suspended";
-type SuperAdminPluginId =
-  RouterInputs["superadmin"]["pluginsUpsertEntitlement"]["pluginId"];
-type PluginAccessRow = RouterOutputs["superadmin"]["pluginsListAccess"]["rows"][number];
+type ProjectAccessRow = RouterOutputs["superadmin"]["pluginsListAccess"]["rows"][number];
+type PluginAccessRow = ProjectAccessRow["plugins"][number];
+type PluginCatalogEntry =
+  RouterOutputs["superadmin"]["getInstanceSettings"]["pluginCatalog"][number];
 type UpsertEntitlementInput = RouterInputs["superadmin"]["pluginsUpsertEntitlement"];
 type PluginState = UpsertEntitlementInput["state"];
 
-type PluginListConfig = {
-  id: SuperAdminPluginId;
-  label: string;
-  description: string;
-  usageLabel: string;
-  limitPrompt: string;
-  showTurnstile: boolean;
-};
-
-type ConsolidatedPluginRow = PluginAccessRow & {
-  pluginId: SuperAdminPluginId;
-  pluginLabel: string;
-  pluginDescription: string;
-  usageLabel: string;
-  limitPrompt: string;
-  showTurnstile: boolean;
-};
-
-type ProjectAccessRow = {
-  organizationId: string;
-  organizationSlug: string;
-  organizationName: string;
-  projectSlug: string;
-  projectTitle: string;
-  isDeployed: boolean;
-  deployedDomain: string | null;
-  pluginRows: ConsolidatedPluginRow[];
-  updatedAt: Date | string | null;
-};
-
 const PROJECT_PAGE_SIZE = 100;
-
-const SUPERADMIN_PLUGIN_LIST: ReadonlyArray<PluginListConfig> = [
-  {
-    id: "contact_form",
-    label: "Contact Form",
-    description: "Submissions with optional Turnstile protection.",
-    usageLabel: "Submissions",
-    limitPrompt:
-      "Set monthly contact form submission limit.\nLeave empty for unlimited.",
-    showTurnstile: true,
-  },
-  {
-    id: "analytics",
-    label: "Analytics",
-    description: "Tracking script and event ingestion.",
-    usageLabel: "Events",
-    limitPrompt: "Set monthly analytics event limit.\nLeave empty for unlimited.",
-    showTurnstile: false,
-  },
-];
 
 function formatDate(value: Date | string | null): string {
   if (!value) return "-";
@@ -88,73 +39,12 @@ function formatDate(value: Date | string | null): string {
   return date.toLocaleString();
 }
 
-function toTimestamp(value: Date | string | null): number {
-  if (!value) return 0;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 0;
-  return date.getTime();
-}
-
 function formatStateBadgeVariant(
   state: "enabled" | "disabled" | "suspended",
 ): "success" | "secondary" | "outline" {
   if (state === "enabled") return "success";
   if (state === "suspended") return "secondary";
   return "outline";
-}
-
-function withPluginMetadata(
-  row: PluginAccessRow,
-  plugin: PluginListConfig,
-): ConsolidatedPluginRow {
-  return {
-    ...row,
-    pluginId: plugin.id,
-    pluginLabel: plugin.label,
-    pluginDescription: plugin.description,
-    usageLabel: plugin.usageLabel,
-    limitPrompt: plugin.limitPrompt,
-    showTurnstile: plugin.showTurnstile,
-  };
-}
-
-function createFallbackPluginRow(
-  project: {
-    organizationId: string;
-    organizationSlug: string;
-    organizationName: string;
-    projectSlug: string;
-    projectTitle: string;
-    isDeployed: boolean;
-    deployedDomain: string | null;
-  },
-  plugin: PluginListConfig,
-): ConsolidatedPluginRow {
-  return {
-    organizationId: project.organizationId,
-    organizationSlug: project.organizationSlug,
-    organizationName: project.organizationName,
-    projectSlug: project.projectSlug,
-    projectTitle: project.projectTitle,
-    isDeployed: project.isDeployed,
-    deployedDomain: project.deployedDomain,
-    effectiveScope: "none",
-    state: "disabled",
-    managedBy: "manual_superadmin",
-    monthlyEventLimit: null,
-    hardStop: true,
-    turnstileEnabled: false,
-    turnstileReady: false,
-    usageThisMonth: 0,
-    projectPluginStatus: null,
-    updatedAt: null,
-    pluginId: plugin.id,
-    pluginLabel: plugin.label,
-    pluginDescription: plugin.description,
-    usageLabel: plugin.usageLabel,
-    limitPrompt: plugin.limitPrompt,
-    showTurnstile: plugin.showTurnstile,
-  };
 }
 
 function getErrorMessage(error: unknown): string {
@@ -213,16 +103,17 @@ function InstancePluginDefaultsPanel() {
 
   return (
     <div className="space-y-4">
-      {SUPERADMIN_PLUGIN_LIST.map((plugin) => {
-        const enabled = settingsQuery.data?.pluginDefaults[plugin.id]?.enabled ?? false;
+      {settingsQuery.data.pluginCatalog.map((plugin: PluginCatalogEntry) => {
+        const enabled =
+          settingsQuery.data?.pluginDefaults[plugin.pluginId]?.enabled ?? false;
         return (
           <div
-            key={plugin.id}
+            key={plugin.pluginId}
             className="rounded-lg border bg-muted/15 p-4 space-y-3"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-medium">{plugin.label}</div>
+                <div className="font-medium">{plugin.name}</div>
                 <div className="text-sm text-muted-foreground">{plugin.description}</div>
               </div>
               <Badge variant={enabled ? "success" : "secondary"}>
@@ -239,15 +130,15 @@ function InstancePluginDefaultsPanel() {
                   updateSettings.mutate(
                     {
                       pluginDefaults: {
-                        [plugin.id]: { enabled: true },
+                        [plugin.pluginId]: { enabled: true },
                       },
                     },
                     {
                       onSuccess: () => {
-                        toast.success(`${plugin.label} enabled`);
+                        toast.success(`${plugin.name} enabled`);
                       },
                       onError: (error) => {
-                        toast.error(`Failed to update ${plugin.label}`, {
+                        toast.error(`Failed to update ${plugin.name}`, {
                           description: error.message,
                         });
                       },
@@ -265,15 +156,15 @@ function InstancePluginDefaultsPanel() {
                   updateSettings.mutate(
                     {
                       pluginDefaults: {
-                        [plugin.id]: { enabled: false },
+                        [plugin.pluginId]: { enabled: false },
                       },
                     },
                     {
                       onSuccess: () => {
-                        toast.success(`${plugin.label} disabled`);
+                        toast.success(`${plugin.name} disabled`);
                       },
                       onError: (error) => {
-                        toast.error(`Failed to update ${plugin.label}`, {
+                        toast.error(`Failed to update ${plugin.name}`, {
                           description: error.message,
                         });
                       },
@@ -300,138 +191,25 @@ function ProjectsPluginAccessPanel() {
   const queryInput = useMemo(
     () => ({
       search: search.trim() ? search.trim() : undefined,
-      state: undefined,
       limit: 500,
       offset: 0,
     }),
     [search],
   );
 
-  const contactFormListQuery = trpc.superadmin.pluginsListAccess.useQuery({
-    pluginId: "contact_form",
-    ...queryInput,
-  });
-  const analyticsListQuery = trpc.superadmin.pluginsListAccess.useQuery({
-    pluginId: "analytics",
-    ...queryInput,
-  });
-
+  const listAccessQuery = trpc.superadmin.pluginsListAccess.useQuery(queryInput);
   const upsertMutation = trpc.superadmin.pluginsUpsertEntitlement.useMutation();
 
   const projectRows = useMemo<ProjectAccessRow[]>(() => {
-    type ProjectMapValue = {
-      organizationId: string;
-      organizationSlug: string;
-      organizationName: string;
-      projectSlug: string;
-      projectTitle: string;
-      isDeployed: boolean;
-      deployedDomain: string | null;
-      pluginRowsById: Map<SuperAdminPluginId, ConsolidatedPluginRow>;
-    };
+    return (listAccessQuery.data?.rows ?? []).filter((project) =>
+      stateFilter === "all"
+        ? true
+        : project.plugins.some((row) => row.state === stateFilter),
+    );
+  }, [listAccessQuery.data?.rows, stateFilter]);
 
-    const projectMap = new Map<string, ProjectMapValue>();
-
-    const addRows = (plugin: PluginListConfig, rows: PluginAccessRow[]) => {
-      for (const rawRow of rows) {
-        const row = withPluginMetadata(rawRow, plugin);
-        const key = `${row.organizationId}:${row.projectSlug}`;
-        const existing = projectMap.get(key);
-        if (existing) {
-          existing.pluginRowsById.set(plugin.id, row);
-          continue;
-        }
-
-        projectMap.set(key, {
-          organizationId: row.organizationId,
-          organizationSlug: row.organizationSlug,
-          organizationName: row.organizationName,
-          projectSlug: row.projectSlug,
-          projectTitle: row.projectTitle,
-          isDeployed: row.isDeployed,
-          deployedDomain: row.deployedDomain,
-          pluginRowsById: new Map<SuperAdminPluginId, ConsolidatedPluginRow>([
-            [plugin.id, row],
-          ]),
-        });
-      }
-    };
-
-    for (const plugin of SUPERADMIN_PLUGIN_LIST) {
-      addRows(
-        plugin,
-        plugin.id === "contact_form"
-          ? contactFormListQuery.data?.rows ?? []
-          : analyticsListQuery.data?.rows ?? [],
-      );
-    }
-
-    const groupedRows = Array.from(projectMap.values())
-      .map((project) => {
-        const pluginRows = SUPERADMIN_PLUGIN_LIST.map((plugin) => {
-          return (
-            project.pluginRowsById.get(plugin.id) ??
-            createFallbackPluginRow(project, plugin)
-          );
-        });
-        const updatedAt = pluginRows.reduce<Date | string | null>(
-          (latest, pluginRow) =>
-            toTimestamp(pluginRow.updatedAt) > toTimestamp(latest)
-              ? pluginRow.updatedAt
-              : latest,
-          null,
-        );
-
-        return {
-          organizationId: project.organizationId,
-          organizationSlug: project.organizationSlug,
-          organizationName: project.organizationName,
-          projectSlug: project.projectSlug,
-          projectTitle: project.projectTitle,
-          isDeployed: project.isDeployed,
-          deployedDomain: project.deployedDomain,
-          pluginRows,
-          updatedAt,
-        };
-      })
-      .filter((project) =>
-        stateFilter === "all"
-          ? true
-          : project.pluginRows.some((row) => row.state === stateFilter),
-      );
-
-    groupedRows.sort((left, right) => {
-      const orgOrder = left.organizationName.localeCompare(right.organizationName);
-      if (orgOrder !== 0) return orgOrder;
-      return left.projectSlug.localeCompare(right.projectSlug);
-    });
-
-    return groupedRows;
-  }, [
-    analyticsListQuery.data?.rows,
-    contactFormListQuery.data?.rows,
-    stateFilter,
-  ]);
-
-  const queryErrors = useMemo(() => {
-    const errors: Array<{ plugin: string; message: string }> = [];
-    if (contactFormListQuery.error) {
-      errors.push({
-        plugin: "Contact Form",
-        message: contactFormListQuery.error.message,
-      });
-    }
-    if (analyticsListQuery.error) {
-      errors.push({
-        plugin: "Analytics",
-        message: analyticsListQuery.error.message,
-      });
-    }
-    return errors;
-  }, [contactFormListQuery.error, analyticsListQuery.error]);
-
-  const isLoading = contactFormListQuery.isLoading || analyticsListQuery.isLoading;
-  const isFetching = contactFormListQuery.isFetching || analyticsListQuery.isFetching;
+  const isLoading = listAccessQuery.isLoading;
+  const isFetching = listAccessQuery.isFetching;
   const totalProjects = projectRows.length;
   const totalPages = Math.max(1, Math.ceil(totalProjects / PROJECT_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -440,7 +218,7 @@ function ProjectsPluginAccessPanel() {
   const pagedProjectRows = projectRows.slice(pageStartIndex, pageEndIndex);
 
   const refreshAll = async () => {
-    await Promise.all([contactFormListQuery.refetch(), analyticsListQuery.refetch()]);
+    await listAccessQuery.refetch();
   };
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -485,7 +263,7 @@ function ProjectsPluginAccessPanel() {
     }
   };
 
-  const updateState = async (row: ConsolidatedPluginRow, state: PluginState) => {
+  const updateState = async (row: PluginAccessRow, state: PluginState) => {
     await runSingleUpdate(
       {
         pluginId: row.pluginId,
@@ -495,11 +273,11 @@ function ProjectsPluginAccessPanel() {
         state,
         monthlyEventLimit: row.monthlyEventLimit,
         hardStop: row.hardStop,
-        turnstileEnabled: row.showTurnstile ? row.turnstileEnabled : false,
-        notes: `Updated from Super Admin Plugins tab (${row.pluginLabel}, ${state})`,
+        turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+        notes: `Updated from Super Admin Plugins tab (${row.catalog.name}, ${state})`,
         ensurePluginWhenEnabled: true,
       },
-      `Updated ${row.pluginLabel} for ${row.projectSlug}`,
+      `Updated ${row.catalog.name} for ${row.projectSlug}`,
     );
   };
 
@@ -507,7 +285,7 @@ function ProjectsPluginAccessPanel() {
     project: ProjectAccessRow,
     state: PluginState,
   ) => {
-    const inputs: UpsertEntitlementInput[] = project.pluginRows.map((row) => ({
+    const inputs: UpsertEntitlementInput[] = project.plugins.map((row) => ({
       pluginId: row.pluginId,
       organizationId: row.organizationId,
       scope: "project",
@@ -515,7 +293,7 @@ function ProjectsPluginAccessPanel() {
       state,
       monthlyEventLimit: row.monthlyEventLimit,
       hardStop: row.hardStop,
-      turnstileEnabled: row.showTurnstile ? row.turnstileEnabled : false,
+      turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
       notes: `Bulk update from Super Admin Plugins tab (${state})`,
       ensurePluginWhenEnabled: true,
     }));
@@ -526,9 +304,9 @@ function ProjectsPluginAccessPanel() {
     );
   };
 
-  const updateLimit = async (row: ConsolidatedPluginRow) => {
+  const updateLimit = async (row: PluginAccessRow) => {
     const current = row.monthlyEventLimit == null ? "" : String(row.monthlyEventLimit);
-    const raw = window.prompt(row.limitPrompt, current);
+    const raw = window.prompt(row.catalog.limitPrompt, current);
     if (raw === null) return;
 
     const trimmed = raw.trim();
@@ -542,11 +320,11 @@ function ProjectsPluginAccessPanel() {
           state: row.state,
           monthlyEventLimit: null,
           hardStop: row.hardStop,
-          turnstileEnabled: row.showTurnstile ? row.turnstileEnabled : false,
-          notes: `Set to unlimited from Super Admin Plugins tab (${row.pluginLabel})`,
+          turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+          notes: `Set to unlimited from Super Admin Plugins tab (${row.catalog.name})`,
           ensurePluginWhenEnabled: false,
         },
-        `Updated ${row.pluginLabel} limit for ${row.projectSlug}`,
+        `Updated ${row.catalog.name} limit for ${row.projectSlug}`,
       );
       return;
     }
@@ -566,16 +344,16 @@ function ProjectsPluginAccessPanel() {
         state: row.state,
         monthlyEventLimit: Math.floor(parsed),
         hardStop: row.hardStop,
-        turnstileEnabled: row.showTurnstile ? row.turnstileEnabled : false,
-        notes: `Updated monthly limit from Super Admin Plugins tab (${row.pluginLabel})`,
+        turnstileEnabled: row.catalog.supportsTurnstile ? row.turnstileEnabled : false,
+        notes: `Updated monthly limit from Super Admin Plugins tab (${row.catalog.name})`,
         ensurePluginWhenEnabled: false,
       },
-      `Updated ${row.pluginLabel} limit for ${row.projectSlug}`,
+      `Updated ${row.catalog.name} limit for ${row.projectSlug}`,
     );
   };
 
-  const updateTurnstile = async (row: ConsolidatedPluginRow, enabled: boolean) => {
-    if (!row.showTurnstile) return;
+  const updateTurnstile = async (row: PluginAccessRow, enabled: boolean) => {
+    if (!row.catalog.supportsTurnstile) return;
 
     await runSingleUpdate(
       {
@@ -628,16 +406,10 @@ function ProjectsPluginAccessPanel() {
           Refresh
         </Button>
       </div>
-      {queryErrors.length > 0 ? (
+
+      {listAccessQuery.error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          <div className="font-medium">Failed to load plugin access:</div>
-          <ul className="mt-1 list-disc pl-5">
-            {queryErrors.map((error) => (
-              <li key={error.plugin}>
-                {error.plugin}: {error.message}
-              </li>
-            ))}
-          </ul>
+          Failed to load plugin access: {listAccessQuery.error.message}
         </div>
       ) : null}
 
@@ -685,16 +457,16 @@ function ProjectsPluginAccessPanel() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="min-w-[620px] space-y-2">
-                    {project.pluginRows.map((pluginRow) => (
+                    {project.plugins.map((pluginRow) => (
                       <div
                         key={pluginRow.pluginId}
                         className="rounded-md border bg-muted/15 p-2"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <div className="font-medium">{pluginRow.pluginLabel}</div>
+                            <div className="font-medium">{pluginRow.catalog.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              {pluginRow.pluginDescription}
+                              {pluginRow.catalog.description}
                             </div>
                           </div>
                           <Badge variant={formatStateBadgeVariant(pluginRow.state)}>
@@ -702,7 +474,7 @@ function ProjectsPluginAccessPanel() {
                           </Badge>
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {pluginRow.usageLabel}: {pluginRow.usageThisMonth} · Limit:{" "}
+                          {pluginRow.catalog.usageLabel}: {pluginRow.usageThisMonth} · Limit:{" "}
                           {pluginRow.monthlyEventLimit == null
                             ? "Unlimited"
                             : pluginRow.monthlyEventLimit}{" "}
@@ -710,7 +482,7 @@ function ProjectsPluginAccessPanel() {
                           {pluginRow.projectPluginStatus || "-"} · Updated:{" "}
                           {formatDate(pluginRow.updatedAt)}
                         </div>
-                        {pluginRow.showTurnstile ? (
+                        {pluginRow.catalog.supportsTurnstile ? (
                           <div className="mt-1 text-xs">
                             {pluginRow.turnstileEnabled ? (
                               pluginRow.state !== "enabled" ? (
@@ -762,15 +534,17 @@ function ProjectsPluginAccessPanel() {
                           >
                             Suspend
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={upsertMutation.isPending}
-                            onClick={() => void updateLimit(pluginRow)}
-                          >
-                            Limit
-                          </Button>
-                          {pluginRow.showTurnstile ? (
+                          {pluginRow.catalog.supportsMonthlyLimit ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={upsertMutation.isPending}
+                              onClick={() => void updateLimit(pluginRow)}
+                            >
+                              Limit
+                            </Button>
+                          ) : null}
+                          {pluginRow.catalog.supportsTurnstile ? (
                             <Button
                               size="sm"
                               variant={

@@ -17,18 +17,30 @@ import { trpc, type RouterOutputs } from "@/lib/trpc";
 
 type OrganizationPluginsOverviewRow =
   RouterOutputs["organization"]["pluginsOverview"]["rows"][number];
+type OrganizationPluginItem = OrganizationPluginsOverviewRow["plugins"][number];
 
-function getPluginStatusLabel(status: "enabled" | "disabled" | "not_installed"): string {
-  if (status === "enabled") return "Enabled";
-  if (status === "disabled") return "Disabled";
-  return "Not installed";
+function getPluginStatusLabel(plugin: OrganizationPluginItem): string {
+  if (plugin.installState === "enabled") return "Enabled";
+  if (plugin.installState === "suspended") return "Suspended";
+  if (!plugin.instanceId) return "Not installed";
+  return "Disabled";
 }
 
 function getPluginStatusBadgeVariant(
-  status: "enabled" | "disabled" | "not_installed",
+  plugin: OrganizationPluginItem,
 ): "success" | "secondary" | "outline" {
-  if (status === "enabled") return "success";
-  if (status === "disabled") return "secondary";
+  if (plugin.installState === "enabled") return "success";
+  if (plugin.installState === "suspended") return "secondary";
+  if (!plugin.instanceId) return "outline";
+  return "secondary";
+}
+
+function getBadgeVariant(
+  tone: OrganizationPluginItem["badges"][number]["tone"],
+): "success" | "secondary" | "outline" | "destructive" {
+  if (tone === "success") return "success";
+  if (tone === "destructive") return "destructive";
+  if (tone === "secondary") return "secondary";
   return "outline";
 }
 
@@ -42,6 +54,12 @@ function includesAllSearchTerms(
     row.projectSlug,
     row.projectTitle,
     row.deployedDomain ?? "",
+    ...row.plugins.flatMap((plugin) => [
+      plugin.catalog.name,
+      plugin.catalog.description,
+      ...plugin.summaryLines,
+      ...plugin.badges.map((badge) => badge.label),
+    ]),
     ...row.issues.map((issue) => issue.message),
   ]
     .join(" ")
@@ -91,7 +109,7 @@ export function OrganizationPluginsTab() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search projects or issues"
+              placeholder="Search projects, plugins, or issues"
               className="pl-8"
             />
           </div>
@@ -117,8 +135,7 @@ export function OrganizationPluginsTab() {
             <thead className="bg-muted/30">
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Project</th>
-                <th className="px-3 py-2 font-medium">Contact Form</th>
-                <th className="px-3 py-2 font-medium">Analytics</th>
+                <th className="px-3 py-2 font-medium">Plugins</th>
                 <th className="px-3 py-2 font-medium">Issues</th>
                 <th className="px-3 py-2 font-medium">Actions</th>
               </tr>
@@ -139,39 +156,45 @@ export function OrganizationPluginsTab() {
                   </td>
 
                   <td className="px-3 py-2">
-                    <Badge variant={getPluginStatusBadgeVariant(row.contactForm.status)}>
-                      {getPluginStatusLabel(row.contactForm.status)}
-                    </Badge>
-                    {row.contactForm.status === "enabled" ? (
-                      <div className="mt-1 space-y-1 text-xs text-muted-foreground">
-                        <div>
-                          Recipients configured: {row.contactForm.configuredRecipientCount}
-                        </div>
-                        {row.contactForm.pendingRecipientCount > 0 ? (
-                          <div>
-                            Pending verification: {row.contactForm.pendingRecipientCount}
+                    <div className="min-w-[320px] space-y-2">
+                      {row.plugins.map((plugin) => (
+                        <div
+                          key={plugin.pluginId}
+                          className="rounded-md border bg-muted/15 p-2"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <div className="font-medium">{plugin.catalog.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {plugin.catalog.description}
+                              </div>
+                            </div>
+                            <Badge variant={getPluginStatusBadgeVariant(plugin)}>
+                              {getPluginStatusLabel(plugin)}
+                            </Badge>
                           </div>
-                        ) : null}
-                        {row.contactForm.turnstileEnabled ? (
-                          <Badge
-                            variant={
-                              row.contactForm.turnstileReady ? "success" : "destructive"
-                            }
-                            className="mt-1"
-                          >
-                            {row.contactForm.turnstileReady
-                              ? "Turnstile ready"
-                              : "Turnstile syncing"}
-                          </Badge>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <Badge variant={getPluginStatusBadgeVariant(row.analytics.status)}>
-                      {getPluginStatusLabel(row.analytics.status)}
-                    </Badge>
+                          {plugin.summaryLines.length > 0 ? (
+                            <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                              {plugin.summaryLines.map((line) => (
+                                <div key={`${plugin.pluginId}:${line}`}>{line}</div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {plugin.badges.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {plugin.badges.map((badge) => (
+                                <Badge
+                                  key={`${plugin.pluginId}:${badge.label}`}
+                                  variant={getBadgeVariant(badge.tone)}
+                                >
+                                  {badge.label}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
                   </td>
 
                   <td className="px-3 py-2">
@@ -215,7 +238,7 @@ export function OrganizationPluginsTab() {
 
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
                     {isLoading ? (
                       <LoadingSpinner message="Loading plugin overview..." />
                     ) : search.trim() ? (
