@@ -113,8 +113,8 @@ describe("OpenCode config policy", () => {
     const config = JSON.parse(
       buildStudioOpencodeConfigContent(JSON.stringify({ tools: { keep_tool: true } }), {
         toolEnablement: {
-          vivd_plugins_catalog: true,
-          vivd_plugins_contact_info: false,
+          vivd_image_ai: true,
+          another_runtime_tool: false,
         },
       }),
     );
@@ -123,8 +123,8 @@ describe("OpenCode config policy", () => {
       tools: {
         keep_tool: true,
         question: true,
-        vivd_plugins_catalog: true,
-        vivd_plugins_contact_info: false,
+        vivd_image_ai: true,
+        another_runtime_tool: false,
       },
       permission: {
         doom_loop: "deny",

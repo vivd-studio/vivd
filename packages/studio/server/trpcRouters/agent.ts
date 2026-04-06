@@ -39,12 +39,11 @@ import {
 import { getStudioRuntimeConfig } from "../config.js";
 
 const CHECKLIST_PENDING_NOTE = "[[PENDING_AGENT_REVIEW]]";
-const CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
-- You MUST use the \`vivd_publish_checklist\` tool to write checklist results incrementally.
-- First call the tool with: { "action": "describe" }.
-- Then call \`update_item\` once for each checklist item id returned by describe.
-- For every \`update_item\` call, provide \`itemId\`, \`status\`, and a concise \`note\`.
-- If a tool call returns an error, fix the arguments and retry immediately.
+const CONNECTED_CHECKLIST_CLI_INSTRUCTIONS = `IMPORTANT FOR THIS TASK:
+- You MUST use the \`vivd\` CLI to write checklist results incrementally.
+- First run \`vivd publish checklist show\`.
+- Then run \`vivd publish checklist update <item-id> --status <status> --note "<note>"\` once for each checklist item.
+- If a CLI command returns an error, fix the arguments and retry immediately.
 - Ignore any later instruction to return one final JSON checklist blob.
 - After all items are updated, reply with a short completion sentence only.`;
 
@@ -507,8 +506,8 @@ export const agentRouter = router({
         }
 
         const checklistPrompt = connectedMode
-          ? `${CONNECTED_CHECKLIST_TOOL_INSTRUCTIONS}
-- Use "version": ${version} in every vivd_publish_checklist tool call.
+          ? `${CONNECTED_CHECKLIST_CLI_INSTRUCTIONS}
+- Use \`--slug ${input.projectSlug} --version ${version}\` in every \`vivd publish checklist ...\` command.
 
 ${CHECKLIST_PROMPT}`
           : CHECKLIST_PROMPT;
@@ -520,14 +519,10 @@ ${CHECKLIST_PROMPT}`
             workspacePath,
             undefined,
             undefined,
-            connectedMode
-              ? {
-                  tools: { vivd_publish_checklist: true },
-                }
-              : undefined,
+            undefined,
           );
 
-          // Wait for completion; connected mode prefers tool-updated backend checklist,
+          // Wait for completion; connected mode prefers CLI-updated backend checklist,
           // with JSON parse kept as fallback for compatibility.
           let attempts = 0;
           const maxAttempts = connectedMode ? 120 : 60;
@@ -590,7 +585,7 @@ ${CHECKLIST_PROMPT}`
 
           if (!isChecklistFullyUpdated(checklist)) {
             console.warn(
-              "[PrePublishChecklist] Connected checklist was not fully updated by tool calls; trying JSON fallback."
+                "[PrePublishChecklist] Connected checklist was not fully updated by CLI writes; trying JSON fallback."
             );
             checklist = null;
           }

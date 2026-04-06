@@ -27,14 +27,20 @@ describe("studio AgentInstructionsService fallback", () => {
     getConnectedBackendAuthConfigMock.mockReturnValue(null);
   });
 
-  it("mentions explorer uploads and chat-dropped images under .vivd", async () => {
+  it("reuses the shared default prompt shape for fallback mode", async () => {
     const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
       projectSlug: "demo-project",
       projectVersion: 1,
     });
 
+    expect(prompt).toContain("Non-technical users");
+    expect(prompt).toContain("Proper error handling");
+    expect(prompt).toContain("Multi-language support");
     expect(prompt).toContain(".vivd/uploads/");
     expect(prompt).toContain(".vivd/dropped-images/");
     expect(prompt).toContain("Treat both as working material");
+    expect(prompt).toContain("Redirects for migrated URLs");
+    expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
+    expect(prompt).toContain("Prefer plugin-backed solutions over custom implementations");
   });
 });

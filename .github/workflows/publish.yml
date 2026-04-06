@@ -223,6 +223,8 @@ jobs:
     needs: [detect-changes, validate-release]
     if: needs.detect-changes.outputs.build_studio == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      candidate_tag: ${{ steps.candidate_tag.outputs.tag }}
     permissions:
       contents: read
       packages: write
@@ -240,6 +242,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Define vivd-studio candidate tag
+        id: candidate_tag
+        run: |
+          echo "tag=${{ env.IMAGE_PREFIX }}/vivd-studio:candidate-${{ needs.detect-changes.outputs.version_no_v }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -281,21 +288,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Tag and push smoked vivd-studio image
+      - name: Tag and push smoked vivd-studio candidate image
+        env:
+          CANDIDATE_TAG: ${{ steps.candidate_tag.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
 
-          tags=(
-            "${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}"
-            "${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}"
-            "${{ env.IMAGE_PREFIX }}/vivd-studio:latest"
-          )
-
-          for tag in "${tags[@]}"; do
-            docker tag vivd-studio:release-smoke "$tag"
-            docker push "$tag"
-          done
+          docker tag vivd-studio:release-smoke "$CANDIDATE_TAG"
+          docker push "$CANDIDATE_TAG"
 
   studio-opencode-revert-smoke:
     needs: [detect-changes, validate-release, build-studio, deploy]
@@ -384,9 +385,8 @@ jobs:
           echo "OpenCode revert smoke passed after deploy." >> "$GITHUB_STEP_SUMMARY"
 
   studio-fly-reconcile-smoke:
-    needs: [detect-changes, validate-release, build-studio, deploy]
-    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true' && needs.deploy.result == 'success'
-    continue-on-error: true
+    needs: [detect-changes, validate-release, build-studio]
+    if: needs.detect-changes.outputs.build_studio == 'true' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -415,7 +415,6 @@ jobs:
 
       - name: Validate Fly release smoke configuration
         id: validate_config
-        continue-on-error: true
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
@@ -435,26 +434,22 @@ jobs:
 
       - name: Fly warm reconcile release smoke
         id: fly_reconcile
-        if: steps.validate_config.outcome == 'success'
-        continue-on-error: true
         env:
           VIVD_RUN_FLY_RECONCILE_FLOW_TESTS: "1"
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
-          VIVD_FLY_TEST_IMAGE: ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
+          VIVD_FLY_TEST_IMAGE: ${{ needs.build-studio.outputs.candidate_tag }}
           VIVD_FLY_TEST_DRIFT_IMAGE: ${{ format('{0}/vivd-studio:{1}', env.IMAGE_PREFIX, vars.FLY_STUDIO_RECONCILE_BASELINE_TAG || 'v1.1.51-repro.2') }}
           VIVD_FLY_RECONCILE_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_reconcile_flow.test.ts
 
       - name: Fly warm wake auth release smoke
         id: fly_wake_auth
-        if: steps.validate_config.outcome == 'success'
-        continue-on-error: true
         env:
           VIVD_RUN_FLY_WARM_WAKE_AUTH_TESTS: "1"
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_STUDIO_APP: ${{ vars.FLY_STUDIO_VALIDATE_APP || secrets.FLY_STUDIO_VALIDATE_APP }}
-          VIVD_FLY_TEST_IMAGE: ${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}
+          VIVD_FLY_TEST_IMAGE: ${{ needs.build-studio.outputs.candidate_tag }}
           VIVD_FLY_WAKE_EXPECT_MAX_MS: "6000"
         run: npm run test:integration -w @vivd/backend -- test/integration/fly_warm_wake_auth.test.ts
 
@@ -469,23 +464,46 @@ jobs:
           set -euo pipefail
 
           {
-            echo "### Fly release smoke (warning only)"
+            echo "### Fly Studio release gate"
             echo "- config: ${CONFIG_OUTCOME:-skipped}"
             echo "- reconcile: ${RECONCILE_OUTCOME:-skipped}"
             echo "- wake_auth: ${WAKE_OUTCOME:-skipped}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "${CONFIG_OUTCOME:-skipped}" != "success" ]; then
-            echo "::warning::Fly release smoke skipped or failed configuration validation after deploy. See job summary for details."
-            exit 0
-          fi
+  publish-studio:
+    needs: [detect-changes, build-studio, studio-fly-reconcile-smoke]
+    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && (needs.detect-changes.outputs.skip_fly_release_smoke == 'true' || needs.studio-fly-reconcile-smoke.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
-          if [ "${RECONCILE_OUTCOME:-skipped}" != "success" ] || [ "${WAKE_OUTCOME:-skipped}" != "success" ]; then
-            echo "::warning::Fly release smoke reported a post-deploy warning (reconcile=${RECONCILE_OUTCOME:-skipped}, wake_auth=${WAKE_OUTCOME:-skipped}). Deployment was not blocked."
-            exit 0
-          fi
+      - name: Publish smoked vivd-studio image
+        env:
+          CANDIDATE_TAG: ${{ needs.build-studio.outputs.candidate_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-          echo "Fly release smoke passed after deploy." >> "$GITHUB_STEP_SUMMARY"
+          docker pull "$CANDIDATE_TAG"
+
+          tags=(
+            "${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-studio:${{ needs.detect-changes.outputs.version_no_v }}"
+            "${{ env.IMAGE_PREFIX }}/vivd-studio:latest"
+          )
+
+          for tag in "${tags[@]}"; do
+            docker tag "$CANDIDATE_TAG" "$tag"
+            docker push "$tag"
+          done
 
   build-builder:
     needs: [detect-changes, validate-release]
@@ -765,7 +783,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=caddy
 
   deploy:
-    needs: [detect-changes, validate-release, build-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
+    needs: [detect-changes, validate-release, build-studio, studio-fly-reconcile-smoke, publish-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
     if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:

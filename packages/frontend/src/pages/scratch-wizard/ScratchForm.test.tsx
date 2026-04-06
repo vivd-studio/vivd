@@ -59,7 +59,7 @@ describe("ScratchForm", () => {
     });
   });
 
-  it("renders the simplified brief-first scratch flow and hides legacy settings fields", () => {
+  it("renders the simplified brief-first scratch flow with a friendly optional reference-url prompt", () => {
     render(<ScratchForm />);
 
     expect(screen.getByText("Project name")).toBeInTheDocument();
@@ -69,12 +69,15 @@ describe("ScratchForm", () => {
     expect(screen.getByText("Design references")).toBeInTheDocument();
     expect(screen.getByText("Brand assets")).toBeInTheDocument();
     expect(screen.getByText("Inspiration only")).toBeInTheDocument();
+    expect(screen.getByText("Websites you like")).toBeInTheDocument();
+    expect(
+      screen.getByText(/paste a few urls with design ideas you want us to use as inspiration/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/files to be used on the page/i),
     ).toBeInTheDocument();
 
     expect(screen.queryByText("Business type")).not.toBeInTheDocument();
-    expect(screen.queryByText("Reference URLs")).not.toBeInTheDocument();
     expect(screen.queryByText("Settings")).not.toBeInTheDocument();
   });
 

@@ -182,15 +182,6 @@ export function ChatComposer({ className }: ChatComposerProps) {
     e.target.style.height = `${e.target.scrollHeight}px`;
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!isUsageBlocked) {
-        handleSend();
-      }
-    }
-  };
-
   const canSend =
     !isDisabled &&
     (input.trim() ||
@@ -198,6 +189,20 @@ export function ChatComposer({ className }: ChatComposerProps) {
       attachedImages.length > 0 ||
       attachedFiles.length > 0);
   const showSteerActions = showSteerButton && canSend;
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (isUsageBlocked) return;
+
+      if (e.metaKey && showSteerActions) {
+        handleSteerSend();
+        return;
+      }
+
+      handleSend();
+    }
+  };
 
   return (
     <div
@@ -406,6 +411,9 @@ export function ChatComposer({ className }: ChatComposerProps) {
                   size="sm"
                   variant="secondary"
                   className="h-8 rounded-full px-3"
+                  title="Steer message (Cmd+Enter)"
+                  aria-label="Steer message"
+                  aria-keyshortcuts="Meta+Enter"
                 >
                   <ChevronsRight className="mr-1.5 h-3.5 w-3.5" />
                   Steer

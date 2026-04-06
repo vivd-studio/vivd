@@ -352,11 +352,11 @@ describe("opencode index session behavior", () => {
 
   it("passes per-run tool enablement to promptAsync", async () => {
     await runTask(
-      "run checklist",
+      "generate image",
       "/workspace/project",
       undefined,
       undefined,
-      { tools: { vivd_publish_checklist: true } },
+      { tools: { vivd_image_ai: true } },
     );
 
     expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
@@ -364,7 +364,20 @@ describe("opencode index session behavior", () => {
         sessionID: "sess-new",
         directory: "/workspace/project/",
         system: "system prompt",
-        tools: { vivd_publish_checklist: true },
+        tools: { vivd_image_ai: true },
+      }),
+    );
+  });
+
+  it("injects the session-start system prompt for a pre-created empty session", async () => {
+    await runTask("first message", "/workspace/project", "sess-existing");
+
+    expect(getSystemPromptForSessionStartMock).toHaveBeenCalledTimes(1);
+    expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "sess-existing",
+        directory: "/workspace/project/",
+        system: "system prompt",
       }),
     );
   });
@@ -411,6 +424,22 @@ describe("opencode index session behavior", () => {
   });
 
   it("does not inject a new system prompt when continuing an existing session", async () => {
+    const existingMessages = {
+      data: [
+        {
+          info: {
+            id: "msg-existing",
+            role: "user",
+          },
+          parts: [{ type: "text", text: "Earlier message" }],
+        },
+      ],
+      error: undefined,
+    };
+    sessionMessagesMock
+      .mockResolvedValueOnce(existingMessages)
+      .mockResolvedValueOnce(existingMessages);
+
     await runTask("continue task", "/workspace/project", "sess-existing");
 
     expect(getSystemPromptForSessionStartMock).not.toHaveBeenCalled();
@@ -439,31 +468,33 @@ describe("opencode index session behavior", () => {
   });
 
   it("auto-compacts oversized sessions after the run finishes", async () => {
+    const oversizedMessages = {
+      data: [
+        {
+          info: {
+            id: "a-finished",
+            role: "assistant",
+            providerID: "openrouter",
+            modelID: "google/gemini-2.5-pro",
+            tokens: {
+              input: 195_000,
+              output: 4_500,
+              reasoning: 1_500,
+              cache: { read: 0, write: 0 },
+            },
+          },
+          parts: [{ type: "text", text: "Done" }],
+        },
+      ],
+      error: undefined,
+    };
     sessionMessagesMock
       .mockResolvedValueOnce({
         data: [],
         error: undefined,
       })
-      .mockResolvedValueOnce({
-        data: [
-          {
-            info: {
-              id: "a-finished",
-              role: "assistant",
-              providerID: "openrouter",
-              modelID: "google/gemini-2.5-pro",
-              tokens: {
-                input: 195_000,
-                output: 4_500,
-                reasoning: 1_500,
-                cache: { read: 0, write: 0 },
-              },
-            },
-            parts: [{ type: "text", text: "Done" }],
-          },
-        ],
-        error: undefined,
-      });
+      .mockResolvedValueOnce(oversizedMessages)
+      .mockResolvedValueOnce(oversizedMessages);
 
     await runTask("continue task", "/workspace/project", "sess-existing");
 

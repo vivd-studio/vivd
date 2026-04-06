@@ -38,7 +38,6 @@ const {
     updateReturningMock,
   };
 });
-
 vi.mock("../src/db", () => ({
   db: {
     query: {

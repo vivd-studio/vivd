@@ -1,3 +1,4 @@
+export * from "./agentInstructions.js";
 export * from "./bootstrap.js";
 export * from "./connectedBackendClient.js";
 export * from "./embeddedBridge.js";

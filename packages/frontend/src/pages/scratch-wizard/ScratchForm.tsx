@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import {
   ArrowUp,
+  Bot,
   FolderArchive,
   ImagePlus,
   Loader2,
@@ -42,6 +43,7 @@ export function ScratchForm() {
   } = useScratchWizard();
   const titleField = form.register("title");
   const descriptionField = form.register("description");
+  const referenceUrlsField = form.register("referenceUrlsText");
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isDisabled = isGenerating || !!started;
@@ -168,6 +170,31 @@ export function ScratchForm() {
             {descriptionError}
           </div>
         ) : null}
+
+        <div className="mx-auto w-full max-w-[42rem] rounded-[24px] border border-border/50 bg-card/56 px-4 py-3 text-left shadow-[0_24px_80px_hsl(var(--primary)/0.08)] backdrop-blur-xl sm:px-5">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/8 text-primary">
+              <Bot className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-foreground">
+                  Websites you like
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Optional. Paste a few URLs with design ideas you want us to use as inspiration.
+                </p>
+              </div>
+              <textarea
+                {...referenceUrlsField}
+                rows={2}
+                disabled={isDisabled}
+                placeholder="https://example.com&#10;https://another-example.com"
+                className="min-h-[72px] w-full resize-y rounded-[18px] border border-border/50 bg-background/55 px-3 py-2 text-sm text-foreground shadow-inner outline-none placeholder:text-muted-foreground focus:border-primary/25 focus:bg-background/80 disabled:cursor-not-allowed disabled:opacity-70"
+              />
+            </div>
+          </div>
+        </div>
 
         {validationError ? (
           <div className="rounded-[24px] border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-[0_24px_80px_hsl(var(--destructive)/0.12)] backdrop-blur-xl">

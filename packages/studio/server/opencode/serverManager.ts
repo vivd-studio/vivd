@@ -111,7 +111,11 @@ async function ensureVivdOpencodeToolsInstalled(): Promise<void> {
       );
     }
 
-    const legacyManagedFiles = new Set([
+    const removedManagedFiles = new Set([
+      "vivd_plugins_catalog.ts",
+      "vivd_plugins_contact_info.ts",
+      "vivd_plugins_analytics_info.ts",
+      "vivd_publish_checklist.ts",
       "vivd_plugins_contact_ensure.ts",
       "vivd_plugins_contact_snippet.ts",
     ]);
@@ -122,7 +126,7 @@ async function ensureVivdOpencodeToolsInstalled(): Promise<void> {
       if (!entry.name.startsWith("vivd_")) continue;
 
       if (expectedFiles.has(entry.name)) continue;
-      if (!legacyManagedFiles.has(entry.name)) continue;
+      if (!removedManagedFiles.has(entry.name)) continue;
 
       await fs.promises.rm(path.join(toolsDir, entry.name), { force: true });
     }

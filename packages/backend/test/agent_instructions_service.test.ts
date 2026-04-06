@@ -36,6 +36,9 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain(
       "Use the `vivd` CLI as the default way to interact with the Vivd platform the website is running on.",
     );
+    expect(result.instructions).toContain(
+      "Treat publish/checklist, plugin, and other platform-state requests as `vivd` CLI work first, not file-search work.",
+    );
     expect(result.instructions).toContain("vivd plugins catalog");
     expect(result.instructions).toContain("vivd plugins contact info");
     expect(result.instructions).toContain("vivd plugins contact help");
@@ -43,7 +46,10 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");
-    expect(result.instructions).toContain("Treat them as working material");
+    expect(result.instructions).toContain(".vivd/dropped-images/");
+    expect(result.instructions).toContain("Treat both as working material");
+    expect(result.instructions).toContain("Redirects for migrated URLs");
+    expect(result.instructions).toContain("User messages may contain `<vivd-internal ... />`");
     expect(result.instructionsHash).toHaveLength(64);
   });
 

@@ -458,7 +458,8 @@ export async function runTask(
     sessionId: currentSessionId,
     modelSelection: model,
   });
-  const isNewSession = !sessionId;
+  const isNewSession =
+    !sessionId || !(await sessionHasMessages(client, directory, currentSessionId));
   const leaseRunId = crypto.randomUUID();
   const connectedProjectSlug = (process.env.VIVD_PROJECT_SLUG || "").trim();
   const connectedProjectVersion = Number.parseInt(
@@ -788,6 +789,21 @@ async function getOrCreateSession(
   if (!result.data?.id) throw new Error("Session created but no ID returned");
 
   return result.data.id;
+}
+
+async function sessionHasMessages(
+  client: OpencodeClient,
+  directory: string,
+  sessionId: string,
+): Promise<boolean> {
+  const result = await client.session.messages({
+    sessionID: sessionId,
+    directory,
+  });
+  if (result.error) {
+    throw new Error(`Failed to load session messages: ${JSON.stringify(result.error)}`);
+  }
+  return Array.isArray(result.data) && result.data.length > 0;
 }
 
 async function sendPromptAsync(

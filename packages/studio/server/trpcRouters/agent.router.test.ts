@@ -305,12 +305,13 @@ describe("agent router", () => {
     expect(result).toEqual({ success: true });
   });
 
-  it("enables checklist tool only for connected checklist runs", async () => {
+  it("uses the CLI checklist flow for connected checklist runs", async () => {
     isConnectedModeMock.mockReturnValue(true);
     getBackendUrlMock.mockReturnValue("http://backend.test");
     getSessionTokenMock.mockReturnValue("session-token");
     getStudioIdMock.mockReturnValue("studio-1");
     getConnectedOrganizationIdMock.mockReturnValue("org-1");
+    process.env.STUDIO_ACCESS_TOKEN = "studio-token";
     runTaskMock.mockResolvedValueOnce({ sessionId: "sess-checklist" });
     getSessionContentMock.mockResolvedValueOnce([
       {
@@ -351,31 +352,37 @@ describe("agent router", () => {
       });
     vi.stubGlobal("fetch", fetchMock as typeof fetch);
 
-    const caller = agentRouter.createCaller(
-      makeContext({
-        workspace: {
-          isInitialized: vi.fn(() => true),
-          getProjectPath: vi.fn(() => "/tmp"),
-          commit: vi.fn(async () => "commit-123"),
-          hasChanges: vi.fn(async () => false),
-        } as unknown as Context["workspace"],
-      }),
-    );
+    try {
+      const caller = agentRouter.createCaller(
+        makeContext({
+          workspace: {
+            isInitialized: vi.fn(() => true),
+            getProjectPath: vi.fn(() => "/tmp"),
+            commit: vi.fn(async () => "commit-123"),
+            hasChanges: vi.fn(async () => false),
+          } as unknown as Context["workspace"],
+        }),
+      );
 
-    const result = await caller.runPrePublishChecklist({
-      projectSlug: "site-1",
-      version: 2,
-    });
+      const result = await caller.runPrePublishChecklist({
+        projectSlug: "site-1",
+        version: 2,
+      });
 
-    expect(runTaskMock).toHaveBeenCalledWith(
-      expect.any(String),
-      "/tmp",
-      undefined,
-      undefined,
-      { tools: { vivd_publish_checklist: true } },
-    );
-    expect(result.success).toBe(true);
-    expect(result.sessionId).toBe("sess-checklist");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(runTaskMock).toHaveBeenCalledWith(
+        expect.stringContaining("vivd publish checklist show"),
+        "/tmp",
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(runTaskMock.mock.calls[0]?.[0]).toContain("--slug site-1 --version 2");
+      expect(runTaskMock.mock.calls[0]?.[0]).not.toContain("vivd_publish_checklist");
+      expect(result.success).toBe(true);
+      expect(result.sessionId).toBe("sess-checklist");
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      delete process.env.STUDIO_ACCESS_TOKEN;
+    }
   });
 });

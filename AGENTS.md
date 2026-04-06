@@ -45,24 +45,13 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - When this repo says "OpenCode web" or refers to the UI started by `opencode web`, that means the actual web app in `vendor/opencode/packages/app`; `vendor/opencode/packages/web` is the docs site, and the CLI entrypoint lives at `vendor/opencode/packages/opencode/src/cli/cmd/web.ts`.
 - Preferred agent surface for connected runtime/platform operations is the Studio-machine `vivd` CLI in `packages/cli`.
 - Shared CLI/backend transport helper lives in `packages/shared/src/studio/connectedBackendClient.ts`.
-- Current CLI-first phase covers runtime context plus plugin/checklist operations:
-  - `vivd whoami`
-  - `vivd project info`
-  - `vivd plugins catalog`
-  - `vivd plugins contact info`
-  - `vivd plugins contact config show|template|apply --file ...`
-  - `vivd plugins contact recipients verify|resend <email>`
-  - `vivd plugins analytics info`
-  - `vivd publish checklist show|update`
+- The `vivd` CLI is how the agent inspects runtime/project context and interacts with platform-managed features such as plugins and the publish checklist.
+- Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd plugins help`, `vivd plugins contact help`, and `vivd publish help`.
 - For `STUDIO_MACHINE_PROVIDER=local`, `packages/backend/src/services/studioMachines/local.ts` is responsible for making `vivd` available inside spawned Studio runtimes by wiring a local wrapper into the child-process `PATH`.
-- OpenCode `vivd_*` tools remain as compatibility wrappers while prompts/runtime usage move to the CLI.
-- Purpose of the OpenCode tools: expose custom Vivd capabilities to the agent through OpenCode's tool wrapper system when needed (namespace `vivd_*`).
+- The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`; plugin/checklist wrappers were removed in favor of the CLI.
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
 - Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
-- Current tools: `vivd_plugins_catalog`, `vivd_plugins_contact_info`, `vivd_plugins_analytics_info`, `vivd_publish_checklist`, `vivd_image_ai`.
-- The agent can use "_info" tools to get general info on how to use the plugin on the website, even including (public) tokens (e.g. for contact forms), and other relevant information.
-- Backend surface for plugin tools: `packages/backend/src/trpcRouters/plugins/index.ts` + `packages/backend/src/services/plugins/ProjectPluginService.ts`.
-- Backend surface for publish-checklist tool: `packages/backend/src/trpcRouters/project/publish.ts` (`project.publishChecklist`, `project.updatePublishChecklistItem`).
+- Managed custom tool: `vivd_image_ai`.
 - Tool gating is centralized in `packages/studio/server/opencode/configPolicy.ts` via `VIVD_OPENCODE_TOOLS_ENABLE`, `VIVD_OPENCODE_TOOLS_DISABLE`, `VIVD_OPENCODE_TOOL_FLAGS`, plus role/plugin context envs.
 - Adding a tool: add typed module, register in tool registry, keep `execute` minimal and safe, and verify in connected mode.
 

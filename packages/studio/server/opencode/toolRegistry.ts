@@ -21,53 +21,10 @@ export interface StudioOpencodeToolPolicy {
 }
 
 const DEFAULT_FEATURE_FLAGS: Record<string, boolean> = {
-  plugins: true,
-  contact_forms: true,
-  analytics: true,
-  publish_checklist: true,
   image_ai: true,
 };
 
 const TOOL_DEFINITIONS: StudioOpencodeToolDefinition[] = [
-  {
-    name: "vivd_plugins_catalog",
-    sourceFile: "vivd_plugins_catalog.ts",
-    moduleDistRelativePath: "opencode/toolModules/vivdPluginsCatalog.js",
-    moduleSourceRelativePath: "server/opencode/toolModules/vivdPluginsCatalog.ts",
-    definitionExportName: "vivdPluginsCatalogToolDefinition",
-    defaultEnabled: true,
-    featureFlag: "plugins",
-  },
-  // Keep plugin info tools available even before activation; the tool bodies resolve
-  // live backend state and can tell the agent whether activation is still needed.
-  {
-    name: "vivd_plugins_contact_info",
-    sourceFile: "vivd_plugins_contact_info.ts",
-    moduleDistRelativePath: "opencode/toolModules/vivdPluginsContactInfo.js",
-    moduleSourceRelativePath: "server/opencode/toolModules/vivdPluginsContactInfo.ts",
-    definitionExportName: "vivdPluginsContactInfoToolDefinition",
-    defaultEnabled: true,
-    featureFlag: "contact_forms",
-  },
-  {
-    name: "vivd_plugins_analytics_info",
-    sourceFile: "vivd_plugins_analytics_info.ts",
-    moduleDistRelativePath: "opencode/toolModules/vivdPluginsAnalyticsInfo.js",
-    moduleSourceRelativePath:
-      "server/opencode/toolModules/vivdPluginsAnalyticsInfo.ts",
-    definitionExportName: "vivdPluginsAnalyticsInfoToolDefinition",
-    defaultEnabled: true,
-    featureFlag: "analytics",
-  },
-  {
-    name: "vivd_publish_checklist",
-    sourceFile: "vivd_publish_checklist.ts",
-    moduleDistRelativePath: "opencode/toolModules/vivdPublishChecklist.js",
-    moduleSourceRelativePath: "server/opencode/toolModules/vivdPublishChecklist.ts",
-    definitionExportName: "vivdPublishChecklistToolDefinition",
-    defaultEnabled: true,
-    featureFlag: "publish_checklist",
-  },
   {
     name: "vivd_image_ai",
     sourceFile: "vivd_image_ai.ts",
