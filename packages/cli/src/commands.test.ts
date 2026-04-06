@@ -111,6 +111,81 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("- a11y | warning | Accessibility | note: Review contrast");
   });
 
+  it("suggests running the checklist when no saved checklist exists yet", async () => {
+    runtime.client.query.mockResolvedValue({
+      checklist: null,
+    });
+
+    const result = await dispatchCli(["publish", "checklist", "show"]);
+
+    expect(result.human).toContain("Publish checklist: none");
+    expect(result.human).toContain("vivd publish checklist run");
+    expect(result.human).toContain("only if the user explicitly asked");
+  });
+
+  it("runs the publish checklist through the local Studio runtime", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        result: {
+          data: {
+            json: {
+              success: true,
+              sessionId: "sess-checklist",
+              checklist: {
+                projectSlug: "demo",
+                version: 7,
+                runAt: "2026-03-29T09:00:00.000Z",
+                snapshotCommitHash: "abc123",
+                items: [
+                  { id: "seo", label: "SEO", status: "pass" },
+                ],
+                summary: {
+                  passed: 1,
+                  failed: 0,
+                  warnings: 0,
+                  skipped: 0,
+                },
+              },
+            },
+          },
+        },
+      }),
+    });
+    const originalToken = process.env.STUDIO_ACCESS_TOKEN;
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    process.env.STUDIO_ACCESS_TOKEN = "token_1";
+
+    try {
+      const result = await dispatchCli(["publish", "checklist", "run"]);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:3100/vivd-studio/api/trpc/agent.runPrePublishChecklist",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            "x-vivd-studio-token": "token_1",
+          }),
+          body: JSON.stringify({
+            projectSlug: "demo",
+            version: 7,
+          }),
+        }),
+      );
+      expect(result.human).toContain("Publish checklist run completed.");
+      expect(result.human).toContain("Session: sess-checklist");
+      expect(result.human).toContain("Publish checklist for demo v7");
+    } finally {
+      if (originalToken == null) {
+        delete process.env.STUDIO_ACCESS_TOKEN;
+      } else {
+        process.env.STUDIO_ACCESS_TOKEN = originalToken;
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("updates a publish checklist item with status and note", async () => {
     runtime.client.mutation.mockResolvedValue({
       checklist: {
@@ -417,7 +492,10 @@ describe("dispatchCli", () => {
 
     expect(rootHelp.human).toContain("vivd project info");
     expect(rootHelp.human).not.toContain("vivd cms");
+    expect(publishHelp.human).toContain("vivd publish checklist run");
     expect(publishHelp.human).toContain("vivd publish checklist show");
+    expect(publishHelp.human).toContain("explicitly asks for a full checklist run");
+    expect(publishHelp.human).toContain("inspect or continue checklist items one by one");
     expect(contactHelp.human).toContain("vivd plugins contact info");
     expect(contactHelp.human).toContain("vivd plugins contact config show");
     expect(contactHelp.human).toContain("vivd plugins contact recipients verify <email>");

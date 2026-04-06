@@ -299,9 +299,8 @@ jobs:
           docker push "$CANDIDATE_TAG"
 
   studio-opencode-revert-smoke:
-    needs: [detect-changes, validate-release, build-studio, deploy]
-    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.deploy.result == 'success'
-    continue-on-error: true
+    needs: [detect-changes, build-studio]
+    if: needs.detect-changes.outputs.build_studio == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -321,30 +320,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build vivd-studio revert smoke image
-        id: build_revert_smoke_image
-        uses: docker/build-push-action@v5
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          context: .
-          file: ./packages/studio/Dockerfile
-          target: prod
-          platforms: linux/amd64
-          load: true
-          build-args: |
-            VIVD_IMAGE_VERSION=${{ needs.detect-changes.outputs.version }}
-            VIVD_IMAGE_REVISION=${{ github.sha }}
-          tags: vivd-studio:revert-smoke
-          cache-from: type=gha,scope=studio
-          cache-to: type=gha,mode=max,scope=studio
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Pull vivd-studio candidate image for revert smoke
+        id: pull_revert_smoke_image
+        env:
+          CANDIDATE_TAG: ${{ needs.build-studio.outputs.candidate_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker pull "$CANDIDATE_TAG"
 
       - name: Smoke test OpenCode rehydrate + revert on the built image
         id: revert_smoke
-        if: steps.build_revert_smoke_image.outcome == 'success'
+        if: steps.pull_revert_smoke_image.outcome == 'success'
         env:
-          STUDIO_IMAGE: vivd-studio:revert-smoke
+          STUDIO_IMAGE: ${{ needs.build-studio.outputs.candidate_tag }}
           VIVD_STUDIO_REVERT_SMOKE_TIMEOUT_MS: "480000"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
@@ -360,29 +357,17 @@ jobs:
       - name: Summarize OpenCode revert smoke result
         if: always()
         env:
-          BUILD_OUTCOME: ${{ steps.build_revert_smoke_image.outcome }}
+          PULL_OUTCOME: ${{ steps.pull_revert_smoke_image.outcome }}
           SMOKE_OUTCOME: ${{ steps.revert_smoke.outcome }}
         shell: bash
         run: |
           set -euo pipefail
 
           {
-            echo "### OpenCode revert smoke (warning only)"
-            echo "- image_build: ${BUILD_OUTCOME:-skipped}"
+            echo "### OpenCode revert release gate"
+            echo "- image_pull: ${PULL_OUTCOME:-skipped}"
             echo "- revert_smoke: ${SMOKE_OUTCOME:-skipped}"
           } >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "${BUILD_OUTCOME:-skipped}" != "success" ]; then
-            echo "::warning::OpenCode revert smoke image build failed after deploy. Deployment was not blocked."
-            exit 0
-          fi
-
-          if [ "${SMOKE_OUTCOME:-skipped}" != "success" ]; then
-            echo "::warning::OpenCode revert smoke reported a post-deploy warning (${SMOKE_OUTCOME:-skipped}). Deployment was not blocked."
-            exit 0
-          fi
-
-          echo "OpenCode revert smoke passed after deploy." >> "$GITHUB_STEP_SUMMARY"
 
   studio-fly-reconcile-smoke:
     needs: [detect-changes, validate-release, build-studio]
@@ -471,8 +456,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-studio:
-    needs: [detect-changes, build-studio, studio-fly-reconcile-smoke]
-    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && (needs.detect-changes.outputs.skip_fly_release_smoke == 'true' || needs.studio-fly-reconcile-smoke.result == 'success')
+    needs: [detect-changes, build-studio, studio-opencode-revert-smoke, studio-fly-reconcile-smoke]
+    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && needs.studio-opencode-revert-smoke.result == 'success' && (needs.detect-changes.outputs.skip_fly_release_smoke == 'true' || needs.studio-fly-reconcile-smoke.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -784,7 +769,7 @@ jobs:
 
   deploy:
     needs: [detect-changes, validate-release, build-studio, studio-fly-reconcile-smoke, publish-studio, build-builder, build-server, build-ui, build-docs, build-scraper, build-caddy]
-    if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    if: always() && needs.detect-changes.outputs.any == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && (needs.detect-changes.outputs.build_studio != 'true' || needs.publish-studio.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Dokploy deployments

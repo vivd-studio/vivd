@@ -92,7 +92,8 @@ function buildPlatformSurfaceSection(mode: VivdPlatformSurfaceMode): string {
    - For Contact Form projects, use \`vivd plugins contact info\` for current status, submit endpoint, and snippets.
    - If you need to inspect or change contact settings, use \`vivd plugins contact help\`.
    - For Analytics, use \`vivd plugins analytics info\`.
-   - Use \`vivd publish checklist show\` to review the current pre-publish checklist and \`vivd publish checklist update <item-id> --status <status> [--note ...]\` to record the result.
+   - Use \`vivd publish checklist show\` to review the saved checklist and \`vivd publish checklist update <item-id> --status <status> [--note ...]\` to continue or record checklist work item by item.
+   - Treat \`vivd publish checklist run\` as an explicit full checklist pass, not a routine test command; use it only when the user explicitly asks to run it.
    - If a matching plugin is enabled, follow the CLI output instructions/snippets.
    - If the plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`;
 }

@@ -14,6 +14,7 @@ import {
   formatPluginCatalogReport,
   formatProjectInfoReport,
   formatPublishChecklistReport,
+  formatPublishChecklistRunReport,
   formatPublishChecklistUpdateReport,
   formatWhoamiReport,
 } from "./format.js";
@@ -66,6 +67,12 @@ type PublishChecklistQueryResponse = {
 type PublishChecklistUpdateResponse = {
   checklist: PublishChecklist;
   item: PublishChecklistItem;
+};
+
+type PublishChecklistRunResponse = {
+  success: boolean;
+  checklist: PublishChecklist;
+  sessionId: string;
 };
 
 type PluginCatalogResponse = {
@@ -200,8 +207,11 @@ const GENERAL_HELP: Record<string, string> = {
     "Analytics info shows the script endpoint, public token, and integration guidance.",
   ].join("\n"),
   publish: [
+    "vivd publish checklist run",
     "vivd publish checklist show",
     "vivd publish checklist update <item-id> --status <status> [--note ...]",
+    "Use `run` only when the user explicitly asks for a full checklist run or rerun; it is slower and more expensive than normal checks.",
+    "Use `show` and `update` to inspect or continue checklist items one by one without starting a new full run.",
     "Allowed statuses: pass, fail, warning, skip, fixed",
     "Use --slug and --version (or VIVD_PROJECT_SLUG / VIVD_PROJECT_VERSION).",
   ].join("\n"),
@@ -233,6 +243,47 @@ function requireProjectVersion(runtime: ReturnType<typeof resolveCliRuntime>): n
   return runtime.projectVersion;
 }
 
+function parseProjectVersion(rawValue: string | undefined): number | null {
+  const parsed = Number.parseInt(rawValue || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function resolveProjectContext(
+  flags: Pick<CliFlags, "slug" | "version">,
+): {
+  projectSlug: string | null;
+  projectVersion: number | null;
+} {
+  const runtime = ensureConnectedRuntime(flags);
+  const projectSlug =
+    runtime?.projectSlug ?? ((flags.slug ?? process.env.VIVD_PROJECT_SLUG ?? "").trim() || null);
+  const projectVersion =
+    runtime?.projectVersion ?? flags.version ?? parseProjectVersion(process.env.VIVD_PROJECT_VERSION);
+
+  return {
+    projectSlug,
+    projectVersion,
+  };
+}
+
+function requireResolvedProjectSlug(flags: Pick<CliFlags, "slug" | "version">): string {
+  const slug = resolveProjectContext(flags).projectSlug;
+  if (!slug) {
+    throw new Error("This command requires a project slug. Set VIVD_PROJECT_SLUG or pass --slug.");
+  }
+  return slug;
+}
+
+function requireResolvedProjectVersion(flags: Pick<CliFlags, "slug" | "version">): number {
+  const version = resolveProjectContext(flags).projectVersion;
+  if (!version) {
+    throw new Error(
+      "This command requires a project version. Set VIVD_PROJECT_VERSION or pass --version.",
+    );
+  }
+  return version;
+}
+
 function resolveInputPath(inputPath: string, cwd: string): string {
   return path.isAbsolute(inputPath) ? inputPath : path.join(cwd, inputPath);
 }
@@ -257,6 +308,43 @@ async function readJsonFile(value: string): Promise<unknown> {
   }
 
   return fs.readFile(value, "utf8").then((text) => JSON.parse(text));
+}
+
+function unwrapTrpcBody(body: any): any {
+  return body?.result?.data?.json ?? body?.result?.data ?? body;
+}
+
+function getLocalStudioTrpcBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const port = parseProjectVersion(env.PORT) ?? 3100;
+  return `http://127.0.0.1:${port}/vivd-studio/api/trpc`;
+}
+
+async function callLocalStudioMutation<T>(
+  procedure: string,
+  input: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const studioAccessToken = env.STUDIO_ACCESS_TOKEN?.trim();
+  if (studioAccessToken) {
+    headers["x-vivd-studio-token"] = studioAccessToken;
+  }
+
+  const response = await fetch(`${getLocalStudioTrpcBaseUrl(env)}/${procedure}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown error");
+    throw new Error(`${procedure} failed (${response.status}): ${errorText}`);
+  }
+
+  const body = await response.json().catch(() => null);
+  return unwrapTrpcBody(body) as T;
 }
 
 function isChecklistStatus(value: string | undefined): value is ChecklistStatus {
@@ -518,6 +606,26 @@ async function runPublishChecklistShow(flags: CliFlags): Promise<CommandResult> 
   });
 }
 
+async function runPublishChecklistRun(flags: CliFlags): Promise<CommandResult> {
+  const slug = requireResolvedProjectSlug(flags);
+  const version = requireResolvedProjectVersion(flags);
+  const result = await callLocalStudioMutation<PublishChecklistRunResponse>(
+    "agent.runPrePublishChecklist",
+    {
+      projectSlug: slug,
+      version,
+    },
+  );
+
+  return jsonResult(
+    result,
+    formatPublishChecklistRunReport({
+      sessionId: result.sessionId,
+      checklist: result.checklist,
+    }),
+  );
+}
+
 async function runPublishChecklistUpdate(
   flags: CliFlags,
   itemId: string,
@@ -620,6 +728,9 @@ export async function dispatchCli(
       }
       throw new Error("Unknown plugins command. Try `vivd plugins help`.");
     case "publish":
+      if (second === "checklist" && third === "run") {
+        return runPublishChecklistRun(parsed.flags);
+      }
       if (second === "checklist" && third === "show") {
         return runPublishChecklistShow(parsed.flags);
       }

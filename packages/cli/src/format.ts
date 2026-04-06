@@ -318,7 +318,11 @@ export function formatPublishChecklistReport(input: {
   } | null;
 }): string {
   if (!input.checklist) {
-    return "Publish checklist: none";
+    return [
+      "Publish checklist: none",
+      "Run `vivd publish checklist run` only if the user explicitly asked for a full checklist run or rerun.",
+      "Otherwise, continue checklist work item by item once a saved checklist exists.",
+    ].join("\n");
   }
 
   const itemLines =
@@ -338,6 +342,36 @@ export function formatPublishChecklistReport(input: {
     }`,
     "Items:",
     ...itemLines,
+  ].join("\n");
+}
+
+export function formatPublishChecklistRunReport(input: {
+  sessionId?: string | null;
+  checklist: {
+    projectSlug: string;
+    version: number;
+    runAt: string;
+    snapshotCommitHash?: string | null;
+    items: Array<{
+      id: string;
+      label: string;
+      status: string;
+      note?: string | null;
+    }>;
+    summary: {
+      passed: number;
+      failed: number;
+      warnings: number;
+      skipped: number;
+      fixed?: number;
+    };
+  };
+}): string {
+  return [
+    "Publish checklist run completed.",
+    formatStatusLine("Session", input.sessionId),
+    "",
+    formatPublishChecklistReport({ checklist: input.checklist }),
   ].join("\n");
 }
 

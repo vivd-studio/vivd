@@ -47,6 +47,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Shared CLI/backend transport helper lives in `packages/shared/src/studio/connectedBackendClient.ts`.
 - The `vivd` CLI is how the agent inspects runtime/project context and interacts with platform-managed features such as plugins and the publish checklist.
 - Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd plugins help`, `vivd plugins contact help`, and `vivd publish help`.
+- Treat `vivd publish checklist run` as an explicit full checklist pass, not a routine test command; prefer item-by-item checklist work unless the user explicitly asked for a full run or rerun.
 - For `STUDIO_MACHINE_PROVIDER=local`, `packages/backend/src/services/studioMachines/local.ts` is responsible for making `vivd` available inside spawned Studio runtimes by wiring a local wrapper into the child-process `PATH`.
 - The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`; plugin/checklist wrappers were removed in favor of the CLI.
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.

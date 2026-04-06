@@ -42,7 +42,10 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("vivd plugins catalog");
     expect(result.instructions).toContain("vivd plugins contact info");
     expect(result.instructions).toContain("vivd plugins contact help");
+    expect(result.instructions).toContain("vivd publish checklist run");
     expect(result.instructions).toContain("vivd publish checklist show");
+    expect(result.instructions).toContain("not a routine test command");
+    expect(result.instructions).toContain("You can work checklist items individually");
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");
