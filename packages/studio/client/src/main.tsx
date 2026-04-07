@@ -6,10 +6,9 @@ import { trpc } from "@/lib/trpc";
 import {
   getVivdStudioToken,
   resolveStudioRuntimePath,
-  VIVD_STUDIO_TOKEN_HEADER,
   withVivdStudioTokenQuery,
 } from "@/lib/studioAuth";
-import { resolveTrpcRequestTimeoutMs } from "@/lib/trpcTimeouts";
+import { createStudioTrpcFetch } from "@/lib/trpcFetch";
 import { ThemeProvider } from "@/components/theme";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { App } from "@/App";
@@ -17,6 +16,7 @@ import "./index.css";
 
 function Root() {
   const studioToken = getVivdStudioToken();
+  const studioTrpcFetch = createStudioTrpcFetch({ studioToken });
 
   const [queryClient] = useState(
     () =>
@@ -44,37 +44,7 @@ function Root() {
           }),
           false: httpBatchLink({
             url: resolveStudioRuntimePath("/vivd-studio/api/trpc"),
-            fetch(url, options) {
-              const headers = new Headers(options?.headers);
-              if (studioToken) {
-                headers.set(VIVD_STUDIO_TOKEN_HEADER, studioToken);
-              }
-
-              const controller = new AbortController();
-              const timeoutTarget =
-                typeof url === "string" || url instanceof URL ? url : url.url;
-              const timeoutMs = resolveTrpcRequestTimeoutMs(timeoutTarget);
-              const timeoutId = window.setTimeout(() => {
-                controller.abort(`Timed out after ${timeoutMs}ms`);
-              }, timeoutMs);
-
-              const upstreamSignal = options?.signal ?? null;
-              const onAbort = () => controller.abort();
-              if (upstreamSignal) {
-                if (upstreamSignal.aborted) controller.abort();
-                upstreamSignal.addEventListener("abort", onAbort, { once: true });
-              }
-
-              return fetch(url, {
-                ...options,
-                credentials: "include",
-                headers,
-                signal: controller.signal,
-              }).finally(() => {
-                window.clearTimeout(timeoutId);
-                upstreamSignal?.removeEventListener("abort", onAbort);
-              });
-            },
+            fetch: studioTrpcFetch,
           }),
         }),
       ],

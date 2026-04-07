@@ -21,6 +21,14 @@ describe("getPageInfo", () => {
       projectSlug: "demo",
       isProjectPluginsPage: true,
     });
+
+    expect(getPageInfo("/vivd-studio/projects/demo/plugins/analytics")).toMatchObject({
+      title: "Analytics",
+      isProjectPage: false,
+      projectSlug: "demo",
+      isProjectPluginPage: true,
+      projectPluginId: "analytics",
+    });
   });
 
   it("treats the scratch route as a non-project page with its own content shell", () => {

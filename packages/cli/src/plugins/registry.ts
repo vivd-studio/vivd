@@ -1,11 +1,17 @@
 import type {
+  PluginCliActionResultPayload,
   PluginCliAliasTarget,
+  PluginCliRenderResult,
   PluginCliInfoContractPayload,
   PluginCliModule,
 } from "@vivd/shared/types";
-import { analyticsCliModule } from "@vivd/plugin-analytics/cli/module";
+import { analyticsCliModule } from "./analytics/module";
+import { contactFormCliModule } from "./contactForm/module";
 
-const cliPluginModules: PluginCliModule[] = [analyticsCliModule];
+const cliPluginModules: PluginCliModule[] = [
+  contactFormCliModule,
+  analyticsCliModule,
+];
 
 const cliPluginModuleById = new Map(
   cliPluginModules.map((module) => [module.pluginId, module]),
@@ -15,6 +21,7 @@ export interface ResolvedCliPluginAlias {
   pluginId: string;
   target: PluginCliAliasTarget;
   args: string[];
+  renderMode: "auto" | "generic" | "plugin";
 }
 
 export function getCliPluginModule(pluginId: string): PluginCliModule | null {
@@ -23,10 +30,48 @@ export function getCliPluginModule(pluginId: string): PluginCliModule | null {
 
 export function renderCliPluginInfo(
   info: PluginCliInfoContractPayload,
-): { data: unknown; human: string } | null {
+): PluginCliRenderResult | null {
   const module = getCliPluginModule(info.pluginId);
   if (!module?.renderInfo) return null;
   return module.renderInfo(info);
+}
+
+export function renderCliPluginConfig(options: {
+  info: PluginCliInfoContractPayload;
+  projectSlug: string;
+}): PluginCliRenderResult | null {
+  const module = getCliPluginModule(options.info.pluginId);
+  if (!module?.renderConfig) return null;
+  return module.renderConfig(options);
+}
+
+export function renderCliPluginConfigTemplate(
+  options: {
+    pluginId: string;
+    info?: PluginCliInfoContractPayload | null;
+  },
+): PluginCliRenderResult | null {
+  const module = getCliPluginModule(options.pluginId);
+  if (!module?.renderConfigTemplate) return null;
+  return module.renderConfigTemplate({ info: options.info ?? null });
+}
+
+export function renderCliPluginConfigUpdate(options: {
+  pluginId: string;
+  info: PluginCliInfoContractPayload;
+  projectSlug: string;
+}): PluginCliRenderResult | null {
+  const module = getCliPluginModule(options.pluginId);
+  if (!module?.renderConfigUpdate) return null;
+  return module.renderConfigUpdate(options);
+}
+
+export function renderCliPluginAction(
+  action: PluginCliActionResultPayload,
+): PluginCliRenderResult | null {
+  const module = getCliPluginModule(action.pluginId);
+  if (!module?.renderAction) return null;
+  return module.renderAction(action);
 }
 
 export function resolveCliPluginAlias(tokens: string[]): ResolvedCliPluginAlias | null {
@@ -50,6 +95,7 @@ export function resolveCliPluginAlias(tokens: string[]): ResolvedCliPluginAlias 
         pluginId: module.pluginId,
         target: alias.target,
         args: tokens.slice(alias.tokens.length),
+        renderMode: alias.renderMode ?? "auto",
         matchedLength: alias.tokens.length,
       };
     }
@@ -60,6 +106,7 @@ export function resolveCliPluginAlias(tokens: string[]): ResolvedCliPluginAlias 
     pluginId: bestMatch.pluginId,
     target: bestMatch.target,
     args: bestMatch.args,
+    renderMode: bestMatch.renderMode,
   };
 }
 

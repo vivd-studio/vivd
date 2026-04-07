@@ -5,7 +5,7 @@ import {
   analyticsInfoPluginProcedure,
   analyticsSummaryPluginProcedure,
   analyticsUpdateConfigPluginProcedure,
-} from "@vivd/plugin-analytics/backend/router";
+} from "./analytics";
 import {
   ensurePluginProcedure,
   infoPluginProcedure,

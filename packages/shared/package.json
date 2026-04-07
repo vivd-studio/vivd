@@ -9,6 +9,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./cms": {
+      "import": "./dist/cms/index.js",
+      "types": "./dist/cms/index.d.ts"
+    },
     "./studio": {
       "import": "./dist/studio/index.js",
       "types": "./dist/studio/index.d.ts"
@@ -26,6 +30,9 @@
     "build": "tsup",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "dev": "tsup --watch"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",

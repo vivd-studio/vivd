@@ -69,9 +69,10 @@ describe.sequential("DB integration: usage/plugin services", () => {
 
         const results = await Promise.all(
           Array.from({ length: 12 }, () =>
-            projectPluginService.ensureContactFormPlugin({
+            projectPluginService.ensurePluginInstance({
               organizationId: orgId,
               projectSlug,
+              pluginId: "contact_form",
             }),
           ),
         );

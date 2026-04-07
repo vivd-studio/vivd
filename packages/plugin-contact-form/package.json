@@ -1,0 +1,31 @@
+{
+  "name": "@vivd/plugin-contact-form",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./backend/config": "./src/backend/config.ts",
+    "./backend/module": "./src/backend/module.ts",
+    "./backend/adminHooks": "./src/backend/adminHooks.ts",
+    "./backend/publicApi": "./src/backend/publicApi.ts",
+    "./backend/service": "./src/backend/service.ts",
+    "./backend/snippets": "./src/backend/snippets.ts",
+    "./backend/sourceHosts": "./src/backend/sourceHosts.ts",
+    "./backend/hostUtils": "./src/backend/hostUtils.ts",
+    "./backend/recipientVerification": "./src/backend/recipientVerification.ts",
+    "./backend/turnstile": "./src/backend/turnstile.ts",
+    "./backend/retention": "./src/backend/retention.ts",
+    "./backend/http/helpers": "./src/backend/http/helpers.ts",
+    "./backend/http/submit": "./src/backend/http/submit.ts",
+    "./backend/http/feedback": "./src/backend/http/feedback.ts",
+    "./backend/http/recipientVerification": "./src/backend/http/recipientVerification.ts",
+    "./cli/module": "./src/cli/module.ts",
+    "./frontend/module": "./src/frontend/module.ts",
+    "./frontend/ContactFormProjectPage": "./src/frontend/ContactFormProjectPage.tsx",
+    "./shared/projectUi": "./src/shared/projectUi.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  }
+}

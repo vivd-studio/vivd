@@ -12,9 +12,15 @@
     "types": ["node"],
     "paths": {
       "@vivd/plugin-analytics/*": ["../plugin-analytics/src/*"],
+      "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
       "@vivd/shared": ["../shared/src/index.ts"],
       "@vivd/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "../shared/src/**/*.ts", "../plugin-analytics/src/cli/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../shared/src/**/*.ts",
+    "../plugin-analytics/src/cli/**/*.ts",
+    "../plugin-contact-form/src/cli/**/*.ts"
+  ]
 }

@@ -47,8 +47,16 @@ type UseStudioIframeLifecycleOptions = {
   onClose?: () => void;
   onFullscreen?: () => void;
   onNavigate?: (path: string) => void;
+  onShowSidebarPeek?: () => void;
+  onScheduleHideSidebarPeek?: () => void;
   onToggleSidebar?: () => void;
   onHardRestart?: (version?: number) => void;
+  onTransportDegraded?: (
+    signal: {
+      transport: "trpc-http";
+      reason: "network-error" | "timeout";
+    },
+  ) => void;
 };
 
 export function useStudioIframeLifecycle({
@@ -66,8 +74,11 @@ export function useStudioIframeLifecycle({
   onClose,
   onFullscreen,
   onNavigate,
+  onShowSidebarPeek,
+  onScheduleHideSidebarPeek,
   onToggleSidebar,
   onHardRestart,
+  onTransportDegraded,
 }: UseStudioIframeLifecycleOptions) {
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
@@ -215,6 +226,24 @@ export function useStudioIframeLifecycle({
         return;
       }
 
+      if (message.type === "vivd:studio:showSidebarPeek") {
+        onShowSidebarPeek?.();
+        return;
+      }
+
+      if (message.type === "vivd:studio:scheduleHideSidebarPeek") {
+        onScheduleHideSidebarPeek?.();
+        return;
+      }
+
+      if (message.type === "vivd:studio:transport-degraded") {
+        onTransportDegraded?.({
+          transport: message.transport,
+          reason: message.reason,
+        });
+        return;
+      }
+
       if (message.type === "vivd:studio:toggleSidebar") {
         onToggleSidebar?.();
       }
@@ -230,6 +259,9 @@ export function useStudioIframeLifecycle({
     onFullscreen,
     onHardRestart,
     onNavigate,
+    onScheduleHideSidebarPeek,
+    onShowSidebarPeek,
+    onTransportDegraded,
     onToggleSidebar,
     setColorTheme,
     setTheme,

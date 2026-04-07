@@ -11,6 +11,8 @@ const mockBuildProjectStudioPath = vi.fn(
   (_projectSlug: string, section: "plugins") => `/${section}`,
 );
 const mockOpenEmbeddedStudioPath = vi.fn();
+const mockParseVivdHostMessage = vi.fn();
+const mockPostVivdHostMessage = vi.fn();
 
 vi.mock("@/components/projects/versioning", () => ({
   VersionSelector: () => <div data-testid="version-selector" />,
@@ -46,6 +48,13 @@ vi.mock("./hostNavigation", () => ({
     mockBuildProjectStudioPath(...args),
   openEmbeddedStudioPath: (...args: Parameters<typeof mockOpenEmbeddedStudioPath>) =>
     mockOpenEmbeddedStudioPath(...args),
+}));
+
+vi.mock("@/lib/hostBridge", () => ({
+  parseVivdHostMessage: (...args: Parameters<typeof mockParseVivdHostMessage>) =>
+    mockParseVivdHostMessage(...args),
+  postVivdHostMessage: (...args: Parameters<typeof mockPostVivdHostMessage>) =>
+    mockPostVivdHostMessage(...args),
 }));
 
 function createToolbarState() {
@@ -132,6 +141,8 @@ describe("StudioToolbar", () => {
     mockUseOpencodeSessionActivity.mockReset();
     mockBuildProjectStudioPath.mockClear();
     mockOpenEmbeddedStudioPath.mockClear();
+    mockParseVivdHostMessage.mockReset();
+    mockPostVivdHostMessage.mockReset();
 
     mockUseToolbarState.mockReturnValue(createToolbarState());
     mockUsePermissions.mockReturnValue({ canUseAgent: true });
@@ -150,6 +161,7 @@ describe("StudioToolbar", () => {
       hasAnyActiveSession: false,
       hasOtherActiveSessions: false,
     });
+    mockParseVivdHostMessage.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -249,6 +261,31 @@ describe("StudioToolbar", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Toggle sidebar");
   });
 
+  it("requests the host immersive peek when hovering the embedded vivd-mark toggle", () => {
+    mockUseToolbarState.mockReturnValue({
+      ...createToolbarState(),
+      embedded: true,
+    });
+
+    render(<StudioToolbar />);
+
+    const toggle = document.querySelector(
+      '[data-sidebar-trigger-appearance="brand"]',
+    ) as HTMLElement | null;
+
+    expect(toggle).toBeInTheDocument();
+
+    fireEvent.pointerEnter(toggle!);
+    fireEvent.pointerLeave(toggle!);
+
+    expect(mockPostVivdHostMessage).toHaveBeenNthCalledWith(1, {
+      type: "vivd:studio:showSidebarPeek",
+    });
+    expect(mockPostVivdHostMessage).toHaveBeenNthCalledWith(2, {
+      type: "vivd:studio:scheduleHideSidebarPeek",
+    });
+  });
+
   it("uses the plain sidebar toggle when the host sidebar is already open", () => {
     window.history.replaceState({}, "", "/?sidebarOpen=1");
     mockUseToolbarState.mockReturnValue({
@@ -346,7 +383,7 @@ describe("StudioToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open analytics" }));
 
     expect(mockOpenEmbeddedStudioPath).toHaveBeenCalledWith(
-      "/vivd-studio/projects/bettinis-bikinis/analytics",
+      "/vivd-studio/projects/bettinis-bikinis/plugins/analytics",
       true,
     );
   });

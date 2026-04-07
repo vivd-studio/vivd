@@ -57,7 +57,7 @@ vi.mock("../src/db", () => ({
   },
 }));
 
-import { projectPluginService } from "../src/services/plugins/ProjectPluginService";
+import { contactFormPluginService } from "../src/services/plugins/contactForm/service";
 
 function makeRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -74,7 +74,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("ProjectPluginService.ensureContactFormPlugin", () => {
+describe("contactFormPluginService", () => {
   beforeEach(() => {
     findFirstMock.mockReset();
     organizationMemberFindManyMock.mockReset();
@@ -101,7 +101,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
     const existing = makeRow({ status: "enabled" });
     findFirstMock.mockResolvedValueOnce(existing);
 
-    const result = await projectPluginService.ensureContactFormPlugin({
+    const result = await contactFormPluginService.ensureContactFormPlugin({
       organizationId: "org-1",
       projectSlug: "site-1",
     });
@@ -122,7 +122,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
     findFirstMock.mockResolvedValueOnce(existingDisabled);
     updateReturningMock.mockResolvedValueOnce([updatedEnabled]);
 
-    const result = await projectPluginService.ensureContactFormPlugin({
+    const result = await contactFormPluginService.ensureContactFormPlugin({
       organizationId: "org-1",
       projectSlug: "site-1",
     });
@@ -144,7 +144,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
       .mockResolvedValueOnce(concurrentRow);
     insertReturningMock.mockRejectedValueOnce({ code: "23505" });
 
-    const result = await projectPluginService.ensureContactFormPlugin({
+    const result = await contactFormPluginService.ensureContactFormPlugin({
       organizationId: "org-1",
       projectSlug: "site-1",
     });
@@ -152,7 +152,6 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
     expect(insertMock).toHaveBeenCalledTimes(1);
     expect(result.created).toBe(false);
     expect(result.instanceId).toBe("ppi-concurrent");
-    expect(result.publicToken).toBe("ppi-concurrent.token");
   });
 
   it("persists config when recipient emails are verified", async () => {
@@ -166,7 +165,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
     findFirstMock.mockResolvedValueOnce(existing);
     updateReturningMock.mockResolvedValueOnce([updated]);
 
-    const result = await projectPluginService.updateContactFormConfig({
+    const result = await contactFormPluginService.updateContactFormConfig({
       organizationId: "org-1",
       projectSlug: "site-1",
       config: {
@@ -191,7 +190,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
 
   it("rejects recipient emails that are not verified in the organization", async () => {
     await expect(
-      projectPluginService.updateContactFormConfig({
+      contactFormPluginService.updateContactFormConfig({
         organizationId: "org-1",
         projectSlug: "site-1",
         config: {
@@ -222,7 +221,7 @@ describe("ProjectPluginService.ensureContactFormPlugin", () => {
 
   it("rejects saves when recipient email list is empty", async () => {
     await expect(
-      projectPluginService.updateContactFormConfig({
+      contactFormPluginService.updateContactFormConfig({
         organizationId: "org-1",
         projectSlug: "site-1",
         config: {

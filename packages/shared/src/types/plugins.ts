@@ -53,10 +53,16 @@ export interface ProjectPluginShortcutDefinition {
 }
 
 export interface SharedProjectPluginUiDefinition {
+  pageTitle?: string;
   openLabel?: string;
   defaultSubpath?: string;
   shortcut?: ProjectPluginShortcutDefinition;
 }
+
+export type ProjectPluginUiRegistry = Record<
+  string,
+  SharedProjectPluginUiDefinition
+>;
 
 export interface ResolvedProjectPluginShortcutDefinition {
   pluginId: string;
@@ -65,38 +71,6 @@ export interface ResolvedProjectPluginShortcutDefinition {
   shortcut: ProjectPluginShortcutDefinition;
   surface: ProjectPluginShortcutSurfaceDefinition;
 }
-
-const sharedProjectPluginUiRegistry: Record<string, SharedProjectPluginUiDefinition> = {
-  contact_form: {
-    openLabel: "Open settings",
-  },
-  analytics: {
-    openLabel: "Open dashboard",
-    shortcut: {
-      label: "Analytics",
-      icon: "bar-chart-3",
-      route: {
-        kind: "project-section",
-        path: "analytics",
-      },
-      keywords: ["analytics", "traffic", "metrics"],
-      expandedWidth: 100,
-      surfaces: [
-        { surface: "navigation-search" },
-        { surface: "project-card" },
-        { surface: "project-header" },
-        { surface: "studio-mobile-menu", showWhenDisabled: true },
-        { surface: "studio-toolbar", showWhenDisabled: true },
-      ],
-      activationSupport: {
-        title: "Analytics needs activation",
-        description: "Analytics is not active for this project yet.",
-        supportSubject: "Activate Analytics",
-        supportActionLabel: "Email Vivd support",
-      },
-    },
-  },
-};
 
 function normalizeRoutePathSegment(value: string): string {
   return value.replace(/^\/+/, "").replace(/\/+$/, "");
@@ -126,18 +100,20 @@ export function buildProjectPluginRoutePath(
 
 export function getSharedProjectPluginUi(
   pluginId: string,
+  registry: ProjectPluginUiRegistry,
 ): SharedProjectPluginUiDefinition | null {
-  return sharedProjectPluginUiRegistry[pluginId] ?? null;
+  return registry[pluginId] ?? null;
 }
 
 export function listProjectPluginShortcuts(options: {
   enabledPluginIds?: string[];
+  registry: ProjectPluginUiRegistry;
   surface: ProjectPluginShortcutSurface;
 }): ResolvedProjectPluginShortcutDefinition[] {
   const enabledPluginIds = new Set(options.enabledPluginIds ?? []);
   const shortcuts: ResolvedProjectPluginShortcutDefinition[] = [];
 
-  for (const [pluginId, ui] of Object.entries(sharedProjectPluginUiRegistry)) {
+  for (const [pluginId, ui] of Object.entries(options.registry)) {
     const shortcut = ui.shortcut;
     if (!shortcut) continue;
 

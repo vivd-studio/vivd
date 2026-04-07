@@ -2,12 +2,19 @@ import type { ColorTheme, Theme } from "../types/index.js";
 
 export type VivdStudioBridgeMessage =
   | { type: "vivd:studio:ready" }
+  | {
+      type: "vivd:studio:transport-degraded";
+      transport: "trpc-http";
+      reason: "network-error" | "timeout";
+    }
   | { type: "vivd:studio:close" }
   | { type: "vivd:studio:exitFullscreen" }
   | { type: "vivd:studio:fullscreen" }
   | { type: "vivd:studio:navigate"; path: string }
   | { type: "vivd:studio:theme"; theme: Theme; colorTheme: ColorTheme }
   | { type: "vivd:studio:hardRestart"; version?: number }
+  | { type: "vivd:studio:showSidebarPeek" }
+  | { type: "vivd:studio:scheduleHideSidebarPeek" }
   | { type: "vivd:studio:toggleSidebar" };
 
 export type VivdHostBridgeMessage =
@@ -32,8 +39,18 @@ export function parseVivdStudioBridgeMessageData(
     case "vivd:studio:close":
     case "vivd:studio:exitFullscreen":
     case "vivd:studio:fullscreen":
+    case "vivd:studio:showSidebarPeek":
+    case "vivd:studio:scheduleHideSidebarPeek":
     case "vivd:studio:toggleSidebar":
       return { type };
+    case "vivd:studio:transport-degraded": {
+      const transport = data.transport;
+      const reason = data.reason;
+      return transport === "trpc-http" &&
+        (reason === "network-error" || reason === "timeout")
+        ? { type, transport, reason }
+        : null;
+    }
     case "vivd:studio:navigate": {
       const path = data.path;
       return typeof path === "string" && path.length > 0 ? { type, path } : null;

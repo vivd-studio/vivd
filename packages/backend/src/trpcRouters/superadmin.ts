@@ -19,7 +19,10 @@ import { studioMachineProvider } from "../services/studioMachines";
 import { isManagedStudioMachineProvider } from "../services/studioMachines/types";
 import { pluginEntitlementService } from "../services/plugins/PluginEntitlementService";
 import { projectPluginService } from "../services/plugins/ProjectPluginService";
-import { contactFormTurnstileService } from "../services/plugins/contactForm/turnstile";
+import {
+  cleanupPluginProjectEntitlementFields,
+  preparePluginProjectEntitlementFields,
+} from "../services/plugins/integrationHooks";
 import { getEmailFeedbackEndpoint } from "../services/plugins/contactForm/publicApi";
 import { emailDeliverabilityService } from "../services/email/deliverability";
 import {
@@ -985,39 +988,31 @@ export const superAdminRouter = router({
             })
           : null;
 
-      let turnstileCredentials:
-        | {
-            widgetId: string;
-            siteKey: string;
-            secretKey: string;
-          }
-        | null = null;
-
-      if (
-        input.pluginId === "contact_form" &&
-        input.scope === "project" &&
-        input.state === "enabled" &&
-        input.turnstileEnabled === true
-      ) {
-        const automationIssue =
-          contactFormTurnstileService.getAutomationConfigurationIssue();
-        if (automationIssue) {
-          throw new Error(automationIssue);
-        }
-
-        const prepared = await contactFormTurnstileService.prepareProjectWidgetCredentials({
-          organizationId: input.organizationId,
-          projectSlug: input.projectSlug!,
-          existingWidgetId: existingProjectEntitlement?.turnstileWidgetId ?? null,
-          existingSiteKey: existingProjectEntitlement?.turnstileSiteKey ?? null,
-          existingSecretKey: existingProjectEntitlement?.turnstileSecretKey ?? null,
-        });
-        turnstileCredentials = {
-          widgetId: prepared.widgetId,
-          siteKey: prepared.siteKey,
-          secretKey: prepared.secretKey,
-        };
-      }
+      const preparedEntitlementFields =
+        input.scope === "project"
+          ? await preparePluginProjectEntitlementFields({
+              pluginId: input.pluginId,
+              organizationId: input.organizationId,
+              projectSlug: input.projectSlug!,
+              state: input.state,
+              turnstileEnabled: input.turnstileEnabled ?? false,
+              existingProjectEntitlement: existingProjectEntitlement
+                ? {
+                    turnstileWidgetId:
+                      existingProjectEntitlement.turnstileWidgetId ?? null,
+                    turnstileSiteKey:
+                      existingProjectEntitlement.turnstileSiteKey ?? null,
+                    turnstileSecretKey:
+                      existingProjectEntitlement.turnstileSecretKey ?? null,
+                  }
+                : null,
+            })
+          : {
+              turnstileEnabled: input.turnstileEnabled ?? false,
+              turnstileWidgetId: null,
+              turnstileSiteKey: null,
+              turnstileSecretKey: null,
+            };
 
       const entitlement = await pluginEntitlementService.upsertEntitlement({
         organizationId: input.organizationId,
@@ -1028,13 +1023,10 @@ export const superAdminRouter = router({
         managedBy: "manual_superadmin",
         monthlyEventLimit: input.monthlyEventLimit,
         hardStop: input.hardStop,
-        turnstileEnabled: input.turnstileEnabled ?? false,
-        turnstileWidgetId:
-          input.turnstileEnabled === true ? turnstileCredentials?.widgetId ?? null : null,
-        turnstileSiteKey:
-          input.turnstileEnabled === true ? turnstileCredentials?.siteKey ?? null : null,
-        turnstileSecretKey:
-          input.turnstileEnabled === true ? turnstileCredentials?.secretKey ?? null : null,
+        turnstileEnabled: preparedEntitlementFields.turnstileEnabled,
+        turnstileWidgetId: preparedEntitlementFields.turnstileWidgetId,
+        turnstileSiteKey: preparedEntitlementFields.turnstileSiteKey,
+        turnstileSecretKey: preparedEntitlementFields.turnstileSecretKey,
         notes: input.notes,
         changedByUserId: ctx.session.user.id,
       });
@@ -1053,17 +1045,19 @@ export const superAdminRouter = router({
         ensuredPluginInstanceId = ensured.instanceId;
       }
 
-      const isTurnstileDisabledAfterUpsert =
-        input.pluginId === "contact_form" &&
-        input.scope === "project" &&
-        (input.state !== "enabled" || input.turnstileEnabled !== true);
-      if (
-        isTurnstileDisabledAfterUpsert &&
-        existingProjectEntitlement?.turnstileWidgetId
-      ) {
-        await contactFormTurnstileService.deleteWidget(
-          existingProjectEntitlement.turnstileWidgetId,
-        );
+      if (input.scope === "project") {
+        await cleanupPluginProjectEntitlementFields({
+          pluginId: input.pluginId,
+          state: input.state,
+          turnstileEnabled: input.turnstileEnabled ?? false,
+          existingProjectEntitlement: existingProjectEntitlement
+            ? {
+                turnstileWidgetId: existingProjectEntitlement.turnstileWidgetId ?? null,
+                turnstileSiteKey: existingProjectEntitlement.turnstileSiteKey ?? null,
+                turnstileSecretKey: existingProjectEntitlement.turnstileSecretKey ?? null,
+              }
+            : null,
+        });
       }
 
       return {

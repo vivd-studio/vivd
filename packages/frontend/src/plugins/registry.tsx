@@ -1,7 +1,8 @@
 import { getSharedProjectPluginUi } from "@vivd/shared/types";
-import { analyticsFrontendPluginModule } from "@vivd/plugin-analytics/frontend/module";
 import type { ProjectPluginUiDefinition } from "./types";
+import { analyticsFrontendPluginModule } from "./analytics/module";
 import { contactFormFrontendPluginModule } from "./contactForm/module";
+import { frontendSharedProjectPluginUiRegistry } from "./sharedUiRegistry";
 
 const frontendPluginModules = [
   contactFormFrontendPluginModule,
@@ -16,7 +17,10 @@ const projectPluginComponentRegistry: Record<string, ProjectPluginUiDefinition> 
   );
 
 export function getProjectPluginUi(pluginId: string): ProjectPluginUiDefinition | null {
-  const sharedUi = getSharedProjectPluginUi(pluginId);
+  const sharedUi = getSharedProjectPluginUi(
+    pluginId,
+    frontendSharedProjectPluginUiRegistry,
+  );
   const componentUi = projectPluginComponentRegistry[pluginId];
   if (!sharedUi && !componentUi) return null;
 

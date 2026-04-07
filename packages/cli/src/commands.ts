@@ -4,11 +4,18 @@ import { validateConnectedStudioBackendClientConfig } from "@vivd/shared/studio"
 import { parseCliArgs, resolveHelpTopic, isHelpRequested, type CliFlags } from "./args.js";
 import { resolveCliRuntime } from "./backend.js";
 import {
-  formatContactConfigReport,
-  formatContactConfigTemplateReport,
-  formatContactConfigUpdateReport,
-  formatContactPluginReport,
-  formatContactRecipientVerificationReport,
+  buildCmsArtifacts,
+  getCmsStatus,
+  scaffoldCmsEntry,
+  scaffoldCmsModel,
+  scaffoldCmsWorkspace,
+  validateCmsWorkspace,
+} from "./cms.js";
+import {
+  formatCmsBuildArtifactsReport,
+  formatCmsScaffoldReport,
+  formatCmsStatusReport,
+  formatCmsValidateReport,
   formatDoctorReport,
   formatGenericPluginActionReport,
   formatGenericPluginConfigReport,
@@ -24,8 +31,13 @@ import {
   formatWhoamiReport,
 } from "./format.js";
 import {
+  getCliPluginModule,
   getCliPluginHelpText,
   listCliPluginHelpSummaryLines,
+  renderCliPluginAction,
+  renderCliPluginConfig,
+  renderCliPluginConfigTemplate,
+  renderCliPluginConfigUpdate,
   renderCliPluginInfo,
   resolveCliPluginAlias,
 } from "./plugins/registry.js";
@@ -135,89 +147,18 @@ type PluginActionResponse = {
   result: unknown;
 };
 
-type ContactInfoResponse = {
-  pluginId: "contact_form";
-  entitled: boolean;
-  entitlementState: "disabled" | "enabled" | "suspended";
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  config: {
-    recipientEmails?: string[];
-    sourceHosts?: string[];
-    redirectHostAllowlist?: string[];
-    formFields?: Array<{
-      key: string;
-      label?: string;
-      type?: string;
-      required?: boolean;
-      placeholder?: string;
-      rows?: number;
-    }>;
-  } | null;
-  usage: {
-    submitEndpoint: string;
-    expectedFields: string[];
-    optionalFields: string[];
-    inferredAutoSourceHosts: string[];
-    turnstileEnabled: boolean;
-    turnstileConfigured: boolean;
-  };
-  recipients: {
-    options: Array<{
-      email: string;
-      isVerified: boolean;
-      isPending: boolean;
-    }>;
-    pending: Array<{
-      email: string;
-      lastSentAt: string | null;
-    }>;
-  };
-  instructions: string[];
-};
-
-const CONTACT_CONFIG_TEMPLATE = {
-  recipientEmails: ["team@example.com"],
-  sourceHosts: ["example.com"],
-  redirectHostAllowlist: ["example.com"],
-  formFields: [
-    {
-      key: "name",
-      label: "Name",
-      type: "text",
-      required: true,
-      placeholder: "",
-    },
-    {
-      key: "email",
-      label: "Email",
-      type: "email",
-      required: true,
-      placeholder: "",
-    },
-    {
-      key: "message",
-      label: "Message",
-      type: "textarea",
-      required: true,
-      placeholder: "",
-      rows: 5,
-    },
-  ],
-};
+const ROOT_HELP_LINES = [
+  "vivd help",
+  "vivd doctor",
+  "vivd whoami",
+  "vivd project info",
+  "vivd cms help",
+  "vivd plugins help",
+  "vivd publish help",
+];
 
 const GENERAL_HELP: Record<string, string> = {
-  root: [
-    "vivd help",
-    "vivd doctor",
-    "vivd whoami",
-    "vivd project info",
-    "vivd preview help",
-    "vivd plugins help",
-    "vivd publish help",
-  ].join("\n"),
+  root: "",
   preview: [
     "vivd preview screenshot [path]",
     "Use preview-relative paths like /, /pricing, or /contact?tab=form.",
@@ -240,23 +181,15 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd plugins contact recipients verify <email>",
     "vivd plugins contact recipients resend <email>",
   ].join("\n"),
-  contact: [
-    "Preferred generic equivalents:",
-    "vivd plugins info contact_form",
-    "vivd plugins config show contact_form",
-    "vivd plugins config template contact_form",
-    "vivd plugins config apply contact_form --file config.json",
-    "vivd plugins action contact_form verify_recipient <email>",
-    "vivd plugins action contact_form resend_recipient <email>",
-    "Compatibility aliases:",
-    "vivd plugins contact info",
-    "vivd plugins contact config show",
-    "vivd plugins contact config template",
-    "vivd plugins contact config apply --file config.json",
-    "vivd plugins contact recipients verify <email>",
-    "vivd plugins contact recipients resend <email>",
-    "Use --file - to read JSON config from stdin.",
-    "Contact info shows submit endpoint, configured recipients, verification state, and install guidance.",
+  cms: [
+    "vivd cms status",
+    "vivd cms validate",
+    "vivd cms scaffold init",
+    "vivd cms scaffold model <key>",
+    "vivd cms scaffold entry <model-key> <entry-key>",
+    "vivd cms build-artifacts",
+    "Vivd CMS is local and file-based under src/content/ for Astro-backed projects.",
+    "Use collection-backed CMS content selectively for structured, repeatable, user-managed domains like products, blogs, directories, downloads, or case studies.",
   ].join("\n"),
   publish: [
     "vivd publish checklist run",
@@ -366,6 +299,29 @@ function unwrapTrpcBody(body: any): any {
   return body?.result?.data?.json ?? body?.result?.data ?? body;
 }
 
+function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  return fallback;
+}
+
+function isPreviewScreenshotCliEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return parseBooleanEnv(env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED, false);
+}
+
+function getRootHelpText(env: NodeJS.ProcessEnv = process.env): string {
+  const lines = [...ROOT_HELP_LINES];
+  if (isPreviewScreenshotCliEnabled(env)) {
+    lines.splice(4, 0, "vivd preview help");
+  }
+  return lines.join("\n");
+}
+
 function isPreviewScreenshotFormat(value: string | undefined): value is "png" | "jpeg" | "webp" {
   return value === "png" || value === "jpeg" || value === "webp";
 }
@@ -451,13 +407,7 @@ async function withRuntime<T>(
 function helpTextFor(topic: string[]): string {
   const normalized = topic.join(" ").trim();
   if (!normalized || normalized === "root") {
-    return GENERAL_HELP.root;
-  }
-  if (
-    normalized.startsWith("plugins contact") ||
-    normalized.startsWith("plugins info contact")
-  ) {
-    return GENERAL_HELP.contact;
+    return getRootHelpText();
   }
   const pluginHelp = getCliPluginHelpText(topic);
   if (pluginHelp) {
@@ -470,13 +420,117 @@ function helpTextFor(topic: string[]): string {
     }
     return [GENERAL_HELP.plugins, ...summaryLines].join("\n");
   }
-  if (normalized.startsWith("preview")) {
+  if (normalized.startsWith("cms")) {
+    return GENERAL_HELP.cms;
+  }
+  if (normalized.startsWith("preview") && isPreviewScreenshotCliEnabled()) {
     return GENERAL_HELP.preview;
   }
   if (normalized.startsWith("publish")) {
     return GENERAL_HELP.publish;
   }
-  return GENERAL_HELP.root;
+  return getRootHelpText();
+}
+
+async function runCmsStatus(cwd: string): Promise<CommandResult> {
+  const report = await getCmsStatus(cwd);
+  return jsonResult(
+    report,
+    formatCmsStatusReport({
+      initialized: report.initialized,
+      valid: report.valid,
+      contentRoot: report.paths.contentRoot,
+      modelCount: report.modelCount,
+      entryCount: report.entryCount,
+      assetCount: report.assetCount,
+      mediaFileCount: report.mediaFileCount,
+      models: report.models,
+      errors: report.errors,
+    }),
+    report.valid ? 0 : 1,
+  );
+}
+
+async function runCmsValidate(cwd: string): Promise<CommandResult> {
+  const report = await validateCmsWorkspace(cwd);
+  return jsonResult(
+    report,
+    formatCmsValidateReport({
+      valid: report.valid,
+      modelCount: report.modelCount,
+      entryCount: report.entryCount,
+      assetCount: report.assetCount,
+      errors: report.errors,
+    }),
+    report.valid ? 0 : 1,
+  );
+}
+
+async function runCmsScaffoldInit(cwd: string): Promise<CommandResult> {
+  const result = await scaffoldCmsWorkspace(cwd);
+  return jsonResult(
+    result,
+    formatCmsScaffoldReport({
+      title: "CMS scaffold initialized.",
+      created: result.created,
+      skipped: result.skipped,
+    }),
+  );
+}
+
+async function runCmsScaffoldModel(modelKey: string, cwd: string): Promise<CommandResult> {
+  const result = await scaffoldCmsModel(cwd, modelKey);
+  return jsonResult(
+    result,
+    formatCmsScaffoldReport({
+      title: `CMS model scaffolded: ${modelKey}`,
+      created: result.created,
+      skipped: result.skipped,
+    }),
+  );
+}
+
+async function runCmsScaffoldEntry(
+  modelKey: string,
+  entryKey: string,
+  cwd: string,
+): Promise<CommandResult> {
+  const result = await scaffoldCmsEntry(cwd, modelKey, entryKey);
+  return jsonResult(
+    result,
+    formatCmsScaffoldReport({
+      title: `CMS entry scaffolded: ${modelKey}/${entryKey}`,
+      created: result.created,
+      skipped: result.skipped,
+    }),
+  );
+}
+
+async function runCmsBuildArtifacts(cwd: string): Promise<CommandResult> {
+  const result = await buildCmsArtifacts(cwd);
+  return jsonResult(
+    result,
+    formatCmsBuildArtifactsReport({
+      outputDir: result.outputDir,
+      manifestPath: result.manifestPath,
+      modelCount: result.modelCount,
+      entryCount: result.entryCount,
+      assetCount: result.assetCount,
+      mediaFileCount: result.mediaFileCount,
+    }),
+  );
+}
+
+type CliPluginRenderMode = "auto" | "generic" | "plugin";
+
+function shouldUseCliPluginRenderer(
+  pluginId: string,
+  mode: CliPluginRenderMode,
+  key: "info" | "config" | "configTemplate" | "configUpdate" | "action",
+): boolean {
+  if (mode === "plugin") return true;
+  if (mode === "generic") return false;
+  return getCliPluginModule(pluginId)?.genericRendererModes?.[key] === true;
 }
 
 async function runDoctor(flags: CliFlags): Promise<CommandResult> {
@@ -637,38 +691,18 @@ async function getPluginInfoContract(
   })) as PluginCliInfoContractPayload;
 }
 
-function toContactInfoResponse(info: PluginCliInfoContractPayload): ContactInfoResponse {
-  const details =
-    info.details && typeof info.details === "object" ? info.details : null;
-  const recipients =
-    details && "recipients" in details && details.recipients
-      ? details.recipients
-      : { options: [], pending: [] };
-
-  return {
-    pluginId: "contact_form",
-    entitled: info.entitled,
-    entitlementState: info.entitlementState,
-    enabled: info.enabled,
-    instanceId: info.instanceId,
-    status: info.status,
-    publicToken: info.publicToken,
-    config: info.config as ContactInfoResponse["config"],
-    usage: info.usage as ContactInfoResponse["usage"],
-    recipients: recipients as ContactInfoResponse["recipients"],
-    instructions: info.instructions,
-  };
-}
-
 async function runPluginsInfoGeneric(
   pluginId: string,
   flags: CliFlags,
+  renderMode: CliPluginRenderMode = "auto",
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const info = await getPluginInfoContract(runtime, pluginId);
-    const rendered = renderCliPluginInfo(info);
-    if (rendered) {
-      return jsonResult(rendered.data, rendered.human);
+    if (shouldUseCliPluginRenderer(pluginId, renderMode, "info")) {
+      const rendered = renderCliPluginInfo(info);
+      if (rendered) {
+        return jsonResult(rendered.data, rendered.human);
+      }
     }
     return jsonResult(info, formatGenericPluginInfoReport(info));
   });
@@ -677,9 +711,19 @@ async function runPluginsInfoGeneric(
 async function runPluginsConfigShowGeneric(
   pluginId: string,
   flags: CliFlags,
+  renderMode: CliPluginRenderMode = "auto",
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const info = await getPluginInfoContract(runtime, pluginId);
+    if (shouldUseCliPluginRenderer(pluginId, renderMode, "config")) {
+      const rendered = renderCliPluginConfig({
+        info,
+        projectSlug: requireProjectSlug(runtime),
+      });
+      if (rendered) {
+        return jsonResult(rendered.data, rendered.human);
+      }
+    }
     return jsonResult(
       info.config,
       formatGenericPluginConfigReport({
@@ -697,9 +741,27 @@ async function runPluginsConfigShowGeneric(
 async function runPluginsConfigTemplateGeneric(
   pluginId: string,
   flags: CliFlags,
+  renderMode: CliPluginRenderMode = "auto",
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
+    if (shouldUseCliPluginRenderer(pluginId, renderMode, "configTemplate")) {
+      const rendered = renderCliPluginConfigTemplate({
+        pluginId,
+      });
+      if (rendered) {
+        return jsonResult(rendered.data, rendered.human);
+      }
+    }
     const info = await getPluginInfoContract(runtime, pluginId);
+    if (shouldUseCliPluginRenderer(pluginId, renderMode, "configTemplate")) {
+      const rendered = renderCliPluginConfigTemplate({
+        pluginId,
+        info,
+      });
+      if (rendered) {
+        return jsonResult(rendered.data, rendered.human);
+      }
+    }
     return jsonResult(
       info.defaultConfig,
       formatGenericPluginConfigTemplateReport({
@@ -715,6 +777,7 @@ async function runPluginsConfigureGeneric(
   pluginId: string,
   flags: CliFlags,
   cwd: string,
+  renderMode: CliPluginRenderMode = "auto",
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const slug = requireProjectSlug(runtime);
@@ -730,6 +793,16 @@ async function runPluginsConfigureGeneric(
       pluginId,
       config,
     })) as PluginCliInfoContractPayload;
+    if (shouldUseCliPluginRenderer(pluginId, renderMode, "configUpdate")) {
+      const rendered = renderCliPluginConfigUpdate({
+        pluginId,
+        info: result,
+        projectSlug: slug,
+      });
+      if (rendered) {
+        return jsonResult(rendered.data, rendered.human);
+      }
+    }
 
     return jsonResult(
       result,
@@ -747,6 +820,7 @@ async function runPluginActionGeneric(
   actionId: string,
   args: string[],
   flags: CliFlags,
+  renderMode: CliPluginRenderMode = "auto",
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const slug = requireProjectSlug(runtime);
@@ -757,17 +831,14 @@ async function runPluginActionGeneric(
       actionId,
       args,
     })) as PluginActionResponse;
+    if (shouldUseCliPluginRenderer(pluginId, renderMode, "action")) {
+      const rendered = renderCliPluginAction(result);
+      if (rendered) {
+        return jsonResult(rendered.data, rendered.human);
+      }
+    }
 
     return jsonResult(result, formatGenericPluginActionReport(result));
-  });
-}
-
-async function runContactInfo(flags: CliFlags): Promise<CommandResult> {
-  return withRuntime(flags, async (runtime) => {
-    const info = toContactInfoResponse(
-      await getPluginInfoContract(runtime, "contact_form"),
-    );
-    return jsonResult(info, formatContactPluginReport(info));
   });
 }
 
@@ -781,110 +852,22 @@ async function runResolvedCliPluginAlias(
 
   switch (match.target.kind) {
     case "info":
-      return runPluginsInfoGeneric(match.pluginId, flags);
+      return runPluginsInfoGeneric(match.pluginId, flags, match.renderMode);
     case "config_show":
-      return runPluginsConfigShowGeneric(match.pluginId, flags);
+      return runPluginsConfigShowGeneric(match.pluginId, flags, match.renderMode);
     case "config_template":
-      return runPluginsConfigTemplateGeneric(match.pluginId, flags);
+      return runPluginsConfigTemplateGeneric(match.pluginId, flags, match.renderMode);
     case "config_apply":
-      return runPluginsConfigureGeneric(match.pluginId, flags, cwd);
+      return runPluginsConfigureGeneric(match.pluginId, flags, cwd, match.renderMode);
     case "action":
       return runPluginActionGeneric(
         match.pluginId,
         match.target.actionId,
         match.args,
         flags,
+        match.renderMode,
       );
   }
-}
-
-async function runContactRecipientVerification(
-  mode: "verify" | "resend",
-  flags: CliFlags,
-  email: string,
-): Promise<CommandResult> {
-  return withRuntime(flags, async (runtime) => {
-    const slug = requireProjectSlug(runtime);
-    const response = (await runtime.client.mutation(
-      "studioApi.runProjectPluginAction",
-      {
-        studioId: runtime.config.studioId,
-        slug,
-        pluginId: "contact_form",
-        actionId:
-          mode === "resend" ? "resend_recipient" : "verify_recipient",
-        args: [email],
-      },
-    )) as PluginActionResponse;
-    const result = response.result as {
-      email: string;
-      status:
-        | "already_verified"
-        | "added_verified"
-        | "verification_sent"
-        | "verification_pending";
-      cooldownRemainingSeconds: number;
-    };
-
-    const prefix =
-      mode === "resend"
-        ? "Resent recipient verification request."
-        : "Recipient verification requested.";
-
-    return jsonResult(
-      result,
-      [prefix, formatContactRecipientVerificationReport(result)].join("\n"),
-    );
-  });
-}
-
-async function runPluginsConfigureContact(
-  flags: CliFlags,
-  cwd: string,
-): Promise<CommandResult> {
-  return withRuntime(flags, async (runtime) => {
-    const slug = requireProjectSlug(runtime);
-    const filePath = flags.file?.trim();
-    if (!filePath) {
-      throw new Error("contact config apply requires --file <config.json|->");
-    }
-
-    const config = await readJsonFile(filePath === "-" ? "-" : resolveInputPath(filePath, cwd));
-    const result = await runtime.client.mutation("studioApi.updateProjectPluginConfig", {
-      studioId: runtime.config.studioId,
-      slug,
-      pluginId: "contact_form",
-      config,
-    });
-
-    return jsonResult(result, formatContactConfigUpdateReport(slug));
-  });
-}
-
-async function runContactConfigShow(flags: CliFlags): Promise<CommandResult> {
-  return withRuntime(flags, async (runtime) => {
-    const slug = requireProjectSlug(runtime);
-    const info = toContactInfoResponse(
-      await getPluginInfoContract(runtime, "contact_form"),
-    );
-
-    return jsonResult(
-      info.config,
-      formatContactConfigReport({
-        projectSlug: slug,
-        config: info.config,
-        enabled: info.enabled,
-        entitled: info.entitled,
-      }),
-    );
-  });
-}
-
-async function runContactConfigTemplate(): Promise<CommandResult> {
-  return jsonResult(
-    CONTACT_CONFIG_TEMPLATE,
-    formatContactConfigTemplateReport(CONTACT_CONFIG_TEMPLATE),
-  );
 }
 
 async function runPublishChecklistShow(flags: CliFlags): Promise<CommandResult> {
@@ -987,7 +970,30 @@ export async function dispatchCli(
         throw new Error("Unknown project command. Try `vivd project info`.");
       }
       return runProjectInfo(parsed.flags);
+    case "cms":
+      if (second === "status") {
+        return runCmsStatus(cwd);
+      }
+      if (second === "validate") {
+        return runCmsValidate(cwd);
+      }
+      if (second === "build-artifacts") {
+        return runCmsBuildArtifacts(cwd);
+      }
+      if (second === "scaffold" && third === "init") {
+        return runCmsScaffoldInit(cwd);
+      }
+      if (second === "scaffold" && third === "model" && rest[0]) {
+        return runCmsScaffoldModel(rest[0], cwd);
+      }
+      if (second === "scaffold" && third === "entry" && rest[0] && rest[1]) {
+        return runCmsScaffoldEntry(rest[0], rest[1], cwd);
+      }
+      throw new Error("Unknown cms command. Try `vivd cms help`.");
     case "preview":
+      if (!isPreviewScreenshotCliEnabled()) {
+        throw new Error("Unknown command: preview. Try `vivd help`.");
+      }
       if (second === "screenshot") {
         return runPreviewScreenshot(third, parsed.flags, cwd);
       }
@@ -995,30 +1001,6 @@ export async function dispatchCli(
     case "plugins":
       if (second === "catalog") {
         return runPluginsCatalog(parsed.flags);
-      }
-      if (second === "info" && third === "contact") {
-        return runContactInfo(parsed.flags);
-      }
-      if (second === "contact" && third === "info") {
-        return runContactInfo(parsed.flags);
-      }
-      if (second === "contact" && third === "config" && rest[0] === "show") {
-        return runContactConfigShow(parsed.flags);
-      }
-      if (second === "contact" && third === "config" && rest[0] === "template") {
-        return runContactConfigTemplate();
-      }
-      if (second === "contact" && third === "config" && rest[0] === "apply") {
-        return runPluginsConfigureContact(parsed.flags, cwd);
-      }
-      if (second === "contact" && third === "recipients" && rest[0] === "verify" && rest[1]) {
-        return runContactRecipientVerification("verify", parsed.flags, rest[1]);
-      }
-      if (second === "contact" && third === "recipients" && rest[0] === "resend" && rest[1]) {
-        return runContactRecipientVerification("resend", parsed.flags, rest[1]);
-      }
-      if (second === "configure" && third === "contact") {
-        return runPluginsConfigureContact(parsed.flags, cwd);
       }
       {
         const aliasResult = await runResolvedCliPluginAlias(tokens.slice(1), parsed.flags, cwd);

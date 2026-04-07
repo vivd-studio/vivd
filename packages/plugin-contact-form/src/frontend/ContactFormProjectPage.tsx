@@ -40,9 +40,13 @@ import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { formatDocumentTitle } from "@/lib/brand";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
-import type { ProjectPluginPageProps } from "../types";
 
 type ContactFormFieldType = "text" | "email" | "textarea";
+
+type ContactFormProjectPageProps = {
+  projectSlug: string;
+  isEmbedded?: boolean;
+};
 
 type EditableContactFormField = {
   key: string;
@@ -228,7 +232,7 @@ function getContactFormInfo(
 export default function ContactFormProjectPage({
   projectSlug,
   isEmbedded = false,
-}: ProjectPluginPageProps) {
+}: ContactFormProjectPageProps) {
   const { config } = useAppConfig();
   const utils = trpc.useUtils();
   const { data: session } = authClient.useSession();

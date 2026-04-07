@@ -1,9 +1,1 @@
-export {
-  resolveDefaultSuccessRedirectTarget,
-  extractSourceHostFromHeaders,
-  isHostAllowed,
-  normalizeHostCandidate,
-  resolveEffectiveRedirectHosts,
-  resolveEffectiveSourceHosts,
-  resolveRedirectTarget,
-} from "../../../services/plugins/contactForm/hostUtils";
+export * from "@vivd/plugin-contact-form/backend/http/helpers";

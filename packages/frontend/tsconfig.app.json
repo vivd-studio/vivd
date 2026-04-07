@@ -50,6 +50,9 @@
       "@vivd/plugin-analytics/*": [
         "../plugin-analytics/src/*"
       ],
+      "@vivd/plugin-contact-form/*": [
+        "../plugin-contact-form/src/*"
+      ],
       "@vivd/shared": [
         "../shared/src/index.ts"
       ],

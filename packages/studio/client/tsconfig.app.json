@@ -23,6 +23,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@studio/shared/*": ["../shared/*"],
+      "@vivd/plugin-analytics/*": ["../../plugin-analytics/src/*"],
       "@vivd/shared": ["../../shared/src/index.ts"],
       "@vivd/shared/*": ["../../shared/src/*"]
     }

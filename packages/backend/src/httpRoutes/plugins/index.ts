@@ -1,11 +1,8 @@
 import express from "express";
 import {
-  createContactFormPublicRouter,
-  type ContactFormPublicRouterDeps,
-} from "./contactForm/submit";
-import { createContactRecipientVerificationRouter } from "./contactForm/recipientVerification";
-import { createEmailFeedbackRouter } from "./contactForm/feedback";
-import { createAnalyticsPublicRouter } from "./analytics/runtime";
+  listPublicPluginRouteRegistrations,
+  type PublicPluginRouterDeps,
+} from "./registry";
 
 /**
  * Public plugin endpoints are called cross-origin from customer websites,
@@ -14,7 +11,7 @@ import { createAnalyticsPublicRouter } from "./analytics/runtime";
  * in server.ts so that plugin requests are handled entirely here.
  */
 export function createPublicPluginsRouter(
-  deps: ContactFormPublicRouterDeps,
+  deps: PublicPluginRouterDeps,
 ) {
   const router = express.Router();
 
@@ -29,9 +26,8 @@ export function createPublicPluginsRouter(
     next();
   });
 
-  router.use(createEmailFeedbackRouter());
-  router.use("/plugins", createAnalyticsPublicRouter(deps));
-  router.use("/plugins", createContactRecipientVerificationRouter());
-  router.use("/plugins", createContactFormPublicRouter(deps));
+  for (const registration of listPublicPluginRouteRegistrations(deps)) {
+    router.use(registration.mountPath, registration.router);
+  }
   return router;
 }

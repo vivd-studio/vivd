@@ -260,6 +260,7 @@ export default function ProjectFullscreen() {
     studioBootstrapAction,
     reloadNonce: studioReloadNonce,
     isStudioRecovering,
+    requestStudioRecoveryCheck,
     replaceRuntime,
     clearRuntimeOverride,
     reloadStudioIframe,
@@ -382,6 +383,7 @@ export default function ProjectFullscreen() {
     onHardRestart: (nextVersion) => {
       void handleHardRestart(nextVersion);
     },
+    onTransportDegraded: requestStudioRecoveryCheck,
   });
 
   const studioIframeSrc = useMemo(() => {

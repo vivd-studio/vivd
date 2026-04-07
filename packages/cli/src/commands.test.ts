@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const originalPreviewScreenshotFlag = process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED;
 
 const { resolveCliRuntimeMock } = vi.hoisted(() => ({
   resolveCliRuntimeMock: vi.fn(),
@@ -53,6 +55,7 @@ describe("dispatchCli", () => {
     runtime = createRuntimeMock();
     resolveCliRuntimeMock.mockReset();
     resolveCliRuntimeMock.mockReturnValue(runtime);
+    delete process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED;
   });
 
   it("shows project info with enabled plugins", async () => {
@@ -79,6 +82,7 @@ describe("dispatchCli", () => {
   });
 
   it("captures a preview screenshot and saves it under .vivd/dropped-images by default", async () => {
+    process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED = "true";
     runtime.client.mutation.mockResolvedValue({
       path: "/pricing",
       capturedUrl: "https://preview.example.test/pricing",
@@ -134,6 +138,17 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("Preview screenshot saved:");
     expect(result.human).toContain(savedPath);
     expect(result.human).toContain("Viewport: 1600x1000");
+  });
+
+  it("keeps preview screenshot commands hidden unless the feature flag is enabled", async () => {
+    const rootHelp = await dispatchCli(["help"]);
+    const previewHelp = await dispatchCli(["preview", "help"]);
+
+    expect(rootHelp.human).not.toContain("vivd preview help");
+    expect(previewHelp.human).not.toContain("vivd preview screenshot [path]");
+    await expect(dispatchCli(["preview", "screenshot", "/"])).rejects.toThrow(
+      "Unknown command: preview",
+    );
   });
 
   it("shows the publish checklist with project version context", async () => {
@@ -907,8 +922,10 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("\"email\": \"person@example.com\"");
   });
 
-  it("shows help without CMS commands", async () => {
+  it("shows help with CMS commands", async () => {
+    process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED = "true";
     const rootHelp = await dispatchCli(["help"]);
+    const cmsHelp = await dispatchCli(["cms", "help"]);
     const previewHelp = await dispatchCli(["preview", "help"]);
     const pluginsHelp = await dispatchCli(["plugins", "help"]);
     const publishHelp = await dispatchCli(["publish", "help"]);
@@ -916,8 +933,10 @@ describe("dispatchCli", () => {
     const analyticsHelp = await dispatchCli(["plugins", "analytics", "help"]);
 
     expect(rootHelp.human).toContain("vivd project info");
+    expect(rootHelp.human).toContain("vivd cms help");
     expect(rootHelp.human).toContain("vivd preview help");
-    expect(rootHelp.human).not.toContain("vivd cms");
+    expect(cmsHelp.human).toContain("vivd cms scaffold init");
+    expect(cmsHelp.human).toContain("src/content/");
     expect(previewHelp.human).toContain("vivd preview screenshot [path]");
     expect(previewHelp.human).toContain(".vivd/dropped-images/");
     expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
@@ -933,6 +952,43 @@ describe("dispatchCli", () => {
     expect(analyticsHelp.human).toContain("vivd plugins info analytics");
     expect(analyticsHelp.human).toContain("vivd plugins analytics info");
   });
+
+  it("scaffolds and validates local CMS content without a connected runtime", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-cms-"));
+
+    try {
+      const modelResult = await dispatchCli(["cms", "scaffold", "model", "products"], tempDir);
+      const entryResult = await dispatchCli(
+        ["cms", "scaffold", "entry", "products", "alpine-boot"],
+        tempDir,
+      );
+      const validateResult = await dispatchCli(["cms", "validate"], tempDir);
+      const buildResult = await dispatchCli(["cms", "build-artifacts"], tempDir);
+
+      expect(modelResult.human).toContain("CMS model scaffolded: products");
+      expect(entryResult.human).toContain("CMS entry scaffolded: products/alpine-boot");
+      expect(validateResult.human).toContain("CMS validate: ok");
+      expect(buildResult.human).toContain("CMS artifacts built.");
+      expect(
+        await fs.readFile(
+          path.join(tempDir, ".vivd", "content", "manifest.json"),
+          "utf8",
+        ),
+      ).toContain('"contentRoot": "src/content"');
+      expect(runtime.client.query).not.toHaveBeenCalled();
+      expect(runtime.client.mutation).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+afterAll(() => {
+  if (originalPreviewScreenshotFlag == null) {
+    delete process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED;
+  } else {
+    process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED = originalPreviewScreenshotFlag;
+  }
 });
 
 describe("cli args", () => {

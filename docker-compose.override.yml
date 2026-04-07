@@ -48,12 +48,28 @@ services:
             - node_modules/
             - dist/
         - action: sync
+          path: ./packages/plugin-analytics
+          target: /app/packages/plugin-analytics
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/plugin-contact-form
+          target: /app/packages/plugin-contact-form
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/theme
           target: /app/packages/theme
           ignore:
             - node_modules/
         - action: rebuild
           path: ./packages/backend/package.json
+        - action: rebuild
+          path: ./packages/plugin-analytics/package.json
+        - action: rebuild
+          path: ./packages/plugin-contact-form/package.json
         - action: rebuild
           path: ./packages/cli/package.json
         - action: rebuild
@@ -96,10 +112,18 @@ services:
             - node_modules/
             - dist/
         - action: sync
+          path: ./packages/plugin-contact-form
+          target: /app/packages/plugin-contact-form
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/backend/src
           target: /app/packages/backend/src
         - action: rebuild
           path: ./packages/plugin-analytics/package.json
+        - action: rebuild
+          path: ./packages/plugin-contact-form/package.json
         - action: rebuild
           path: ./packages/frontend/package.json
         - action: rebuild
@@ -173,8 +197,24 @@ services:
           target: /app/packages/shared
           ignore:
             - node_modules/
+        - action: sync
+          path: ./packages/plugin-analytics
+          target: /app/packages/plugin-analytics
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./packages/plugin-contact-form
+          target: /app/packages/plugin-contact-form
+          ignore:
+            - node_modules/
+            - dist/
         - action: rebuild
           path: ./packages/studio/package.json
+        - action: rebuild
+          path: ./packages/plugin-analytics/package.json
+        - action: rebuild
+          path: ./packages/plugin-contact-form/package.json
         - action: rebuild
           path: ./packages/theme/package.json
         - action: rebuild

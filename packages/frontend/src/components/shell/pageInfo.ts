@@ -1,10 +1,23 @@
+import { getProjectPluginUi } from "@/plugins/registry";
+
 export interface PageInfo {
   title: string;
   isProjectPage: boolean;
   projectSlug?: string;
   isProjectPluginsPage?: boolean;
-  isProjectAnalyticsPage?: boolean;
+  isProjectPluginPage?: boolean;
+  projectPluginId?: string;
   isScratchWizardPage?: boolean;
+}
+
+function formatPluginPageTitle(pluginId: string) {
+  const pluginUi = getProjectPluginUi(pluginId);
+  if (pluginUi?.pageTitle) return pluginUi.pageTitle;
+  if (pluginUi?.shortcut?.label) return pluginUi.shortcut.label;
+
+  const normalized = pluginId.trim().replace(/[-_]+/g, " ");
+  if (!normalized) return "Plugin";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function getPageInfo(pathname: string): PageInfo {
@@ -16,15 +29,30 @@ export function getPageInfo(pathname: string): PageInfo {
     };
   }
 
-  const projectAnalyticsMatch = pathname.match(
+  const projectPluginMatch = pathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)\/plugins\/([^/]+)(?:\/.*)?$/,
+  );
+  if (projectPluginMatch) {
+    const [, projectSlug = "", pluginId = ""] = projectPluginMatch;
+    return {
+      title: formatPluginPageTitle(decodeURIComponent(pluginId)),
+      isProjectPage: false,
+      projectSlug: decodeURIComponent(projectSlug),
+      isProjectPluginPage: true,
+      projectPluginId: decodeURIComponent(pluginId),
+    };
+  }
+
+  const legacyAnalyticsMatch = pathname.match(
     /^\/vivd-studio\/projects\/([^/]+)\/analytics$/,
   );
-  if (projectAnalyticsMatch) {
+  if (legacyAnalyticsMatch) {
     return {
-      title: "Analytics",
+      title: formatPluginPageTitle("analytics"),
       isProjectPage: false,
-      projectSlug: projectAnalyticsMatch[1],
-      isProjectAnalyticsPage: true,
+      projectSlug: decodeURIComponent(legacyAnalyticsMatch[1]),
+      isProjectPluginPage: true,
+      projectPluginId: "analytics",
     };
   }
 
@@ -68,7 +96,7 @@ export function getPageInfo(pathname: string): PageInfo {
     title: "Projects",
     isProjectPage: false,
     isProjectPluginsPage: false,
-    isProjectAnalyticsPage: false,
+    isProjectPluginPage: false,
     isScratchWizardPage: false,
   };
 }

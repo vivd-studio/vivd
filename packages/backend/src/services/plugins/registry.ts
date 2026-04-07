@@ -1,5 +1,3 @@
-import { z } from "zod";
-import type { PluginCapabilityDefinition } from "./capabilityContract";
 import {
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
@@ -7,45 +5,24 @@ import {
 import {
   analyticsPluginConfigSchema,
   type AnalyticsPluginConfig,
-} from "@vivd/plugin-analytics/backend/module";
-import { analyticsPluginModule } from "@vivd/plugin-analytics/backend/module";
+  analyticsPluginModule,
+} from "./analytics/module";
 import { contactFormPluginModule } from "./contactForm/module";
-import type { PluginModule } from "./core/module";
+import type {
+  PluginCatalogEntry as SharedPluginCatalogEntry,
+  PluginDefinition as SharedPluginDefinition,
+  PluginModule as SharedPluginModule,
+} from "@vivd/shared/types";
 
 export const PLUGIN_IDS = ["contact_form", "analytics"] as const;
 export type PluginId = (typeof PLUGIN_IDS)[number];
-export type PluginCategory = "forms" | "marketing" | "commerce" | "utility";
-export type PluginProjectPanelKind = "custom" | "generic";
-
+export type PluginDefinition = SharedPluginDefinition<PluginId>;
+export type PluginCatalogEntry = SharedPluginCatalogEntry<PluginId>;
+export type PluginModule = SharedPluginModule<PluginId>;
 export { contactFormPluginConfigSchema };
 export type { ContactFormPluginConfig };
 export { analyticsPluginConfigSchema };
 export type { AnalyticsPluginConfig };
-
-export interface PluginDefinition {
-  pluginId: PluginId;
-  name: string;
-  description: string;
-  category: PluginCategory;
-  version: number;
-  sortOrder: number;
-  configSchema: z.ZodTypeAny;
-  defaultConfig: Record<string, unknown>;
-  defaultEnabledByProfile: {
-    solo: boolean;
-    platform: boolean;
-  };
-  capabilities: PluginCapabilityDefinition;
-  listUi: {
-    projectPanel: PluginProjectPanelKind;
-    usageLabel: string;
-    limitPrompt: string;
-    supportsMonthlyLimit: boolean;
-    supportsHardStop: boolean;
-    supportsTurnstile: boolean;
-    dashboardPath: string | null;
-  };
-}
 
 const pluginModules: Record<PluginId, PluginModule> = {
   contact_form: contactFormPluginModule,
@@ -56,23 +33,6 @@ const pluginRegistry: Record<PluginId, PluginDefinition> = {
   contact_form: contactFormPluginModule.definition,
   analytics: analyticsPluginModule.definition,
 };
-
-export interface PluginCatalogEntry {
-  pluginId: PluginId;
-  name: string;
-  description: string;
-  category: PluginCategory;
-  version: number;
-  sortOrder: number;
-  capabilities: PluginCapabilityDefinition;
-  projectPanel: PluginProjectPanelKind;
-  usageLabel: string;
-  limitPrompt: string;
-  supportsMonthlyLimit: boolean;
-  supportsHardStop: boolean;
-  supportsTurnstile: boolean;
-  dashboardPath: string | null;
-}
 
 export function listPluginCatalogEntries(): PluginCatalogEntry[] {
   return listPluginDefinitions().map((plugin) => ({

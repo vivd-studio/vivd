@@ -221,6 +221,11 @@ export function useStudioRuntimeGuard({
     ],
   );
 
+  const requestRecoveryCheck = useCallback(() => {
+    if (!enabled || !studioProbeBaseUrl) return;
+    void runHealthCheck("retry-on-fail");
+  }, [enabled, runHealthCheck, studioProbeBaseUrl]);
+
   useEffect(() => {
     if (!enabled || !studioProbeBaseUrl) return;
 
@@ -266,5 +271,6 @@ export function useStudioRuntimeGuard({
 
   return {
     isRecovering,
+    requestRecoveryCheck,
   };
 }

@@ -624,11 +624,31 @@ export function StudioToolbar() {
                         setHostSidebarOpen((current) => !current);
                         postVivdHostMessage({ type: "vivd:studio:toggleSidebar" });
                       }}
+                      onPointerEnter={() => {
+                        if (hostSidebarOpen) return;
+                        postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
+                      }}
+                      onPointerLeave={() => {
+                        if (hostSidebarOpen) return;
+                        postVivdHostMessage({
+                          type: "vivd:studio:scheduleHideSidebarPeek",
+                        });
+                      }}
+                      onFocus={() => {
+                        if (hostSidebarOpen) return;
+                        postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
+                      }}
+                      onBlur={() => {
+                        if (hostSidebarOpen) return;
+                        postVivdHostMessage({
+                          type: "vivd:studio:scheduleHideSidebarPeek",
+                        });
+                      }}
                     >
                       {hostSidebarOpen ? (
                         <PanelLeft className="h-4 w-4" />
                       ) : (
-                        <SidebarBrandToggleGlyph />
+                        <SidebarBrandToggleGlyph morphOnHover={false} />
                       )}
                       <span className="sr-only">Toggle Sidebar</span>
                     </Button>

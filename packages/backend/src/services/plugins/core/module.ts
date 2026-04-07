@@ -1,37 +1,12 @@
-import type { PluginCapabilityDefinition } from "../capabilityContract";
 import type {
+  PluginInfoSourcePayload,
+  ProjectPluginInfoContractPayload,
   PluginCatalogEntry,
   PluginDefinition,
-  PluginId,
-} from "../registry";
-
-export interface ProjectPluginInfoContractPayload {
-  pluginId: PluginId;
-  catalog: PluginCatalogEntry;
-  capabilities: PluginCapabilityDefinition;
-  entitled: boolean;
-  entitlementState: "disabled" | "enabled" | "suspended";
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  config: Record<string, unknown> | null;
-  defaultConfig: Record<string, unknown>;
-  snippets: Record<string, unknown> | null;
-  usage: Record<string, unknown> | null;
-  details: Record<string, unknown> | null;
-  instructions: string[];
-}
-
-export interface ProjectPluginActionPayload {
-  pluginId: PluginId;
-  actionId: string;
-  summary: string;
-  result: unknown;
-}
+} from "@vivd/shared/types";
 
 export class UnsupportedPluginActionError extends Error {
-  constructor(pluginId: PluginId, actionId: string) {
+  constructor(pluginId: string, actionId: string) {
     super(`Plugin ${pluginId} does not support action "${actionId}"`);
     this.name = "UnsupportedPluginActionError";
   }
@@ -44,80 +19,24 @@ export class PluginActionArgumentError extends Error {
   }
 }
 
-export interface PluginOperationContext {
-  organizationId: string;
-  projectSlug: string;
-}
-
-export interface PluginUpdateConfigContext extends PluginOperationContext {
-  config: Record<string, unknown>;
-}
-
-export interface PluginActionContext extends PluginOperationContext {
-  actionId: string;
-  args: string[];
-  requestedByUserId?: string | null;
-  requestHost?: string | null;
-}
-
-export interface PluginInfoSourcePayload {
-  entitled: boolean;
-  entitlementState: "disabled" | "enabled" | "suspended";
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  config: Record<string, unknown> | null;
-  snippets: Record<string, unknown> | null;
-  usage: Record<string, unknown> | null;
-  details: Record<string, unknown> | null;
-  instructions: string[];
-}
-
-export type PluginPublicErrorCode =
-  | "BAD_REQUEST"
-  | "UNAUTHORIZED"
-  | "INTERNAL_SERVER_ERROR";
-
-export interface PluginPublicErrorPayload {
-  code: PluginPublicErrorCode;
-  message: string;
-}
-
-export interface PluginPublicErrorContext {
-  operation: "info" | "updateConfig" | "runAction";
-  error: unknown;
-  actionId?: string;
-}
-
-export interface PluginModule {
-  definition: PluginDefinition;
-  ensureInstance(options: PluginOperationContext): Promise<{
-    instanceId: string;
-    created: boolean;
-    status: string;
-  }>;
-  getInfoPayload(
-    options: PluginOperationContext,
-  ): Promise<PluginInfoSourcePayload>;
-  updateConfig(
-    options: PluginUpdateConfigContext,
-  ): Promise<PluginInfoSourcePayload>;
-  runAction?(
-    options: PluginActionContext,
-  ): Promise<ProjectPluginActionPayload>;
-  mapPublicError?(
-    context: PluginPublicErrorContext,
-  ): PluginPublicErrorPayload | null;
-}
+export type {
+  PluginModule,
+  PluginOperationContext,
+  PluginPublicErrorContext,
+  PluginPublicErrorPayload,
+  PluginUpdateConfigContext,
+  ProjectPluginActionPayload,
+  PluginInfoSourcePayload,
+  ProjectPluginInfoContractPayload,
+} from "@vivd/shared/types";
 
 function clonePlainObject<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-export function toPluginCatalogEntry(
-  definition: PluginDefinition,
-): PluginCatalogEntry {
+export function toPluginCatalogEntry<TPluginId extends string>(
+  definition: PluginDefinition<TPluginId>,
+): PluginCatalogEntry<TPluginId> {
   return {
     pluginId: definition.pluginId,
     name: definition.name,
@@ -136,10 +55,10 @@ export function toPluginCatalogEntry(
   };
 }
 
-export function buildPluginInfoContractPayload(
-  definition: PluginDefinition,
+export function buildPluginInfoContractPayload<TPluginId extends string>(
+  definition: PluginDefinition<TPluginId>,
   payload: PluginInfoSourcePayload,
-): ProjectPluginInfoContractPayload {
+): ProjectPluginInfoContractPayload<TPluginId> {
   const catalog = toPluginCatalogEntry(definition);
   return {
     pluginId: definition.pluginId,

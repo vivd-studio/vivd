@@ -118,6 +118,79 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.onHardRestart).toHaveBeenCalledWith(7);
   });
 
+  it("forwards sidebar peek lifecycle requests from the studio iframe", async () => {
+    const onShowSidebarPeek = vi.fn();
+    const onScheduleHideSidebarPeek = vi.fn();
+    const props = createLifecycleProps({
+      onShowSidebarPeek,
+      onScheduleHideSidebarPeek,
+    });
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = { location: { pathname: "/vivd-studio" } };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:showSidebarPeek" },
+          origin: "https://app.example.com",
+          source: frameWindow as unknown as MessageEventSource,
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:studio:scheduleHideSidebarPeek" },
+          origin: "https://app.example.com",
+          source: frameWindow as unknown as MessageEventSource,
+        }),
+      );
+    });
+
+    expect(onShowSidebarPeek).toHaveBeenCalledTimes(1);
+    expect(onScheduleHideSidebarPeek).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards transport-degraded signals from the studio iframe", async () => {
+    const onTransportDegraded = vi.fn();
+    const props = createLifecycleProps({
+      onTransportDegraded,
+    });
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameWindow = { location: { pathname: "/vivd-studio" } };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            type: "vivd:studio:transport-degraded",
+            transport: "trpc-http",
+            reason: "timeout",
+          },
+          origin: "https://app.example.com",
+          source: frameWindow as unknown as MessageEventSource,
+        }),
+      );
+    });
+
+    expect(onTransportDegraded).toHaveBeenCalledWith({
+      transport: "trpc-http",
+      reason: "timeout",
+    });
+  });
+
   it("keeps requesting a ready handshake for cross-origin iframes until the studio responds", async () => {
     const props = createLifecycleProps({
       studioBaseUrl: "https://studio.example.com/runtime",

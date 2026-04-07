@@ -1,19 +1,12 @@
-import type { PluginDefinition } from "@vivd/backend/src/services/plugins/registry";
 import type {
-  PluginPublicErrorContext,
+  PluginDefinition,
   PluginInfoSourcePayload,
   PluginModule,
   PluginOperationContext,
+  PluginPublicErrorContext,
   PluginUpdateConfigContext,
-} from "@vivd/backend/src/services/plugins/core/module";
-import {
-  analyticsPluginConfigSchema,
-  type AnalyticsPluginConfig,
-} from "@vivd/backend/src/services/plugins/analytics/config";
-import {
-  AnalyticsPluginNotEnabledError,
-  analyticsPluginService,
-} from "@vivd/backend/src/services/plugins/analytics/service";
+} from "@vivd/shared/types";
+import { analyticsPluginConfigSchema, type AnalyticsPluginConfig } from "./config";
 
 export const analyticsPluginDefinition = {
   pluginId: "analytics",
@@ -48,12 +41,49 @@ export const analyticsPluginDefinition = {
     supportsTurnstile: false,
     dashboardPath: "/analytics",
   },
-} satisfies PluginDefinition;
+} satisfies PluginDefinition<"analytics">;
 
-async function getAnalyticsInfoPayload(
-  options: PluginOperationContext,
-): Promise<PluginInfoSourcePayload> {
-  const info = await analyticsPluginService.getAnalyticsInfo(options);
+export interface AnalyticsPluginInfoSource {
+  entitled: boolean;
+  entitlementState: "disabled" | "enabled" | "suspended";
+  enabled: boolean;
+  instanceId: string | null;
+  status: string | null;
+  publicToken: string | null;
+  config: AnalyticsPluginConfig | null;
+  snippets: {
+    html: string;
+    astro: string;
+  } | null;
+  usage: {
+    scriptEndpoint: string;
+    trackEndpoint: string;
+    eventTypes: string[];
+    respectDoNotTrack: boolean;
+    captureQueryString: boolean;
+    enableClientTracking: boolean;
+  };
+  instructions: string[];
+}
+
+export interface AnalyticsPluginBackendRuntime {
+  ensurePlugin(options: PluginOperationContext): Promise<{
+    instanceId: string;
+    created: boolean;
+    status: string;
+  }>;
+  getInfo(options: PluginOperationContext): Promise<AnalyticsPluginInfoSource>;
+  updateConfig(options: {
+    organizationId: string;
+    projectSlug: string;
+    config: AnalyticsPluginConfig;
+  }): Promise<AnalyticsPluginInfoSource>;
+  isNotEnabledError(error: unknown): boolean;
+}
+
+function toAnalyticsInfoPayload(
+  info: AnalyticsPluginInfoSource,
+): PluginInfoSourcePayload {
   return {
     entitled: info.entitled,
     entitlementState: info.entitlementState,
@@ -69,43 +99,40 @@ async function getAnalyticsInfoPayload(
   };
 }
 
-async function updateAnalyticsConfigPayload(
-  options: PluginUpdateConfigContext,
-): Promise<PluginInfoSourcePayload> {
-  await analyticsPluginService.updateAnalyticsConfig({
-    organizationId: options.organizationId,
-    projectSlug: options.projectSlug,
-    config: analyticsPluginConfigSchema.parse(options.config),
-  });
-  return getAnalyticsInfoPayload(options);
+export function createAnalyticsPluginModule(
+  runtime: AnalyticsPluginBackendRuntime,
+): PluginModule<"analytics"> {
+  return {
+    definition: analyticsPluginDefinition,
+    ensureInstance(options) {
+      return runtime.ensurePlugin(options);
+    },
+    async getInfoPayload(options) {
+      return toAnalyticsInfoPayload(await runtime.getInfo(options));
+    },
+    async updateConfig(options: PluginUpdateConfigContext) {
+      return toAnalyticsInfoPayload(
+        await runtime.updateConfig({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          config: analyticsPluginConfigSchema.parse(options.config),
+        }),
+      );
+    },
+    mapPublicError(context: PluginPublicErrorContext) {
+      if (runtime.isNotEnabledError(context.error)) {
+        return {
+          code: "UNAUTHORIZED",
+          message:
+            context.error instanceof Error
+              ? context.error.message
+              : "Analytics plugin is not enabled for this project.",
+        };
+      }
+      return null;
+    },
+  };
 }
-
-function mapAnalyticsPublicError(
-  context: PluginPublicErrorContext,
-) {
-  if (context.error instanceof AnalyticsPluginNotEnabledError) {
-    return {
-      code: "UNAUTHORIZED" as const,
-      message: context.error.message,
-    };
-  }
-  return null;
-}
-
-export const analyticsPluginModule: PluginModule = {
-  definition: analyticsPluginDefinition,
-  async ensureInstance(options) {
-    const result = await analyticsPluginService.ensureAnalyticsPlugin(options);
-    return {
-      instanceId: result.instanceId,
-      created: result.created,
-      status: result.status,
-    };
-  },
-  getInfoPayload: getAnalyticsInfoPayload,
-  updateConfig: updateAnalyticsConfigPayload,
-  mapPublicError: mapAnalyticsPublicError,
-};
 
 export { analyticsPluginConfigSchema };
 export type { AnalyticsPluginConfig };

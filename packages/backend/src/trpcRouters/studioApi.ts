@@ -29,7 +29,6 @@ import {
   projectPluginService,
 } from "../services/plugins/ProjectPluginService";
 import { studioMachineProvider } from "../services/studioMachines";
-import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
 import { PLUGIN_IDS } from "../services/plugins/registry";
 import type { ChecklistItem, ChecklistStatus } from "../types/checklistTypes";
 import {
@@ -176,61 +175,6 @@ const projectInfoInputSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 const pluginIdSchema = z.enum(PLUGIN_IDS);
-
-function toLegacyContactPluginInfoResponse(
-  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
-) {
-  const recipients =
-    info.details &&
-    typeof info.details === "object" &&
-    "recipients" in info.details
-      ? info.details.recipients
-      : { options: [], pending: [] };
-
-  return {
-    pluginId: "contact_form" as const,
-    entitled: info.entitled,
-    entitlementState: info.entitlementState,
-    enabled: info.enabled,
-    instanceId: info.instanceId,
-    status: info.status,
-    publicToken: info.publicToken,
-    config: info.config,
-    usage: info.usage,
-    recipients,
-    instructions: info.instructions,
-  };
-}
-
-function toLegacyAnalyticsPluginInfoResponse(
-  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
-) {
-  return {
-    pluginId: "analytics" as const,
-    entitled: info.entitled,
-    entitlementState: info.entitlementState,
-    enabled: info.enabled,
-    instanceId: info.instanceId,
-    status: info.status,
-    publicToken: info.publicToken,
-    usage: info.usage,
-    instructions: info.instructions,
-  };
-}
-
-function toLegacyUpdatedPluginPayload(
-  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
-) {
-  return {
-    pluginId: info.pluginId,
-    instanceId: info.instanceId ?? "",
-    status: info.status ?? (info.enabled ? "enabled" : "disabled"),
-    created: false,
-    publicToken: info.publicToken ?? "",
-    config: info.config ?? {},
-    snippets: info.snippets ?? {},
-  };
-}
 
 async function buildProjectInfo(options: {
   organizationId: string;
@@ -490,56 +434,6 @@ export const studioApiRouter = router({
       });
     }),
 
-  getProjectContactPluginInfo: studioProjectProcedure
-    .input(
-      z.object({
-        studioId: z.string(),
-        slug: z.string().min(1),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const info = await getProjectPluginInfo({
-        organizationId: ctx.organizationId!,
-        projectSlug: input.slug,
-        pluginId: "contact_form",
-      });
-      return toLegacyContactPluginInfoResponse(info);
-    }),
-
-  getProjectAnalyticsPluginInfo: studioProjectProcedure
-    .input(
-      z.object({
-        studioId: z.string(),
-        slug: z.string().min(1),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const info = await getProjectPluginInfo({
-        organizationId: ctx.organizationId!,
-        projectSlug: input.slug,
-        pluginId: "analytics",
-      });
-      return toLegacyAnalyticsPluginInfoResponse(info);
-    }),
-
-  updateProjectContactPluginConfig: studioProjectProcedure
-    .input(
-      z.object({
-        studioId: z.string(),
-        slug: z.string().min(1),
-        config: contactFormPluginConfigSchema,
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const info = await updateProjectPluginConfig({
-        organizationId: ctx.organizationId!,
-        projectSlug: input.slug,
-        pluginId: "contact_form",
-        config: input.config,
-      });
-      return toLegacyUpdatedPluginPayload(info);
-    }),
-
   updateProjectPluginConfig: studioProjectProcedure
     .input(
       z.object({
@@ -556,30 +450,6 @@ export const studioApiRouter = router({
         pluginId: input.pluginId,
         config: input.config,
       });
-    }),
-
-  requestProjectContactRecipientVerification: studioProjectProcedure
-    .input(
-      z.object({
-        studioId: z.string(),
-        slug: z.string().min(1),
-        email: z.string().trim().min(1),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const result = await runProjectPluginAction({
-        organizationId: ctx.organizationId!,
-        projectSlug: input.slug,
-        pluginId: "contact_form",
-        actionId: "verify_recipient",
-        args: [input.email],
-        requestedByUserId: ctx.session?.user.id ?? null,
-        requestHost:
-          ctx.requestHost ??
-          extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
-          extractRequestHost(ctx.req.headers.host),
-      });
-      return result.result;
     }),
 
   runProjectPluginAction: studioProjectProcedure

@@ -129,6 +129,102 @@ export function formatPreviewScreenshotReport(input: {
   ].join("\n");
 }
 
+export function formatCmsStatusReport(input: {
+  initialized: boolean;
+  valid: boolean;
+  contentRoot: string;
+  modelCount: number;
+  entryCount: number;
+  assetCount: number;
+  mediaFileCount: number;
+  models: Array<{
+    key: string;
+    label: string;
+    entries: Array<unknown>;
+  }>;
+  errors: string[];
+}): string {
+  const lines = [
+    `CMS root: ${input.contentRoot}`,
+    `Initialized: ${input.initialized ? "yes" : "no"}`,
+    `Validation: ${input.valid ? "ok" : "failed"}`,
+    `Models: ${input.modelCount}`,
+    `Entries: ${input.entryCount}`,
+    `Asset refs: ${input.assetCount}`,
+    `Media files: ${input.mediaFileCount}`,
+  ];
+
+  if (input.models.length > 0) {
+    lines.push("Models:");
+    lines.push(
+      ...input.models.map(
+        (model) => `- ${model.key} (${model.label}) - ${model.entries.length} entr${model.entries.length === 1 ? "y" : "ies"}`,
+      ),
+    );
+  }
+
+  if (input.errors.length > 0) {
+    lines.push("Errors:");
+    lines.push(...input.errors.map((error) => `- ${error}`));
+  } else {
+    lines.push("Errors: none");
+  }
+
+  return lines.join("\n");
+}
+
+export function formatCmsValidateReport(input: {
+  valid: boolean;
+  modelCount: number;
+  entryCount: number;
+  assetCount: number;
+  errors: string[];
+}): string {
+  if (input.valid) {
+    return [
+      "CMS validate: ok",
+      `Models: ${input.modelCount}`,
+      `Entries: ${input.entryCount}`,
+      `Asset refs: ${input.assetCount}`,
+    ].join("\n");
+  }
+
+  return ["CMS validate: failed", ...input.errors.map((error) => `- ${error}`)].join("\n");
+}
+
+export function formatCmsScaffoldReport(input: {
+  title: string;
+  created: string[];
+  skipped: string[];
+}): string {
+  return [
+    input.title,
+    "Created:",
+    ...(input.created.length > 0 ? input.created.map((value) => `- ${value}`) : ["- none"]),
+    "Skipped:",
+    ...(input.skipped.length > 0 ? input.skipped.map((value) => `- ${value}`) : ["- none"]),
+  ].join("\n");
+}
+
+export function formatCmsBuildArtifactsReport(input: {
+  outputDir: string;
+  manifestPath: string;
+  modelCount: number;
+  entryCount: number;
+  assetCount: number;
+  mediaFileCount: number;
+}): string {
+  return [
+    "CMS artifacts built.",
+    `Output: ${input.outputDir}`,
+    `Manifest: ${input.manifestPath}`,
+    `Models: ${input.modelCount}`,
+    `Entries: ${input.entryCount}`,
+    `Asset refs: ${input.assetCount}`,
+    `Media files copied: ${input.mediaFileCount}`,
+  ].join("\n");
+}
+
 export function formatPluginCatalogReport(input: {
   available: Array<{
     pluginId: string;
@@ -301,181 +397,6 @@ export function formatGenericPluginActionReport(input: {
     `Action: ${input.actionId}`,
     formatJson(input.result),
   ].join("\n");
-}
-
-export function formatContactPluginReport(input: {
-  entitled: boolean;
-  entitlementState: string;
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  config: {
-    recipientEmails?: string[];
-    sourceHosts?: string[];
-    redirectHostAllowlist?: string[];
-    formFields?: Array<{
-      key: string;
-      label?: string;
-      type?: string;
-      required?: boolean;
-    }>;
-  } | null;
-  usage: {
-    submitEndpoint: string;
-    expectedFields: string[];
-    optionalFields: string[];
-    inferredAutoSourceHosts: string[];
-    turnstileEnabled: boolean;
-    turnstileConfigured: boolean;
-  };
-  recipients: {
-    options: Array<{
-      email: string;
-      isVerified: boolean;
-      isPending: boolean;
-    }>;
-    pending: Array<{
-      email: string;
-      lastSentAt: string | null;
-    }>;
-  };
-  instructions: string[];
-}): string {
-  const configuredRecipients = input.config?.recipientEmails ?? [];
-  const formFields = input.config?.formFields ?? [];
-  const recipientLines =
-    input.recipients.options.length > 0
-      ? input.recipients.options.map((recipient) => {
-          if (recipient.isVerified) {
-            return `- ${recipient.email} [verified]`;
-          }
-          if (recipient.isPending) {
-            const pending = input.recipients.pending.find((row) => row.email === recipient.email);
-            const lastSentAt = pending?.lastSentAt ? `, last sent ${pending.lastSentAt}` : "";
-            return `- ${recipient.email} [pending${lastSentAt}]`;
-          }
-          return `- ${recipient.email}`;
-        })
-      : ["- none"];
-
-  return [
-    `Entitled: ${input.entitled ? "yes" : "no"} (${input.entitlementState})`,
-    `Enabled: ${input.enabled ? "yes" : "no"}`,
-    formatStatusLine("Instance", input.instanceId),
-    formatStatusLine("Status", input.status),
-    formatStatusLine("Public token", input.publicToken),
-    `Submit endpoint: ${input.usage.submitEndpoint}`,
-    `Expected fields: ${input.usage.expectedFields.length > 0 ? input.usage.expectedFields.join(", ") : "none"}`,
-    `Optional fields: ${input.usage.optionalFields.length > 0 ? input.usage.optionalFields.join(", ") : "none"}`,
-    `Inferred auto-source hosts: ${
-      input.usage.inferredAutoSourceHosts.length > 0
-        ? input.usage.inferredAutoSourceHosts.join(", ")
-        : "none"
-    }`,
-    `Turnstile: ${
-      input.usage.turnstileEnabled
-        ? input.usage.turnstileConfigured
-          ? "enabled and configured"
-          : "enabled, waiting on configuration"
-        : "disabled"
-    }`,
-    `Configured recipients: ${configuredRecipients.length > 0 ? configuredRecipients.join(", ") : "none"}`,
-    `Form fields: ${formFields.length > 0 ? formFields.map((field) => field.key).join(", ") : "none"}`,
-    "Recipient directory:",
-    ...recipientLines,
-    "Instructions:",
-    ...formatInstructionLines(input.instructions),
-  ].join("\n");
-}
-
-export function formatContactConfigReport(input: {
-  projectSlug: string;
-  config: {
-    recipientEmails?: string[];
-    sourceHosts?: string[];
-    redirectHostAllowlist?: string[];
-    formFields?: Array<{
-      key: string;
-      label?: string;
-      type?: string;
-      required?: boolean;
-      placeholder?: string;
-      rows?: number;
-    }>;
-  } | null;
-  enabled: boolean;
-  entitled: boolean;
-}): string {
-  if (!input.config) {
-    return [
-      `Contact config for ${input.projectSlug}`,
-      "No saved contact config exists for this project yet.",
-      `Plugin enabled: ${input.enabled ? "yes" : "no"}`,
-      `Plugin entitled: ${input.entitled ? "yes" : "no"}`,
-      "Use `vivd plugins contact config template` to print a valid config payload.",
-    ].join("\n");
-  }
-
-  return [
-    `Contact config for ${input.projectSlug}`,
-    formatJson(input.config),
-    "",
-    "Apply updates with `vivd plugins contact config apply --file -` or a JSON file path.",
-  ].join("\n");
-}
-
-export function formatContactConfigTemplateReport(input: {
-  recipientEmails: string[];
-  sourceHosts: string[];
-  redirectHostAllowlist: string[];
-  formFields: Array<{
-    key: string;
-    label: string;
-    type: string;
-    required: boolean;
-    placeholder: string;
-    rows?: number;
-  }>;
-}): string {
-  return [
-    "Contact config template",
-    formatJson(input),
-    "",
-    "Pipe this into `vivd plugins contact config apply --file -` or save it to a JSON file first.",
-  ].join("\n");
-}
-
-export function formatContactConfigUpdateReport(projectSlug: string): string {
-  return [
-    `Contact plugin config updated for ${projectSlug}`,
-    "Review it with `vivd plugins contact config show`.",
-  ].join("\n");
-}
-
-export function formatContactRecipientVerificationReport(input: {
-  email: string;
-  status:
-    | "already_verified"
-    | "added_verified"
-    | "verification_sent"
-    | "verification_pending";
-  cooldownRemainingSeconds: number;
-}): string {
-  const statusLine =
-    input.status === "already_verified"
-      ? "already verified"
-      : input.status === "added_verified"
-        ? "verified and added to the contact config"
-        : input.status === "verification_sent"
-          ? "verification email sent"
-          : "verification already pending";
-
-  const lines = [`Recipient: ${input.email}`, `Status: ${statusLine}`];
-  if (input.status === "verification_pending" && input.cooldownRemainingSeconds > 0) {
-    lines.push(`Cooldown remaining: ${input.cooldownRemainingSeconds}s`);
-  }
-  return lines.join("\n");
 }
 
 export function formatPublishChecklistReport(input: {

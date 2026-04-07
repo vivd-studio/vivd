@@ -23,7 +23,7 @@ describe("brand titles", () => {
       "Acme Studio · Vivd",
     );
     expect(
-      getRouteDocumentTitle("/vivd-studio/projects/acme-studio/analytics"),
+      getRouteDocumentTitle("/vivd-studio/projects/acme-studio/plugins/analytics"),
     ).toBe("Acme Studio Analytics · Vivd");
     expect(
       getRouteDocumentTitle("/vivd-studio/projects/acme-studio/fullscreen"),

@@ -39,6 +39,9 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain(".vivd/uploads/");
     expect(prompt).toContain(".vivd/dropped-images/");
     expect(prompt).toContain("Treat both as working material");
+    expect(prompt).toContain("Structured CMS content");
+    expect(prompt).toContain("src/content/vivd.content.yaml");
+    expect(prompt).toContain("vivd cms validate");
     expect(prompt).toContain("Redirects for migrated URLs");
     expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
     expect(prompt).toContain("Prefer plugin-backed solutions over custom implementations");

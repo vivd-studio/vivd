@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { RouteLoadingIndicator } from "@/components/common";
 import { authClient } from "@/lib/auth-client";
 import { ROUTES } from "./paths";
@@ -27,7 +27,6 @@ const StudioFullscreen = lazy(() => import("@/pages/StudioFullscreen"));
 const ScratchWizard = lazy(() => import("@/pages/ScratchWizard"));
 const NoProjectAssigned = lazy(() => import("@/pages/NoProjectAssigned"));
 const ProjectPlugins = lazy(() => import("@/pages/ProjectPlugins"));
-const ProjectAnalytics = lazy(() => import("@/pages/ProjectAnalytics"));
 const ProjectPluginPage = lazy(() => import("@/pages/ProjectPluginPage"));
 const Layout = lazy(() =>
   import("@/components/shell/Layout").then((module) => ({
@@ -95,16 +94,6 @@ function ProjectPluginsRoute() {
   );
 }
 
-function ProjectAnalyticsRoute() {
-  return (
-    <RequireAssignedProject>
-      <RouteSuspense>
-        <ProjectAnalytics />
-      </RouteSuspense>
-    </RequireAssignedProject>
-  );
-}
-
 function ProjectPluginRoute() {
   return (
     <RequireAssignedProject>
@@ -113,6 +102,15 @@ function ProjectPluginRoute() {
       </RouteSuspense>
     </RequireAssignedProject>
   );
+}
+
+function ProjectAnalyticsRedirect() {
+  const { projectSlug } = useParams<{ projectSlug: string }>();
+  if (!projectSlug) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
+  }
+
+  return <Navigate to={ROUTES.PROJECT_PLUGIN(projectSlug, "analytics")} replace />;
 }
 
 /**
@@ -337,7 +335,10 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
           path="projects/:projectSlug/plugins/:pluginId/*"
           element={<ProjectPluginRoute />}
         />
-        <Route path="projects/:projectSlug/analytics" element={<ProjectAnalyticsRoute />} />
+        <Route
+          path="projects/:projectSlug/analytics"
+          element={<ProjectAnalyticsRedirect />}
+        />
       </Route>
 
       {/* Fullscreen project view (no layout chrome) */}

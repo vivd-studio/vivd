@@ -6,5 +6,8 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  noExternal: [/^@vivd\/plugin-analytics(\/.*)?$/],
+  noExternal: [
+    /^@vivd\/plugin-analytics(\/.*)?$/,
+    /^@vivd\/plugin-contact-form(\/.*)?$/,
+  ],
 });

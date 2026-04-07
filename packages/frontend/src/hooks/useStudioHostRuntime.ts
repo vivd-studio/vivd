@@ -164,14 +164,15 @@ export function useStudioHostRuntime({
   const studioBaseUrl = selectBrowserStudioBaseUrl(studioRuntime);
   const studioHostProbeBaseUrl = selectHostProbeStudioBaseUrl(studioRuntime);
 
-  const { isRecovering: isStudioRecovering } = useStudioRuntimeGuard({
-    enabled: Boolean(studioHostProbeBaseUrl),
-    studioProbeBaseUrl: studioHostProbeBaseUrl,
-    touchStudio,
-    ensureStudioRunning,
-    onRecovered: handleStudioRecovered,
-    onRecoveryError,
-  });
+  const { isRecovering: isStudioRecovering, requestRecoveryCheck } =
+    useStudioRuntimeGuard({
+      enabled: Boolean(studioHostProbeBaseUrl),
+      studioProbeBaseUrl: studioHostProbeBaseUrl,
+      touchStudio,
+      ensureStudioRunning,
+      onRecovered: handleStudioRecovered,
+      onRecoveryError,
+    });
 
   const studioRuntimeUrl = studioRuntime?.runtimeUrl ?? studioRuntime?.url ?? null;
   const studioBootstrapToken = studioRuntime?.bootstrapToken ?? null;
@@ -194,6 +195,7 @@ export function useStudioHostRuntime({
     studioBootstrapAction,
     reloadNonce,
     isStudioRecovering,
+    requestStudioRecoveryCheck: requestRecoveryCheck,
     replaceRuntime,
     clearRuntimeOverride,
     reloadStudioIframe,

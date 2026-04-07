@@ -5,11 +5,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./backend/config": "./src/backend/config.ts",
     "./backend/module": "./src/backend/module.ts",
-    "./backend/router": "./src/backend/router.ts",
+    "./backend/publicApi": "./src/backend/publicApi.ts",
+    "./backend/service": "./src/backend/service.ts",
+    "./backend/snippets": "./src/backend/snippets.ts",
+    "./backend/http/runtime": "./src/backend/http/runtime.ts",
     "./cli/module": "./src/cli/module.ts",
     "./frontend/module": "./src/frontend/module.ts",
-    "./frontend/AnalyticsProjectPage": "./src/frontend/AnalyticsProjectPage.tsx"
+    "./frontend/AnalyticsProjectPage": "./src/frontend/AnalyticsProjectPage.tsx",
+    "./shared/projectUi": "./src/shared/projectUi.ts"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"

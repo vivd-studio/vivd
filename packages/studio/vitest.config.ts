@@ -31,6 +31,14 @@ export default defineConfig({
         find: /^@vivd\/shared$/,
         replacement: path.resolve(__dirname, "../shared/src/index.ts"),
       },
+      {
+        find: /^@vivd\/plugin-analytics\/(.*)$/,
+        replacement: path.resolve(__dirname, "../plugin-analytics/src/$1"),
+      },
+      {
+        find: /^@vivd\/plugin-contact-form\/(.*)$/,
+        replacement: path.resolve(__dirname, "../plugin-contact-form/src/$1"),
+      },
     ],
   },
   test: {

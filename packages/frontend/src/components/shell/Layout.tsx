@@ -28,7 +28,7 @@ export function Layout() {
     : pageInfo.title;
   const isEmbeddedProjectPanel =
     new URLSearchParams(location.search).get("embedded") === "1" &&
-    (pageInfo.isProjectPluginsPage || pageInfo.isProjectAnalyticsPage);
+    (pageInfo.isProjectPluginsPage || pageInfo.isProjectPluginPage);
   const showNewProjectButton =
     pageTitle === "Projects" && !pageInfo.isProjectPage;
 
@@ -97,7 +97,7 @@ export function Layout() {
                             <BreadcrumbPage>Plugins</BreadcrumbPage>
                           </BreadcrumbItem>
                         </>
-                      ) : pageInfo.isProjectAnalyticsPage && pageInfo.projectSlug ? (
+                      ) : pageInfo.isProjectPluginPage && pageInfo.projectSlug ? (
                         <>
                           <BreadcrumbItem>
                             <HeaderBreadcrumbTextLink to={ROUTES.DASHBOARD}>
@@ -114,7 +114,15 @@ export function Layout() {
                           </BreadcrumbItem>
                           <BreadcrumbSeparator />
                           <BreadcrumbItem>
-                            <BreadcrumbPage>Analytics</BreadcrumbPage>
+                            <HeaderBreadcrumbTextLink
+                              to={ROUTES.PROJECT_PLUGINS(pageInfo.projectSlug)}
+                            >
+                              Plugins
+                            </HeaderBreadcrumbTextLink>
+                          </BreadcrumbItem>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            <BreadcrumbPage>{pageInfo.title}</BreadcrumbPage>
                           </BreadcrumbItem>
                         </>
                       ) : pageInfo.isScratchWizardPage ? (

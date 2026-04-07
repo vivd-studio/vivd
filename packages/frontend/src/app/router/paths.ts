@@ -41,7 +41,7 @@ export const ROUTES = {
       subpath ? `/${subpath.replace(/^\/+/, "")}` : ""
     }` as const,
   PROJECT_ANALYTICS: (slug: string) =>
-    `/vivd-studio/projects/${slug}/analytics` as const,
+    ROUTES.PROJECT_PLUGIN(slug, "analytics"),
   PROJECT_FULLSCREEN: (slug: string) =>
     `/vivd-studio/projects/${slug}/fullscreen` as const,
   PROJECT_STUDIO_FULLSCREEN: (slug: string) =>

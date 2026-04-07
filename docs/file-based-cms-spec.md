@@ -1,13 +1,13 @@
 # File-Based CMS Spec
 
 Status: Draft  
-Last updated: 2026-04-06
+Last updated: 2026-04-07
 
 This document is a fresh planning pass for Vivd CMS and supersedes the earlier DB-first/CLI-first leaning in `docs/headless-cms-agent-plan.md`.
 
 ## Summary
 
-Vivd should treat CMS content for build-backed projects as project-owned files under a canonical `content/` directory.
+Vivd should treat CMS content for build-backed projects as project-owned files under a canonical `src/content/` directory.
 
 The source of truth should be:
 
@@ -56,6 +56,7 @@ Required in v1:
 - active/inactive entry states
 - CLI validation, status, and scaffolding for the collection-first contract
 - Astro adapter/build integration for collection content
+- Astro starters and scratch-generated Astro projects should be able to include the default CMS folder structure from day one, even if no meaningful collections have been added yet
 
 Explicitly out of scope for v1:
 
@@ -69,6 +70,7 @@ Explicitly out of scope for v1:
 - Do not make the control-plane DB the canonical CMS source of truth.
 - Do not make the `vivd` CLI the only way to mutate content.
 - Do not require a Vivd-private runtime package that only exists inside the platform.
+- Do not model the CMS as an optional Vivd plugin.
 - Do not build a full human-facing schema designer in v1.
 - Do not solve every framework at once; v1 should focus on Astro/build-backed projects.
 - Do not promise fully generic visual page-building from schemas alone.
@@ -90,6 +92,8 @@ Explicitly out of scope for v1:
 The broader architecture should still leave room for later singleton and page-backed model kinds without forcing a contract reset.
 
 The Studio editor contract should be schema-rendered rather than hand-authored per collection type. Adding or changing a collection schema should be enough for the UI to render the corresponding editing controls, subject to the supported field types of the current release.
+
+The CMS should be available by default in Astro-backed Vivd projects, but usage should stay selective. The product should not force all content into collection models; collection-backed CMS content is for domains where structured, repeatable, or user-managed data adds real value.
 
 ### Non-Functional
 
@@ -114,7 +118,7 @@ Why:
 
 Vivd should add only a thin adapter on top:
 
-- load the file-based CMS contract from `content/`
+- load the file-based CMS contract from `src/content/`
 - validate and normalize it
 - expose generated helpers/runtime files for project code
 
@@ -130,31 +134,41 @@ Reasons:
 
 ## Core Decision
 
-Canonical CMS content lives in a project-root `content/` directory.
+The CMS should be a core Vivd feature, not a plugin.
+
+Why:
+
+- it defines project source-of-truth content
+- it affects preview/build behavior directly
+- it must be available as part of the standard Studio editing surface
+- it is more like pages/assets/content structure than an optional project capability
+
+Canonical CMS content should live in `src/content/` for Astro-backed projects.
 
 Recommended top-level structure:
 
 ```text
-content/
-  vivd.content.yaml
-  models/
-    products.yaml
-    categories.yaml
-  collections/
-    products/
-      alpine-boot/
-        index.yaml
-        description.en.md
-        description.de.md
-    categories/
-      winter-boots/
-        index.yaml
-  media/
-    products/
-      alpine-boot/
-        hero.jpg
-        datasheet-en.pdf
-        datasheet-de.pdf
+src/
+  content/
+    vivd.content.yaml
+    models/
+      products.yaml
+      categories.yaml
+    collections/
+      products/
+        alpine-boot/
+          index.yaml
+          description.en.md
+          description.de.md
+      categories/
+        winter-boots/
+          index.yaml
+    media/
+      products/
+        alpine-boot/
+          hero.jpg
+          datasheet-en.pdf
+          datasheet-de.pdf
 ```
 
 Derived artifacts should live outside the canonical content tree, for example:
@@ -170,16 +184,61 @@ Derived artifacts should live outside the canonical content tree, for example:
 
 Rule:
 
-- `content/` is canonical and may be edited by humans, the agent, and Studio UI
+- `src/content/` is canonical and may be edited by humans, the agent, and Studio UI
 - `.vivd/content/` is generated and must not be hand-edited
 
 Future model kinds such as `singletons/` or `pages/` can be added later without changing the collection-first v1 contract.
+
+## Starter Integration
+
+Astro starters, project templates, and scratch-generated Astro projects should be able to scaffold the CMS structure by default.
+
+Recommended default scaffold:
+
+- `src/content/vivd.content.yaml`
+- `src/content/models/`
+- `src/content/collections/`
+- `src/content/media/`
+
+The default scaffold does not need to ship real business collections in every project. An empty or minimal ready-to-use structure is enough as long as:
+
+- the agent can discover that CMS content belongs there
+- Studio can detect that the project supports the CMS contract
+- later collection models can be added without restructuring the project
+
+## When To Use CMS
+
+The CMS should be the default available content system in Astro-backed Vivd projects, but not every piece of site content needs to be modeled in it.
+
+Use collection-backed CMS content when the content is:
+
+- repeatable across many entries
+- structured enough to benefit from schema validation
+- likely to be edited by non-technical users in Studio
+- likely to be listed, filtered, reordered, localized, or rendered in multiple places
+
+Good v1 examples:
+
+- product catalogs
+- blog/article listings
+- team directories
+- testimonials
+- downloads/resources libraries
+- events or case studies
+
+Do not force collection-backed CMS modeling by default for:
+
+- one-off layout wrappers
+- purely presentational component structure
+- small static marketing copy that is tightly coupled to a single page section and not expected to be managed as data
+
+The agent instructions should steer toward that same rule: use the CMS for structured, repeatable, user-managed content, and keep page/component code for one-off presentational content unless the user or project structure clearly calls for a CMS model.
 
 ## File Contract
 
 ### Root Config
 
-`content/vivd.content.yaml` should declare global CMS configuration:
+`src/content/vivd.content.yaml` should declare global CMS configuration:
 
 ```yaml
 version: 1
@@ -276,7 +335,7 @@ Each entry should live in its own directory when the schema uses `entryFormat: d
 Example:
 
 ```yaml
-# content/collections/products/alpine-boot/index.yaml
+# src/content/collections/products/alpine-boot/index.yaml
 slug: alpine-boot
 status: active
 sku: BOOT-001
@@ -344,7 +403,7 @@ Rules:
 
 ## Media And File Attachments
 
-Binary assets should live under `content/media/`.
+Binary assets should live under `src/content/media/`.
 
 Asset fields should reference those files by relative path, and validation should verify:
 
@@ -368,7 +427,7 @@ Rules:
 Important separation:
 
 - `locales/*.json` or `src/locales/*.json` remain the right place for site chrome and UI strings
-- `content/` is the right place for structured CMS content such as products, services, downloads, bios, and long-form page copy
+- `src/content/` is the right place for structured CMS content such as products, services, downloads, bios, and long-form page copy
 
 ## Studio UI
 
@@ -386,7 +445,7 @@ Recommended first UI surface:
 - left sidebar with models
 - model view with entry list, status, locale completeness, and validation summary
 - entry editor with schema-driven controls
-- asset picker/uploader rooted in `content/media/`
+- asset picker/uploader rooted in `src/content/media/`
 - rich text editor for Markdown-backed fields
 - save action that writes the canonical files back into the project workspace
 
@@ -404,11 +463,11 @@ The agent should be allowed to edit the canonical files directly.
 
 Agent instructions should say:
 
-- treat `content/` as the CMS source of truth when `content/vivd.content.yaml` exists
+- treat `src/content/` as the CMS source of truth when `src/content/vivd.content.yaml` exists
 - do not hand-edit `.vivd/content/`
-- create or update models in `content/models/*.yaml`
-- create or update collection entries in `content/collections/`
-- place attachments in `content/media/`
+- create or update models in `src/content/models/*.yaml`
+- create or update collection entries in `src/content/collections/`
+- place attachments in `src/content/media/`
 - run `vivd cms validate` after changing schema or entries
 - use generated runtime helpers or approved render helpers instead of inventing raw file-system reads in page code
 
@@ -444,7 +503,7 @@ There must be a clear translation layer between raw content files and page code.
 
 For Astro projects:
 
-1. Vivd reads and validates `content/`.
+1. Vivd reads and validates `src/content/`.
 2. Vivd generates normalized artifacts into `.vivd/content/`.
 3. Astro consumes a thin adapter built on Astro Content Collections or a custom loader.
 4. Page code imports typed helpers instead of parsing YAML directly.
@@ -581,7 +640,7 @@ Rejected for now. Astro/build-backed projects are the right first target. Other 
 ## Open Questions
 
 - Should `pages` be a distinct model kind, or just a convention over a normal collection plus route metadata?
-- Should image assets stay in `content/media/` and be copied into a public/runtime location, or should we add an Astro-specific image pipeline for optimized CMS images?
+- For Astro projects, should generic document assets from `src/content/media/` be copied into a public/runtime location, or should the adapter expose them another way?
 - Should generated artifacts live in `.vivd/content/` permanently, or should some framework adapters generate into `src/generated/` instead?
 - How much schema editing should Studio own in v1 vs later?
 - Do we want explicit draft scheduling/versioning in v1, or only active/inactive?
@@ -590,7 +649,7 @@ Rejected for now. Astro/build-backed projects are the right first target. Other 
 
 The recommended v1 is:
 
-- file-first source of truth in `content/`
+- file-first source of truth in `src/content/`
 - collections-first scope for the first release
 - declarative YAML schemas
 - entry directories with YAML metadata plus Markdown sidecars for long copy

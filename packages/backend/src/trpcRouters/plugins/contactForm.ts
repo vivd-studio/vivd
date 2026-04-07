@@ -6,8 +6,8 @@ import type {
   ContactFormPluginPayload,
 } from "../../services/plugins/ProjectPluginService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
-import { contactFormPluginConfigSchema } from "../../services/plugins/contactForm/config";
-import type { ContactRecipientVerificationRequestResult } from "../../services/plugins/contactForm/recipientVerification";
+import type { ContactRecipientVerificationRequestResult } from "@vivd/plugin-contact-form/backend/module";
+import { contactFormPluginConfigSchema } from "@vivd/plugin-contact-form/backend/config";
 import {
   ensureProjectPluginInstance,
   extractRequestHost,

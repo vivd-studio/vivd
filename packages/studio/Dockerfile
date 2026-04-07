@@ -27,13 +27,14 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
+COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/plugin-analytics -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/theme -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 
@@ -42,6 +43,7 @@ FROM deps AS dev
 COPY packages/shared ./packages/shared
 COPY packages/theme ./packages/theme
 COPY packages/plugin-analytics ./packages/plugin-analytics
+COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
@@ -64,6 +66,7 @@ FROM deps AS build
 COPY packages/shared ./packages/shared
 COPY packages/theme ./packages/theme
 COPY packages/plugin-analytics ./packages/plugin-analytics
+COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/cli ./packages/cli
 COPY packages/studio ./packages/studio
 
@@ -84,13 +87,14 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
+COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/plugin-analytics -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/cli -w @vivd/studio --omit=dev --include-workspace-root=false \
   && npm cache clean --force \
   && rm -rf /root/.npm/_logs /tmp/node-compile-cache
 

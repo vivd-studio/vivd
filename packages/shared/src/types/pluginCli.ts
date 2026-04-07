@@ -56,6 +56,7 @@ export type PluginCliAliasTarget =
 export interface PluginCliAliasDefinition {
   tokens: string[];
   target: PluginCliAliasTarget;
+  renderMode?: "auto" | "generic" | "plugin";
 }
 
 export interface PluginCliHelpDefinition {
@@ -69,11 +70,51 @@ export interface PluginCliRenderResult {
   human: string;
 }
 
+export interface PluginCliRenderConfigContext {
+  info: PluginCliInfoContractPayload;
+  projectSlug: string;
+}
+
+export interface PluginCliRenderConfigTemplateContext {
+  info: PluginCliInfoContractPayload | null;
+}
+
+export interface PluginCliRenderConfigUpdateContext {
+  info: PluginCliInfoContractPayload;
+  projectSlug: string;
+}
+
+export interface PluginCliActionResultPayload {
+  pluginId: string;
+  actionId: string;
+  summary: string;
+  result: unknown;
+}
+
 export interface PluginCliModule {
   pluginId: string;
   aliases?: PluginCliAliasDefinition[];
   help?: PluginCliHelpDefinition;
+  genericRendererModes?: {
+    info?: boolean;
+    config?: boolean;
+    configTemplate?: boolean;
+    configUpdate?: boolean;
+    action?: boolean;
+  };
   renderInfo?(
     info: PluginCliInfoContractPayload,
   ): PluginCliRenderResult;
+  renderConfig?(
+    context: PluginCliRenderConfigContext,
+  ): PluginCliRenderResult;
+  renderConfigTemplate?(
+    context: PluginCliRenderConfigTemplateContext,
+  ): PluginCliRenderResult;
+  renderConfigUpdate?(
+    context: PluginCliRenderConfigUpdateContext,
+  ): PluginCliRenderResult;
+  renderAction?(
+    action: PluginCliActionResultPayload,
+  ): PluginCliRenderResult | null;
 }

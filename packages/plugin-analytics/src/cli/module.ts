@@ -81,6 +81,9 @@ function formatAnalyticsPluginReport(input: AnalyticsCliInfoResponse): string {
 
 export const analyticsCliModule: PluginCliModule = {
   pluginId: "analytics",
+  genericRendererModes: {
+    info: true,
+  },
   aliases: [
     {
       tokens: ["analytics", "info"],

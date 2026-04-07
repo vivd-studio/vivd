@@ -1,3 +1,5 @@
+import { getProjectPluginUi } from "@/plugins/registry";
+
 export const BRAND_NAME = "Vivd";
 
 const ENV_SUFFIX = (() => {
@@ -17,6 +19,13 @@ function formatProjectLabel(slug: string) {
   const cleaned = slug.trim().replace(/[-_]+/g, " ");
   if (!cleaned) return "Project";
   return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatPluginLabel(pluginId: string) {
+  const pluginUi = getProjectPluginUi(pluginId);
+  if (pluginUi?.pageTitle) return pluginUi.pageTitle;
+  if (pluginUi?.shortcut?.label) return pluginUi.shortcut.label;
+  return formatProjectLabel(pluginId);
 }
 
 function getOrganizationTitle(searchParams: URLSearchParams) {
@@ -86,15 +95,34 @@ export function getRouteDocumentTitle(pathname: string, search = "") {
     return formatDocumentTitle("Create Site");
   }
 
-  const projectMatch = pathname.match(/^\/vivd-studio\/projects\/([^/]+)(?:\/(plugins|analytics|fullscreen|studio-fullscreen))?$/);
+  const projectPluginMatch = pathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)\/plugins\/([^/]+)(?:\/.*)?$/,
+  );
+  if (projectPluginMatch) {
+    const [, slug = "", pluginId = ""] = projectPluginMatch;
+    const projectLabel = formatProjectLabel(decodeURIComponent(slug));
+    const pluginLabel = formatPluginLabel(decodeURIComponent(pluginId));
+    return formatDocumentTitle(`${projectLabel} ${pluginLabel}`);
+  }
+
+  const legacyAnalyticsMatch = pathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)\/analytics$/,
+  );
+  if (legacyAnalyticsMatch) {
+    const [, slug = ""] = legacyAnalyticsMatch;
+    const projectLabel = formatProjectLabel(decodeURIComponent(slug));
+    const pluginLabel = formatPluginLabel("analytics");
+    return formatDocumentTitle(`${projectLabel} ${pluginLabel}`);
+  }
+
+  const projectMatch = pathname.match(
+    /^\/vivd-studio\/projects\/([^/]+)(?:\/(plugins|fullscreen|studio-fullscreen))?$/,
+  );
   if (projectMatch) {
     const [, slug = "", section] = projectMatch;
     const projectLabel = formatProjectLabel(decodeURIComponent(slug));
     if (section === "plugins") {
       return formatDocumentTitle(`${projectLabel} Plugins`);
-    }
-    if (section === "analytics") {
-      return formatDocumentTitle(`${projectLabel} Analytics`);
     }
     if (section === "fullscreen") {
       return formatDocumentTitle(`${projectLabel} Preview`);

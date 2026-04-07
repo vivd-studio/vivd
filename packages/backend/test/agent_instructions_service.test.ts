@@ -50,6 +50,10 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain(
       "Use `vivd publish checklist show` to review the saved checklist",
     );
+    expect(result.instructions).toContain("Structured CMS content");
+    expect(result.instructions).toContain("src/content/vivd.content.yaml");
+    expect(result.instructions).toContain("Use collection-backed CMS content selectively");
+    expect(result.instructions).toContain("vivd cms validate");
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");

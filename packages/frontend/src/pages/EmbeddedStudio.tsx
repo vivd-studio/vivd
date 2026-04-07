@@ -90,6 +90,8 @@ export default function EmbeddedStudio() {
   const {
     toggleSidebar,
     open: sidebarOpen,
+    showImmersivePeek,
+    scheduleHideImmersivePeek,
   } = useSidebar();
   const [editRequested, setEditRequested] = useState(false);
   const [previewSurface, setPreviewSurface] = useState<"live" | "publish">("publish");
@@ -296,6 +298,7 @@ export default function EmbeddedStudio() {
     studioBootstrapAction,
     reloadNonce: studioReloadNonce,
     isStudioRecovering,
+    requestStudioRecoveryCheck,
     replaceRuntime,
     clearRuntimeOverride,
     reloadStudioIframe,
@@ -479,10 +482,13 @@ export default function EmbeddedStudio() {
     onNavigate: (path) => {
       navigate(path);
     },
+    onShowSidebarPeek: showImmersivePeek,
+    onScheduleHideSidebarPeek: scheduleHideImmersivePeek,
     onToggleSidebar: toggleSidebar,
     onHardRestart: (nextVersion) => {
       void handleHardRestart(nextVersion);
     },
+    onTransportDegraded: requestStudioRecoveryCheck,
   });
 
   const studioIframeSrc = useMemo(() => {

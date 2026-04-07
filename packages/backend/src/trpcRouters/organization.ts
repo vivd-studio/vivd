@@ -4,10 +4,8 @@ import { z } from "zod";
 import { router, orgAdminProcedure, orgProcedure, protectedProcedure } from "../trpc";
 import { db } from "../db";
 import {
-  contactFormRecipientVerification,
   organization,
   organizationMember,
-  pluginEntitlement,
   projectPluginInstance,
   projectMember,
   projectMeta,
@@ -15,14 +13,19 @@ import {
   session as sessionTable,
   user as userTable,
 } from "../db/schema";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { auth } from "../auth";
 import { domainService } from "../services/publish/DomainService";
 import { organizationIdSchema } from "../lib/organizationIdentifiers";
-import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
 import { installProfileService } from "../services/system/InstallProfileService";
 import { PLUGIN_IDS, listPluginCatalogEntries } from "../services/plugins/registry";
-import type { OrganizationProjectPluginItem } from "../services/plugins/surfaceTypes";
+import {
+  buildOrganizationPluginProjectSummaries,
+} from "../services/plugins/integrationHooks";
+import type {
+  OrganizationProjectPluginItem,
+  OrganizationPluginIssue,
+} from "../services/plugins/surfaceTypes";
 
 const memberRoleSchema = z.enum(["admin", "member", "client_editor"]);
 
@@ -33,27 +36,11 @@ function getGlobalUserRoleForMemberRole(
 }
 
 type PluginInstanceStatus = "enabled" | "disabled" | "not_installed";
-type PluginIssueSeverity = "warning" | "info";
-
-type PluginIssue = {
-  code:
-    | "contact_no_recipients"
-    | "contact_pending_recipients"
-    | "contact_turnstile_not_ready";
-  severity: PluginIssueSeverity;
-  message: string;
-};
 
 function toPluginInstanceStatus(raw: string | null | undefined): PluginInstanceStatus {
   if (!raw) return "not_installed";
   if (raw === "enabled") return "enabled";
   return "disabled";
-}
-
-function getConfiguredRecipientCount(configJson: unknown): number {
-  const parsed = contactFormPluginConfigSchema.safeParse(configJson ?? {});
-  if (!parsed.success) return 0;
-  return parsed.data.recipientEmails.length;
 }
 
 export const organizationRouter = router({
@@ -263,7 +250,7 @@ export const organizationRouter = router({
 
     const projectSlugs = projects.map((project) => project.slug);
 
-    const [pluginInstances, pendingRecipientRows, entitlementRows, publishedRows] =
+    const [pluginInstances, publishedRows] =
       await Promise.all([
         db.query.projectPluginInstance.findMany({
           where: and(
@@ -278,34 +265,6 @@ export const organizationRouter = router({
             status: true,
             configJson: true,
             updatedAt: true,
-          },
-        }),
-        db
-          .select({
-            projectSlug: contactFormRecipientVerification.projectSlug,
-            count: sql<number>`count(*)`,
-          })
-          .from(contactFormRecipientVerification)
-          .where(
-            and(
-              eq(contactFormRecipientVerification.organizationId, organizationId),
-              inArray(contactFormRecipientVerification.projectSlug, projectSlugs),
-              eq(contactFormRecipientVerification.status, "pending"),
-            ),
-          )
-          .groupBy(contactFormRecipientVerification.projectSlug),
-        db.query.pluginEntitlement.findMany({
-          where: and(
-            eq(pluginEntitlement.organizationId, organizationId),
-            eq(pluginEntitlement.pluginId, "contact_form"),
-          ),
-          columns: {
-            scope: true,
-            projectSlug: true,
-            state: true,
-            turnstileEnabled: true,
-            turnstileSiteKey: true,
-            turnstileSecretKey: true,
           },
         }),
         db.query.publishedSite.findMany({
@@ -342,32 +301,28 @@ export const organizationRouter = router({
       );
     }
 
-    const pendingRecipientsByProjectSlug = new Map<string, number>(
-      pendingRecipientRows.map((row) => [row.projectSlug, Number(row.count) || 0]),
+    const contactInstancesByProjectSlug = new Map<
+      string,
+      { status: string | null; configJson: unknown } | null
+    >(
+      projects.map((project) => [
+        project.slug,
+        instanceByProjectPluginId.get(`${project.slug}:contact_form`)
+          ? {
+              status:
+                instanceByProjectPluginId.get(`${project.slug}:contact_form`)?.status ?? null,
+              configJson:
+                instanceByProjectPluginId.get(`${project.slug}:contact_form`)?.configJson ?? null,
+            }
+          : null,
+      ]),
     );
-
-    type ContactEntitlementSummary = {
-      state: string;
-      turnstileEnabled: boolean;
-      turnstileSiteKey: string | null;
-      turnstileSecretKey: string | null;
-    };
-
-    const contactEntitlementByProjectSlug = new Map<string, ContactEntitlementSummary>();
-    let organizationContactEntitlement: ContactEntitlementSummary | null = null;
-    for (const row of entitlementRows) {
-      const normalized = {
-        state: row.state,
-        turnstileEnabled: row.turnstileEnabled ?? false,
-        turnstileSiteKey: row.turnstileSiteKey ?? null,
-        turnstileSecretKey: row.turnstileSecretKey ?? null,
-      } satisfies ContactEntitlementSummary;
-      if (row.scope === "project" && row.projectSlug) {
-        contactEntitlementByProjectSlug.set(row.projectSlug, normalized);
-      } else if (row.scope === "organization") {
-        organizationContactEntitlement = normalized;
-      }
-    }
+    const contactFormSummaries = await buildOrganizationPluginProjectSummaries({
+      pluginId: "contact_form",
+      organizationId,
+      projectSlugs,
+      instancesByProjectSlug: contactInstancesByProjectSlug,
+    });
 
     const deployedByProjectSlug = new Map<
       string,
@@ -385,68 +340,22 @@ export const organizationRouter = router({
 
     const rows = projects.map((project) => {
       const projectSlug = project.slug;
-      const contact = instanceByProjectPluginId.get(`${projectSlug}:contact_form`);
-      const contactStatus = toPluginInstanceStatus(contact?.status ?? null);
-      const configuredRecipientCount = contact
-        ? getConfiguredRecipientCount(contact.configJson)
-        : 0;
-      const pendingRecipientCount =
-        pendingRecipientsByProjectSlug.get(projectSlug) ?? 0;
-      const effectiveEntitlement =
-        contactEntitlementByProjectSlug.get(projectSlug) ??
-        organizationContactEntitlement;
-      const turnstileEnabled =
-        effectiveEntitlement?.state === "enabled" &&
-        effectiveEntitlement.turnstileEnabled;
-      const turnstileReady =
-        turnstileEnabled &&
-        !!effectiveEntitlement?.turnstileSiteKey &&
-        !!effectiveEntitlement?.turnstileSecretKey;
-
-      const issues: PluginIssue[] = [];
-      if (contactStatus === "enabled" && configuredRecipientCount === 0) {
-        issues.push({
-          code: "contact_no_recipients",
-          severity: "warning",
-          message: "Contact Form is enabled but has no verified recipients configured.",
-        });
-      }
-      if (contactStatus === "enabled" && pendingRecipientCount > 0) {
-        const noun = pendingRecipientCount === 1 ? "recipient" : "recipients";
-        issues.push({
-          code: "contact_pending_recipients",
-          severity: "info",
-          message: `${pendingRecipientCount} ${noun} pending verification.`,
-        });
-      }
-      if (contactStatus === "enabled" && turnstileEnabled && !turnstileReady) {
-        issues.push({
-          code: "contact_turnstile_not_ready",
-          severity: "warning",
-          message: "Turnstile is enabled but credentials are not ready yet.",
-        });
-      }
+      const contactFormSummary =
+        contactFormSummaries.get(projectSlug) ?? {
+          summaryLines: [],
+          badges: [],
+          issues: [] as OrganizationPluginIssue[],
+        };
 
       const plugins = pluginCatalog.map((catalog): OrganizationProjectPluginItem => {
         const instance = instanceByProjectPluginId.get(
           `${projectSlug}:${catalog.pluginId}`,
         );
         const status = toPluginInstanceStatus(instance?.status ?? null);
-        const summaryLines: string[] = [];
-        const badges: OrganizationProjectPluginItem["badges"] = [];
-
-        if (catalog.pluginId === "contact_form" && status === "enabled") {
-          summaryLines.push(`Recipients configured: ${configuredRecipientCount}`);
-          if (pendingRecipientCount > 0) {
-            summaryLines.push(`Pending verification: ${pendingRecipientCount}`);
-          }
-          if (turnstileEnabled) {
-            badges.push({
-              label: turnstileReady ? "Turnstile ready" : "Turnstile syncing",
-              tone: turnstileReady ? "success" : "destructive",
-            });
-          }
-        }
+        const pluginSummary =
+          catalog.pluginId === "contact_form"
+            ? contactFormSummary
+            : { summaryLines: [], badges: [] };
 
         return {
           pluginId: catalog.pluginId,
@@ -457,8 +366,8 @@ export const organizationRouter = router({
           instanceId: instance?.id ?? null,
           instanceStatus: instance?.status ?? null,
           updatedAt: instance?.updatedAt?.toISOString() ?? null,
-          summaryLines,
-          badges,
+          summaryLines: pluginSummary.summaryLines,
+          badges: pluginSummary.badges,
         };
       });
 
@@ -468,7 +377,7 @@ export const organizationRouter = router({
         updatedAt: project.updatedAt.toISOString(),
         deployedDomain: deployedByProjectSlug.get(projectSlug)?.domain ?? null,
         plugins,
-        issues,
+        issues: contactFormSummary.issues,
       };
     });
 

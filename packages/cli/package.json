@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@vivd/plugin-analytics": "1.0.0",
-    "@vivd/shared": "1.0.0"
+    "@vivd/plugin-contact-form": "1.0.0",
+    "@vivd/shared": "1.0.0",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",

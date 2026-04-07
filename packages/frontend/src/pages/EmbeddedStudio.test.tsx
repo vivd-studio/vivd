@@ -298,6 +298,8 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: false,
+      showImmersivePeek: vi.fn(),
+      scheduleHideImmersivePeek: vi.fn(),
     });
     useStudioRuntimeGuardMock.mockReturnValue({
       isRecovering: false,
@@ -382,6 +384,8 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: true,
+      showImmersivePeek: vi.fn(),
+      scheduleHideImmersivePeek: vi.fn(),
     });
 
     renderEmbeddedStudio();
@@ -751,6 +755,8 @@ describe("EmbeddedStudio", () => {
     useSidebarMock.mockReturnValue({
       toggleSidebar: vi.fn(),
       open: true,
+      showImmersivePeek: vi.fn(),
+      scheduleHideImmersivePeek: vi.fn(),
     });
     getStudioUrlUseQueryMock.mockReturnValue({
       data: {

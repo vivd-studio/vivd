@@ -14,7 +14,7 @@ describe("getStudioProjectPluginShortcuts", () => {
       pluginId: "analytics",
       enabled: false,
       label: "Analytics",
-      path: "/vivd-studio/projects/bettinis-bikinis/analytics",
+      path: "/vivd-studio/projects/bettinis-bikinis/plugins/analytics",
       activationSupport: {
         title: "Analytics needs activation",
         description: "Analytics is not active for this project yet.",

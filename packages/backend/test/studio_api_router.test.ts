@@ -15,11 +15,7 @@ const {
   getProjectVersionMock,
   listCatalogForProjectMock,
   getPluginInfoContractMock,
-  getContactFormInfoMock,
-  getAnalyticsInfoMock,
   updatePluginConfigByIdMock,
-  updateContactFormConfigMock,
-  requestContactRecipientVerificationMock,
   runPluginActionMock,
   renderAgentInstructionsMock,
   reportAgentLeaseActiveMock,
@@ -43,11 +39,7 @@ const {
   getProjectVersionMock: vi.fn(),
   listCatalogForProjectMock: vi.fn(),
   getPluginInfoContractMock: vi.fn(),
-  getContactFormInfoMock: vi.fn(),
-  getAnalyticsInfoMock: vi.fn(),
   updatePluginConfigByIdMock: vi.fn(),
-  updateContactFormConfigMock: vi.fn(),
-  requestContactRecipientVerificationMock: vi.fn(),
   runPluginActionMock: vi.fn(),
   renderAgentInstructionsMock: vi.fn(),
   reportAgentLeaseActiveMock: vi.fn(),
@@ -108,11 +100,7 @@ vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     listCatalogForProject: listCatalogForProjectMock,
     getPluginInfoContract: getPluginInfoContractMock,
-    getContactFormInfo: getContactFormInfoMock,
-    getAnalyticsInfo: getAnalyticsInfoMock,
     updatePluginConfigById: updatePluginConfigByIdMock,
-    updateContactFormConfig: updateContactFormConfigMock,
-    requestContactRecipientVerification: requestContactRecipientVerificationMock,
     runPluginAction: runPluginActionMock,
   },
 }));
@@ -201,11 +189,7 @@ describe("studioApi router", () => {
     getProjectVersionMock.mockReset();
     listCatalogForProjectMock.mockReset();
     getPluginInfoContractMock.mockReset();
-    getContactFormInfoMock.mockReset();
-    getAnalyticsInfoMock.mockReset();
     updatePluginConfigByIdMock.mockReset();
-    updateContactFormConfigMock.mockReset();
-    requestContactRecipientVerificationMock.mockReset();
     runPluginActionMock.mockReset();
     renderAgentInstructionsMock.mockReset();
     reportAgentLeaseActiveMock.mockReset();
@@ -664,40 +648,11 @@ describe("studioApi router", () => {
       }),
     );
 
-    await expect(
-      caller.getProjectContactPluginInfo({
-        studioId: "studio-1",
-        slug: "site-1",
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        pluginId: "contact_form",
-        enabled: true,
-      }),
-    );
-
-    await expect(
-      caller.getProjectAnalyticsPluginInfo({
-        studioId: "studio-1",
-        slug: "site-1",
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        pluginId: "analytics",
-        enabled: false,
-      }),
-    );
-
     expect(listCatalogForProjectMock).toHaveBeenCalledWith("org-1", "site-1");
     expect(getPluginInfoContractMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
       pluginId: "contact_form",
-    });
-    expect(getPluginInfoContractMock).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      projectSlug: "site-1",
-      pluginId: "analytics",
     });
   });
 
@@ -724,12 +679,66 @@ describe("studioApi router", () => {
     });
   });
 
-  it("updates contact plugin config for the project", async () => {
+  it("updates plugin config for the project through the generic procedure", async () => {
     const caller = studioApiRouter.createCaller(makeContext());
+    updatePluginConfigByIdMock.mockResolvedValueOnce({
+      pluginId: "contact_form",
+      catalog: {
+        pluginId: "contact_form",
+        name: "Contact Form",
+        description: "Collect visitor inquiries and store submissions in Vivd.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin-contact-1",
+      status: "enabled",
+      publicToken: "contact-token",
+      config: {
+        recipientEmails: ["owner@example.com"],
+        sourceHosts: ["example.com"],
+        redirectHostAllowlist: ["example.com"],
+        formFields: [
+          {
+            key: "name",
+            label: "Name",
+            type: "text",
+            required: true,
+            placeholder: "",
+          },
+        ],
+      },
+      defaultConfig: {
+        recipientEmails: ["team@example.com"],
+      },
+      snippets: {
+        html: "<form></form>",
+      },
+      usage: {
+        submitEndpoint: "https://api.example.test/plugins/contact",
+      },
+      details: {
+        recipients: {
+          options: [],
+          pending: [],
+        },
+      },
+      instructions: ["Insert the snippet"],
+    });
 
-    await caller.updateProjectContactPluginConfig({
+    const result = await caller.updateProjectPluginConfig({
       studioId: "studio-1",
       slug: "site-1",
+      pluginId: "contact_form",
       config: {
         recipientEmails: ["owner@example.com"],
         sourceHosts: ["example.com"],
@@ -765,6 +774,25 @@ describe("studioApi router", () => {
         ],
       },
     });
+    expect(result).toEqual(
+      expect.objectContaining({
+        pluginId: "contact_form",
+        config: {
+          recipientEmails: ["owner@example.com"],
+          sourceHosts: ["example.com"],
+          redirectHostAllowlist: ["example.com"],
+          formFields: [
+            {
+              key: "name",
+              label: "Name",
+              type: "text",
+              required: true,
+              placeholder: "",
+            },
+          ],
+        },
+      }),
+    );
   });
 
   it("updates generic plugin config for the project", async () => {
@@ -797,32 +825,7 @@ describe("studioApi router", () => {
     );
   });
 
-  it("requests contact recipient verification for the project", async () => {
-    const caller = studioApiRouter.createCaller(makeContext());
-
-    const result = await caller.requestProjectContactRecipientVerification({
-      studioId: "studio-1",
-      slug: "site-1",
-      email: "owner@example.com",
-    });
-
-    expect(runPluginActionMock).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      projectSlug: "site-1",
-      pluginId: "contact_form",
-      actionId: "verify_recipient",
-      args: ["owner@example.com"],
-      requestedByUserId: "user-1",
-      requestHost: "app.vivd.local",
-    });
-    expect(result).toEqual({
-      email: "owner@example.com",
-      status: "verification_sent",
-      cooldownRemainingSeconds: 0,
-    });
-  });
-
-  it("runs generic plugin actions for the project", async () => {
+  it("runs recipient verification through the generic plugin action procedure", async () => {
     const caller = studioApiRouter.createCaller(makeContext());
 
     const result = await caller.runProjectPluginAction({

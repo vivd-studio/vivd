@@ -6,6 +6,7 @@ import {
 } from "@vivd/shared/types";
 import type { LucideIcon } from "lucide-react";
 import { getPluginUiIcon } from "./icons";
+import { frontendSharedProjectPluginUiRegistry } from "./sharedUiRegistry";
 
 export interface ResolvedProjectPluginShortcut {
   pluginId: string;
@@ -25,6 +26,7 @@ export function getProjectPluginShortcuts(options: {
 }): ResolvedProjectPluginShortcut[] {
   return listProjectPluginShortcuts({
     enabledPluginIds: options.enabledPluginIds,
+    registry: frontendSharedProjectPluginUiRegistry,
     surface: options.surface,
   }).map((entry) => ({
     pluginId: entry.pluginId,

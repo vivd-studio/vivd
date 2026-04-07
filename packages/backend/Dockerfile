@@ -31,6 +31,7 @@ COPY packages/builder/package.json packages/builder/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
+COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 # Keep workspace metadata available for npm workspaces resolution
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/studio/package.json packages/studio/package.json
@@ -39,7 +40,7 @@ COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/shared -w @vivd/builder -w @vivd/plugin-analytics -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
+RUN npm ci -w @vivd/shared -w @vivd/builder -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/backend -w @vivd/cli -w @vivd/studio --include-workspace-root=false \
     && npm cache clean --force
 
 # Stage 2: Development (hot reload)
@@ -48,6 +49,7 @@ COPY packages/builder ./packages/builder
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
+COPY packages/plugin-contact-form ./packages/plugin-contact-form
 COPY packages/cli ./packages/cli
 COPY packages/theme ./packages/theme
 COPY packages/studio ./packages/studio
@@ -70,6 +72,7 @@ COPY packages/builder ./packages/builder
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 COPY packages/plugin-analytics ./packages/plugin-analytics
+COPY packages/plugin-contact-form ./packages/plugin-contact-form
 
 RUN npm run build -w @vivd/shared
 RUN npm run build -w @vivd/builder
@@ -95,12 +98,13 @@ COPY packages/builder/package.json packages/builder/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/plugin-analytics/package.json packages/plugin-analytics/package.json
+COPY packages/plugin-contact-form/package.json packages/plugin-contact-form/package.json
 COPY packages/studio/package.json packages/studio/package.json
 COPY packages/theme/package.json packages/theme/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/scraper/package.json packages/scraper/package.json
 
-RUN npm ci -w @vivd/plugin-analytics -w @vivd/backend --omit=dev --include-workspace-root=false \
+RUN npm ci -w @vivd/plugin-analytics -w @vivd/plugin-contact-form -w @vivd/backend --omit=dev --include-workspace-root=false \
     && npm cache clean --force
 
 # Copy built outputs

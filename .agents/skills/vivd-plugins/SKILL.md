@@ -17,9 +17,9 @@ This skill is for:
 ## Current Shape
 
 Vivd is in a mixed state:
-- `analytics` is the first extracted plugin workspace package at `packages/plugin-analytics`
-- `contact_form` still mostly lives in host-owned code under `packages/backend/src/services/plugins/contactForm` and `packages/frontend/src/plugins/contactForm`
-- host apps still own the generic plugin platform, routing, and compatibility layers
+- `analytics` and `contact_form` are extracted plugin workspace packages at `packages/plugin-analytics` and `packages/plugin-contact-form`
+- host apps still own the generic plugin platform, registries, routing, and compatibility layers
+- the actual plugin implementation/runtime code for Analytics and Contact Form now lives in the plugin packages; host code should mostly be adapters
 
 Treat the architecture as:
 - shared contract layer in `packages/shared`
@@ -37,8 +37,10 @@ Start here when orienting:
 - Shared UI and CLI-facing types:
   - `packages/shared/src/types/plugins.ts`
   - `packages/shared/src/types/pluginCli.ts`
+  - `packages/shared/src/types/pluginContracts.ts`
 - Backend plugin host:
   - `packages/backend/src/services/plugins/registry.ts`
+  - `packages/backend/src/services/plugins/integrationHooks.ts`
   - `packages/backend/src/services/plugins/core/module.ts`
   - `packages/backend/src/services/plugins/ProjectPluginService.ts`
   - `packages/backend/src/trpcRouters/plugins/index.ts`
@@ -53,11 +55,22 @@ Start here when orienting:
   - `packages/cli/src/plugins/registry.ts`
 - Extracted plugin package example:
   - `packages/plugin-analytics/package.json`
+  - `packages/plugin-analytics/src/backend/config.ts`
   - `packages/plugin-analytics/src/backend/module.ts`
-  - `packages/plugin-analytics/src/backend/router.ts`
   - `packages/plugin-analytics/src/frontend/module.ts`
   - `packages/plugin-analytics/src/frontend/AnalyticsProjectPage.tsx`
   - `packages/plugin-analytics/src/cli/module.ts`
+  - `packages/plugin-analytics/src/shared/projectUi.ts`
+  - `packages/plugin-contact-form/package.json`
+  - `packages/plugin-contact-form/src/backend/config.ts`
+  - `packages/plugin-contact-form/src/backend/module.ts`
+  - `packages/plugin-contact-form/src/backend/adminHooks.ts`
+  - `packages/plugin-contact-form/src/frontend/module.ts`
+  - `packages/plugin-contact-form/src/frontend/ContactFormProjectPage.tsx`
+  - `packages/plugin-contact-form/src/cli/module.ts`
+  - `packages/plugin-contact-form/src/shared/projectUi.ts`
+  - Backend-owned compatibility adapters now live in `packages/backend/src/trpcRouters/plugins/contactForm.ts` and `packages/backend/src/trpcRouters/plugins/analytics.ts`
+  - Public plugin HTTP route composition now lives in `packages/backend/src/httpRoutes/plugins/registry.ts`
 
 ## Decision Rule
 
@@ -110,13 +123,16 @@ Use this sequence:
    - Keep manifest-like metadata in one place
 
 2. Wire the backend module.
-   - Implement `PluginModule` behavior
+   - Implement `PluginModule` behavior using shared contracts from `packages/shared`
    - Support generic info/config/action flows when possible
-   - Keep plugin-specific router payloads thin and plugin-owned
+   - Prefer a host adapter that binds backend runtime/services into a plugin-owned module factory
+   - Keep plugin-specific router payloads thin, but keep compatibility tRPC routers in backend host adapters rather than making extracted plugin packages import `@vivd/backend/src/...`
+   - If organization overview or super-admin/plugin-entitlement flows need plugin-specific behavior, put that behavior in plugin-owned backend hooks and register it through `packages/backend/src/services/plugins/integrationHooks.ts`
 
 3. Wire shared UI metadata.
-   - Add or update `packages/shared/src/types/plugins.ts`
-   - Use this for icon, shortcut surfaces, open labels, route targets, and activation-support copy
+   - Keep the shared UI types/helpers in `packages/shared/src/types/plugins.ts`
+   - Put plugin-owned UI metadata in the plugin package when possible
+   - Register that metadata in the frontend and Studio shared UI registries
 
 4. Wire frontend ownership.
    - Register the frontend module in `packages/frontend/src/plugins/registry.tsx`
@@ -141,7 +157,7 @@ Plugins may have:
 When adding richer UI:
 - prefer plugin-owned pages/components over app-owned special cases
 - keep route mounting generic in the host
-- put shortcut/icon/open-label metadata in shared plugin UI types
+- put shortcut/icon/open-label metadata in plugin-owned shared UI exports
 - avoid baking plugin IDs directly into unrelated host components
 
 ## Docker And Workspace Pitfalls
@@ -169,6 +185,7 @@ Pick the smallest useful set:
 
 - Typecheck touched workspaces:
   - `npm run typecheck -w @vivd/plugin-analytics`
+  - `npm run typecheck -w @vivd/plugin-contact-form`
   - `npm run typecheck -w @vivd/frontend`
   - `npm run typecheck -w @vivd/backend`
   - `npm run typecheck -w @vivd/cli`
@@ -180,12 +197,16 @@ Pick the smallest useful set:
 
 Prefer targeted validation over full-suite runs.
 
+If you are extracting a plugin into its own package, also read:
+- `references/extraction-checklist.md`
+
 ## Compatibility Wrappers
 
 Some legacy paths still exist. Keep them thin.
 
 Examples:
 - plugin-specific backend router files under `packages/backend/src/trpcRouters/plugins/*`
+- backend plugin integration registries such as `packages/backend/src/services/plugins/integrationHooks.ts`
 - compatibility page re-exports such as `packages/frontend/src/pages/ProjectAnalytics.tsx`
 
 If you touch a compatibility layer:

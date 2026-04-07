@@ -14,7 +14,7 @@ describe("getProjectPluginShortcuts", () => {
       pluginId: "analytics",
       enabled: true,
       label: "Analytics",
-      path: "/vivd-studio/projects/bettinis-bikinis/analytics",
+      path: "/vivd-studio/projects/bettinis-bikinis/plugins/analytics",
     });
   });
 
