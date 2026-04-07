@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./descriptor": "./src/descriptor.ts",
     "./backend/config": "./src/backend/config.ts",
     "./backend/module": "./src/backend/module.ts",
     "./backend/publicApi": "./src/backend/publicApi.ts",

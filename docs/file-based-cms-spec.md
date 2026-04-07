@@ -352,13 +352,13 @@ attributes:
       en: Leather
       de: Leder
 documents:
-  - path: ../../media/products/alpine-boot/datasheet-en.pdf
+  - path: ../../../media/products/alpine-boot/datasheet-en.pdf
     label:
       en: Datasheet
       de: Datenblatt
     locale: en
 heroImage:
-  path: ../../media/products/alpine-boot/hero.jpg
+  path: ../../../media/products/alpine-boot/hero.jpg
   alt:
     en: Alpine boot in profile view
     de: Alpine-Stiefel in Seitenansicht

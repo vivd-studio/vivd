@@ -1,16 +1,10 @@
-import {
-  buildContactFormOrganizationProjectSummaries,
-  cleanupContactFormEntitlementFields,
-  prepareContactFormEntitlementFields,
-  type ContactFormOrganizationInstanceSnapshot,
-  type ContactFormProjectEntitlementSnapshot,
-} from "@vivd/plugin-contact-form/backend/adminHooks";
 import type {
   OrganizationPluginIssue,
   PluginSurfaceBadge,
 } from "./surfaceTypes";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type { PluginId } from "./registry";
+import { backendPluginPackageDescriptors } from "./descriptors";
 
 export interface OrganizationPluginInstanceSnapshot {
   status: string | null;
@@ -23,36 +17,25 @@ export interface OrganizationPluginProjectIntegrationSummary {
   issues: OrganizationPluginIssue[];
 }
 
-type OrganizationPluginHook = (options: {
-  organizationId: string;
-  projectSlugs: string[];
-  instancesByProjectSlug: Map<string, OrganizationPluginInstanceSnapshot | null>;
-}) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>;
-
-const organizationPluginHooks: Partial<Record<PluginId, OrganizationPluginHook>> = {
-  contact_form: async (options) => {
-    const rawSummaries = await buildContactFormOrganizationProjectSummaries({
-      organizationId: options.organizationId,
-      projectSlugs: options.projectSlugs,
-      instancesByProjectSlug:
-        options.instancesByProjectSlug as Map<
-          string,
-          ContactFormOrganizationInstanceSnapshot | null
-        >,
-    });
-
-    return new Map(
-      Array.from(rawSummaries.entries()).map(([projectSlug, summary]) => [
-        projectSlug,
-        {
-          summaryLines: summary.summaryLines,
-          badges: summary.badges as PluginSurfaceBadge[],
-          issues: summary.issues as OrganizationPluginIssue[],
-        },
-      ]),
-    );
-  },
-};
+const organizationPluginHooks = new Map<
+  PluginId,
+  (options: {
+    organizationId: string;
+    projectSlugs: string[];
+    instancesByProjectSlug: Map<string, OrganizationPluginInstanceSnapshot | null>;
+  }) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>
+>(
+  backendPluginPackageDescriptors.flatMap((descriptor) =>
+    descriptor.backendHooks?.buildOrganizationProjectSummaries
+      ? [
+          [
+            descriptor.pluginId as PluginId,
+            descriptor.backendHooks.buildOrganizationProjectSummaries,
+          ] as const,
+        ]
+      : [],
+  ),
+);
 
 export async function buildOrganizationPluginProjectSummaries(options: {
   pluginId: PluginId;
@@ -60,7 +43,7 @@ export async function buildOrganizationPluginProjectSummaries(options: {
   projectSlugs: string[];
   instancesByProjectSlug: Map<string, OrganizationPluginInstanceSnapshot | null>;
 }): Promise<Map<string, OrganizationPluginProjectIntegrationSummary>> {
-  const hook = organizationPluginHooks[options.pluginId];
+  const hook = organizationPluginHooks.get(options.pluginId);
   if (!hook) return new Map();
   return hook(options);
 }
@@ -93,28 +76,23 @@ interface SuperAdminEntitlementHook {
   }): Promise<void>;
 }
 
-const superAdminEntitlementHooks: Partial<Record<PluginId, SuperAdminEntitlementHook>> = {
-  contact_form: {
-    prepareProjectEntitlementFields(options) {
-      return prepareContactFormEntitlementFields({
-        organizationId: options.organizationId,
-        projectSlug: options.projectSlug,
-        state: options.state,
-        turnstileEnabled: options.turnstileEnabled,
-        existingProjectEntitlement:
-          options.existingProjectEntitlement as ContactFormProjectEntitlementSnapshot | null,
-      });
-    },
-    cleanupProjectEntitlementFields(options) {
-      return cleanupContactFormEntitlementFields({
-        state: options.state,
-        turnstileEnabled: options.turnstileEnabled,
-        existingProjectEntitlement:
-          options.existingProjectEntitlement as ContactFormProjectEntitlementSnapshot | null,
-      });
-    },
-  },
-};
+const superAdminEntitlementHooks = new Map<PluginId, SuperAdminEntitlementHook>(
+  backendPluginPackageDescriptors.flatMap((descriptor) => {
+    const prepare = descriptor.backendHooks?.prepareProjectEntitlementFields;
+    const cleanup = descriptor.backendHooks?.cleanupProjectEntitlementFields;
+    if (!prepare || !cleanup) return [];
+
+    return [
+      [
+        descriptor.pluginId as PluginId,
+        {
+          prepareProjectEntitlementFields: prepare,
+          cleanupProjectEntitlementFields: cleanup,
+        },
+      ] as const,
+    ];
+  }),
+);
 
 export async function preparePluginProjectEntitlementFields(options: {
   pluginId: PluginId;
@@ -124,7 +102,7 @@ export async function preparePluginProjectEntitlementFields(options: {
   turnstileEnabled: boolean;
   existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
 }): Promise<PreparedPluginEntitlementFields> {
-  const hook = superAdminEntitlementHooks[options.pluginId];
+  const hook = superAdminEntitlementHooks.get(options.pluginId);
   if (!hook) {
     return {
       turnstileEnabled: options.turnstileEnabled,
@@ -143,7 +121,7 @@ export async function cleanupPluginProjectEntitlementFields(options: {
   turnstileEnabled: boolean;
   existingProjectEntitlement: SuperAdminPluginEntitlementSnapshot | null;
 }): Promise<void> {
-  const hook = superAdminEntitlementHooks[options.pluginId];
+  const hook = superAdminEntitlementHooks.get(options.pluginId);
   if (!hook) return;
   await hook.cleanupProjectEntitlementFields(options);
 }

@@ -1,4 +1,4 @@
-import { getProjectPluginUi } from "@/plugins/registry";
+import { getFrontendSharedProjectPluginUi } from "@/plugins/sharedUiRegistry";
 
 export const BRAND_NAME = "Vivd";
 
@@ -22,7 +22,7 @@ function formatProjectLabel(slug: string) {
 }
 
 function formatPluginLabel(pluginId: string) {
-  const pluginUi = getProjectPluginUi(pluginId);
+  const pluginUi = getFrontendSharedProjectPluginUi(pluginId);
   if (pluginUi?.pageTitle) return pluginUi.pageTitle;
   if (pluginUi?.shortcut?.label) return pluginUi.shortcut.label;
   return formatProjectLabel(pluginId);

@@ -792,7 +792,7 @@ export default function EmbeddedStudio() {
         leadingAccessory={
           <SidebarTrigger
             appearance={sidebarOpen ? "panel" : "brand"}
-            revealOnHover={false}
+            morphOnHover={false}
             className="rounded-md"
           />
         }

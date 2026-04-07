@@ -1,13 +1,9 @@
 import { getSharedProjectPluginUi } from "@vivd/shared/types";
 import type { ProjectPluginUiDefinition } from "./types";
-import { analyticsFrontendPluginModule } from "./analytics/module";
-import { contactFormFrontendPluginModule } from "./contactForm/module";
-import { frontendSharedProjectPluginUiRegistry } from "./sharedUiRegistry";
-
-const frontendPluginModules = [
-  contactFormFrontendPluginModule,
-  analyticsFrontendPluginModule,
-];
+import {
+  frontendPluginModules,
+  frontendSharedProjectPluginUiRegistry,
+} from "./descriptors";
 
 const projectPluginComponentRegistry: Record<string, ProjectPluginUiDefinition> =
   Object.fromEntries(

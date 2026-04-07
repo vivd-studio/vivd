@@ -96,13 +96,16 @@ vi.mock("@/components/theme", () => ({
 vi.mock("@/components/ui/sidebar", () => ({
   SidebarTrigger: ({
     appearance,
+    revealOnHover,
   }: {
     appearance?: "panel" | "brand";
+    revealOnHover?: boolean;
   }) => (
     <button
       type="button"
       aria-label="Toggle Sidebar"
       data-appearance={appearance ?? "panel"}
+      data-reveal-on-hover={revealOnHover === false ? "false" : "true"}
     >
       Sidebar
     </button>
@@ -377,6 +380,10 @@ describe("EmbeddedStudio", () => {
     expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
       "data-appearance",
       "brand",
+    );
+    expect(screen.getByRole("button", { name: "Toggle Sidebar" })).toHaveAttribute(
+      "data-reveal-on-hover",
+      "true",
     );
   });
 

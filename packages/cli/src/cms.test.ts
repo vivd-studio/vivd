@@ -105,7 +105,7 @@ status: active
 title:
   en: Alpine Boot
 heroImage:
-  path: ../../media/products/alpine-boot/hero.jpg
+  path: ../../../media/products/alpine-boot/hero.jpg
 `,
       "utf8",
     );

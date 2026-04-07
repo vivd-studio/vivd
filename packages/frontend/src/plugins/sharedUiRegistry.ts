@@ -1,8 +1,8 @@
-import type { ProjectPluginUiRegistry } from "@vivd/shared/types";
-import { analyticsSharedProjectUi } from "@vivd/plugin-analytics/shared/projectUi";
-import { contactFormSharedProjectUi } from "@vivd/plugin-contact-form/shared/projectUi";
+export { frontendSharedProjectPluginUiRegistry } from "./descriptors";
 
-export const frontendSharedProjectPluginUiRegistry = {
-  contact_form: contactFormSharedProjectUi,
-  analytics: analyticsSharedProjectUi,
-} satisfies ProjectPluginUiRegistry;
+import { getSharedProjectPluginUi } from "@vivd/shared/types";
+import { frontendSharedProjectPluginUiRegistry } from "./descriptors";
+
+export function getFrontendSharedProjectPluginUi(pluginId: string) {
+  return getSharedProjectPluginUi(pluginId, frontendSharedProjectPluginUiRegistry);
+}

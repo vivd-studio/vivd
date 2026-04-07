@@ -245,7 +245,7 @@ describe("SidebarProvider persistence", () => {
 
     fireEvent.pointerLeave(hotspot);
     act(() => {
-      vi.advanceTimersByTime(179);
+      vi.advanceTimersByTime(259);
     });
     expect(sidebarRoot).toHaveAttribute("data-overlay-state", "peek");
 

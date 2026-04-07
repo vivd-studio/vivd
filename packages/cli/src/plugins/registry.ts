@@ -5,12 +5,12 @@ import type {
   PluginCliInfoContractPayload,
   PluginCliModule,
 } from "@vivd/shared/types";
-import { analyticsCliModule } from "./analytics/module";
-import { contactFormCliModule } from "./contactForm/module";
+import { cliPluginDescriptors } from "./descriptors";
 
 const cliPluginModules: PluginCliModule[] = [
-  contactFormCliModule,
-  analyticsCliModule,
+  ...cliPluginDescriptors.flatMap((descriptor) =>
+    descriptor.cli ? [descriptor.cli] : [],
+  ),
 ];
 
 const cliPluginModuleById = new Map(

@@ -13,8 +13,12 @@ import type {
   PluginDefinition as SharedPluginDefinition,
   PluginModule as SharedPluginModule,
 } from "@vivd/shared/types";
+import {
+  backendPluginPackageDescriptors,
+  extractPluginIds,
+} from "./descriptors";
 
-export const PLUGIN_IDS = ["contact_form", "analytics"] as const;
+export const PLUGIN_IDS = extractPluginIds(backendPluginPackageDescriptors);
 export type PluginId = (typeof PLUGIN_IDS)[number];
 export type PluginDefinition = SharedPluginDefinition<PluginId>;
 export type PluginCatalogEntry = SharedPluginCatalogEntry<PluginId>;
@@ -24,15 +28,19 @@ export type { ContactFormPluginConfig };
 export { analyticsPluginConfigSchema };
 export type { AnalyticsPluginConfig };
 
-const pluginModules: Record<PluginId, PluginModule> = {
-  contact_form: contactFormPluginModule,
-  analytics: analyticsPluginModule,
-};
+const pluginModules = Object.fromEntries(
+  [
+    ["contact_form", contactFormPluginModule],
+    ["analytics", analyticsPluginModule],
+  ] as const,
+) as Record<PluginId, PluginModule>;
 
-const pluginRegistry: Record<PluginId, PluginDefinition> = {
-  contact_form: contactFormPluginModule.definition,
-  analytics: analyticsPluginModule.definition,
-};
+const pluginRegistry = Object.fromEntries(
+  backendPluginPackageDescriptors.map((descriptor) => [
+    descriptor.pluginId,
+    descriptor.definition,
+  ]),
+) as unknown as Record<PluginId, PluginDefinition>;
 
 export function listPluginCatalogEntries(): PluginCatalogEntry[] {
   return listPluginDefinitions().map((plugin) => ({

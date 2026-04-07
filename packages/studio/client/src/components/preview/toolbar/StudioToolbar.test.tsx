@@ -165,6 +165,7 @@ describe("StudioToolbar", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -242,7 +243,7 @@ describe("StudioToolbar", () => {
     expect(screen.queryByTitle(/fullscreen/i)).not.toBeInTheDocument();
   });
 
-  it("shows a tooltip on the embedded sidebar toggle", async () => {
+  it("does not show a tooltip on the embedded sidebar toggle", async () => {
     mockUseToolbarState.mockReturnValue({
       ...createToolbarState(),
       embedded: true,
@@ -258,7 +259,7 @@ describe("StudioToolbar", () => {
 
     fireEvent.pointerMove(toggle!);
 
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Toggle sidebar");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("requests the host immersive peek when hovering the embedded vivd-mark toggle", () => {
@@ -276,13 +277,10 @@ describe("StudioToolbar", () => {
     expect(toggle).toBeInTheDocument();
 
     fireEvent.pointerEnter(toggle!);
-    fireEvent.pointerLeave(toggle!);
 
+    expect(mockPostVivdHostMessage).toHaveBeenCalledTimes(1);
     expect(mockPostVivdHostMessage).toHaveBeenNthCalledWith(1, {
       type: "vivd:studio:showSidebarPeek",
-    });
-    expect(mockPostVivdHostMessage).toHaveBeenNthCalledWith(2, {
-      type: "vivd:studio:scheduleHideSidebarPeek",
     });
   });
 

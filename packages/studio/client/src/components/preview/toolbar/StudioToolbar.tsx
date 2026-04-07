@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   ChevronRight,
+  FileCode,
   FolderOpen,
   History,
   MessageSquare,
@@ -34,12 +35,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { SidebarBrandToggleGlyph, VivdIcon } from "@/components/common";
 
 import { useToolbarState } from "./useToolbarState";
@@ -92,6 +87,8 @@ export function StudioToolbar() {
     setSelectedDevice,
     assetsOpen,
     setAssetsOpen,
+    cmsOpen,
+    setCmsOpen,
     chatOpen,
     chatPanel,
     setChatOpen,
@@ -292,6 +289,7 @@ export function StudioToolbar() {
   const toolbarControlGap = 4;
   const sessionExpandedWidth = 94;
   const explorerExpandedWidth = 96;
+  const cmsExpandedWidth = 84;
   const editExpandedWidth = 104;
   const pluginExpandedWidth = 88;
   const pluginShortcutExpandedWidths = studioToolbarPluginShortcuts.map(
@@ -318,6 +316,7 @@ export function StudioToolbar() {
     previewWorkspaceWidth >= 280 && chatOpen && sessionHistoryOpen;
   const shouldExpandExplorerLabel =
     !shouldCollapseRightSideLabels && assetsOpen;
+  const shouldExpandCmsLabel = !shouldCollapseRightSideLabels && cmsOpen;
   const hoverableWorkspaceLabels = !shouldCollapseRightSideLabels;
   const newSessionReservedWidth =
     canUseAgent && hoverableWorkspaceLabels
@@ -328,6 +327,7 @@ export function StudioToolbar() {
     newSessionControlGap +
     (shouldReserveSessionSlot ? sessionExpandedWidth : compactControlWidth);
   const explorerControlWidth = compactControlWidth;
+  const cmsControlWidth = compactControlWidth;
   const editControlWidth = compactControlWidth;
   const pluginControlWidth = compactControlWidth;
   const pluginShortcutControlWidth =
@@ -335,18 +335,20 @@ export function StudioToolbar() {
   const hoverExpansionAllowance = hoverableWorkspaceLabels
     ? Math.max(
         explorerExpandedWidth - compactControlWidth,
+        cmsExpandedWidth - compactControlWidth,
         editExpandedWidth - compactControlWidth,
         pluginExpandedWidth - compactControlWidth,
         ...pluginShortcutExpandedWidths.map((width) => width - compactControlWidth),
       )
     : 0;
   const workspaceControlCount =
-    (canUseAgent ? 2 : 0) + 3 + studioToolbarPluginShortcuts.length;
+    (canUseAgent ? 2 : 0) + 4 + studioToolbarPluginShortcuts.length;
   const reservedWorkspaceControlsWidth =
     (canUseAgent
       ? sessionGroupWidth + compactControlWidth
       : 0) +
     explorerControlWidth +
+    cmsControlWidth +
     editControlWidth +
     pluginControlWidth +
     pluginShortcutControlWidth +
@@ -517,6 +519,33 @@ export function StudioToolbar() {
         </span>
       </Button>
 
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setCmsOpen(!cmsOpen)}
+        className={expandableToggleClass(
+          cmsOpen,
+          shouldExpandCmsLabel,
+          hoverableWorkspaceLabels,
+        )}
+        style={expandableToggleStyle(cmsExpandedWidth)}
+        title={cmsOpen ? "Hide CMS" : "Show CMS"}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+          <FileCode className="h-4 w-4" />
+        </span>
+        <span
+          aria-hidden="true"
+          className={expandableToggleLabelClass(
+            shouldExpandCmsLabel,
+            !shouldCollapseRightSideLabels,
+          )}
+        >
+          CMS
+        </span>
+        <span className="sr-only">{cmsOpen ? "Hide CMS" : "Show CMS"}</span>
+      </Button>
+
       <EditControls
         projectSlug={projectSlug}
         editMode={editMode}
@@ -609,55 +638,34 @@ export function StudioToolbar() {
             style={maxLeadingWidth ? { maxWidth: maxLeadingWidth } : undefined}
           >
             {embedded && !fullscreen ? (
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-sidebar-trigger-appearance={hostSidebarOpen ? "panel" : "brand"}
-                      className={cn(
-                        "group/sidebar-trigger shrink-0 rounded-md",
-                        hostSidebarOpen ? "h-7 w-7" : "h-9 w-9",
-                      )}
-                      onClick={() => {
-                        setHostSidebarOpen((current) => !current);
-                        postVivdHostMessage({ type: "vivd:studio:toggleSidebar" });
-                      }}
-                      onPointerEnter={() => {
-                        if (hostSidebarOpen) return;
-                        postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
-                      }}
-                      onPointerLeave={() => {
-                        if (hostSidebarOpen) return;
-                        postVivdHostMessage({
-                          type: "vivd:studio:scheduleHideSidebarPeek",
-                        });
-                      }}
-                      onFocus={() => {
-                        if (hostSidebarOpen) return;
-                        postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
-                      }}
-                      onBlur={() => {
-                        if (hostSidebarOpen) return;
-                        postVivdHostMessage({
-                          type: "vivd:studio:scheduleHideSidebarPeek",
-                        });
-                      }}
-                    >
-                      {hostSidebarOpen ? (
-                        <PanelLeft className="h-4 w-4" />
-                      ) : (
-                        <SidebarBrandToggleGlyph morphOnHover={false} />
-                      )}
-                      <span className="sr-only">Toggle Sidebar</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" align="center">
-                    Toggle sidebar
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                variant="ghost"
+                size="icon"
+                data-sidebar-trigger-appearance={hostSidebarOpen ? "panel" : "brand"}
+                className={cn(
+                  "group/sidebar-trigger shrink-0 rounded-md",
+                  hostSidebarOpen ? "h-7 w-7" : "h-9 w-9",
+                )}
+                onClick={() => {
+                  setHostSidebarOpen((current) => !current);
+                  postVivdHostMessage({ type: "vivd:studio:toggleSidebar" });
+                }}
+                onPointerEnter={() => {
+                  if (hostSidebarOpen) return;
+                  postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
+                }}
+                onFocus={() => {
+                  if (hostSidebarOpen) return;
+                  postVivdHostMessage({ type: "vivd:studio:showSidebarPeek" });
+                }}
+              >
+                {hostSidebarOpen ? (
+                  <PanelLeft className="h-4 w-4" />
+                ) : (
+                  <SidebarBrandToggleGlyph morphOnHover={false} />
+                )}
+                <span className="sr-only">Toggle Sidebar</span>
+              </Button>
             ) : (
               <div className="flex shrink-0 items-center">
                 <VivdIcon className="!size-6" strokeWidth={12} />

@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./descriptor": "./src/descriptor.ts",
+    "./backendHooks": "./src/backendHooks.ts",
     "./backend/config": "./src/backend/config.ts",
     "./backend/module": "./src/backend/module.ts",
     "./backend/adminHooks": "./src/backend/adminHooks.ts",

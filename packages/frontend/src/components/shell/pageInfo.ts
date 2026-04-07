@@ -1,4 +1,4 @@
-import { getProjectPluginUi } from "@/plugins/registry";
+import { getFrontendSharedProjectPluginUi } from "@/plugins/sharedUiRegistry";
 
 export interface PageInfo {
   title: string;
@@ -11,7 +11,7 @@ export interface PageInfo {
 }
 
 function formatPluginPageTitle(pluginId: string) {
-  const pluginUi = getProjectPluginUi(pluginId);
+  const pluginUi = getFrontendSharedProjectPluginUi(pluginId);
   if (pluginUi?.pageTitle) return pluginUi.pageTitle;
   if (pluginUi?.shortcut?.label) return pluginUi.shortcut.label;
 

@@ -87,6 +87,8 @@ interface PreviewContextValue {
   setChatOpen: (open: boolean) => void;
   assetsOpen: boolean;
   setAssetsOpen: (open: boolean) => void;
+  cmsOpen: boolean;
+  setCmsOpen: (open: boolean) => void;
   sessionHistoryOpen: boolean;
   setSessionHistoryOpen: (open: boolean) => void;
   refreshKey: number;
@@ -232,6 +234,7 @@ export function PreviewProvider({
   const [assetsOpenState, setAssetsOpenState] = useState(
     initialPanelState.assetsOpen,
   );
+  const [cmsOpen, setCmsOpen] = useState(false);
   const [sessionHistoryOpenState, setSessionHistoryOpenState] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
@@ -1484,6 +1487,8 @@ export function PreviewProvider({
     setChatOpen,
     assetsOpen: assetsOpenState,
     setAssetsOpen,
+    cmsOpen,
+    setCmsOpen,
     sessionHistoryOpen: sessionHistoryOpenState,
     setSessionHistoryOpen,
     refreshKey,

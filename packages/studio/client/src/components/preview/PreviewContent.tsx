@@ -63,6 +63,11 @@ const AIEditDialog = lazy(() =>
     default: module.AIEditDialog,
   })),
 );
+const CmsPanel = lazy(() =>
+  import("../cms/CmsPanel").then((module) => ({
+    default: module.CmsPanel,
+  })),
+);
 
 function DeferredPanel({
   children,
@@ -99,6 +104,8 @@ export function PreviewContent() {
     handlePreviewLocationChange,
     assetPanel,
     chatPanel,
+    cmsOpen,
+    setCmsOpen,
     iframeLoading,
     onIframeNavigateStart,
     onIframeLoad,
@@ -515,6 +522,16 @@ export function PreviewContent() {
                   version={selectedVersion}
                   filePath={editingTextFile}
                   onClose={() => setEditingTextFile(null)}
+                />
+              </DeferredPanel>
+            )}
+
+            {projectSlug && cmsOpen && (
+              <DeferredPanel>
+                <CmsPanel
+                  projectSlug={projectSlug}
+                  version={selectedVersion}
+                  onClose={() => setCmsOpen(false)}
                 />
               </DeferredPanel>
             )}

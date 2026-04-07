@@ -20,9 +20,9 @@ export function SidebarBrandToggleGlyph({
         aria-hidden="true"
         data-sidebar-brand-glyph="brand"
         className={cn(
-          "!size-6 transition-all duration-150 ease-out",
+          "!size-6 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] delay-0",
           morphOnHover &&
-            "group-hover/sidebar-trigger:scale-90 group-hover/sidebar-trigger:opacity-0 group-focus/sidebar-trigger:scale-90 group-focus/sidebar-trigger:opacity-0",
+            "group-hover/sidebar-trigger:delay-150 group-hover/sidebar-trigger:scale-90 group-hover/sidebar-trigger:opacity-0 group-focus/sidebar-trigger:delay-150 group-focus/sidebar-trigger:scale-90 group-focus/sidebar-trigger:opacity-0",
         )}
         strokeWidth={12}
       />
@@ -30,9 +30,9 @@ export function SidebarBrandToggleGlyph({
         aria-hidden="true"
         data-sidebar-brand-glyph="panel"
         className={cn(
-          "!size-[18px] absolute scale-90 opacity-0 transition-all duration-150 ease-out",
+          "!size-[18px] absolute scale-90 opacity-0 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] delay-0",
           morphOnHover &&
-            "group-hover/sidebar-trigger:scale-100 group-hover/sidebar-trigger:opacity-100 group-focus/sidebar-trigger:scale-100 group-focus/sidebar-trigger:opacity-100",
+            "group-hover/sidebar-trigger:delay-150 group-hover/sidebar-trigger:scale-100 group-hover/sidebar-trigger:opacity-100 group-focus/sidebar-trigger:delay-150 group-focus/sidebar-trigger:scale-100 group-focus/sidebar-trigger:opacity-100",
         )}
       />
     </span>

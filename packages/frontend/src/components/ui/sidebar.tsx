@@ -31,7 +31,7 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
-const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 180;
+const SIDEBAR_IMMERSIVE_HIDE_DELAY_MS = 260;
 const SIDEBAR_IMMERSIVE_WAKE_EDGE_PX = 12;
 
 function isWithinAnySidebarPanel(
@@ -483,7 +483,7 @@ const Sidebar = React.forwardRef<
             "fixed inset-y-0 hidden h-svh md:flex",
             isImmersiveDesktop
               ? [
-                  "z-30 transition-[width,opacity,transform,visibility] duration-200 ease-out",
+                  "z-30 transition-[width,opacity,transform,visibility] duration-360 ease-[cubic-bezier(0.22,1,0.36,1)]",
                   side === "left" ? "left-0" : "right-0",
                   state === "collapsed"
                     ? variant === "floating" || variant === "inset"
@@ -546,6 +546,7 @@ const SidebarTrigger = React.forwardRef<
   React.ComponentProps<typeof Button> & {
     appearance?: "panel" | "brand";
     revealOnHover?: boolean;
+    morphOnHover?: boolean;
   }
 >(
   (
@@ -555,6 +556,7 @@ const SidebarTrigger = React.forwardRef<
       onClick,
       appearance = "panel",
       revealOnHover = true,
+      morphOnHover = true,
       ...props
     },
     ref,
@@ -607,7 +609,7 @@ const SidebarTrigger = React.forwardRef<
 
   const icon =
     appearance === "brand" ? (
-      <SidebarBrandToggleGlyph />
+      <SidebarBrandToggleGlyph morphOnHover={morphOnHover} />
     ) : (
       <PanelLeft aria-hidden="true" className="!size-4" />
     );

@@ -20,6 +20,7 @@ Vivd is in a mixed state:
 - `analytics` and `contact_form` are extracted plugin workspace packages at `packages/plugin-analytics` and `packages/plugin-contact-form`
 - host apps still own the generic plugin platform, registries, routing, and compatibility layers
 - the actual plugin implementation/runtime code for Analytics and Contact Form now lives in the plugin packages; host code should mostly be adapters
+- plugin packages now also export safe package descriptors (`src/descriptor.ts`) so host registries can derive plugin-owned definition/UI/CLI metadata from one package-level source instead of repeating separate arrays/maps per surface
 
 Treat the architecture as:
 - shared contract layer in `packages/shared`
@@ -38,7 +39,9 @@ Start here when orienting:
   - `packages/shared/src/types/plugins.ts`
   - `packages/shared/src/types/pluginCli.ts`
   - `packages/shared/src/types/pluginContracts.ts`
+  - `packages/shared/src/types/pluginPackages.ts`
 - Backend plugin host:
+  - `packages/backend/src/services/plugins/descriptors.ts`
   - `packages/backend/src/services/plugins/registry.ts`
   - `packages/backend/src/services/plugins/integrationHooks.ts`
   - `packages/backend/src/services/plugins/core/module.ts`
@@ -55,6 +58,7 @@ Start here when orienting:
   - `packages/cli/src/plugins/registry.ts`
 - Extracted plugin package example:
   - `packages/plugin-analytics/package.json`
+  - `packages/plugin-analytics/src/descriptor.ts`
   - `packages/plugin-analytics/src/backend/config.ts`
   - `packages/plugin-analytics/src/backend/module.ts`
   - `packages/plugin-analytics/src/frontend/module.ts`
@@ -62,6 +66,8 @@ Start here when orienting:
   - `packages/plugin-analytics/src/cli/module.ts`
   - `packages/plugin-analytics/src/shared/projectUi.ts`
   - `packages/plugin-contact-form/package.json`
+  - `packages/plugin-contact-form/src/descriptor.ts`
+  - `packages/plugin-contact-form/src/backendHooks.ts`
   - `packages/plugin-contact-form/src/backend/config.ts`
   - `packages/plugin-contact-form/src/backend/module.ts`
   - `packages/plugin-contact-form/src/backend/adminHooks.ts`
@@ -119,8 +125,9 @@ Bad examples:
 Use this sequence:
 
 1. Define or update the plugin definition.
-   - Register it in `packages/backend/src/services/plugins/registry.ts`
-   - Keep manifest-like metadata in one place
+   - Keep the plugin definition in the plugin package
+   - Export a safe package descriptor from the plugin package
+   - Register the plugin through the host descriptor lists instead of adding separate hardcoded arrays/maps per surface
 
 2. Wire the backend module.
    - Implement `PluginModule` behavior using shared contracts from `packages/shared`

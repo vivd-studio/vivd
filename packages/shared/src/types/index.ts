@@ -3,6 +3,7 @@ export * from "./initialGeneration.js";
 export * from "./limits.js";
 export * from "./pluginCli.js";
 export * from "./pluginContracts.js";
+export * from "./pluginPackages.js";
 export * from "./plugins.js";
 export * from "./projectActions.js";
 export * from "./studioMode.js";
