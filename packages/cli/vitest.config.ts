@@ -1,20 +1,23 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
+const sharedSrc = path.resolve(__dirname, "../shared/src");
+const pluginAnalyticsSrc = path.resolve(__dirname, "../plugin-analytics/src");
+
 export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^@vivd\/shared\/studio$/,
-        replacement: path.resolve(__dirname, "../shared/src/studio/index.ts"),
+        find: /^@vivd\/plugin-analytics$/,
+        replacement: path.resolve(pluginAnalyticsSrc, "index.ts"),
       },
       {
-        find: /^@vivd\/shared\/config$/,
-        replacement: path.resolve(__dirname, "../shared/src/config/index.ts"),
+        find: /^@vivd\/plugin-analytics\/(.*)$/,
+        replacement: path.resolve(__dirname, "../plugin-analytics/src/$1"),
       },
       {
         find: /^@vivd\/shared$/,
-        replacement: path.resolve(__dirname, "../shared/src/index.ts"),
+        replacement: path.resolve(sharedSrc, "index.ts"),
       },
       {
         find: /^@vivd\/shared\/(.*)$/,
@@ -23,8 +26,6 @@ export default defineConfig({
     ],
   },
   test: {
-    globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts"],
   },
 });

@@ -27,6 +27,7 @@ const {
   requestPreviewBuildMock,
   isArtifactBuilderEnabledMock,
   touchStudioMachineMock,
+  capturePreviewScreenshotMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
   recordImageGenerationMock: vi.fn(),
@@ -54,6 +55,7 @@ const {
   requestPreviewBuildMock: vi.fn(),
   isArtifactBuilderEnabledMock: vi.fn(),
   touchStudioMachineMock: vi.fn(),
+  capturePreviewScreenshotMock: vi.fn(),
 }));
 
 vi.mock("../src/services/usage/UsageService", () => ({
@@ -78,6 +80,12 @@ vi.mock("../src/generator/versionUtils", () => ({
 vi.mock("../src/services/project/ThumbnailService", () => ({
   thumbnailService: {
     generateThumbnail: generateThumbnailMock,
+  },
+}));
+
+vi.mock("../src/services/project/PreviewScreenshotService", () => ({
+  previewScreenshotService: {
+    capture: capturePreviewScreenshotMock,
   },
 }));
 
@@ -203,6 +211,7 @@ describe("studioApi router", () => {
     reportAgentLeaseActiveMock.mockReset();
     reportAgentLeaseIdleMock.mockReset();
     touchStudioMachineMock.mockReset();
+    capturePreviewScreenshotMock.mockReset();
 
     recordAiCostMock.mockResolvedValue(undefined);
     recordImageGenerationMock.mockResolvedValue(undefined);
@@ -211,6 +220,18 @@ describe("studioApi router", () => {
     touchProjectUpdatedAtMock.mockResolvedValue(undefined);
     getVersionDirMock.mockReturnValue("/tmp/org-1/site-1/v1");
     generateThumbnailMock.mockResolvedValue(undefined);
+    capturePreviewScreenshotMock.mockResolvedValue({
+      path: "/",
+      capturedUrl: "https://preview.example.test/",
+      filename: "preview-home-1440x900.png",
+      mimeType: "image/png",
+      format: "png",
+      width: 1440,
+      height: 900,
+      scrollX: 0,
+      scrollY: 0,
+      imageBase64: "base64-image",
+    });
     upsertPublishChecklistMock.mockResolvedValue(undefined);
     getPublishChecklistMock.mockResolvedValue(null);
     getProjectMock.mockResolvedValue({
@@ -871,6 +892,47 @@ describe("studioApi router", () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  it("captures live preview screenshots through the preview screenshot service", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.capturePreviewScreenshot({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 2,
+      path: "/pricing?view=full",
+      width: 1600,
+      height: 1000,
+      scrollY: 1400,
+      waitMs: 900,
+      format: "webp",
+    });
+
+    expect(capturePreviewScreenshotMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 2,
+      path: "/pricing?view=full",
+      width: 1600,
+      height: 1000,
+      scrollX: undefined,
+      scrollY: 1400,
+      waitMs: 900,
+      format: "webp",
+    });
+    expect(result).toEqual({
+      path: "/",
+      capturedUrl: "https://preview.example.test/",
+      filename: "preview-home-1440x900.png",
+      mimeType: "image/png",
+      format: "png",
+      width: 1440,
+      height: 900,
+      scrollX: 0,
+      scrollY: 0,
+      imageBase64: "base64-image",
+    });
   });
 
   it("normalizes missing workspace hashes to null", async () => {

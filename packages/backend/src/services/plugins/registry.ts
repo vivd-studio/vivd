@@ -7,8 +7,8 @@ import {
 import {
   analyticsPluginConfigSchema,
   type AnalyticsPluginConfig,
-} from "./analytics/module";
-import { analyticsPluginModule } from "./analytics/module";
+} from "@vivd/plugin-analytics/backend/module";
+import { analyticsPluginModule } from "@vivd/plugin-analytics/backend/module";
 import { contactFormPluginModule } from "./contactForm/module";
 import type { PluginModule } from "./core/module";
 

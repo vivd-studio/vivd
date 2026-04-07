@@ -1,17 +1,17 @@
 import { router } from "../../trpc";
 import { catalogPluginProcedure } from "./catalog";
 import {
+  analyticsEnsurePluginProcedure,
+  analyticsInfoPluginProcedure,
+  analyticsSummaryPluginProcedure,
+  analyticsUpdateConfigPluginProcedure,
+} from "@vivd/plugin-analytics/backend/router";
+import {
   ensurePluginProcedure,
   infoPluginProcedure,
   runPluginActionProcedure,
   updatePluginConfigProcedure,
 } from "./generic";
-import {
-  analyticsEnsurePluginProcedure,
-  analyticsInfoPluginProcedure,
-  analyticsSummaryPluginProcedure,
-  analyticsUpdateConfigPluginProcedure,
-} from "./analytics";
 import {
   contactEnsurePluginProcedure,
   contactInfoPluginProcedure,

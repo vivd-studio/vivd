@@ -16,6 +16,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - `packages/backend`: control-plane backend (Express + tRPC, Better Auth, Drizzle migrations, publish/domain orchestration, studio machine orchestration).
 - `packages/docs`: public product docs site (Astro/Starlight).
 - `packages/frontend`: control-plane React UI.
+- `packages/plugin-analytics`: first extracted internal plugin package; owns Analytics-specific backend/frontend/CLI module entrypoints and compatibility exports.
 - `packages/studio`: isolated studio runtime (server + client) for workspace edits and agent operations.
 - `packages/scraper`: dedicated Express + Puppeteer scraping service.
 - `packages/shared`: shared config/types used across services.
@@ -29,9 +30,9 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Frontend should not depend on backend internals via ad-hoc local path aliases; prefer explicit shared contracts.
 - Shared plugin presentation metadata now lives in `packages/shared/src/types/plugins.ts`; direct plugin affordances such as icons, shortcut labels, route targets, and activation prompts should be declared there instead of hardcoding `analytics`/other plugin checks into host pages or Studio chrome.
 - Control-plane frontend resolves those shared plugin shortcuts through `packages/frontend/src/plugins/shortcuts.ts`, while Studio client resolves the same contract through `packages/studio/client/src/plugins/shortcuts.ts`.
-- Current internal plugins are also moving behind module registries before any workspace-package split: backend plugin module ownership now starts in `packages/backend/src/services/plugins/*/module.ts`, and control-plane frontend plugin page ownership now starts in `packages/frontend/src/plugins/*/module.ts`.
+- Internal plugins should now move toward real workspace-package ownership. Analytics already lives in `packages/plugin-analytics`, including its plugin-owned CLI descriptor under `src/cli/module.ts`, while remaining plugins such as Contact Form still have host-owned module entrypoints under `packages/backend/src/services/plugins/*/module.ts`, `packages/frontend/src/plugins/*/module.ts`, and `packages/cli/src/commands.ts` until they are extracted.
 - Generic backend plugin host helpers now live in `packages/backend/src/trpcRouters/plugins/operations.ts`; keep plugin-specific public error translation inside the plugin module files instead of reintroducing contact/analytics-specific error handling in shared routers.
-- The plugin-specific public routers under `packages/backend/src/trpcRouters/plugins/contactForm.ts` and `packages/backend/src/trpcRouters/plugins/analytics.ts` are compatibility adapters. Keep them thin and route shared lifecycle/config/action flows through the generic operations layer; only truly plugin-specific endpoints like Analytics summary should stay there.
+- The plugin-specific public routers under `packages/backend/src/trpcRouters/plugins/contactForm.ts` and `packages/backend/src/trpcRouters/plugins/analytics.ts` are compatibility adapters. Keep them thin and route shared lifecycle/config/action flows through the generic operations layer; plugin-owned implementations should live in the plugin package/module first, with the host path reduced to a re-export or legacy payload wrapper.
 - Keep compatibility wrappers/routes only as thin adapters. New plugin-owned UI or backend behavior should go into the per-plugin module files first, not into host-page/service switch statements.
 
 ## Upstream Reference Checkouts
@@ -52,12 +53,14 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Preferred agent surface for connected runtime/platform operations is the Studio-machine `vivd` CLI in `packages/cli`.
 - Shared CLI/backend transport helper lives in `packages/shared/src/studio/connectedBackendClient.ts`.
 - The `vivd` CLI is how the agent inspects runtime/project context and interacts with platform-managed features such as plugins and the publish checklist.
+- Interaction with the Vivd platform outside normal file/code editing capabilities should go through the `vivd` CLI rather than dedicated custom OpenCode wrappers wherever possible.
 - Prefer the generic plugin CLI surface for discovery and execution: `vivd plugins catalog`, `vivd plugins info <pluginId>`, `vivd plugins config show|template|apply <pluginId>`, and `vivd plugins action <pluginId> <actionId> ...`.
 - Current first-party compatibility aliases such as `vivd plugins contact ...` and `vivd plugins analytics info` still work, but they should not be treated as the long-term contract.
-- Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd plugins help`, and `vivd publish help`.
+- Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd preview help`, `vivd plugins help`, and `vivd publish help`.
 - Treat `vivd publish checklist run` as an explicit full checklist pass, not a routine test command; prefer item-by-item checklist work unless the user explicitly asked for a full run or rerun.
+- Use `vivd preview screenshot [path]` when the agent needs a visual capture of the live preview; screenshots default to `.vivd/dropped-images/` unless `--output` is passed.
 - For `STUDIO_MACHINE_PROVIDER=local`, `packages/backend/src/services/studioMachines/local.ts` is responsible for making `vivd` available inside spawned Studio runtimes by wiring a local wrapper into the child-process `PATH`.
-- The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`; plugin/checklist wrappers were removed in favor of the CLI.
+- The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`; plugin, preview-screenshot, checklist, and similar platform operations should go through the CLI.
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.
 - Tool source of truth: `packages/studio/server/opencode/toolRegistry.ts` + `packages/studio/server/opencode/toolModules/*.ts`.
 - Managed custom tool: `vivd_image_ai`.

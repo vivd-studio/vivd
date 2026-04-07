@@ -4,6 +4,29 @@ import { log } from "../utils/logger.js";
 
 const MAX_SCREENSHOT_HEIGHT = 2000;
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
+const DEFAULT_CAPTURE_WAIT_MS = 1500;
+
+export type CaptureScreenshotFormat = "png" | "jpeg" | "webp";
+
+export interface ScreenshotCaptureResult {
+  url: string;
+  data: string;
+  filename: string;
+  mimeType: string;
+}
+
+export interface CaptureScreenshotOptions {
+  url: string;
+  width?: number;
+  height?: number;
+  scrollX?: number;
+  scrollY?: number;
+  waitMs?: number;
+  headers?: Record<string, string>;
+  format?: CaptureScreenshotFormat;
+  filename?: string;
+  index?: number;
+}
 
 async function getDocumentHeight(page: Page): Promise<number> {
   const height = await page.evaluate(() => {
@@ -34,6 +57,154 @@ async function getDocumentHeight(page: Page): Promise<number> {
 function toPositiveInt(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.floor(value));
+}
+
+function toNonNegativeInt(value: number | undefined): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value ?? 0));
+}
+
+function toWaitMs(value: number | undefined): number {
+  if (!Number.isFinite(value)) return DEFAULT_CAPTURE_WAIT_MS;
+  return Math.max(0, Math.min(Math.floor(value ?? DEFAULT_CAPTURE_WAIT_MS), 15_000));
+}
+
+function sanitizeFilenamePart(input: string): string {
+  return input.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "capture";
+}
+
+function buildCaptureFilename(
+  url: string,
+  index = 0,
+  format: CaptureScreenshotFormat = "png",
+): string {
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  return `ref_${index + 1}_${sanitizeFilenamePart(host)}.${format}`;
+}
+
+async function applyAllowedHeaders(
+  page: Page,
+  headers: Record<string, string> | undefined,
+): Promise<void> {
+  if (!headers) return;
+
+  const allowedHeaderKeys = new Set([
+    "x-vivd-preview-token",
+    "x-vivd-organization-id",
+    "x-vivd-studio-token",
+  ]);
+  const extraHeaders: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== "string") continue;
+    const normalizedKey = key.toLowerCase();
+    if (!allowedHeaderKeys.has(normalizedKey)) continue;
+    extraHeaders[normalizedKey] = value;
+  }
+
+  if (Object.keys(extraHeaders).length > 0) {
+    await page.setExtraHTTPHeaders(extraHeaders);
+  }
+}
+
+async function ensureFontsSettled(page: Page): Promise<void> {
+  try {
+    await page.evaluate(async () => {
+      if ("fonts" in document) {
+        await document.fonts.ready;
+      }
+    });
+  } catch {
+    // Best-effort only.
+  }
+}
+
+function mimeTypeForFormat(format: CaptureScreenshotFormat): string {
+  if (format === "jpeg") return "image/jpeg";
+  if (format === "webp") return "image/webp";
+  return "image/png";
+}
+
+export async function capturePageScreenshot(
+  page: Page,
+  options: CaptureScreenshotOptions,
+): Promise<ScreenshotCaptureResult> {
+  const width = toPositiveInt(options.width ?? DEFAULT_VIEWPORT.width);
+  const height = toPositiveInt(options.height ?? DEFAULT_VIEWPORT.height);
+  const waitMs = toWaitMs(options.waitMs);
+  const scrollX = toNonNegativeInt(options.scrollX);
+  const scrollY = toNonNegativeInt(options.scrollY);
+  const format = options.format ?? "png";
+
+  log(
+    `Capturing screenshot: ${options.url} (${width}x${height}, scroll=${scrollX},${scrollY}, format=${format})`,
+  );
+
+  await page.setViewport({
+    width,
+    height,
+    deviceScaleFactor: 1,
+  });
+  await applyAllowedHeaders(page, options.headers);
+
+  const response = await page.goto(options.url, {
+    waitUntil: "networkidle2",
+    timeout: 45000,
+  });
+
+  if (!response) {
+    throw new Error("No response from preview URL");
+  }
+
+  const status = response.status();
+  if (status >= 400) {
+    let detail = "";
+    try {
+      const bodyText = await response.text();
+      if (bodyText) {
+        const compact = bodyText.replace(/\s+/g, " ").trim();
+        if (compact) {
+          detail = `: ${compact.slice(0, 240)}`;
+        }
+      }
+    } catch {
+      // Ignore response body parsing failures.
+    }
+    throw new Error(`Preview returned HTTP ${status}${detail}`);
+  }
+
+  const contentType = response.headers()["content-type"] || "";
+  if (contentType.toLowerCase().includes("application/json")) {
+    throw new Error(`Preview returned JSON instead of HTML (${contentType})`);
+  }
+
+  await ensureFontsSettled(page);
+
+  await page.evaluate(
+    ({ nextScrollX, nextScrollY }) => {
+      window.scrollTo(nextScrollX, nextScrollY);
+    },
+    { nextScrollX: scrollX, nextScrollY: scrollY },
+  );
+
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  const screenshot = await page.screenshot({
+    type: format,
+    quality: format === "png" ? undefined : 90,
+    fullPage: false,
+    captureBeyondViewport: false,
+    encoding: "base64",
+  });
+
+  return {
+    url: options.url,
+    data: screenshot as string,
+    filename: options.filename || buildCaptureFilename(options.url, options.index, format),
+    mimeType: mimeTypeForFormat(format),
+  };
 }
 
 export async function takeMainPageScreenshot(page: Page): Promise<string> {
@@ -225,37 +396,19 @@ export async function captureReferenceScreenshot(
   index: number,
 ): Promise<{ url: string; data: string; filename: string } | null> {
   try {
-    log(`Capturing reference screenshot: ${url}`);
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await new Promise((r) => setTimeout(r, 1500));
-
-    const viewport = page.viewport() ?? DEFAULT_VIEWPORT;
-    const width = viewport.width || DEFAULT_VIEWPORT.width;
-    const viewportHeight = viewport.height || DEFAULT_VIEWPORT.height;
-
-    const documentHeight = await getDocumentHeight(page);
-    const height = toPositiveInt(
-      Math.min(documentHeight || viewportHeight, MAX_SCREENSHOT_HEIGHT),
-    );
-
-    const screenshot = await page.screenshot({
-      fullPage: false,
-      captureBeyondViewport: true,
-      clip: { x: 0, y: 0, width, height },
-      encoding: "base64",
+    const result = await capturePageScreenshot(page, {
+      url,
+      index,
+      width: DEFAULT_VIEWPORT.width,
+      height: DEFAULT_VIEWPORT.height,
+      waitMs: DEFAULT_CAPTURE_WAIT_MS,
+      format: "png",
     });
 
-    const host = new URL(url).hostname
-      .replace(/^www\./, "")
-      .replace(/[^a-zA-Z0-9._-]/g, "_");
-    const filename = `ref_${index + 1}_${host}.png`;
-
     return {
-      url,
-      data: screenshot as string,
-      filename,
+      url: result.url,
+      data: result.data,
+      filename: result.filename,
     };
   } catch (err) {
     log(`Failed to capture reference screenshot (${url}): ${err}`);

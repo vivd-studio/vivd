@@ -6,7 +6,6 @@
  * machine-scoped Studio runtime token.
  */
 
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, studioOrgProcedure, studioProjectProcedure } from "../trpc";
 import { usageService, type TokenData } from "../services/usage/UsageService";
@@ -17,6 +16,7 @@ import {
   writeInitialGenerationManifest,
 } from "../generator/initialGeneration";
 import { thumbnailService } from "../services/project/ThumbnailService";
+import { previewScreenshotService } from "../services/project/PreviewScreenshotService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
 import { studioAgentLeaseService } from "../services/project/StudioAgentLeaseService";
@@ -91,6 +91,19 @@ const prePublishChecklistSchema = z.object({
     skipped: z.number(),
     fixed: z.number().optional(),
   }),
+});
+
+const previewScreenshotSchema = z.object({
+  path: z.string(),
+  capturedUrl: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  format: z.enum(["png", "jpeg", "webp"]),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  scrollX: z.number().int().nonnegative(),
+  scrollY: z.number().int().nonnegative(),
+  imageBase64: z.string(),
 });
 
 function normalizeChecklistItemNote(note: string | null | undefined): string | undefined {
@@ -744,6 +757,37 @@ export const studioApiRouter = router({
         });
 
       return { success: true };
+    }),
+
+  capturePreviewScreenshot: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        path: z.string().optional(),
+        width: z.number().int().positive().max(4096).optional(),
+        height: z.number().int().positive().max(4096).optional(),
+        scrollX: z.number().int().nonnegative().max(20000).optional(),
+        scrollY: z.number().int().nonnegative().max(50000).optional(),
+        waitMs: z.number().int().nonnegative().max(15000).optional(),
+        format: z.enum(["png", "jpeg", "webp"]).optional(),
+      }),
+    )
+    .output(previewScreenshotSchema)
+    .mutation(async ({ ctx, input }) => {
+      return await previewScreenshotService.capture({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        version: input.version,
+        path: input.path,
+        width: input.width,
+        height: input.height,
+        scrollX: input.scrollX,
+        scrollY: input.scrollY,
+        waitMs: input.waitMs,
+        format: input.format,
+      });
     }),
 
   /**

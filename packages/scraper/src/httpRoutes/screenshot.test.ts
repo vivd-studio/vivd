@@ -5,6 +5,7 @@ const {
   createPageMock,
   releaseMock,
   isBrowserErrorMock,
+  capturePageScreenshotMock,
   captureReferenceScreenshotMock,
   logMock,
 } = vi.hoisted(() => ({
@@ -12,6 +13,7 @@ const {
   createPageMock: vi.fn(),
   releaseMock: vi.fn(),
   isBrowserErrorMock: vi.fn(),
+  capturePageScreenshotMock: vi.fn(),
   captureReferenceScreenshotMock: vi.fn(),
   logMock: vi.fn(),
 }));
@@ -26,6 +28,7 @@ vi.mock("../services/browser.js", () => ({
 }));
 
 vi.mock("../services/screenshot.js", () => ({
+  capturePageScreenshot: capturePageScreenshotMock,
   captureReferenceScreenshot: captureReferenceScreenshotMock,
 }));
 
@@ -71,6 +74,7 @@ describe("screenshotRouter", () => {
     createPageMock.mockReset();
     releaseMock.mockReset();
     isBrowserErrorMock.mockReset();
+    capturePageScreenshotMock.mockReset();
     captureReferenceScreenshotMock.mockReset();
     logMock.mockReset();
 
@@ -85,8 +89,72 @@ describe("screenshotRouter", () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ error: "Missing or invalid 'urls' array" });
+    expect(res.body).toEqual({ error: "Missing or invalid 'url' or 'urls' input" });
     expect(acquireMock).not.toHaveBeenCalled();
+  });
+
+  it("captures a single preview screenshot with viewport, scroll, and auth headers", async () => {
+    const browser = { id: "browser-preview" };
+    const page = {
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    acquireMock.mockResolvedValue(browser);
+    createPageMock.mockResolvedValue(page);
+    capturePageScreenshotMock.mockResolvedValue({
+      url: "https://preview.example.test/pricing",
+      data: "base64-preview",
+      filename: "preview-pricing-1600x1000-x0-y1200.webp",
+      mimeType: "image/webp",
+    });
+
+    const handler = getPostHandler();
+    const req = {
+      body: {
+        url: "https://preview.example.test/pricing",
+        width: 1600,
+        height: 1000,
+        scrollY: 1200,
+        waitMs: 700,
+        headers: {
+          "x-vivd-studio-token": "studio-token",
+          "x-vivd-organization-id": "org-1",
+        },
+        format: "webp",
+        filename: "preview-pricing-1600x1000-x0-y1200.webp",
+      },
+    } as any;
+    const res = makeResponse();
+
+    await handler(req, res);
+
+    expect(capturePageScreenshotMock).toHaveBeenCalledWith(page, {
+      url: "https://preview.example.test/pricing",
+      width: 1600,
+      height: 1000,
+      scrollX: undefined,
+      scrollY: 1200,
+      waitMs: 700,
+      headers: {
+        "x-vivd-studio-token": "studio-token",
+        "x-vivd-organization-id": "org-1",
+      },
+      format: "webp",
+      filename: "preview-pricing-1600x1000-x0-y1200.webp",
+      index: 0,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({
+      screenshots: [
+        {
+          url: "https://preview.example.test/pricing",
+          data: "base64-preview",
+          filename: "preview-pricing-1600x1000-x0-y1200.webp",
+          mimeType: "image/webp",
+        },
+      ],
+    });
+    expect(page.close).toHaveBeenCalledTimes(1);
+    expect(releaseMock).toHaveBeenCalledWith(browser);
   });
 
   it("caps captures by maxScreenshots and omits failed captures", async () => {

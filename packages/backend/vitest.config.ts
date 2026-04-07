@@ -28,6 +28,14 @@ export default defineConfig({
         find: /^@vivd\/shared$/,
         replacement: path.resolve(__dirname, "../shared/src/index.ts"),
       },
+      {
+        find: /^@vivd\/plugin-analytics$/,
+        replacement: path.resolve(__dirname, "../plugin-analytics/src/index.ts"),
+      },
+      {
+        find: /^@vivd\/plugin-analytics\/(.*)$/,
+        replacement: path.resolve(__dirname, "../plugin-analytics/src/$1"),
+      },
     ],
   },
   test: {

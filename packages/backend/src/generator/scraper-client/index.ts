@@ -50,6 +50,7 @@ interface ScreenshotResponse {
     url: string;
     data: string;
     filename: string;
+    mimeType?: string;
   }>;
 }
 
@@ -62,6 +63,18 @@ interface FindLinksResponse {
 
 interface ThumbnailResponse {
   thumbnail: string;
+}
+
+export interface CaptureScreenshotRequest {
+  url: string;
+  width?: number;
+  height?: number;
+  scrollX?: number;
+  scrollY?: number;
+  waitMs?: number;
+  headers?: Record<string, string>;
+  format?: "png" | "jpeg" | "webp";
+  filename?: string;
 }
 
 async function fetchWithRetry<T>(
@@ -213,6 +226,39 @@ export const scraperClient = {
 
     log(`[ScraperClient] Saved ${savedPaths.length} reference screenshots`);
     return savedPaths;
+  },
+
+  async captureScreenshot(
+    request: CaptureScreenshotRequest,
+  ): Promise<{
+    url: string;
+    data: string;
+    filename: string;
+    mimeType: string;
+  }> {
+    log(
+      `[ScraperClient] Requesting screenshot: ${request.url} (${request.width ?? 1280}x${request.height ?? 800})`,
+    );
+
+    const response = await fetchWithRetry<ScreenshotResponse>(
+      `${SCRAPER_URL}/screenshot`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+    );
+
+    const screenshot = response.screenshots[0];
+    if (!screenshot) {
+      throw new Error("Screenshot capture failed: scraper returned no image");
+    }
+
+    return {
+      url: screenshot.url,
+      data: screenshot.data,
+      filename: screenshot.filename,
+      mimeType: screenshot.mimeType || "image/png",
+    };
   },
 
   /**

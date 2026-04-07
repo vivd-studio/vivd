@@ -47,6 +47,9 @@
       "@vivd/builder/*": [
         "../builder/src/*"
       ],
+      "@vivd/plugin-analytics/*": [
+        "../plugin-analytics/src/*"
+      ],
       "@vivd/shared": [
         "../shared/src/index.ts"
       ],
@@ -56,7 +59,6 @@
     }
   },
   "include": [
-    "src",
-    "../backend/src"
+    "src"
   ]
 }

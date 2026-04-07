@@ -1,1 +1,1 @@
-export { default } from "@/plugins/analytics/AnalyticsProjectPage";
+export { default } from "@vivd/plugin-analytics/frontend/AnalyticsProjectPage";

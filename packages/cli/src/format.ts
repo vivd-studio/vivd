@@ -109,6 +109,26 @@ export function formatProjectInfoReport(input: {
   ].join("\n");
 }
 
+export function formatPreviewScreenshotReport(input: {
+  path: string;
+  capturedUrl: string;
+  savedPath: string;
+  format: string;
+  width: number;
+  height: number;
+  scrollX: number;
+  scrollY: number;
+}): string {
+  return [
+    `Preview screenshot saved: ${input.savedPath}`,
+    `Preview path: ${input.path}`,
+    `Captured URL: ${input.capturedUrl}`,
+    `Viewport: ${input.width}x${input.height}`,
+    `Scroll: ${input.scrollX}, ${input.scrollY}`,
+    `Format: ${input.format}`,
+  ].join("\n");
+}
+
 export function formatPluginCatalogReport(input: {
   available: Array<{
     pluginId: string;
@@ -430,40 +450,6 @@ export function formatContactConfigUpdateReport(projectSlug: string): string {
   return [
     `Contact plugin config updated for ${projectSlug}`,
     "Review it with `vivd plugins contact config show`.",
-  ].join("\n");
-}
-
-export function formatAnalyticsPluginReport(input: {
-  entitled: boolean;
-  entitlementState: string;
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  usage: {
-    scriptEndpoint: string;
-    trackEndpoint: string;
-    eventTypes: string[];
-    respectDoNotTrack: boolean;
-    captureQueryString: boolean;
-    enableClientTracking: boolean;
-  };
-  instructions: string[];
-}): string {
-  return [
-    `Entitled: ${input.entitled ? "yes" : "no"} (${input.entitlementState})`,
-    `Enabled: ${input.enabled ? "yes" : "no"}`,
-    formatStatusLine("Instance", input.instanceId),
-    formatStatusLine("Status", input.status),
-    formatStatusLine("Public token", input.publicToken),
-    `Script endpoint: ${input.usage.scriptEndpoint}`,
-    `Track endpoint: ${input.usage.trackEndpoint}`,
-    `Event types: ${input.usage.eventTypes.length > 0 ? input.usage.eventTypes.join(", ") : "none"}`,
-    `Respect DNT: ${input.usage.respectDoNotTrack ? "yes" : "no"}`,
-    `Capture query string: ${input.usage.captureQueryString ? "yes" : "no"}`,
-    `Client tracking: ${input.usage.enableClientTracking ? "enabled" : "disabled"}`,
-    "Instructions:",
-    ...formatInstructionLines(input.instructions),
   ].join("\n");
 }
 

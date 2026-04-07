@@ -4,6 +4,13 @@ export interface CliFlags {
   slug?: string;
   version?: number;
   file?: string;
+  output?: string;
+  width?: number;
+  height?: number;
+  scrollX?: number;
+  scrollY?: number;
+  waitMs?: number;
+  format?: string;
   status?: string;
   note?: string;
 }
@@ -37,6 +44,14 @@ function readInlineValue(token: string): string | null {
 function parseNumber(value: string, flagName: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error(`Invalid value for ${flagName}: ${value}`);
+  }
+  return parsed;
+}
+
+function parseNonNegativeNumber(value: string, flagName: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error(`Invalid value for ${flagName}: ${value}`);
   }
   return parsed;
@@ -89,6 +104,76 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     }
     if (token.startsWith("--file=")) {
       flags.file = readInlineValue(token) || undefined;
+      continue;
+    }
+
+    if (token === "--output" || token === "-o") {
+      flags.output = takeNextValue(argv, index, token, { allowLeadingDash: true });
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--output=")) {
+      flags.output = readInlineValue(token) || undefined;
+      continue;
+    }
+
+    if (token === "--width") {
+      flags.width = parseNumber(takeNextValue(argv, index, token), token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--width=")) {
+      flags.width = parseNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
+    if (token === "--height") {
+      flags.height = parseNumber(takeNextValue(argv, index, token), token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--height=")) {
+      flags.height = parseNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
+    if (token === "--scroll-x") {
+      flags.scrollX = parseNonNegativeNumber(takeNextValue(argv, index, token), token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--scroll-x=")) {
+      flags.scrollX = parseNonNegativeNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
+    if (token === "--scroll-y") {
+      flags.scrollY = parseNonNegativeNumber(takeNextValue(argv, index, token), token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--scroll-y=")) {
+      flags.scrollY = parseNonNegativeNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
+    if (token === "--wait-ms") {
+      flags.waitMs = parseNonNegativeNumber(takeNextValue(argv, index, token), token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--wait-ms=")) {
+      flags.waitMs = parseNonNegativeNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
+    if (token === "--format") {
+      flags.format = takeNextValue(argv, index, token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--format=")) {
+      flags.format = readInlineValue(token) || undefined;
       continue;
     }
 

@@ -78,6 +78,64 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("Plugins: contact_form, analytics");
   });
 
+  it("captures a preview screenshot and saves it under .vivd/dropped-images by default", async () => {
+    runtime.client.mutation.mockResolvedValue({
+      path: "/pricing",
+      capturedUrl: "https://preview.example.test/pricing",
+      filename: "preview-pricing-1600x1000-x0-y1200.png",
+      mimeType: "image/png",
+      format: "png",
+      width: 1600,
+      height: 1000,
+      scrollX: 0,
+      scrollY: 1200,
+      imageBase64: Buffer.from("png-bytes").toString("base64"),
+    });
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-preview-"));
+    const result = await dispatchCli(
+      [
+        "preview",
+        "screenshot",
+        "/pricing",
+        "--width",
+        "1600",
+        "--height",
+        "1000",
+        "--scroll-y",
+        "1200",
+      ],
+      tempDir,
+    );
+
+    expect(runtime.client.mutation).toHaveBeenCalledWith(
+      "studioApi.capturePreviewScreenshot",
+      {
+        studioId: "studio_1",
+        slug: "demo",
+        version: 7,
+        path: "/pricing",
+        width: 1600,
+        height: 1000,
+        scrollX: undefined,
+        scrollY: 1200,
+        waitMs: undefined,
+        format: "png",
+      },
+    );
+
+    const savedPath = path.join(
+      tempDir,
+      ".vivd",
+      "dropped-images",
+      "preview-pricing-1600x1000-x0-y1200.png",
+    );
+    expect(await fs.readFile(savedPath, "utf8")).toBe("png-bytes");
+    expect(result.human).toContain("Preview screenshot saved:");
+    expect(result.human).toContain(savedPath);
+    expect(result.human).toContain("Viewport: 1600x1000");
+  });
+
   it("shows the publish checklist with project version context", async () => {
     runtime.client.query.mockResolvedValue({
       checklist: {
@@ -488,6 +546,85 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("vivd plugins contact config apply --file -");
   });
 
+  it.each([
+    ["plugins", "info", "analytics"],
+    ["plugins", "analytics", "info"],
+  ])("shows analytics info through the plugin CLI module via %j", async (...argv) => {
+    runtime.client.query.mockResolvedValue({
+      pluginId: "analytics",
+      catalog: {
+        pluginId: "analytics",
+        name: "Analytics",
+        description: "Track page traffic and visitor behavior for your project.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_analytics",
+      status: "enabled",
+      publicToken: "analytics_public",
+      config: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      },
+      defaultConfig: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      },
+      snippets: null,
+      usage: {
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+        trackEndpoint: "https://api.example.test/plugins/analytics/track",
+        eventTypes: ["pageview", "custom"],
+        respectDoNotTrack: true,
+        captureQueryString: false,
+        enableClientTracking: true,
+      },
+      details: null,
+      instructions: ["Insert the analytics script snippet once per page."],
+    });
+
+    const result = await dispatchCli(argv);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      pluginId: "analytics",
+    });
+    expect(result.data).toEqual({
+      pluginId: "analytics",
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_analytics",
+      status: "enabled",
+      publicToken: "analytics_public",
+      usage: {
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+        trackEndpoint: "https://api.example.test/plugins/analytics/track",
+        eventTypes: ["pageview", "custom"],
+        respectDoNotTrack: true,
+        captureQueryString: false,
+        enableClientTracking: true,
+      },
+      instructions: ["Insert the analytics script snippet once per page."],
+    });
+    expect(result.human).toContain(
+      "Script endpoint: https://api.example.test/plugins/analytics/script.js",
+    );
+    expect(result.human).toContain("Track endpoint: https://api.example.test/plugins/analytics/track");
+    expect(result.human).toContain("Event types: pageview, custom");
+  });
+
   it("shows generic plugin config and template", async () => {
     runtime.client.query.mockResolvedValue({
       pluginId: "analytics",
@@ -772,13 +909,17 @@ describe("dispatchCli", () => {
 
   it("shows help without CMS commands", async () => {
     const rootHelp = await dispatchCli(["help"]);
+    const previewHelp = await dispatchCli(["preview", "help"]);
     const pluginsHelp = await dispatchCli(["plugins", "help"]);
     const publishHelp = await dispatchCli(["publish", "help"]);
     const contactHelp = await dispatchCli(["plugins", "contact", "help"]);
     const analyticsHelp = await dispatchCli(["plugins", "analytics", "help"]);
 
     expect(rootHelp.human).toContain("vivd project info");
+    expect(rootHelp.human).toContain("vivd preview help");
     expect(rootHelp.human).not.toContain("vivd cms");
+    expect(previewHelp.human).toContain("vivd preview screenshot [path]");
+    expect(previewHelp.human).toContain(".vivd/dropped-images/");
     expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
     expect(pluginsHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(publishHelp.human).toContain("vivd publish checklist run");
@@ -805,6 +946,16 @@ describe("cli args", () => {
       "--slug",
       "demo",
       "--version=4",
+      "--width",
+      "1440",
+      "--height=900",
+      "--scroll-y",
+      "1200",
+      "--wait-ms=600",
+      "--format",
+      "webp",
+      "--output",
+      ".vivd/dropped-images/preview.webp",
       "--status",
       "pass",
       "--note=ready to ship",
@@ -814,6 +965,12 @@ describe("cli args", () => {
     expect(parsed.flags.json).toBe(true);
     expect(parsed.flags.slug).toBe("demo");
     expect(parsed.flags.version).toBe(4);
+    expect(parsed.flags.width).toBe(1440);
+    expect(parsed.flags.height).toBe(900);
+    expect(parsed.flags.scrollY).toBe(1200);
+    expect(parsed.flags.waitMs).toBe(600);
+    expect(parsed.flags.format).toBe("webp");
+    expect(parsed.flags.output).toBe(".vivd/dropped-images/preview.webp");
     expect(parsed.flags.status).toBe("pass");
     expect(parsed.flags.note).toBe("ready to ship");
   });

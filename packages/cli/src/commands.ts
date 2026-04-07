@@ -4,7 +4,6 @@ import { validateConnectedStudioBackendClientConfig } from "@vivd/shared/studio"
 import { parseCliArgs, resolveHelpTopic, isHelpRequested, type CliFlags } from "./args.js";
 import { resolveCliRuntime } from "./backend.js";
 import {
-  formatAnalyticsPluginReport,
   formatContactConfigReport,
   formatContactConfigTemplateReport,
   formatContactConfigUpdateReport,
@@ -17,12 +16,20 @@ import {
   formatGenericPluginConfigUpdateReport,
   formatGenericPluginInfoReport,
   formatPluginCatalogReport,
+  formatPreviewScreenshotReport,
   formatProjectInfoReport,
   formatPublishChecklistReport,
   formatPublishChecklistRunReport,
   formatPublishChecklistUpdateReport,
   formatWhoamiReport,
 } from "./format.js";
+import {
+  getCliPluginHelpText,
+  listCliPluginHelpSummaryLines,
+  renderCliPluginInfo,
+  resolveCliPluginAlias,
+} from "./plugins/registry.js";
+import type { PluginCliInfoContractPayload } from "@vivd/shared/types";
 
 type CommandResult = {
   data: unknown;
@@ -80,6 +87,19 @@ type PublishChecklistRunResponse = {
   sessionId: string;
 };
 
+type PreviewScreenshotResponse = {
+  path: string;
+  capturedUrl: string;
+  filename: string;
+  mimeType: string;
+  format: "png" | "jpeg" | "webp";
+  width: number;
+  height: number;
+  scrollX: number;
+  scrollY: number;
+  imageBase64: string;
+};
+
 type PluginCatalogResponse = {
   project: { organizationId: string; slug: string };
   available: Array<{
@@ -106,46 +126,6 @@ type PluginCatalogResponse = {
     };
   }>;
   instances: Array<{ pluginId: string; status: string; instanceId: string }>;
-};
-
-type PluginInfoContractResponse = {
-  pluginId: string;
-  catalog: {
-    pluginId: string;
-    name: string;
-    description: string;
-    capabilities: {
-      supportsInfo: boolean;
-      config: {
-        supportsShow: boolean;
-        supportsApply: boolean;
-        supportsTemplate: boolean;
-      } | null;
-      actions: Array<{
-        actionId: string;
-        title: string;
-        description: string;
-        arguments: Array<{
-          name: string;
-          type: string;
-          required: boolean;
-          description?: string;
-        }>;
-      }>;
-    };
-  };
-  entitled: boolean;
-  entitlementState: "disabled" | "enabled" | "suspended";
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  config: Record<string, unknown> | null;
-  defaultConfig: Record<string, unknown>;
-  snippets: Record<string, unknown> | null;
-  usage: Record<string, unknown> | null;
-  details: Record<string, unknown> | null;
-  instructions: string[];
 };
 
 type PluginActionResponse = {
@@ -198,25 +178,6 @@ type ContactInfoResponse = {
   instructions: string[];
 };
 
-type AnalyticsInfoResponse = {
-  pluginId: "analytics";
-  entitled: boolean;
-  entitlementState: "disabled" | "enabled" | "suspended";
-  enabled: boolean;
-  instanceId: string | null;
-  status: string | null;
-  publicToken: string | null;
-  usage: {
-    scriptEndpoint: string;
-    trackEndpoint: string;
-    eventTypes: string[];
-    respectDoNotTrack: boolean;
-    captureQueryString: boolean;
-    enableClientTracking: boolean;
-  };
-  instructions: string[];
-};
-
 const CONTACT_CONFIG_TEMPLATE = {
   recipientEmails: ["team@example.com"],
   sourceHosts: ["example.com"],
@@ -253,8 +214,16 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd doctor",
     "vivd whoami",
     "vivd project info",
+    "vivd preview help",
     "vivd plugins help",
     "vivd publish help",
+  ].join("\n"),
+  preview: [
+    "vivd preview screenshot [path]",
+    "Use preview-relative paths like /, /pricing, or /contact?tab=form.",
+    "Optional flags: --width --height --scroll-x --scroll-y --wait-ms --format --output",
+    "Screenshots are saved under .vivd/dropped-images/ by default unless --output is passed.",
+    "Run this from the project workspace so the default output path lands in the current project.",
   ].join("\n"),
   plugins: [
     "vivd plugins catalog",
@@ -270,7 +239,6 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd plugins contact config apply --file config.json",
     "vivd plugins contact recipients verify <email>",
     "vivd plugins contact recipients resend <email>",
-    "vivd plugins analytics info",
   ].join("\n"),
   contact: [
     "Preferred generic equivalents:",
@@ -289,16 +257,6 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd plugins contact recipients resend <email>",
     "Use --file - to read JSON config from stdin.",
     "Contact info shows submit endpoint, configured recipients, verification state, and install guidance.",
-  ].join("\n"),
-  analytics: [
-    "Preferred generic equivalents:",
-    "vivd plugins info analytics",
-    "vivd plugins config show analytics",
-    "vivd plugins config template analytics",
-    "vivd plugins config apply analytics --file config.json",
-    "Compatibility alias:",
-    "vivd plugins analytics info",
-    "Analytics info shows the script endpoint, public token, and integration guidance.",
   ].join("\n"),
   publish: [
     "vivd publish checklist run",
@@ -408,6 +366,32 @@ function unwrapTrpcBody(body: any): any {
   return body?.result?.data?.json ?? body?.result?.data ?? body;
 }
 
+function isPreviewScreenshotFormat(value: string | undefined): value is "png" | "jpeg" | "webp" {
+  return value === "png" || value === "jpeg" || value === "webp";
+}
+
+async function ensureUniqueFilePath(filePath: string): Promise<string> {
+  try {
+    await fs.access(filePath);
+  } catch {
+    return filePath;
+  }
+
+  const parsed = path.parse(filePath);
+  let counter = 2;
+  let candidate = path.join(parsed.dir, `${parsed.name}-${counter}${parsed.ext}`);
+
+  while (true) {
+    try {
+      await fs.access(candidate);
+      counter += 1;
+      candidate = path.join(parsed.dir, `${parsed.name}-${counter}${parsed.ext}`);
+    } catch {
+      return candidate;
+    }
+  }
+}
+
 function getLocalStudioTrpcBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   const port = parseProjectVersion(env.PORT) ?? 3100;
   return `http://127.0.0.1:${port}/vivd-studio/api/trpc`;
@@ -475,14 +459,19 @@ function helpTextFor(topic: string[]): string {
   ) {
     return GENERAL_HELP.contact;
   }
-  if (
-    normalized.startsWith("plugins analytics") ||
-    normalized.startsWith("plugins info analytics")
-  ) {
-    return GENERAL_HELP.analytics;
+  const pluginHelp = getCliPluginHelpText(topic);
+  if (pluginHelp) {
+    return pluginHelp;
   }
   if (normalized.startsWith("plugins")) {
-    return GENERAL_HELP.plugins;
+    const summaryLines = listCliPluginHelpSummaryLines();
+    if (summaryLines.length === 0) {
+      return GENERAL_HELP.plugins;
+    }
+    return [GENERAL_HELP.plugins, ...summaryLines].join("\n");
+  }
+  if (normalized.startsWith("preview")) {
+    return GENERAL_HELP.preview;
   }
   if (normalized.startsWith("publish")) {
     return GENERAL_HELP.publish;
@@ -566,6 +555,64 @@ async function runProjectInfo(flags: CliFlags): Promise<CommandResult> {
   });
 }
 
+async function runPreviewScreenshot(
+  pathArg: string | undefined,
+  flags: CliFlags,
+  cwd: string,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const slug = requireProjectSlug(runtime);
+    const version = requireProjectVersion(runtime);
+    const format = (flags.format?.trim().toLowerCase() || "png") as
+      | "png"
+      | "jpeg"
+      | "webp";
+    if (!isPreviewScreenshotFormat(format)) {
+      throw new Error("preview screenshot requires --format <png|jpeg|webp>");
+    }
+
+    const screenshot = (await runtime.client.mutation(
+      "studioApi.capturePreviewScreenshot",
+      {
+        studioId: runtime.config.studioId,
+        slug,
+        version,
+        path: pathArg || "/",
+        width: flags.width,
+        height: flags.height,
+        scrollX: flags.scrollX,
+        scrollY: flags.scrollY,
+        waitMs: flags.waitMs,
+        format,
+      },
+    )) as PreviewScreenshotResponse;
+
+    const requestedOutput = flags.output?.trim();
+    const defaultOutput = path.join(cwd, ".vivd", "dropped-images", screenshot.filename);
+    const resolvedOutput = requestedOutput
+      ? resolveInputPath(requestedOutput, cwd)
+      : defaultOutput;
+    await fs.mkdir(path.dirname(resolvedOutput), { recursive: true });
+    const savedPath = await ensureUniqueFilePath(resolvedOutput);
+    await fs.writeFile(savedPath, Buffer.from(screenshot.imageBase64, "base64"));
+
+    const printable = {
+      path: screenshot.path,
+      capturedUrl: screenshot.capturedUrl,
+      filename: screenshot.filename,
+      mimeType: screenshot.mimeType,
+      format: screenshot.format,
+      width: screenshot.width,
+      height: screenshot.height,
+      scrollX: screenshot.scrollX,
+      scrollY: screenshot.scrollY,
+      savedPath,
+    };
+
+    return jsonResult(printable, formatPreviewScreenshotReport(printable));
+  });
+}
+
 async function runPluginsCatalog(flags: CliFlags): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const slug = requireProjectSlug(runtime);
@@ -581,16 +628,16 @@ async function runPluginsCatalog(flags: CliFlags): Promise<CommandResult> {
 async function getPluginInfoContract(
   runtime: NonNullable<ReturnType<typeof resolveCliRuntime>>,
   pluginId: string,
-): Promise<PluginInfoContractResponse> {
+): Promise<PluginCliInfoContractPayload> {
   const slug = requireProjectSlug(runtime);
   return (await runtime.client.query("studioApi.getProjectPluginInfo", {
     studioId: runtime.config.studioId,
     slug,
     pluginId,
-  })) as PluginInfoContractResponse;
+  })) as PluginCliInfoContractPayload;
 }
 
-function toContactInfoResponse(info: PluginInfoContractResponse): ContactInfoResponse {
+function toContactInfoResponse(info: PluginCliInfoContractPayload): ContactInfoResponse {
   const details =
     info.details && typeof info.details === "object" ? info.details : null;
   const recipients =
@@ -613,28 +660,16 @@ function toContactInfoResponse(info: PluginInfoContractResponse): ContactInfoRes
   };
 }
 
-function toAnalyticsInfoResponse(
-  info: PluginInfoContractResponse,
-): AnalyticsInfoResponse {
-  return {
-    pluginId: "analytics",
-    entitled: info.entitled,
-    entitlementState: info.entitlementState,
-    enabled: info.enabled,
-    instanceId: info.instanceId,
-    status: info.status,
-    publicToken: info.publicToken,
-    usage: info.usage as AnalyticsInfoResponse["usage"],
-    instructions: info.instructions,
-  };
-}
-
 async function runPluginsInfoGeneric(
   pluginId: string,
   flags: CliFlags,
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const info = await getPluginInfoContract(runtime, pluginId);
+    const rendered = renderCliPluginInfo(info);
+    if (rendered) {
+      return jsonResult(rendered.data, rendered.human);
+    }
     return jsonResult(info, formatGenericPluginInfoReport(info));
   });
 }
@@ -694,7 +729,7 @@ async function runPluginsConfigureGeneric(
       slug,
       pluginId,
       config,
-    })) as PluginInfoContractResponse;
+    })) as PluginCliInfoContractPayload;
 
     return jsonResult(
       result,
@@ -727,23 +762,40 @@ async function runPluginActionGeneric(
   });
 }
 
-async function runPluginsInfo(
-  kind: "contact" | "analytics",
-  flags: CliFlags,
-): Promise<CommandResult> {
+async function runContactInfo(flags: CliFlags): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
-    if (kind === "contact") {
-      const info = toContactInfoResponse(
-        await getPluginInfoContract(runtime, "contact_form"),
-      );
-      return jsonResult(info, formatContactPluginReport(info));
-    }
-
-    const info = toAnalyticsInfoResponse(
-      await getPluginInfoContract(runtime, "analytics"),
+    const info = toContactInfoResponse(
+      await getPluginInfoContract(runtime, "contact_form"),
     );
-    return jsonResult(info, formatAnalyticsPluginReport(info));
+    return jsonResult(info, formatContactPluginReport(info));
   });
+}
+
+async function runResolvedCliPluginAlias(
+  tokensAfterPlugins: string[],
+  flags: CliFlags,
+  cwd: string,
+): Promise<CommandResult | null> {
+  const match = resolveCliPluginAlias(tokensAfterPlugins);
+  if (!match) return null;
+
+  switch (match.target.kind) {
+    case "info":
+      return runPluginsInfoGeneric(match.pluginId, flags);
+    case "config_show":
+      return runPluginsConfigShowGeneric(match.pluginId, flags);
+    case "config_template":
+      return runPluginsConfigTemplateGeneric(match.pluginId, flags);
+    case "config_apply":
+      return runPluginsConfigureGeneric(match.pluginId, flags, cwd);
+    case "action":
+      return runPluginActionGeneric(
+        match.pluginId,
+        match.target.actionId,
+        match.args,
+        flags,
+      );
+  }
 }
 
 async function runContactRecipientVerification(
@@ -935,21 +987,20 @@ export async function dispatchCli(
         throw new Error("Unknown project command. Try `vivd project info`.");
       }
       return runProjectInfo(parsed.flags);
+    case "preview":
+      if (second === "screenshot") {
+        return runPreviewScreenshot(third, parsed.flags, cwd);
+      }
+      throw new Error("Unknown preview command. Try `vivd preview help`.");
     case "plugins":
       if (second === "catalog") {
         return runPluginsCatalog(parsed.flags);
       }
       if (second === "info" && third === "contact") {
-        return runPluginsInfo("contact", parsed.flags);
-      }
-      if (second === "info" && third === "analytics") {
-        return runPluginsInfo("analytics", parsed.flags);
+        return runContactInfo(parsed.flags);
       }
       if (second === "contact" && third === "info") {
-        return runPluginsInfo("contact", parsed.flags);
-      }
-      if (second === "analytics" && third === "info") {
-        return runPluginsInfo("analytics", parsed.flags);
+        return runContactInfo(parsed.flags);
       }
       if (second === "contact" && third === "config" && rest[0] === "show") {
         return runContactConfigShow(parsed.flags);
@@ -968,6 +1019,12 @@ export async function dispatchCli(
       }
       if (second === "configure" && third === "contact") {
         return runPluginsConfigureContact(parsed.flags, cwd);
+      }
+      {
+        const aliasResult = await runResolvedCliPluginAlias(tokens.slice(1), parsed.flags, cwd);
+        if (aliasResult) {
+          return aliasResult;
+        }
       }
       if (second === "info" && third) {
         return runPluginsInfoGeneric(third, parsed.flags);

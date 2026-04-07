@@ -1,6 +1,6 @@
 import { getSharedProjectPluginUi } from "@vivd/shared/types";
+import { analyticsFrontendPluginModule } from "@vivd/plugin-analytics/frontend/module";
 import type { ProjectPluginUiDefinition } from "./types";
-import { analyticsFrontendPluginModule } from "./analytics/module";
 import { contactFormFrontendPluginModule } from "./contactForm/module";
 
 const frontendPluginModules = [

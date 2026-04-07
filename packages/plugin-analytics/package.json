@@ -1,0 +1,17 @@
+{
+  "name": "@vivd/plugin-analytics",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./backend/module": "./src/backend/module.ts",
+    "./backend/router": "./src/backend/router.ts",
+    "./cli/module": "./src/cli/module.ts",
+    "./frontend/module": "./src/frontend/module.ts",
+    "./frontend/AnalyticsProjectPage": "./src/frontend/AnalyticsProjectPage.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+  }
+}

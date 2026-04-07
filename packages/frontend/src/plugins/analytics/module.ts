@@ -1,9 +1,1 @@
-import type { FrontendPluginModule } from "../types";
-import AnalyticsProjectPage from "./AnalyticsProjectPage";
-
-export const analyticsFrontendPluginModule: FrontendPluginModule = {
-  pluginId: "analytics",
-  projectUi: {
-    ProjectPage: AnalyticsProjectPage,
-  },
-};
+export { analyticsFrontendPluginModule } from "@vivd/plugin-analytics/frontend/module";
