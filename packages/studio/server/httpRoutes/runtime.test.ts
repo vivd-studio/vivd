@@ -4,6 +4,7 @@ import path from "node:path";
 import express from "express";
 import multer from "multer";
 import { describe, expect, it, vi } from "vitest";
+import { STUDIO_CHAT_ATTACHMENT_MAX_FILES } from "@studio/shared/chatAttachmentPolicy";
 
 import {
   injectBasePathScript,
@@ -18,6 +19,7 @@ import { resolveRuntimeRequestedFilePath } from "./runtime";
 function createTestRuntimeApp(options?: {
   initialized?: boolean;
   projectPath?: string;
+  writeUploadedFile?: (fullPath: string, buffer: Buffer) => Promise<void>;
   getProxyBasePath?: (req: express.Request) => string | null;
   devPreviewProxy?: express.RequestHandler;
   onRuntimeActivity?: () => void;
@@ -66,7 +68,12 @@ function createTestRuntimeApp(options?: {
       }
       return resolvedTarget;
     },
-    writeUploadedFile: async () => {},
+    writeUploadedFile:
+      options?.writeUploadedFile ??
+      (async (fullPath, buffer) => {
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, buffer);
+      }),
     getProxyBasePath: options?.getProxyBasePath ?? (() => null),
     rewriteRootAssetUrlsInText,
     injectBasePathScript,
@@ -271,6 +278,59 @@ describe("registerStudioRuntimeHttpRoutes", () => {
       });
     } finally {
       server.close();
+    }
+  });
+
+  it("retains only the newest dropped chat files after repeated uploads", async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "vivd-studio-runtime-chat-upload-"),
+    );
+    const { app } = createTestRuntimeApp({
+      projectPath: projectDir,
+    });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      for (
+        let index = 0;
+        index < STUDIO_CHAT_ATTACHMENT_MAX_FILES + 2;
+        index += 1
+      ) {
+        const formData = new FormData();
+        formData.append(
+          "file",
+          new Blob([`file-${index}`], { type: "text/plain" }),
+          `ref-${index}.txt`,
+        );
+
+        const response = await fetch(
+          `${baseUrl}/vivd-studio/api/upload-dropped-file/demo/1`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+
+        expect(response.status).toBe(200);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
+
+      const droppedDir = path.join(projectDir, ".vivd", "dropped-images");
+      const remainingFiles = fs.readdirSync(droppedDir);
+
+      expect(remainingFiles).toHaveLength(STUDIO_CHAT_ATTACHMENT_MAX_FILES);
+      expect(
+        remainingFiles.some((filename) => filename.endsWith("ref-0.txt")),
+      ).toBe(false);
+      expect(
+        remainingFiles.some((filename) => filename.endsWith("ref-1.txt")),
+      ).toBe(false);
+      expect(
+        remainingFiles.some((filename) => filename.endsWith("ref-11.txt")),
+      ).toBe(true);
+    } finally {
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
     }
   });
 

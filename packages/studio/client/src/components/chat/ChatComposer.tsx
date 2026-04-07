@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ChevronsRight, Plus, Send, MousePointerClick, X, Square } from "lucide-react";
 import {
@@ -20,6 +21,7 @@ import { ImagePreviewPill } from "./ImagePreviewPill";
 import { ModelSelector } from "./ModelSelector";
 import { useChatContext } from "./ChatContext";
 import { InteractiveSurface } from "@/components/ui/interactive-surface";
+import { STUDIO_CHAT_ATTACHMENT_MAX_FILES } from "@studio/shared/chatAttachmentPolicy";
 
 import { cn } from "@/lib/utils";
 
@@ -86,6 +88,57 @@ export function ChatComposer({ className }: ChatComposerProps) {
     }
   }, [input]);
 
+  const appendDroppedFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0) return;
+
+      const remainingSlots = Math.max(
+        STUDIO_CHAT_ATTACHMENT_MAX_FILES - attachedImages.length,
+        0,
+      );
+
+      if (remainingSlots === 0) {
+        toast.info(
+          `Chat uploads are limited to ${STUDIO_CHAT_ATTACHMENT_MAX_FILES} files.`,
+          {
+            description:
+              "Remove an existing temporary attachment before adding more.",
+          },
+        );
+        return;
+      }
+
+      const acceptedFiles = files.slice(0, remainingSlots);
+      const ignoredCount = files.length - acceptedFiles.length;
+
+      if (acceptedFiles.length > 0) {
+        addAttachedImages(
+          acceptedFiles.map((file) => ({
+            file,
+            previewUrl: file.type.startsWith("image/")
+              ? URL.createObjectURL(file)
+              : "",
+            tempId: `${Date.now()}-${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
+          })),
+        );
+      }
+
+      if (ignoredCount > 0) {
+        toast.info(
+          `Only ${STUDIO_CHAT_ATTACHMENT_MAX_FILES} temporary chat files can be queued at once.`,
+          {
+            description: `${ignoredCount} file${ignoredCount === 1 ? "" : "s"} ${
+              ignoredCount === 1 ? "was" : "were"
+            } ignored.`,
+          },
+        );
+      }
+    },
+    [addAttachedImages, attachedImages.length],
+  );
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -105,19 +158,9 @@ export function ChatComposer({ className }: ChatComposerProps) {
       setIsDragOver(false);
 
       const files = Array.from(e.dataTransfer.files);
-
-      if (files.length > 0) {
-        const newFiles = files.map((file) => ({
-          file,
-          previewUrl: file.type.startsWith("image/")
-            ? URL.createObjectURL(file)
-            : "",
-          tempId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        }));
-        addAttachedImages(newFiles);
-      }
+      appendDroppedFiles(files);
     },
-    [addAttachedImages],
+    [appendDroppedFiles],
   );
 
   const handlePaste = useCallback(
@@ -129,51 +172,29 @@ export function ChatComposer({ className }: ChatComposerProps) {
         e.preventDefault();
         const newImages = imageItems
           .map((item) => {
-            const file = item.getAsFile();
-            if (!file) return null;
-            return {
-              file,
-              previewUrl: URL.createObjectURL(file),
-              tempId: `${Date.now()}-${Math.random()
-                .toString(36)
-                .substr(2, 9)}`,
-            };
+            return item.getAsFile();
           })
-          .filter(Boolean) as {
-          file: File;
-          previewUrl: string;
-          tempId: string;
-        }[];
+          .filter(Boolean) as File[];
 
         if (newImages.length > 0) {
-          addAttachedImages(newImages);
+          appendDroppedFiles(newImages);
         }
       }
     },
-    [addAttachedImages],
+    [appendDroppedFiles],
   );
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
-
-      if (files.length > 0) {
-        const newFiles = files.map((file) => ({
-          file,
-          previewUrl: file.type.startsWith("image/")
-            ? URL.createObjectURL(file)
-            : "",
-          tempId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        }));
-        addAttachedImages(newFiles);
-      }
+      appendDroppedFiles(files);
 
       // Reset input to allow selecting the same file again
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     },
-    [addAttachedImages],
+    [appendDroppedFiles],
   );
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

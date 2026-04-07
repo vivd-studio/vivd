@@ -5,6 +5,7 @@ export default defineConfig({
   format: ["esm"],
   clean: true,
   shims: true,
+  noExternal: [/^@vivd\/plugin-analytics(\/.*)?$/],
   // Mark extract-zip as external to avoid bundling issues with debug's dynamic require of 'tty'
   external: ["extract-zip"],
 });

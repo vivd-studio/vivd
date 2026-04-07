@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AttachedImage } from "./chatTypes";
 import { ChatComposer } from "./ChatComposer";
 
-const { chatContextState } = vi.hoisted(() => ({
+const { chatContextState, toastInfoMock } = vi.hoisted(() => ({
   chatContextState: {
     input: "",
     setInput: vi.fn(),
@@ -11,7 +12,7 @@ const { chatContextState } = vi.hoisted(() => ({
     handleStopGeneration: vi.fn(),
     attachedElement: null,
     setAttachedElement: vi.fn(),
-    attachedImages: [],
+    attachedImages: [] as AttachedImage[],
     addAttachedImages: vi.fn(),
     removeAttachedImage: vi.fn(),
     attachedFiles: [],
@@ -30,10 +31,17 @@ const { chatContextState } = vi.hoisted(() => ({
     setSelectedModel: vi.fn(),
     handleSteerSend: vi.fn(),
   },
+  toastInfoMock: vi.fn(),
 }));
 
 vi.mock("./ChatContext", () => ({
   useChatContext: () => chatContextState,
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    info: toastInfoMock,
+  },
 }));
 
 vi.mock("@/components/ui/dropdown-menu", () => ({
@@ -94,6 +102,7 @@ describe("ChatComposer", () => {
     chatContextState.selectedModel = null;
     chatContextState.setSelectedModel = vi.fn();
     chatContextState.handleSteerSend = vi.fn();
+    toastInfoMock.mockReset();
   });
 
   it("exposes an accessible stop-generation control while the agent is running", () => {
@@ -128,5 +137,37 @@ describe("ChatComposer", () => {
 
     expect(chatContextState.handleSend).toHaveBeenCalledOnce();
     expect(chatContextState.handleSteerSend).not.toHaveBeenCalled();
+  });
+
+  it("limits newly queued dropped files to the shared chat attachment cap", () => {
+    chatContextState.attachedImages = Array.from({ length: 8 }, (_, index) => ({
+      file: new File([`existing-${index}`], `existing-${index}.txt`, {
+        type: "text/plain",
+      }),
+      previewUrl: "",
+      tempId: `existing-${index}`,
+    }));
+
+    render(<ChatComposer />);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    if (!input) {
+      throw new Error("Expected hidden file input");
+    }
+
+    const files = Array.from({ length: 5 }, (_, index) =>
+      new File([`new-${index}`], `new-${index}.txt`, { type: "text/plain" }),
+    );
+
+    fireEvent.change(input, { target: { files } });
+
+    expect(chatContextState.addAttachedImages).toHaveBeenCalledTimes(1);
+    const attachedBatch = (
+      chatContextState.addAttachedImages as ReturnType<typeof vi.fn>
+    ).mock.calls[0]?.[0];
+    expect(attachedBatch).toHaveLength(2);
+    expect(attachedBatch[0]).toEqual(expect.objectContaining({ file: files[0] }));
+    expect(attachedBatch[1]).toEqual(expect.objectContaining({ file: files[1] }));
+    expect(toastInfoMock).toHaveBeenCalledTimes(1);
   });
 });

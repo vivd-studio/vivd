@@ -280,4 +280,4 @@ Add smoke checks to local runbook:
   - `packages/frontend/src/components/projects/listing/ProjectCard.tsx`
   - super-admin org components under `packages/frontend/src/components/admin/organizations/`
 - Docs:
-  - `docs/PROJECT_STATE.md` (keep roadmap checkpoints in sync)
+  - `PROJECT_STATE.md` (keep roadmap checkpoints in sync)

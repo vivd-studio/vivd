@@ -4,10 +4,10 @@ Vivd is an AI-powered website builder: generate a site, preview/edit it in Studi
 
 ## Project State & Roadmap
 
-See `docs/PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
+See `PROJECT_STATE.md` for active roadmap, priorities, and open decisions.
 
-When plans change or work is completed, update `docs/PROJECT_STATE.md` in the same change.
-If `docs/PROJECT_STATE.md` starts accumulating too much closed-out detail again, suggest trimming it and moving older material into `docs/PROJECT_STATE_ARCHIVE.md`.
+When plans change or work is completed, update `PROJECT_STATE.md` in the same change.
+If `PROJECT_STATE.md` starts accumulating too much closed-out detail again, suggest trimming it and moving older material into `docs/PROJECT_STATE_ARCHIVE.md`.
 
 ## Core Architecture
 
@@ -34,6 +34,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Generic backend plugin host helpers now live in `packages/backend/src/trpcRouters/plugins/operations.ts`; keep plugin-specific public error translation inside the plugin module files instead of reintroducing contact/analytics-specific error handling in shared routers.
 - The plugin-specific public routers under `packages/backend/src/trpcRouters/plugins/contactForm.ts` and `packages/backend/src/trpcRouters/plugins/analytics.ts` are compatibility adapters. Keep them thin and route shared lifecycle/config/action flows through the generic operations layer; plugin-owned implementations should live in the plugin package/module first, with the host path reduced to a re-export or legacy payload wrapper.
 - Keep compatibility wrappers/routes only as thin adapters. New plugin-owned UI or backend behavior should go into the per-plugin module files first, not into host-page/service switch statements.
+- When a host workspace imports a plugin workspace package, declare that plugin package in the host `package.json` and update any Docker workspace-install contexts (`package.json` copies, `npm ci -w ...`, and source copies where needed). Otherwise local typecheck can pass while Docker/runtime builds fail with missing workspace packages.
 
 ## Upstream Reference Checkouts
 
@@ -44,7 +45,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
   - `vendor/opencode`: upstream OpenCode reference checkout (`https://github.com/anomalyco/opencode`).
   - `vendor/dokploy`: upstream Dokploy reference checkout (`https://github.com/Dokploy/dokploy`) for self-hosting/hosting patterns Vivd may reuse while still running directly on its own server/runtime.
   - `vendor/dyad`: upstream Dyad reference checkout (`https://github.com/dyad-sh/dyad`) for local-first AI app-builder product, packaging, and paid/open-source boundary comparisons.
-- If an upstream reference checkout is added, moved, or replaced, update this file and `docs/PROJECT_STATE.md` in the same change so the agent can rely on stable paths.
+- If an upstream reference checkout is added, moved, or replaced, update this file and `PROJECT_STATE.md` in the same change so the agent can rely on stable paths.
 
 ## OpenCode Studio Tools / Studio CLI
 
@@ -59,6 +60,7 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd preview help`, `vivd plugins help`, and `vivd publish help`.
 - Treat `vivd publish checklist run` as an explicit full checklist pass, not a routine test command; prefer item-by-item checklist work unless the user explicitly asked for a full run or rerun.
 - Use `vivd preview screenshot [path]` when the agent needs a visual capture of the live preview; screenshots default to `.vivd/dropped-images/` unless `--output` is passed.
+- Treat `.vivd/dropped-images/` as ephemeral working storage; Studio keeps only the latest 10 files there, so move anything worth keeping into the project tree.
 - For `STUDIO_MACHINE_PROVIDER=local`, `packages/backend/src/services/studioMachines/local.ts` is responsible for making `vivd` available inside spawned Studio runtimes by wiring a local wrapper into the child-process `PATH`.
 - The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`; plugin, preview-screenshot, checklist, and similar platform operations should go through the CLI.
 - Runtime install point: `packages/studio/server/opencode/serverManager.ts` writes tool wrappers to `~/.config/opencode/tools/` before `opencode serve`.

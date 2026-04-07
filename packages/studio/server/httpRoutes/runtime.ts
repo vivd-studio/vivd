@@ -18,7 +18,12 @@ import {
   normalizeStudioWorkingImageUpload,
   shouldNormalizeStudioWorkingImageUpload,
 } from "../services/uploads/uploadNormalization.js";
+import { pruneStudioChatAttachments } from "../services/uploads/chatAttachmentRetention.js";
 import { injectPreviewBridgeScript } from "../http/previewBridge.js";
+import {
+  isStudioChatAttachmentDirectory,
+  STUDIO_CHAT_ATTACHMENT_DIRECTORY,
+} from "@studio/shared/chatAttachmentPolicy";
 
 type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewTarget?: string;
@@ -252,8 +257,7 @@ export function registerStudioRuntimeHttpRoutes(
         const projectPath = workspace.getProjectPath();
         const droppedImagesDir = path.join(
           projectPath,
-          ".vivd",
-          "dropped-images",
+          STUDIO_CHAT_ATTACHMENT_DIRECTORY,
         );
         await fs.ensureDir(droppedImagesDir);
 
@@ -269,11 +273,12 @@ export function registerStudioRuntimeHttpRoutes(
         const filePath = path.join(droppedImagesDir, preparedUpload.filename);
 
         await writeUploadedFile(filePath, preparedUpload.buffer);
+        await pruneStudioChatAttachments({ projectDir: projectPath });
         const slug = getSingleRouteParam(req.params?.slug);
         if (!slug) {
           return res.status(400).json({ error: "Invalid slug" });
         }
-        const relativePath = `.vivd/dropped-images/${preparedUpload.filename}`;
+        const relativePath = `${STUDIO_CHAT_ATTACHMENT_DIRECTORY}/${preparedUpload.filename}`;
         projectTouchReporter.touch(slug);
         requestBucketSync("upload-dropped-file", {
           slug,
@@ -317,7 +322,7 @@ export function registerStudioRuntimeHttpRoutes(
         await fs.ensureDir(targetDir);
 
         const files = req.files as Express.Multer.File[];
-        const uploaded: string[] = [];
+        let uploaded: string[] = [];
 
         for (const file of files) {
           const sanitizedName = file.originalname.replace(
@@ -363,6 +368,15 @@ export function registerStudioRuntimeHttpRoutes(
         const slug = getSingleRouteParam(req.params?.slug);
         if (!slug) {
           return res.status(400).json({ error: "Invalid slug" });
+        }
+        if (isStudioChatAttachmentDirectory(relativePath)) {
+          const pruneResult = await pruneStudioChatAttachments({
+            projectDir: projectPath,
+          });
+          if (pruneResult.deletedPaths.length > 0) {
+            const deletedPaths = new Set(pruneResult.deletedPaths);
+            uploaded = uploaded.filter((filePath) => !deletedPaths.has(filePath));
+          }
         }
         projectTouchReporter.touch(slug);
         requestBucketSync("upload-files", {

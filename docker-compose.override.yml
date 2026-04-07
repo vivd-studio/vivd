@@ -90,8 +90,16 @@ services:
           ignore:
             - node_modules/
         - action: sync
+          path: ./packages/plugin-analytics
+          target: /app/packages/plugin-analytics
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
           path: ./packages/backend/src
           target: /app/packages/backend/src
+        - action: rebuild
+          path: ./packages/plugin-analytics/package.json
         - action: rebuild
           path: ./packages/frontend/package.json
         - action: rebuild

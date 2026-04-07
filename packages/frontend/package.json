@@ -37,6 +37,7 @@
     "@tanstack/react-query": "^5.90.12",
     "@trpc/client": "^11.7.2",
     "@trpc/react-query": "^11.7.2",
+    "@vivd/plugin-analytics": "1.0.0",
     "@vivd/shared": "1.0.0",
     "@vivd/theme": "1.0.0",
     "better-auth": "^1.4.6",
