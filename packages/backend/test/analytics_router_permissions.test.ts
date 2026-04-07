@@ -1,14 +1,18 @@
+import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  ensureAnalyticsPluginMock,
-  updateAnalyticsConfigMock,
+  ensureProjectPluginInstanceMock,
+  getProjectPluginInfoMock,
+  updateProjectPluginConfigMock,
   getAnalyticsSummaryMock,
 } = vi.hoisted(() => ({
-  ensureAnalyticsPluginMock: vi.fn(),
-  updateAnalyticsConfigMock: vi.fn(),
+  ensureProjectPluginInstanceMock: vi.fn(),
+  getProjectPluginInfoMock: vi.fn(),
+  updateProjectPluginConfigMock: vi.fn(),
   getAnalyticsSummaryMock: vi.fn(),
 }));
+
 const { resolveEffectiveEntitlementMock } = vi.hoisted(() => ({
   resolveEffectiveEntitlementMock: vi.fn(),
 }));
@@ -40,8 +44,6 @@ vi.mock("../src/db", () => ({
 
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
-    ensureAnalyticsPlugin: ensureAnalyticsPluginMock,
-    updateAnalyticsConfig: updateAnalyticsConfigMock,
     getAnalyticsSummary: getAnalyticsSummaryMock,
   },
 }));
@@ -50,6 +52,14 @@ vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   pluginEntitlementService: {
     resolveEffectiveEntitlement: resolveEffectiveEntitlementMock,
   },
+}));
+
+vi.mock("../src/trpcRouters/plugins/operations", () => ({
+  ensureProjectPluginInstance: ensureProjectPluginInstanceMock,
+  getProjectPluginInfo: getProjectPluginInfoMock,
+  updateProjectPluginConfig: updateProjectPluginConfigMock,
+  runProjectPluginAction: vi.fn(),
+  extractRequestHost: vi.fn(() => "app.vivd.local"),
 }));
 
 import { router } from "../src/trpc";
@@ -61,7 +71,7 @@ import {
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {
-    req: {} as any,
+    req: { headers: {} } as any,
     res: {} as any,
     session: {
       session: {
@@ -105,14 +115,16 @@ describe("plugins.analytics router behavior", () => {
   });
 
   beforeEach(() => {
-    ensureAnalyticsPluginMock.mockReset();
-    updateAnalyticsConfigMock.mockReset();
+    ensureProjectPluginInstanceMock.mockReset();
+    getProjectPluginInfoMock.mockReset();
+    updateProjectPluginConfigMock.mockReset();
     getAnalyticsSummaryMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
     organizationFindFirstMock.mockReset();
     selectMock.mockClear();
     selectFromMock.mockClear();
     selectWhereMock.mockReset();
+
     organizationFindFirstMock.mockResolvedValue({ status: "active" });
     selectWhereMock.mockResolvedValue([]);
     resolveEffectiveEntitlementMock.mockResolvedValue({
@@ -141,7 +153,7 @@ describe("plugins.analytics router behavior", () => {
       code: "UNAUTHORIZED",
       message: "Only super-admin users can enable plugins",
     });
-    expect(ensureAnalyticsPluginMock).not.toHaveBeenCalled();
+    expect(ensureProjectPluginInstanceMock).not.toHaveBeenCalled();
   });
 
   it("rejects analytics enable when entitlement is disabled", async () => {
@@ -194,15 +206,22 @@ describe("plugins.analytics router behavior", () => {
       code: "UNAUTHORIZED",
       message: "Analytics is not entitled for this project",
     });
-    expect(ensureAnalyticsPluginMock).not.toHaveBeenCalled();
+    expect(ensureProjectPluginInstanceMock).not.toHaveBeenCalled();
   });
 
   it("allows super-admin users to enable analytics", async () => {
-    ensureAnalyticsPluginMock.mockResolvedValueOnce({
+    ensureProjectPluginInstanceMock.mockResolvedValueOnce({
+      instanceId: "ppi-1",
+      created: true,
+      status: "enabled",
+    });
+    getProjectPluginInfoMock.mockResolvedValueOnce({
       pluginId: "analytics",
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
       instanceId: "ppi-1",
       status: "enabled",
-      created: true,
       publicToken: "analytics.token",
       config: {
         respectDoNotTrack: true,
@@ -213,6 +232,20 @@ describe("plugins.analytics router behavior", () => {
       snippets: {
         html: "<script></script>",
         astro: "<script></script>",
+      },
+      usage: null,
+      details: null,
+      instructions: [],
+      defaultConfig: {},
+      catalog: {
+        pluginId: "analytics",
+        name: "Analytics",
+        description: "",
+        capabilities: {
+          supportsInfo: true,
+          config: null,
+          actions: [],
+        },
       },
     });
 
@@ -249,17 +282,25 @@ describe("plugins.analytics router behavior", () => {
       created: true,
     });
 
-    expect(ensureAnalyticsPluginMock).toHaveBeenCalledWith({
+    expect(ensureProjectPluginInstanceMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+      pluginId: "analytics",
+    });
+    expect(getProjectPluginInfoMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "analytics",
     });
   });
 
   it("maps disabled-plugin config updates to UNAUTHORIZED", async () => {
-    updateAnalyticsConfigMock.mockRejectedValueOnce(
-      new Error(
-        "Analytics plugin is not enabled for this project. Ask a super-admin to enable it first.",
-      ),
+    updateProjectPluginConfigMock.mockRejectedValueOnce(
+      new TRPCError({
+        code: "UNAUTHORIZED",
+        message:
+          "Analytics plugin is not enabled for this project. Ask a super-admin to enable it first.",
+      }),
     );
 
     const caller = pluginsRouter.createCaller(makeContext());

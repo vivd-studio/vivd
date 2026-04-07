@@ -3,9 +3,12 @@ import { VersionSelector } from "@/components/projects/versioning";
 import { ModeToggle, useTheme } from "@/components/theme";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useOpencodeSessionActivity } from "@/features/opencodeChat";
+import {
+  getStudioProjectPluginShortcuts,
+  type StudioProjectPluginShortcut,
+} from "@/plugins/shortcuts";
 import { cn } from "@/lib/utils";
 import {
-  BarChart3,
   ChevronRight,
   FolderOpen,
   History,
@@ -80,7 +83,7 @@ export function StudioToolbar() {
     previewMode,
     versions,
     hasMultipleVersions,
-    analyticsAvailable,
+    enabledPlugins,
     supportEmail,
     handleVersionSelect,
     viewportMode,
@@ -137,8 +140,8 @@ export function StudioToolbar() {
   const [hostSidebarOpen, setHostSidebarOpen] = useState(initialHostSidebarOpen);
   const [leadingChromeWidth, setLeadingChromeWidth] = useState(0);
   const [trailingChromeWidth, setTrailingChromeWidth] = useState(0);
-  const [showAnalyticsActivationPrompt, setShowAnalyticsActivationPrompt] =
-    useState(false);
+  const [activationPromptShortcut, setActivationPromptShortcut] =
+    useState<StudioProjectPluginShortcut | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -225,20 +228,29 @@ export function StudioToolbar() {
     );
   };
 
-  const handleOpenAnalytics = () => {
-    if (!projectSlug) return;
-    openEmbeddedStudioPath(
-      buildProjectStudioPath(projectSlug, "analytics"),
-      embedded,
-    );
-  };
+  const studioToolbarPluginShortcuts = projectSlug
+    ? getStudioProjectPluginShortcuts({
+        enabledPluginIds: enabledPlugins,
+        projectSlug,
+        surface: "studio-toolbar",
+      })
+    : [];
+  const studioMobileMenuPluginShortcuts = projectSlug
+    ? getStudioProjectPluginShortcuts({
+        enabledPluginIds: enabledPlugins,
+        projectSlug,
+        surface: "studio-mobile-menu",
+      })
+    : [];
 
-  const handleAnalyticsAction = () => {
-    if (analyticsAvailable) {
-      handleOpenAnalytics();
+  const handlePluginShortcutAction = (shortcut: StudioProjectPluginShortcut) => {
+    if (shortcut.enabled) {
+      openEmbeddedStudioPath(shortcut.path, embedded);
       return;
     }
-    setShowAnalyticsActivationPrompt(true);
+    if (shortcut.activationSupport) {
+      setActivationPromptShortcut(shortcut);
+    }
   };
 
   const expandableToggleClass = (
@@ -282,7 +294,9 @@ export function StudioToolbar() {
   const explorerExpandedWidth = 96;
   const editExpandedWidth = 104;
   const pluginExpandedWidth = 88;
-  const analyticsExpandedWidth = 100;
+  const pluginShortcutExpandedWidths = studioToolbarPluginShortcuts.map(
+    (shortcut) => shortcut.expandedWidth ?? 100,
+  );
   const newSessionExpandedWidth = 68;
   const newSessionControlWidth = canUseAgent ? compactControlWidth : 0;
   const newSessionControlGap = canUseAgent ? toolbarControlGap : 0;
@@ -316,16 +330,18 @@ export function StudioToolbar() {
   const explorerControlWidth = compactControlWidth;
   const editControlWidth = compactControlWidth;
   const pluginControlWidth = compactControlWidth;
-  const analyticsControlWidth = compactControlWidth;
+  const pluginShortcutControlWidth =
+    compactControlWidth * studioToolbarPluginShortcuts.length;
   const hoverExpansionAllowance = hoverableWorkspaceLabels
     ? Math.max(
         explorerExpandedWidth - compactControlWidth,
         editExpandedWidth - compactControlWidth,
         pluginExpandedWidth - compactControlWidth,
-        analyticsExpandedWidth - compactControlWidth,
+        ...pluginShortcutExpandedWidths.map((width) => width - compactControlWidth),
       )
     : 0;
-  const workspaceControlCount = (canUseAgent ? 5 : 3) + 1;
+  const workspaceControlCount =
+    (canUseAgent ? 2 : 0) + 3 + studioToolbarPluginShortcuts.length;
   const reservedWorkspaceControlsWidth =
     (canUseAgent
       ? sessionGroupWidth + compactControlWidth
@@ -333,7 +349,7 @@ export function StudioToolbar() {
     explorerControlWidth +
     editControlWidth +
     pluginControlWidth +
-    analyticsControlWidth +
+    pluginShortcutControlWidth +
     toolbarControlGap * Math.max(0, workspaceControlCount - 1) +
     hoverExpansionAllowance;
   const workspaceControlStart = chatOpen
@@ -369,10 +385,10 @@ export function StudioToolbar() {
     });
   };
 
-  const analyticsSupportHref =
-    projectSlug && supportEmail
+  const activationPromptSupportHref =
+    projectSlug && supportEmail && activationPromptShortcut?.activationSupport
       ? `mailto:${supportEmail}?subject=${encodeURIComponent(
-          `Activate Analytics for ${projectSlug}`,
+          `${activationPromptShortcut.activationSupport.supportSubject} for ${projectSlug}`,
         )}`
       : null;
 
@@ -537,34 +553,42 @@ export function StudioToolbar() {
         <span className="sr-only">Open plugins</span>
       </Button>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleAnalyticsAction}
-        className={expandableToggleClass(
-          false,
-          false,
-          hoverableWorkspaceLabels,
-        )}
-        style={expandableToggleStyle(analyticsExpandedWidth)}
-        title={analyticsAvailable ? "Open analytics" : "Analytics requires activation"}
-      >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-          <BarChart3 className="h-4 w-4" />
-        </span>
-        <span
-          aria-hidden="true"
-          className={expandableToggleLabelClass(
-            false,
-            !shouldCollapseRightSideLabels,
-          )}
-        >
-          Analytics
-        </span>
-        <span className="sr-only">
-          {analyticsAvailable ? "Open analytics" : "Analytics requires activation"}
-        </span>
-      </Button>
+      {studioToolbarPluginShortcuts.map((shortcut) => {
+        const ShortcutIcon = shortcut.icon;
+        const expandedWidth = shortcut.expandedWidth ?? 100;
+        const shortcutTitle = shortcut.enabled
+          ? `Open ${shortcut.label.toLowerCase()}`
+          : `${shortcut.label} requires activation`;
+        return (
+          <Button
+            key={`toolbar-plugin-shortcut-${shortcut.pluginId}`}
+            variant="ghost"
+            size="sm"
+            onClick={() => handlePluginShortcutAction(shortcut)}
+            className={expandableToggleClass(
+              false,
+              false,
+              hoverableWorkspaceLabels,
+            )}
+            style={expandableToggleStyle(expandedWidth)}
+            title={shortcutTitle}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+              <ShortcutIcon className="h-4 w-4" />
+            </span>
+            <span
+              aria-hidden="true"
+              className={expandableToggleLabelClass(
+                false,
+                !shouldCollapseRightSideLabels,
+              )}
+            >
+              {shortcut.label}
+            </span>
+            <span className="sr-only">{shortcutTitle}</span>
+          </Button>
+        );
+      })}
     </div>
   ) : null;
 
@@ -759,7 +783,8 @@ export function StudioToolbar() {
               hasGitChanges={hasGitChanges}
               isPublished={isPublished}
               publishStatus={publishStatus}
-              onOpenAnalytics={handleAnalyticsAction}
+              projectPluginShortcuts={studioMobileMenuPluginShortcuts}
+              onTriggerProjectPluginShortcut={handlePluginShortcutAction}
               theme={theme}
               setTheme={setTheme}
               colorTheme={colorTheme}
@@ -837,23 +862,33 @@ export function StudioToolbar() {
       />
 
       <AlertDialog
-        open={showAnalyticsActivationPrompt}
-        onOpenChange={setShowAnalyticsActivationPrompt}
+        open={Boolean(activationPromptShortcut)}
+        onOpenChange={(open) => {
+          if (!open) setActivationPromptShortcut(null);
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Analytics needs activation</AlertDialogTitle>
+            <AlertDialogTitle>
+              {activationPromptShortcut?.activationSupport?.title ??
+                "Plugin needs activation"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {supportEmail
-                ? `Analytics is not active for this project yet. Contact Vivd support at ${supportEmail} to enable it.`
-                : "Analytics is not active for this project yet. Contact Vivd support to enable it."}
+              {activationPromptShortcut?.activationSupport
+                ? supportEmail
+                  ? `${activationPromptShortcut.activationSupport.description} Contact Vivd support at ${supportEmail} to enable it.`
+                  : `${activationPromptShortcut.activationSupport.description} Contact Vivd support to enable it.`
+                : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Close</AlertDialogCancel>
-            {analyticsSupportHref ? (
+            {activationPromptSupportHref ? (
               <AlertDialogAction asChild>
-                <a href={analyticsSupportHref}>Email Vivd support</a>
+                <a href={activationPromptSupportHref}>
+                  {activationPromptShortcut?.activationSupport?.supportActionLabel ??
+                    "Email Vivd support"}
+                </a>
               </AlertDialogAction>
             ) : null}
           </AlertDialogFooter>

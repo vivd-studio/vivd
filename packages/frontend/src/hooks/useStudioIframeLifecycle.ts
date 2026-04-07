@@ -72,6 +72,7 @@ export function useStudioIframeLifecycle({
   const [studioReady, setStudioReady] = useState(false);
   const [studioLoadTimedOut, setStudioLoadTimedOut] = useState(false);
   const [studioLoadErrored, setStudioLoadErrored] = useState(false);
+  const studioReadyRef = useRef(false);
   const attemptedEarlyRecoveryRef = useRef(false);
   const attemptedEarlyBlankReloadRef = useRef(false);
   const attemptedCrossOriginTimeoutReloadRef = useRef(false);
@@ -116,6 +117,10 @@ export function useStudioIframeLifecycle({
     postMessageToStudio({ type: "vivd:host:ready-check" });
   }, [postMessageToStudio]);
 
+  const ackStudioReady = useCallback(() => {
+    postMessageToStudio({ type: "vivd:host:ready-ack" });
+  }, [postMessageToStudio]);
+
   const requestStudioBridgeSync = useCallback(() => {
     requestStudioReadyCheck();
     syncThemeToStudio();
@@ -123,16 +128,22 @@ export function useStudioIframeLifecycle({
   }, [requestStudioReadyCheck, syncSidebarToStudio, syncThemeToStudio]);
 
   const markStudioReady = useCallback(() => {
+    studioReadyRef.current = true;
     setStudioReady(true);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);
   }, []);
 
   const handleStudioReady = useCallback(() => {
+    const wasReady = studioReadyRef.current;
     markStudioReady();
+    ackStudioReady();
     syncThemeToStudio();
-    onReady?.();
-  }, [markStudioReady, onReady, syncThemeToStudio]);
+    syncSidebarToStudio();
+    if (!wasReady) {
+      onReady?.();
+    }
+  }, [ackStudioReady, markStudioReady, onReady, syncSidebarToStudio, syncThemeToStudio]);
 
   const tryMarkStudioReadyFromIframe = useCallback(() => {
     if (!isStudioIframeShellLoaded(iframeRef.current)) {
@@ -152,18 +163,6 @@ export function useStudioIframeLifecycle({
   const handleStudioIframeError = useCallback(() => {
     setStudioLoadErrored(true);
   }, []);
-
-  useEffect(() => {
-    syncThemeToStudio();
-  }, [syncThemeToStudio]);
-
-  useEffect(() => {
-    syncSidebarToStudio();
-  }, [syncSidebarToStudio]);
-
-  useEffect(() => {
-    requestStudioBridgeSync();
-  }, [requestStudioBridgeSync]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -201,6 +200,7 @@ export function useStudioIframeLifecycle({
 
       if (message.type === "vivd:studio:theme") {
         markStudioReady();
+        ackStudioReady();
 
         if (isTheme(message.theme)) setTheme(message.theme);
         if (isColorTheme(message.colorTheme)) setColorTheme(message.colorTheme);
@@ -224,6 +224,7 @@ export function useStudioIframeLifecycle({
     return () => window.removeEventListener("message", onMessage);
   }, [
     handleStudioReady,
+    ackStudioReady,
     markStudioReady,
     onClose,
     onFullscreen,
@@ -234,6 +235,18 @@ export function useStudioIframeLifecycle({
     setTheme,
     studioOrigin,
   ]);
+
+  useEffect(() => {
+    syncThemeToStudio();
+  }, [syncThemeToStudio]);
+
+  useEffect(() => {
+    syncSidebarToStudio();
+  }, [syncSidebarToStudio]);
+
+  useEffect(() => {
+    requestStudioBridgeSync();
+  }, [requestStudioBridgeSync]);
 
   useStudioIframeReadyRetry({
     enabled: Boolean(studioBaseUrl && !studioReady),
@@ -260,12 +273,14 @@ export function useStudioIframeLifecycle({
 
   useEffect(() => {
     if (!studioBaseUrl) {
+      studioReadyRef.current = false;
       setStudioReady(false);
       setStudioLoadTimedOut(false);
       setStudioLoadErrored(false);
       return;
     }
 
+    studioReadyRef.current = false;
     setStudioReady(false);
     setStudioLoadTimedOut(false);
     setStudioLoadErrored(false);

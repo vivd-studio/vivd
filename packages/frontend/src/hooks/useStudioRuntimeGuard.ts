@@ -241,12 +241,20 @@ export function useStudioRuntimeGuard({
       }
     };
 
+    const onPageShow = () => {
+      if (document.visibilityState === "visible") {
+        void runHealthCheck("retry-on-fail");
+      }
+    };
+
     window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [

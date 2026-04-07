@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { InteractiveSurface } from "@/components/ui/interactive-surface";
 import {
   ArrowUp,
-  Bot,
+  ChevronDown,
   FolderArchive,
   ImagePlus,
   Loader2,
@@ -171,31 +171,6 @@ export function ScratchForm() {
           </div>
         ) : null}
 
-        <div className="mx-auto w-full max-w-[42rem] rounded-[24px] border border-border/50 bg-card/56 px-4 py-3 text-left shadow-[0_24px_80px_hsl(var(--primary)/0.08)] backdrop-blur-xl sm:px-5">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/8 text-primary">
-              <Bot className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="space-y-1">
-                <div className="text-sm font-medium text-foreground">
-                  Websites you like
-                </div>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Optional. Paste a few URLs with design ideas you want us to use as inspiration.
-                </p>
-              </div>
-              <textarea
-                {...referenceUrlsField}
-                rows={2}
-                disabled={isDisabled}
-                placeholder="https://example.com&#10;https://another-example.com"
-                className="min-h-[72px] w-full resize-y rounded-[18px] border border-border/50 bg-background/55 px-3 py-2 text-sm text-foreground shadow-inner outline-none placeholder:text-muted-foreground focus:border-primary/25 focus:bg-background/80 disabled:cursor-not-allowed disabled:opacity-70"
-              />
-            </div>
-          </div>
-        </div>
-
         {validationError ? (
           <div className="rounded-[24px] border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive shadow-[0_24px_80px_hsl(var(--destructive)/0.12)] backdrop-blur-xl">
             {validationError}
@@ -264,8 +239,33 @@ export function ScratchForm() {
               setAssets((prev) => prev.filter((_, i) => i !== idx))
             }
           />
-
         </div>
+
+        <details className="mx-auto w-full max-w-[42rem] rounded-[18px] border border-border/35 bg-card/22 px-4 py-3 text-left shadow-[0_14px_36px_hsl(var(--primary)/0.04)] backdrop-blur-xl group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:content-none">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground/88">
+                Websites you like
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Optional inspiration URLs
+              </p>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="mt-3 border-t border-border/25 pt-3">
+            <p className="mb-2 text-xs leading-5 text-muted-foreground">
+              Paste a few sites or design references we should loosely follow.
+            </p>
+            <textarea
+              {...referenceUrlsField}
+              rows={2}
+              disabled={isDisabled}
+              placeholder={"https://example.com\nhttps://another-example.com"}
+              className="min-h-[60px] w-full resize-y rounded-[16px] border border-border/35 bg-background/30 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-border/55 focus:bg-background/46 disabled:cursor-not-allowed disabled:opacity-70"
+            />
+          </div>
+        </details>
       </div>
     </form>
   );

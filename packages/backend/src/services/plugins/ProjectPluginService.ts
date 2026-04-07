@@ -1,9 +1,14 @@
 import {
   contactFormPluginService,
+  ContactFormPluginNotEnabledError,
+  ContactFormRecipientRequiredError,
+  ContactFormRecipientVerificationError,
   type ContactFormPluginInfoPayload,
   type ContactFormPluginPayload,
 } from "./contactForm/service";
-import type { ContactFormPluginConfig } from "./contactForm/config";
+import {
+  type ContactFormPluginConfig,
+} from "./contactForm/config";
 import type { ContactRecipientVerificationRequestResult } from "./contactForm/recipientVerification";
 import {
   analyticsPluginService,
@@ -11,17 +16,27 @@ import {
   type AnalyticsPluginPayload,
   type AnalyticsSummaryPayload,
 } from "./analytics/service";
-import type { AnalyticsPluginConfig } from "./analytics/config";
+import {
+  type AnalyticsPluginConfig,
+} from "./analytics/config";
 import {
   projectPluginInstanceService,
   type ProjectPluginInstanceSummary,
 } from "./core/instanceService";
+import {
+  buildPluginInfoContractPayload,
+  PluginActionArgumentError,
+  type ProjectPluginActionPayload,
+  type ProjectPluginInfoContractPayload,
+  UnsupportedPluginActionError,
+} from "./core/module";
 import { pluginEntitlementService } from "./PluginEntitlementService";
 import {
   derivePluginInstallState,
   type ProjectPluginCatalogItem,
 } from "./surfaceTypes";
 import {
+  getPluginModule,
   listPluginCatalogEntries,
   type PluginCatalogEntry,
   type PluginId,
@@ -89,32 +104,48 @@ class ProjectPluginService {
     projectSlug: string;
     pluginId: PluginId;
   }): Promise<{ instanceId: string; created: boolean; status: string }> {
-    if (options.pluginId === "contact_form") {
-      const result = await this.ensureContactFormPlugin(options);
-      return {
-        instanceId: result.instanceId,
-        created: result.created,
-        status: result.status,
-      };
-    }
+    return getPluginModule(options.pluginId).ensureInstance(options);
+  }
 
-    if (options.pluginId === "analytics") {
-      const result = await this.ensureAnalyticsPlugin(options);
-      return {
-        instanceId: result.instanceId,
-        created: result.created,
-        status: result.status,
-      };
-    }
-
-    const { row, created } = await projectPluginInstanceService.ensurePluginInstance(
-      options,
+  async getPluginInfoContract(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: PluginId;
+  }): Promise<ProjectPluginInfoContractPayload> {
+    const module = getPluginModule(options.pluginId);
+    return buildPluginInfoContractPayload(
+      module.definition,
+      await module.getInfoPayload(options),
     );
-    return {
-      instanceId: row.id,
-      created,
-      status: row.status,
-    };
+  }
+
+  async updatePluginConfigById(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: PluginId;
+    config: Record<string, unknown>;
+  }): Promise<ProjectPluginInfoContractPayload> {
+    const module = getPluginModule(options.pluginId);
+    return buildPluginInfoContractPayload(
+      module.definition,
+      await module.updateConfig(options),
+    );
+  }
+
+  async runPluginAction(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginId: PluginId;
+    actionId: string;
+    args: string[];
+    requestedByUserId?: string | null;
+    requestHost?: string | null;
+  }): Promise<ProjectPluginActionPayload> {
+    const module = getPluginModule(options.pluginId);
+    if (!module.runAction) {
+      throw new UnsupportedPluginActionError(options.pluginId, options.actionId);
+    }
+    return module.runAction(options);
   }
 
   async ensureContactFormPlugin(options: {
@@ -204,4 +235,11 @@ export type {
   AnalyticsPluginPayload,
   AnalyticsSummaryPayload,
   ProjectPluginInstanceSummary,
+};
+export {
+  ContactFormPluginNotEnabledError,
+  ContactFormRecipientRequiredError,
+  ContactFormRecipientVerificationError,
+  PluginActionArgumentError,
+  UnsupportedPluginActionError,
 };

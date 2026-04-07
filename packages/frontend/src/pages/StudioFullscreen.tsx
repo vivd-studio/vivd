@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { trpc } from "@/lib/trpc";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading, VivdIcon } from "@/components/common";
+import { StudioRecoveryOverlay } from "@/components/common/StudioRecoveryOverlay";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { Button } from "@/components/ui/button";
@@ -443,12 +444,6 @@ export default function StudioFullscreen() {
         onError={handleStudioIframeError}
       />
 
-      {isStudioRecovering ? (
-        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-          Reconnecting studio machine...
-        </div>
-      ) : null}
-
       {!studioReady ? (
         <div className="absolute inset-0 z-10 bg-background">
           {studioLoadTimedOut || studioLoadErrored ? (
@@ -494,6 +489,8 @@ export default function StudioFullscreen() {
           )}
         </div>
       ) : null}
+
+      {isStudioRecovering && studioReady ? <StudioRecoveryOverlay /> : null}
     </div>
   );
 }

@@ -1,20 +1,20 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
-import { projectPluginService } from "../../services/plugins/ProjectPluginService";
+import type {
+  ContactFormPluginInfoPayload,
+  ContactFormPluginPayload,
+} from "../../services/plugins/ProjectPluginService";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
 import { contactFormPluginConfigSchema } from "../../services/plugins/contactForm/config";
+import type { ContactRecipientVerificationRequestResult } from "../../services/plugins/contactForm/recipientVerification";
 import {
-  ContactFormPluginNotEnabledError,
-  ContactFormRecipientRequiredError,
-  ContactFormRecipientVerificationError,
-} from "../../services/plugins/contactForm/service";
-import {
-  ContactRecipientEmailFormatError,
-  ContactRecipientVerificationPendingLimitError,
-  ContactRecipientVerificationSendError,
-} from "../../services/plugins/contactForm/recipientVerification";
-import { ContactRecipientVerificationEndpointUnavailableError } from "../../services/plugins/contactForm/publicApi";
+  ensureProjectPluginInstance,
+  extractRequestHost,
+  getProjectPluginInfo,
+  runProjectPluginAction,
+  updateProjectPluginConfig,
+} from "./operations";
 
 const projectSlugInput = z.object({
   slug: z.string().min(1),
@@ -30,18 +30,58 @@ const contactRecipientInput = z.object({
   email: z.string().trim().min(1),
 });
 
-function extractRequestHost(
-  rawHost: string | string[] | undefined,
-): string | null {
-  if (typeof rawHost === "string") {
-    const normalized = rawHost.split(",")[0]?.trim() ?? "";
-    return normalized || null;
+function buildLegacyContactPluginPayload(
+  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
+  created: boolean,
+): ContactFormPluginPayload {
+  if (
+    info.pluginId !== "contact_form" ||
+    !info.instanceId ||
+    !info.publicToken ||
+    !info.config ||
+    !info.snippets
+  ) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Contact Form plugin payload is incomplete after ensure/config update.",
+    });
   }
-  if (Array.isArray(rawHost) && rawHost.length > 0) {
-    const normalized = rawHost[0]?.split(",")[0]?.trim() ?? "";
-    return normalized || null;
-  }
-  return null;
+
+  return {
+    pluginId: "contact_form",
+    instanceId: info.instanceId,
+    status: info.status ?? "enabled",
+    created,
+    publicToken: info.publicToken,
+    config: info.config as ContactFormPluginPayload["config"],
+    snippets: info.snippets as ContactFormPluginPayload["snippets"],
+  };
+}
+
+function buildLegacyContactPluginInfo(
+  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
+): ContactFormPluginInfoPayload {
+  const details =
+    info.details && typeof info.details === "object" ? info.details : null;
+  const recipients =
+    details && "recipients" in details && details.recipients
+      ? details.recipients
+      : { options: [], pending: [] };
+
+  return {
+    pluginId: "contact_form",
+    entitled: info.entitled,
+    entitlementState: info.entitlementState,
+    enabled: info.enabled,
+    instanceId: info.instanceId,
+    status: info.status,
+    publicToken: info.publicToken,
+    config: info.config as ContactFormPluginInfoPayload["config"],
+    snippets: info.snippets as ContactFormPluginInfoPayload["snippets"],
+    usage: info.usage as ContactFormPluginInfoPayload["usage"],
+    recipients: recipients as ContactFormPluginInfoPayload["recipients"],
+    instructions: info.instructions,
+  };
 }
 
 export const contactEnsurePluginProcedure = projectMemberProcedure
@@ -67,82 +107,57 @@ export const contactEnsurePluginProcedure = projectMemberProcedure
       });
     }
 
-    return projectPluginService.ensureContactFormPlugin({
+    const ensured = await ensureProjectPluginInstance({
       organizationId: ctx.organizationId!,
       projectSlug: input.slug,
+      pluginId: "contact_form",
     });
+    const info = await getProjectPluginInfo({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: "contact_form",
+    });
+    return buildLegacyContactPluginPayload(info, ensured.created);
   });
 
 export const contactInfoPluginProcedure = projectMemberProcedure
   .input(projectSlugInput)
   .query(async ({ ctx, input }) => {
-    return projectPluginService.getContactFormInfo({
+    const info = await getProjectPluginInfo({
       organizationId: ctx.organizationId!,
       projectSlug: input.slug,
+      pluginId: "contact_form",
     });
+    return buildLegacyContactPluginInfo(info);
   });
 
 export const contactUpdateConfigPluginProcedure = projectMemberProcedure
   .input(contactConfigInput)
   .mutation(async ({ ctx, input }) => {
-    try {
-      return await projectPluginService.updateContactFormConfig({
-        organizationId: ctx.organizationId!,
-        projectSlug: input.slug,
-        config: input.config,
-      });
-    } catch (error) {
-      if (
-        error instanceof ContactFormRecipientVerificationError ||
-        error instanceof ContactFormRecipientRequiredError
-      ) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: error.message,
-        });
-      }
-      throw error;
-    }
+    const info = await updateProjectPluginConfig({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: "contact_form",
+      config: input.config,
+    });
+    return buildLegacyContactPluginPayload(info, false);
   });
 
 export const contactRequestRecipientVerificationPluginProcedure = projectMemberProcedure
   .input(contactRecipientInput)
   .mutation(async ({ ctx, input }) => {
-    try {
-      return await projectPluginService.requestContactRecipientVerification({
-        organizationId: ctx.organizationId!,
-        projectSlug: input.slug,
-        email: input.email,
-        requestedByUserId: ctx.session.user.id,
-        requestHost:
-          ctx.requestHost ??
-          extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
-          extractRequestHost(ctx.req.headers.host),
-      });
-    } catch (error) {
-      if (
-        error instanceof ContactFormPluginNotEnabledError ||
-        error instanceof ContactRecipientEmailFormatError ||
-        error instanceof ContactRecipientVerificationPendingLimitError
-      ) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: error.message,
-        });
-      }
-      if (error instanceof ContactRecipientVerificationSendError) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: error.message,
-        });
-      }
-      if (error instanceof ContactRecipientVerificationEndpointUnavailableError) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message:
-            "Could not generate verification link for this host. Please contact support.",
-        });
-      }
-      throw error;
-    }
+    const result = await runProjectPluginAction({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      args: [input.email],
+      requestedByUserId: ctx.session.user.id,
+      requestHost:
+        ctx.requestHost ??
+        extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
+        extractRequestHost(ctx.req.headers.host),
+    });
+
+    return result.result as ContactRecipientVerificationRequestResult;
   });

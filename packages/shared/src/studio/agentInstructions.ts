@@ -88,10 +88,11 @@ function buildPlatformSurfaceSection(mode: VivdPlatformSurfaceMode): string {
    - Treat publish/checklist, plugin, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
    - Use \`vivd whoami\` or \`vivd project info\` when you need runtime/project context before making changes.
    - Vivd supports first-party plugins for some functionality, including Contact Form and Analytics.
-   - Before building those features manually, inspect the available first-party plugin surface with \`vivd plugins catalog\`.
-   - For Contact Form projects, use \`vivd plugins contact info\` for current status, submit endpoint, and snippets.
-   - If you need to inspect or change contact settings, use \`vivd plugins contact help\`.
-   - For Analytics, use \`vivd plugins analytics info\`.
+   - Before building those features manually, inspect the available plugin surface with \`vivd plugins catalog\`.
+   - Discover plugin-specific capabilities with \`vivd plugins info <pluginId>\`.
+   - For plugin configuration, prefer the generic commands \`vivd plugins config show <pluginId>\`, \`vivd plugins config template <pluginId>\`, and \`vivd plugins config apply <pluginId> --file ...\`.
+   - For plugin-specific operations beyond config, use \`vivd plugins action <pluginId> <actionId> ...\`.
+   - Current first-party compatibility aliases like \`vivd plugins contact ...\` and \`vivd plugins analytics info\` still work, but treat the generic plugin commands as the main discovery surface.
    - Use \`vivd publish checklist show\` to review the saved checklist and \`vivd publish checklist update <item-id> --status <status> [--note ...]\` to continue or record checklist work item by item.
    - Treat \`vivd publish checklist run\` as an explicit full checklist pass, not a routine test command; use it only when the user explicitly asks to run it.
    - If a matching plugin is enabled, follow the CLI output instructions/snippets.

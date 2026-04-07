@@ -22,6 +22,12 @@ function parsePositiveFloat(value: string | undefined, fallback: number): number
   return parsed;
 }
 
+function parseNonNegativeFloat(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseFloat(value || "");
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+
 function parseOptionalPositiveInt(value: string | undefined): number | null {
   const trimmed = value?.trim() || "";
   if (!trimmed) return null;
@@ -93,6 +99,7 @@ function normalizeDockerPlatform(value: string | undefined): string | null {
 }
 
 type DockerProviderConfigDeps = {
+  totalSystemCpuCount?: () => number;
   totalSystemMemoryBytes?: () => number;
   readTextFile?: (path: string) => string;
 };
@@ -114,6 +121,16 @@ export class DockerProviderConfig {
       return 2048 * BYTES_PER_MEBIBYTE;
     }
     return detected;
+  }
+
+  private get totalSystemCpuCount(): number {
+    const detected =
+      this.deps.totalSystemCpuCount?.() ??
+      (typeof os.availableParallelism === "function"
+        ? os.availableParallelism()
+        : os.cpus().length);
+    if (!Number.isFinite(detected) || detected <= 0) return 1;
+    return Math.max(1, Math.floor(detected));
   }
 
   private readCgroupMemoryLimitBytes(): number | null {
@@ -370,7 +387,20 @@ export class DockerProviderConfig {
   }
 
   get cpuLimit(): number {
-    return parsePositiveFloat(process.env.DOCKER_STUDIO_CPUS, 1);
+    const configured = parsePositiveFloat(process.env.DOCKER_STUDIO_CPUS, 0);
+    if (configured > 0) return configured;
+    return Math.min(
+      Math.max(1, this.totalSystemCpuCount - this.autoCpuReserve),
+      this.autoCpuMax,
+    );
+  }
+
+  get autoCpuReserve(): number {
+    return parseNonNegativeFloat(process.env.DOCKER_STUDIO_CPUS_AUTO_RESERVE, 1);
+  }
+
+  get autoCpuMax(): number {
+    return parsePositiveFloat(process.env.DOCKER_STUDIO_CPUS_AUTO_MAX, 2);
   }
 
   get nanoCpus(): number {
@@ -385,24 +415,23 @@ export class DockerProviderConfig {
   }
 
   get autoMemoryMinMb(): number {
-    return parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB, 2048);
+    return parseNonNegativeInt(process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB, 0);
   }
 
   get autoMemoryMaxMb(): number {
-    return Math.max(
-      this.autoMemoryMinMb,
-      parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB, 3072),
-    );
+    return parsePositiveInt(process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB, 4096);
   }
 
   get memoryMb(): number {
     const configured = parseOptionalPositiveInt(process.env.DOCKER_STUDIO_MEMORY_MB);
     if (configured !== null) return configured;
 
+    const maximum = this.autoMemoryMaxMb;
+    const minimum = Math.min(this.autoMemoryMinMb, maximum);
     return clamp(
-      this.memoryBudgetMb - this.autoMemoryReserveMb,
-      this.autoMemoryMinMb,
-      this.autoMemoryMaxMb,
+      Math.max(1, this.memoryBudgetMb - this.autoMemoryReserveMb),
+      minimum,
+      maximum,
     );
   }
 

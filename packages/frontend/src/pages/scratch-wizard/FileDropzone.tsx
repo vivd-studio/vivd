@@ -160,10 +160,10 @@ export function FileDropzone({
     <div className={cn("h-full", className)}>
       <label
         className={cn(
-          "flex min-h-[108px] h-full cursor-pointer rounded-[24px] border border-dashed border-border/60 bg-card/34 p-4 text-left shadow-[0_22px_54px_hsl(var(--primary)/0.1)] backdrop-blur-xl transition duration-200",
+          "flex min-h-[88px] h-full cursor-pointer rounded-[20px] border border-dashed border-border/45 bg-card/20 p-3.5 text-left shadow-[0_10px_28px_hsl(var(--primary)/0.05)] backdrop-blur-xl transition duration-200",
           isDragging
-            ? "border-primary/70 bg-primary/10 shadow-[0_24px_80px_hsl(var(--primary)/0.14)]"
-            : "hover:border-primary/22 hover:bg-card/52",
+            ? "border-primary/55 bg-primary/8 shadow-[0_16px_40px_hsl(var(--primary)/0.1)]"
+            : "hover:border-border/65 hover:bg-card/28",
         )}
         onDragEnter={onDragEnter}
         onDragLeave={onDragLeave}
@@ -172,8 +172,8 @@ export function FileDropzone({
       >
         <div className="flex w-full items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/46 text-foreground/78">
-              <Icon className="h-4 w-4" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/46 text-foreground/78">
+              <Icon className="h-3.5 w-3.5" />
             </div>
             <div className="min-w-0">
               <div className="text-sm font-medium text-foreground">{title}</div>
@@ -182,7 +182,7 @@ export function FileDropzone({
           </div>
           <Badge
             variant="secondary"
-            className="shrink-0 rounded-full border border-border/60 bg-background/50 px-2.5 py-1 text-[11px] font-normal text-muted-foreground"
+            className="shrink-0 rounded-full border border-border/45 bg-background/35 px-2.5 py-1 text-[11px] font-normal text-muted-foreground"
           >
             {files.length > 0
               ? `${files.length} file${files.length === 1 ? "" : "s"}`

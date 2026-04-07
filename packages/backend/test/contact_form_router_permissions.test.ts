@@ -1,9 +1,16 @@
+import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { ensureContactFormPluginMock, updateContactFormConfigMock } = vi.hoisted(() => ({
-  ensureContactFormPluginMock: vi.fn(),
-  updateContactFormConfigMock: vi.fn(),
+const {
+  ensureProjectPluginInstanceMock,
+  getProjectPluginInfoMock,
+  updateProjectPluginConfigMock,
+} = vi.hoisted(() => ({
+  ensureProjectPluginInstanceMock: vi.fn(),
+  getProjectPluginInfoMock: vi.fn(),
+  updateProjectPluginConfigMock: vi.fn(),
 }));
+
 const { resolveEffectiveEntitlementMock } = vi.hoisted(() => ({
   resolveEffectiveEntitlementMock: vi.fn(),
 }));
@@ -33,17 +40,18 @@ vi.mock("../src/db", () => ({
   },
 }));
 
-vi.mock("../src/services/plugins/ProjectPluginService", () => ({
-  projectPluginService: {
-    ensureContactFormPlugin: ensureContactFormPluginMock,
-    updateContactFormConfig: updateContactFormConfigMock,
-  },
-}));
-
 vi.mock("../src/services/plugins/PluginEntitlementService", () => ({
   pluginEntitlementService: {
     resolveEffectiveEntitlement: resolveEffectiveEntitlementMock,
   },
+}));
+
+vi.mock("../src/trpcRouters/plugins/operations", () => ({
+  ensureProjectPluginInstance: ensureProjectPluginInstanceMock,
+  getProjectPluginInfo: getProjectPluginInfoMock,
+  updateProjectPluginConfig: updateProjectPluginConfigMock,
+  runProjectPluginAction: vi.fn(),
+  extractRequestHost: vi.fn(() => "app.vivd.local"),
 }));
 
 import { router } from "../src/trpc";
@@ -51,14 +59,10 @@ import {
   contactEnsurePluginProcedure,
   contactUpdateConfigPluginProcedure,
 } from "../src/trpcRouters/plugins/contactForm";
-import {
-  ContactFormRecipientRequiredError,
-  ContactFormRecipientVerificationError,
-} from "../src/services/plugins/contactForm/service";
 
 function makeContext(overrides: Record<string, unknown> = {}) {
   return {
-    req: {} as any,
+    req: { headers: {} } as any,
     res: {} as any,
     session: {
       session: {
@@ -101,13 +105,15 @@ describe("plugins.contactEnsure permissions", () => {
   });
 
   beforeEach(() => {
-    ensureContactFormPluginMock.mockReset();
-    updateContactFormConfigMock.mockReset();
+    ensureProjectPluginInstanceMock.mockReset();
+    getProjectPluginInfoMock.mockReset();
+    updateProjectPluginConfigMock.mockReset();
     resolveEffectiveEntitlementMock.mockReset();
     organizationFindFirstMock.mockReset();
     selectMock.mockClear();
     selectFromMock.mockClear();
     selectWhereMock.mockReset();
+
     organizationFindFirstMock.mockResolvedValue({ status: "active" });
     selectWhereMock.mockResolvedValue([]);
     resolveEffectiveEntitlementMock.mockResolvedValue({
@@ -136,7 +142,7 @@ describe("plugins.contactEnsure permissions", () => {
       code: "UNAUTHORIZED",
       message: "Only super-admin users can enable plugins",
     });
-    expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
+    expect(ensureProjectPluginInstanceMock).not.toHaveBeenCalled();
   });
 
   it("rejects when entitlement is not enabled", async () => {
@@ -189,15 +195,22 @@ describe("plugins.contactEnsure permissions", () => {
       code: "UNAUTHORIZED",
       message: "Contact Form is not entitled for this project",
     });
-    expect(ensureContactFormPluginMock).not.toHaveBeenCalled();
+    expect(ensureProjectPluginInstanceMock).not.toHaveBeenCalled();
   });
 
   it("allows super-admin users", async () => {
-    ensureContactFormPluginMock.mockResolvedValueOnce({
+    ensureProjectPluginInstanceMock.mockResolvedValueOnce({
+      instanceId: "ppi-1",
+      created: false,
+      status: "enabled",
+    });
+    getProjectPluginInfoMock.mockResolvedValueOnce({
       pluginId: "contact_form",
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
       instanceId: "ppi-1",
       status: "enabled",
-      created: false,
       publicToken: "ppi-1.token",
       config: {
         recipientEmails: [],
@@ -208,6 +221,20 @@ describe("plugins.contactEnsure permissions", () => {
       snippets: {
         html: "<form></form>",
         astro: "<form></form>",
+      },
+      usage: null,
+      details: null,
+      instructions: [],
+      defaultConfig: {},
+      catalog: {
+        pluginId: "contact_form",
+        name: "Contact Form",
+        description: "",
+        capabilities: {
+          supportsInfo: true,
+          config: null,
+          actions: [],
+        },
       },
     });
 
@@ -243,15 +270,24 @@ describe("plugins.contactEnsure permissions", () => {
       instanceId: "ppi-1",
       status: "enabled",
     });
-    expect(ensureContactFormPluginMock).toHaveBeenCalledWith({
+    expect(ensureProjectPluginInstanceMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+      pluginId: "contact_form",
+    });
+    expect(getProjectPluginInfoMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "contact_form",
     });
   });
 
   it("maps unverified-recipient config errors to BAD_REQUEST", async () => {
-    updateContactFormConfigMock.mockRejectedValueOnce(
-      new ContactFormRecipientVerificationError(["unverified@example.com"]),
+    updateProjectPluginConfigMock.mockRejectedValueOnce(
+      new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Recipient email is not verified for this project: unverified@example.com",
+      }),
     );
 
     const caller = pluginsRouter.createCaller(makeContext());
@@ -281,8 +317,11 @@ describe("plugins.contactEnsure permissions", () => {
   });
 
   it("maps empty-recipient config errors to BAD_REQUEST", async () => {
-    updateContactFormConfigMock.mockRejectedValueOnce(
-      new ContactFormRecipientRequiredError(),
+    updateProjectPluginConfigMock.mockRejectedValueOnce(
+      new TRPCError({
+        code: "BAD_REQUEST",
+        message: "At least one verified recipient email is required",
+      }),
     );
 
     const caller = pluginsRouter.createCaller(makeContext());

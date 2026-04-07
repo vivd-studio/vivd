@@ -40,6 +40,7 @@ import { useTheme } from "@/components/theme";
 import { HeaderBreadcrumbTextLink, HostHeader } from "@/components/shell";
 import { ROUTES } from "@/app/router";
 import { CenteredLoading } from "@/components/common";
+import { StudioRecoveryOverlay } from "@/components/common/StudioRecoveryOverlay";
 import { StudioStartupLoading } from "@/components/common/StudioStartupLoading";
 import {
   FramedHostShell,
@@ -49,6 +50,7 @@ import {
 import { PublishSiteDialog } from "@/components/projects/publish/PublishSiteDialog";
 import { StudioBootstrapIframe } from "@/components/common/StudioBootstrapIframe";
 import { authClient } from "@/lib/auth-client";
+import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import {
   type StudioRuntimeSession,
   useStudioHostRuntime,
@@ -58,7 +60,6 @@ import { resolveStudioRuntimeUrl } from "@/lib/studioRuntimeUrl";
 import { createStudioRuntimeSession } from "@/lib/studioRuntimeSession";
 import { toast } from "sonner";
 import {
-  BarChart3,
   Copy,
   Download,
   ExternalLink,
@@ -102,11 +103,13 @@ export default function EmbeddedStudio() {
   const project = projectsData?.projects?.find((p) => p.slug === projectSlug);
   const version = project?.currentVersion || 1;
   const publicPreviewEnabled = project?.publicPreviewEnabled ?? true;
-  const analyticsAvailable = (project?.enabledPlugins ?? []).includes("analytics");
-  const analyticsPath = projectSlug
-    ? ROUTES.PROJECT_ANALYTICS?.(projectSlug) ??
-      `/vivd-studio/projects/${projectSlug}/analytics`
-    : null;
+  const projectHeaderPluginShortcuts = projectSlug
+    ? getProjectPluginShortcuts({
+        enabledPluginIds: project?.enabledPlugins ?? [],
+        projectSlug,
+        surface: "project-header",
+      })
+    : [];
 
   const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const resumeStudio = urlParams.get("view") === "studio";
@@ -588,14 +591,22 @@ export default function EmbeddedStudio() {
     studioStatusLabel?: string;
   }) => {
     const showStudioStartupAction =
-      editRequested &&
-      (startStudio.isPending ||
-        hardRestartStudio.isPending ||
-        !studioIframeSrc ||
-        !studioReady);
+      startStudio.isPending ||
+      hardRestartStudio.isPending ||
+      isStudioRecovering ||
+      (livePreviewActive && (!studioIframeSrc || !studioReady));
     const projectActions = includeProjectActions ? (
       <>
-        {!editRequested ? (
+        {showStudioStartupAction ? (
+          <Button size="sm" disabled className="h-8 rounded-md px-3">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {hardRestartStudio.isPending
+              ? "Restarting..."
+              : isStudioRecovering
+                ? "Reconnecting..."
+                : "Starting..."}
+          </Button>
+        ) : (
           <Button
             size="sm"
             onClick={handleEdit}
@@ -608,12 +619,7 @@ export default function EmbeddedStudio() {
           >
             Edit
           </Button>
-        ) : showStudioStartupAction ? (
-          <Button size="sm" disabled className="h-8 rounded-md px-3">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {hardRestartStudio.isPending ? "Restarting..." : "Starting..."}
-          </Button>
-        ) : null}
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -623,18 +629,22 @@ export default function EmbeddedStudio() {
         >
           Publish
         </Button>
-        {analyticsAvailable ? (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => analyticsPath && navigate(analyticsPath)}
-            title="Analytics"
-            disabled={isRenamePending}
-            className="h-8 w-8 rounded-md"
-          >
-            <BarChart3 className="h-4 w-4" />
-          </Button>
-        ) : null}
+        {projectHeaderPluginShortcuts.map((shortcut) => {
+          const ShortcutIcon = shortcut.icon;
+          return (
+            <Button
+              key={`header-shortcut-${shortcut.pluginId}`}
+              variant="outline"
+              size="icon"
+              onClick={() => navigate(shortcut.path)}
+              title={shortcut.label}
+              disabled={isRenamePending}
+              className="h-8 w-8 rounded-md"
+            >
+              <ShortcutIcon className="h-4 w-4" />
+            </Button>
+          );
+        })}
         <Separator orientation="vertical" className="mx-0.5 h-4" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -732,15 +742,19 @@ export default function EmbeddedStudio() {
               <Plug className="mr-2 h-4 w-4" />
               Plugins
             </DropdownMenuItem>
-            {analyticsAvailable ? (
-              <DropdownMenuItem
-                onClick={() => analyticsPath && navigate(analyticsPath)}
-                disabled={isRenamePending}
-              >
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Analytics
-              </DropdownMenuItem>
-            ) : null}
+            {projectHeaderPluginShortcuts.map((shortcut) => {
+              const ShortcutIcon = shortcut.icon;
+              return (
+                <DropdownMenuItem
+                  key={`menu-shortcut-${shortcut.pluginId}`}
+                  onClick={() => navigate(shortcut.path)}
+                  disabled={isRenamePending}
+                >
+                  <ShortcutIcon className="mr-2 h-4 w-4" />
+                  {shortcut.label}
+                </DropdownMenuItem>
+              );
+            })}
             <DropdownMenuSeparator />
             {canRenameProject ? (
               <DropdownMenuItem
@@ -939,12 +953,6 @@ export default function EmbeddedStudio() {
               onError={handleStudioIframeError}
             />
 
-            {isStudioRecovering ? (
-              <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-                Reconnecting studio machine...
-              </div>
-            ) : null}
-
             {!studioReady ? (
               <div className="absolute inset-0 z-10 bg-background">
                 {studioLoadTimedOut || studioLoadErrored ? (
@@ -994,6 +1002,10 @@ export default function EmbeddedStudio() {
                   />
                 )}
               </div>
+            ) : null}
+
+            {isStudioRecovering && studioReady ? (
+              <StudioRecoveryOverlay />
             ) : null}
           </div>
         </div>

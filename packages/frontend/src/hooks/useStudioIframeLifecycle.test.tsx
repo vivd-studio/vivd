@@ -79,6 +79,10 @@ describe("useStudioIframeLifecycle", () => {
 
     expect(latestValue?.studioReady).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:ready-ack" },
+      "https://app.example.com",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
       { type: "vivd:host:theme", theme: "light", colorTheme: "vivd-sharp" },
       "https://app.example.com",
     );
@@ -156,10 +160,14 @@ describe("useStudioIframeLifecycle", () => {
     });
 
     expect(latestValue?.studioReady).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:ready-ack" },
+      "https://studio.example.com",
+    );
     expect(props.onReady).toHaveBeenCalledTimes(1);
   });
 
-  it("waits to post bridge messages until a cross-origin iframe has committed to the studio origin", async () => {
+  it("can keep sending bridge messages before a cross-origin iframe exposes its location", async () => {
     const props = createLifecycleProps({
       studioBaseUrl: "https://studio.example.com/runtime",
       studioHostProbeBaseUrl: null,
@@ -192,18 +200,12 @@ describe("useStudioIframeLifecycle", () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(postMessage).not.toHaveBeenCalled();
-
-    committedToStudioOrigin = true;
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
-    });
-
     expect(postMessage).toHaveBeenCalledWith(
       { type: "vivd:host:ready-check" },
       "https://studio.example.com",
     );
+
+    committedToStudioOrigin = true;
   });
 
   it("reloads early when a cross-origin studio iframe is still stuck on about:blank", async () => {
@@ -216,6 +218,7 @@ describe("useStudioIframeLifecycle", () => {
 
     const iframe = screen.getByTitle("studio-frame");
     const frameWindow = {
+      postMessage: vi.fn(),
       location: {
         href: "about:blank",
       },
@@ -310,6 +313,7 @@ describe("useStudioIframeLifecycle", () => {
 
     const iframe = screen.getByTitle("studio-frame");
     const frameWindow = {
+      postMessage: vi.fn(),
       location: {
         href: "https://studio.example.com/runtime/vivd-studio",
       },

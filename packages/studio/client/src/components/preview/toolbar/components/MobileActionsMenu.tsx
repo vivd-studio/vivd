@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  BarChart3,
   Check,
   Copy,
   Download,
@@ -54,6 +53,7 @@ import {
   ThemeIndicator,
 } from "@/components/theme/color-theme-options";
 import { useState } from "react";
+import type { StudioProjectPluginShortcut } from "@/plugins/shortcuts";
 import { DEVICE_PRESETS } from "../../types";
 import type { DevicePreset, ViewportMode } from "../../types";
 import {
@@ -105,7 +105,8 @@ interface MobileActionsMenuProps {
     domain?: string | null;
     lastTag?: string | null;
   };
-  onOpenAnalytics?: () => void;
+  projectPluginShortcuts?: StudioProjectPluginShortcut[];
+  onTriggerProjectPluginShortcut?: (shortcut: StudioProjectPluginShortcut) => void;
 
   // Theme
   theme: Theme;
@@ -168,7 +169,8 @@ export function MobileActionsMenu({
   hasGitChanges,
   isPublished,
   publishStatus,
-  onOpenAnalytics,
+  projectPluginShortcuts = [],
+  onTriggerProjectPluginShortcut,
   theme,
   setTheme,
   colorTheme,
@@ -205,18 +207,6 @@ export function MobileActionsMenu({
     if (!projectSlug) return;
     openEmbeddedStudioPath(
       buildProjectStudioPath(projectSlug, "plugins"),
-      embedded,
-    );
-  };
-
-  const handleOpenAnalytics = () => {
-    if (onOpenAnalytics) {
-      onOpenAnalytics();
-      return;
-    }
-    if (!projectSlug) return;
-    openEmbeddedStudioPath(
-      buildProjectStudioPath(projectSlug, "analytics"),
       embedded,
     );
   };
@@ -430,10 +420,18 @@ export function MobileActionsMenu({
               <Plug className="w-4 h-4 mr-2" />
               Plugins
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleOpenAnalytics}>
-              <BarChart3 className="w-4 h-4 mr-2" />
-              Analytics
-            </DropdownMenuItem>
+            {projectPluginShortcuts.map((shortcut) => {
+              const ShortcutIcon = shortcut.icon;
+              return (
+                <DropdownMenuItem
+                  key={`plugin-shortcut-${shortcut.pluginId}`}
+                  onClick={() => onTriggerProjectPluginShortcut?.(shortcut)}
+                >
+                  <ShortcutIcon className="w-4 h-4 mr-2" />
+                  {shortcut.label}
+                </DropdownMenuItem>
+              );
+            })}
             {/* Connected-mode actions — see PROJECT_ACTIONS in @vivd/shared */}
             {isConnectedMode && (
               <>

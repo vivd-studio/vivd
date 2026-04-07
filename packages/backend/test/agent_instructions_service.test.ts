@@ -40,12 +40,16 @@ describe("AgentInstructionsService", () => {
       "Treat publish/checklist, plugin, and other platform-state requests as `vivd` CLI work first, not file-search work.",
     );
     expect(result.instructions).toContain("vivd plugins catalog");
-    expect(result.instructions).toContain("vivd plugins contact info");
-    expect(result.instructions).toContain("vivd plugins contact help");
+    expect(result.instructions).toContain("vivd plugins info <pluginId>");
+    expect(result.instructions).toContain("vivd plugins config show <pluginId>");
+    expect(result.instructions).toContain("vivd plugins action <pluginId> <actionId> ...");
+    expect(result.instructions).toContain("vivd plugins contact ...");
     expect(result.instructions).toContain("vivd publish checklist run");
     expect(result.instructions).toContain("vivd publish checklist show");
     expect(result.instructions).toContain("not a routine test command");
-    expect(result.instructions).toContain("You can work checklist items individually");
+    expect(result.instructions).toContain(
+      "Use `vivd publish checklist show` to review the saved checklist",
+    );
     expect(result.instructions).toContain("asking Vivd support to activate it");
     expect(result.instructions).toContain("Git workflow boundaries");
     expect(result.instructions).toContain(".vivd/uploads/");

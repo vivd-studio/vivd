@@ -11,6 +11,46 @@ function formatInstructionLines(instructions: string[]): string[] {
   return instructions.map((instruction) => `- ${instruction}`);
 }
 
+function formatPluginCommandHints(pluginId: string, plugin: {
+  capabilities?: {
+    supportsInfo?: boolean;
+    config?: {
+      supportsShow?: boolean;
+      supportsApply?: boolean;
+      supportsTemplate?: boolean;
+    } | null;
+    actions?: Array<{
+      actionId: string;
+      arguments?: Array<{
+        name: string;
+      }>;
+    }>;
+  };
+}): string {
+  const commands: string[] = [];
+  if (plugin.capabilities?.supportsInfo) {
+    commands.push(`info ${pluginId}`);
+  }
+  if (plugin.capabilities?.config?.supportsShow) {
+    commands.push(`config show ${pluginId}`);
+  }
+  if (plugin.capabilities?.config?.supportsTemplate) {
+    commands.push(`config template ${pluginId}`);
+  }
+  if (plugin.capabilities?.config?.supportsApply) {
+    commands.push(`config apply ${pluginId} --file config.json`);
+  }
+  for (const action of plugin.capabilities?.actions ?? []) {
+    const args =
+      action.arguments && action.arguments.length > 0
+        ? ` ${action.arguments.map((arg) => `<${arg.name}>`).join(" ")}`
+        : "";
+    commands.push(`action ${pluginId} ${action.actionId}${args}`);
+  }
+
+  return commands.length > 0 ? commands.join(" | ") : "none";
+}
+
 export function formatDoctorReport(input: {
   connected: boolean;
   studioId?: string | null;
@@ -70,7 +110,25 @@ export function formatProjectInfoReport(input: {
 }
 
 export function formatPluginCatalogReport(input: {
-  available: Array<{ pluginId: string; name?: string; description?: string }>;
+  available: Array<{
+    pluginId: string;
+    name?: string;
+    description?: string;
+    capabilities?: {
+      supportsInfo?: boolean;
+      config?: {
+        supportsShow?: boolean;
+        supportsApply?: boolean;
+        supportsTemplate?: boolean;
+      } | null;
+      actions?: Array<{
+        actionId: string;
+        arguments?: Array<{
+          name: string;
+        }>;
+      }>;
+    };
+  }>;
   instances: Array<{ pluginId: string; status: string; instanceId?: string }>;
 }): string {
   const enabledInstanceLines =
@@ -79,12 +137,150 @@ export function formatPluginCatalogReport(input: {
       : ["- none"];
   const catalogLines =
     input.available.length > 0
-      ? input.available.map(
-          (plugin) => `- ${plugin.pluginId}${plugin.name ? ` - ${plugin.name}` : ""}`,
-        )
+      ? input.available.flatMap((plugin) => [
+          `- ${plugin.pluginId}${plugin.name ? ` - ${plugin.name}` : ""}`,
+          `  Commands: ${formatPluginCommandHints(plugin.pluginId, plugin)}`,
+        ])
       : ["- none"];
 
   return ["Enabled instances:", ...enabledInstanceLines, "", "Catalog:", ...catalogLines].join("\n");
+}
+
+export function formatGenericPluginInfoReport(input: {
+  pluginId: string;
+  catalog: {
+    name: string;
+    description: string;
+    capabilities: {
+      supportsInfo: boolean;
+      config: {
+        supportsShow: boolean;
+        supportsApply: boolean;
+        supportsTemplate: boolean;
+      } | null;
+      actions: Array<{
+        actionId: string;
+        title: string;
+        arguments: Array<{
+          name: string;
+        }>;
+      }>;
+    };
+  };
+  entitled: boolean;
+  entitlementState: string;
+  enabled: boolean;
+  instanceId: string | null;
+  status: string | null;
+  publicToken: string | null;
+  usage: Record<string, unknown> | null;
+  config: Record<string, unknown> | null;
+  instructions: string[];
+}): string {
+  const actionLines =
+    input.catalog.capabilities.actions.length > 0
+      ? input.catalog.capabilities.actions.map((action) => {
+          const args =
+            action.arguments.length > 0
+              ? ` ${action.arguments.map((arg) => `<${arg.name}>`).join(" ")}`
+              : "";
+          return `- ${action.actionId}${args} - ${action.title}`;
+        })
+      : ["- none"];
+
+  return [
+    `Plugin: ${input.catalog.name}`,
+    `Plugin ID: ${input.pluginId}`,
+    `Description: ${input.catalog.description}`,
+    `Entitled: ${input.entitled ? "yes" : "no"} (${input.entitlementState})`,
+    `Enabled: ${input.enabled ? "yes" : "no"}`,
+    formatStatusLine("Instance", input.instanceId),
+    formatStatusLine("Status", input.status),
+    formatStatusLine("Public token", input.publicToken),
+    `Config support: ${
+      input.catalog.capabilities.config
+        ? [
+            input.catalog.capabilities.config.supportsShow ? "show" : null,
+            input.catalog.capabilities.config.supportsTemplate ? "template" : null,
+            input.catalog.capabilities.config.supportsApply ? "apply" : null,
+          ]
+            .filter(Boolean)
+            .join(", ")
+        : "none"
+    }`,
+    "Actions:",
+    ...actionLines,
+    "Usage:",
+    formatJson(input.usage ?? {}),
+    "Current config:",
+    formatJson(input.config ?? {}),
+    "Instructions:",
+    ...formatInstructionLines(input.instructions),
+  ].join("\n");
+}
+
+export function formatGenericPluginConfigReport(input: {
+  pluginId: string;
+  pluginName: string;
+  projectSlug: string;
+  config: Record<string, unknown> | null;
+  enabled: boolean;
+  entitled: boolean;
+}): string {
+  if (!input.config) {
+    return [
+      `${input.pluginName} config for ${input.projectSlug}`,
+      "No saved plugin config exists for this project yet.",
+      `Plugin enabled: ${input.enabled ? "yes" : "no"}`,
+      `Plugin entitled: ${input.entitled ? "yes" : "no"}`,
+      `Use \`vivd plugins config template ${input.pluginId}\` to print a valid config payload.`,
+    ].join("\n");
+  }
+
+  return [
+    `${input.pluginName} config for ${input.projectSlug}`,
+    formatJson(input.config),
+    "",
+    `Apply updates with \`vivd plugins config apply ${input.pluginId} --file -\` or a JSON file path.`,
+  ].join("\n");
+}
+
+export function formatGenericPluginConfigTemplateReport(input: {
+  pluginId: string;
+  pluginName: string;
+  defaultConfig: Record<string, unknown>;
+}): string {
+  return [
+    `${input.pluginName} config template`,
+    formatJson(input.defaultConfig),
+    "",
+    `Pipe this into \`vivd plugins config apply ${input.pluginId} --file -\` or save it to a JSON file first.`,
+  ].join("\n");
+}
+
+export function formatGenericPluginConfigUpdateReport(input: {
+  pluginId: string;
+  pluginName: string;
+  projectSlug: string;
+}): string {
+  return [
+    `${input.pluginName} config updated for ${input.projectSlug}`,
+    `Review it with \`vivd plugins config show ${input.pluginId}\`.`,
+  ].join("\n");
+}
+
+export function formatGenericPluginActionReport(input: {
+  pluginId: string;
+  actionId: string;
+  summary: string;
+  result: unknown;
+}): string {
+  return [
+    input.summary,
+    `Plugin: ${input.pluginId}`,
+    `Action: ${input.actionId}`,
+    formatJson(input.result),
+  ].join("\n");
 }
 
 export function formatContactPluginReport(input: {

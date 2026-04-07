@@ -199,6 +199,59 @@ describe("useStudioRuntimeGuard", () => {
     expect(touchStudio).toHaveBeenCalled();
   });
 
+  it("rechecks and wakes the studio when the page is restored", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const touchStudio = vi.fn();
+    const ensureStudioRunning = vi.fn().mockResolvedValue({
+      success: true as const,
+      url: "https://studio-recovered.example.com",
+      runtimeUrl: "https://studio-recovered.example.com",
+      compatibilityUrl: null,
+      bootstrapToken: "token-2",
+      userActionToken: "user-action-2",
+    });
+    const onRecovered = vi.fn();
+
+    render(
+      <GuardHarness
+        enabled
+        studioProbeBaseUrl="https://studio.example.com"
+        touchStudio={touchStudio}
+        ensureStudioRunning={ensureStudioRunning}
+        onRecovered={onRecovered}
+        timing={timing}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(ensureStudioRunning).not.toHaveBeenCalled();
+
+    fetchMock.mockReset();
+    fetchMock.mockRejectedValue(new Error("offline after restore"));
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pageshow"));
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    expect(ensureStudioRunning).toHaveBeenCalledTimes(1);
+    expect(onRecovered).toHaveBeenCalledWith({
+      url: "https://studio-recovered.example.com",
+      browserUrl: null,
+      runtimeUrl: "https://studio-recovered.example.com",
+      compatibilityUrl: null,
+      bootstrapToken: "token-2",
+      userActionToken: "user-action-2",
+    });
+    expect(touchStudio).toHaveBeenCalled();
+  });
+
   it("ignores stale failed probes after switching to a new studio target", async () => {
     const createAbortError = () => {
       const error = new Error("Aborted");

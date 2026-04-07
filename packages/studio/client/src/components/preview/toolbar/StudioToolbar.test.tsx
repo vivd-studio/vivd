@@ -8,7 +8,7 @@ const mockUsePermissions = vi.fn();
 const mockUseTheme = vi.fn();
 const mockUseOpencodeSessionActivity = vi.fn();
 const mockBuildProjectStudioPath = vi.fn(
-  (_projectSlug: string, section: "plugins" | "analytics") => `/${section}`,
+  (_projectSlug: string, section: "plugins") => `/${section}`,
 );
 const mockOpenEmbeddedStudioPath = vi.fn();
 
@@ -58,7 +58,7 @@ function createToolbarState() {
     previewMode: "static",
     versions: [{ version: 1, status: "draft" }],
     hasMultipleVersions: false,
-    analyticsAvailable: false,
+    enabledPlugins: [],
     supportEmail: "support@example.com",
     handleVersionSelect: vi.fn(),
     viewportMode: "desktop",
@@ -335,7 +335,7 @@ describe("StudioToolbar", () => {
   it("opens the analytics page from the toolbar when analytics is enabled", () => {
     mockUseToolbarState.mockReturnValue({
       ...createToolbarState(),
-      analyticsAvailable: true,
+      enabledPlugins: ["analytics"],
       embedded: true,
     });
 
@@ -345,10 +345,9 @@ describe("StudioToolbar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open analytics" }));
 
-    expect(mockBuildProjectStudioPath).toHaveBeenCalledWith(
-      "bettinis-bikinis",
-      "analytics",
+    expect(mockOpenEmbeddedStudioPath).toHaveBeenCalledWith(
+      "/vivd-studio/projects/bettinis-bikinis/analytics",
+      true,
     );
-    expect(mockOpenEmbeddedStudioPath).toHaveBeenCalledWith("/analytics", true);
   });
 });

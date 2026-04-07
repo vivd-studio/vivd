@@ -46,7 +46,7 @@ export const PREVIEW_CHECKLIST_ITEMS: PreviewChecklistItem[] = [
   { id: "imprint", label: "Imprint (Impressum) page" },
   { id: "privacy", label: "Privacy policy page" },
   { id: "favicon", label: "Favicon" },
-  { id: "seo_meta", label: "SEO meta tags" },
+  { id: "seo_meta", label: "SEO & share preview meta tags" },
   { id: "navigation", label: "Working navigation links" },
   { id: "alt_text", label: "Image alt text" },
   // Optional items

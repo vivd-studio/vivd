@@ -14,10 +14,13 @@ const {
   getProjectMock,
   getProjectVersionMock,
   listCatalogForProjectMock,
+  getPluginInfoContractMock,
   getContactFormInfoMock,
   getAnalyticsInfoMock,
+  updatePluginConfigByIdMock,
   updateContactFormConfigMock,
   requestContactRecipientVerificationMock,
+  runPluginActionMock,
   renderAgentInstructionsMock,
   reportAgentLeaseActiveMock,
   reportAgentLeaseIdleMock,
@@ -38,10 +41,13 @@ const {
   getProjectMock: vi.fn(),
   getProjectVersionMock: vi.fn(),
   listCatalogForProjectMock: vi.fn(),
+  getPluginInfoContractMock: vi.fn(),
   getContactFormInfoMock: vi.fn(),
   getAnalyticsInfoMock: vi.fn(),
+  updatePluginConfigByIdMock: vi.fn(),
   updateContactFormConfigMock: vi.fn(),
   requestContactRecipientVerificationMock: vi.fn(),
+  runPluginActionMock: vi.fn(),
   renderAgentInstructionsMock: vi.fn(),
   reportAgentLeaseActiveMock: vi.fn(),
   reportAgentLeaseIdleMock: vi.fn(),
@@ -93,10 +99,13 @@ vi.mock("../src/services/project/StudioWorkspaceStateService", () => ({
 vi.mock("../src/services/plugins/ProjectPluginService", () => ({
   projectPluginService: {
     listCatalogForProject: listCatalogForProjectMock,
+    getPluginInfoContract: getPluginInfoContractMock,
     getContactFormInfo: getContactFormInfoMock,
     getAnalyticsInfo: getAnalyticsInfoMock,
+    updatePluginConfigById: updatePluginConfigByIdMock,
     updateContactFormConfig: updateContactFormConfigMock,
     requestContactRecipientVerification: requestContactRecipientVerificationMock,
+    runPluginAction: runPluginActionMock,
   },
 }));
 
@@ -183,10 +192,13 @@ describe("studioApi router", () => {
     getProjectMock.mockReset();
     getProjectVersionMock.mockReset();
     listCatalogForProjectMock.mockReset();
+    getPluginInfoContractMock.mockReset();
     getContactFormInfoMock.mockReset();
     getAnalyticsInfoMock.mockReset();
+    updatePluginConfigByIdMock.mockReset();
     updateContactFormConfigMock.mockReset();
     requestContactRecipientVerificationMock.mockReset();
+    runPluginActionMock.mockReset();
     renderAgentInstructionsMock.mockReset();
     reportAgentLeaseActiveMock.mockReset();
     reportAgentLeaseIdleMock.mockReset();
@@ -223,35 +235,151 @@ describe("studioApi router", () => {
         { pluginId: "analytics", status: "disabled" },
       ],
     });
-    getContactFormInfoMock.mockResolvedValue({
-      pluginId: "contact_form",
-      enabled: true,
+    getPluginInfoContractMock.mockImplementation(async ({ pluginId }) => {
+      if (pluginId === "analytics") {
+        return {
+          pluginId: "analytics",
+          catalog: {
+            pluginId: "analytics",
+            name: "Analytics",
+            description: "Track page traffic and visitor behavior for your project.",
+            capabilities: {
+              supportsInfo: true,
+              config: {
+                supportsShow: true,
+                supportsApply: true,
+                supportsTemplate: true,
+              },
+              actions: [],
+            },
+          },
+          entitled: true,
+          entitlementState: "enabled",
+          enabled: false,
+          instanceId: null,
+          status: null,
+          publicToken: null,
+          config: null,
+          defaultConfig: {
+            respectDoNotTrack: true,
+            captureQueryString: false,
+          },
+          snippets: null,
+          usage: {
+            scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+            trackEndpoint: "https://api.example.test/plugins/analytics/track",
+            eventTypes: ["pageview", "custom"],
+            respectDoNotTrack: true,
+            captureQueryString: false,
+            enableClientTracking: true,
+          },
+          details: null,
+          instructions: ["Keep the snippet in the page head."],
+        };
+      }
+
+      return {
+        pluginId: "contact_form",
+        catalog: {
+          pluginId: "contact_form",
+          name: "Contact Form",
+          description: "Collect visitor inquiries and store submissions in Vivd.",
+          capabilities: {
+            supportsInfo: true,
+            config: {
+              supportsShow: true,
+              supportsApply: true,
+              supportsTemplate: true,
+            },
+            actions: [
+              {
+                actionId: "verify_recipient",
+                title: "Verify recipient",
+                arguments: [{ name: "email", type: "email", required: true }],
+              },
+            ],
+          },
+        },
+        entitled: true,
+        entitlementState: "enabled",
+        enabled: true,
+        instanceId: "plugin-1",
+        status: "enabled",
+        publicToken: "public-token",
+        config: {
+          recipientEmails: ["owner@example.com"],
+          sourceHosts: [],
+          redirectHostAllowlist: [],
+          formFields: [],
+        },
+        defaultConfig: {
+          recipientEmails: ["team@example.com"],
+        },
+        snippets: {
+          html: "<form></form>",
+        },
+        usage: {
+          submitEndpoint: "https://api.example.test/plugins/contact",
+          expectedFields: ["token", "name"],
+          optionalFields: ["_redirect"],
+          inferredAutoSourceHosts: [],
+          turnstileEnabled: false,
+          turnstileConfigured: false,
+        },
+        details: {
+          recipients: {
+            options: [],
+            pending: [],
+          },
+        },
+        instructions: ["Insert the snippet"],
+      };
     });
-    getAnalyticsInfoMock.mockResolvedValue({
+    updatePluginConfigByIdMock.mockResolvedValue({
       pluginId: "analytics",
-      enabled: false,
-    });
-    updateContactFormConfigMock.mockResolvedValue({
-      pluginId: "contact_form",
-      instanceId: "plugin-1",
+      catalog: {
+        pluginId: "analytics",
+        name: "Analytics",
+        description: "Track page traffic and visitor behavior for your project.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin-analytics-1",
       status: "enabled",
-      created: false,
-      publicToken: "public-token",
+      publicToken: "analytics-token",
       config: {
-        recipientEmails: ["owner@example.com"],
-        sourceHosts: [],
-        redirectHostAllowlist: [],
-        formFields: [],
+        respectDoNotTrack: true,
       },
-      snippets: {
-        html: "<form></form>",
-        astro: "<Form />",
+      defaultConfig: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
       },
+      snippets: null,
+      usage: {
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+      },
+      details: null,
+      instructions: ["Keep the snippet in the page head."],
     });
-    requestContactRecipientVerificationMock.mockResolvedValue({
-      email: "owner@example.com",
-      status: "verification_sent",
-      cooldownRemainingSeconds: 0,
+    runPluginActionMock.mockResolvedValue({
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      summary: "Requested recipient verification.",
+      result: {
+        email: "owner@example.com",
+        status: "verification_sent",
+        cooldownRemainingSeconds: 0,
+      },
     });
     renderAgentInstructionsMock.mockResolvedValue({
       instructions: "Use this prompt",
@@ -503,33 +631,52 @@ describe("studioApi router", () => {
     });
 
     await expect(
+      caller.getProjectPluginInfo({
+        studioId: "studio-1",
+        slug: "site-1",
+        pluginId: "contact_form",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        pluginId: "contact_form",
+        enabled: true,
+      }),
+    );
+
+    await expect(
       caller.getProjectContactPluginInfo({
         studioId: "studio-1",
         slug: "site-1",
       }),
-    ).resolves.toEqual({
-      pluginId: "contact_form",
-      enabled: true,
-    });
+    ).resolves.toEqual(
+      expect.objectContaining({
+        pluginId: "contact_form",
+        enabled: true,
+      }),
+    );
 
     await expect(
       caller.getProjectAnalyticsPluginInfo({
         studioId: "studio-1",
         slug: "site-1",
       }),
-    ).resolves.toEqual({
-      pluginId: "analytics",
-      enabled: false,
-    });
+    ).resolves.toEqual(
+      expect.objectContaining({
+        pluginId: "analytics",
+        enabled: false,
+      }),
+    );
 
     expect(listCatalogForProjectMock).toHaveBeenCalledWith("org-1", "site-1");
-    expect(getContactFormInfoMock).toHaveBeenCalledWith({
+    expect(getPluginInfoContractMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+      pluginId: "contact_form",
     });
-    expect(getAnalyticsInfoMock).toHaveBeenCalledWith({
+    expect(getPluginInfoContractMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+      pluginId: "analytics",
     });
   });
 
@@ -578,9 +725,10 @@ describe("studioApi router", () => {
       },
     });
 
-    expect(updateContactFormConfigMock).toHaveBeenCalledWith({
+    expect(updatePluginConfigByIdMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
+      pluginId: "contact_form",
       config: {
         recipientEmails: ["owner@example.com"],
         sourceHosts: ["example.com"],
@@ -598,6 +746,36 @@ describe("studioApi router", () => {
     });
   });
 
+  it("updates generic plugin config for the project", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.updateProjectPluginConfig({
+      studioId: "studio-1",
+      slug: "site-1",
+      pluginId: "analytics",
+      config: {
+        respectDoNotTrack: true,
+      },
+    });
+
+    expect(updatePluginConfigByIdMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "analytics",
+      config: {
+        respectDoNotTrack: true,
+      },
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        pluginId: "analytics",
+        config: {
+          respectDoNotTrack: true,
+        },
+      }),
+    );
+  });
+
   it("requests contact recipient verification for the project", async () => {
     const caller = studioApiRouter.createCaller(makeContext());
 
@@ -607,10 +785,12 @@ describe("studioApi router", () => {
       email: "owner@example.com",
     });
 
-    expect(requestContactRecipientVerificationMock).toHaveBeenCalledWith({
+    expect(runPluginActionMock).toHaveBeenCalledWith({
       organizationId: "org-1",
       projectSlug: "site-1",
-      email: "owner@example.com",
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      args: ["owner@example.com"],
       requestedByUserId: "user-1",
       requestHost: "app.vivd.local",
     });
@@ -618,6 +798,38 @@ describe("studioApi router", () => {
       email: "owner@example.com",
       status: "verification_sent",
       cooldownRemainingSeconds: 0,
+    });
+  });
+
+  it("runs generic plugin actions for the project", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.runProjectPluginAction({
+      studioId: "studio-1",
+      slug: "site-1",
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      args: ["owner@example.com"],
+    });
+
+    expect(runPluginActionMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      args: ["owner@example.com"],
+      requestedByUserId: "user-1",
+      requestHost: "app.vivd.local",
+    });
+    expect(result).toEqual({
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      summary: "Requested recipient verification.",
+      result: {
+        email: "owner@example.com",
+        status: "verification_sent",
+        cooldownRemainingSeconds: 0,
+      },
     });
   });
 

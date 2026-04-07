@@ -230,6 +230,15 @@ function buildUsage(input: {
   };
 }
 
+export class AnalyticsPluginNotEnabledError extends Error {
+  constructor() {
+    super(
+      "Analytics plugin is not enabled for this project. Ask a super-admin to enable it first.",
+    );
+    this.name = "AnalyticsPluginNotEnabledError";
+  }
+}
+
 class AnalyticsPluginService {
   async ensureAnalyticsPlugin(options: {
     organizationId: string;
@@ -281,9 +290,7 @@ class AnalyticsPluginService {
     ]);
 
     if (entitlement.state !== "enabled" || !existing || existing.status !== "enabled") {
-      throw new Error(
-        "Analytics plugin is not enabled for this project. Ask a super-admin to enable it first.",
-      );
+      throw new AnalyticsPluginNotEnabledError();
     }
 
     const parsedConfig = analyticsPluginConfigSchema.parse(options.config);

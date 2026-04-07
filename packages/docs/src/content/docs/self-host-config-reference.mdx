@@ -270,21 +270,32 @@ GOOGLE_APPLICATION_CREDENTIALS_JSON='{"type":"service_account",...}'
 Optional Docker Studio tuning:
 
 ```env
-DOCKER_STUDIO_CPUS=1
-# Optional explicit override. Leave unset to use Vivd's auto-sized default.
-DOCKER_STUDIO_MEMORY_MB=2560
+DOCKER_STUDIO_CPUS=2
+DOCKER_STUDIO_CPUS_AUTO_RESERVE=1
+DOCKER_STUDIO_CPUS_AUTO_MAX=2
+# Optional explicit override. Leave unset to use Vivd's reserve-first auto-sized default.
+DOCKER_STUDIO_MEMORY_MB=4096
 DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB=1536
-DOCKER_STUDIO_MEMORY_AUTO_MIN_MB=2048
-DOCKER_STUDIO_MEMORY_AUTO_MAX_MB=3072
+DOCKER_STUDIO_MEMORY_AUTO_MIN_MB=1024
+DOCKER_STUDIO_MEMORY_AUTO_MAX_MB=4096
 DOCKER_STUDIO_NETWORK=vivd-network
 DOCKER_STUDIO_ROUTE_PREFIX=/_studio
 DOCKER_STUDIO_IMAGE=ghcr.io/vivd-studio/vivd-studio:latest
 ```
 
+If `DOCKER_STUDIO_CPUS` is unset, Vivd auto-sizes Docker-managed Studio CPU
+from the detected CPU budget, leaves one CPU for the rest of the stack, and
+caps the default auto-sized result at `2` vCPUs unless you raise
+`DOCKER_STUDIO_CPUS_AUTO_MAX`.
+
 If `DOCKER_STUDIO_MEMORY_MB` is unset, Vivd auto-sizes Docker-managed Studio
 RAM from the detected host or cgroup memory budget, subtracts a default
-`1536 MiB` reserve for the rest of the stack, and clamps the result to
-`2048-3072 MiB`. On a `4 GiB` host that yields `2560 MiB` by default.
+`1536 MiB` reserve for the rest of the stack and caps the default auto-sized
+result at `4096 MiB` unless you raise `DOCKER_STUDIO_MEMORY_AUTO_MAX_MB`. On a
+`4 GiB` host that still yields `2560 MiB` by default; on a `16 GiB` host it now
+yields `4096 MiB` by default instead of trying to claim nearly the whole box.
+The optional `DOCKER_STUDIO_MEMORY_AUTO_MIN_MB` floor is opt-in instead of
+being forced on smaller boxes by default.
 
 ## Notes
 

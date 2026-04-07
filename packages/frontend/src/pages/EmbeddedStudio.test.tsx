@@ -476,6 +476,61 @@ describe("EmbeddedStudio", () => {
     expect(screen.queryByTitle("Preview - site-1")).not.toBeInTheDocument();
     expect(screen.getByTestId("host-header")).toBeInTheDocument();
     expect(screen.getByText("Starting studio...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Starting..." })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("blocks interaction with a reconnect overlay when a resumed studio is waking back up", () => {
+    useStudioRuntimeGuardMock.mockReturnValue({
+      isRecovering: true,
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "/_studio/runtime-123",
+        runtimeUrl: "/_studio/runtime-123",
+        compatibilityUrl: "/_studio/runtime-123",
+        bootstrapToken: null,
+      },
+    });
+
+    const contentWindowMock = {
+      postMessage: vi.fn(),
+      location: { pathname: "/_studio/runtime-123/vivd-studio" },
+    };
+    const frameDocument = document.implementation.createHTMLDocument("studio");
+    const root = frameDocument.createElement("div");
+    root.id = "root";
+    root.textContent = "Studio toolbar";
+    frameDocument.body.append(root);
+
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+      configurable: true,
+      get() {
+        return contentWindowMock;
+      },
+    });
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
+      configurable: true,
+      get() {
+        return frameDocument;
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    fireEvent.load(screen.getByTitle("Vivd Studio - site-1"));
+
+    expect(screen.getByTestId("studio-recovery-overlay")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Reconnecting studio" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Reconnecting studio")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the host header and shows loading state in the breadcrumb while studio is booting after edit", () => {

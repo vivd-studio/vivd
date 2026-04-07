@@ -7,6 +7,7 @@ import { useAppConfig } from "@/lib/AppConfigContext";
 import { authClient } from "@/lib/auth-client";
 import { getProjectLastModified } from "@/lib/project-utils";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
+import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -224,6 +225,11 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
 
     for (const project of recentProjects) {
       const projectLabel = project.title || project.slug;
+      const projectPluginShortcuts = getProjectPluginShortcuts({
+        enabledPluginIds: project.enabledPlugins ?? [],
+        projectSlug: project.slug,
+        surface: "navigation-search",
+      });
       items.push({
         id: `project:${project.slug}`,
         label: projectLabel,
@@ -238,17 +244,22 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
           label: `Plugins: ${projectLabel}`,
           section: "Projects",
           to: ROUTES.PROJECT_PLUGINS(project.slug),
-          keywords: [project.slug, projectLabel, "plugins", "integrations", "forms", "analytics"],
+          keywords: [project.slug, projectLabel, "plugins", "integrations"],
           isActive: isActive(ROUTES.PROJECT_PLUGINS(project.slug), true),
         },
-        {
-          id: `project:analytics:${project.slug}`,
-          label: `Analytics: ${projectLabel}`,
-          section: "Projects",
-          to: ROUTES.PROJECT_ANALYTICS(project.slug),
-          keywords: [project.slug, projectLabel, "analytics", "traffic", "metrics"],
-          isActive: isActive(ROUTES.PROJECT_ANALYTICS(project.slug), true),
-        },
+        ...projectPluginShortcuts.map((shortcut) => ({
+          id: `project:plugin:${shortcut.pluginId}:${project.slug}`,
+          label: `${shortcut.label}: ${projectLabel}`,
+          section: "Projects" as const,
+          to: shortcut.path,
+          keywords: [
+            project.slug,
+            projectLabel,
+            shortcut.label,
+            ...shortcut.keywords,
+          ],
+          isActive: isActive(shortcut.path, true),
+        })),
         {
           id: `project:preview:${project.slug}`,
           label: `Preview: ${projectLabel}`,
@@ -299,7 +310,7 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
           label: "Plugins",
           section: "Organization",
           to: `${ROUTES.ORG}?tab=plugins`,
-          keywords: ["integrations", "contact form", "analytics"],
+          keywords: ["plugins", "integrations"],
           isActive: isOrgTabActive("plugins"),
         },
       );
@@ -377,7 +388,7 @@ function useNavigationSearchItems(): NavigationSearchItem[] {
           label: "Plugins",
           section: "Super Admin",
           to: `${ROUTES.SUPERADMIN_BASE}?section=plugins`,
-          keywords: ["plugins", "instance", "contact form", "analytics"],
+          keywords: ["plugins", "instance", "entitlements", "integrations"],
           isActive: isSuperAdminTabActive("plugins"),
         });
       }

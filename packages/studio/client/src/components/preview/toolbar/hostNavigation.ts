@@ -25,7 +25,7 @@ export function openEmbeddedStudioPath(path: string, embedded?: boolean) {
 
 export function buildProjectStudioPath(
   projectSlug: string,
-  section: "plugins" | "analytics",
+  section: "plugins",
 ) {
   return `/vivd-studio/projects/${encodeURIComponent(projectSlug)}/${section}`;
 }

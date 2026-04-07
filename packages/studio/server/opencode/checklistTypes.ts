@@ -35,7 +35,10 @@ export const CHECKLIST_ITEMS = [
   { id: "imprint", label: "Imprint (Impressum) page exists and is linked" },
   { id: "privacy", label: "Privacy policy (Datenschutz) exists and is linked" },
   { id: "favicon", label: "Favicon is set" },
-  { id: "seo_meta", label: "SEO meta tags (title, description, OG tags)" },
+  {
+    id: "seo_meta",
+    label: "SEO/share meta tags (title, description, social preview image)",
+  },
   { id: "navigation", label: "All navigation links work (no broken links)" },
   { id: "alt_text", label: "Images have alt text attributes" },
   // Conditionally optional items - can be skipped with valid reason
@@ -75,7 +78,11 @@ Your job is to CAREFULLY analyze the project files and verify each item. Be SKEP
 
 3. **favicon** - Is there a favicon.ico file OR a <link rel="icon"> tag in the HTML <head>?
 
-4. **seo_meta** - Are these present in the HTML <head>: <title>, <meta name="description">, Open Graph tags (og:title, og:description)?
+4. **seo_meta** - Are these present in the HTML <head>: <title>, <meta name="description">, Open Graph tags (og:title, og:description, og:image)?
+   - The share-preview image matters here: \`og:image\` should point to a real, publicly served image that represents the page/site when someone shares the link.
+   - Mark as "pass" if the title, description, and OG tags are present and the \`og:image\` looks intentional.
+   - Mark as "warning" if \`og:image\` is missing, obviously placeholder, or looks like a generic logo/icon fallback (for example file names like \`logo.png\`, \`icon.png\`, \`og-image.jpg\` placeholder comments, or a brand mark that is unlikely to be the intended share preview).
+   - Mark as "fail" if the page is missing the basic title/description/core OG tags entirely, or they still contain placeholder content.
 
 5. **navigation** - Check all internal links (<a href="...">). Do all linked files exist? Are there any broken links?
 
@@ -126,7 +133,7 @@ Respond with ONLY a valid JSON object (no markdown, no explanation outside JSON)
     {"id": "imprint", "label": "Imprint page", "status": "pass|fail|warning|skip", "note": "Specific evidence or what's missing"},
     {"id": "privacy", "label": "Privacy policy", "status": "pass|fail|warning|skip", "note": "..."},
     {"id": "favicon", "label": "Favicon", "status": "pass|fail|warning|skip", "note": "..."},
-    {"id": "seo_meta", "label": "SEO meta tags", "status": "pass|fail|warning|skip", "note": "..."},
+    {"id": "seo_meta", "label": "SEO & social preview meta tags", "status": "pass|fail|warning|skip", "note": "..."},
     {"id": "navigation", "label": "Navigation links", "status": "pass|fail|warning|skip", "note": "..."},
     {"id": "alt_text", "label": "Image alt text", "status": "pass|fail|warning|skip", "note": "..."},
     {"id": "cookie_banner", "label": "Cookie banner", "status": "pass|fail|warning|skip", "note": "..."},

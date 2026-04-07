@@ -12,6 +12,7 @@ export type VivdStudioBridgeMessage =
 
 export type VivdHostBridgeMessage =
   | { type: "vivd:host:ready-check" }
+  | { type: "vivd:host:ready-ack" }
   | { type: "vivd:host:theme"; theme: Theme; colorTheme: ColorTheme }
   | { type: "vivd:host:sidebar"; open: boolean };
 
@@ -66,6 +67,7 @@ export function parseVivdHostBridgeMessageData(
 
   switch (type) {
     case "vivd:host:ready-check":
+    case "vivd:host:ready-ack":
       return { type };
     case "vivd:host:theme": {
       const theme = data.theme;

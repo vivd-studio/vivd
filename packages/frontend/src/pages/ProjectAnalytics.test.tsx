@@ -9,18 +9,22 @@ const {
   analyticsEnsureUseMutationMock,
   analyticsInfoUseQueryMock,
   analyticsSummaryUseQueryMock,
+  catalogInvalidateMock,
+  infoInvalidateMock,
   projectListUseQueryMock,
   useUtilsMock,
-} =
-  vi.hoisted(() => ({
-    analyticsEnsureMutateMock: vi.fn(),
-    useParamsMock: vi.fn(),
-    analyticsEnsureUseMutationMock: vi.fn(),
-    analyticsInfoUseQueryMock: vi.fn(),
-    analyticsSummaryUseQueryMock: vi.fn(),
-    projectListUseQueryMock: vi.fn(),
-    useUtilsMock: vi.fn(),
-  }));
+} = vi.hoisted(() => ({
+  analyticsEnsureMutateMock: vi.fn(),
+  useParamsMock: vi.fn(),
+  analyticsEnsureUseMutationMock: vi.fn(),
+  analyticsInfoUseQueryMock: vi.fn(),
+  analyticsSummaryUseQueryMock: vi.fn(),
+  catalogInvalidateMock: vi.fn(),
+  infoInvalidateMock: vi.fn(),
+  projectListUseQueryMock: vi.fn(),
+  useUtilsMock: vi.fn(),
+}));
+
 const { useSessionMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
 }));
@@ -60,10 +64,10 @@ vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: useUtilsMock,
     plugins: {
-      analyticsEnsure: {
+      ensure: {
         useMutation: analyticsEnsureUseMutationMock,
       },
-      analyticsInfo: {
+      info: {
         useQuery: analyticsInfoUseQueryMock,
       },
       analyticsSummary: {
@@ -244,6 +248,8 @@ describe("ProjectAnalytics", () => {
     analyticsEnsureUseMutationMock.mockReset();
     analyticsInfoUseQueryMock.mockReset();
     analyticsSummaryUseQueryMock.mockReset();
+    catalogInvalidateMock.mockReset();
+    infoInvalidateMock.mockReset();
     projectListUseQueryMock.mockReset();
     useUtilsMock.mockReset();
     useSessionMock.mockReset();
@@ -254,7 +260,15 @@ describe("ProjectAnalytics", () => {
       isPending: false,
     });
     analyticsInfoUseQueryMock.mockReturnValue({
-      data: { enabled: true },
+      data: {
+        enabled: true,
+        entitled: true,
+        instanceId: "ppi-analytics-1",
+        catalog: {
+          name: "Analytics",
+          description: "Track page traffic and visitor behavior for your project.",
+        },
+      },
       error: null,
       isLoading: false,
       refetch: vi.fn().mockResolvedValue(undefined),
@@ -273,8 +287,11 @@ describe("ProjectAnalytics", () => {
     });
     useUtilsMock.mockReturnValue({
       plugins: {
-        analyticsInfo: {
-          invalidate: vi.fn().mockResolvedValue(undefined),
+        catalog: {
+          invalidate: catalogInvalidateMock.mockResolvedValue(undefined),
+        },
+        info: {
+          invalidate: infoInvalidateMock.mockResolvedValue(undefined),
         },
       },
     });
@@ -287,65 +304,30 @@ describe("ProjectAnalytics", () => {
     });
   });
 
-  it("shows latest day first in the daily performance table", () => {
+  it("renders analytics summary cards and attribution tables", () => {
     render(
       <MemoryRouter>
         <ProjectAnalytics />
       </MemoryRouter>,
     );
 
-    const dailyTable = screen
-      .getByRole("columnheader", { name: "Traffic vs peak" })
-      .closest("table");
-    expect(dailyTable).not.toBeNull();
-
-    const rows = within(dailyTable as HTMLTableElement).getAllByRole("row");
-    expect(rows[1]).toHaveTextContent("999");
-  });
-
-  it("renders the reorganized analytics sections", () => {
-    render(
-      <MemoryRouter>
-        <ProjectAnalytics />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("Overview")).toBeInTheDocument();
-    expect(screen.getByText("Period comparison")).toBeInTheDocument();
-    expect(screen.getByText("Conversion funnel")).toBeInTheDocument();
-    expect(screen.getByText("UTM campaign attribution")).toBeInTheDocument();
-    expect(screen.getByText("Daily performance")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Analytics" })).toBeInTheDocument();
+    expect(screen.getAllByText("Pageviews").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Unique visitors").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sessions").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Contact submissions").length).toBeGreaterThan(0);
     expect(screen.getByText("Top pages")).toBeInTheDocument();
-    expect(screen.getByText("Lead sources")).toBeInTheDocument();
-  });
+    expect(screen.getByText("UTM campaign attribution")).toBeInTheDocument();
 
-  it("offers project enablement when analytics is entitled but not initialized yet", () => {
-    analyticsInfoUseQueryMock.mockReturnValueOnce({
-      data: {
-        entitled: true,
-        enabled: false,
-        instanceId: null,
-      },
-      error: null,
-      isLoading: false,
-      refetch: vi.fn().mockResolvedValue(undefined),
-    });
+    const campaignsSection = screen.getByText("UTM campaign attribution").closest("section");
+    expect(campaignsSection).not.toBeNull();
+    const campaigns = within(campaignsSection!);
+    expect(campaigns.getByText("google")).toBeInTheDocument();
+    expect(campaigns.getByText("spring_launch")).toBeInTheDocument();
 
-    render(
-      <MemoryRouter>
-        <ProjectAnalytics />
-      </MemoryRouter>,
-    );
-
-    expect(
-      screen.getByText(
-        "Analytics is available for this instance but has not been enabled for this project yet.",
-      ),
-    ).toBeInTheDocument();
-    screen.getByRole("button", { name: "Enable for this project" }).click();
-    expect(analyticsEnsureMutateMock).toHaveBeenCalledWith({ slug: "leonord" });
-    expect(
-      screen.queryByText("Analytics is disabled for this instance. Open Instance Settings -> Plugins to enable it."),
-    ).not.toBeInTheDocument();
+    const sourcesSection = screen.getByText("Top UTM sources").closest("section");
+    expect(sourcesSection).not.toBeNull();
+    const sources = within(sourcesSection!);
+    expect(sources.getAllByText("google")[0]).toBeInTheDocument();
   });
 });

@@ -25,21 +25,19 @@ import {
   artifactBuildRequestService,
   isArtifactBuilderEnabled,
 } from "../services/project/ArtifactBuildRequestService";
-import { projectPluginService } from "../services/plugins/ProjectPluginService";
+import {
+  projectPluginService,
+} from "../services/plugins/ProjectPluginService";
 import { studioMachineProvider } from "../services/studioMachines";
 import { contactFormPluginConfigSchema } from "../services/plugins/contactForm/config";
-import {
-  ContactFormPluginNotEnabledError,
-  ContactFormRecipientRequiredError,
-  ContactFormRecipientVerificationError,
-} from "../services/plugins/contactForm/service";
-import {
-  ContactRecipientEmailFormatError,
-  ContactRecipientVerificationPendingLimitError,
-  ContactRecipientVerificationSendError,
-} from "../services/plugins/contactForm/recipientVerification";
-import { ContactRecipientVerificationEndpointUnavailableError } from "../services/plugins/contactForm/publicApi";
+import { PLUGIN_IDS } from "../services/plugins/registry";
 import type { ChecklistItem, ChecklistStatus } from "../types/checklistTypes";
+import {
+  extractRequestHost,
+  getProjectPluginInfo,
+  runProjectPluginAction,
+  updateProjectPluginConfig,
+} from "./plugins/operations";
 
 /**
  * Schema for token data in usage reports
@@ -99,18 +97,6 @@ function normalizeChecklistItemNote(note: string | null | undefined): string | u
   if (note == null) return undefined;
   const trimmed = note.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function extractRequestHost(rawHost: string | string[] | undefined): string | null {
-  if (typeof rawHost === "string") {
-    const normalized = rawHost.split(",")[0]?.trim() ?? "";
-    return normalized || null;
-  }
-  if (Array.isArray(rawHost) && rawHost.length > 0) {
-    const normalized = rawHost[0]?.split(",")[0]?.trim() ?? "";
-    return normalized || null;
-  }
-  return null;
 }
 
 function summarizeChecklistItems(items: ChecklistItem[]): {
@@ -176,6 +162,62 @@ const projectInfoInputSchema = z.object({
   slug: z.string().min(1),
   version: z.number().int().positive().optional(),
 });
+const pluginIdSchema = z.enum(PLUGIN_IDS);
+
+function toLegacyContactPluginInfoResponse(
+  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
+) {
+  const recipients =
+    info.details &&
+    typeof info.details === "object" &&
+    "recipients" in info.details
+      ? info.details.recipients
+      : { options: [], pending: [] };
+
+  return {
+    pluginId: "contact_form" as const,
+    entitled: info.entitled,
+    entitlementState: info.entitlementState,
+    enabled: info.enabled,
+    instanceId: info.instanceId,
+    status: info.status,
+    publicToken: info.publicToken,
+    config: info.config,
+    usage: info.usage,
+    recipients,
+    instructions: info.instructions,
+  };
+}
+
+function toLegacyAnalyticsPluginInfoResponse(
+  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
+) {
+  return {
+    pluginId: "analytics" as const,
+    entitled: info.entitled,
+    entitlementState: info.entitlementState,
+    enabled: info.enabled,
+    instanceId: info.instanceId,
+    status: info.status,
+    publicToken: info.publicToken,
+    usage: info.usage,
+    instructions: info.instructions,
+  };
+}
+
+function toLegacyUpdatedPluginPayload(
+  info: Awaited<ReturnType<typeof getProjectPluginInfo>>,
+) {
+  return {
+    pluginId: info.pluginId,
+    instanceId: info.instanceId ?? "",
+    status: info.status ?? (info.enabled ? "enabled" : "disabled"),
+    created: false,
+    publicToken: info.publicToken ?? "",
+    config: info.config ?? {},
+    snippets: info.snippets ?? {},
+  };
+}
 
 async function buildProjectInfo(options: {
   organizationId: string;
@@ -419,6 +461,22 @@ export const studioApiRouter = router({
       );
     }),
 
+  getProjectPluginInfo: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        pluginId: pluginIdSchema,
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return getProjectPluginInfo({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        pluginId: input.pluginId,
+      });
+    }),
+
   getProjectContactPluginInfo: studioProjectProcedure
     .input(
       z.object({
@@ -427,10 +485,12 @@ export const studioApiRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      return projectPluginService.getContactFormInfo({
+      const info = await getProjectPluginInfo({
         organizationId: ctx.organizationId!,
         projectSlug: input.slug,
+        pluginId: "contact_form",
       });
+      return toLegacyContactPluginInfoResponse(info);
     }),
 
   getProjectAnalyticsPluginInfo: studioProjectProcedure
@@ -441,10 +501,12 @@ export const studioApiRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      return projectPluginService.getAnalyticsInfo({
+      const info = await getProjectPluginInfo({
         organizationId: ctx.organizationId!,
         projectSlug: input.slug,
+        pluginId: "analytics",
       });
+      return toLegacyAnalyticsPluginInfoResponse(info);
     }),
 
   updateProjectContactPluginConfig: studioProjectProcedure
@@ -456,24 +518,31 @@ export const studioApiRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      try {
-        return await projectPluginService.updateContactFormConfig({
-          organizationId: ctx.organizationId!,
-          projectSlug: input.slug,
-          config: input.config,
-        });
-      } catch (error) {
-        if (
-          error instanceof ContactFormRecipientVerificationError ||
-          error instanceof ContactFormRecipientRequiredError
-        ) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: error.message,
-          });
-        }
-        throw error;
-      }
+      const info = await updateProjectPluginConfig({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        pluginId: "contact_form",
+        config: input.config,
+      });
+      return toLegacyUpdatedPluginPayload(info);
+    }),
+
+  updateProjectPluginConfig: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        pluginId: pluginIdSchema,
+        config: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return updateProjectPluginConfig({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        pluginId: input.pluginId,
+        config: input.config,
+      });
     }),
 
   requestProjectContactRecipientVerification: studioProjectProcedure
@@ -485,43 +554,44 @@ export const studioApiRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      try {
-        return await projectPluginService.requestContactRecipientVerification({
-          organizationId: ctx.organizationId!,
-          projectSlug: input.slug,
-          email: input.email,
-          requestedByUserId: ctx.session?.user.id ?? null,
-          requestHost:
-            ctx.requestHost ??
-            extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
-            extractRequestHost(ctx.req.headers.host),
-        });
-      } catch (error) {
-        if (
-          error instanceof ContactFormPluginNotEnabledError ||
-          error instanceof ContactRecipientEmailFormatError ||
-          error instanceof ContactRecipientVerificationPendingLimitError
-        ) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: error.message,
-          });
-        }
-        if (error instanceof ContactRecipientVerificationSendError) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: error.message,
-          });
-        }
-        if (error instanceof ContactRecipientVerificationEndpointUnavailableError) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message:
-              "Could not generate verification link for this host. Please contact support.",
-          });
-        }
-        throw error;
-      }
+      const result = await runProjectPluginAction({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        pluginId: "contact_form",
+        actionId: "verify_recipient",
+        args: [input.email],
+        requestedByUserId: ctx.session?.user.id ?? null,
+        requestHost:
+          ctx.requestHost ??
+          extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
+          extractRequestHost(ctx.req.headers.host),
+      });
+      return result.result;
+    }),
+
+  runProjectPluginAction: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        pluginId: pluginIdSchema,
+        actionId: z.string().trim().min(1),
+        args: z.array(z.string()).default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return runProjectPluginAction({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        pluginId: input.pluginId,
+        actionId: input.actionId,
+        args: input.args,
+        requestedByUserId: ctx.session?.user.id ?? null,
+        requestHost:
+          ctx.requestHost ??
+          extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
+          extractRequestHost(ctx.req.headers.host),
+      });
     }),
 
   /**

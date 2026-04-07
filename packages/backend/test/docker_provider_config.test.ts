@@ -129,6 +129,19 @@ describe("DockerProviderConfig.memoryMb", () => {
     expect(config.memoryMb).toBe(2560);
   });
 
+  it("preserves the reserve on 3 GiB hosts instead of forcing the old 2 GiB floor", () => {
+    delete process.env.DOCKER_STUDIO_MEMORY_MB;
+
+    const config = new DockerProviderConfig({
+      totalSystemMemoryBytes: () => 3 * gib,
+      readTextFile: () => {
+        throw new Error("missing");
+      },
+    });
+
+    expect(config.memoryMb).toBe(1536);
+  });
+
   it("uses the cgroup memory limit when the backend container is constrained", () => {
     delete process.env.DOCKER_STUDIO_MEMORY_MB;
 
@@ -145,7 +158,7 @@ describe("DockerProviderConfig.memoryMb", () => {
     expect(config.memoryMb).toBe(2560);
   });
 
-  it("caps the auto-sized studio memory on larger hosts", () => {
+  it("caps auto-sized studio memory on larger hosts by default", () => {
     delete process.env.DOCKER_STUDIO_MEMORY_MB;
 
     const config = new DockerProviderConfig({
@@ -155,13 +168,13 @@ describe("DockerProviderConfig.memoryMb", () => {
       },
     });
 
-    expect(config.memoryMb).toBe(3072);
+    expect(config.memoryMb).toBe(4096);
   });
 
   it("lets self-hosters tune the auto-sizing reserve and clamp", () => {
     delete process.env.DOCKER_STUDIO_MEMORY_MB;
     process.env.DOCKER_STUDIO_MEMORY_AUTO_RESERVE_MB = "1024";
-    process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB = "2304";
+    process.env.DOCKER_STUDIO_MEMORY_AUTO_MIN_MB = "1024";
     process.env.DOCKER_STUDIO_MEMORY_AUTO_MAX_MB = "3328";
 
     const config = new DockerProviderConfig({
@@ -172,5 +185,84 @@ describe("DockerProviderConfig.memoryMb", () => {
     });
 
     expect(config.memoryMb).toBe(3328);
+  });
+});
+
+describe("DockerProviderConfig.cpuLimit", () => {
+  const originalDockerStudioCpus = process.env.DOCKER_STUDIO_CPUS;
+  const originalDockerStudioAutoReserve = process.env.DOCKER_STUDIO_CPUS_AUTO_RESERVE;
+  const originalDockerStudioAutoMax = process.env.DOCKER_STUDIO_CPUS_AUTO_MAX;
+
+  afterEach(() => {
+    if (typeof originalDockerStudioCpus === "string") {
+      process.env.DOCKER_STUDIO_CPUS = originalDockerStudioCpus;
+    } else {
+      delete process.env.DOCKER_STUDIO_CPUS;
+    }
+
+    if (typeof originalDockerStudioAutoReserve === "string") {
+      process.env.DOCKER_STUDIO_CPUS_AUTO_RESERVE = originalDockerStudioAutoReserve;
+    } else {
+      delete process.env.DOCKER_STUDIO_CPUS_AUTO_RESERVE;
+    }
+
+    if (typeof originalDockerStudioAutoMax === "string") {
+      process.env.DOCKER_STUDIO_CPUS_AUTO_MAX = originalDockerStudioAutoMax;
+    } else {
+      delete process.env.DOCKER_STUDIO_CPUS_AUTO_MAX;
+    }
+  });
+
+  it("uses an explicit studio cpu override when configured", () => {
+    process.env.DOCKER_STUDIO_CPUS = "2.5";
+
+    const config = new DockerProviderConfig({
+      totalSystemCpuCount: () => 8,
+    });
+
+    expect(config.cpuLimit).toBe(2.5);
+  });
+
+  it("auto-sizes studio cpu from the detected budget, while still respecting the default cap", () => {
+    delete process.env.DOCKER_STUDIO_CPUS;
+
+    const config = new DockerProviderConfig({
+      totalSystemCpuCount: () => 4,
+    });
+
+    expect(config.cpuLimit).toBe(2);
+  });
+
+  it("caps auto-sized studio cpu on larger hosts by default", () => {
+    delete process.env.DOCKER_STUDIO_CPUS;
+
+    const config = new DockerProviderConfig({
+      totalSystemCpuCount: () => 16,
+    });
+
+    expect(config.cpuLimit).toBe(2);
+  });
+
+  it("lets self-hosters tune the auto-sized cpu reserve", () => {
+    delete process.env.DOCKER_STUDIO_CPUS;
+    process.env.DOCKER_STUDIO_CPUS_AUTO_RESERVE = "2";
+    process.env.DOCKER_STUDIO_CPUS_AUTO_MAX = "8";
+
+    const config = new DockerProviderConfig({
+      totalSystemCpuCount: () => 6,
+    });
+
+    expect(config.cpuLimit).toBe(4);
+  });
+
+  it("lets self-hosters raise the auto-sized cpu cap", () => {
+    delete process.env.DOCKER_STUDIO_CPUS;
+    process.env.DOCKER_STUDIO_CPUS_AUTO_MAX = "8";
+
+    const config = new DockerProviderConfig({
+      totalSystemCpuCount: () => 16,
+    });
+
+    expect(config.cpuLimit).toBe(8);
   });
 });

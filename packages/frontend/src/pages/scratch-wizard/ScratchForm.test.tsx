@@ -59,7 +59,7 @@ describe("ScratchForm", () => {
     });
   });
 
-  it("renders the simplified brief-first scratch flow with a friendly optional reference-url prompt", () => {
+  it("renders the simplified brief-first scratch flow with a subtle optional reference-url section", () => {
     render(<ScratchForm />);
 
     expect(screen.getByText("Project name")).toBeInTheDocument();
@@ -71,7 +71,10 @@ describe("ScratchForm", () => {
     expect(screen.getByText("Inspiration only")).toBeInTheDocument();
     expect(screen.getByText("Websites you like")).toBeInTheDocument();
     expect(
-      screen.getByText(/paste a few urls with design ideas you want us to use as inspiration/i),
+      screen.getByText(/optional inspiration urls/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/paste a few sites or design references we should loosely follow/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/files to be used on the page/i),

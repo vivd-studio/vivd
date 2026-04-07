@@ -11,6 +11,11 @@ import {
   formatContactPluginReport,
   formatContactRecipientVerificationReport,
   formatDoctorReport,
+  formatGenericPluginActionReport,
+  formatGenericPluginConfigReport,
+  formatGenericPluginConfigTemplateReport,
+  formatGenericPluginConfigUpdateReport,
+  formatGenericPluginInfoReport,
   formatPluginCatalogReport,
   formatProjectInfoReport,
   formatPublishChecklistReport,
@@ -77,8 +82,77 @@ type PublishChecklistRunResponse = {
 
 type PluginCatalogResponse = {
   project: { organizationId: string; slug: string };
-  available: Array<{ pluginId: string; name?: string; description?: string }>;
+  available: Array<{
+    pluginId: string;
+    name?: string;
+    description?: string;
+    capabilities?: {
+      supportsInfo?: boolean;
+      config?: {
+        supportsShow?: boolean;
+        supportsApply?: boolean;
+        supportsTemplate?: boolean;
+      } | null;
+      actions?: Array<{
+        actionId: string;
+        title?: string;
+        arguments?: Array<{
+          name: string;
+          type?: string;
+          required?: boolean;
+          description?: string;
+        }>;
+      }>;
+    };
+  }>;
   instances: Array<{ pluginId: string; status: string; instanceId: string }>;
+};
+
+type PluginInfoContractResponse = {
+  pluginId: string;
+  catalog: {
+    pluginId: string;
+    name: string;
+    description: string;
+    capabilities: {
+      supportsInfo: boolean;
+      config: {
+        supportsShow: boolean;
+        supportsApply: boolean;
+        supportsTemplate: boolean;
+      } | null;
+      actions: Array<{
+        actionId: string;
+        title: string;
+        description: string;
+        arguments: Array<{
+          name: string;
+          type: string;
+          required: boolean;
+          description?: string;
+        }>;
+      }>;
+    };
+  };
+  entitled: boolean;
+  entitlementState: "disabled" | "enabled" | "suspended";
+  enabled: boolean;
+  instanceId: string | null;
+  status: string | null;
+  publicToken: string | null;
+  config: Record<string, unknown> | null;
+  defaultConfig: Record<string, unknown>;
+  snippets: Record<string, unknown> | null;
+  usage: Record<string, unknown> | null;
+  details: Record<string, unknown> | null;
+  instructions: string[];
+};
+
+type PluginActionResponse = {
+  pluginId: string;
+  actionId: string;
+  summary: string;
+  result: unknown;
 };
 
 type ContactInfoResponse = {
@@ -184,6 +258,12 @@ const GENERAL_HELP: Record<string, string> = {
   ].join("\n"),
   plugins: [
     "vivd plugins catalog",
+    "vivd plugins info <pluginId>",
+    "vivd plugins config show <pluginId>",
+    "vivd plugins config template <pluginId>",
+    "vivd plugins config apply <pluginId> --file config.json",
+    "vivd plugins action <pluginId> <actionId> [args...]",
+    "Legacy aliases still work for current first-party plugins:",
     "vivd plugins contact info",
     "vivd plugins contact config show",
     "vivd plugins contact config template",
@@ -193,6 +273,14 @@ const GENERAL_HELP: Record<string, string> = {
     "vivd plugins analytics info",
   ].join("\n"),
   contact: [
+    "Preferred generic equivalents:",
+    "vivd plugins info contact_form",
+    "vivd plugins config show contact_form",
+    "vivd plugins config template contact_form",
+    "vivd plugins config apply contact_form --file config.json",
+    "vivd plugins action contact_form verify_recipient <email>",
+    "vivd plugins action contact_form resend_recipient <email>",
+    "Compatibility aliases:",
     "vivd plugins contact info",
     "vivd plugins contact config show",
     "vivd plugins contact config template",
@@ -203,6 +291,12 @@ const GENERAL_HELP: Record<string, string> = {
     "Contact info shows submit endpoint, configured recipients, verification state, and install guidance.",
   ].join("\n"),
   analytics: [
+    "Preferred generic equivalents:",
+    "vivd plugins info analytics",
+    "vivd plugins config show analytics",
+    "vivd plugins config template analytics",
+    "vivd plugins config apply analytics --file config.json",
+    "Compatibility alias:",
     "vivd plugins analytics info",
     "Analytics info shows the script endpoint, public token, and integration guidance.",
   ].join("\n"),
@@ -484,25 +578,170 @@ async function runPluginsCatalog(flags: CliFlags): Promise<CommandResult> {
   });
 }
 
+async function getPluginInfoContract(
+  runtime: NonNullable<ReturnType<typeof resolveCliRuntime>>,
+  pluginId: string,
+): Promise<PluginInfoContractResponse> {
+  const slug = requireProjectSlug(runtime);
+  return (await runtime.client.query("studioApi.getProjectPluginInfo", {
+    studioId: runtime.config.studioId,
+    slug,
+    pluginId,
+  })) as PluginInfoContractResponse;
+}
+
+function toContactInfoResponse(info: PluginInfoContractResponse): ContactInfoResponse {
+  const details =
+    info.details && typeof info.details === "object" ? info.details : null;
+  const recipients =
+    details && "recipients" in details && details.recipients
+      ? details.recipients
+      : { options: [], pending: [] };
+
+  return {
+    pluginId: "contact_form",
+    entitled: info.entitled,
+    entitlementState: info.entitlementState,
+    enabled: info.enabled,
+    instanceId: info.instanceId,
+    status: info.status,
+    publicToken: info.publicToken,
+    config: info.config as ContactInfoResponse["config"],
+    usage: info.usage as ContactInfoResponse["usage"],
+    recipients: recipients as ContactInfoResponse["recipients"],
+    instructions: info.instructions,
+  };
+}
+
+function toAnalyticsInfoResponse(
+  info: PluginInfoContractResponse,
+): AnalyticsInfoResponse {
+  return {
+    pluginId: "analytics",
+    entitled: info.entitled,
+    entitlementState: info.entitlementState,
+    enabled: info.enabled,
+    instanceId: info.instanceId,
+    status: info.status,
+    publicToken: info.publicToken,
+    usage: info.usage as AnalyticsInfoResponse["usage"],
+    instructions: info.instructions,
+  };
+}
+
+async function runPluginsInfoGeneric(
+  pluginId: string,
+  flags: CliFlags,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const info = await getPluginInfoContract(runtime, pluginId);
+    return jsonResult(info, formatGenericPluginInfoReport(info));
+  });
+}
+
+async function runPluginsConfigShowGeneric(
+  pluginId: string,
+  flags: CliFlags,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const info = await getPluginInfoContract(runtime, pluginId);
+    return jsonResult(
+      info.config,
+      formatGenericPluginConfigReport({
+        pluginId,
+        pluginName: info.catalog.name,
+        projectSlug: requireProjectSlug(runtime),
+        config: info.config,
+        enabled: info.enabled,
+        entitled: info.entitled,
+      }),
+    );
+  });
+}
+
+async function runPluginsConfigTemplateGeneric(
+  pluginId: string,
+  flags: CliFlags,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const info = await getPluginInfoContract(runtime, pluginId);
+    return jsonResult(
+      info.defaultConfig,
+      formatGenericPluginConfigTemplateReport({
+        pluginId,
+        pluginName: info.catalog.name,
+        defaultConfig: info.defaultConfig,
+      }),
+    );
+  });
+}
+
+async function runPluginsConfigureGeneric(
+  pluginId: string,
+  flags: CliFlags,
+  cwd: string,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const slug = requireProjectSlug(runtime);
+    const filePath = flags.file?.trim();
+    if (!filePath) {
+      throw new Error(`plugins config apply ${pluginId} requires --file <config.json|->`);
+    }
+
+    const config = await readJsonFile(filePath === "-" ? "-" : resolveInputPath(filePath, cwd));
+    const result = (await runtime.client.mutation("studioApi.updateProjectPluginConfig", {
+      studioId: runtime.config.studioId,
+      slug,
+      pluginId,
+      config,
+    })) as PluginInfoContractResponse;
+
+    return jsonResult(
+      result,
+      formatGenericPluginConfigUpdateReport({
+        pluginId,
+        pluginName: result.catalog.name,
+        projectSlug: slug,
+      }),
+    );
+  });
+}
+
+async function runPluginActionGeneric(
+  pluginId: string,
+  actionId: string,
+  args: string[],
+  flags: CliFlags,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const slug = requireProjectSlug(runtime);
+    const result = (await runtime.client.mutation("studioApi.runProjectPluginAction", {
+      studioId: runtime.config.studioId,
+      slug,
+      pluginId,
+      actionId,
+      args,
+    })) as PluginActionResponse;
+
+    return jsonResult(result, formatGenericPluginActionReport(result));
+  });
+}
+
 async function runPluginsInfo(
   kind: "contact" | "analytics",
   flags: CliFlags,
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
-    const slug = requireProjectSlug(runtime);
-
     if (kind === "contact") {
-      const info = (await runtime.client.query("studioApi.getProjectContactPluginInfo", {
-        studioId: runtime.config.studioId,
-        slug,
-      })) as ContactInfoResponse;
+      const info = toContactInfoResponse(
+        await getPluginInfoContract(runtime, "contact_form"),
+      );
       return jsonResult(info, formatContactPluginReport(info));
     }
 
-    const info = (await runtime.client.query("studioApi.getProjectAnalyticsPluginInfo", {
-      studioId: runtime.config.studioId,
-      slug,
-    })) as AnalyticsInfoResponse;
+    const info = toAnalyticsInfoResponse(
+      await getPluginInfoContract(runtime, "analytics"),
+    );
     return jsonResult(info, formatAnalyticsPluginReport(info));
   });
 }
@@ -514,14 +753,18 @@ async function runContactRecipientVerification(
 ): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const slug = requireProjectSlug(runtime);
-    const result = (await runtime.client.mutation(
-      "studioApi.requestProjectContactRecipientVerification",
+    const response = (await runtime.client.mutation(
+      "studioApi.runProjectPluginAction",
       {
         studioId: runtime.config.studioId,
         slug,
-        email,
+        pluginId: "contact_form",
+        actionId:
+          mode === "resend" ? "resend_recipient" : "verify_recipient",
+        args: [email],
       },
-    )) as {
+    )) as PluginActionResponse;
+    const result = response.result as {
       email: string;
       status:
         | "already_verified"
@@ -555,9 +798,10 @@ async function runPluginsConfigureContact(
     }
 
     const config = await readJsonFile(filePath === "-" ? "-" : resolveInputPath(filePath, cwd));
-    const result = await runtime.client.mutation("studioApi.updateProjectContactPluginConfig", {
+    const result = await runtime.client.mutation("studioApi.updateProjectPluginConfig", {
       studioId: runtime.config.studioId,
       slug,
+      pluginId: "contact_form",
       config,
     });
 
@@ -568,10 +812,9 @@ async function runPluginsConfigureContact(
 async function runContactConfigShow(flags: CliFlags): Promise<CommandResult> {
   return withRuntime(flags, async (runtime) => {
     const slug = requireProjectSlug(runtime);
-    const info = (await runtime.client.query("studioApi.getProjectContactPluginInfo", {
-      studioId: runtime.config.studioId,
-      slug,
-    })) as ContactInfoResponse;
+    const info = toContactInfoResponse(
+      await getPluginInfoContract(runtime, "contact_form"),
+    );
 
     return jsonResult(
       info.config,
@@ -696,16 +939,16 @@ export async function dispatchCli(
       if (second === "catalog") {
         return runPluginsCatalog(parsed.flags);
       }
-      if (second === "contact" && third === "info") {
-        return runPluginsInfo("contact", parsed.flags);
-      }
       if (second === "info" && third === "contact") {
         return runPluginsInfo("contact", parsed.flags);
       }
-      if (second === "analytics" && third === "info") {
+      if (second === "info" && third === "analytics") {
         return runPluginsInfo("analytics", parsed.flags);
       }
-      if (second === "info" && third === "analytics") {
+      if (second === "contact" && third === "info") {
+        return runPluginsInfo("contact", parsed.flags);
+      }
+      if (second === "analytics" && third === "info") {
         return runPluginsInfo("analytics", parsed.flags);
       }
       if (second === "contact" && third === "config" && rest[0] === "show") {
@@ -725,6 +968,21 @@ export async function dispatchCli(
       }
       if (second === "configure" && third === "contact") {
         return runPluginsConfigureContact(parsed.flags, cwd);
+      }
+      if (second === "info" && third) {
+        return runPluginsInfoGeneric(third, parsed.flags);
+      }
+      if (second === "config" && third === "show" && rest[0]) {
+        return runPluginsConfigShowGeneric(rest[0], parsed.flags);
+      }
+      if (second === "config" && third === "template" && rest[0]) {
+        return runPluginsConfigTemplateGeneric(rest[0], parsed.flags);
+      }
+      if (second === "config" && third === "apply" && rest[0]) {
+        return runPluginsConfigureGeneric(rest[0], parsed.flags, cwd);
+      }
+      if (second === "action" && third && rest[0]) {
+        return runPluginActionGeneric(third, rest[0], rest.slice(1), parsed.flags);
       }
       throw new Error("Unknown plugins command. Try `vivd plugins help`.");
     case "publish":

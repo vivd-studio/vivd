@@ -22,7 +22,6 @@ import {
   Check,
   Plus,
   Loader2,
-  BarChart3,
   RotateCcw,
   Globe,
   Trash2,
@@ -43,6 +42,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAppConfig } from "@/lib/AppConfigContext";
 import { ROUTES } from "@/app/router";
+import { getProjectPluginShortcuts } from "@/plugins/shortcuts";
 import { VersionSelector } from "../versioning/VersionSelector";
 import { VersionManagementPanel } from "../versioning/VersionManagementPanel";
 import { PublishSiteDialog } from "../publish/PublishSiteDialog";
@@ -264,10 +264,11 @@ export function ProjectCard({
   });
   const [copied, setCopied] = useState(false);
   const publicPreviewEnabled = project.publicPreviewEnabled ?? true;
-  const analyticsAvailable = (project.enabledPlugins ?? []).includes("analytics");
-  const analyticsPath =
-    ROUTES.PROJECT_ANALYTICS?.(project.slug) ??
-    `/vivd-studio/projects/${project.slug}/analytics`;
+  const projectPluginShortcuts = getProjectPluginShortcuts({
+    enabledPluginIds: project.enabledPlugins ?? [],
+    projectSlug: project.slug,
+    surface: "project-card",
+  });
   const canManagePreview = membership?.organizationRole !== "client_editor";
   const canRenameProject = membership?.organizationRole !== "client_editor";
   const isRenamePending = renameSlugMutation.isPending;
@@ -808,14 +809,18 @@ export function ProjectCard({
                 <Plug className="w-4 h-4 mr-2" />
                 Plugins
               </DropdownMenuItem>
-              {analyticsAvailable ? (
-                <DropdownMenuItem
-                  onClick={() => navigate(analyticsPath)}
-                >
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Analytics
-                </DropdownMenuItem>
-              ) : null}
+              {projectPluginShortcuts.map((shortcut) => {
+                const ShortcutIcon = shortcut.icon;
+                return (
+                  <DropdownMenuItem
+                    key={`shortcut-menu-${shortcut.pluginId}`}
+                    onClick={() => navigate(shortcut.path)}
+                  >
+                    <ShortcutIcon className="w-4 h-4 mr-2" />
+                    {shortcut.label}
+                  </DropdownMenuItem>
+                );
+              })}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setShowVersionManagement(true)}
@@ -863,21 +868,25 @@ export function ProjectCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {analyticsAvailable ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(analyticsPath);
-              }}
-              title="Analytics"
-              disabled={isRenamePending}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </Button>
-          ) : null}
+          {projectPluginShortcuts.map((shortcut) => {
+            const ShortcutIcon = shortcut.icon;
+            return (
+              <Button
+                key={`shortcut-button-${shortcut.pluginId}`}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(shortcut.path);
+                }}
+                title={shortcut.label}
+                disabled={isRenamePending}
+              >
+                <ShortcutIcon className="h-4 w-4" />
+              </Button>
+            );
+          })}
           {isUrlProject && project.url && (
             <Button
               variant="outline"

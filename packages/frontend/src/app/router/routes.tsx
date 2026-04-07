@@ -28,6 +28,7 @@ const ScratchWizard = lazy(() => import("@/pages/ScratchWizard"));
 const NoProjectAssigned = lazy(() => import("@/pages/NoProjectAssigned"));
 const ProjectPlugins = lazy(() => import("@/pages/ProjectPlugins"));
 const ProjectAnalytics = lazy(() => import("@/pages/ProjectAnalytics"));
+const ProjectPluginPage = lazy(() => import("@/pages/ProjectPluginPage"));
 const Layout = lazy(() =>
   import("@/components/shell/Layout").then((module) => ({
     default: module.Layout,
@@ -99,6 +100,16 @@ function ProjectAnalyticsRoute() {
     <RequireAssignedProject>
       <RouteSuspense>
         <ProjectAnalytics />
+      </RouteSuspense>
+    </RequireAssignedProject>
+  );
+}
+
+function ProjectPluginRoute() {
+  return (
+    <RequireAssignedProject>
+      <RouteSuspense>
+        <ProjectPluginPage />
       </RouteSuspense>
     </RequireAssignedProject>
   );
@@ -322,6 +333,10 @@ export function AppRoutes({ hasUsers }: AppRoutesProps) {
         <Route path="projects/new/scratch" element={<ScratchWizardRoute />} />
         <Route path="projects/:projectSlug" element={<EmbeddedStudioRoute />} />
         <Route path="projects/:projectSlug/plugins" element={<ProjectPluginsRoute />} />
+        <Route
+          path="projects/:projectSlug/plugins/:pluginId/*"
+          element={<ProjectPluginRoute />}
+        />
         <Route path="projects/:projectSlug/analytics" element={<ProjectAnalyticsRoute />} />
       </Route>
 

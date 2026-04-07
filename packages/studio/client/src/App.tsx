@@ -6,6 +6,9 @@ import {
 } from "@/lib/hostBridge";
 import { useCallback, useEffect } from "react";
 
+const READY_BROADCAST_INTERVAL_MS = 500;
+const READY_BROADCAST_TIMEOUT_MS = 30_000;
+
 export function App() {
   const params = new URLSearchParams(window.location.search);
   const embedded =
@@ -46,17 +49,49 @@ export function App() {
   useEffect(() => {
     if (!embedded) return;
 
-    postStudioReady();
+    let hostReadyAcknowledged = false;
 
-    const onMessage = (event: MessageEvent) => {
-      const message = parseVivdHostMessage(event);
-      if (message?.type !== "vivd:host:ready-check") return;
-
+    const announceReady = () => {
+      if (hostReadyAcknowledged) return;
       postStudioReady();
     };
 
+    announceReady();
+
+    const readyInterval = window.setInterval(
+      announceReady,
+      READY_BROADCAST_INTERVAL_MS,
+    );
+    const readyTimeout = window.setTimeout(() => {
+      window.clearInterval(readyInterval);
+    }, READY_BROADCAST_TIMEOUT_MS);
+
+    const onMessage = (event: MessageEvent) => {
+      const message = parseVivdHostMessage(event);
+      if (!message) return;
+
+      if (message.type === "vivd:host:ready-ack") {
+        hostReadyAcknowledged = true;
+        window.clearInterval(readyInterval);
+        window.clearTimeout(readyTimeout);
+        return;
+      }
+
+      if (
+        message.type === "vivd:host:ready-check" ||
+        message.type === "vivd:host:theme" ||
+        message.type === "vivd:host:sidebar"
+      ) {
+        announceReady();
+      }
+    };
+
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+    return () => {
+      window.clearInterval(readyInterval);
+      window.clearTimeout(readyTimeout);
+      window.removeEventListener("message", onMessage);
+    };
   }, [embedded, postStudioReady]);
 
   return (

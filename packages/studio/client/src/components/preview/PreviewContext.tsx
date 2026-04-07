@@ -122,7 +122,6 @@ interface PreviewContextValue {
   totalVersions: number;
   hasMultipleVersions: boolean;
   enabledPlugins: string[];
-  analyticsAvailable: boolean;
   supportEmail: string | null;
   previewMode: PreviewMode;
 
@@ -573,7 +572,6 @@ export function PreviewProvider({
   const totalVersions = project?.totalVersions || 1;
   const hasMultipleVersions = totalVersions > 1;
   const enabledPlugins = project?.enabledPlugins ?? [];
-  const analyticsAvailable = enabledPlugins.includes("analytics");
   const supportEmail = projectsData?.supportEmail ?? null;
 
   // Query for git changes (unsaved work)
@@ -1522,7 +1520,6 @@ export function PreviewProvider({
     totalVersions,
     hasMultipleVersions,
     enabledPlugins,
-    analyticsAvailable,
     supportEmail,
 
     // Handlers

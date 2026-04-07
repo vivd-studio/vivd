@@ -27,6 +27,12 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Studio file patching/edit logic (HTML/Astro/i18n patching) belongs in `packages/studio` runtime paths.
 - Keep backend and studio responsibilities separated; avoid duplicating runtime patching logic across both.
 - Frontend should not depend on backend internals via ad-hoc local path aliases; prefer explicit shared contracts.
+- Shared plugin presentation metadata now lives in `packages/shared/src/types/plugins.ts`; direct plugin affordances such as icons, shortcut labels, route targets, and activation prompts should be declared there instead of hardcoding `analytics`/other plugin checks into host pages or Studio chrome.
+- Control-plane frontend resolves those shared plugin shortcuts through `packages/frontend/src/plugins/shortcuts.ts`, while Studio client resolves the same contract through `packages/studio/client/src/plugins/shortcuts.ts`.
+- Current internal plugins are also moving behind module registries before any workspace-package split: backend plugin module ownership now starts in `packages/backend/src/services/plugins/*/module.ts`, and control-plane frontend plugin page ownership now starts in `packages/frontend/src/plugins/*/module.ts`.
+- Generic backend plugin host helpers now live in `packages/backend/src/trpcRouters/plugins/operations.ts`; keep plugin-specific public error translation inside the plugin module files instead of reintroducing contact/analytics-specific error handling in shared routers.
+- The plugin-specific public routers under `packages/backend/src/trpcRouters/plugins/contactForm.ts` and `packages/backend/src/trpcRouters/plugins/analytics.ts` are compatibility adapters. Keep them thin and route shared lifecycle/config/action flows through the generic operations layer; only truly plugin-specific endpoints like Analytics summary should stay there.
+- Keep compatibility wrappers/routes only as thin adapters. New plugin-owned UI or backend behavior should go into the per-plugin module files first, not into host-page/service switch statements.
 
 ## Upstream Reference Checkouts
 
@@ -46,7 +52,9 @@ Vivd uses npm workspaces (`package.json` at repo root, single root `package-lock
 - Preferred agent surface for connected runtime/platform operations is the Studio-machine `vivd` CLI in `packages/cli`.
 - Shared CLI/backend transport helper lives in `packages/shared/src/studio/connectedBackendClient.ts`.
 - The `vivd` CLI is how the agent inspects runtime/project context and interacts with platform-managed features such as plugins and the publish checklist.
-- Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd plugins help`, `vivd plugins contact help`, and `vivd publish help`.
+- Prefer the generic plugin CLI surface for discovery and execution: `vivd plugins catalog`, `vivd plugins info <pluginId>`, `vivd plugins config show|template|apply <pluginId>`, and `vivd plugins action <pluginId> <actionId> ...`.
+- Current first-party compatibility aliases such as `vivd plugins contact ...` and `vivd plugins analytics info` still work, but they should not be treated as the long-term contract.
+- Use the CLI help surface to discover exact subcommands when needed: `vivd help`, `vivd plugins help`, and `vivd publish help`.
 - Treat `vivd publish checklist run` as an explicit full checklist pass, not a routine test command; prefer item-by-item checklist work unless the user explicitly asked for a full run or rerun.
 - For `STUDIO_MACHINE_PROVIDER=local`, `packages/backend/src/services/studioMachines/local.ts` is responsible for making `vivd` available inside spawned Studio runtimes by wiring a local wrapper into the child-process `PATH`.
 - The only remaining custom OpenCode tool on the agent surface is `vivd_image_ai`; plugin/checklist wrappers were removed in favor of the CLI.

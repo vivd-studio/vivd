@@ -19,21 +19,5 @@ export function canPostMessageToVivdStudio(options: {
 }): boolean {
   const { iframe, studioOrigin } = options;
   if (!iframe || !studioOrigin) return false;
-  if (typeof window === "undefined") return true;
-  if (studioOrigin === window.location.origin) return true;
-
-  const frameWindow = iframe.contentWindow;
-  if (!frameWindow) return false;
-
-  try {
-    const pathname = frameWindow.location.pathname;
-    if (typeof pathname === "string" && pathname.includes("/vivd-studio")) {
-      return true;
-    }
-    return frameWindow.location.origin === studioOrigin;
-  } catch {
-    // Cross-origin access throws once the iframe has actually committed to the
-    // studio origin. At that point postMessage(targetOrigin) is safe to use.
-    return true;
-  }
+  return Boolean(iframe.contentWindow);
 }

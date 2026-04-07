@@ -74,7 +74,6 @@ function createProps() {
     hasGitChanges: false,
     isPublished: false,
     publishStatus: { mode: "standalone" as const, domain: null, lastTag: null },
-    analyticsAvailable: false,
     theme: "light" as const,
     setTheme: vi.fn(),
     colorTheme: "vivd-sharp" as const,
@@ -93,6 +92,8 @@ function createProps() {
     isRegeneratingThumbnail: false,
     handleDeleteProject: vi.fn(),
     isDeletingProject: false,
+    projectPluginShortcuts: [],
+    onTriggerProjectPluginShortcut: vi.fn(),
   };
 }
 

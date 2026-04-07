@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 vi.mock("@/components/preview", () => ({
@@ -16,8 +16,13 @@ vi.mock("@/components/ui/sonner", () => ({
 describe("App", () => {
   const originalParent = window.parent;
 
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     window.history.replaceState({}, "", "/");
     Object.defineProperty(window, "parent", {
       configurable: true,
@@ -25,7 +30,7 @@ describe("App", () => {
     });
   });
 
-  it("replies to host ready checks when embedded", () => {
+  it("keeps announcing readiness until the host acknowledges it", () => {
     const postMessage = vi.fn();
     const parentWindow = { postMessage };
 
@@ -47,6 +52,12 @@ describe("App", () => {
     );
 
     act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(2);
+
+    act(() => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: { type: "vivd:host:ready-check" },
@@ -56,10 +67,23 @@ describe("App", () => {
       );
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(2);
+    expect(postMessage).toHaveBeenCalledTimes(3);
     expect(postMessage).toHaveBeenLastCalledWith(
       { type: "vivd:studio:ready" },
       "https://host.example.com",
     );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "vivd:host:ready-ack" },
+          origin: "https://host.example.com",
+          source: parentWindow as unknown as MessageEventSource,
+        }),
+      );
+      vi.advanceTimersByTime(1_500);
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(3);
   });
 });

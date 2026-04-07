@@ -4,36 +4,21 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  analyticsEnsureMutateMock,
-  analyticsEnsureUseMutationMock,
-  analyticsInfoUseQueryMock,
   catalogUseQueryMock,
-  contactEnsureMutateMock,
-  contactEnsureUseMutationMock,
-  contactInfoUseQueryMock,
-  contactRequestRecipientVerificationUseMutationMock,
-  contactUpdateConfigUseMutationMock,
   genericEnsureMutateMock,
   genericEnsureUseMutationMock,
   projectListUseQueryMock,
   useParamsMock,
   useUtilsMock,
 } = vi.hoisted(() => ({
-  analyticsEnsureMutateMock: vi.fn(),
-  analyticsEnsureUseMutationMock: vi.fn(),
-  analyticsInfoUseQueryMock: vi.fn(),
   catalogUseQueryMock: vi.fn(),
-  contactEnsureMutateMock: vi.fn(),
-  contactEnsureUseMutationMock: vi.fn(),
-  contactInfoUseQueryMock: vi.fn(),
-  contactRequestRecipientVerificationUseMutationMock: vi.fn(),
-  contactUpdateConfigUseMutationMock: vi.fn(),
   genericEnsureMutateMock: vi.fn(),
   genericEnsureUseMutationMock: vi.fn(),
   projectListUseQueryMock: vi.fn(),
   useParamsMock: vi.fn(),
   useUtilsMock: vi.fn(),
 }));
+
 const { useSessionMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
 }));
@@ -88,26 +73,8 @@ vi.mock("@/lib/trpc", () => ({
       catalog: {
         useQuery: catalogUseQueryMock,
       },
-      contactInfo: {
-        useQuery: contactInfoUseQueryMock,
-      },
-      analyticsInfo: {
-        useQuery: analyticsInfoUseQueryMock,
-      },
-      contactEnsure: {
-        useMutation: contactEnsureUseMutationMock,
-      },
-      analyticsEnsure: {
-        useMutation: analyticsEnsureUseMutationMock,
-      },
       ensure: {
         useMutation: genericEnsureUseMutationMock,
-      },
-      contactUpdateConfig: {
-        useMutation: contactUpdateConfigUseMutationMock,
-      },
-      contactRequestRecipientVerification: {
-        useMutation: contactRequestRecipientVerificationUseMutationMock,
       },
     },
     project: {
@@ -135,15 +102,7 @@ import ProjectPlugins from "./ProjectPlugins";
 
 describe("ProjectPlugins", () => {
   beforeEach(() => {
-    analyticsEnsureMutateMock.mockReset();
-    analyticsEnsureUseMutationMock.mockReset();
-    analyticsInfoUseQueryMock.mockReset();
     catalogUseQueryMock.mockReset();
-    contactEnsureMutateMock.mockReset();
-    contactEnsureUseMutationMock.mockReset();
-    contactInfoUseQueryMock.mockReset();
-    contactRequestRecipientVerificationUseMutationMock.mockReset();
-    contactUpdateConfigUseMutationMock.mockReset();
     genericEnsureMutateMock.mockReset();
     genericEnsureUseMutationMock.mockReset();
     projectListUseQueryMock.mockReset();
@@ -164,12 +123,6 @@ describe("ProjectPlugins", () => {
         catalog: {
           invalidate: vi.fn().mockResolvedValue(undefined),
         },
-        contactInfo: {
-          invalidate: vi.fn().mockResolvedValue(undefined),
-        },
-        analyticsInfo: {
-          invalidate: vi.fn().mockResolvedValue(undefined),
-        },
       },
     });
     catalogUseQueryMock.mockReturnValue({
@@ -185,7 +138,6 @@ describe("ProjectPlugins", () => {
               pluginId: "contact_form",
               name: "Contact Form",
               description: "Collect visitor inquiries and store submissions in Vivd.",
-              dashboardPath: null,
             },
           },
           {
@@ -198,7 +150,6 @@ describe("ProjectPlugins", () => {
               pluginId: "analytics",
               name: "Analytics",
               description: "Track page traffic and visitor behavior for your project.",
-              dashboardPath: "/analytics",
             },
           },
           {
@@ -211,7 +162,6 @@ describe("ProjectPlugins", () => {
               pluginId: "search_console",
               name: "Search Console",
               description: "Inspect search indexing and performance signals.",
-              dashboardPath: "/plugins/search-console",
             },
           },
         ],
@@ -224,85 +174,16 @@ describe("ProjectPlugins", () => {
       data: {
         projects: [{ slug: "site-1", title: "Site 1" }],
       },
-    });
-    contactInfoUseQueryMock.mockReturnValue({
-      data: {
-        pluginId: "contact_form",
-        entitled: true,
-        entitlementState: "enabled",
-        enabled: false,
-        instanceId: null,
-        status: null,
-        publicToken: null,
-        config: null,
-        snippets: null,
-        usage: {
-          submitEndpoint: "/plugins/contact-form/v1/submit",
-          expectedFields: ["token", "name", "email", "message"],
-          optionalFields: ["_redirect", "_subject", "_honeypot"],
-          inferredAutoSourceHosts: [],
-          turnstileEnabled: false,
-          turnstileConfigured: false,
-        },
-        recipients: {
-          options: [],
-          pending: [],
-        },
-        instructions: [],
-      },
-      error: null,
-      isLoading: false,
       refetch: vi.fn().mockResolvedValue(undefined),
-    });
-    analyticsInfoUseQueryMock.mockReturnValue({
-      data: {
-        pluginId: "analytics",
-        entitled: true,
-        entitlementState: "enabled",
-        enabled: false,
-        instanceId: null,
-        status: null,
-        publicToken: null,
-        config: null,
-        snippets: null,
-        usage: {
-          scriptEndpoint: "/plugins/analytics/v1/script.js",
-          trackEndpoint: "/plugins/analytics/v1/track",
-          eventTypes: [],
-          respectDoNotTrack: true,
-          captureQueryString: false,
-          enableClientTracking: true,
-        },
-        instructions: [],
-      },
-      error: null,
-      isLoading: false,
-      refetch: vi.fn().mockResolvedValue(undefined),
-    });
-    contactEnsureUseMutationMock.mockReturnValue({
-      mutate: contactEnsureMutateMock,
-      isPending: false,
-    });
-    analyticsEnsureUseMutationMock.mockReturnValue({
-      mutate: analyticsEnsureMutateMock,
-      isPending: false,
     });
     genericEnsureUseMutationMock.mockReturnValue({
       mutate: genericEnsureMutateMock,
       isPending: false,
       variables: undefined,
     });
-    contactUpdateConfigUseMutationMock.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    });
-    contactRequestRecipientVerificationUseMutationMock.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    });
   });
 
-  it("shows project enable actions when plugins are instance-entitled but not yet created for the project", () => {
+  it("shows project enable actions for available plugins", () => {
     render(
       <MemoryRouter>
         <ProjectPlugins />
@@ -310,31 +191,22 @@ describe("ProjectPlugins", () => {
     );
 
     expect(
-      screen.getByText(
-        "Contact Form is available for this instance but has not been enabled for this project yet.",
-      ),
-    ).toBeInTheDocument();
+      screen.getAllByRole("button", { name: "Enable for this project" }),
+    ).toHaveLength(2);
     expect(
-      screen.getByText(
-        "Analytics is available for this instance but has not been enabled for this project yet.",
+      screen.getAllByText(
+        "This plugin is available for this project but has not been enabled yet.",
       ),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(
-        "Contact Form is disabled for this instance. Open Instance Settings -> Plugins to enable it.",
-      ),
-    ).not.toBeInTheDocument();
+    ).toHaveLength(2);
 
-    const enableButtons = screen.getAllByRole("button", {
-      name: "Enable for this project",
+    fireEvent.click(screen.getAllByRole("button", { name: "Enable for this project" })[0]!);
+    expect(genericEnsureMutateMock).toHaveBeenCalledWith({
+      slug: "site-1",
+      pluginId: "contact_form",
     });
-    expect(enableButtons).toHaveLength(2);
-
-    fireEvent.click(enableButtons[0]!);
-    expect(contactEnsureMutateMock).toHaveBeenCalledWith({ slug: "site-1" });
   });
 
-  it("renders generic registry-backed plugin cards beyond contact form and analytics", () => {
+  it("renders registry-backed detail links for enabled plugins", () => {
     render(
       <MemoryRouter>
         <ProjectPlugins />
@@ -344,12 +216,12 @@ describe("ProjectPlugins", () => {
     expect(screen.getByText("Search Console")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This plugin is enabled, but it does not expose in-app configuration here yet.",
+        "Open this plugin to view details, configuration, snippets, and plugin-specific actions.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open dashboard" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open plugin" })).toHaveAttribute(
       "href",
-      "/vivd-studio/projects/site-1/plugins/search-console",
+      "/vivd-studio/projects/site-1/plugins/search_console",
     );
   });
 });

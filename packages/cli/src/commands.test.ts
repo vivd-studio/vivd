@@ -234,9 +234,17 @@ describe("dispatchCli", () => {
     "requests contact recipient verification via %s",
     async (mode) => {
       runtime.client.mutation.mockResolvedValue({
-        email: "person@example.com",
-        status: "verification_sent",
-        cooldownRemainingSeconds: 0,
+        pluginId: "contact_form",
+        actionId: mode === "resend" ? "resend_recipient" : "verify_recipient",
+        summary:
+          mode === "resend"
+            ? "Resent recipient verification request."
+            : "Requested recipient verification.",
+        result: {
+          email: "person@example.com",
+          status: "verification_sent",
+          cooldownRemainingSeconds: 0,
+        },
       });
 
       const result = await dispatchCli([
@@ -248,11 +256,13 @@ describe("dispatchCli", () => {
       ]);
 
       expect(runtime.client.mutation).toHaveBeenCalledWith(
-        "studioApi.requestProjectContactRecipientVerification",
+        "studioApi.runProjectPluginAction",
         {
           studioId: "studio_1",
           slug: "demo",
-          email: "person@example.com",
+          pluginId: "contact_form",
+          actionId: mode === "resend" ? "resend_recipient" : "verify_recipient",
+          args: ["person@example.com"],
         },
       );
       expect(result.human).toContain("Recipient: person@example.com");
@@ -263,12 +273,90 @@ describe("dispatchCli", () => {
     },
   );
 
+  it("shows generic plugin info through the capability contract", async () => {
+    runtime.client.query.mockResolvedValue({
+      pluginId: "contact_form",
+      catalog: {
+        pluginId: "contact_form",
+        name: "Contact Form",
+        description: "Collect visitor inquiries and store submissions in Vivd.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [
+            {
+              actionId: "verify_recipient",
+              title: "Verify recipient",
+              description: "Send verification email",
+              arguments: [{ name: "email", type: "email", required: true }],
+            },
+          ],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_1",
+      status: "enabled",
+      publicToken: "public_1",
+      config: {
+        recipientEmails: ["owner@example.com"],
+      },
+      defaultConfig: {
+        recipientEmails: ["team@example.com"],
+      },
+      snippets: {
+        html: "<form></form>",
+      },
+      usage: {
+        submitEndpoint: "https://api.example.test/plugins/contact",
+      },
+      details: {
+        recipients: {
+          options: [],
+          pending: [],
+        },
+      },
+      instructions: ["Insert the snippet"],
+    });
+
+    const result = await dispatchCli(["plugins", "info", "contact_form"]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      pluginId: "contact_form",
+    });
+    expect(result.human).toContain("Plugin: Contact Form");
+    expect(result.human).toContain("Plugin ID: contact_form");
+    expect(result.human).toContain("Config support: show, template, apply");
+    expect(result.human).toContain("- verify_recipient <email> - Verify recipient");
+  });
+
   it.each([
     ["plugins", "info", "contact"],
     ["plugins", "contact", "info"],
   ])("shows contact info with recipient and field configuration via %j", async (...argv) => {
     runtime.client.query.mockResolvedValue({
       pluginId: "contact_form",
+      catalog: {
+        pluginId: "contact_form",
+        name: "Contact Form",
+        description: "Collect visitor inquiries and store submissions in Vivd.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
       entitled: true,
       entitlementState: "enabled",
       enabled: true,
@@ -292,21 +380,30 @@ describe("dispatchCli", () => {
         turnstileEnabled: false,
         turnstileConfigured: false,
       },
-      recipients: {
-        options: [
-          { email: "owner@example.com", isVerified: true, isPending: false },
-          { email: "pending@example.com", isVerified: false, isPending: true },
-        ],
-        pending: [{ email: "pending@example.com", lastSentAt: "2026-03-29T08:00:00.000Z" }],
+      defaultConfig: {
+        recipientEmails: ["team@example.com"],
+      },
+      snippets: {
+        html: "<form></form>",
+      },
+      details: {
+        recipients: {
+          options: [
+            { email: "owner@example.com", isVerified: true, isPending: false },
+            { email: "pending@example.com", isVerified: false, isPending: true },
+          ],
+          pending: [{ email: "pending@example.com", lastSentAt: "2026-03-29T08:00:00.000Z" }],
+        },
       },
       instructions: ["Insert the snippet", "Verify with a test submit"],
     });
 
     const result = await dispatchCli(argv);
 
-    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectContactPluginInfo", {
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
       studioId: "studio_1",
       slug: "demo",
+      pluginId: "contact_form",
     });
     expect(result.human).toContain("Submit endpoint: https://api.example.test/plugins/contact");
     expect(result.human).toContain("Configured recipients: owner@example.com");
@@ -318,6 +415,20 @@ describe("dispatchCli", () => {
   it("shows the saved contact config", async () => {
     runtime.client.query.mockResolvedValue({
       pluginId: "contact_form",
+      catalog: {
+        pluginId: "contact_form",
+        name: "Contact Form",
+        description: "Collect visitor inquiries and store submissions in Vivd.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
       entitled: true,
       entitlementState: "enabled",
       enabled: true,
@@ -341,18 +452,27 @@ describe("dispatchCli", () => {
         turnstileEnabled: false,
         turnstileConfigured: false,
       },
-      recipients: {
-        options: [],
-        pending: [],
+      defaultConfig: {
+        recipientEmails: ["team@example.com"],
+      },
+      snippets: {
+        html: "<form></form>",
+      },
+      details: {
+        recipients: {
+          options: [],
+          pending: [],
+        },
       },
       instructions: [],
     });
 
     const result = await dispatchCli(["plugins", "contact", "config", "show"]);
 
-    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectContactPluginInfo", {
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
       studioId: "studio_1",
       slug: "demo",
+      pluginId: "contact_form",
     });
     expect(result.data).toEqual({
       recipientEmails: ["team@example.com"],
@@ -366,6 +486,66 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("Contact config for demo");
     expect(result.human).toContain("\"recipientEmails\": [");
     expect(result.human).toContain("vivd plugins contact config apply --file -");
+  });
+
+  it("shows generic plugin config and template", async () => {
+    runtime.client.query.mockResolvedValue({
+      pluginId: "analytics",
+      catalog: {
+        pluginId: "analytics",
+        name: "Analytics",
+        description: "Track page traffic and visitor behavior for your project.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_analytics",
+      status: "enabled",
+      publicToken: "analytics_public",
+      config: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      },
+      defaultConfig: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      },
+      snippets: null,
+      usage: {
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+      },
+      details: null,
+      instructions: [],
+    });
+
+    const showResult = await dispatchCli(["plugins", "config", "show", "analytics"]);
+    const templateResult = await dispatchCli([
+      "plugins",
+      "config",
+      "template",
+      "analytics",
+    ]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getProjectPluginInfo", {
+      studioId: "studio_1",
+      slug: "demo",
+      pluginId: "analytics",
+    });
+    expect(showResult.human).toContain("Analytics config for demo");
+    expect(showResult.human).toContain("\"respectDoNotTrack\": true");
+    expect(templateResult.human).toContain("Analytics config template");
+    expect(templateResult.human).toContain(
+      "vivd plugins config apply analytics --file -",
+    );
   });
 
   it("prints a contact config template", async () => {
@@ -415,10 +595,11 @@ describe("dispatchCli", () => {
     const result = await dispatchCli([...command, "--file", configPath], tmpDir);
 
     expect(runtime.client.mutation).toHaveBeenCalledWith(
-      "studioApi.updateProjectContactPluginConfig",
+      "studioApi.updateProjectPluginConfig",
       {
         studioId: "studio_1",
         slug: "demo",
+        pluginId: "contact_form",
         config: {
           recipientEmails: ["team@example.com"],
           sourceHosts: ["example.com"],
@@ -431,6 +612,75 @@ describe("dispatchCli", () => {
     );
     expect(result.human).toContain("Contact plugin config updated for demo");
     expect(result.human).toContain("vivd plugins contact config show");
+  });
+
+  it("updates plugin config through the generic capability contract", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "vivd-cli-"));
+    const configPath = path.join(tmpDir, "analytics.json");
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      }),
+    );
+    runtime.client.mutation.mockResolvedValue({
+      pluginId: "analytics",
+      catalog: {
+        pluginId: "analytics",
+        name: "Analytics",
+        description: "Track page traffic and visitor behavior for your project.",
+        capabilities: {
+          supportsInfo: true,
+          config: {
+            supportsShow: true,
+            supportsApply: true,
+            supportsTemplate: true,
+          },
+          actions: [],
+        },
+      },
+      entitled: true,
+      entitlementState: "enabled",
+      enabled: true,
+      instanceId: "plugin_analytics",
+      status: "enabled",
+      publicToken: "analytics_public",
+      config: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      },
+      defaultConfig: {
+        respectDoNotTrack: true,
+        captureQueryString: false,
+      },
+      snippets: null,
+      usage: {
+        scriptEndpoint: "https://api.example.test/plugins/analytics/script.js",
+      },
+      details: null,
+      instructions: [],
+    });
+
+    const result = await dispatchCli(
+      ["plugins", "config", "apply", "analytics", "--file", configPath],
+      tmpDir,
+    );
+
+    expect(runtime.client.mutation).toHaveBeenCalledWith(
+      "studioApi.updateProjectPluginConfig",
+      {
+        studioId: "studio_1",
+        slug: "demo",
+        pluginId: "analytics",
+        config: {
+          respectDoNotTrack: true,
+          captureQueryString: false,
+        },
+      },
+    );
+    expect(result.human).toContain("Analytics config updated for demo");
+    expect(result.human).toContain("vivd plugins config show analytics");
   });
 
   it("updates contact plugin config from stdin when --file - is used", async () => {
@@ -463,10 +713,11 @@ describe("dispatchCli", () => {
 
       expect(setEncodingSpy).toHaveBeenCalledWith("utf8");
       expect(runtime.client.mutation).toHaveBeenCalledWith(
-        "studioApi.updateProjectContactPluginConfig",
+        "studioApi.updateProjectPluginConfig",
         {
           studioId: "studio_1",
           slug: "demo",
+          pluginId: "contact_form",
           config: {
             recipientEmails: ["stdin@example.com"],
             sourceHosts: ["example.com"],
@@ -484,21 +735,61 @@ describe("dispatchCli", () => {
     }
   });
 
+  it("runs generic plugin actions", async () => {
+    runtime.client.mutation.mockResolvedValue({
+      pluginId: "contact_form",
+      actionId: "verify_recipient",
+      summary: "Requested recipient verification.",
+      result: {
+        email: "person@example.com",
+        status: "verification_sent",
+        cooldownRemainingSeconds: 0,
+      },
+    });
+
+    const result = await dispatchCli([
+      "plugins",
+      "action",
+      "contact_form",
+      "verify_recipient",
+      "person@example.com",
+    ]);
+
+    expect(runtime.client.mutation).toHaveBeenCalledWith(
+      "studioApi.runProjectPluginAction",
+      {
+        studioId: "studio_1",
+        slug: "demo",
+        pluginId: "contact_form",
+        actionId: "verify_recipient",
+        args: ["person@example.com"],
+      },
+    );
+    expect(result.human).toContain("Requested recipient verification.");
+    expect(result.human).toContain("Action: verify_recipient");
+    expect(result.human).toContain("\"email\": \"person@example.com\"");
+  });
+
   it("shows help without CMS commands", async () => {
     const rootHelp = await dispatchCli(["help"]);
+    const pluginsHelp = await dispatchCli(["plugins", "help"]);
     const publishHelp = await dispatchCli(["publish", "help"]);
     const contactHelp = await dispatchCli(["plugins", "contact", "help"]);
     const analyticsHelp = await dispatchCli(["plugins", "analytics", "help"]);
 
     expect(rootHelp.human).toContain("vivd project info");
     expect(rootHelp.human).not.toContain("vivd cms");
+    expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
+    expect(pluginsHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
     expect(publishHelp.human).toContain("vivd publish checklist run");
     expect(publishHelp.human).toContain("vivd publish checklist show");
     expect(publishHelp.human).toContain("explicitly asks for a full checklist run");
     expect(publishHelp.human).toContain("inspect or continue checklist items one by one");
     expect(contactHelp.human).toContain("vivd plugins contact info");
+    expect(contactHelp.human).toContain("vivd plugins info contact_form");
     expect(contactHelp.human).toContain("vivd plugins contact config show");
     expect(contactHelp.human).toContain("vivd plugins contact recipients verify <email>");
+    expect(analyticsHelp.human).toContain("vivd plugins info analytics");
     expect(analyticsHelp.human).toContain("vivd plugins analytics info");
   });
 });

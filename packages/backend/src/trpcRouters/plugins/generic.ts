@@ -2,12 +2,36 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { projectMemberProcedure } from "../../trpc";
 import { pluginEntitlementService } from "../../services/plugins/PluginEntitlementService";
-import { projectPluginService } from "../../services/plugins/ProjectPluginService";
 import { PLUGIN_IDS } from "../../services/plugins/registry";
+import { projectPluginService } from "../../services/plugins/ProjectPluginService";
+import {
+  extractRequestHost,
+  getProjectPluginInfo,
+  runProjectPluginAction,
+  updateProjectPluginConfig,
+} from "./operations";
 
-const ensurePluginInput = z.object({
+export const ensurePluginInput = z.object({
   slug: z.string().min(1),
   pluginId: z.enum(PLUGIN_IDS),
+});
+
+export const infoPluginInput = z.object({
+  slug: z.string().min(1),
+  pluginId: z.enum(PLUGIN_IDS),
+});
+
+export const updatePluginConfigInput = z.object({
+  slug: z.string().min(1),
+  pluginId: z.enum(PLUGIN_IDS),
+  config: z.record(z.string(), z.unknown()),
+});
+
+export const runPluginActionInput = z.object({
+  slug: z.string().min(1),
+  pluginId: z.enum(PLUGIN_IDS),
+  actionId: z.string().trim().min(1),
+  args: z.array(z.string()).default([]),
 });
 
 export const ensurePluginProcedure = projectMemberProcedure
@@ -37,5 +61,43 @@ export const ensurePluginProcedure = projectMemberProcedure
       organizationId: ctx.organizationId!,
       projectSlug: input.slug,
       pluginId: input.pluginId,
+    });
+  });
+
+export const infoPluginProcedure = projectMemberProcedure
+  .input(infoPluginInput)
+  .query(async ({ ctx, input }) => {
+    return getProjectPluginInfo({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: input.pluginId,
+    });
+  });
+
+export const updatePluginConfigProcedure = projectMemberProcedure
+  .input(updatePluginConfigInput)
+  .mutation(async ({ ctx, input }) => {
+    return updateProjectPluginConfig({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: input.pluginId,
+      config: input.config,
+    });
+  });
+
+export const runPluginActionProcedure = projectMemberProcedure
+  .input(runPluginActionInput)
+  .mutation(async ({ ctx, input }) => {
+    return runProjectPluginAction({
+      organizationId: ctx.organizationId!,
+      projectSlug: input.slug,
+      pluginId: input.pluginId,
+      actionId: input.actionId,
+      args: input.args,
+      requestedByUserId: ctx.session.user.id,
+      requestHost:
+        ctx.requestHost ??
+        extractRequestHost(ctx.req.headers["x-forwarded-host"]) ??
+        extractRequestHost(ctx.req.headers.host),
     });
   });
