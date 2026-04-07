@@ -13,6 +13,8 @@
     "paths": {
       "@/*": ["../frontend/src/*"],
       "@vivd/backend/*": ["../backend/*"],
+      "@vivd/builder": ["../builder/src/index.ts"],
+      "@vivd/builder/*": ["../builder/src/*"],
       "@vivd/plugin-contact-form": ["../plugin-contact-form/src/index.ts"],
       "@vivd/plugin-contact-form/*": ["../plugin-contact-form/src/*"],
       "@vivd/plugin-analytics": ["./src/index.ts"],

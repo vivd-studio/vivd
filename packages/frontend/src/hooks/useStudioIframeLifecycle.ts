@@ -175,6 +175,11 @@ export function useStudioIframeLifecycle({
     setStudioLoadErrored(true);
   }, []);
 
+  const recheckStudioReadiness = useCallback(() => {
+    if (!studioBaseUrl || studioReadyRef.current) return;
+    void tryMarkStudioReadyFromIframe();
+  }, [studioBaseUrl, tryMarkStudioReadyFromIframe]);
+
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const studioWindow = iframeRef.current?.contentWindow;
@@ -279,6 +284,34 @@ export function useStudioIframeLifecycle({
   useEffect(() => {
     requestStudioBridgeSync();
   }, [requestStudioBridgeSync]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      recheckStudioReadiness();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        recheckStudioReadiness();
+      }
+    };
+
+    const onPageShow = () => {
+      if (document.visibilityState === "visible") {
+        recheckStudioReadiness();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [recheckStudioReadiness]);
 
   useStudioIframeReadyRetry({
     enabled: Boolean(studioBaseUrl && !studioReady),

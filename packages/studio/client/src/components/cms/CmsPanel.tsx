@@ -45,7 +45,6 @@ import {
   cloneValue,
   collectRichTextSidecars,
   deriveReferenceValue,
-  dirnamePosix,
   getAssetPathValue,
   getEntryTitle,
   getValueAtPath,
@@ -65,8 +64,8 @@ function formatYaml(value: unknown): string {
   return `${stringifyYaml(value)}\n`;
 }
 
-function getFieldLabel(fieldKey: string) {
-  return titleizeKey(fieldKey);
+function getFieldLabel(fieldKey: string, field: CmsFieldDefinition) {
+  return field.label?.trim() || titleizeKey(fieldKey);
 }
 
 function getEntryErrorCount(reportErrors: string[], entry: CmsEntryRecord): number {
@@ -400,7 +399,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       await deleteAssetMutation.mutateAsync({
         slug: projectSlug,
         version,
-        relativePath: dirnamePosix(selectedEntry.relativePath),
+        relativePath: selectedEntry.deletePath,
       });
       await handlePrepare();
       setSelectedEntryKey(null);
@@ -439,6 +438,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       const reordered = [...selectedModel.entries];
       const [movedEntry] = reordered.splice(currentIndex, 1);
       reordered.splice(targetIndex, 0, movedEntry);
+      const sortField = selectedModel.sortField ?? "sortOrder";
 
       try {
         setIsSaving(true);
@@ -450,7 +450,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
               relativePath: entry.relativePath,
               content: formatYaml({
                 ...entry.values,
-                sortOrder: index,
+                [sortField]: index,
               }),
             }),
           ),
@@ -548,7 +548,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     ) => {
       const rawValue = draftValues ? getValueAtPath(draftValues, fieldPath) : undefined;
       const fieldId = fieldPath.map(String).join(".");
-      const label = getFieldLabel(fieldKey);
+      const label = getFieldLabel(fieldKey, field);
 
       if (field.localized) {
         const localizedValue =

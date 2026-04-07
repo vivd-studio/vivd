@@ -51,6 +51,8 @@ export interface CmsRootConfig {
 
 export interface CmsFieldDefinition {
   type: string;
+  label?: string;
+  description?: string;
   required?: boolean;
   localized?: boolean;
   default?: unknown;
@@ -65,7 +67,7 @@ export interface CmsModelSchema {
   label: string;
   storage: {
     path: string;
-    entryFormat: "directory";
+    entryFormat: "directory" | "file";
   };
   display?: {
     primaryField?: string;
@@ -75,6 +77,7 @@ export interface CmsModelSchema {
   };
   entry: {
     statusField?: string;
+    sortField?: string;
     fields: Record<string, CmsFieldDefinition>;
   };
 }
@@ -93,6 +96,7 @@ export interface CmsEntryRecord {
   key: string;
   filePath: string;
   relativePath: string;
+  deletePath: string;
   values: Record<string, unknown>;
   slug: string | null;
   status: string | null;
@@ -107,6 +111,8 @@ export interface CmsModelRecord {
   relativeSchemaPath: string;
   collectionRoot: string;
   relativeCollectionRoot: string;
+  entryFormat: "directory" | "file";
+  sortField: string | null;
   fields: Record<string, CmsFieldDefinition>;
   display?: {
     primaryField?: string;
@@ -250,12 +256,29 @@ async function readRootConfig(paths: CmsPaths, errors: string[]): Promise<CmsRoo
     : [];
   const models = Array.isArray(parsed.models)
     ? parsed.models
-        .filter(isRecord)
-        .map((model) => ({
-          key: typeof model.key === "string" ? model.key.trim() : "",
-          kind: model.kind === "collection" ? "collection" : (model.kind as "collection"),
-          schema: typeof model.schema === "string" ? model.schema.trim() : "",
-        }))
+        .map((model) => {
+          if (typeof model === "string") {
+            const key = model.trim();
+            return {
+              key,
+              kind: "collection" as const,
+              schema: key ? `./models/${key}.yaml` : "",
+            };
+          }
+          if (!isRecord(model)) return null;
+          const key = typeof model.key === "string" ? model.key.trim() : "";
+          return {
+            key,
+            kind: model.kind === "collection" ? "collection" : (model.kind as "collection"),
+            schema:
+              typeof model.schema === "string" && model.schema.trim().length > 0
+                ? model.schema.trim()
+                : key
+                  ? `./models/${key}.yaml`
+                  : "",
+          };
+        })
+        .filter((model): model is CmsModelRef => Boolean(model))
     : [];
 
   if (version !== CMS_VERSION) {
@@ -298,18 +321,13 @@ async function readRootConfig(paths: CmsPaths, errors: string[]): Promise<CmsRoo
         `${toPosix(path.relative(paths.projectDir, paths.rootConfigPath))}: model ${model.key} kind must be collection in v1`,
       );
     }
-    if (!model.schema) {
-      errors.push(
-        `${toPosix(path.relative(paths.projectDir, paths.rootConfigPath))}: model ${model.key} schema is required`,
-      );
-    }
   }
 
   return {
     version,
     defaultLocale,
     locales,
-    models: models.filter((model) => model.key && model.schema) as CmsModelRef[],
+    models: models.filter((model) => model.key && model.schema),
   };
 }
 
@@ -349,72 +367,215 @@ function validateFieldDefinition(
   }
 }
 
+function inferPrimaryField(fields: Record<string, CmsFieldDefinition>): string | undefined {
+  for (const candidate of TITLE_FIELD_KEYS) {
+    if (candidate in fields) {
+      return candidate;
+    }
+  }
+  return Object.keys(fields)[0];
+}
+
+function inferSortField(fields: Record<string, CmsFieldDefinition>): string | undefined {
+  if (fields.sortOrder?.type === "number") return "sortOrder";
+  if (fields.order?.type === "number") return "order";
+  return undefined;
+}
+
+function normalizeFieldDefinition(
+  fieldKey: string,
+  rawField: unknown,
+  errors: string[],
+  schemaLabel: string,
+): CmsFieldDefinition | null {
+  if (!isRecord(rawField) || typeof rawField.type !== "string") {
+    errors.push(`${schemaLabel}: field ${fieldKey} must be an object with a type`);
+    return null;
+  }
+
+  const normalizedType =
+    rawField.type === "string" &&
+    Array.isArray(rawField.options) &&
+    rawField.options.some((option) => typeof option === "string" && option.trim().length > 0)
+      ? "enum"
+      : rawField.type;
+
+  const field: CmsFieldDefinition = {
+    type: normalizedType,
+    label: typeof rawField.label === "string" ? rawField.label.trim() : undefined,
+    description:
+      typeof rawField.description === "string" ? rawField.description.trim() : undefined,
+    required: typeof rawField.required === "boolean" ? rawField.required : undefined,
+    localized: typeof rawField.localized === "boolean" ? rawField.localized : undefined,
+    default: rawField.default,
+    options: Array.isArray(rawField.options)
+      ? rawField.options.filter(
+          (option): option is string => typeof option === "string" && option.trim().length > 0,
+        )
+      : undefined,
+    accepts: Array.isArray(rawField.accepts)
+      ? rawField.accepts.filter(
+          (option): option is string => typeof option === "string" && option.trim().length > 0,
+        )
+      : undefined,
+    storage: typeof rawField.storage === "string" ? rawField.storage.trim() : undefined,
+  };
+
+  if (field.type === "object") {
+    const rawNestedFields = rawField.fields;
+    const nestedFields: Record<string, CmsFieldDefinition> = {};
+    if (isRecord(rawNestedFields)) {
+      for (const [nestedKey, nestedRawField] of Object.entries(rawNestedFields)) {
+        const normalized = normalizeFieldDefinition(nestedKey, nestedRawField, errors, schemaLabel);
+        if (normalized) {
+          nestedFields[nestedKey] = normalized;
+        }
+      }
+    } else if (Array.isArray(rawNestedFields)) {
+      for (const nestedRawField of rawNestedFields) {
+        if (!isRecord(nestedRawField) || typeof nestedRawField.name !== "string") {
+          errors.push(`${schemaLabel}: object field ${fieldKey} must define nested field names`);
+          continue;
+        }
+        const nestedKey = nestedRawField.name.trim();
+        if (!nestedKey) {
+          errors.push(`${schemaLabel}: object field ${fieldKey} must define nested field names`);
+          continue;
+        }
+        const normalized = normalizeFieldDefinition(nestedKey, nestedRawField, errors, schemaLabel);
+        if (normalized) {
+          nestedFields[nestedKey] = normalized;
+        }
+      }
+    }
+    field.fields = nestedFields;
+  }
+
+  if (field.type === "list" && typeof rawField.item !== "undefined") {
+    const normalizedItem = normalizeFieldDefinition(
+      `${fieldKey}[]`,
+      rawField.item,
+      errors,
+      schemaLabel,
+    );
+    if (normalizedItem) {
+      field.item = normalizedItem;
+    }
+  }
+
+  validateFieldDefinition(fieldKey, field, errors, schemaLabel);
+  return field;
+}
+
 function parseModelSchema(
   parsed: Record<string, unknown>,
   modelKey: string,
   schemaLabel: string,
   errors: string[],
 ): CmsModelSchema | null {
-  const label = typeof parsed.label === "string" ? parsed.label.trim() : "";
   const storage = isRecord(parsed.storage) ? parsed.storage : null;
   const entry = isRecord(parsed.entry) ? parsed.entry : null;
-  const fieldsValue = entry && isRecord(entry.fields) ? entry.fields : null;
+  const fields: Record<string, CmsFieldDefinition> = {};
+  const legacyFields = Array.isArray(parsed.fields) ? parsed.fields : null;
+  const currentFields =
+    entry && isRecord(entry.fields)
+      ? entry.fields
+      : isRecord(parsed.fields)
+        ? parsed.fields
+        : null;
 
-  if (!label) {
-    errors.push(`${schemaLabel}: label is required`);
+  if (currentFields) {
+    for (const [fieldKey, rawField] of Object.entries(currentFields)) {
+      const normalized = normalizeFieldDefinition(fieldKey, rawField, errors, schemaLabel);
+      if (normalized) {
+        fields[fieldKey] = normalized;
+      }
+    }
+  } else if (legacyFields) {
+    for (const rawField of legacyFields) {
+      if (!isRecord(rawField) || typeof rawField.name !== "string") {
+        errors.push(`${schemaLabel}: legacy field definitions must include a name`);
+        continue;
+      }
+      const fieldKey = rawField.name.trim();
+      if (!fieldKey) {
+        errors.push(`${schemaLabel}: legacy field definitions must include a name`);
+        continue;
+      }
+      const normalized = normalizeFieldDefinition(fieldKey, rawField, errors, schemaLabel);
+      if (normalized) {
+        fields[fieldKey] = normalized;
+      }
+    }
+  } else {
+    errors.push(`${schemaLabel}: entry.fields or fields is required`);
   }
-  if (!storage) {
+  if (Object.keys(fields).length === 0) return null;
+
+  const label =
+    typeof parsed.label === "string" && parsed.label.trim().length > 0
+      ? parsed.label.trim()
+      : titleizeKey(modelKey);
+
+  const storagePath = typeof storage?.path === "string" ? storage.path.trim() : "";
+  const entryFormatValue =
+    storage?.entryFormat === "directory" || storage?.entryFormat === "file"
+      ? storage.entryFormat
+      : null;
+  const isLegacySchema = !entry && !storage && Array.isArray(parsed.fields);
+  const entryFormat = entryFormatValue ?? (isLegacySchema ? "file" : "directory");
+  const normalizedStoragePath =
+    storagePath || (entryFormat === "file" ? `./${modelKey}` : `./collections/${modelKey}`);
+
+  if (storagePath) {
+    const expectedPath =
+      entryFormat === "file" ? `./${modelKey}` : `./collections/${modelKey}`;
+    if (normalizedStoragePath !== expectedPath) {
+      errors.push(
+        `${schemaLabel}: storage.path should be ${expectedPath} for collection model ${modelKey}`,
+      );
+    }
+  }
+  if (!storagePath && !isLegacySchema && !storage) {
     errors.push(`${schemaLabel}: storage is required`);
   }
-  if (!entry) {
+  if (storage && !entryFormatValue) {
+    errors.push(`${schemaLabel}: storage.entryFormat must be directory or file`);
+  }
+  if (!entry && !isLegacySchema) {
     errors.push(`${schemaLabel}: entry is required`);
-  }
-  if (!fieldsValue) {
-    errors.push(`${schemaLabel}: entry.fields is required`);
-  }
-  if (!storage || !entry || !fieldsValue) return null;
-
-  const storagePath = typeof storage.path === "string" ? storage.path.trim() : "";
-  const entryFormat = storage.entryFormat === "directory" ? "directory" : null;
-  if (!storagePath) {
-    errors.push(`${schemaLabel}: storage.path is required`);
-  }
-  if (entryFormat !== "directory") {
-    errors.push(`${schemaLabel}: storage.entryFormat must be directory in v1`);
-  }
-  if (storagePath && storagePath !== `./collections/${modelKey}`) {
-    errors.push(
-      `${schemaLabel}: storage.path should be ./collections/${modelKey} for collection model ${modelKey}`,
-    );
-  }
-
-  const fields: Record<string, CmsFieldDefinition> = {};
-  for (const [fieldKey, rawField] of Object.entries(fieldsValue)) {
-    if (!isRecord(rawField) || typeof rawField.type !== "string") {
-      errors.push(`${schemaLabel}: field ${fieldKey} must be an object with a type`);
-      continue;
-    }
-    fields[fieldKey] = rawField as unknown as CmsFieldDefinition;
-    validateFieldDefinition(fieldKey, fields[fieldKey], errors, schemaLabel);
   }
 
   const display = isRecord(parsed.display) ? parsed.display : null;
   const route = isRecord(parsed.route) ? parsed.route : null;
+  const primaryField =
+    display && typeof display.primaryField === "string" && display.primaryField.trim().length > 0
+      ? display.primaryField
+      : inferPrimaryField(fields);
+  const statusField =
+    entry && typeof entry.statusField === "string" && entry.statusField.trim().length > 0
+      ? entry.statusField
+      : fields.status
+        ? "status"
+        : undefined;
+  const sortField =
+    entry && typeof entry.sortField === "string" && entry.sortField.trim().length > 0
+      ? entry.sortField
+      : inferSortField(fields);
 
   return {
     label,
     storage: {
-      path: storagePath,
-      entryFormat: "directory",
+      path: normalizedStoragePath,
+      entryFormat,
     },
-    display: display
-      ? { primaryField: typeof display.primaryField === "string" ? display.primaryField : undefined }
-      : undefined,
+    display: primaryField ? { primaryField } : undefined,
     route: route
       ? { detail: typeof route.detail === "string" ? route.detail : undefined }
       : undefined,
     entry: {
-      statusField: typeof entry.statusField === "string" ? entry.statusField : undefined,
+      statusField,
+      sortField,
       fields,
     },
   };
@@ -715,6 +876,100 @@ async function validateFieldValue(options: {
   }
 }
 
+async function loadEntryRecord(options: {
+  entryKey: string;
+  entryDir: string;
+  entryFilePath: string;
+  entryRelativePath: string;
+  deletePath: string;
+  paths: CmsPaths;
+  rootConfig: CmsRootConfig;
+  schema: CmsModelSchema;
+  modelKey: string;
+  errors: string[];
+  referenceChecks: ReferenceCheck[];
+  seenSlugs: Map<string, string>;
+}): Promise<CmsEntryRecord | null> {
+  const {
+    entryKey,
+    entryDir,
+    entryFilePath,
+    entryRelativePath,
+    deletePath,
+    paths,
+    rootConfig,
+    schema,
+    modelKey,
+    errors,
+    referenceChecks,
+    seenSlugs,
+  } = options;
+
+  const values = await readYamlObject(entryFilePath, errors, entryRelativePath);
+  if (!values) return null;
+
+  const assetRefs: CmsAssetRecord[] = [];
+  for (const [fieldKey, field] of Object.entries(schema.entry.fields)) {
+    const value = values[fieldKey];
+    if (typeof value === "undefined") {
+      if (field.required) {
+        errors.push(`${entryRelativePath}: field ${fieldKey} is required`);
+      }
+      continue;
+    }
+    await validateFieldValue({
+      fieldKey,
+      field,
+      value,
+      defaultLocale: rootConfig.defaultLocale,
+      entryDir,
+      contentRoot: paths.contentRoot,
+      mediaRoot: paths.mediaRoot,
+      entryLabel: entryRelativePath,
+      errors,
+      modelKey,
+      entryKey,
+      assetRefs,
+      referenceChecks,
+    });
+  }
+
+  const statusField = schema.entry.statusField;
+  const statusValue =
+    statusField && typeof values[statusField] === "string" ? values[statusField] : null;
+  const slugValue = typeof values.slug === "string" ? values.slug : null;
+  const sortField = schema.entry.sortField;
+  const sortOrderValue =
+    sortField && typeof values[sortField] === "number"
+      ? values[sortField]
+      : typeof values.sortOrder === "number"
+        ? values.sortOrder
+        : typeof values.order === "number"
+          ? values.order
+          : null;
+
+  if (slugValue) {
+    const existingEntry = seenSlugs.get(slugValue);
+    if (existingEntry) {
+      errors.push(`${entryRelativePath}: duplicate slug ${slugValue} already used by ${existingEntry}`);
+    } else {
+      seenSlugs.set(slugValue, entryRelativePath);
+    }
+  }
+
+  return {
+    key: entryKey,
+    filePath: entryFilePath,
+    relativePath: entryRelativePath,
+    deletePath,
+    values,
+    slug: slugValue,
+    status: statusValue,
+    sortOrder: sortOrderValue,
+    assetRefs,
+  };
+}
+
 async function loadModelRecord(options: {
   paths: CmsPaths;
   rootConfig: CmsRootConfig;
@@ -745,69 +1000,60 @@ async function loadModelRecord(options: {
 
   const dirents = await fs.readdir(collectionRoot, { withFileTypes: true });
   for (const dirent of dirents) {
-    if (!dirent.isDirectory() || dirent.name.startsWith(".")) continue;
-    const entryDir = path.join(collectionRoot, dirent.name);
-    const indexPath = path.join(entryDir, "index.yaml");
-    const relativeIndexPath = toPosix(path.relative(paths.projectDir, indexPath));
-    if (!(await pathExists(indexPath))) {
-      errors.push(`${relativeCollectionRoot}/${dirent.name}: missing index.yaml`);
+    if (dirent.name.startsWith(".")) continue;
+
+    if (schema.storage.entryFormat === "directory") {
+      if (!dirent.isDirectory()) continue;
+      const entryDir = path.join(collectionRoot, dirent.name);
+      const indexPath = path.join(entryDir, "index.yaml");
+      const relativeEntryDir = toPosix(path.relative(paths.projectDir, entryDir));
+      const relativeIndexPath = toPosix(path.relative(paths.projectDir, indexPath));
+      if (!(await pathExists(indexPath))) {
+        errors.push(`${relativeCollectionRoot}/${dirent.name}: missing index.yaml`);
+        continue;
+      }
+
+      const entry = await loadEntryRecord({
+        entryKey: dirent.name,
+        entryDir,
+        entryFilePath: indexPath,
+        entryRelativePath: relativeIndexPath,
+        deletePath: relativeEntryDir,
+        paths,
+        rootConfig,
+        schema,
+        modelKey: modelRef.key,
+        errors,
+        referenceChecks,
+        seenSlugs,
+      });
+      if (entry) {
+        entries.push(entry);
+      }
       continue;
     }
 
-    const values = await readYamlObject(indexPath, errors, relativeIndexPath);
-    if (!values) continue;
-
-    const assetRefs: CmsAssetRecord[] = [];
-    for (const [fieldKey, field] of Object.entries(schema.entry.fields)) {
-      const value = values[fieldKey];
-      if (typeof value === "undefined") {
-        if (field.required) {
-          errors.push(`${relativeIndexPath}: field ${fieldKey} is required`);
-        }
-        continue;
-      }
-      await validateFieldValue({
-        fieldKey,
-        field,
-        value,
-        defaultLocale: rootConfig.defaultLocale,
-        entryDir,
-        contentRoot: paths.contentRoot,
-        mediaRoot: paths.mediaRoot,
-        entryLabel: relativeIndexPath,
-        errors,
-        modelKey: modelRef.key,
-        entryKey: dirent.name,
-        assetRefs,
-        referenceChecks,
-      });
-    }
-
-    const statusField = schema.entry.statusField ?? "status";
-    const statusValue = typeof values[statusField] === "string" ? values[statusField] : null;
-    const slugValue = typeof values.slug === "string" ? values.slug : null;
-    const sortOrderValue = typeof values.sortOrder === "number" ? values.sortOrder : null;
-    if (slugValue) {
-      const existingEntry = seenSlugs.get(slugValue);
-      if (existingEntry) {
-        errors.push(
-          `${relativeIndexPath}: duplicate slug ${slugValue} already used by ${existingEntry}`,
-        );
-      } else {
-        seenSlugs.set(slugValue, relativeIndexPath);
-      }
-    }
-
-    entries.push({
-      key: dirent.name,
-      filePath: indexPath,
-      relativePath: relativeIndexPath,
-      values,
-      slug: slugValue,
-      status: statusValue,
-      sortOrder: sortOrderValue,
-      assetRefs,
+    if (!dirent.isFile() || !/\.(ya?ml)$/i.test(dirent.name)) continue;
+    const entryKey = dirent.name.replace(/\.(ya?ml)$/i, "");
+    const entryFilePath = path.join(collectionRoot, dirent.name);
+    const relativeEntryPath = toPosix(path.relative(paths.projectDir, entryFilePath));
+    const entry = await loadEntryRecord({
+      entryKey,
+      entryDir: collectionRoot,
+      entryFilePath,
+      entryRelativePath: relativeEntryPath,
+      deletePath: relativeEntryPath,
+      paths,
+      rootConfig,
+      schema,
+      modelKey: modelRef.key,
+      errors,
+      referenceChecks,
+      seenSlugs,
     });
+    if (entry) {
+      entries.push(entry);
+    }
   }
 
   entries.sort((left, right) => {
@@ -824,6 +1070,8 @@ async function loadModelRecord(options: {
     relativeSchemaPath,
     collectionRoot,
     relativeCollectionRoot,
+    entryFormat: schema.storage.entryFormat,
+    sortField: schema.entry.sortField ?? null,
     fields: schema.entry.fields,
     display: schema.display,
     entries,
@@ -970,15 +1218,17 @@ function buildDefaultFieldValue(
   field: CmsFieldDefinition,
   entryKey: string,
   defaultLocale: string,
+  options: { fileEntrySidecarPrefix?: string } = {},
 ): unknown {
   const titleSeed = titleizeKey(entryKey);
   const preferredText = TITLE_FIELD_KEYS.has(fieldKey) ? titleSeed : "";
   const defaultEnum = field.default ?? field.options?.[0] ?? null;
+  const sidecarPrefix = options.fileEntrySidecarPrefix ?? "";
 
   if (field.localized) {
     if (field.type === "richText" && field.storage === "sidecar-markdown") {
       return {
-        [defaultLocale]: `./${fieldKey}.${defaultLocale}.md`,
+        [defaultLocale]: `./${sidecarPrefix}${fieldKey}.${defaultLocale}.md`,
       };
     }
     return {
@@ -1005,7 +1255,13 @@ function buildDefaultFieldValue(
     case "object": {
       const nested: Record<string, unknown> = {};
       for (const [nestedKey, nestedField] of Object.entries(field.fields ?? {})) {
-        nested[nestedKey] = buildDefaultFieldValue(nestedKey, nestedField, entryKey, defaultLocale);
+        nested[nestedKey] = buildDefaultFieldValue(
+          nestedKey,
+          nestedField,
+          entryKey,
+          defaultLocale,
+          options,
+        );
       }
       return nested;
     }
@@ -1025,10 +1281,11 @@ async function createDefaultRichTextSidecars(
   defaultLocale: string,
   created: string[],
   projectDir: string,
+  fileNamePrefix = "",
 ): Promise<void> {
   for (const [fieldKey, field] of Object.entries(fields)) {
     if (field.localized && field.type === "richText" && field.storage === "sidecar-markdown") {
-      const filePath = path.join(entryDir, `${fieldKey}.${defaultLocale}.md`);
+      const filePath = path.join(entryDir, `${fileNamePrefix}${fieldKey}.${defaultLocale}.md`);
       if (await ensurePlaceholderFile(filePath)) {
         created.push(toPosix(path.relative(projectDir, filePath)));
       }
@@ -1153,23 +1410,33 @@ export async function scaffoldCmsEntry(
   }
 
   const rootConfig = await readOrCreateRootConfig(paths);
-  const entryDir = path.join(model.collectionRoot, normalizedEntryKey);
-  const entryFile = path.join(entryDir, "index.yaml");
+  const entryDir =
+    model.entryFormat === "directory"
+      ? path.join(model.collectionRoot, normalizedEntryKey)
+      : model.collectionRoot;
+  const entryFile =
+    model.entryFormat === "directory"
+      ? path.join(entryDir, "index.yaml")
+      : path.join(model.collectionRoot, `${normalizedEntryKey}.yaml`);
   if (await pathExists(entryFile)) {
     skipped.push(toPosix(path.relative(projectDir, entryFile)));
     return { created, skipped, paths };
   }
 
-  await ensureDirectory(entryDir);
-  created.push(toPosix(path.relative(projectDir, entryDir)));
+  if (model.entryFormat === "directory") {
+    await ensureDirectory(entryDir);
+    created.push(toPosix(path.relative(projectDir, entryDir)));
+  }
 
   const values: Record<string, unknown> = {};
+  const fileEntrySidecarPrefix = model.entryFormat === "file" ? `${normalizedEntryKey}.` : "";
   for (const [fieldKey, field] of Object.entries(model.fields)) {
     values[fieldKey] = buildDefaultFieldValue(
       fieldKey,
       field,
       normalizedEntryKey,
       rootConfig.defaultLocale,
+      { fileEntrySidecarPrefix },
     );
   }
 
@@ -1181,6 +1448,7 @@ export async function scaffoldCmsEntry(
     rootConfig.defaultLocale,
     created,
     projectDir,
+    fileEntrySidecarPrefix,
   );
 
   return { created, skipped, paths };

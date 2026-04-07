@@ -181,4 +181,134 @@ heroImage:
       report.errors.some((error) => error.includes("must point to a file under src/content/media")),
     ).toBe(true);
   });
+
+  it("loads legacy flat-file collections declared as model strings", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await scaffoldCmsWorkspace(projectDir);
+    const paths = getCmsPaths(projectDir);
+    await fs.writeFile(
+      paths.rootConfigPath,
+      `version: 1
+defaultLocale: en
+locales:
+  - en
+models:
+  - menu
+  - features
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(paths.modelsRoot, "menu.yaml"),
+      `fields:
+  - name: name
+    type: string
+    label: Name
+    required: true
+  - name: level
+    type: string
+    label: Spiciness Level
+    options:
+      - Mild
+      - Hot
+    required: true
+  - name: description
+    type: text
+    required: true
+  - name: order
+    type: number
+    default: 0
+`,
+      "utf8",
+    );
+    await fs.mkdir(path.join(paths.contentRoot, "menu"), { recursive: true });
+    await fs.writeFile(
+      path.join(paths.contentRoot, "menu", "classic-mild.yaml"),
+      `name: Classic Mild
+level: Mild
+description: Smooth pesto with pine nuts.
+order: 1
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(paths.contentRoot, "menu", "flaming-hot.yaml"),
+      `name: Flaming Hot
+level: Hot
+description: Aggressively spicy pesto.
+order: 2
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(paths.modelsRoot, "features.yaml"),
+      `fields:
+  - name: title
+    type: string
+    required: true
+`,
+      "utf8",
+    );
+    await fs.mkdir(path.join(paths.contentRoot, "features"), { recursive: true });
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.valid).toBe(true);
+    expect(report.modelCount).toBe(2);
+    expect(report.entryCount).toBe(2);
+    expect(report.models[0]?.entryFormat).toBe("file");
+    expect(report.models[0]?.sortField).toBe("order");
+    expect(report.models[0]?.entries[0]?.relativePath).toBe(
+      "src/content/menu/classic-mild.yaml",
+    );
+    expect(report.models[0]?.entries[0]?.deletePath).toBe(
+      "src/content/menu/classic-mild.yaml",
+    );
+    expect(report.models[0]?.fields.level.type).toBe("enum");
+  });
+
+  it("scaffolds new entries into legacy flat-file collections", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await scaffoldCmsWorkspace(projectDir);
+    const paths = getCmsPaths(projectDir);
+    await fs.writeFile(
+      paths.rootConfigPath,
+      `version: 1
+defaultLocale: en
+locales:
+  - en
+models:
+  - menu
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(paths.modelsRoot, "menu.yaml"),
+      `fields:
+  - name: name
+    type: string
+    required: true
+  - name: order
+    type: number
+    default: 0
+`,
+      "utf8",
+    );
+    await fs.mkdir(path.join(paths.contentRoot, "menu"), { recursive: true });
+
+    const result = await scaffoldCmsEntry(projectDir, "menu", "sunny-pesto");
+
+    expect(result.created).toContain("src/content/menu/sunny-pesto.yaml");
+    expect(
+      await fs.readFile(path.join(paths.contentRoot, "menu", "sunny-pesto.yaml"), "utf8"),
+    ).toContain("order: 0");
+    expect(await validateCmsWorkspace(projectDir)).toMatchObject({
+      valid: true,
+      entryCount: 1,
+    });
+  });
 });

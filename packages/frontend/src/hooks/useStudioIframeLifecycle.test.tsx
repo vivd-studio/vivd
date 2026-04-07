@@ -240,6 +240,44 @@ describe("useStudioIframeLifecycle", () => {
     expect(props.onReady).toHaveBeenCalledTimes(1);
   });
 
+  it("rechecks same-origin iframe readiness when the page is restored", async () => {
+    const props = createLifecycleProps();
+    const postMessage = vi.fn();
+    render(<LifecycleHarness {...props} />);
+
+    const iframe = screen.getByTitle("studio-frame");
+    const frameDocument = document.implementation.createHTMLDocument("studio");
+    const root = frameDocument.createElement("div");
+    root.id = "root";
+    root.textContent = "Studio already mounted";
+    frameDocument.body.appendChild(root);
+
+    const frameWindow = {
+      location: { pathname: "/vivd-studio" },
+      postMessage,
+    };
+
+    Object.defineProperty(iframe, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow,
+    });
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get: () => frameDocument,
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pageshow"));
+    });
+
+    expect(latestValue?.studioReady).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "vivd:host:ready-ack" },
+      "https://app.example.com",
+    );
+    expect(props.onReady).toHaveBeenCalledTimes(1);
+  });
+
   it("can keep sending bridge messages before a cross-origin iframe exposes its location", async () => {
     const props = createLifecycleProps({
       studioBaseUrl: "https://studio.example.com/runtime",
