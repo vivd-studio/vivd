@@ -55,6 +55,7 @@ const TEST_ORGANIZATION_ID =
   (process.env.VIVD_FLY_TEST_ORGANIZATION_ID || "").trim() || "integration";
 const TEST_MAIN_BACKEND_URL =
   (process.env.VIVD_FLY_TEST_MAIN_BACKEND_URL || "").trim();
+const KEEP_MACHINE = process.env.VIVD_FLY_KEEP_MACHINE === "1";
 const SHOULD_RUN =
   RUN_TESTS && FLY_API_TOKEN.length > 0 && FLY_STUDIO_APP.length > 0;
 
@@ -771,7 +772,9 @@ describe.sequential("Fly warm wake + auth", () => {
           delete process.env.FLY_STUDIO_IMAGE;
         }
 
-        if (machineId) {
+        if (machineId && KEEP_MACHINE) {
+          console.warn(`[Fly warm wake smoke] keeping machine for debugging: ${machineId}`);
+        } else if (machineId) {
           try {
             await provider.destroyStudioMachine(machineId);
           } catch (error) {

@@ -289,7 +289,7 @@ export function StudioToolbar() {
   const toolbarControlGap = 4;
   const sessionExpandedWidth = 94;
   const explorerExpandedWidth = 96;
-  const cmsExpandedWidth = 84;
+  const cmsExpandedWidth = 96;
   const editExpandedWidth = 104;
   const pluginExpandedWidth = 88;
   const pluginShortcutExpandedWidths = studioToolbarPluginShortcuts.map(
