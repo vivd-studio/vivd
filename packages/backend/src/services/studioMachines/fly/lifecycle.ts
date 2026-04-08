@@ -3,6 +3,8 @@ import { sleep } from "./utils";
 
 const READY_POLL_INTERVAL_MS = 250;
 const TRANSIENT_MACHINE_POLL_BACKOFF_MS = 1_000;
+const SUSPEND_WAIT_TIMEOUT_MS = 30_000;
+const SUSPEND_IN_PROGRESS_TIMEOUT_MS = 120_000;
 
 function isFlyRateLimitError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -135,6 +137,7 @@ export async function waitForState(options: {
   getMachine: (machineId: string) => Promise<FlyMachine>;
 }): Promise<void> {
   const startedAt = Date.now();
+  let lastState: string | null = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     let machine: FlyMachine;
     try {
@@ -147,6 +150,7 @@ export async function waitForState(options: {
       continue;
     }
     const state = machine.state || "unknown";
+    lastState = state;
 
     if (state === options.state) return;
     if (state === "destroyed" || state === "destroying") {
@@ -157,8 +161,55 @@ export async function waitForState(options: {
   }
 
   throw new Error(
-    `[FlyMachines] Timed out waiting for machine to reach state=${options.state} (${options.machineId})`,
+    `[FlyMachines] Timed out waiting for machine to reach state=${options.state} (${options.machineId}; lastState=${lastState || "unknown"})`,
   );
+}
+
+async function getCurrentMachineState(options: {
+  machineId: string;
+  getMachine: (machineId: string) => Promise<FlyMachine>;
+}): Promise<string | null> {
+  try {
+    const machine = await options.getMachine(options.machineId);
+    const state = machine.state || "unknown";
+    if (state === "destroyed" || state === "destroying") {
+      throw new Error(`[FlyMachines] Machine ${options.machineId} was destroyed`);
+    }
+    return state;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("was destroyed")) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+function appendLastState(message: string, state: string | null): string {
+  if (!state) return message;
+  if (message.includes(`lastState=${state}`)) return message;
+  return `${message}; lastState=${state}`;
+}
+
+async function waitForSuspendingMachineToSettle(options: {
+  machineId: string;
+  getMachine: (machineId: string) => Promise<FlyMachine>;
+  waitForState: (options: {
+    machineId: string;
+    state: FlyMachineState;
+    timeoutMs: number;
+  }) => Promise<void>;
+}): Promise<boolean> {
+  const currentState = await getCurrentMachineState(options);
+  if (currentState === "suspended") return true;
+  if (currentState !== "suspending") return false;
+
+  await options.waitForState({
+    machineId: options.machineId,
+    state: "suspended",
+    timeoutMs: SUSPEND_IN_PROGRESS_TIMEOUT_MS,
+  });
+  return true;
 }
 
 export async function suspendOrStopMachine(options: {
@@ -179,16 +230,52 @@ export async function suspendOrStopMachine(options: {
   if (initialState === "destroyed" || initialState === "destroying") {
     throw new Error(`[FlyMachines] Machine ${options.machineId} was destroyed`);
   }
+  if (initialState === "suspending") {
+    await options.waitForState({
+      machineId: options.machineId,
+      state: "suspended",
+      timeoutMs: SUSPEND_IN_PROGRESS_TIMEOUT_MS,
+    });
+    return "suspended";
+  }
 
   const attempts = 3;
   let lastError: string | null = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       await options.suspendMachine(options.machineId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      lastError = message;
+
+      if (message.includes("was destroyed")) throw err;
+
+      try {
+        const settled = await waitForSuspendingMachineToSettle(options);
+        if (settled) {
+          return "suspended";
+        }
+        const currentState = await getCurrentMachineState(options);
+        lastError = appendLastState(message, currentState);
+      } catch (settleError) {
+        const settleMessage =
+          settleError instanceof Error ? settleError.message : String(settleError);
+        if (settleMessage.includes("was destroyed")) throw settleError;
+        lastError = settleMessage;
+      }
+
+      if (attempt < attempts) {
+        await sleep(Math.min(5000, 750 * attempt));
+        continue;
+      }
+      break;
+    }
+
+    try {
       await options.waitForState({
         machineId: options.machineId,
         state: "suspended",
-        timeoutMs: 30_000,
+        timeoutMs: SUSPEND_WAIT_TIMEOUT_MS,
       });
       return "suspended";
     } catch (err) {
@@ -196,6 +283,21 @@ export async function suspendOrStopMachine(options: {
       lastError = message;
 
       if (message.includes("was destroyed")) throw err;
+
+      try {
+        const settled = await waitForSuspendingMachineToSettle(options);
+        if (settled) {
+          return "suspended";
+        }
+        const currentState = await getCurrentMachineState(options);
+        lastError = appendLastState(message, currentState);
+      } catch (settleError) {
+        const settleMessage =
+          settleError instanceof Error ? settleError.message : String(settleError);
+        if (settleMessage.includes("was destroyed")) throw settleError;
+        lastError = settleMessage;
+      }
+
       if (attempt < attempts) {
         await sleep(Math.min(5000, 750 * attempt));
         continue;

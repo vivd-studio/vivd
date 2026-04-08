@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   startMachineHandlingReplacement,
+  suspendOrStopMachine,
   waitForReady,
   waitForState,
 } from "../src/services/studioMachines/fly/lifecycle";
@@ -216,5 +217,91 @@ describe("Fly lifecycle helpers", () => {
     await result;
 
     expect(getMachine).toHaveBeenCalledTimes(2);
+  });
+
+  it("waitForState reports the last observed state on timeout", async () => {
+    vi.useFakeTimers();
+
+    const getMachine = vi.fn<() => Promise<FlyMachine>>().mockResolvedValue(machine("suspending"));
+
+    const result = waitForState({
+      machineId: "machine-1",
+      state: "suspended",
+      timeoutMs: 5_000,
+      getMachine: async () => getMachine(),
+    });
+    const rejection = expect(result).rejects.toThrow("lastState=suspending");
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    await rejection;
+  });
+
+  it("waits for an already suspending machine instead of reissuing suspend", async () => {
+    const getMachine = vi.fn<() => Promise<FlyMachine>>().mockResolvedValue(machine("suspending"));
+    const suspendMachine = vi.fn<() => Promise<void>>();
+    const stopMachine = vi.fn<() => Promise<void>>();
+    const waitForStateMock = vi.fn<
+      (options: { machineId: string; state: FlyMachine["state"]; timeoutMs: number }) => Promise<void>
+    >().mockResolvedValue(undefined);
+
+    const result = await suspendOrStopMachine({
+      machineId: "machine-1",
+      getMachine: async () => getMachine(),
+      suspendMachine: async () => suspendMachine(),
+      stopMachine: async () => stopMachine(),
+      waitForState: async (options) => waitForStateMock(options),
+    });
+
+    expect(result).toBe("suspended");
+    expect(suspendMachine).not.toHaveBeenCalled();
+    expect(stopMachine).not.toHaveBeenCalled();
+    expect(waitForStateMock).toHaveBeenCalledTimes(1);
+    expect(waitForStateMock).toHaveBeenCalledWith({
+      machineId: "machine-1",
+      state: "suspended",
+      timeoutMs: 120_000,
+    });
+  });
+
+  it("keeps waiting when Fly is already suspending after the first suspend request", async () => {
+    const getMachine = vi
+      .fn<() => Promise<FlyMachine>>()
+      .mockResolvedValueOnce(machine("started"))
+      .mockResolvedValueOnce(machine("suspending"));
+    const suspendMachine = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const stopMachine = vi.fn<() => Promise<void>>();
+    const waitForStateMock = vi
+      .fn<
+        (options: { machineId: string; state: FlyMachine["state"]; timeoutMs: number }) => Promise<void>
+      >()
+      .mockRejectedValueOnce(
+        new Error(
+          "[FlyMachines] Timed out waiting for machine to reach state=suspended (machine-1; lastState=suspending)",
+        ),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const result = await suspendOrStopMachine({
+      machineId: "machine-1",
+      getMachine: async () => getMachine(),
+      suspendMachine: async () => suspendMachine(),
+      stopMachine: async () => stopMachine(),
+      waitForState: async (options) => waitForStateMock(options),
+    });
+
+    expect(result).toBe("suspended");
+    expect(suspendMachine).toHaveBeenCalledTimes(1);
+    expect(stopMachine).not.toHaveBeenCalled();
+    expect(waitForStateMock).toHaveBeenCalledTimes(2);
+    expect(waitForStateMock).toHaveBeenNthCalledWith(1, {
+      machineId: "machine-1",
+      state: "suspended",
+      timeoutMs: 30_000,
+    });
+    expect(waitForStateMock).toHaveBeenNthCalledWith(2, {
+      machineId: "machine-1",
+      state: "suspended",
+      timeoutMs: 120_000,
+    });
   });
 });

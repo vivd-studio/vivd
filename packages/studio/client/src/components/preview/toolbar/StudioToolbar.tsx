@@ -529,7 +529,7 @@ export function StudioToolbar() {
           hoverableWorkspaceLabels,
         )}
         style={expandableToggleStyle(cmsExpandedWidth)}
-        title={cmsOpen ? "Hide CMS" : "Show CMS"}
+        title={cmsOpen ? "Hide content" : "Show content"}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center">
           <FileCode className="h-4 w-4" />
@@ -541,9 +541,9 @@ export function StudioToolbar() {
             !shouldCollapseRightSideLabels,
           )}
         >
-          CMS
+          Content
         </span>
-        <span className="sr-only">{cmsOpen ? "Hide CMS" : "Show CMS"}</span>
+        <span className="sr-only">{cmsOpen ? "Hide content" : "Show content"}</span>
       </Button>
 
       <EditControls
