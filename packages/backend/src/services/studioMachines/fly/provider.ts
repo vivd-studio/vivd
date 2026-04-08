@@ -79,12 +79,28 @@ import { parseNonNegativeInt, sleep } from "./utils";
 
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const DEFAULT_PARK_RUNTIME_CLEANUP_DRAIN_MS = 3_000;
+const MAX_SUSPEND_ELIGIBLE_MEMORY_MB = 2048;
 
 function getParkRuntimeCleanupDrainMs(): number {
   return parseNonNegativeInt(
     process.env.VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS,
     DEFAULT_PARK_RUNTIME_CLEANUP_DRAIN_MS,
   );
+}
+
+function hasSuspendAutostop(machine: FlyMachine): boolean {
+  const services = machine.config?.services;
+  if (!Array.isArray(services) || services.length === 0) return false;
+  return services.some((service) => String(service?.autostop || "").toLowerCase() === "suspend");
+}
+
+function isSuspendRetryEligible(machine: FlyMachine): boolean {
+  if (!hasSuspendAutostop(machine)) return false;
+  const memoryMb = machine.config?.guest?.memory_mb;
+  if (typeof memoryMb === "number" && Number.isFinite(memoryMb)) {
+    return memoryMb <= MAX_SUSPEND_ELIGIBLE_MEMORY_MB;
+  }
+  return true;
 }
 
 export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
@@ -313,6 +329,28 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
       stopMachine: (id) => this.apiClient.stopMachine(id),
       waitForState: (options) => this.waitForState(options),
     });
+  }
+
+  private async cleanupRuntimeBeforePark(machine: FlyMachine): Promise<void> {
+    if ((machine.state || "unknown") !== "started") return;
+
+    const port = getMachineExternalPort(machine);
+    const accessToken = getStudioAccessTokenFromMachine(machine);
+    if (!port || !accessToken) return;
+
+    const url = this.config.getPublicUrlForPort(port);
+    try {
+      await this.requestRuntimeCleanup(url, accessToken);
+      const drainMs = getParkRuntimeCleanupDrainMs();
+      if (drainMs > 0) {
+        await sleep(drainMs);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[FlyMachines] Runtime cleanup before park failed for ${machine.id}: ${message}`,
+      );
+    }
   }
 
   private async requestRuntimeCleanup(
@@ -626,33 +664,41 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
   }
 
   async parkStudioMachine(machineId: string): Promise<StudioMachineParkResult> {
-    const machine = await this.getMachine(machineId);
-    const identity = getStudioIdentityFromMachine(machine);
+    const initialMachine = await this.getMachine(machineId);
+    const identity = getStudioIdentityFromMachine(initialMachine);
     if (!identity) {
       throw new Error(`[FlyMachines] Refusing to park non-studio machine ${machineId}`);
     }
 
-    if ((machine.state || "unknown") === "started") {
-      const port = getMachineExternalPort(machine);
-      const accessToken = getStudioAccessTokenFromMachine(machine);
-      if (port && accessToken) {
-        const url = this.config.getPublicUrlForPort(port);
-        try {
-          await this.requestRuntimeCleanup(url, accessToken);
-          const drainMs = getParkRuntimeCleanupDrainMs();
-          if (drainMs > 0) {
-            await sleep(drainMs);
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.warn(
-            `[FlyMachines] Runtime cleanup before park failed for ${machineId}: ${message}`,
-          );
+    await this.cleanupRuntimeBeforePark(initialMachine);
+
+    let parked = await this.suspendOrStopMachine(machineId);
+    if (parked === "stopped" && isSuspendRetryEligible(initialMachine)) {
+      const url = (() => {
+        const port = getMachineExternalPort(initialMachine);
+        return port ? this.config.getPublicUrlForPort(port) : null;
+      })();
+      console.warn(
+        `[FlyMachines] Machine ${machineId} stopped instead of suspended despite suspend-compatible config; retrying park once after restart.`,
+      );
+      try {
+        await this.startMachineHandlingReplacement(machineId);
+        if (url) {
+          await this.waitForReady({
+            machineId,
+            url,
+            timeoutMs: this.config.startTimeoutMs,
+          });
         }
+        const restartedMachine = await this.getMachine(machineId);
+        await this.cleanupRuntimeBeforePark(restartedMachine);
+        parked = await this.suspendOrStopMachine(machineId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[FlyMachines] Retry park failed for ${machineId}: ${message}`);
       }
     }
 
-    const parked = await this.suspendOrStopMachine(machineId);
     await this.routeService.removeRuntimeRoute(
       this.config.routeIdFor(
         identity.organizationId,

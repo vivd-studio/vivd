@@ -257,6 +257,107 @@ describe("FlyStudioMachineProvider orchestration", () => {
     );
   });
 
+  it("parkStudioMachine retries once when a suspend-eligible machine stops instead", async () => {
+    vi.stubEnv("VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS", "0");
+
+    const provider = new FlyStudioMachineProvider();
+    const initialMachine = studioMachine({
+      id: "machine-1",
+      state: "started",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+    });
+    const restartedMachine = studioMachine({
+      id: "machine-1",
+      state: "started",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+    });
+
+    (provider as any).getMachine = vi
+      .fn()
+      .mockResolvedValueOnce(initialMachine)
+      .mockResolvedValueOnce(restartedMachine);
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    const cleanupMock = vi
+      .spyOn(provider as any, "requestRuntimeCleanup")
+      .mockResolvedValue(undefined);
+    const suspendOrStopMock = vi
+      .spyOn(provider as any, "suspendOrStopMachine")
+      .mockResolvedValueOnce("stopped")
+      .mockResolvedValueOnce("suspended");
+    const startReplacementMock = vi
+      .spyOn(provider as any, "startMachineHandlingReplacement")
+      .mockResolvedValue(undefined);
+    const waitForReadyMock = vi
+      .spyOn(provider as any, "waitForReady")
+      .mockResolvedValue(undefined);
+    const removeRuntimeRouteMock = vi
+      .spyOn((provider as any).routeService, "removeRuntimeRoute")
+      .mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await provider.parkStudioMachine("machine-1");
+
+    expect(result).toBe("suspended");
+    expect(suspendOrStopMock).toHaveBeenCalledTimes(2);
+    expect(startReplacementMock).toHaveBeenCalledWith("machine-1");
+    expect(waitForReadyMock).toHaveBeenCalledWith({
+      machineId: "machine-1",
+      url: "https://studio.test:4100",
+      timeoutMs: (provider as any).config.startTimeoutMs,
+    });
+    expect(cleanupMock).toHaveBeenCalledTimes(2);
+    expect(removeRuntimeRouteMock).toHaveBeenCalledWith(
+      (provider as any).config.routeIdFor("org-1", "site-1", 1),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("stopped instead of suspended"),
+    );
+  });
+
+  it("parkStudioMachine does not retry once a machine is not suspend-eligible", async () => {
+    vi.stubEnv("VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS", "0");
+
+    const provider = new FlyStudioMachineProvider();
+    const machine = studioMachine({
+      id: "machine-1",
+      state: "started",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+    });
+    machine.config = {
+      ...(machine.config || {}),
+      guest: { cpu_kind: "performance", cpus: 1, memory_mb: 4096 },
+    };
+
+    (provider as any).getMachine = async () => machine;
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    const cleanupMock = vi
+      .spyOn(provider as any, "requestRuntimeCleanup")
+      .mockResolvedValue(undefined);
+    const suspendOrStopMock = vi
+      .spyOn(provider as any, "suspendOrStopMachine")
+      .mockResolvedValue("stopped");
+    const startReplacementMock = vi
+      .spyOn(provider as any, "startMachineHandlingReplacement")
+      .mockResolvedValue(undefined);
+    const removeRuntimeRouteMock = vi
+      .spyOn((provider as any).routeService, "removeRuntimeRoute")
+      .mockResolvedValue(undefined);
+
+    const result = await provider.parkStudioMachine("machine-1");
+
+    expect(result).toBe("stopped");
+    expect(cleanupMock).toHaveBeenCalledTimes(1);
+    expect(suspendOrStopMock).toHaveBeenCalledTimes(1);
+    expect(startReplacementMock).not.toHaveBeenCalled();
+    expect(removeRuntimeRouteMock).toHaveBeenCalledWith(
+      (provider as any).config.routeIdFor("org-1", "site-1", 1),
+    );
+  });
+
   it("ensureRunningInner creates a machine with expected metadata and returns start result", async () => {
     const provider = new FlyStudioMachineProvider();
 
