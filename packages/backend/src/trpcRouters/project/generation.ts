@@ -47,6 +47,7 @@ import {
 } from "../../generator/initialGeneration";
 import { installProfileService } from "../../services/system/InstallProfileService";
 import { ensureGitRepositoryHasInitialCommit } from "../../generator/gitUtils";
+import { setProjectVersionStatus } from "../../services/project/ProjectStatusService";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -641,7 +642,13 @@ export const projectGenerationProcedures = {
             requestHost: ctx.requestHost,
           });
 
-          generationCtx.updateStatus(initialGeneration.status);
+          await setProjectVersionStatus({
+            organizationId,
+            slug,
+            version,
+            status: initialGeneration.status,
+            sessionId: initialGeneration.sessionId,
+          });
 
           return {
             status: initialGeneration.status,
@@ -659,7 +666,13 @@ export const projectGenerationProcedures = {
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
-          generationCtx.updateStatus("failed", message);
+          await setProjectVersionStatus({
+            organizationId,
+            slug,
+            version,
+            status: "failed",
+            errorMessage: message,
+          });
           throw error;
         }
       }

@@ -51,6 +51,10 @@ const TEST_IMAGE_TAG = (process.env.VIVD_FLY_TEST_IMAGE_TAG || "").trim();
 const PRINT_LOGS = process.env.VIVD_FLY_WAKE_PRINT_LOGS === "1";
 const VERIFY_BACKEND_CALLBACKS =
   process.env.VIVD_FLY_WAKE_VERIFY_BACKEND_CALLBACKS === "1";
+const SKIP_DIRECT_RUNTIME_AUTH =
+  process.env.VIVD_FLY_WAKE_SKIP_DIRECT_RUNTIME_AUTH === "1";
+const SKIP_BOOTSTRAP_AUTH =
+  process.env.VIVD_FLY_WAKE_SKIP_BOOTSTRAP_AUTH === "1";
 const TEST_ORGANIZATION_ID =
   (process.env.VIVD_FLY_TEST_ORGANIZATION_ID || "").trim() || "integration";
 const TEST_MAIN_BACKEND_URL =
@@ -116,6 +120,8 @@ const MAX_WAKE_MS = parseOptionalPositiveIntEnv("VIVD_FLY_WAKE_EXPECT_MAX_MS");
 const MAX_COLD_MS = parseOptionalPositiveIntEnv("VIVD_FLY_COLD_EXPECT_MAX_MS");
 const POST_BOOTSTRAP_PARK_DRAIN_MS =
   parseOptionalPositiveIntEnv("VIVD_FLY_PARK_DRAIN_MS") ?? 8_000;
+const DEBUG_PREPARK_SLEEP_MS =
+  parseOptionalPositiveIntEnv("VIVD_FLY_DEBUG_PREPARK_SLEEP_MS") ?? 0;
 
 async function flyApiFetch<T>(
   path: string,
@@ -635,15 +641,19 @@ describe.sequential("Fly warm wake + auth", () => {
         }
 
         expect(coldStart.accessToken).toBeTruthy();
-        await verifyDirectRuntimeAuth({
-          baseUrl: coldStart.url,
-          accessToken: coldStart.accessToken!,
-        });
-        await verifyBootstrapAuth({
-          baseUrl: coldStart.url,
-          accessToken: coldStart.accessToken!,
-          studioId: coldStart.studioId,
-        });
+        if (!SKIP_DIRECT_RUNTIME_AUTH) {
+          await verifyDirectRuntimeAuth({
+            baseUrl: coldStart.url,
+            accessToken: coldStart.accessToken!,
+          });
+        }
+        if (!SKIP_BOOTSTRAP_AUTH) {
+          await verifyBootstrapAuth({
+            baseUrl: coldStart.url,
+            accessToken: coldStart.accessToken!,
+            studioId: coldStart.studioId,
+          });
+        }
         if (VERIFY_BACKEND_CALLBACKS) {
           if (!process.env.VIVD_FLY_TEST_ORGANIZATION_ID?.trim()) {
             throw new Error(
@@ -661,6 +671,13 @@ describe.sequential("Fly warm wake + auth", () => {
           baseUrl: coldStart.url,
           accessToken: coldStart.accessToken!,
         });
+
+        if (DEBUG_PREPARK_SLEEP_MS > 0) {
+          console.warn(
+            `[Fly warm wake smoke] debug pre-park pause machine=${machineId} durationMs=${DEBUG_PREPARK_SLEEP_MS}`,
+          );
+          await sleep(DEBUG_PREPARK_SLEEP_MS);
+        }
 
         // Fly will refuse/ignore suspend requests that arrive immediately after
         // the auth/bootstrap traffic we generate in this smoke. Give the edge
@@ -700,15 +717,19 @@ describe.sequential("Fly warm wake + auth", () => {
         expect(machineAfterWake.state).toBe("started");
         expect(woke.accessToken).toBeTruthy();
 
-        await verifyDirectRuntimeAuth({
-          baseUrl: woke.url,
-          accessToken: woke.accessToken!,
-        });
-        await verifyBootstrapAuth({
-          baseUrl: woke.url,
-          accessToken: woke.accessToken!,
-          studioId: woke.studioId,
-        });
+        if (!SKIP_DIRECT_RUNTIME_AUTH) {
+          await verifyDirectRuntimeAuth({
+            baseUrl: woke.url,
+            accessToken: woke.accessToken!,
+          });
+        }
+        if (!SKIP_BOOTSTRAP_AUTH) {
+          await verifyBootstrapAuth({
+            baseUrl: woke.url,
+            accessToken: woke.accessToken!,
+            studioId: woke.studioId,
+          });
+        }
         if (VERIFY_BACKEND_CALLBACKS) {
           await verifyConnectedBackendCallbacks(machineId);
         }

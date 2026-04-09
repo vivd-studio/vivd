@@ -20,11 +20,12 @@ type ActiveRun = StartRunInput & {
 const DEFAULT_HEARTBEAT_MS = 20_000;
 const MIN_HEARTBEAT_MS = 5_000;
 
-class AgentLeaseReporter {
+export class AgentLeaseReporter {
   private activeRuns = new Map<string, ActiveRun>();
   private runIdsBySession = new Map<string, Set<string>>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatInFlight: Promise<void> | null = null;
+  private pausedForSuspend = false;
 
   startRun(input: StartRunInput): void {
     if (!isConnectedMode()) return;
@@ -41,6 +42,8 @@ class AgentLeaseReporter {
     const sessionRuns = this.runIdsBySession.get(input.sessionId) || new Set<string>();
     sessionRuns.add(input.runId);
     this.runIdsBySession.set(input.sessionId, sessionRuns);
+
+    if (this.pausedForSuspend) return;
 
     this.ensureHeartbeatTimer();
     void this.reportActive(run);
@@ -63,6 +66,25 @@ class AgentLeaseReporter {
     void this.reportIdle(run);
   }
 
+  async pauseForSuspend(): Promise<void> {
+    this.pausedForSuspend = true;
+    this.stopHeartbeatTimer();
+    if (this.heartbeatInFlight) {
+      await this.heartbeatInFlight.catch(() => {});
+    }
+  }
+
+  resume(): void {
+    if (!isConnectedMode()) return;
+    if (!this.pausedForSuspend) return;
+
+    this.pausedForSuspend = false;
+    if (this.activeRuns.size === 0) return;
+
+    this.ensureHeartbeatTimer();
+    void this.flushHeartbeats();
+  }
+
   finishSession(sessionId: string): void {
     const runIds = this.runIdsBySession.get(sessionId);
     if (!runIds || runIds.size === 0) return;
@@ -79,14 +101,19 @@ class AgentLeaseReporter {
     this.heartbeatTimer.unref?.();
   }
 
-  private stopHeartbeatTimerIfIdle(): void {
-    if (this.activeRuns.size > 0) return;
+  private stopHeartbeatTimer(): void {
     if (!this.heartbeatTimer) return;
     clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
   }
 
+  private stopHeartbeatTimerIfIdle(): void {
+    if (this.activeRuns.size > 0) return;
+    this.stopHeartbeatTimer();
+  }
+
   private async flushHeartbeats(): Promise<void> {
+    if (this.pausedForSuspend) return;
     if (this.activeRuns.size === 0) {
       this.stopHeartbeatTimerIfIdle();
       return;

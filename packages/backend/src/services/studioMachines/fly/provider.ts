@@ -724,8 +724,14 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     if (!identity) {
       throw new Error(`[FlyMachines] Refusing to park non-studio machine ${machineId}`);
     }
+    const routeId = this.config.routeIdFor(
+      identity.organizationId,
+      identity.projectSlug,
+      identity.version,
+    );
 
     await this.cleanupRuntimeBeforePark(initialMachine);
+    await this.routeService.removeRuntimeRoute(routeId);
 
     let parked = await this.suspendOrStopMachine(machineId);
     if (parked === "stopped" && isSuspendRetryEligible(initialMachine)) {
@@ -753,14 +759,6 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
         console.warn(`[FlyMachines] Retry park failed for ${machineId}: ${message}`);
       }
     }
-
-    await this.routeService.removeRuntimeRoute(
-      this.config.routeIdFor(
-        identity.organizationId,
-        identity.projectSlug,
-        identity.version,
-      ),
-    );
     this.lastActivityByStudioKey.delete(
       this.config.key(identity.organizationId, identity.projectSlug, identity.version),
     );

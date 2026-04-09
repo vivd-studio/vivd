@@ -47,12 +47,50 @@ type StudioRuntimeHttpRoutesDeps = {
   injectBasePathScript: (html: string, basePath: string) => string;
   devPreviewProxy: express.RequestHandler;
   onRuntimeActivity?: () => void;
+  drainRuntimeTransportForSuspend?: () => void;
   runtimeQuiesceCoordinator?: {
     getQuiesceStatus: RuntimeQuiesceCoordinator["getQuiesceStatus"];
     quiesceForSuspend: RuntimeQuiesceCoordinator["quiesceForSuspend"];
     resumeAfterActivity: () => Promise<void> | void;
   };
 };
+
+function readSingleHeaderValue(
+  value: string | string[] | undefined,
+): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (Array.isArray(value)) {
+    const first = value.find(
+      (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+    );
+    return first?.trim() || null;
+  }
+  return null;
+}
+
+function isSuspendCleanupRequest(req: express.Request): boolean {
+  const contentType =
+    readSingleHeaderValue(req.headers["content-type"])?.toLowerCase() ?? "";
+  if (contentType.includes("application/json")) {
+    return false;
+  }
+
+  const contentLengthHeader = readSingleHeaderValue(req.headers["content-length"]);
+  const contentLength = Number.parseInt(contentLengthHeader ?? "", 10);
+  if (Number.isFinite(contentLength) && contentLength > 0) {
+    return false;
+  }
+
+  const transferEncoding = readSingleHeaderValue(req.headers["transfer-encoding"]);
+  if (transferEncoding) {
+    return false;
+  }
+
+  return true;
+}
 
 export function resolveRuntimeRequestedFilePath(options: {
   restPath: string;
@@ -194,13 +232,29 @@ export function registerStudioRuntimeHttpRoutes(
   });
 
   // Cleanup endpoint for sendBeacon on page leave (fire-and-forget)
-  app.post("/vivd-studio/api/cleanup/preview-leave", requireStudioAuth(), async (_req, res) => {
+  app.post("/vivd-studio/api/cleanup/preview-leave", requireStudioAuth(), async (req, res) => {
+    if (!isSuspendCleanupRequest(req)) {
+      return res.status(200).end();
+    }
+
     try {
       const projectDir = workspace.isInitialized() ? workspace.getProjectPath() : null;
       await runtimeQuiesceCoordinator.quiesceForSuspend({ projectDir });
     } catch (err) {
       console.warn("[Cleanup] preview-leave failed:", err);
     }
+    if (deps.drainRuntimeTransportForSuspend) {
+      res.once("finish", () => {
+        setImmediate(() => {
+          try {
+            deps.drainRuntimeTransportForSuspend?.();
+          } catch (error) {
+            console.warn("[Cleanup] preview-leave transport drain failed:", error);
+          }
+        });
+      });
+    }
+    res.set("Connection", "close");
     res.status(200).end();
   });
 
@@ -491,7 +545,10 @@ export function registerStudioRuntimeHttpRoutes(
 
       if (resolvedPath.endsWith(".html")) {
         const content = await fs.readFile(resolvedPath, "utf-8");
-        const processed = injectPreviewBridgeScript(content);
+        const processed = injectPreviewBridgeScript(
+          content,
+          getProxyBasePath(req),
+        );
         res.setHeader("Content-Type", "text/html");
         return res.send(processed);
       }
@@ -565,7 +622,10 @@ export function registerStudioRuntimeHttpRoutes(
           const content = await fs.readFile(resolvedPath, "utf-8");
           let processed = rewriteRootAssetUrlsInText(content, forwardedBasePath);
           processed = injectBasePathScript(processed, forwardedBasePath);
-          processed = injectPreviewBridgeScript(processed);
+          processed = injectPreviewBridgeScript(
+            processed,
+            getProxyBasePath(req),
+          );
           res.setHeader("Content-Type", "text/html");
           return res.send(processed);
         }

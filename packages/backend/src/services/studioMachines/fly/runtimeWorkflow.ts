@@ -653,9 +653,9 @@ export async function ensureRunningInnerWorkflow(
             internal_port: 3100,
             ports: [{ port, handlers: ["tls", "http"] }],
             autostop: "suspend",
-            // We control lifecycle explicitly via the backend. Autostart can wake machines
-            // from stray traffic (e.g. previews, probes), so keep it off.
-            autostart: false,
+            // Keep autostart/autostop aligned so Fly can resume suspended machines
+            // cleanly; we still remove runtime routes before explicit parking.
+            autostart: true,
             min_machines_running: 0,
           },
         ],

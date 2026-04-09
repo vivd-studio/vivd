@@ -1,4 +1,5 @@
 import { serverManager as opencodeServerManager } from "../../opencode/serverManager.js";
+import { agentLeaseReporter } from "../reporting/AgentLeaseReporter.js";
 import { usageReporter } from "../reporting/UsageReporter.js";
 import { workspaceStateReporter } from "../reporting/WorkspaceStateReporter.js";
 import {
@@ -167,6 +168,15 @@ export const runtimeQuiesceCoordinator = new RuntimeQuiesceCoordinator([
     },
     resume: () => {
       usageReporter.resume();
+    },
+  },
+  {
+    name: "agent_lease_reporter",
+    quiesce: async () => {
+      await agentLeaseReporter.pauseForSuspend();
+    },
+    resume: () => {
+      agentLeaseReporter.resume();
     },
   },
   {

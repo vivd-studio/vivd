@@ -23,6 +23,7 @@ function createTestRuntimeApp(options?: {
   getProxyBasePath?: (req: express.Request) => string | null;
   devPreviewProxy?: express.RequestHandler;
   onRuntimeActivity?: () => void;
+  drainRuntimeTransportForSuspend?: () => void;
   runtimeQuiesceCoordinator?: {
     getQuiesceStatus: () => RuntimeQuiesceStatus;
     quiesceForSuspend: (
@@ -83,6 +84,7 @@ function createTestRuntimeApp(options?: {
         res.status(200).send("proxied");
       }),
     onRuntimeActivity: options?.onRuntimeActivity,
+    drainRuntimeTransportForSuspend: options?.drainRuntimeTransportForSuspend,
     runtimeQuiesceCoordinator: options?.runtimeQuiesceCoordinator,
   });
 
@@ -246,15 +248,17 @@ describe("registerStudioRuntimeHttpRoutes", () => {
     expect(routeLayer?.route?.stack[0]?.handle).not.toBe(authMiddleware);
   });
 
-  it("waits for runtime quiesce before acknowledging preview leave", async () => {
+  it("treats bodyless cleanup requests as suspend cleanup and drains runtime transport", async () => {
     const quiesceForSuspend = vi.fn(async () => ({
       state: "idle" as const,
       subsystems: {},
       lastQuiescedAt: "2026-04-02T00:00:00.000Z",
     }));
+    const drainRuntimeTransportForSuspend = vi.fn();
     const { app } = createTestRuntimeApp({
       initialized: true,
       projectPath: "/tmp/runtime-project",
+      drainRuntimeTransportForSuspend,
       runtimeQuiesceCoordinator: {
         getQuiesceStatus: () => ({
           state: "active" as const,
@@ -273,9 +277,57 @@ describe("registerStudioRuntimeHttpRoutes", () => {
       });
 
       expect(response.status).toBe(200);
+      expect(response.headers.get("connection")).toBe("close");
       expect(quiesceForSuspend).toHaveBeenCalledWith({
         projectDir: "/tmp/runtime-project",
       });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(drainRuntimeTransportForSuspend).toHaveBeenCalledTimes(1);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("does not quiesce runtime for browser preview-leave beacons", async () => {
+    const quiesceForSuspend = vi.fn(async () => ({
+      state: "idle" as const,
+      subsystems: {},
+      lastQuiescedAt: "2026-04-02T00:00:00.000Z",
+    }));
+    const drainRuntimeTransportForSuspend = vi.fn();
+    const { app } = createTestRuntimeApp({
+      initialized: true,
+      projectPath: "/tmp/runtime-project",
+      drainRuntimeTransportForSuspend,
+      runtimeQuiesceCoordinator: {
+        getQuiesceStatus: () => ({
+          state: "active" as const,
+          subsystems: {},
+          lastQuiescedAt: null,
+        }),
+        quiesceForSuspend,
+        resumeAfterActivity: vi.fn(),
+      },
+    });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(`${baseUrl}/vivd-studio/api/cleanup/preview-leave`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          slug: "test-project",
+          version: 1,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("connection")).not.toBe("close");
+      expect(quiesceForSuspend).not.toHaveBeenCalled();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(drainRuntimeTransportForSuspend).not.toHaveBeenCalled();
     } finally {
       server.close();
     }
@@ -510,6 +562,38 @@ describe("registerStudioRuntimeHttpRoutes", () => {
       expect(html).toContain('/vivd-studio/api/preview-bridge.js');
       expect(html).not.toContain('/preview/assets/app.js');
       expect(html).not.toContain('__vivdBasePath');
+    } finally {
+      server.close();
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves mounted preview HTML with a prefixed preview bridge script", async () => {
+    const projectDir = createTempPreviewProject();
+    const { app } = createTestRuntimeApp({
+      projectPath: projectDir,
+      getProxyBasePath: () => "/_studio/runtime-123",
+    });
+    const { server, baseUrl } = await startRuntimeServer(app);
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/vivd-studio/api/preview/demo/v1/index.html`,
+        {
+          headers: {
+            "x-forwarded-prefix": "/_studio/runtime-123",
+          },
+        },
+      );
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain(
+        '/_studio/runtime-123/vivd-studio/api/preview-bridge.js',
+      );
+      expect(html).not.toContain(
+        'src="/vivd-studio/api/preview-bridge.js"',
+      );
     } finally {
       server.close();
       fs.rmSync(projectDir, { recursive: true, force: true });

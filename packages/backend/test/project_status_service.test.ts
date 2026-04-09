@@ -113,4 +113,44 @@ describe("setProjectVersionStatus", () => {
       errorMessage: "Paused by admin",
     });
   });
+
+  it("persists a running scratch session id as soon as generation starts", async () => {
+    writeInitialGenerationManifest(
+      tempDir,
+      {
+        ...createScratchInitialGenerationManifest({
+          title: "Horse Tinder",
+          description: "Scratch site",
+        }),
+        state: "starting_studio",
+        sessionId: null,
+        startedAt: null,
+        completedAt: "2026-04-09T10:15:00.000Z",
+        errorMessage: "Old failure",
+      },
+    );
+
+    await setProjectVersionStatus({
+      organizationId: "org-1",
+      slug: "horse-tinder",
+      version: 1,
+      status: "generating_initial_site",
+      sessionId: "ses_live_123",
+    });
+
+    const manifest = readInitialGenerationManifest(tempDir);
+    expect(manifest?.state).toBe("generating_initial_site");
+    expect(manifest?.sessionId).toBe("ses_live_123");
+    expect(manifest?.startedAt).toMatch(/^2026-04-09T/);
+    expect(manifest?.completedAt).toBeNull();
+    expect(manifest?.errorMessage).toBeNull();
+
+    expect(updateVersionStatusMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      slug: "horse-tinder",
+      version: 1,
+      status: "generating_initial_site",
+      errorMessage: undefined,
+    });
+  });
 });

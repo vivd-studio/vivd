@@ -113,4 +113,4 @@ RUN printf '%s\n' '#!/bin/sh' 'exec node /app/packages/cli/dist/index.js "$@"' >
   && chmod +x /usr/local/bin/vivd
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 EXPOSE 3100
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

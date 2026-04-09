@@ -19,14 +19,15 @@ const DEFAULT_TENANT_HOSTNAME = "default.localhost";
 const DEFAULT_DOCS_HOSTNAME = "docs.localhost";
 const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
 const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
+const DEFAULT_GENERATION_BUSY_GRACE_TIMEOUT_MS = 30_000;
 const DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS = 15_000;
 const INITIAL_GENERATION_ACTION_POLL_MS = 2_000;
-const INITIAL_GENERATION_MIN_PROGRESS_SIGNALS = 1;
+const DEFAULT_INITIAL_GENERATION_MIN_RECORDED_ACTIONS = 6;
 const INITIAL_GENERATION_SESSION_HISTORY_PROBE_INTERVAL_MS = 10_000;
 const DEFAULT_STUDIO_READY_TIMEOUT_MS = 90_000;
 const STUDIO_READY_PROGRESS_LOG_INTERVAL_MS = 15_000;
 const MAX_AUTH_SETTLE_ATTEMPTS = 3;
-const DEFAULT_CHEAP_OPENROUTER_MODEL = "openrouter/google/gemini-2.5-flash-lite";
+const DEFAULT_HOST_SMOKE_FALLBACK_MODEL = "openrouter/google/gemini-2.5-flash-lite";
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const FAILING_CONSOLE_PATTERNS = [
   /invalid bootstrap target/i,
@@ -1056,49 +1057,33 @@ function rewriteLocalhostUrlToIpv4(urlString) {
   };
 }
 
-async function readStudioTrpcQueryInFrame(frame, trpcUrl, procedureName, input, studioToken) {
-  const queryUrl = `${trpcUrl.replace(/\/+$/u, "")}/${procedureName}`;
-  const response = await frame.locator("html").evaluate(
-    async ({ requestUrl, requestInput, studioTokenValue, studioAuthHeader }) => {
-      const url = new URL(requestUrl, window.location.origin);
-      url.searchParams.set("batch", "1");
-      url.searchParams.set("input", JSON.stringify({ 0: requestInput }));
-
-      const headers = {};
-      if (studioTokenValue) {
-        headers[studioAuthHeader] = studioTokenValue;
-      }
-
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers,
-        credentials: "include",
-      });
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        body: await response.text(),
-      };
-    },
-    {
-      requestUrl: queryUrl,
-      requestInput: input,
-      studioTokenValue: typeof studioToken === "string" ? studioToken.trim() : "",
-      studioAuthHeader: STUDIO_AUTH_HEADER,
-    },
+async function readStudioTrpcQuery(requestContext, trpcUrl, procedureName, input, studioToken) {
+  const queryUrl = new URL(
+    `${trpcUrl.replace(/\/+$/u, "")}/${procedureName}`,
   );
+  queryUrl.searchParams.set("batch", "1");
+  queryUrl.searchParams.set("input", JSON.stringify({ 0: input }));
+  const headers = {};
+  if (typeof studioToken === "string" && studioToken.trim()) {
+    headers[STUDIO_AUTH_HEADER] = studioToken.trim();
+  }
 
-  if (!response.ok) {
-    const detail = response.body.trim();
+  const response = await requestContext.get(queryUrl.toString(), {
+    headers,
+    failOnStatusCode: false,
+  });
+  const body = await response.text();
+
+  if (!response.ok()) {
+    const detail = body.trim();
     throw new Error(
       detail
-        ? `${procedureName} failed (${response.status}): ${detail}`
-        : `${procedureName} failed (${response.status})`,
+        ? `${procedureName} failed (${response.status()}) [${queryUrl.toString()}]: ${detail}`
+        : `${procedureName} failed (${response.status()}) [${queryUrl.toString()}]`,
     );
   }
 
-  const payload = JSON.parse(response.body);
+  const payload = JSON.parse(body);
   const result = Array.isArray(payload) ? payload[0] : payload;
   return result?.result?.data?.json ?? result?.result?.data ?? result;
 }
@@ -1144,11 +1129,11 @@ function countRecordedInitialGenerationActions(messages) {
 }
 
 async function readInitialGenerationProgress(options) {
-  const [messagesResult, statusesResult] = await Promise.allSettled([
-    readStudioTrpcQueryInFrame(
-      options.frame,
+  const bootstrapResult = await Promise.allSettled([
+    readStudioTrpcQuery(
+      options.requestContext,
       options.trpcUrl,
-      "agent.getSessionContent",
+      "agentChat.bootstrap",
       {
         sessionId: options.sessionId,
         projectSlug: options.projectSlug,
@@ -1156,40 +1141,29 @@ async function readInitialGenerationProgress(options) {
       },
       options.studioToken,
     ),
-    readStudioTrpcQueryInFrame(
-      options.frame,
-      options.trpcUrl,
-      "agent.getSessionsStatus",
-      {
-        projectSlug: options.projectSlug,
-        version: options.version,
-      },
-      options.studioToken,
-    ),
   ]);
 
-  const messages =
-    messagesResult.status === "fulfilled" ? messagesResult.value : [];
-  const statuses =
-    statusesResult.status === "fulfilled" ? statusesResult.value : null;
-  const messagesError =
-    messagesResult.status === "rejected"
-      ? messagesResult.reason instanceof Error
-        ? messagesResult.reason.message
-        : String(messagesResult.reason)
+  const bootstrap =
+    bootstrapResult[0]?.status === "fulfilled"
+      ? bootstrapResult[0].value
       : null;
-  const statusesError =
-    statusesResult.status === "rejected"
-      ? statusesResult.reason instanceof Error
-        ? statusesResult.reason.message
-        : String(statusesResult.reason)
+  const messages = Array.isArray(bootstrap?.messages) ? bootstrap.messages : [];
+  const statuses =
+    bootstrap && typeof bootstrap === "object" && bootstrap.statuses
+      ? bootstrap.statuses
+      : null;
+  const bootstrapError =
+    bootstrapResult[0]?.status === "rejected"
+      ? bootstrapResult[0].reason instanceof Error
+        ? bootstrapResult[0].reason.message
+        : String(bootstrapResult[0].reason)
       : null;
 
   return {
     actionCount: countRecordedInitialGenerationActions(messages),
     sessionStatus: statuses?.[options.sessionId] ?? null,
-    messagesError,
-    statusesError,
+    messagesError: bootstrapError,
+    statusesError: bootstrapError,
   };
 }
 
@@ -1242,6 +1216,10 @@ async function probeSessionHistoryForSessionEvidence(frame, timeoutMs) {
 }
 
 async function settleInitialGeneration(page, frame, timeoutMs, options) {
+  const minRecordedActions = readNonNegativeIntEnv(
+    "VIVD_STUDIO_HOST_SMOKE_MIN_RECORDED_ACTIONS",
+    DEFAULT_INITIAL_GENERATION_MIN_RECORDED_ACTIONS,
+  );
   const iframeLocator = page.locator("iframe[title^='Vivd Studio -']");
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
   const sendButton = frame.getByRole("button", { name: "Send message" });
@@ -1254,7 +1232,11 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
     .first();
   const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
   const agentQuestionHeader = frame.getByText(/Agent Question/i).first();
-  const settleTimeoutMs = Math.min(timeoutMs, DEFAULT_GENERATION_SETTLE_TIMEOUT_MS);
+  const baseSettleTimeoutMs = Math.min(
+    timeoutMs,
+    DEFAULT_GENERATION_SETTLE_TIMEOUT_MS,
+  );
+  let settleTimeoutMs = baseSettleTimeoutMs;
   const startedAt = Date.now();
   let sessionIdFromUrl = null;
   let lastVisibleState = null;
@@ -1266,9 +1248,39 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   let lastSessionHistoryProbeAt = 0;
   let trpcUrl = null;
   let studioToken = null;
+  let busyGraceApplied = false;
 
-  while (Date.now() - startedAt < settleTimeoutMs) {
-    const remainingMs = settleTimeoutMs - (Date.now() - startedAt);
+  while (true) {
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs >= settleTimeoutMs) {
+      const shouldExtendForActiveRun =
+        !busyGraceApplied &&
+        lastRecordedActionCount > 0 &&
+        lastRecordedActionCount < minRecordedActions &&
+        (lastSessionStatus === "busy" ||
+          lastSessionStatus === "retry" ||
+          lastVisibleState === "stop" ||
+          lastVisibleState === "assistant-activity");
+
+      if (shouldExtendForActiveRun) {
+        const extendedSettleTimeoutMs = Math.min(
+          timeoutMs,
+          baseSettleTimeoutMs + DEFAULT_GENERATION_BUSY_GRACE_TIMEOUT_MS,
+        );
+        if (extendedSettleTimeoutMs > settleTimeoutMs) {
+          settleTimeoutMs = extendedSettleTimeoutMs;
+          busyGraceApplied = true;
+          log(
+            `Initial generation is still active after ${elapsedMs}ms (recordedActions=${lastRecordedActionCount} status=${lastSessionStatus ?? "unknown"}); allowing ${extendedSettleTimeoutMs - baseSettleTimeoutMs}ms extra to reach ${minRecordedActions} recorded actions`,
+          );
+          continue;
+        }
+      }
+
+      break;
+    }
+
+    const remainingMs = settleTimeoutMs - elapsedMs;
     if (remainingMs <= 0) break;
 
     const visibleState = await waitForVisibleState(
@@ -1310,7 +1322,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
 
       try {
         const progress = await readInitialGenerationProgress({
-          frame,
+          requestContext: page.context().request,
           trpcUrl,
           studioToken,
           sessionId: sessionIdFromUrl,
@@ -1365,7 +1377,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
       sessionHistoryEvidence,
     );
 
-    if (lastProgressEvidenceCount >= INITIAL_GENERATION_MIN_PROGRESS_SIGNALS) {
+    if (lastRecordedActionCount >= minRecordedActions) {
       log(
         `Observed initial-generation progress for session ${sessionIdFromUrl ?? "unknown"} (recordedActions=${lastRecordedActionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"} history=${lastSessionHistoryEvidence ?? "none"}); checking for a stop opportunity`,
       );
@@ -1379,11 +1391,11 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
             settleTimeoutMs,
             "send button after stop",
           );
-          return `stopped-after-${lastProgressEvidenceCount}-progress-signals`;
+          return `stopped-after-${lastRecordedActionCount}-recorded-actions`;
         }
       }
 
-      return `observed-${lastProgressEvidenceCount}-progress-signals`;
+      return `observed-${lastRecordedActionCount}-recorded-actions`;
     }
 
     await sleep(INITIAL_GENERATION_ACTION_POLL_MS);
@@ -1393,7 +1405,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
 
   throw new Error(
-    `Initial generation did not reach ${INITIAL_GENERATION_MIN_PROGRESS_SIGNALS} progress signal(s) within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastRecordedActionCount} progressEvidence=${lastProgressEvidenceCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sessionHistoryEvidence=${lastSessionHistoryEvidence ?? "none"} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
+    `Initial generation did not reach ${minRecordedActions} recorded action(s) within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastRecordedActionCount} progressEvidence=${lastProgressEvidenceCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sessionHistoryEvidence=${lastSessionHistoryEvidence ?? "none"} busyGraceApplied=${busyGraceApplied} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
   );
 }
 
@@ -1504,7 +1516,8 @@ async function main() {
     DEFAULT_STUDIO_IMAGE;
   const modelOverride =
     getOptionalEnv("VIVD_STUDIO_HOST_SMOKE_MODEL", baseEnv) ||
-    DEFAULT_CHEAP_OPENROUTER_MODEL;
+    getOptionalEnv("OPENCODE_MODEL_STANDARD", baseEnv) ||
+    DEFAULT_HOST_SMOKE_FALLBACK_MODEL;
   const headless = readBooleanEnv(
     "VIVD_STUDIO_HOST_SMOKE_HEADLESS",
     !pwDebugEnabled,
@@ -1708,10 +1721,11 @@ async function main() {
       projectSlug: createdProjectSlug,
       outcome: initialGenerationOutcome,
     });
-    await controlPlaneFrame.locator("textarea").first().fill(
+    const controlPlaneInteractiveFrame = await waitForStudioReady(page, timeoutMs);
+    await controlPlaneInteractiveFrame.locator("textarea").first().fill(
       "Smoke follow-up draft only. Do not send.",
     );
-    const sendButton = controlPlaneFrame.getByRole("button", {
+    const sendButton = controlPlaneInteractiveFrame.getByRole("button", {
       name: "Send message",
     });
     await expectVisible(sendButton, timeoutMs, "send button after typing");

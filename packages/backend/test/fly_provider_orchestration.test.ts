@@ -70,7 +70,7 @@ function studioMachine(options: {
         VIVD_PROJECT_VERSION: "1",
         ...(options.env || {}),
       },
-      services: [{ autostop: "suspend", autostart: false, ports: [{ port: 4100 }] }],
+      services: [{ autostop: "suspend", autostart: true, ports: [{ port: 4100 }] }],
       metadata: {
         vivd_organization_id: "org-1",
         vivd_project_slug: "site-1",

@@ -106,7 +106,7 @@ export function resolveMachineReconcileState(options: {
 
   const needsServiceUpdate =
     options.machine.config?.services?.some((service) => {
-      const needsAutostart = service.autostart !== false;
+      const needsAutostart = service.autostart !== true;
       const needsAutostop = service.autostop !== "suspend";
       return needsAutostart || needsAutostop;
     }) ?? true;
@@ -264,7 +264,7 @@ export function normalizeServicesForVivd(
         internal_port: service.internal_port || 3100,
         ports,
         autostop: "suspend",
-        autostart: false,
+        autostart: true,
         min_machines_running: 0,
       };
     },

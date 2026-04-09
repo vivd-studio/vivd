@@ -21,7 +21,7 @@ function buildMachine(options: {
       kill_timeout: 180,
       env: { [STUDIO_ACCESS_TOKEN_ENV_KEY]: accessToken },
       guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
-      services: [{ autostop: "suspend", autostart: false }],
+      services: [{ autostop: "suspend", autostart: true }],
       metadata: {
         ...(options.metadataImage ? { vivd_image: options.metadataImage } : {}),
         vivd_studio_access_token: accessToken,

@@ -40,6 +40,12 @@ type DevPreviewProxyRequest = express.Request & {
   vivdDevPreviewBasePath?: string;
 };
 
+type DrainableSocket = {
+  destroyed?: boolean;
+  destroy: () => void;
+  once: (event: "close", listener: () => void) => void;
+};
+
 const FORWARDED_PREFIX_HEADER = "x-forwarded-prefix";
 
 function sleep(ms: number): Promise<void> {
@@ -290,13 +296,13 @@ const devPreviewProxy = createProxyMiddleware({
         }
 
         const html = responseBuffer.toString("utf8");
-        return Buffer.from(injectPreviewBridgeScript(html), "utf8");
+        return Buffer.from(injectPreviewBridgeScript(html, basePath), "utf8");
       }
 
       let text = responseBuffer.toString("utf8");
       const isHtml = ct.includes("text/html");
       if (isHtml) {
-        text = injectPreviewBridgeScript(text);
+        text = injectPreviewBridgeScript(text, basePath);
       }
       const shouldRewrite = Boolean(basePath && basePath !== "/");
       const rewritten = shouldRewrite
@@ -309,7 +315,7 @@ const devPreviewProxy = createProxyMiddleware({
         finalText = injectBasePathScript(finalText, basePath);
       }
       if (isHtml) {
-        finalText = injectPreviewBridgeScript(finalText);
+        finalText = injectPreviewBridgeScript(finalText, basePath);
       }
 
       return Buffer.from(finalText, "utf8");
@@ -360,6 +366,9 @@ async function startServer() {
     void runtimeQuiesceCoordinator.resumeAfterActivity();
     next();
   };
+  const runtimeSockets = new Set<DrainableSocket>();
+  const upgradedPreviewSockets = new Set<DrainableSocket>();
+  let drainRuntimeTransportForSuspend = () => {};
 
   // TRPC middleware
   app.use(
@@ -408,6 +417,9 @@ async function startServer() {
     devPreviewProxy,
     onRuntimeActivity: () => {
       void runtimeQuiesceCoordinator.resumeAfterActivity();
+    },
+    drainRuntimeTransportForSuspend: () => {
+      drainRuntimeTransportForSuspend();
     },
     runtimeQuiesceCoordinator,
   });
@@ -471,7 +483,31 @@ async function startServer() {
   const server = app.listen(PORT, HOST, () => {
     console.log(`Studio server running on http://${HOST}:${PORT}`);
   });
+  drainRuntimeTransportForSuspend = () => {
+    server.closeAllConnections?.();
+    server.closeIdleConnections?.();
+    for (const socket of runtimeSockets) {
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
+    }
+    for (const socket of upgradedPreviewSockets) {
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
+    }
+  };
+  server.on("connection", (socket) => {
+    runtimeSockets.add(socket);
+    socket.once("close", () => {
+      runtimeSockets.delete(socket);
+    });
+  });
   server.on("upgrade", (req, socket, head) => {
+    upgradedPreviewSockets.add(socket);
+    socket.once("close", () => {
+      upgradedPreviewSockets.delete(socket);
+    });
     void handleStudioPreviewUpgrade({
       req,
       socket,
