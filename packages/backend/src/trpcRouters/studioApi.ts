@@ -12,6 +12,8 @@ import { usageService, type TokenData } from "../services/usage/UsageService";
 import { limitsService } from "../services/usage/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
 import { thumbnailService } from "../services/project/ThumbnailService";
+import { previewStatusService } from "../services/project/PreviewStatusService";
+import { previewLogsService } from "../services/project/PreviewLogsService";
 import { previewScreenshotService } from "../services/project/PreviewScreenshotService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
 import { setProjectVersionStatus } from "../services/project/ProjectStatusService";
@@ -100,6 +102,68 @@ const previewScreenshotSchema = z.object({
   scrollX: z.number().int().nonnegative(),
   scrollY: z.number().int().nonnegative(),
   imageBase64: z.string(),
+});
+
+const previewLogLevelSchema = z.enum(["debug", "log", "info", "warn", "error"]);
+
+const previewLogEntrySchema = z.object({
+  type: z.enum(["debug", "log", "info", "warn", "error", "pageerror"]),
+  text: z.string(),
+  timestamp: z.string(),
+  textTruncated: z.boolean(),
+  location: z
+    .object({
+      url: z.string().optional(),
+      line: z.number().int().positive().optional(),
+      column: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+
+const previewLogsSchema = z.object({
+  path: z.string(),
+  capturedUrl: z.string(),
+  waitMs: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  level: previewLogLevelSchema,
+  contains: z.string().optional(),
+  entries: z.array(previewLogEntrySchema),
+  summary: z.object({
+    observed: z.number().int().nonnegative(),
+    matched: z.number().int().nonnegative(),
+    returned: z.number().int().nonnegative(),
+    dropped: z.number().int().nonnegative(),
+    truncatedMessages: z.number().int().nonnegative(),
+  }),
+});
+
+const previewStatusSchema = z.object({
+  provider: z.enum(["local", "fly", "docker"]),
+  runtime: z.object({
+    running: z.boolean(),
+    health: z.enum(["ok", "starting", "unreachable", "stopped"]),
+    browserUrl: z.string().nullable(),
+    runtimeUrl: z.string().nullable(),
+    compatibilityUrl: z.string().nullable(),
+    error: z.string().optional(),
+  }),
+  preview: z.object({
+    mode: z.enum(["static", "devserver", "unknown"]),
+    status: z.enum(["ready", "starting", "installing", "error", "unavailable"]),
+    error: z.string().optional(),
+  }),
+  devServer: z.object({
+    applicable: z.boolean(),
+    running: z.boolean(),
+    status: z.enum([
+      "ready",
+      "starting",
+      "installing",
+      "error",
+      "not_applicable",
+      "unknown",
+    ]),
+  }),
 });
 
 function normalizeChecklistItemNote(note: string | null | undefined): string | undefined {
@@ -631,6 +695,50 @@ export const studioApiRouter = router({
         scrollY: input.scrollY,
         waitMs: input.waitMs,
         format: input.format,
+      });
+    }),
+
+  capturePreviewLogs: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+        path: z.string().optional(),
+        waitMs: z.number().int().nonnegative().max(15000).optional(),
+        limit: z.number().int().positive().max(200).optional(),
+        level: previewLogLevelSchema.optional(),
+        contains: z.string().trim().max(200).optional(),
+      }),
+    )
+    .output(previewLogsSchema)
+    .mutation(async ({ ctx, input }) => {
+      return await previewLogsService.capture({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        version: input.version,
+        path: input.path,
+        waitMs: input.waitMs,
+        limit: input.limit,
+        level: input.level,
+        contains: input.contains,
+      });
+    }),
+
+  getPreviewStatus: studioProjectProcedure
+    .input(
+      z.object({
+        studioId: z.string(),
+        slug: z.string().min(1),
+        version: z.number().int().positive(),
+      }),
+    )
+    .output(previewStatusSchema)
+    .query(async ({ ctx, input }) => {
+      return await previewStatusService.getStatus({
+        organizationId: ctx.organizationId!,
+        projectSlug: input.slug,
+        version: input.version,
       });
     }),
 

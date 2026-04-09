@@ -33,6 +33,9 @@ During multi-file work, prefer repeating package-level `typecheck` and a few tar
 
 - Studio runtime/auth/cleanup regressions:
   - `npm run test:run -w @vivd/studio -- server/http/studioAuth.test.ts server/httpRoutes/runtime.test.ts client/src/components/chat/ChatContext.followup.test.tsx`
+- Studio OpenCode persistence/revert regressions:
+  - `npm run test:run -w @vivd/studio -- server/opencode/useEvents.test.ts server/opencode/index.sessions.test.ts server/opencode/runTask.bucketSync.test.ts`
+  - `STUDIO_IMAGE=vivd-studio:local npm run studio:image:revert-smoke`
 - Backend Studio runtime auth + machine drift regressions:
   - `npm run test:run -w @vivd/backend -- studio_api_router.test.ts trpc_context_org_procedure.test.ts fly_lifecycle.test.ts fly_provider_reconcile.test.ts fly_provider_orchestration.test.ts docker_provider.test.ts local_provider_orchestration.test.ts`
 - Frontend embedded/hosted Studio regressions:
@@ -103,3 +106,4 @@ Useful things to inspect on a deployed box include service/container status, rec
 
 - Read [references/test-surfaces.md](references/test-surfaces.md) for the longer map of test commands, dependencies, and recurring failure patterns.
 - Read `.agents/skills/fly-studio-machines/SKILL.md` as a companion when the testing problem is specifically about Fly machine wake/reconcile/auth behavior.
+- Read `.agents/skills/studio-runtime-debugging/SKILL.md` as a companion when the testing problem is specifically about Studio runtime bootstrap, host smoke, OpenCode-backed persistence, rehydrate, or revert behavior.

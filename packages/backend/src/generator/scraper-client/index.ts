@@ -54,6 +54,32 @@ interface ScreenshotResponse {
   }>;
 }
 
+interface PreviewLogsResponse {
+  url: string;
+  waitMs: number;
+  limit: number;
+  level: "debug" | "log" | "info" | "warn" | "error";
+  contains?: string;
+  entries: Array<{
+    type: "debug" | "log" | "info" | "warn" | "error" | "pageerror";
+    text: string;
+    timestamp: string;
+    textTruncated: boolean;
+    location?: {
+      url?: string;
+      line?: number;
+      column?: number;
+    };
+  }>;
+  summary: {
+    observed: number;
+    matched: number;
+    returned: number;
+    dropped: number;
+    truncatedMessages: number;
+  };
+}
+
 interface FindLinksResponse {
   links: Array<{
     text: string;
@@ -75,6 +101,15 @@ export interface CaptureScreenshotRequest {
   headers?: Record<string, string>;
   format?: "png" | "jpeg" | "webp";
   filename?: string;
+}
+
+export interface CapturePreviewLogsRequest {
+  url: string;
+  waitMs?: number;
+  headers?: Record<string, string>;
+  limit?: number;
+  level?: "debug" | "log" | "info" | "warn" | "error";
+  contains?: string;
 }
 
 async function fetchWithRetry<T>(
@@ -259,6 +294,19 @@ export const scraperClient = {
       filename: screenshot.filename,
       mimeType: screenshot.mimeType || "image/png",
     };
+  },
+
+  async capturePreviewLogs(
+    request: CapturePreviewLogsRequest,
+  ): Promise<PreviewLogsResponse> {
+    log(
+      `[ScraperClient] Requesting preview logs: ${request.url} (wait=${request.waitMs ?? 1500}ms, limit=${request.limit ?? 50})`,
+    );
+
+    return await fetchWithRetry<PreviewLogsResponse>(`${SCRAPER_URL}/preview-logs`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
   },
 
   /**

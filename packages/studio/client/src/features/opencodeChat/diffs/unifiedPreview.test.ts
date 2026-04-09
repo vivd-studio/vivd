@@ -114,4 +114,44 @@ describe("buildUnifiedDiffPreview", () => {
       },
     ]);
   });
+
+  it("parses unified patches from current OpenCode diff payloads", () => {
+    const result = buildUnifiedDiffPreview({
+      patch: [
+        "diff --git a/src/index.ts b/src/index.ts",
+        "--- a/src/index.ts",
+        "+++ b/src/index.ts",
+        "@@ -1,3 +1,3 @@",
+        " one",
+        "-two",
+        "+changed",
+        " three",
+      ].join("\n"),
+    });
+
+    expect(result.lines).toEqual([
+      {
+        kind: "context",
+        text: "one",
+        beforeLineNumber: 1,
+        afterLineNumber: 1,
+      },
+      {
+        kind: "removed",
+        text: "two",
+        beforeLineNumber: 2,
+      },
+      {
+        kind: "added",
+        text: "changed",
+        afterLineNumber: 2,
+      },
+      {
+        kind: "context",
+        text: "three",
+        beforeLineNumber: 3,
+        afterLineNumber: 3,
+      },
+    ]);
+  });
 });

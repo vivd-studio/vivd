@@ -10,7 +10,10 @@ export interface CliFlags {
   scrollX?: number;
   scrollY?: number;
   waitMs?: number;
+  limit?: number;
   format?: string;
+  level?: string;
+  contains?: string;
   status?: string;
   note?: string;
 }
@@ -167,6 +170,16 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
       continue;
     }
 
+    if (token === "--limit") {
+      flags.limit = parseNumber(takeNextValue(argv, index, token), token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--limit=")) {
+      flags.limit = parseNumber(readInlineValue(token) || "", token);
+      continue;
+    }
+
     if (token === "--format") {
       flags.format = takeNextValue(argv, index, token);
       index += 1;
@@ -174,6 +187,26 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
     }
     if (token.startsWith("--format=")) {
       flags.format = readInlineValue(token) || undefined;
+      continue;
+    }
+
+    if (token === "--level") {
+      flags.level = takeNextValue(argv, index, token);
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--level=")) {
+      flags.level = readInlineValue(token) || undefined;
+      continue;
+    }
+
+    if (token === "--contains") {
+      flags.contains = takeNextValue(argv, index, token, { allowLeadingDash: true });
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--contains=")) {
+      flags.contains = readInlineValue(token) || undefined;
       continue;
     }
 

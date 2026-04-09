@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  buildStudioEnvWorkflow,
   ensureContainerRunningWorkflow,
   waitForReadyWorkflow,
 } from "../src/services/studioMachines/docker/runtimeWorkflow";
@@ -7,6 +8,25 @@ import {
 describe("docker runtime workflow", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("injects the internal backend callback URL when Docker studio env lacks one", () => {
+    const env = buildStudioEnvWorkflow(
+      {
+        desiredKillTimeoutSeconds: 180,
+        internalMainBackendUrl: "http://backend:3000/vivd-studio",
+      },
+      {
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        env: {},
+        studioId: "studio-1",
+        accessToken: "access-token-1",
+      },
+    );
+
+    expect(env.MAIN_BACKEND_URL).toBe("http://backend:3000/vivd-studio");
   });
 
   it("prefers the direct container health URL over the internal proxy route", async () => {

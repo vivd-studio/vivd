@@ -1,11 +1,36 @@
 import type { FlyMachine, FlyMachineState } from "./types";
 import { requestRuntime } from "./runtimeHttp";
-import { sleep } from "./utils";
+import { parsePositiveInt, sleep } from "./utils";
 
 const READY_POLL_INTERVAL_MS = 250;
 const TRANSIENT_MACHINE_POLL_BACKOFF_MS = 1_000;
-const SUSPEND_WAIT_TIMEOUT_MS = 30_000;
-const SUSPEND_IN_PROGRESS_TIMEOUT_MS = 120_000;
+const DEFAULT_SUSPEND_WAIT_TIMEOUT_MS = 30_000;
+const DEFAULT_SUSPEND_IN_PROGRESS_TIMEOUT_MS = 120_000;
+
+export function resolveSuspendWaitTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return Math.max(
+    5_000,
+    parsePositiveInt(
+      env.VIVD_FLY_SUSPEND_WAIT_TIMEOUT_MS,
+      DEFAULT_SUSPEND_WAIT_TIMEOUT_MS,
+    ),
+  );
+}
+
+export function resolveSuspendInProgressTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const waitTimeoutMs = resolveSuspendWaitTimeoutMs(env);
+  return Math.max(
+    waitTimeoutMs,
+    parsePositiveInt(
+      env.VIVD_FLY_SUSPEND_IN_PROGRESS_TIMEOUT_MS,
+      DEFAULT_SUSPEND_IN_PROGRESS_TIMEOUT_MS,
+    ),
+  );
+}
 
 function isFlyRateLimitError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -201,6 +226,7 @@ function appendLastState(message: string, state: string | null): string {
 
 async function waitForSuspendingMachineToSettle(options: {
   machineId: string;
+  suspendInProgressTimeoutMs: number;
   getMachine: (machineId: string) => Promise<FlyMachine>;
   waitForState: (options: {
     machineId: string;
@@ -215,7 +241,7 @@ async function waitForSuspendingMachineToSettle(options: {
   await options.waitForState({
     machineId: options.machineId,
     state: "suspended",
-    timeoutMs: SUSPEND_IN_PROGRESS_TIMEOUT_MS,
+    timeoutMs: options.suspendInProgressTimeoutMs,
   });
   return true;
 }
@@ -231,6 +257,8 @@ export async function suspendOrStopMachine(options: {
     timeoutMs: number;
   }) => Promise<void>;
 }): Promise<"suspended" | "stopped"> {
+  const suspendWaitTimeoutMs = resolveSuspendWaitTimeoutMs();
+  const suspendInProgressTimeoutMs = resolveSuspendInProgressTimeoutMs();
   const initial = await options.getMachine(options.machineId);
   const initialState = initial.state || "unknown";
   if (initialState === "suspended") return "suspended";
@@ -242,7 +270,7 @@ export async function suspendOrStopMachine(options: {
     await options.waitForState({
       machineId: options.machineId,
       state: "suspended",
-      timeoutMs: SUSPEND_IN_PROGRESS_TIMEOUT_MS,
+      timeoutMs: suspendInProgressTimeoutMs,
     });
     return "suspended";
   }
@@ -259,7 +287,10 @@ export async function suspendOrStopMachine(options: {
       if (message.includes("was destroyed")) throw err;
 
       try {
-        const settled = await waitForSuspendingMachineToSettle(options);
+        const settled = await waitForSuspendingMachineToSettle({
+          ...options,
+          suspendInProgressTimeoutMs,
+        });
         if (settled) {
           return "suspended";
         }
@@ -283,7 +314,7 @@ export async function suspendOrStopMachine(options: {
       await options.waitForState({
         machineId: options.machineId,
         state: "suspended",
-        timeoutMs: SUSPEND_WAIT_TIMEOUT_MS,
+        timeoutMs: suspendWaitTimeoutMs,
       });
       return "suspended";
     } catch (err) {
@@ -293,7 +324,10 @@ export async function suspendOrStopMachine(options: {
       if (message.includes("was destroyed")) throw err;
 
       try {
-        const settled = await waitForSuspendingMachineToSettle(options);
+        const settled = await waitForSuspendingMachineToSettle({
+          ...options,
+          suspendInProgressTimeoutMs,
+        });
         if (settled) {
           return "suspended";
         }

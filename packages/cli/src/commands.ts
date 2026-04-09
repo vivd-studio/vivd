@@ -23,7 +23,9 @@ import {
   formatGenericPluginConfigUpdateReport,
   formatGenericPluginInfoReport,
   formatPluginCatalogReport,
+  formatPreviewLogsReport,
   formatPreviewScreenshotReport,
+  formatPreviewStatusReport,
   formatProjectInfoReport,
   formatPublishChecklistReport,
   formatPublishChecklistRunReport,
@@ -112,6 +114,63 @@ type PreviewScreenshotResponse = {
   imageBase64: string;
 };
 
+type PreviewLogLevel = "debug" | "log" | "info" | "warn" | "error";
+
+type PreviewLogsResponse = {
+  path: string;
+  capturedUrl: string;
+  waitMs: number;
+  limit: number;
+  level: PreviewLogLevel;
+  contains?: string;
+  entries: Array<{
+    type: "debug" | "log" | "info" | "warn" | "error" | "pageerror";
+    text: string;
+    timestamp: string;
+    textTruncated: boolean;
+    location?: {
+      url?: string;
+      line?: number;
+      column?: number;
+    };
+  }>;
+  summary: {
+    observed: number;
+    matched: number;
+    returned: number;
+    dropped: number;
+    truncatedMessages: number;
+  };
+};
+
+type PreviewStatusResponse = {
+  provider: "local" | "fly" | "docker";
+  runtime: {
+    running: boolean;
+    health: "ok" | "starting" | "unreachable" | "stopped";
+    browserUrl: string | null;
+    runtimeUrl: string | null;
+    compatibilityUrl: string | null;
+    error?: string;
+  };
+  preview: {
+    mode: "static" | "devserver" | "unknown";
+    status: "ready" | "starting" | "installing" | "error" | "unavailable";
+    error?: string;
+  };
+  devServer: {
+    applicable: boolean;
+    running: boolean;
+    status:
+      | "ready"
+      | "starting"
+      | "installing"
+      | "error"
+      | "not_applicable"
+      | "unknown";
+  };
+};
+
 type PluginCatalogResponse = {
   project: { organizationId: string; slug: string };
   available: Array<{
@@ -152,6 +211,7 @@ const ROOT_HELP_LINES = [
   "vivd doctor",
   "vivd whoami",
   "vivd project info",
+  "vivd preview help",
   "vivd cms help",
   "vivd plugins help",
   "vivd publish help",
@@ -159,13 +219,6 @@ const ROOT_HELP_LINES = [
 
 const GENERAL_HELP: Record<string, string> = {
   root: "",
-  preview: [
-    "vivd preview screenshot [path]",
-    "Use preview-relative paths like /, /pricing, or /contact?tab=form.",
-    "Optional flags: --width --height --scroll-x --scroll-y --wait-ms --format --output",
-    "Screenshots are saved under .vivd/dropped-images/ by default unless --output is passed.",
-    "Run this from the project workspace so the default output path lands in the current project.",
-  ].join("\n"),
   plugins: [
     "vivd plugins catalog",
     "vivd plugins info <pluginId>",
@@ -315,15 +368,46 @@ function isPreviewScreenshotCliEnabled(env: NodeJS.ProcessEnv = process.env): bo
 }
 
 function getRootHelpText(env: NodeJS.ProcessEnv = process.env): string {
-  const lines = [...ROOT_HELP_LINES];
-  if (isPreviewScreenshotCliEnabled(env)) {
-    lines.splice(4, 0, "vivd preview help");
-  }
-  return lines.join("\n");
+  return ROOT_HELP_LINES.join("\n");
 }
 
 function isPreviewScreenshotFormat(value: string | undefined): value is "png" | "jpeg" | "webp" {
   return value === "png" || value === "jpeg" || value === "webp";
+}
+
+function isPreviewLogLevel(value: string | undefined): value is PreviewLogLevel {
+  return (
+    value === "debug" ||
+    value === "log" ||
+    value === "info" ||
+    value === "warn" ||
+    value === "error"
+  );
+}
+
+function getPreviewHelpText(env: NodeJS.ProcessEnv = process.env): string {
+  const lines = [
+    "vivd preview status",
+    "Show preview/runtime debugging status, including whether the dev server is running.",
+    "vivd preview logs [path]",
+    "Capture browser console output from the previewed site for debugging.",
+    "Use preview-relative paths like /, /pricing, or /contact?tab=form.",
+    "Optional flags: --wait-ms --limit --level --contains",
+    "Default scope: preview page only; this does not include Studio shell or backend logs.",
+  ];
+
+  if (isPreviewScreenshotCliEnabled(env)) {
+    lines.push(
+      "",
+      "Experimental screenshot command:",
+      "vivd preview screenshot [path]",
+      "Optional flags: --width --height --scroll-x --scroll-y --wait-ms --format --output",
+      "Screenshots are saved under .vivd/dropped-images/ by default unless --output is passed.",
+      "Run this from the project workspace so the default output path lands in the current project.",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 async function ensureUniqueFilePath(filePath: string): Promise<string> {
@@ -409,6 +493,9 @@ function helpTextFor(topic: string[]): string {
   if (!normalized || normalized === "root") {
     return getRootHelpText();
   }
+  if (normalized.startsWith("preview")) {
+    return getPreviewHelpText();
+  }
   const pluginHelp = getCliPluginHelpText(topic);
   if (pluginHelp) {
     return pluginHelp;
@@ -422,9 +509,6 @@ function helpTextFor(topic: string[]): string {
   }
   if (normalized.startsWith("cms")) {
     return GENERAL_HELP.cms;
-  }
-  if (normalized.startsWith("preview") && isPreviewScreenshotCliEnabled()) {
-    return GENERAL_HELP.preview;
   }
   if (normalized.startsWith("publish")) {
     return GENERAL_HELP.publish;
@@ -664,6 +748,48 @@ async function runPreviewScreenshot(
     };
 
     return jsonResult(printable, formatPreviewScreenshotReport(printable));
+  });
+}
+
+async function runPreviewLogs(
+  pathArg: string | undefined,
+  flags: CliFlags,
+): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const slug = requireProjectSlug(runtime);
+    const version = requireProjectVersion(runtime);
+    const level = flags.level?.trim().toLowerCase();
+    if (level && !isPreviewLogLevel(level)) {
+      throw new Error("preview logs requires --level <debug|log|info|warn|error>");
+    }
+
+    const result = (await runtime.client.mutation("studioApi.capturePreviewLogs", {
+      studioId: runtime.config.studioId,
+      slug,
+      version,
+      path: pathArg || "/",
+      waitMs: flags.waitMs,
+      limit: flags.limit,
+      level,
+      contains: flags.contains?.trim() || undefined,
+    })) as PreviewLogsResponse;
+
+    return jsonResult(result, formatPreviewLogsReport(result));
+  });
+}
+
+async function runPreviewStatus(flags: CliFlags): Promise<CommandResult> {
+  return withRuntime(flags, async (runtime) => {
+    const slug = requireProjectSlug(runtime);
+    const version = requireProjectVersion(runtime);
+
+    const result = (await runtime.client.query("studioApi.getPreviewStatus", {
+      studioId: runtime.config.studioId,
+      slug,
+      version,
+    })) as PreviewStatusResponse;
+
+    return jsonResult(result, formatPreviewStatusReport(result));
   });
 }
 
@@ -991,10 +1117,16 @@ export async function dispatchCli(
       }
       throw new Error("Unknown cms command. Try `vivd cms help`.");
     case "preview":
-      if (!isPreviewScreenshotCliEnabled()) {
-        throw new Error("Unknown command: preview. Try `vivd help`.");
+      if (second === "status") {
+        return runPreviewStatus(parsed.flags);
+      }
+      if (second === "logs") {
+        return runPreviewLogs(third, parsed.flags);
       }
       if (second === "screenshot") {
+        if (!isPreviewScreenshotCliEnabled()) {
+          throw new Error("Unknown preview command. Try `vivd preview help`.");
+        }
         return runPreviewScreenshot(third, parsed.flags, cwd);
       }
       throw new Error("Unknown preview command. Try `vivd preview help`.");

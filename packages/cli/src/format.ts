@@ -129,6 +129,140 @@ export function formatPreviewScreenshotReport(input: {
   ].join("\n");
 }
 
+function formatPreviewLogLocation(location: {
+  url?: string;
+  line?: number;
+  column?: number;
+} | null | undefined): string {
+  if (!location) return "";
+  const parts: string[] = [];
+  if (location.url) {
+    parts.push(location.url);
+  }
+  if (typeof location.line === "number") {
+    parts.push(
+      typeof location.column === "number"
+        ? `${location.line}:${location.column}`
+        : String(location.line),
+    );
+  }
+  return parts.length > 0 ? ` | ${parts.join(" ")}` : "";
+}
+
+function compactPreviewLogText(text: string): string {
+  return text.replace(/\s+/g, " ").trim() || "(empty message)";
+}
+
+export function formatPreviewLogsReport(input: {
+  path: string;
+  capturedUrl: string;
+  waitMs: number;
+  limit: number;
+  level: "debug" | "log" | "info" | "warn" | "error";
+  contains?: string;
+  entries: Array<{
+    type: string;
+    text: string;
+    textTruncated: boolean;
+    location?: {
+      url?: string;
+      line?: number;
+      column?: number;
+    };
+  }>;
+  summary: {
+    observed: number;
+    matched: number;
+    returned: number;
+    dropped: number;
+    truncatedMessages: number;
+  };
+}): string {
+  const filters = [
+    `level>=${input.level}`,
+    `limit=${input.limit}`,
+    `wait=${input.waitMs}ms`,
+  ];
+  if (input.contains) {
+    filters.push(`contains="${input.contains}"`);
+  }
+
+  const lines = [
+    "Preview logs captured for debugging.",
+    `Preview path: ${input.path}`,
+    `Captured URL: ${input.capturedUrl}`,
+    `Filters: ${filters.join(" | ")}`,
+    `Summary: ${input.summary.observed} observed, ${input.summary.matched} matched, ${input.summary.returned} returned, ${input.summary.dropped} dropped${input.summary.truncatedMessages > 0 ? `, ${input.summary.truncatedMessages} truncated` : ""}`,
+  ];
+
+  if (input.entries.length === 0) {
+    lines.push("Entries: none");
+    return lines.join("\n");
+  }
+
+  lines.push("Entries:");
+  lines.push(
+    ...input.entries.map((entry) => {
+      const suffix = entry.textTruncated ? " | truncated" : "";
+      return `- [${entry.type}] ${compactPreviewLogText(entry.text)}${formatPreviewLogLocation(entry.location)}${suffix}`;
+    }),
+  );
+  return lines.join("\n");
+}
+
+export function formatPreviewStatusReport(input: {
+  provider: "local" | "fly" | "docker";
+  runtime: {
+    running: boolean;
+    health: "ok" | "starting" | "unreachable" | "stopped";
+    browserUrl: string | null;
+    error?: string;
+  };
+  preview: {
+    mode: "static" | "devserver" | "unknown";
+    status: "ready" | "starting" | "installing" | "error" | "unavailable";
+    error?: string;
+  };
+  devServer: {
+    applicable: boolean;
+    running: boolean;
+    status:
+      | "ready"
+      | "starting"
+      | "installing"
+      | "error"
+      | "not_applicable"
+      | "unknown";
+  };
+}): string {
+  const lines = [
+    "Preview status for debugging.",
+    `Provider: ${input.provider}`,
+    `Studio runtime: ${input.runtime.running ? "running" : "stopped"}`,
+    `Runtime health: ${input.runtime.health}`,
+    `Preview mode: ${input.preview.mode}`,
+    `Preview status: ${input.preview.status}`,
+    `Dev server: ${
+      input.devServer.applicable
+        ? input.devServer.running
+          ? "running"
+          : `not running (${input.devServer.status})`
+        : "not applicable"
+    }`,
+  ];
+
+  if (input.runtime.browserUrl) {
+    lines.push(`Browser URL: ${input.runtime.browserUrl}`);
+  }
+  if (input.preview.error) {
+    lines.push(`Preview error: ${input.preview.error}`);
+  } else if (input.runtime.error) {
+    lines.push(`Runtime error: ${input.runtime.error}`);
+  }
+
+  return lines.join("\n");
+}
+
 export function formatCmsStatusReport(input: {
   initialized: boolean;
   valid: boolean;

@@ -23,6 +23,8 @@ const {
   requestPreviewBuildMock,
   isArtifactBuilderEnabledMock,
   touchStudioMachineMock,
+  getPreviewStatusMock,
+  capturePreviewLogsMock,
   capturePreviewScreenshotMock,
 } = vi.hoisted(() => ({
   recordAiCostMock: vi.fn(),
@@ -47,6 +49,8 @@ const {
   requestPreviewBuildMock: vi.fn(),
   isArtifactBuilderEnabledMock: vi.fn(),
   touchStudioMachineMock: vi.fn(),
+  getPreviewStatusMock: vi.fn(),
+  capturePreviewLogsMock: vi.fn(),
   capturePreviewScreenshotMock: vi.fn(),
 }));
 
@@ -78,6 +82,18 @@ vi.mock("../src/services/project/ThumbnailService", () => ({
 vi.mock("../src/services/project/PreviewScreenshotService", () => ({
   previewScreenshotService: {
     capture: capturePreviewScreenshotMock,
+  },
+}));
+
+vi.mock("../src/services/project/PreviewStatusService", () => ({
+  previewStatusService: {
+    getStatus: getPreviewStatusMock,
+  },
+}));
+
+vi.mock("../src/services/project/PreviewLogsService", () => ({
+  previewLogsService: {
+    capture: capturePreviewLogsMock,
   },
 }));
 
@@ -195,6 +211,8 @@ describe("studioApi router", () => {
     reportAgentLeaseActiveMock.mockReset();
     reportAgentLeaseIdleMock.mockReset();
     touchStudioMachineMock.mockReset();
+    getPreviewStatusMock.mockReset();
+    capturePreviewLogsMock.mockReset();
     capturePreviewScreenshotMock.mockReset();
 
     recordAiCostMock.mockResolvedValue(undefined);
@@ -204,6 +222,40 @@ describe("studioApi router", () => {
     touchProjectUpdatedAtMock.mockResolvedValue(undefined);
     getVersionDirMock.mockReturnValue("/tmp/org-1/site-1/v1");
     generateThumbnailMock.mockResolvedValue(undefined);
+    getPreviewStatusMock.mockResolvedValue({
+      provider: "fly",
+      runtime: {
+        running: true,
+        health: "ok",
+        browserUrl: "https://preview.example.test",
+        runtimeUrl: "https://runtime.example.test",
+        compatibilityUrl: "https://app.example/_studio/runtime-1",
+      },
+      preview: {
+        mode: "devserver",
+        status: "ready",
+      },
+      devServer: {
+        applicable: true,
+        running: true,
+        status: "ready",
+      },
+    });
+    capturePreviewLogsMock.mockResolvedValue({
+      path: "/",
+      capturedUrl: "https://preview.example.test/",
+      waitMs: 1500,
+      limit: 50,
+      level: "debug",
+      entries: [],
+      summary: {
+        observed: 0,
+        matched: 0,
+        returned: 0,
+        dropped: 0,
+        truncatedMessages: 0,
+      },
+    });
     capturePreviewScreenshotMock.mockResolvedValue({
       path: "/",
       capturedUrl: "https://preview.example.test/",
@@ -935,6 +987,82 @@ describe("studioApi router", () => {
       scrollX: 0,
       scrollY: 0,
       imageBase64: "base64-image",
+    });
+  });
+
+  it("captures live preview logs through the preview logs service", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.capturePreviewLogs({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 2,
+      path: "/pricing?view=full",
+      waitMs: 1200,
+      limit: 10,
+      level: "warn",
+      contains: "hydrate",
+    });
+
+    expect(capturePreviewLogsMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 2,
+      path: "/pricing?view=full",
+      waitMs: 1200,
+      limit: 10,
+      level: "warn",
+      contains: "hydrate",
+    });
+    expect(result).toEqual({
+      path: "/",
+      capturedUrl: "https://preview.example.test/",
+      waitMs: 1500,
+      limit: 50,
+      level: "debug",
+      entries: [],
+      summary: {
+        observed: 0,
+        matched: 0,
+        returned: 0,
+        dropped: 0,
+        truncatedMessages: 0,
+      },
+    });
+  });
+
+  it("returns preview/runtime status through the preview status service", async () => {
+    const caller = studioApiRouter.createCaller(makeContext());
+
+    const result = await caller.getPreviewStatus({
+      studioId: "studio-1",
+      slug: "site-1",
+      version: 2,
+    });
+
+    expect(getPreviewStatusMock).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      projectSlug: "site-1",
+      version: 2,
+    });
+    expect(result).toEqual({
+      provider: "fly",
+      runtime: {
+        running: true,
+        health: "ok",
+        browserUrl: "https://preview.example.test",
+        runtimeUrl: "https://runtime.example.test",
+        compatibilityUrl: "https://app.example/_studio/runtime-1",
+      },
+      preview: {
+        mode: "devserver",
+        status: "ready",
+      },
+      devServer: {
+        applicable: true,
+        running: true,
+        status: "ready",
+      },
     });
   });
 

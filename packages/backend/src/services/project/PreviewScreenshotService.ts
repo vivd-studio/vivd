@@ -1,7 +1,11 @@
-import path from "node:path";
 import { scraperClient } from "../../generator/scraper-client";
 import { studioMachineProvider } from "../studioMachines";
 import { installProfileService } from "../system/InstallProfileService";
+import {
+  normalizePreviewCapturePath,
+  resolvePreviewCaptureBaseUrl,
+  resolvePreviewCaptureUrl,
+} from "./PreviewCapture";
 
 export type PreviewScreenshotFormat = "png" | "jpeg" | "webp";
 
@@ -53,20 +57,7 @@ function sanitizeFilenameSegment(input: string): string {
     .replace(/^-|-$/g, "") || "preview";
 }
 
-export function normalizePreviewScreenshotPath(
-  rawPath: string | null | undefined,
-): string {
-  const trimmed = rawPath?.trim() || "/";
-  if (/^https?:\/\//i.test(trimmed)) {
-    throw new Error("Preview screenshot path must be preview-relative, not a full URL");
-  }
-
-  const normalized = trimmed.startsWith("/")
-    ? trimmed
-    : `/${trimmed.replace(/^\/+/, "")}`;
-  const parsed = new URL(normalized, "https://vivd.invalid");
-  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-}
+export const normalizePreviewScreenshotPath = normalizePreviewCapturePath;
 
 export function buildPreviewScreenshotFilename(options: {
   path: string;
@@ -89,35 +80,8 @@ export function buildPreviewScreenshotFilename(options: {
   return `preview-${pathSlug}-${options.width}x${options.height}${scrollSuffix}.${options.format}`;
 }
 
-export function resolvePreviewScreenshotBaseUrl(options: {
-  installProfile: "solo" | "platform";
-  runtimeUrl?: string | null;
-  compatibilityUrl?: string | null;
-  url: string;
-}): string {
-  const runtimeUrl = options.runtimeUrl?.trim() || null;
-  const compatibilityUrl = options.compatibilityUrl?.trim() || null;
-
-  if (options.installProfile !== "platform" && compatibilityUrl) {
-    return compatibilityUrl;
-  }
-
-  return runtimeUrl || compatibilityUrl || options.url;
-}
-
-export function resolvePreviewScreenshotUrl(
-  baseUrl: string,
-  requestedPath: string,
-): string {
-  const base = new URL(baseUrl);
-  const parsedPath = new URL(requestedPath, "https://vivd.invalid");
-  const basePathname = base.pathname.replace(/\/+$/, "") || "/";
-
-  base.pathname = path.posix.join(basePathname, parsedPath.pathname);
-  base.search = parsedPath.search;
-  base.hash = parsedPath.hash;
-  return base.toString();
-}
+export const resolvePreviewScreenshotBaseUrl = resolvePreviewCaptureBaseUrl;
+export const resolvePreviewScreenshotUrl = resolvePreviewCaptureUrl;
 
 class PreviewScreenshotService {
   async capture(
@@ -148,6 +112,7 @@ class PreviewScreenshotService {
     const format = options.format ?? "png";
     const captureBaseUrl = resolvePreviewScreenshotBaseUrl({
       installProfile,
+      backendUrl: runtime.backendUrl,
       runtimeUrl: runtime.runtimeUrl,
       compatibilityUrl: runtime.compatibilityUrl,
       url: runtime.url,

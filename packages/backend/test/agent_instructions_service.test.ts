@@ -39,6 +39,7 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain(
       "Treat publish/checklist, plugin, and other platform-state requests as `vivd` CLI work first, not file-search work.",
     );
+    expect(result.instructions).toContain("vivd preview status");
     expect(result.instructions).toContain("vivd plugins catalog");
     expect(result.instructions).toContain("vivd plugins info <pluginId>");
     expect(result.instructions).toContain("vivd plugins config show <pluginId>");
@@ -52,6 +53,9 @@ describe("AgentInstructionsService", () => {
     );
     expect(result.instructions).toContain("Structured CMS content");
     expect(result.instructions).toContain("src/content/vivd.content.yaml");
+    expect(result.instructions).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
+    expect(result.instructions).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
+    expect(result.instructions).toContain("Collection entries belong under `src/content/collections/<collection-key>/`");
     expect(result.instructions).toContain("Use collection-backed CMS content selectively");
     expect(result.instructions).toContain("vivd cms validate");
     expect(result.instructions).toContain("asking Vivd support to activate it");

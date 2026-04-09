@@ -114,6 +114,8 @@ export function buildStudioEnvWorkflow(
         env.MAIN_BACKEND_URL,
         deps.internalMainBackendUrl,
       ) || env.MAIN_BACKEND_URL;
+  } else {
+    env.MAIN_BACKEND_URL = deps.internalMainBackendUrl;
   }
 
   const passthrough = getConfiguredDockerStudioEnvPassthroughKeys();

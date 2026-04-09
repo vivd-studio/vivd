@@ -121,4 +121,37 @@ describe("TurnDiffPreview", () => {
       screen.getByText("No inline text diff preview is available for this file."),
     ).toBeInTheDocument();
   });
+
+  it("renders unified patch previews directly from summary diffs", () => {
+    queryState.data = undefined;
+
+    render(
+      <TurnDiffPreview
+        messageId="msg-3"
+        summaryDiffs={[
+          {
+            file: "src/index.ts",
+            patch: [
+              "diff --git a/src/index.ts b/src/index.ts",
+              "--- a/src/index.ts",
+              "+++ b/src/index.ts",
+              "@@ -1,3 +1,3 @@",
+              " one",
+              "-two",
+              "+changed",
+              " three",
+            ].join("\n"),
+            additions: 1,
+            deletions: 1,
+            status: "modified",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /files edited/i }));
+
+    expect(screen.getByText("changed")).toBeInTheDocument();
+    expect(screen.queryByText("Loading diff preview...")).not.toBeInTheDocument();
+  });
 });

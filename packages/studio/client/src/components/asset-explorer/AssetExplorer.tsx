@@ -12,6 +12,10 @@ import {
   pickInitialAssetExplorerPath,
   STUDIO_UPLOADS_PATH,
 } from "./utils";
+import {
+  shouldShowWorkingImageOptimization,
+  uploadFilesToStudioPath,
+} from "./upload";
 import { AssetToolbar } from "./AssetToolbar";
 import { CreateFolderInput } from "./CreateFolderInput";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
@@ -22,45 +26,11 @@ import { FileTreeView } from "./FileTreeView";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePreview } from "@/components/preview/PreviewContext";
 import { useOptionalChatContext } from "@/components/chat/ChatContext";
-import {
-  getVivdStudioToken,
-  resolveStudioRuntimePath,
-  VIVD_STUDIO_TOKEN_HEADER,
-} from "@/lib/studioAuth";
 
 interface AssetExplorerProps {
   projectSlug: string;
   version: number;
   onClose?: () => void;
-}
-
-const OPTIMIZED_WORKING_IMAGE_EXTENSIONS = new Set([
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".tif",
-  ".tiff",
-  ".bmp",
-  ".webp",
-]);
-
-function shouldShowWorkingImageOptimization(
-  files: FileList,
-  targetPath: string,
-): boolean {
-  const normalizedTargetPath = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (
-    normalizedTargetPath !== ".vivd/uploads" &&
-    normalizedTargetPath !== ".vivd/dropped-images"
-  ) {
-    return false;
-  }
-
-  return Array.from(files).some((file) => {
-    const lowerName = file.name.toLowerCase();
-    const extension = lowerName.slice(lowerName.lastIndexOf("."));
-    return OPTIMIZED_WORKING_IMAGE_EXTENSIONS.has(extension);
-  });
 }
 
 export function AssetExplorer({
@@ -267,37 +237,12 @@ export function AssetExplorer({
     );
 
     try {
-      const token = getVivdStudioToken();
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append("files", files[i]);
-      }
-
-      const headers = new Headers();
-      if (token) headers.set(VIVD_STUDIO_TOKEN_HEADER, token);
-
-      const response = await fetch(
-        resolveStudioRuntimePath(
-          `/vivd-studio/api/upload/${projectSlug}/${version}?path=${encodeURIComponent(targetPath)}`,
-        ),
-        {
-          method: "POST",
-          body: formData,
-          headers,
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-
-      const payload = (await response.json()) as { uploaded?: unknown };
-      const uploadedPaths = Array.isArray(payload.uploaded)
-        ? payload.uploaded.filter(
-            (value): value is string =>
-              typeof value === "string" && value.length > 0,
-          )
-        : [];
+      const uploadedPaths = await uploadFilesToStudioPath({
+        projectSlug,
+        version,
+        targetPath,
+        files,
+      });
       const firstUploadedPath = uploadedPaths[0] ?? null;
 
       setCurrentPath(targetPath);

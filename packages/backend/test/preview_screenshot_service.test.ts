@@ -62,7 +62,7 @@ describe("PreviewScreenshotService", () => {
   it("normalizes preview-relative paths and rejects absolute URLs", () => {
     expect(normalizePreviewScreenshotPath("pricing?tab=pro")).toBe("/pricing?tab=pro");
     expect(() => normalizePreviewScreenshotPath("https://example.com")).toThrow(
-      "Preview screenshot path must be preview-relative",
+      "Preview path must be preview-relative",
     );
   });
 
@@ -82,6 +82,7 @@ describe("PreviewScreenshotService", () => {
   it("prefers compatibility routes for solo installs and resolves preview-relative paths under them", () => {
     const baseUrl = resolvePreviewScreenshotBaseUrl({
       installProfile: "solo",
+      backendUrl: null,
       runtimeUrl: "https://studio.example:4100",
       compatibilityUrl: "https://app.example/_studio/runtime-1",
       url: "https://studio.example:4100",
@@ -91,6 +92,18 @@ describe("PreviewScreenshotService", () => {
     expect(resolvePreviewScreenshotUrl(baseUrl, "/pricing?tab=pro")).toBe(
       "https://app.example/_studio/runtime-1/pricing?tab=pro",
     );
+  });
+
+  it("prefers the backend runtime URL when browser-facing preview URLs are local-only", () => {
+    const baseUrl = resolvePreviewScreenshotBaseUrl({
+      installProfile: "solo",
+      backendUrl: "http://studio-site-1-v1-a3f6fad7ba:3100",
+      runtimeUrl: "http://app.localhost:4100",
+      compatibilityUrl: "http://app.localhost/_studio/runtime-1",
+      url: "http://app.localhost:4100",
+    });
+
+    expect(baseUrl).toBe("http://studio-site-1-v1-a3f6fad7ba:3100");
   });
 
   it("captures the live preview through the scraper with studio auth headers", async () => {

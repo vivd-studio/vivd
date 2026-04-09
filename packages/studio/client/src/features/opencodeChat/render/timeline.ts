@@ -20,6 +20,9 @@ export type RenderableFileDiffSummary = {
   additions: number;
   deletions: number;
   status?: "added" | "deleted" | "modified";
+  patch?: string;
+  before?: string;
+  after?: string;
 };
 
 export type RenderableChatMessage = {
@@ -259,6 +262,15 @@ function normalizeRecordToRenderableMessage(
         deletions: Number((diff as any).deletions) || 0,
         ...(typeof (diff as any).status === "string"
           ? { status: (diff as any).status as "added" | "deleted" | "modified" }
+          : {}),
+        ...(typeof (diff as any).patch === "string"
+          ? { patch: (diff as any).patch }
+          : {}),
+        ...(typeof (diff as any).before === "string"
+          ? { before: (diff as any).before }
+          : {}),
+        ...(typeof (diff as any).after === "string"
+          ? { after: (diff as any).after }
           : {}),
       };
     })

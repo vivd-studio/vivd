@@ -248,9 +248,16 @@ function MessagePartBubble({
   if (part.type === "tool") {
     const toolStatus = normalizeToolStatus(part) ?? "completed";
     const toolLabelParts = getToolActivityLabelParts(part);
-    const toolInput = summarizeToolInput(part.input);
+    const isBashTool = String(part.tool ?? "").trim().toLowerCase() === "bash";
+    const rawToolInput = part.input ?? part.state?.input;
+    const toolOutput = summarizeToolOutput(part);
+    const toolTranscript = isBashTool ? summarizeBashTranscript(part, toolOutput) : null;
+    const toolInput = summarizeToolInput(rawToolInput, {
+      omitKeys: toolTranscript ? ["command", "description"] : ["description"],
+    });
     const toolDescription =
-      toolStatus === "error" ? undefined : extractToolDescription(part.input);
+      toolStatus === "error" ? undefined : extractToolDescription(rawToolInput);
+    const toolTitle = normalizeToolLabelDetail(extractToolTitle(part), toolDescription);
     const isRunning = toolStatus === "running";
     const actionText = isRunning
       ? stripTrailingDots(toolLabelParts.action)
@@ -290,15 +297,25 @@ function MessagePartBubble({
           <div className="text-[11px] text-muted-foreground/90">
             Tool: <span className="font-mono">{String(part.tool ?? "unknown")}</span>
           </div>
-          {part.title && (
+          {toolTitle && (
             <div className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-words">
-              {String(part.title)}
+              {toolTitle}
             </div>
           )}
-          {toolInput && (
-            <pre className="text-[11px] text-muted-foreground/90 bg-muted/40 rounded px-2 py-1 whitespace-pre-wrap break-words max-h-28 overflow-y-auto">
-              {toolInput}
-            </pre>
+          {toolTranscript && (
+            <ToolCodeBlock
+              text={toolTranscript}
+              className="font-mono text-[12px] text-foreground bg-muted/65"
+            />
+          )}
+          {!toolTranscript && toolInput && (
+            <ToolCodeBlock text={toolInput} className="text-[11px] text-foreground/90" />
+          )}
+          {!toolTranscript && toolOutput && (
+            <ToolCodeBlock
+              text={toolOutput}
+              className="font-mono text-[11px] text-foreground/90 bg-muted/55"
+            />
           )}
           {toolStatus === "error" && (
             <div className="text-[11px] text-destructive/90">
@@ -397,19 +414,56 @@ function LoadingStateLabel({ prefix }: { prefix: ReactNode }) {
   );
 }
 
-function summarizeToolInput(input: unknown): string | null {
+function ToolCodeBlock({
+  text,
+  className = "",
+}: {
+  text: string;
+  className?: string;
+}) {
+  return (
+    <pre
+      className={`rounded px-2 py-1 whitespace-pre-wrap break-words max-h-28 overflow-y-auto ${className}`}
+    >
+      {text}
+    </pre>
+  );
+}
+
+function summarizeToolInput(
+  input: unknown,
+  options?: { omitKeys?: string[] },
+): string | null {
   if (input == null) return null;
   if (typeof input === "string") {
-    const trimmed = input.trim();
+    const trimmed = sanitizeToolText(input);
     if (!trimmed) return null;
     return trimmed.length > 500 ? `${trimmed.slice(0, 500)}\n...` : trimmed;
   }
+
+  let value = input;
+  if (
+    options?.omitKeys?.length &&
+    typeof input === "object" &&
+    !Array.isArray(input)
+  ) {
+    const omitKeys = new Set(options.omitKeys);
+    value = Object.fromEntries(
+      Object.entries(input as Record<string, unknown>).filter(
+        ([key, candidate]) =>
+          !omitKeys.has(key) && candidate !== undefined && candidate !== null,
+      ),
+    );
+  }
+
   try {
-    const serialized = JSON.stringify(input, null, 2);
+    const serialized = JSON.stringify(value, null, 2);
     if (!serialized || serialized === "{}") return null;
-    return serialized.length > 500
-      ? `${serialized.slice(0, 500)}\n...`
-      : serialized;
+    const normalized = sanitizeToolText(serialized);
+    if (!normalized) return null;
+    return normalized.length > 500
+      ? `${normalized.slice(0, 500)}\n...`
+      : normalized;
   } catch {
     return null;
   }
@@ -445,6 +499,90 @@ function extractToolDescription(input: unknown): string | undefined {
 
   const normalized = description.replace(/\s+/g, " ").trim();
   return normalized || undefined;
+}
+
+function extractToolTitle(part: any): string | undefined {
+  const value = part?.title ?? part?.state?.title;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized || undefined;
+}
+
+function normalizeToolLabelDetail(
+  value: string | undefined,
+  duplicateOf?: string,
+): string | undefined {
+  if (!value) return undefined;
+  if (!duplicateOf) return value;
+  return value === duplicateOf ? undefined : value;
+}
+
+function summarizeToolOutput(part: any): string | null {
+  const candidates = [
+    part?.output,
+    part?.state?.output,
+    part?.metadata?.output,
+    part?.state?.metadata?.output,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = formatToolDetailText(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+function summarizeBashTranscript(part: any, output: string | null): string | null {
+  const command = extractToolCommand(part);
+  const lines = [command ? `$ ${command}` : null, output].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (lines.length === 0) return null;
+  return lines.join("\n\n");
+}
+
+function extractToolCommand(part: any): string | undefined {
+  const candidates = [
+    part?.input?.command,
+    part?.state?.input?.command,
+    part?.metadata?.command,
+    part?.state?.metadata?.command,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const normalized = sanitizeToolText(candidate);
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+}
+
+function formatToolDetailText(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    return sanitizeToolText(value) || null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    const serialized = JSON.stringify(value, null, 2);
+    return sanitizeToolText(serialized) || null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeToolText(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g, "")
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
+    .trim();
 }
 
 function AgentStateRow({

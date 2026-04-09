@@ -135,6 +135,53 @@ function readSessionNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
+type DetailedSessionFileDiff = {
+  file: string;
+  additions: number;
+  deletions: number;
+  status?: "added" | "deleted" | "modified";
+  patch?: string;
+  before?: string;
+  after?: string;
+};
+
+function normalizeDetailedSessionDiffs(value: unknown): DetailedSessionFileDiff[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item): DetailedSessionFileDiff | null => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const file = typeof (item as any).file === "string" ? (item as any).file : "";
+      if (!file) {
+        return null;
+      }
+
+      return {
+        file,
+        additions: Number((item as any).additions) || 0,
+        deletions: Number((item as any).deletions) || 0,
+        ...(typeof (item as any).status === "string"
+          ? { status: (item as any).status as "added" | "deleted" | "modified" }
+          : {}),
+        ...(typeof (item as any).patch === "string"
+          ? { patch: (item as any).patch }
+          : {}),
+        ...(typeof (item as any).before === "string"
+          ? { before: (item as any).before }
+          : {}),
+        ...(typeof (item as any).after === "string"
+          ? { after: (item as any).after }
+          : {}),
+      };
+    })
+    .filter((item): item is DetailedSessionFileDiff => Boolean(item));
+}
+
 function getPatchHistoryForMessageRevert(
   messages: SessionMessageRecord[],
   userMessageId: string,
@@ -873,6 +920,34 @@ export async function getMessageDiff(
 ) {
   const { client, directory: opencodeDir } =
     await serverManager.getClientAndDirectory(directory);
+  const messagesResult = await client.session.messages({
+    sessionID: sessionId,
+    directory: opencodeDir,
+  });
+
+  if (messagesResult.error) {
+    throw new Error(
+      `Failed to load session messages for diff lookup: ${JSON.stringify(messagesResult.error)}`,
+    );
+  }
+
+  const messages = Array.isArray(messagesResult.data) ? messagesResult.data : [];
+  const targetMessage = messages.find(
+    (message) =>
+      (message &&
+        typeof message === "object" &&
+        typeof (message as any).info?.id === "string" &&
+        (message as any).info.id === messageId) ||
+      (typeof (message as any)?.id === "string" && (message as any).id === messageId),
+  );
+  const summaryDiffs = normalizeDetailedSessionDiffs(
+    (targetMessage as any)?.info?.summary?.diffs ?? (targetMessage as any)?.summary?.diffs,
+  );
+
+  if (summaryDiffs.length > 0) {
+    return summaryDiffs;
+  }
+
   const result = await client.session.diff({
     sessionID: sessionId,
     directory: opencodeDir,
@@ -883,7 +958,7 @@ export async function getMessageDiff(
     throw new Error(`Failed to load session diff: ${JSON.stringify(result.error)}`);
   }
 
-  return result.data || [];
+  return normalizeDetailedSessionDiffs(result.data);
 }
 
 export async function listQuestions(directory: string) {

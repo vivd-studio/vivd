@@ -144,11 +144,108 @@ describe("dispatchCli", () => {
     const rootHelp = await dispatchCli(["help"]);
     const previewHelp = await dispatchCli(["preview", "help"]);
 
-    expect(rootHelp.human).not.toContain("vivd preview help");
+    expect(rootHelp.human).toContain("vivd preview help");
+    expect(previewHelp.human).toContain("vivd preview status");
+    expect(previewHelp.human).toContain("vivd preview logs [path]");
     expect(previewHelp.human).not.toContain("vivd preview screenshot [path]");
     await expect(dispatchCli(["preview", "screenshot", "/"])).rejects.toThrow(
-      "Unknown command: preview",
+      "Unknown preview command",
     );
+  });
+
+  it("shows preview/runtime debugging status including dev server state", async () => {
+    runtime.client.query.mockResolvedValue({
+      provider: "fly",
+      runtime: {
+        running: true,
+        health: "ok",
+        browserUrl: "https://preview.example.test",
+        runtimeUrl: "https://runtime.example.test",
+        compatibilityUrl: "https://app.example/_studio/runtime-1",
+      },
+      preview: {
+        mode: "devserver",
+        status: "ready",
+      },
+      devServer: {
+        applicable: true,
+        running: true,
+        status: "ready",
+      },
+    });
+
+    const result = await dispatchCli(["preview", "status"]);
+
+    expect(runtime.client.query).toHaveBeenCalledWith("studioApi.getPreviewStatus", {
+      studioId: "studio_1",
+      slug: "demo",
+      version: 7,
+    });
+    expect(result.human).toContain("Preview status for debugging.");
+    expect(result.human).toContain("Provider: fly");
+    expect(result.human).toContain("Dev server: running");
+  });
+
+  it("captures preview logs through the stable preview CLI surface", async () => {
+    runtime.client.mutation.mockResolvedValue({
+      path: "/pricing",
+      capturedUrl: "https://preview.example.test/pricing",
+      waitMs: 1200,
+      limit: 10,
+      level: "warn",
+      contains: "hydrate",
+      entries: [
+        {
+          type: "error",
+          text: "Hydration failed at <App>",
+          timestamp: "2026-04-09T10:00:00.000Z",
+          textTruncated: false,
+          location: {
+            url: "https://preview.example.test/assets/app.js",
+            line: 18,
+            column: 4,
+          },
+        },
+      ],
+      summary: {
+        observed: 6,
+        matched: 1,
+        returned: 1,
+        dropped: 0,
+        truncatedMessages: 0,
+      },
+    });
+
+    const result = await dispatchCli([
+      "preview",
+      "logs",
+      "/pricing",
+      "--wait-ms",
+      "1200",
+      "--limit",
+      "10",
+      "--level",
+      "warn",
+      "--contains",
+      "hydrate",
+    ]);
+
+    expect(runtime.client.mutation).toHaveBeenCalledWith(
+      "studioApi.capturePreviewLogs",
+      {
+        studioId: "studio_1",
+        slug: "demo",
+        version: 7,
+        path: "/pricing",
+        waitMs: 1200,
+        limit: 10,
+        level: "warn",
+        contains: "hydrate",
+      },
+    );
+    expect(result.human).toContain("Preview logs captured for debugging.");
+    expect(result.human).toContain("Filters: level>=warn | limit=10 | wait=1200ms | contains=\"hydrate\"");
+    expect(result.human).toContain("[error] Hydration failed at <App>");
   });
 
   it("shows the publish checklist with project version context", async () => {
@@ -937,6 +1034,10 @@ describe("dispatchCli", () => {
     expect(rootHelp.human).toContain("vivd preview help");
     expect(cmsHelp.human).toContain("vivd cms scaffold init");
     expect(cmsHelp.human).toContain("src/content/");
+    expect(previewHelp.human).toContain("vivd preview status");
+    expect(previewHelp.human).toContain("dev server is running");
+    expect(previewHelp.human).toContain("vivd preview logs [path]");
+    expect(previewHelp.human).toContain("for debugging");
     expect(previewHelp.human).toContain("vivd preview screenshot [path]");
     expect(previewHelp.human).toContain(".vivd/dropped-images/");
     expect(pluginsHelp.human).toContain("vivd plugins info <pluginId>");
@@ -1008,8 +1109,13 @@ describe("cli args", () => {
       "--scroll-y",
       "1200",
       "--wait-ms=600",
+      "--limit",
+      "25",
       "--format",
       "webp",
+      "--level",
+      "warn",
+      "--contains=hydrate",
       "--output",
       ".vivd/dropped-images/preview.webp",
       "--status",
@@ -1025,7 +1131,10 @@ describe("cli args", () => {
     expect(parsed.flags.height).toBe(900);
     expect(parsed.flags.scrollY).toBe(1200);
     expect(parsed.flags.waitMs).toBe(600);
+    expect(parsed.flags.limit).toBe(25);
     expect(parsed.flags.format).toBe("webp");
+    expect(parsed.flags.level).toBe("warn");
+    expect(parsed.flags.contains).toBe("hydrate");
     expect(parsed.flags.output).toBe(".vivd/dropped-images/preview.webp");
     expect(parsed.flags.status).toBe("pass");
     expect(parsed.flags.note).toBe("ready to ship");

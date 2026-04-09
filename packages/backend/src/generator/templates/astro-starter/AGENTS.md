@@ -10,6 +10,14 @@ If this Astro project uses the Vivd CMS contract, the canonical structured conte
 - collection entries: `src/content/collections/`
 - CMS media/documents: `src/content/media/`
 
+The Vivd YAML files under `src/content/` are the canonical source of truth.
+
+- Do not replace them with a separate Astro-only schema/source-of-truth such as `src/content.config.ts`.
+- Astro Content Collections may be used as the Astro rendering/query layer, but they should read from the existing Vivd content contract instead of introducing a second parallel content model.
+- Collection entries belong under `src/content/collections/<collection-key>/`; do not place them directly under `src/content/<collection-key>/`.
+- Do not hand-edit `.vivd/content/`; it is generated.
+- Run `vivd cms validate` after changing CMS schema or collection entries.
+
 Use `src/content/` selectively for structured, repeatable, user-managed content such as products, blog posts, directories, testimonials, downloads, events, or case studies.
 
 Do not force one-off presentational page copy or layout wrappers into the CMS by default.

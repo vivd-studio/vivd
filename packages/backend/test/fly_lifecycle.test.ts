@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
+  resolveSuspendInProgressTimeoutMs,
+  resolveSuspendWaitTimeoutMs,
   startMachineHandlingReplacement,
   suspendOrStopMachine,
   waitForReady,
@@ -304,6 +306,36 @@ describe("Fly lifecycle helpers", () => {
       machineId: "machine-1",
       state: "suspended",
       timeoutMs: 120_000,
+    });
+  });
+
+  it("honors env overrides for suspend wait timeouts", async () => {
+    vi.stubEnv("VIVD_FLY_SUSPEND_WAIT_TIMEOUT_MS", "90000");
+    vi.stubEnv("VIVD_FLY_SUSPEND_IN_PROGRESS_TIMEOUT_MS", "180000");
+
+    expect(resolveSuspendWaitTimeoutMs()).toBe(90_000);
+    expect(resolveSuspendInProgressTimeoutMs()).toBe(180_000);
+
+    const getMachine = vi.fn<() => Promise<FlyMachine>>().mockResolvedValue(machine("suspending"));
+    const suspendMachine = vi.fn<() => Promise<void>>();
+    const stopMachine = vi.fn<() => Promise<void>>();
+    const waitForStateMock = vi.fn<
+      (options: { machineId: string; state: FlyMachine["state"]; timeoutMs: number }) => Promise<void>
+    >().mockResolvedValue(undefined);
+
+    const result = await suspendOrStopMachine({
+      machineId: "machine-1",
+      getMachine: async () => getMachine(),
+      suspendMachine: async () => suspendMachine(),
+      stopMachine: async () => stopMachine(),
+      waitForState: async (options) => waitForStateMock(options),
+    });
+
+    expect(result).toBe("suspended");
+    expect(waitForStateMock).toHaveBeenCalledWith({
+      machineId: "machine-1",
+      state: "suspended",
+      timeoutMs: 180_000,
     });
   });
 });

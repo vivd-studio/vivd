@@ -17,6 +17,73 @@ export type UnifiedDiffPreview = {
   truncated: boolean;
 };
 
+function parseUnifiedPatchLines(patch: string): UnifiedPreviewLine[] {
+  const lines = patch.replace(/\r\n?/g, "\n").split("\n");
+  const parsed: UnifiedPreviewLine[] = [];
+  let inHunk = false;
+  let beforeLineNumber = 0;
+  let afterLineNumber = 0;
+
+  for (const line of lines) {
+    const hunkMatch = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunkMatch) {
+      const nextBeforeLineNumber = Number(hunkMatch[1] ?? 0);
+      const nextAfterLineNumber = Number(hunkMatch[2] ?? 0);
+      const omittedCount = Math.max(
+        nextBeforeLineNumber - beforeLineNumber,
+        nextAfterLineNumber - afterLineNumber,
+      );
+      if (inHunk && omittedCount > 0) {
+        parsed.push({ kind: "omitted", count: omittedCount });
+      }
+      beforeLineNumber = nextBeforeLineNumber;
+      afterLineNumber = nextAfterLineNumber;
+      inHunk = true;
+      continue;
+    }
+
+    if (!inHunk || line.startsWith("\\ No newline at end of file")) {
+      continue;
+    }
+
+    const prefix = line[0];
+    const text = line.slice(1);
+
+    if (prefix === " ") {
+      parsed.push({
+        kind: "context",
+        text,
+        beforeLineNumber,
+        afterLineNumber,
+      });
+      beforeLineNumber += 1;
+      afterLineNumber += 1;
+      continue;
+    }
+
+    if (prefix === "-") {
+      parsed.push({
+        kind: "removed",
+        text,
+        beforeLineNumber,
+      });
+      beforeLineNumber += 1;
+      continue;
+    }
+
+    if (prefix === "+") {
+      parsed.push({
+        kind: "added",
+        text,
+        afterLineNumber,
+      });
+      afterLineNumber += 1;
+    }
+  }
+
+  return parsed;
+}
+
 function splitLines(value: string): string[] {
   const normalized = value.replace(/\r\n?/g, "\n");
   if (normalized.length === 0) {
@@ -156,15 +223,30 @@ function buildRawDiffLines(before: string[], after: string[]): UnifiedPreviewLin
 }
 
 export function buildUnifiedDiffPreview(
-  diff: Pick<DetailedFileDiff, "before" | "after">,
+  diff: Pick<DetailedFileDiff, "patch" | "before" | "after">,
   options?: {
     contextRadius?: number;
     maxLines?: number;
   },
 ): UnifiedDiffPreview {
-  const rawLines = buildRawDiffLines(splitLines(diff.before), splitLines(diff.after));
-  const contextRadius = options?.contextRadius ?? 2;
   const maxLines = options?.maxLines ?? 180;
+  const patch =
+    typeof diff.patch === "string" && diff.patch.trim().length > 0
+      ? diff.patch
+      : null;
+
+  if (patch) {
+    const lines = parseUnifiedPatchLines(patch);
+    return {
+      lines: lines.slice(0, maxLines),
+      truncated: lines.length > maxLines,
+    };
+  }
+
+  const before = typeof diff.before === "string" ? diff.before : "";
+  const after = typeof diff.after === "string" ? diff.after : "";
+  const rawLines = buildRawDiffLines(splitLines(before), splitLines(after));
+  const contextRadius = options?.contextRadius ?? 2;
   const changedIndexes = rawLines
     .map((line, index) => (line.kind === "context" ? -1 : index))
     .filter((index) => index >= 0);

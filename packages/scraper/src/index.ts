@@ -1,5 +1,6 @@
 import express from "express";
 import { fullScrapeRouter } from "./httpRoutes/fullScrape.js";
+import { previewLogsRouter } from "./httpRoutes/previewLogs.js";
 import { screenshotRouter } from "./httpRoutes/screenshot.js";
 import { scrapePageRouter } from "./httpRoutes/scrapePage.js";
 import { findLinksRouter } from "./httpRoutes/findLinks.js";
@@ -32,6 +33,7 @@ app.get("/health", (_req, res) => {
 // Protected routes with concurrency limiting for heavy operations
 // Full scrape and screenshot are the most resource-intensive
 app.use("/full-scrape", authMiddleware, concurrencyLimiter, fullScrapeRouter);
+app.use("/preview-logs", authMiddleware, concurrencyLimiter, previewLogsRouter);
 app.use("/screenshot", authMiddleware, concurrencyLimiter, screenshotRouter);
 app.use("/scrape-page", authMiddleware, concurrencyLimiter, scrapePageRouter);
 // find-links is lighter weight but still uses a browser

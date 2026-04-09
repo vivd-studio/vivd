@@ -69,6 +69,44 @@ export function resolveRelativePath(baseFilePath: string, rawPath: string): stri
   return resolved.join("/");
 }
 
+export function buildRelativeReferencePath(
+  baseFilePath: string,
+  targetPath: string,
+): string {
+  const baseSegments = dirnamePosix(baseFilePath).split("/").filter(Boolean);
+  const targetSegments = normalizeRelativeSegments(targetPath);
+
+  let sharedIndex = 0;
+  while (
+    sharedIndex < baseSegments.length &&
+    sharedIndex < targetSegments.length &&
+    baseSegments[sharedIndex] === targetSegments[sharedIndex]
+  ) {
+    sharedIndex += 1;
+  }
+
+  const relativeSegments = [
+    ...baseSegments.slice(sharedIndex).map(() => ".."),
+    ...targetSegments.slice(sharedIndex),
+  ];
+
+  if (relativeSegments.length === 0) {
+    return ".";
+  }
+
+  return relativeSegments.join("/");
+}
+
+export function isPathInsideRoot(candidatePath: string, rootPath: string): boolean {
+  const normalizedCandidate = normalizePosix(candidatePath).replace(/^\/+/, "");
+  const normalizedRoot = normalizePosix(rootPath).replace(/^\/+/, "").replace(/\/+$/, "");
+
+  return (
+    normalizedCandidate === normalizedRoot ||
+    normalizedCandidate.startsWith(`${normalizedRoot}/`)
+  );
+}
+
 export function getValueAtPath(value: unknown, path: CmsFieldSegment[]): unknown {
   let current = value;
   for (const segment of path) {

@@ -181,7 +181,76 @@ describe("opencode index session behavior", () => {
     ]);
   });
 
-  it("loads per-message diffs with the current session and directory", async () => {
+  it("loads per-message diffs from the matched message summary first", async () => {
+    sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "msg-1",
+            summary: {
+              diffs: [
+                {
+                  file: "src/index.html",
+                  patch: [
+                    "diff --git a/src/index.html b/src/index.html",
+                    "--- a/src/index.html",
+                    "+++ b/src/index.html",
+                    "@@ -1 +1 @@",
+                    "-<h1>Before</h1>",
+                    "+<h1>After</h1>",
+                  ].join("\n"),
+                  additions: 1,
+                  deletions: 1,
+                  status: "modified",
+                },
+              ],
+            },
+          },
+        },
+      ],
+      error: undefined,
+    });
+
+    const result = await getMessageDiff(
+      "sess-1",
+      "msg-1",
+      "/workspace/project",
+    );
+
+    expect(sessionMessagesMock).toHaveBeenCalledWith({
+      sessionID: "sess-1",
+      directory: "/workspace/project/",
+    });
+    expect(sessionDiffMock).not.toHaveBeenCalled();
+    expect(result).toEqual([
+      {
+        file: "src/index.html",
+        patch: [
+          "diff --git a/src/index.html b/src/index.html",
+          "--- a/src/index.html",
+          "+++ b/src/index.html",
+          "@@ -1 +1 @@",
+          "-<h1>Before</h1>",
+          "+<h1>After</h1>",
+        ].join("\n"),
+        additions: 1,
+        deletions: 1,
+        status: "modified",
+      },
+    ]);
+  });
+
+  it("falls back to the session diff endpoint for older sessions without summary diffs", async () => {
+    sessionMessagesMock.mockResolvedValueOnce({
+      data: [
+        {
+          info: {
+            id: "msg-1",
+          },
+        },
+      ],
+      error: undefined,
+    });
     sessionDiffMock.mockResolvedValueOnce({
       data: [
         {

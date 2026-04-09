@@ -19,13 +19,15 @@ type TurnDiffPreviewProps = {
   summaryDiffs: RenderableFileDiffSummary[];
 };
 
-function hasInlineTextDiff(
+function hasDetailedPreviewData(
   diff: RenderableFileDiffSummary | DetailedFileDiff | null,
-): diff is DetailedFileDiff {
+): diff is DetailedFileDiff | RenderableFileDiffSummary {
   return (
     diff !== null &&
-    typeof (diff as DetailedFileDiff).before === "string" &&
-    typeof (diff as DetailedFileDiff).after === "string"
+    ((typeof (diff as DetailedFileDiff).patch === "string" &&
+      (diff as DetailedFileDiff).patch!.trim().length > 0) ||
+      typeof (diff as DetailedFileDiff).before === "string" ||
+      typeof (diff as DetailedFileDiff).after === "string")
   );
 }
 
@@ -56,6 +58,8 @@ export function TurnDiffPreview({
   const [expandedFile, setExpandedFile] = useState<string | null>(
     summaryDiffs[0]?.file ?? null,
   );
+  const needsQuery =
+    summaryDiffs.length === 0 || summaryDiffs.some((diff) => !hasDetailedPreviewData(diff));
 
   const diffQuery = trpc.agentChat.messageDiff.useQuery(
     {
@@ -65,12 +69,14 @@ export function TurnDiffPreview({
       messageId,
     },
     {
-      enabled: open && Boolean(selectedSessionId),
+      enabled: open && Boolean(selectedSessionId) && needsQuery,
       staleTime: 60_000,
     },
   );
 
-  const displayDiffs = (diffQuery.data ?? summaryDiffs) as Array<
+  const displayDiffs = (
+    summaryDiffs.length > 0 ? summaryDiffs : (diffQuery.data ?? [])
+  ) as Array<
     RenderableFileDiffSummary | DetailedFileDiff
   >;
 
@@ -93,8 +99,12 @@ export function TurnDiffPreview({
 
     return new Map(diffQuery.data.map((diff) => [diff.file, diff]));
   }, [diffQuery.data]);
+  const summaryDiffsByFile = useMemo(
+    () => new Map(summaryDiffs.map((diff) => [diff.file, diff])),
+    [summaryDiffs],
+  );
 
-  const diffCount = diffQuery.data?.length ?? summaryDiffs.length;
+  const diffCount = displayDiffs.length;
   const hasDisplayDiffs = displayDiffs.length > 0;
 
   return (
@@ -131,9 +141,13 @@ export function TurnDiffPreview({
                 const isExpanded = diff.file === expandedFile;
                 const directory = getDirectory(diff.file);
                 const status = resolveFileDiffStatus(diff);
-                const detailedDiff = detailedDiffsByFile.get(diff.file) ?? null;
+                const summaryDetailedDiff = summaryDiffsByFile.get(diff.file) ?? null;
+                const queriedDetailedDiff = detailedDiffsByFile.get(diff.file) ?? null;
+                const detailedDiff = hasDetailedPreviewData(summaryDetailedDiff)
+                  ? summaryDetailedDiff
+                  : queriedDetailedDiff;
                 const preview =
-                  isExpanded && hasInlineTextDiff(detailedDiff)
+                  isExpanded && hasDetailedPreviewData(detailedDiff)
                     ? buildUnifiedDiffPreview(detailedDiff)
                     : null;
 
@@ -197,7 +211,7 @@ export function TurnDiffPreview({
                           {diff.deletions}
                         </div>
 
-                        {hasInlineTextDiff(detailedDiff) ? (
+                        {hasDetailedPreviewData(detailedDiff) ? (
                           preview && preview.lines.length > 0 ? (
                             <div className="max-h-80 overflow-auto font-mono text-[11px] leading-5">
                               {preview.lines.map((line, index) =>

@@ -41,6 +41,9 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain("Treat both as working material");
     expect(prompt).toContain("Structured CMS content");
     expect(prompt).toContain("src/content/vivd.content.yaml");
+    expect(prompt).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
+    expect(prompt).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
+    expect(prompt).toContain("Collection entries belong under `src/content/collections/<collection-key>/`");
     expect(prompt).toContain("vivd cms validate");
     expect(prompt).toContain("Redirects for migrated URLs");
     expect(prompt).toContain("Tool Usage Contract");

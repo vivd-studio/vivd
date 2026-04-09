@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { stringify as stringifyYaml } from "yaml";
 import { trpc } from "@/lib/trpc";
 import { usePreview } from "@/components/preview/PreviewContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -45,14 +46,13 @@ import {
   cloneValue,
   collectRichTextSidecars,
   deriveReferenceValue,
-  getAssetPathValue,
   getEntryTitle,
   getValueAtPath,
   resolveRelativePath,
-  setAssetPathValue,
   setValueAtPath,
   titleizeKey,
 } from "./helpers";
+import { CmsAssetField } from "./CmsAssetField";
 
 interface CmsPanelProps {
   projectSlug: string;
@@ -108,6 +108,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     setViewingImagePath,
     setViewingPdfPath,
   } = usePreview();
+  const { canUseAiImages } = usePermissions();
   const statusQuery = trpc.cms.status.useQuery(undefined, {
     staleTime: 0,
     refetchOnWindowFocus: false,
@@ -771,52 +772,39 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       }
 
       if (field.type === "asset") {
-        const assetPath = getAssetPathValue(rawValue);
+        if (!selectedEntry || !selectedModel) {
+          return null;
+        }
+
+        const mediaRootPath = "src/content/media";
+        const defaultFolderPath = `${mediaRootPath}/${selectedModel.key}/${selectedEntry.key}`;
         return (
-          <div key={fieldId} className="space-y-2 rounded-lg border border-border/60 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <Label htmlFor={fieldId}>{label}</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Store a path under <code>src/content/media/</code>.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openExplorer()}
-              >
-                <FolderOpen className="mr-2 h-4 w-4" />
-                Explorer
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Input
-                id={fieldId}
-                value={assetPath}
-                onChange={(event) =>
-                  applyDraftValue(
-                    fieldPath,
-                    setAssetPathValue(rawValue, event.target.value),
-                  )
-                }
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!assetPath.trim()}
-                onClick={() => openAssetReference(assetPath)}
-              >
-                Open
-              </Button>
-            </div>
-          </div>
+          <CmsAssetField
+            key={fieldId}
+            projectSlug={projectSlug}
+            version={version}
+            fieldId={fieldId}
+            label={label}
+            field={field}
+            value={rawValue}
+            entryRelativePath={selectedEntry.relativePath}
+            mediaRootPath={mediaRootPath}
+            defaultFolderPath={defaultFolderPath}
+            canUseAiImages={canUseAiImages}
+            onChange={(nextValue) => applyDraftValue(fieldPath, nextValue)}
+            onOpenAsset={openAssetReference}
+          />
         );
       }
 
       if (field.type === "assetList") {
+        if (!selectedEntry || !selectedModel) {
+          return null;
+        }
+
         const items = ensureArray(rawValue);
+        const mediaRootPath = "src/content/media";
+        const defaultFolderPath = `${mediaRootPath}/${selectedModel.key}/${selectedEntry.key}`;
         return (
           <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -852,38 +840,41 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
                 <p className="text-sm text-muted-foreground">No assets yet.</p>
               ) : null}
               {items.map((item, index) => {
-                const itemPath = getAssetPathValue(item);
                 return (
-                  <div key={`${fieldId}.${index}`} className="flex gap-2">
-                    <Input
-                      value={itemPath}
-                      onChange={(event) => {
+                  <div key={`${fieldId}.${index}`} className="space-y-2">
+                    <CmsAssetField
+                      projectSlug={projectSlug}
+                      version={version}
+                      fieldId={`${fieldId}.${index}`}
+                      label={`${label} ${index + 1}`}
+                      field={{ ...field, type: "asset" }}
+                      value={item}
+                      entryRelativePath={selectedEntry.relativePath}
+                      mediaRootPath={mediaRootPath}
+                      defaultFolderPath={defaultFolderPath}
+                      canUseAiImages={canUseAiImages}
+                      compact
+                      onChange={(nextValue) => {
                         const nextItems = [...items];
-                        nextItems[index] = setAssetPathValue(item, event.target.value);
+                        nextItems[index] = nextValue;
                         applyDraftValue(fieldPath, nextItems);
                       }}
+                      onOpenAsset={openAssetReference}
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!itemPath.trim()}
-                      onClick={() => openAssetReference(itemPath)}
-                    >
-                      Open
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        const nextItems = [...items];
-                        nextItems.splice(index, 1);
-                        applyDraftValue(fieldPath, nextItems);
-                      }}
-                    >
-                      Remove
-                    </Button>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const nextItems = [...items];
+                          nextItems.splice(index, 1);
+                          applyDraftValue(fieldPath, nextItems);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -993,6 +984,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     },
     [
       applyDraftValue,
+      canUseAiImages,
       defaultLocale,
       draftValues,
       locales,
@@ -1000,6 +992,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       openExplorer,
       referenceOptions,
       selectedEntry,
+      selectedModel,
       sidecarDrafts,
       handleRichTextChange,
     ],
