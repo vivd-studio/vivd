@@ -1,4 +1,4 @@
-import type { FileDiff } from "@opencode-ai/sdk/v2";
+import type { DetailedFileDiff } from "./types";
 
 export type UnifiedPreviewLine =
   | {
@@ -156,7 +156,7 @@ function buildRawDiffLines(before: string[], after: string[]): UnifiedPreviewLin
 }
 
 export function buildUnifiedDiffPreview(
-  diff: Pick<FileDiff, "before" | "after">,
+  diff: Pick<DetailedFileDiff, "before" | "after">,
   options?: {
     contextRadius?: number;
     maxLines?: number;

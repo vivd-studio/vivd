@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FileDiff } from "@opencode-ai/sdk/v2";
 import { ChevronDown, ChevronRight, FileCode2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useChatContext } from "../ChatContext";
+import type { DetailedFileDiff } from "@/features/opencodeChat/diffs/types";
 import {
   buildUnifiedDiffPreview,
   type UnifiedPreviewLine,
@@ -18,6 +18,16 @@ type TurnDiffPreviewProps = {
   messageId: string;
   summaryDiffs: RenderableFileDiffSummary[];
 };
+
+function hasInlineTextDiff(
+  diff: RenderableFileDiffSummary | DetailedFileDiff | null,
+): diff is DetailedFileDiff {
+  return (
+    diff !== null &&
+    typeof (diff as DetailedFileDiff).before === "string" &&
+    typeof (diff as DetailedFileDiff).after === "string"
+  );
+}
 
 function getFilename(file: string): string {
   const parts = file.split("/");
@@ -61,7 +71,7 @@ export function TurnDiffPreview({
   );
 
   const displayDiffs = (diffQuery.data ?? summaryDiffs) as Array<
-    RenderableFileDiffSummary | FileDiff
+    RenderableFileDiffSummary | DetailedFileDiff
   >;
 
   useEffect(() => {
@@ -78,7 +88,7 @@ export function TurnDiffPreview({
 
   const detailedDiffsByFile = useMemo(() => {
     if (!Array.isArray(diffQuery.data)) {
-      return new Map<string, FileDiff>();
+      return new Map<string, DetailedFileDiff>();
     }
 
     return new Map(diffQuery.data.map((diff) => [diff.file, diff]));
@@ -123,7 +133,7 @@ export function TurnDiffPreview({
                 const status = resolveFileDiffStatus(diff);
                 const detailedDiff = detailedDiffsByFile.get(diff.file) ?? null;
                 const preview =
-                  isExpanded && detailedDiff
+                  isExpanded && hasInlineTextDiff(detailedDiff)
                     ? buildUnifiedDiffPreview(detailedDiff)
                     : null;
 
@@ -187,7 +197,7 @@ export function TurnDiffPreview({
                           {diff.deletions}
                         </div>
 
-                        {detailedDiff ? (
+                        {hasInlineTextDiff(detailedDiff) ? (
                           preview && preview.lines.length > 0 ? (
                             <div className="max-h-80 overflow-auto font-mono text-[11px] leading-5">
                               {preview.lines.map((line, index) =>

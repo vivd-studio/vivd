@@ -1,10 +1,10 @@
-import type { FileDiff } from "@opencode-ai/sdk/v2";
 import type { RenderableFileDiffSummary } from "../render/timeline";
+import type { DetailedFileDiff } from "./types";
 
 export type ResolvedFileDiffStatus = "added" | "deleted" | "modified";
 
 type FileDiffStatusSource = Pick<RenderableFileDiffSummary, "status"> &
-  Partial<Pick<FileDiff, "before" | "after">>;
+  Partial<Pick<DetailedFileDiff, "before" | "after">>;
 
 export function resolveFileDiffStatus(
   diff: FileDiffStatusSource,
