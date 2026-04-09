@@ -52,6 +52,17 @@ type SessionMessageRecord = {
   parts?: Array<Record<string, unknown>>;
 };
 
+type LatestAssistantTerminalState = {
+  hasAssistant: boolean;
+  isTerminal: boolean;
+  reason:
+    | "no_assistant"
+    | "assistant_error"
+    | "assistant_completed"
+    | "assistant_finish"
+    | "assistant_unfinished";
+};
+
 type RevertPatchPartRecord = {
   type?: unknown;
   files?: unknown;
@@ -359,6 +370,94 @@ function resolveCompactionModelSelection(
   return getDefaultModel();
 }
 
+function getLatestAssistantTerminalState(
+  messages: SessionMessageRecord[],
+): LatestAssistantTerminalState {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const info = messages[index]?.info;
+    if (info?.role !== "assistant") {
+      continue;
+    }
+
+    if (info.error != null) {
+      return {
+        hasAssistant: true,
+        isTerminal: true,
+        reason: "assistant_error",
+      };
+    }
+
+    const completedAt = readSessionNumber(
+      (info.time as Record<string, unknown> | undefined)?.completed,
+    );
+    if (typeof completedAt === "number") {
+      return {
+        hasAssistant: true,
+        isTerminal: true,
+        reason: "assistant_completed",
+      };
+    }
+
+    const finish = readSessionString(info.finish);
+    if (finish && !["tool-calls", "unknown"].includes(finish)) {
+      return {
+        hasAssistant: true,
+        isTerminal: true,
+        reason: "assistant_finish",
+      };
+    }
+
+    return {
+      hasAssistant: true,
+      isTerminal: false,
+      reason: "assistant_unfinished",
+    };
+  }
+
+  return {
+    hasAssistant: false,
+    isTerminal: false,
+    reason: "no_assistant",
+  };
+}
+
+async function inspectLatestAssistantTerminalState(options: {
+  client: OpencodeClient;
+  directory: string;
+  sessionId: string;
+}): Promise<LatestAssistantTerminalState> {
+  try {
+    const result = await options.client.session.messages({
+      sessionID: options.sessionId,
+      directory: options.directory,
+    });
+    if (result.error) {
+      console.warn(
+        `[OpenCode] Failed to inspect session=${options.sessionId} for terminal completion: ${JSON.stringify(result.error)}`,
+      );
+      return {
+        hasAssistant: false,
+        isTerminal: false,
+        reason: "no_assistant",
+      };
+    }
+
+    const messages = Array.isArray(result.data)
+      ? (result.data as SessionMessageRecord[])
+      : [];
+    return getLatestAssistantTerminalState(messages);
+  } catch (error) {
+    console.warn(
+      `[OpenCode] Failed to inspect session=${options.sessionId} for terminal completion: ${toErrorMessage(error, "Unknown session inspection failure")}`,
+    );
+    return {
+      hasAssistant: false,
+      isTerminal: false,
+      reason: "no_assistant",
+    };
+  }
+}
+
 async function maybeSoftCompactSession(options: {
   client: OpencodeClient;
   directory: string;
@@ -605,8 +704,22 @@ export async function runTask(
     onIdle: async () => {
       if (completionHandled || idleFinalizationInFlight) return;
       idleFinalizationInFlight = true;
+      let shouldFinalize = true;
 
       try {
+        const terminalState = await inspectLatestAssistantTerminalState({
+          client,
+          directory,
+          sessionId: currentSessionId,
+        });
+        if (!terminalState.isTerminal) {
+          shouldFinalize = false;
+          console.warn(
+            `[OpenCode] Ignoring idle completion for non-terminal session=${currentSessionId} reason=${terminalState.reason}`,
+          );
+          return;
+        }
+
         await maybeSoftCompactSession({
           client,
           directory,
@@ -615,7 +728,9 @@ export async function runTask(
         });
       } finally {
         idleFinalizationInFlight = false;
-        finalizeSessionRun();
+        if (shouldFinalize) {
+          finalizeSessionRun();
+        }
       }
     },
     onSessionError: (error) => {

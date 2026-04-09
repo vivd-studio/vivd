@@ -474,6 +474,10 @@ describe("opencode index session behavior", () => {
           info: {
             id: "a-finished",
             role: "assistant",
+            finish: "stop",
+            time: {
+              completed: Date.now(),
+            },
             providerID: "openrouter",
             modelID: "google/gemini-2.5-pro",
             tokens: {
@@ -494,6 +498,7 @@ describe("opencode index session behavior", () => {
         error: undefined,
       })
       .mockResolvedValueOnce(oversizedMessages)
+      .mockResolvedValueOnce(oversizedMessages)
       .mockResolvedValueOnce(oversizedMessages);
 
     await runTask("continue task", "/workspace/project", "sess-existing");
@@ -510,6 +515,46 @@ describe("opencode index session behavior", () => {
     });
     expect(stopEventsMock).toHaveBeenCalledTimes(1);
     expect(emitSessionEventMock).toHaveBeenCalledWith(
+      "sess-existing",
+      expect.objectContaining({ kind: "session.completed" }),
+    );
+  });
+
+  it("does not emit session.completed when idle arrives before the latest assistant is terminal", async () => {
+    const unfinishedMessages = {
+      data: [
+        {
+          info: {
+            id: "a-unfinished",
+            role: "assistant",
+            providerID: "openrouter",
+            modelID: "google/gemini-2.5-pro",
+            tokens: {
+              input: 150_000,
+              output: 3_000,
+              reasoning: 1_000,
+              cache: { read: 0, write: 0 },
+            },
+          },
+          parts: [{ type: "reasoning", text: "Still working" }],
+        },
+      ],
+      error: undefined,
+    };
+    sessionMessagesMock
+      .mockResolvedValueOnce({
+        data: [],
+        error: undefined,
+      })
+      .mockResolvedValueOnce(unfinishedMessages)
+      .mockResolvedValueOnce(unfinishedMessages);
+
+    await runTask("continue task", "/workspace/project", "sess-existing");
+
+    expect(useEventsCallbacksRef.current?.onIdle).toBeTypeOf("function");
+    await useEventsCallbacksRef.current.onIdle();
+
+    expect(emitSessionEventMock).not.toHaveBeenCalledWith(
       "sess-existing",
       expect.objectContaining({ kind: "session.completed" }),
     );

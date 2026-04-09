@@ -134,6 +134,40 @@ function readManifest(tmpDir: string) {
   ) as Record<string, unknown>;
 }
 
+function mockCompletedSessionState(sessionId = "sess-1") {
+  const now = Date.now();
+  getSessionsStatusMock.mockResolvedValue({
+    [sessionId]: { type: "idle" },
+  });
+  getSessionContentMock.mockResolvedValue([
+    {
+      info: {
+        id: "msg-user",
+        role: "user",
+        time: {
+          created: now - 5_000,
+          updated: now - 5_000,
+          completed: now - 5_000,
+        },
+      },
+      parts: [{ type: "text", text: "Create the initial site" }],
+    },
+    {
+      info: {
+        id: "msg-assistant",
+        role: "assistant",
+        finish: "stop",
+        time: {
+          created: now - 4_000,
+          updated: now - 1_000,
+          completed: now - 1_000,
+        },
+      },
+      parts: [{ type: "text", text: "Done" }],
+    },
+  ]);
+}
+
 async function flushAsyncWork() {
   for (let index = 0; index < 12; index += 1) {
     await Promise.resolve();
@@ -271,6 +305,7 @@ describe("InitialGenerationService", () => {
     expect(startedManifest.sessionId).toBe("sess-1");
 
     expect(sessionListener).toBeTypeOf("function");
+    mockCompletedSessionState();
     sessionListener?.({
       type: "session.completed",
       data: { kind: "session.completed" },
@@ -321,6 +356,7 @@ describe("InitialGenerationService", () => {
       model: { provider: "openai", modelId: "gpt-5.4" },
     });
 
+    mockCompletedSessionState();
     sessionListener?.({
       type: "session.completed",
       data: { kind: "session.completed" },
@@ -353,6 +389,7 @@ describe("InitialGenerationService", () => {
       workspaceDir: tmpDir,
     });
 
+    mockCompletedSessionState();
     sessionListener?.({
       type: "session.completed",
       data: { kind: "session.completed" },
@@ -434,6 +471,7 @@ describe("InitialGenerationService", () => {
       });
       expect(runTaskMock).toHaveBeenCalledTimes(1);
 
+      mockCompletedSessionState("sess-manifest-wait");
       sessionListener?.({
         type: "session.completed",
         data: { kind: "session.completed" },
@@ -500,6 +538,55 @@ describe("InitialGenerationService", () => {
       "The AI provider stopped this run before the initial site finished. Open Studio to continue the session.",
     );
     vi.useRealTimers();
+  });
+
+  it("ignores premature session.completed events while the latest assistant message is unfinished", async () => {
+    getSessionsStatusMock.mockResolvedValue({
+      "sess-1": { type: "idle" },
+    });
+    getSessionContentMock.mockResolvedValue([
+      {
+        info: {
+          id: "msg-user",
+          role: "user",
+          time: {
+            created: Date.now() - 20_000,
+            updated: Date.now() - 20_000,
+            completed: Date.now() - 20_000,
+          },
+        },
+        parts: [{ type: "text", text: "Create the initial site" }],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          role: "assistant",
+          time: {
+            created: Date.now() - 10_000,
+            updated: Date.now() - 2_000,
+          },
+        },
+        parts: [{ type: "reasoning", text: "Still working" }],
+      },
+    ]);
+
+    await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+    });
+
+    sessionListener?.({
+      type: "session.completed",
+      data: { kind: "session.completed" },
+    });
+    await flushAsyncWork();
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("generating_initial_site");
+    expect(saveInitialGenerationSnapshotMock).not.toHaveBeenCalled();
+    expect(syncSourceToBucketMock).not.toHaveBeenCalled();
+    expect(buildAndUploadPreviewMock).not.toHaveBeenCalled();
   });
 
   it("drops a stale empty startup session and starts a fresh visible session", async () => {

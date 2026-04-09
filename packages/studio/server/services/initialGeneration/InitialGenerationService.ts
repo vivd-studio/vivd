@@ -725,6 +725,39 @@ function startMonitor(options: {
     });
   };
 
+  const verifyCompletedSession = async () => {
+    if (settled) return;
+
+    try {
+      const assessment = await inspectExistingInitialGenerationSession({
+        workspaceDir: options.workspaceDir,
+        sessionId: options.sessionId,
+      });
+
+      if (settled) return;
+
+      if (assessment.outcome.state === "completed") {
+        finalizeCompletedSession();
+        return;
+      }
+
+      if (assessment.outcome.state === "failed") {
+        reportSessionFailure(assessment.outcome.errorMessage);
+        return;
+      }
+
+      console.warn(
+        `[InitialGeneration] Ignoring premature completion event for ${options.projectSlug}/v${options.version} (${options.sessionId}); persisted session is not terminal yet.`,
+      );
+      reportSessionResumed();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[InitialGeneration] Failed to verify completion for ${options.projectSlug}/v${options.version} (${options.sessionId}): ${message}`,
+      );
+    }
+  };
+
   const reportSessionFailure = (message?: string) => {
     if (settled) return;
     failureObserved = true;
@@ -806,7 +839,7 @@ function startMonitor(options: {
       if (settled) return;
 
       if (event.type === "session.completed") {
-        finalizeCompletedSession();
+        void verifyCompletedSession();
         return;
       }
 
