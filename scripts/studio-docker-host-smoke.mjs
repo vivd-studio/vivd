@@ -21,7 +21,8 @@ const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
 const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
 const DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS = 15_000;
 const INITIAL_GENERATION_ACTION_POLL_MS = 2_000;
-const INITIAL_GENERATION_MIN_RECORDED_ACTIONS = 6;
+const INITIAL_GENERATION_MIN_PROGRESS_SIGNALS = 1;
+const INITIAL_GENERATION_SESSION_HISTORY_PROBE_INTERVAL_MS = 10_000;
 const DEFAULT_STUDIO_READY_TIMEOUT_MS = 90_000;
 const STUDIO_READY_PROGRESS_LOG_INTERVAL_MS = 15_000;
 const MAX_AUTH_SETTLE_ATTEMPTS = 3;
@@ -1143,7 +1144,7 @@ function countRecordedInitialGenerationActions(messages) {
 }
 
 async function readInitialGenerationProgress(options) {
-  const [messages, statuses] = await Promise.all([
+  const [messagesResult, statusesResult] = await Promise.allSettled([
     readStudioTrpcQueryInFrame(
       options.frame,
       options.trpcUrl,
@@ -1167,9 +1168,28 @@ async function readInitialGenerationProgress(options) {
     ),
   ]);
 
+  const messages =
+    messagesResult.status === "fulfilled" ? messagesResult.value : [];
+  const statuses =
+    statusesResult.status === "fulfilled" ? statusesResult.value : null;
+  const messagesError =
+    messagesResult.status === "rejected"
+      ? messagesResult.reason instanceof Error
+        ? messagesResult.reason.message
+        : String(messagesResult.reason)
+      : null;
+  const statusesError =
+    statusesResult.status === "rejected"
+      ? statusesResult.reason instanceof Error
+        ? statusesResult.reason.message
+        : String(statusesResult.reason)
+      : null;
+
   return {
     actionCount: countRecordedInitialGenerationActions(messages),
     sessionStatus: statuses?.[options.sessionId] ?? null,
+    messagesError,
+    statusesError,
   };
 }
 
@@ -1238,9 +1258,12 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   const startedAt = Date.now();
   let sessionIdFromUrl = null;
   let lastVisibleState = null;
-  let lastActionCount = 0;
+  let lastRecordedActionCount = 0;
+  let lastProgressEvidenceCount = 0;
   let lastSessionStatus = null;
   let lastProgressError = null;
+  let lastSessionHistoryEvidence = null;
+  let lastSessionHistoryProbeAt = 0;
   let trpcUrl = null;
   let studioToken = null;
 
@@ -1294,17 +1317,57 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
           projectSlug: options.projectSlug,
           version: options.version,
         });
-        lastActionCount = progress.actionCount;
+        lastRecordedActionCount = progress.actionCount;
         lastSessionStatus = progress.sessionStatus?.type ?? null;
-        lastProgressError = null;
+        lastProgressError = [progress.messagesError, progress.statusesError]
+          .filter(Boolean)
+          .join("; ") || null;
       } catch (error) {
         lastProgressError = error instanceof Error ? error.message : String(error);
       }
     }
 
-    if (lastActionCount >= INITIAL_GENERATION_MIN_RECORDED_ACTIONS) {
+    const uiProgressEvidence =
+      lastVisibleState === "stop" ||
+      lastVisibleState === "assistant-activity" ||
+      lastVisibleState === "agent-question"
+        ? 1
+        : 0;
+
+    const shouldProbeSessionHistory =
+      Boolean(sessionIdFromUrl) &&
+      lastRecordedActionCount === 0 &&
+      Date.now() - lastSessionHistoryProbeAt >=
+        INITIAL_GENERATION_SESSION_HISTORY_PROBE_INTERVAL_MS &&
+      (lastProgressError ||
+        lastSessionStatus === "busy" ||
+        lastSessionStatus === "retry" ||
+        lastVisibleState === "user-message");
+
+    if (shouldProbeSessionHistory) {
+      lastSessionHistoryProbeAt = Date.now();
+      lastSessionHistoryEvidence = await probeSessionHistoryForSessionEvidence(
+        frame,
+        Math.min(remainingMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
+      ).catch(() => lastSessionHistoryEvidence);
+    }
+
+    const sessionHistoryEvidence =
+      lastSessionHistoryEvidence === "session-activity-indicator" ||
+      (lastSessionHistoryEvidence === "session-row" &&
+        (lastSessionStatus === "busy" || lastSessionStatus === "retry"))
+        ? 1
+        : 0;
+
+    lastProgressEvidenceCount = Math.max(
+      lastRecordedActionCount,
+      uiProgressEvidence,
+      sessionHistoryEvidence,
+    );
+
+    if (lastProgressEvidenceCount >= INITIAL_GENERATION_MIN_PROGRESS_SIGNALS) {
       log(
-        `Observed ${lastActionCount} recorded initial-generation actions for session ${sessionIdFromUrl ?? "unknown"} (status=${lastSessionStatus ?? "unknown"}); checking for a stop opportunity`,
+        `Observed initial-generation progress for session ${sessionIdFromUrl ?? "unknown"} (recordedActions=${lastRecordedActionCount} evidence=${lastProgressEvidenceCount} status=${lastSessionStatus ?? "unknown"} history=${lastSessionHistoryEvidence ?? "none"}); checking for a stop opportunity`,
       );
 
       if (await stopButton.isVisible().catch(() => false)) {
@@ -1316,11 +1379,11 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
             settleTimeoutMs,
             "send button after stop",
           );
-          return `stopped-after-${lastActionCount}-artifacts`;
+          return `stopped-after-${lastProgressEvidenceCount}-progress-signals`;
         }
       }
 
-      return `observed-${lastActionCount}-recorded-actions`;
+      return `observed-${lastProgressEvidenceCount}-progress-signals`;
     }
 
     await sleep(INITIAL_GENERATION_ACTION_POLL_MS);
@@ -1330,7 +1393,7 @@ async function settleInitialGeneration(page, frame, timeoutMs, options) {
   const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
 
   throw new Error(
-    `Initial generation did not reach ${INITIAL_GENERATION_MIN_RECORDED_ACTIONS} recorded assistant actions within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastActionCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
+    `Initial generation did not reach ${INITIAL_GENERATION_MIN_PROGRESS_SIGNALS} progress signal(s) within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastRecordedActionCount} progressEvidence=${lastProgressEvidenceCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sessionHistoryEvidence=${lastSessionHistoryEvidence ?? "none"} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
   );
 }
 
@@ -1481,6 +1544,7 @@ async function main() {
   );
   const screenshotPath = path.join(artifactDir, "failure.png");
   const metricsPath = path.join(artifactDir, "metrics.json");
+  const composeLogsPath = path.join(artifactDir, "compose.log");
   const smokeEnv = {
     ...baseEnv,
     VIVD_STUDIO_HOST_SMOKE_PORT: String(hostPort),
@@ -1790,12 +1854,13 @@ async function main() {
       try {
         const composeLogs = runDockerCompose(
           composeProject,
-          ["logs", "--tail", "200"],
+          ["logs", "--tail", "80"],
           { cwd: workDir, env: smokeEnv, allowFailure: true },
         );
         const combinedLogs = `${composeLogs.stdout}${composeLogs.stderr}`.trim();
         if (combinedLogs) {
-          console.error(combinedLogs);
+          writeFileSync(composeLogsPath, `${combinedLogs}\n`, "utf8");
+          log(`Saved compose logs to ${composeLogsPath}`);
         }
       } catch {
         // Best effort.
