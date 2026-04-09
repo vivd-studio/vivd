@@ -265,6 +265,41 @@ describe("project studio callback URL wiring", () => {
     });
   });
 
+  it("returns the direct browser URL for local platform hosts", async () => {
+    getInstallProfileMock.mockResolvedValueOnce("platform");
+    ensureRunningMock.mockResolvedValueOnce({
+      studioId: "studio-1",
+      url: "http://app.localhost:4100",
+      runtimeUrl: "http://app.localhost:4100",
+      compatibilityUrl: "http://app.localhost:18080/_studio/runtime-1",
+      port: 4100,
+      accessToken: "access-1",
+    });
+
+    const caller = studioRouter.createCaller(
+      makeContext({
+        req: {
+          headers: {
+            "x-forwarded-host": "app.localhost:18080",
+            "x-forwarded-proto": "http",
+          },
+        } as any,
+        requestHost: "app.localhost",
+        requestProtocol: "http",
+        requestDomain: "app.localhost",
+      }),
+    );
+    const result = await caller.startStudio({ slug: "site-1", version: 1 });
+
+    expect(result).toMatchObject({
+      success: true,
+      url: "http://app.localhost:4100",
+      browserUrl: "http://app.localhost:4100",
+      runtimeUrl: "http://app.localhost:4100",
+      compatibilityUrl: "http://app.localhost:18080/_studio/runtime-1",
+    });
+  });
+
   it("returns the compatibility browser URL for solo installs that need same-host routing", async () => {
     getInstallProfileMock.mockResolvedValueOnce("solo");
     ensureRunningMock.mockResolvedValueOnce({

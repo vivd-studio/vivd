@@ -99,6 +99,7 @@ describe("serverManager workspace readiness", () => {
       "http://127.0.0.1:4096/config",
       `http://127.0.0.1:4096/path?directory=${encodeURIComponent(workspaceDir)}`,
       `http://127.0.0.1:4096/session/status?directory=${encodeURIComponent(workspaceDir)}`,
+      "http://127.0.0.1:4096/experimental/tool/ids",
     ]);
     expect(createOpencodeClientMock).toHaveBeenCalledWith({
       baseUrl: "http://127.0.0.1:4096",

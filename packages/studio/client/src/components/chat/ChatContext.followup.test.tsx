@@ -26,6 +26,12 @@ const {
   previewState: {
     initialGenerationRequested: false,
     requestedInitialSessionId: null as string | null,
+    devServerStatus: "ready" as
+      | "ready"
+      | "starting"
+      | "installing"
+      | "error"
+      | "none",
     pendingChatMessage: null as
       | {
           kind?: "task";
@@ -37,7 +43,7 @@ const {
     setChatOpen: vi.fn(),
   },
   controllerState: {
-    sessions: [],
+    sessions: [] as any[],
     sessionsLoading: false,
     selectedSessionId: "sess-1" as string | null,
     setSelectedSessionId: vi.fn(),
@@ -144,6 +150,7 @@ describe("ChatProvider follow-up behavior", () => {
     startInitialGenerationMock.mockReset();
     previewState.initialGenerationRequested = false;
     previewState.requestedInitialSessionId = null;
+    previewState.devServerStatus = "ready";
     previewState.pendingChatMessage = null;
     previewState.clearPendingChatMessage.mockReset();
     previewState.clearPendingChatMessage.mockImplementation(() => {
@@ -383,6 +390,35 @@ describe("ChatProvider follow-up behavior", () => {
   it("auto-starts initial generation after Studio attaches when no session exists yet", async () => {
     controllerState.selectedSessionId = null;
     controllerState.sessions = [];
+    controllerState.sessionsLoading = false;
+    controllerState.isSessionHydrating = false;
+    previewState.initialGenerationRequested = true;
+    previewState.pendingChatMessage = null;
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(startInitialGenerationMock).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        version: 1,
+        model: undefined,
+      });
+    });
+  });
+
+  it("still auto-starts initial generation when unrelated hydrated sessions exist", async () => {
+    controllerState.selectedSessionId = null;
+    controllerState.sessions = [
+      {
+        id: "sess-stale",
+        title: "Older unrelated session",
+        time: { updated: Date.UTC(2026, 3, 8, 14, 1, 10) },
+      },
+    ];
     controllerState.sessionsLoading = false;
     controllerState.isSessionHydrating = false;
     previewState.initialGenerationRequested = true;

@@ -462,6 +462,8 @@ class OpencodeServerManager {
     const sessionStatusUrl = new URL("/session/status", url);
     sessionStatusUrl.searchParams.set("directory", workspaceDir);
 
+    const toolIdsUrl = new URL("/experimental/tool/ids", url);
+
     return [
       {
         label: "global config",
@@ -474,6 +476,14 @@ class OpencodeServerManager {
       {
         label: "workspace session status",
         url: sessionStatusUrl.toString(),
+      },
+      {
+        // Tool registry initialization waits for OpenCode's config/plugin
+        // dependency install. Initial generation sends a prompt immediately
+        // after machine boot, so we must not treat the server as ready before
+        // tool loading finishes.
+        label: "workspace tool registry",
+        url: toolIdsUrl.toString(),
       },
     ];
   }

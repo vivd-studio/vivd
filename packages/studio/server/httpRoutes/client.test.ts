@@ -124,10 +124,10 @@ describe("registerStudioClientHttpRoutes", () => {
     }
   });
 
-  it("serves the shell without resolving a session when one is already present", async () => {
+  it("serves the shell when the handed-off initial session matches the current runtime", async () => {
     const resolveInitialGenerationSessionId = vi
       .fn()
-      .mockResolvedValue("sess-should-not-be-used");
+      .mockResolvedValue("sess-existing");
     const { app } = createApp({
       resolveInitialGenerationSessionId,
     });
@@ -140,7 +140,63 @@ describe("registerStudioClientHttpRoutes", () => {
 
       expect(response.status).toBe(200);
       expect(await response.text()).toContain("studio-shell");
-      expect(resolveInitialGenerationSessionId).not.toHaveBeenCalled();
+      expect(resolveInitialGenerationSessionId).toHaveBeenCalledTimes(1);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  it("strips a stale handed-off initial session when the current runtime no longer has one", async () => {
+    const resolveInitialGenerationSessionId = vi.fn().mockResolvedValue(null);
+    const { app } = createApp({
+      resolveInitialGenerationSessionId,
+    });
+    const { server, baseUrl } = await startServer(app);
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/vivd-studio?initialGeneration=1&projectSlug=site-1&version=1&sessionId=sess-stale`,
+        {
+          redirect: "manual",
+        },
+      );
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(
+        "/vivd-studio?initialGeneration=1&projectSlug=site-1&version=1",
+      );
+      expect(resolveInitialGenerationSessionId).toHaveBeenCalledTimes(1);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  it("replaces a stale handed-off initial session with the runtime's current session", async () => {
+    const resolveInitialGenerationSessionId = vi
+      .fn()
+      .mockResolvedValue("sess-current");
+    const { app } = createApp({
+      resolveInitialGenerationSessionId,
+    });
+    const { server, baseUrl } = await startServer(app);
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/vivd-studio?initialGeneration=1&projectSlug=site-1&version=1&sessionId=sess-stale`,
+        {
+          redirect: "manual",
+        },
+      );
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(
+        "/vivd-studio?initialGeneration=1&projectSlug=site-1&version=1&sessionId=sess-current",
+      );
+      expect(resolveInitialGenerationSessionId).toHaveBeenCalledTimes(1);
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

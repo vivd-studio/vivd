@@ -60,6 +60,35 @@ const studioRuntimeRunningSchema = z.object({
 type StudioRuntimeStatusContract = z.infer<typeof studioRuntimeStatusSchema>;
 type StudioRuntimeStartContract = z.infer<typeof studioRuntimeStartSchema>;
 
+function readForwardedHostHeader(
+  value: string | string[] | undefined,
+): string | null {
+  if (typeof value === "string") {
+    const normalized = value.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  if (Array.isArray(value) && value.length > 0) {
+    const normalized = value[0]?.split(",")[0]?.trim() ?? "";
+    return normalized || null;
+  }
+  return null;
+}
+
+function resolveRuntimeAccessRequestHost(options: {
+  req?: { headers?: Record<string, string | string[] | undefined> } | null;
+  fallbackHost?: string | null;
+}): string | null {
+  const forwardedHost = readForwardedHostHeader(
+    options.req?.headers?.["x-forwarded-host"],
+  );
+  if (forwardedHost) return forwardedHost;
+
+  const host = readForwardedHostHeader(options.req?.headers?.host);
+  if (host) return host;
+
+  return options.fallbackHost?.trim() || null;
+}
+
 async function resolveRuntimeContractUrls(options: {
   url: string;
   runtimeUrl?: string | null;
@@ -151,7 +180,10 @@ export const studioProcedures = {
           url: existing.url,
           runtimeUrl: existing.runtimeUrl ?? existing.url,
           compatibilityUrl: existing.compatibilityUrl ?? null,
-          requestHost: ctx.requestHost,
+          requestHost: resolveRuntimeAccessRequestHost({
+            req: ctx.req,
+            fallbackHost: ctx.requestHost,
+          }),
           requestProtocol: ctx.requestProtocol,
         });
         return {
@@ -233,7 +265,10 @@ export const studioProcedures = {
           url,
           runtimeUrl: runtimeUrl ?? url,
           compatibilityUrl: compatibilityUrl ?? null,
-          requestHost: ctx.requestHost,
+          requestHost: resolveRuntimeAccessRequestHost({
+            req: ctx.req,
+            fallbackHost: ctx.requestHost,
+          }),
           requestProtocol: ctx.requestProtocol,
         });
 
@@ -317,7 +352,10 @@ export const studioProcedures = {
           url,
           runtimeUrl: runtimeUrl ?? url,
           compatibilityUrl: compatibilityUrl ?? null,
-          requestHost: ctx.requestHost,
+          requestHost: resolveRuntimeAccessRequestHost({
+            req: ctx.req,
+            fallbackHost: ctx.requestHost,
+          }),
           requestProtocol: ctx.requestProtocol,
         });
 
@@ -421,7 +459,10 @@ export const studioProcedures = {
             url: info.url,
             runtimeUrl: info.runtimeUrl ?? info.url,
             compatibilityUrl: info.compatibilityUrl ?? null,
-            requestHost: ctx.requestHost,
+            requestHost: resolveRuntimeAccessRequestHost({
+              req: ctx.req,
+              fallbackHost: ctx.requestHost,
+            }),
             requestProtocol: ctx.requestProtocol,
           })
         : {

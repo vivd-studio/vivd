@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useEvents } from "./useEvents.js";
 
 function makeClient(events: any[]) {
@@ -21,6 +21,10 @@ async function flushEventLoop() {
 }
 
 describe("useEvents", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("does not mirror user text when text part arrives before role metadata", async () => {
     const onText = vi.fn();
 
@@ -474,10 +478,135 @@ describe("useEvents", () => {
     expect(onIdle).not.toHaveBeenCalled();
   });
 
-  it("treats session.status done as terminal completion", async () => {
+  it("does not treat busy->idle with no assistant activity as completion", async () => {
+    vi.useFakeTimers();
     const onIdle = vi.fn();
 
     const client = makeClient([
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-empty",
+          status: { type: "busy" },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-empty",
+          status: { type: "idle" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-empty",
+      onIdle,
+    });
+    await start();
+    await vi.runAllTimersAsync();
+    stop();
+
+    expect(onIdle).not.toHaveBeenCalled();
+  });
+
+  it("debounces transient idle states until the session stays idle", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-transient-idle",
+          info: { id: "assistant-transient", role: "assistant" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-transient-idle",
+          part: {
+            id: "text-transient-1",
+            messageID: "assistant-transient",
+            type: "text",
+            text: "Starting with a quick scan",
+          },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-transient-idle",
+          status: { type: "idle" },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-transient-idle",
+          status: { type: "busy" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-transient-idle",
+          part: {
+            id: "tool-transient-1",
+            messageID: "assistant-transient",
+            type: "tool",
+            tool: "glob",
+            status: "completed",
+          },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-transient-idle",
+          status: { type: "done" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-transient-idle",
+      onIdle,
+    });
+    await start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onIdle).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    stop();
+
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats session.status done as terminal completion after assistant activity", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-done",
+          info: { id: "assistant-done", role: "assistant" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-done",
+          part: {
+            id: "text-done-1",
+            messageID: "assistant-done",
+            type: "text",
+            text: "Drafting the site now",
+          },
+        },
+      },
       {
         type: "session.status",
         properties: {
@@ -499,7 +628,7 @@ describe("useEvents", () => {
       onIdle,
     });
     await start();
-    await flushEventLoop();
+    await vi.runAllTimersAsync();
     stop();
 
     expect(onIdle).toHaveBeenCalledTimes(1);

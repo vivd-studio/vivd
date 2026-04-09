@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  injectBasePathScript,
   rewriteRootAssetUrlsInText,
   rewriteViteHmrWebSocketUrl,
   stripDevServerToolingFromHtml,
@@ -72,6 +73,26 @@ describe("rewriteRootAssetUrlsInText", () => {
       ),
     ).toBe("wss://default.vivd.studio/_studio/runtime-123/?token=test-token");
   });
+
+  it("keeps relative Studio shell assets relative while rewriting the mounted shell base", () => {
+    const rewritten = rewriteRootAssetUrlsInText(
+      [
+        '<base href="/vivd-studio/" />',
+        '<script type="module" src="./assets/index.js"></script>',
+        '<link rel="icon" href="./favicon-transparent.svg" />',
+      ].join(""),
+      "/_studio/runtime-123",
+    );
+
+    expect(rewritten).toContain('<base href="/_studio/runtime-123/vivd-studio/" />');
+    expect(rewritten).toContain(
+      '<script type="module" src="./assets/index.js"></script>',
+    );
+    expect(rewritten).toContain(
+      '<link rel="icon" href="./favicon-transparent.svg" />',
+    );
+    expect(rewritten).not.toContain("./_studio/runtime-123/");
+  });
 });
 
 describe("stripDevServerToolingFromHtml", () => {
@@ -89,5 +110,26 @@ describe("stripDevServerToolingFromHtml", () => {
     expect(stripped).toContain("/@vite/client");
     expect(stripped).not.toContain("dev-toolbar/entrypoint.js");
     expect(stripped).not.toContain("dev-toolbar/app.css");
+  });
+});
+
+describe("injectBasePathScript", () => {
+  it("injects the path-rewrite script ahead of the Studio shell base tag", () => {
+    const html = [
+      "<!doctype html>",
+      "<html>",
+      "<head>",
+      '<base href="/_studio/runtime-123/vivd-studio/" />',
+      "</head>",
+      "<body></body>",
+      "</html>",
+    ].join("");
+
+    const injected = injectBasePathScript(html, "/_studio/runtime-123");
+
+    expect(injected).toContain('<script data-vivd-basepath>');
+    expect(injected.indexOf('<script data-vivd-basepath>')).toBeLessThan(
+      injected.indexOf('<base href="/_studio/runtime-123/vivd-studio/" />'),
+    );
   });
 });

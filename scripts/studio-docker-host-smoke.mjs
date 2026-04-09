@@ -20,10 +20,13 @@ const DEFAULT_DOCS_HOSTNAME = "docs.localhost";
 const DEFAULT_AUTH_WAIT_TIMEOUT_MS = 15_000;
 const DEFAULT_GENERATION_SETTLE_TIMEOUT_MS = 45_000;
 const DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS = 15_000;
+const INITIAL_GENERATION_ACTION_POLL_MS = 2_000;
+const INITIAL_GENERATION_MIN_RECORDED_ACTIONS = 6;
 const DEFAULT_STUDIO_READY_TIMEOUT_MS = 90_000;
 const STUDIO_READY_PROGRESS_LOG_INTERVAL_MS = 15_000;
 const MAX_AUTH_SETTLE_ATTEMPTS = 3;
 const DEFAULT_CHEAP_OPENROUTER_MODEL = "openrouter/google/gemini-2.5-flash-lite";
+const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const FAILING_CONSOLE_PATTERNS = [
   /invalid bootstrap target/i,
   /localhost:undefined/i,
@@ -461,6 +464,7 @@ async function readIframeNavigationState(iframeLocator) {
   return {
     iframeAttrSrc,
     iframeFrameUrl: iframeFrame?.url() ?? null,
+    iframeFrame,
   };
 }
 
@@ -988,6 +992,187 @@ function readSessionIdFromUrl(urlString) {
   }
 }
 
+function isBlankIframeUrl(urlString) {
+  if (typeof urlString !== "string") return true;
+  const trimmed = urlString.trim();
+  return !trimmed || trimmed === "about:blank";
+}
+
+function resolveStudioTrpcUrl(appUrl) {
+  const url = new URL(appUrl);
+  const marker = "/vivd-studio";
+  const markerIndex = url.pathname.indexOf(marker);
+  const runtimePrefix = markerIndex >= 0 ? url.pathname.slice(0, markerIndex) : "";
+  url.pathname = `${runtimePrefix}/vivd-studio/api/trpc`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+async function resolveStudioTrpcUrlFromFrame(frame, fallbackUrl) {
+  const fallbackResolved = resolveStudioTrpcUrl(fallbackUrl);
+  if (!frame) {
+    return fallbackResolved;
+  }
+
+  try {
+    const frameUrl = await frame.locator("html").evaluate(() => window.location.href);
+    if (typeof frameUrl === "string" && frameUrl.trim() && frameUrl !== "about:blank") {
+      return resolveStudioTrpcUrl(frameUrl);
+    }
+  } catch {
+    // Fall back to URL-based inference below.
+  }
+
+  return fallbackResolved;
+}
+
+function readStudioTokenFromUrl(urlString) {
+  try {
+    const url = new URL(urlString);
+    const queryToken = url.searchParams.get("vivdStudioToken")?.trim();
+    if (queryToken) return queryToken;
+
+    const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+    const hashParams = new URLSearchParams(hash);
+    return hashParams.get("vivdStudioToken")?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function rewriteLocalhostUrlToIpv4(urlString) {
+  const url = new URL(urlString);
+  const originalHost = url.host;
+  if (!url.hostname.endsWith(".localhost")) {
+    return null;
+  }
+
+  url.hostname = "127.0.0.1";
+  return {
+    rewrittenUrl: url.toString(),
+    originalHost,
+  };
+}
+
+async function readStudioTrpcQueryInFrame(frame, trpcUrl, procedureName, input, studioToken) {
+  const queryUrl = `${trpcUrl.replace(/\/+$/u, "")}/${procedureName}`;
+  const response = await frame.locator("html").evaluate(
+    async ({ requestUrl, requestInput, studioTokenValue, studioAuthHeader }) => {
+      const url = new URL(requestUrl, window.location.origin);
+      url.searchParams.set("batch", "1");
+      url.searchParams.set("input", JSON.stringify({ 0: requestInput }));
+
+      const headers = {};
+      if (studioTokenValue) {
+        headers[studioAuthHeader] = studioTokenValue;
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers,
+        credentials: "include",
+      });
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        body: await response.text(),
+      };
+    },
+    {
+      requestUrl: queryUrl,
+      requestInput: input,
+      studioTokenValue: typeof studioToken === "string" ? studioToken.trim() : "",
+      studioAuthHeader: STUDIO_AUTH_HEADER,
+    },
+  );
+
+  if (!response.ok) {
+    const detail = response.body.trim();
+    throw new Error(
+      detail
+        ? `${procedureName} failed (${response.status}): ${detail}`
+        : `${procedureName} failed (${response.status})`,
+    );
+  }
+
+  const payload = JSON.parse(response.body);
+  const result = Array.isArray(payload) ? payload[0] : payload;
+  return result?.result?.data?.json ?? result?.result?.data ?? result;
+}
+
+function countRecordedInitialGenerationActions(messages) {
+  let total = 0;
+
+  for (const message of Array.isArray(messages) ? messages : []) {
+    if (message?.info?.role !== "assistant") continue;
+
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+    for (const part of parts) {
+      if (part?.type === "tool") {
+        const status =
+          typeof part?.status === "string"
+            ? part.status
+            : typeof part?.state?.status === "string"
+              ? part.state.status
+              : null;
+        if (status === "running") continue;
+        total += 1;
+        continue;
+      }
+
+      if (part?.type === "reasoning" || part?.type === "text") {
+        const text = typeof part?.text === "string" ? part.text.trim() : "";
+        if (text) {
+          total += 1;
+        }
+      }
+    }
+
+    if (
+      parts.length === 0 &&
+      typeof message?.content === "string" &&
+      message.content.trim()
+    ) {
+      total += 1;
+    }
+  }
+
+  return total;
+}
+
+async function readInitialGenerationProgress(options) {
+  const [messages, statuses] = await Promise.all([
+    readStudioTrpcQueryInFrame(
+      options.frame,
+      options.trpcUrl,
+      "agent.getSessionContent",
+      {
+        sessionId: options.sessionId,
+        projectSlug: options.projectSlug,
+        version: options.version,
+      },
+      options.studioToken,
+    ),
+    readStudioTrpcQueryInFrame(
+      options.frame,
+      options.trpcUrl,
+      "agent.getSessionsStatus",
+      {
+        projectSlug: options.projectSlug,
+        version: options.version,
+      },
+      options.studioToken,
+    ),
+  ]);
+
+  return {
+    actionCount: countRecordedInitialGenerationActions(messages),
+    sessionStatus: statuses?.[options.sessionId] ?? null,
+  };
+}
+
 async function probeSessionHistoryForSessionEvidence(frame, timeoutMs) {
   const sessionToggleButton = frame
     .getByRole("button", { name: /Show sessions|Hide sessions/i })
@@ -1036,119 +1221,116 @@ async function probeSessionHistoryForSessionEvidence(frame, timeoutMs) {
   }
 }
 
-async function settleInitialGeneration(page, frame, timeoutMs) {
+async function settleInitialGeneration(page, frame, timeoutMs, options) {
+  const iframeLocator = page.locator("iframe[title^='Vivd Studio -']");
   const stopButton = frame.getByRole("button", { name: "Stop generation" });
   const sendButton = frame.getByRole("button", { name: "Send message" });
   const chatComposer = frame.locator("textarea").first();
   const sessionContextButton = frame.locator(
     "[data-testid='session-context-usage-button']",
   );
+  const assistantActivityLabel = frame
+    .getByText(/^(Thought|Thinking\b|Working\b)/i)
+    .first();
   const firstUserMessage = frame.locator("[data-chat-user-row-id]").first();
   const agentQuestionHeader = frame.getByText(/Agent Question/i).first();
   const settleTimeoutMs = Math.min(timeoutMs, DEFAULT_GENERATION_SETTLE_TIMEOUT_MS);
-  const visibleState = await waitForVisibleState(
-    [
-      { name: "stop", locator: stopButton },
-      { name: "user-message", locator: firstUserMessage },
-      { name: "session-context", locator: sessionContextButton },
-      { name: "agent-question", locator: agentQuestionHeader },
-    ],
-    settleTimeoutMs,
-  );
+  const startedAt = Date.now();
+  let sessionIdFromUrl = null;
+  let lastVisibleState = null;
+  let lastActionCount = 0;
+  let lastSessionStatus = null;
+  let lastProgressError = null;
+  let trpcUrl = null;
+  let studioToken = null;
 
-  if (visibleState === "stop") {
-    log("Initial generation is running; stopping it after a short settle window");
-    await sleep(5_000);
-    const postStopState = await waitForVisibleState(
+  while (Date.now() - startedAt < settleTimeoutMs) {
+    const remainingMs = settleTimeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) break;
+
+    const visibleState = await waitForVisibleState(
       [
         { name: "stop", locator: stopButton },
+        { name: "assistant-activity", locator: assistantActivityLabel },
         { name: "user-message", locator: firstUserMessage },
         { name: "session-context", locator: sessionContextButton },
         { name: "agent-question", locator: agentQuestionHeader },
       ],
-      Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
+      Math.min(remainingMs, INITIAL_GENERATION_ACTION_POLL_MS),
+    ).catch(() => null);
+
+    lastVisibleState = visibleState ?? lastVisibleState;
+    const { iframeAttrSrc, iframeFrameUrl } = await readIframeNavigationState(
+      iframeLocator,
     );
+    sessionIdFromUrl =
+      readSessionIdFromUrl(page.url()) ??
+      readSessionIdFromUrl(iframeFrameUrl) ??
+      readSessionIdFromUrl(iframeAttrSrc) ??
+      sessionIdFromUrl;
 
-    if (postStopState === "stop") {
-      await stopButton.click({ timeout: 5_000 });
-      await expectVisible(
-        sendButton,
-        settleTimeoutMs,
-        "send button after stop",
+    if (sessionIdFromUrl) {
+      trpcUrl =
+        trpcUrl ??
+        (await resolveStudioTrpcUrlFromFrame(
+          frame,
+          isBlankIframeUrl(iframeFrameUrl)
+            ? iframeAttrSrc ?? page.url()
+            : iframeFrameUrl,
+        ));
+      studioToken =
+        studioToken ??
+        readStudioTokenFromUrl(iframeFrameUrl) ??
+        readStudioTokenFromUrl(iframeAttrSrc) ??
+        readStudioTokenFromUrl(page.url()) ??
+        null;
+
+      try {
+        const progress = await readInitialGenerationProgress({
+          frame,
+          trpcUrl,
+          studioToken,
+          sessionId: sessionIdFromUrl,
+          projectSlug: options.projectSlug,
+          version: options.version,
+        });
+        lastActionCount = progress.actionCount;
+        lastSessionStatus = progress.sessionStatus?.type ?? null;
+        lastProgressError = null;
+      } catch (error) {
+        lastProgressError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    if (lastActionCount >= INITIAL_GENERATION_MIN_RECORDED_ACTIONS) {
+      log(
+        `Observed ${lastActionCount} recorded initial-generation actions for session ${sessionIdFromUrl ?? "unknown"} (status=${lastSessionStatus ?? "unknown"}); checking for a stop opportunity`,
       );
-      return "stopped";
+
+      if (await stopButton.isVisible().catch(() => false)) {
+        await sleep(5_000);
+        if (await stopButton.isVisible().catch(() => false)) {
+          await stopButton.click({ timeout: 5_000 });
+          await expectVisible(
+            sendButton,
+            settleTimeoutMs,
+            "send button after stop",
+          );
+          return `stopped-after-${lastActionCount}-artifacts`;
+        }
+      }
+
+      return `observed-${lastActionCount}-recorded-actions`;
     }
 
-    if (postStopState === "user-message") {
-      return "observed-user-message";
-    }
-    if (postStopState === "agent-question") {
-      return "observed-agent-question";
-    }
-    if (postStopState === "session-context") {
-      return "observed-session-context";
-    }
+    await sleep(INITIAL_GENERATION_ACTION_POLL_MS);
   }
 
-  if (
-    visibleState === "user-message" ||
-    visibleState === "session-context" ||
-    visibleState === "agent-question"
-  ) {
-    log(
-      `Observed initial-generation session activity via ${visibleState}; checking briefly for a stop opportunity`,
-    );
-
-    const followupState = await waitForVisibleState(
-      [
-        { name: "stop", locator: stopButton },
-        { name: "user-message", locator: firstUserMessage },
-        { name: "session-context", locator: sessionContextButton },
-        { name: "agent-question", locator: agentQuestionHeader },
-      ],
-      Math.min(timeoutMs, DEFAULT_GENERATION_STOP_OPPORTUNITY_TIMEOUT_MS),
-    );
-
-    if (followupState === "stop") {
-      log("Stop control appeared after session activity; stopping generation");
-      await sleep(5_000);
-      await stopButton.click();
-      await expectVisible(
-        sendButton,
-        settleTimeoutMs,
-        "send button after stop",
-      );
-      return "stopped-after-activity";
-    }
-
-    if (visibleState === "user-message") {
-      return "observed-user-message";
-    }
-    if (visibleState === "agent-question") {
-      return "observed-agent-question";
-    }
-    return "observed-session-context";
-  }
-
-  const sessionIdFromUrl = readSessionIdFromUrl(page.url());
   const sendButtonVisible = await sendButton.isVisible().catch(() => false);
   const chatComposerVisible = await chatComposer.isVisible().catch(() => false);
 
-  if (chatComposerVisible) {
-    const sessionHistoryState = await probeSessionHistoryForSessionEvidence(
-      frame,
-      settleTimeoutMs,
-    );
-    if (sessionHistoryState === "session-activity-indicator") {
-      return "observed-session-activity-indicator";
-    }
-    if (sessionHistoryState === "session-row") {
-      return "observed-session-row";
-    }
-  }
-
   throw new Error(
-    `Initial generation did not expose a running control or any session activity within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible})`,
+    `Initial generation did not reach ${INITIAL_GENERATION_MIN_RECORDED_ACTIONS} recorded assistant actions within ${settleTimeoutMs}ms (sessionId=${sessionIdFromUrl ?? "none"} recordedActions=${lastActionCount} sessionStatus=${lastSessionStatus ?? "none"} visibleState=${lastVisibleState ?? "none"} sendButtonVisible=${sendButtonVisible} chatComposerVisible=${chatComposerVisible}${lastProgressError ? ` progressError=${lastProgressError}` : ""})`,
   );
 }
 
@@ -1453,6 +1635,10 @@ async function main() {
       page,
       controlPlaneFrame,
       timeoutMs,
+      {
+        projectSlug: createdProjectSlug,
+        version: 1,
+      },
     );
     markCheckpoint(metrics.checkpoints, "initial_generation_settled", startedAt, {
       projectSlug: createdProjectSlug,

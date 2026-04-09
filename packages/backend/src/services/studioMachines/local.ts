@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import net from "node:net";
 import crypto from "node:crypto";
 import treeKill from "tree-kill";
+import { soloSelfHostDefaults } from "@vivd/shared/config";
 import type {
   StudioMachineProvider,
   StudioMachineRestartArgs,
@@ -23,6 +24,9 @@ import {
 } from "../storage/ObjectStorageService";
 import type { S3Client } from "@aws-sdk/client-s3";
 import { resolveAuthBaseUrlFromEnv } from "../../lib/publicOrigin";
+import { sanitizeForFlyAppId } from "./fly/utils";
+import { RuntimeUrlRouteService } from "./runtimeUrlRouteService";
+import { shouldCreateStudioCompatibilityRoutes } from "./compatibilityRoutePolicy";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -71,6 +75,12 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function normalizePathPrefix(value: string | undefined, fallback: string): string {
+  const raw = (value || "").trim() || fallback;
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLeadingSlash.replace(/\/+$/, "");
 }
 
 function trimSlashes(value: string): string {
@@ -222,6 +232,10 @@ async function isPortAvailable(port: number): Promise<boolean> {
 export class LocalStudioMachineProvider implements StudioMachineProvider {
   kind = "local" as const;
 
+  private readonly routeService = new RuntimeUrlRouteService({
+    getRoutesDir: () => this.runtimeRoutesDir,
+    getRoutePath: (routeId) => this.routePathFor(routeId),
+  });
   private studios = new Map<string, StudioProcess>();
   private inflightStarts = new Map<string, Promise<StudioMachineStartResult>>();
   private nextPort = STUDIO_PORT_START;
@@ -240,18 +254,95 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
     return `${organizationId}:${projectSlug}:v${version}`;
   }
 
+  private routeIdFor(
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ): string {
+    const key = this.key(organizationId, projectSlug, version);
+    const hash = crypto.createHash("sha1").update(key).digest("hex").slice(0, 12);
+    const base = sanitizeForFlyAppId(`${projectSlug}-v${version}`);
+    const clippedBase = base.length > 24 ? base.slice(0, 24) : base;
+    return `${clippedBase}-${hash}`;
+  }
+
+  private get runtimeRoutesDir(): string {
+    return process.env.CADDY_RUNTIME_ROUTES_DIR?.trim() || soloSelfHostDefaults.caddyRuntimeRoutesDir;
+  }
+
+  private get routePrefix(): string {
+    return normalizePathPrefix(
+      process.env.DOCKER_STUDIO_ROUTE_PREFIX,
+      soloSelfHostDefaults.dockerStudioRoutePrefix,
+    );
+  }
+
+  private routePathFor(routeId: string): string {
+    return `${this.routePrefix}/${routeId}`;
+  }
+
+  private getCompatibilityRouteTargetBaseUrl(port: number): string {
+    try {
+      const rawCaddyAdminUrl = process.env.CADDY_ADMIN_URL?.trim();
+      if (!rawCaddyAdminUrl) {
+        return this.getInternalUrl(port);
+      }
+      const caddyAdminUrl = new URL(rawCaddyAdminUrl);
+      if (caddyAdminUrl.hostname === "caddy") {
+        return `http://backend:${port}`;
+      }
+    } catch {
+      // Fall through to the loopback target below.
+    }
+
+    return this.getInternalUrl(port);
+  }
+
+  private async upsertCompatibilityRoute(
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+    port: number,
+  ): Promise<string | null> {
+    if (!(await shouldCreateStudioCompatibilityRoutes(this.kind))) {
+      await this.removeCompatibilityRoute(organizationId, projectSlug, version);
+      return null;
+    }
+
+    return await this.routeService.upsertRuntimeRoute({
+      routeId: this.routeIdFor(organizationId, projectSlug, version),
+      targetBaseUrl: this.getCompatibilityRouteTargetBaseUrl(port),
+    });
+  }
+
+  private async removeCompatibilityRoute(
+    organizationId: string,
+    projectSlug: string,
+    version: number,
+  ): Promise<void> {
+    await this.routeService.removeRuntimeRoute(
+      this.routeIdFor(organizationId, projectSlug, version),
+    );
+  }
+
   async ensureRunning(args: StudioMachineStartArgs): Promise<StudioMachineStartResult> {
     const key = this.key(args.organizationId, args.projectSlug, args.version);
 
     const existing = this.studios.get(key);
     if (existing) {
       this.touch(args.organizationId, args.projectSlug, args.version);
+      const compatibilityUrl = await this.upsertCompatibilityRoute(
+        args.organizationId,
+        args.projectSlug,
+        args.version,
+        existing.port,
+      );
       return {
         studioId: existing.studioId,
         url: this.getPublicUrl(existing.port),
-        backendUrl: this.getPublicUrl(existing.port),
+        backendUrl: this.getInternalUrl(existing.port),
         runtimeUrl: this.getPublicUrl(existing.port),
-        compatibilityUrl: null,
+        compatibilityUrl,
         port: existing.port,
         accessToken: existing.accessToken,
       };
@@ -403,6 +494,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       await this.waitForReady(proc, port);
     } catch (err) {
       this.studios.delete(key);
+      await this.removeCompatibilityRoute(args.organizationId, args.projectSlug, args.version);
       if (proc.pid && proc.exitCode === null && proc.signalCode === null) {
         treeKill(proc.pid, "SIGTERM");
       }
@@ -413,12 +505,19 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       throw new Error(`${message}${suffix}`);
     }
 
+    const compatibilityUrl = await this.upsertCompatibilityRoute(
+      args.organizationId,
+      args.projectSlug,
+      args.version,
+      port,
+    );
+
     return {
       studioId,
       url: this.getPublicUrl(port),
-      backendUrl: this.getPublicUrl(port),
+      backendUrl: this.getInternalUrl(port),
       runtimeUrl: this.getPublicUrl(port),
-      compatibilityUrl: null,
+      compatibilityUrl,
       port,
       accessToken,
     };
@@ -458,6 +557,7 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       treeKill(studio.process.pid, "SIGTERM");
     }
     this.studios.delete(key);
+    void this.removeCompatibilityRoute(organizationId, projectSlug, version);
   }
 
   async getUrl(
@@ -467,12 +567,18 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
   ): Promise<StudioMachineUrlResult | null> {
     const studio = this.studios.get(this.key(organizationId, projectSlug, version));
     if (!studio) return null;
+    const compatibilityUrl = await this.upsertCompatibilityRoute(
+      organizationId,
+      projectSlug,
+      version,
+      studio.port,
+    );
     return {
       studioId: studio.studioId,
       url: this.getPublicUrl(studio.port),
-      backendUrl: this.getPublicUrl(studio.port),
+      backendUrl: this.getInternalUrl(studio.port),
       runtimeUrl: this.getPublicUrl(studio.port),
-      compatibilityUrl: null,
+      compatibilityUrl,
       accessToken: studio.accessToken,
     };
   }
@@ -514,6 +620,11 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
       if (studio.process.pid) {
         treeKill(studio.process.pid, "SIGTERM");
       }
+      void this.removeCompatibilityRoute(
+        studio.organizationId,
+        studio.projectSlug,
+        studio.version,
+      );
     }
     this.studios.clear();
     this.inflightStarts.clear();
@@ -825,6 +936,11 @@ export class LocalStudioMachineProvider implements StudioMachineProvider {
 
     console.log(
       `[StudioMachine] ${options.organizationId}:${options.projectSlug}/v${options.version} exited with code ${options.code}`
+    );
+    await this.removeCompatibilityRoute(
+      options.organizationId,
+      options.projectSlug,
+      options.version,
     );
     this.studios.delete(options.key);
   }

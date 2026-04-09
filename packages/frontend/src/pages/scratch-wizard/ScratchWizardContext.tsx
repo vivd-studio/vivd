@@ -298,7 +298,8 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!statusData || !started) return;
-    const initialSessionId = started.initialSessionId ?? polledInitialSessionId;
+    const initialSessionId =
+      started.initialSessionId ?? polledInitialSessionId;
     const studioHandoffRequested =
       started.expectsStudioHandoff ||
       ("studioHandoff" in statusData &&
@@ -307,10 +308,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
       statusData.status === "starting_studio" ||
       statusData.status === "generating_initial_site" ||
       statusData.status === "completed";
-    if (
-      studioHandoffRequested &&
-      studioStartupObserved
-    ) {
+    if (studioHandoffRequested && studioStartupObserved) {
       navigateToStartedProjectStudio(
         started.slug,
         started.version,
@@ -338,6 +336,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     started?.slug,
     started?.version,
     started?.initialSessionId,
+    started?.expectsStudioHandoff,
     navigateToStartedProjectStudio,
     navigate,
     utils.project.list,

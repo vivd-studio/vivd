@@ -19,13 +19,13 @@ function makeRuntime(
 }
 
 describe("selectBrowserStudioBaseUrl", () => {
-  it("prefers the explicit backend-resolved browser URL", () => {
+  it("prefers the explicit backend-resolved browser URL when no same-origin compatibility route is available", () => {
     expect(
       selectBrowserStudioBaseUrl(
         makeRuntime({
           browserUrl: "https://vivd-studio-prod.fly.dev:3115",
           runtimeUrl: "https://vivd-studio-prod.fly.dev:3115",
-          compatibilityUrl: "/_studio/runtime-1",
+          compatibilityUrl: "https://app.example.com/_studio/runtime-1",
         }),
       ),
     ).toBe("https://vivd-studio-prod.fly.dev:3115");
@@ -53,6 +53,39 @@ describe("selectBrowserStudioBaseUrl", () => {
         }),
       ),
     ).toBe("https://studio.example.com/runtime");
+  });
+
+  it("prefers the same-origin compatibility route over a cross-origin direct runtime", () => {
+    const locationSnapshot = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...locationSnapshot,
+        origin: "http://app.localhost:18080",
+        href: "http://app.localhost:18080/vivd-studio/projects/site-1",
+        protocol: "http:",
+        host: "app.localhost:18080",
+        hostname: "app.localhost",
+        pathname: "/vivd-studio/projects/site-1",
+        search: "",
+      },
+    });
+
+    expect(
+      selectBrowserStudioBaseUrl(
+        makeRuntime({
+          browserUrl: "http://app.localhost:4100",
+          url: "http://app.localhost:4100",
+          runtimeUrl: "http://app.localhost:4100",
+          compatibilityUrl: "http://app.localhost:18080/_studio/runtime-1",
+        }),
+      ),
+    ).toBe("http://app.localhost:18080/_studio/runtime-1");
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: locationSnapshot,
+    });
   });
 
   it("falls back to the direct runtime url when needed", () => {

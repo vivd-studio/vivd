@@ -200,11 +200,11 @@ export function rewriteRootAssetUrlsInText(text: string, basePath: string): stri
       rewriteStyleAttributes(rewriteSrcsetAttributes(rewriteCommonAttributes(text))),
     )
       .replace(
-        new RegExp(`(^|[^\\w/])\\/(${prefixGroups})\\/`, "g"),
+        new RegExp(`(^|[^\\w./])\\/(${prefixGroups})\\/`, "g"),
         `$1${base}/$2/`,
       )
       .replace(
-        /(^|[^\w/])\/(favicon(?:-[^"'`()\s,]+)?\.(?:ico|png|svg))\b/g,
+        /(^|[^\w./])\/(favicon(?:-[^"'`()\s,]+)?\.(?:ico|png|svg))\b/g,
         `$1${base}/$2`,
       ),
     base,

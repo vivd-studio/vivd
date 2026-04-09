@@ -55,6 +55,7 @@ import {
   getVivdHostOrigin,
 } from "@/lib/hostBridge";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
+import { sendPreviewLeaveBeacon } from "./previewLeave";
 
 // Version info from project data
 interface VersionInfo {
@@ -663,36 +664,6 @@ export function PreviewProvider({
     devServerStatus,
     keepAliveDevServer,
   ]);
-
-  // Track current values in refs for cleanup (avoids stale closures)
-  const projectSlugRef = useRef(projectSlug);
-  const selectedVersionRef = useRef(selectedVersion);
-
-  useEffect(() => {
-    projectSlugRef.current = projectSlug;
-    selectedVersionRef.current = selectedVersion;
-  }, [projectSlug, selectedVersion]);
-
-  // Stop server when component unmounts
-  // Uses sendBeacon for reliable delivery even during React teardown
-  useEffect(() => {
-    return () => {
-      const slug = projectSlugRef.current;
-      const version = selectedVersionRef.current;
-      if (slug && version !== undefined) {
-        const payload = JSON.stringify({ slug, version });
-        // Must use Blob with correct content-type for express.json() to parse it
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon(
-          withVivdStudioTokenQuery(
-            resolveStudioRuntimePath("/vivd-studio/api/cleanup/preview-leave"),
-            getVivdStudioToken(),
-          ),
-          blob,
-        );
-      }
-    };
-  }, []);
 
   // Enable image drag-and-drop from Asset Explorer (disabled during text editing)
   useImageDropZone({
@@ -1449,25 +1420,17 @@ export function PreviewProvider({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasGitChanges]);
 
-  // Stop opencode server on tab/window close using sendBeacon for reliable delivery
-  // sendBeacon is specifically designed for page unload - browser guarantees delivery
+  // Stop OpenCode only on real page unloads. A plain React unmount can happen during
+  // StrictMode verification or host-side remounts and must not be treated as
+  // "the user left Studio".
   useEffect(() => {
     if (!projectSlug) return;
 
     const handleBeforeUnload = () => {
-      const payload = JSON.stringify({
-        slug: projectSlug,
+      sendPreviewLeaveBeacon({
+        projectSlug,
         version: selectedVersion,
       });
-      // Must use Blob with correct content-type for express.json() to parse it
-      const blob = new Blob([payload], { type: "application/json" });
-      navigator.sendBeacon(
-        withVivdStudioTokenQuery(
-          resolveStudioRuntimePath("/vivd-studio/api/cleanup/preview-leave"),
-          getVivdStudioToken(),
-        ),
-        blob,
-      );
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);

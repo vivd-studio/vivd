@@ -633,8 +633,9 @@ export function useOpencodeChatController({
       return;
     }
 
-    const fallbackSessionId =
-      initialGenerationRequested ? sessions[0]?.id ?? null : null;
+    // During scratch initial generation, an unrelated hydrated session must not
+    // steal focus before the real initial-generation session is created.
+    const fallbackSessionId = null;
     const nextSessionId = attentionSessionId ?? fallbackSessionId;
 
     if (!nextSessionId) {

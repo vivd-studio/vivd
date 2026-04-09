@@ -16,6 +16,7 @@ type StudioClientHttpRoutesDeps = {
 };
 
 const INITIAL_SESSION_REDIRECT_WAIT_MS = 2_000;
+const INITIAL_SESSION_RESOLUTION_TIMEOUT = Symbol("initial-session-resolution-timeout");
 
 function readRequestUrl(req: express.Request): URL {
   const host = req.get("host") || "localhost";
@@ -43,6 +44,12 @@ function buildRequestUrlWithSessionId(
   return `${url.pathname}${url.search}`;
 }
 
+function buildRequestUrlWithoutSessionId(req: express.Request): string {
+  const url = readRequestUrl(req);
+  url.searchParams.delete("sessionId");
+  return `${url.pathname}${url.search}`;
+}
+
 async function sendStudioClientIndex(options: {
   req: express.Request;
   res: express.Response;
@@ -56,9 +63,9 @@ async function sendStudioClientIndex(options: {
 }): Promise<void> {
   if (
     options.resolveInitialGenerationSessionId &&
-    isTruthySearchParam(options.req, "initialGeneration") &&
-    !readSearchParam(options.req, "sessionId")
+    isTruthySearchParam(options.req, "initialGeneration")
   ) {
+    const requestedSessionId = readSearchParam(options.req, "sessionId");
     const resolvePromise = options
       .resolveInitialGenerationSessionId(options.req)
       .catch((error) => {
@@ -69,17 +76,37 @@ async function sendStudioClientIndex(options: {
         return null;
       });
 
-    const sessionId =
-      (await Promise.race([
+    const resolvedSessionId = await Promise.race([
         resolvePromise,
-        new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), INITIAL_SESSION_REDIRECT_WAIT_MS),
+        new Promise<typeof INITIAL_SESSION_RESOLUTION_TIMEOUT>((resolve) =>
+          setTimeout(
+            () => resolve(INITIAL_SESSION_RESOLUTION_TIMEOUT),
+            INITIAL_SESSION_REDIRECT_WAIT_MS,
+          ),
         ),
-      ])) || null;
+      ]);
 
-    if (sessionId) {
-      options.res.redirect(buildRequestUrlWithSessionId(options.req, sessionId));
-      return;
+    if (resolvedSessionId !== INITIAL_SESSION_RESOLUTION_TIMEOUT) {
+      if (!requestedSessionId && resolvedSessionId) {
+        options.res.redirect(
+          buildRequestUrlWithSessionId(options.req, resolvedSessionId),
+        );
+        return;
+      }
+
+      if (requestedSessionId) {
+        if (!resolvedSessionId) {
+          options.res.redirect(buildRequestUrlWithoutSessionId(options.req));
+          return;
+        }
+
+        if (resolvedSessionId !== requestedSessionId) {
+          options.res.redirect(
+            buildRequestUrlWithSessionId(options.req, resolvedSessionId),
+          );
+          return;
+        }
+      }
     }
 
     void resolvePromise;

@@ -54,31 +54,36 @@ export default function StudioFullscreen() {
       ? versionOverride
       : currentVersion;
   const canBootstrapStudio = Boolean(project || initialGenerationRequested);
-
-  const initialGenerationStatusQuery = trpc.project.status.useQuery(
+  const { data: projectStatusData } = trpc.project.status.useQuery(
     { slug: projectSlug!, version },
     {
       enabled: !!projectSlug && initialGenerationRequested,
+      staleTime: 0,
+      refetchOnMount: "always",
+      refetchOnReconnect: "always",
       refetchInterval: (query) => {
-        const polledSessionId =
+        const sessionId =
           query.state.data && "studioHandoff" in query.state.data
             ? query.state.data.studioHandoff?.sessionId ?? null
             : null;
         return initialGenerationRequested &&
           !requestedInitialSessionId &&
-          !polledSessionId
+          sessionId == null
           ? 1_000
           : false;
       },
     },
   );
   const polledInitialSessionId =
-    initialGenerationStatusQuery.data &&
-    "studioHandoff" in initialGenerationStatusQuery.data
-      ? initialGenerationStatusQuery.data.studioHandoff?.sessionId ?? null
+    initialGenerationRequested &&
+    projectStatusData &&
+    "studioHandoff" in projectStatusData
+      ? projectStatusData.studioHandoff?.sessionId?.trim() || null
       : null;
   const resolvedInitialSessionId =
-    requestedInitialSessionId ?? polledInitialSessionId ?? null;
+    requestedInitialSessionId ?? polledInitialSessionId;
+  const awaitingInitialGenerationHandoff =
+    initialGenerationRequested && !resolvedInitialSessionId;
   const studioReturnPath = useMemo(() => {
     if (!projectSlug) return ROUTES.DASHBOARD;
 
@@ -181,38 +186,16 @@ export default function StudioFullscreen() {
     },
   });
 
-  useEffect(() => {
-    if (
-      !initialGenerationRequested ||
-      !projectSlug ||
-      requestedInitialSessionId ||
-      !resolvedInitialSessionId
-    ) {
-      return;
-    }
-
-    const params = new URLSearchParams(location.search);
-    params.set("sessionId", resolvedInitialSessionId);
-    navigate(`${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug)}?${params.toString()}`, {
-      replace: true,
-    });
-  }, [
-    initialGenerationRequested,
-    location.search,
-    navigate,
-    projectSlug,
-    requestedInitialSessionId,
-    resolvedInitialSessionId,
-  ]);
-
   // If the studio isn't already running, start it automatically in fullscreen mode.
   useEffect(() => {
     if (!projectSlug || !canBootstrapStudio) return;
+    if (awaitingInitialGenerationHandoff) return;
     if (studioUrlQuery.data?.status === "running") return;
     if (startStudio.isPending || startStudio.data) return;
     if (hardRestartStudio.isPending) return;
     startStudio.mutate({ slug: projectSlug, version });
   }, [
+    awaitingInitialGenerationHandoff,
     canBootstrapStudio,
     projectSlug,
     startStudio,
@@ -325,7 +308,7 @@ export default function StudioFullscreen() {
 
   const studioIframeSrc = useMemo(() => {
     const liveStudioBaseUrl = studioBaseUrl;
-    if (!liveStudioBaseUrl) return null;
+    if (!liveStudioBaseUrl || awaitingInitialGenerationHandoff) return null;
     const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
     url.searchParams.set("fullscreen", "1");
@@ -355,6 +338,7 @@ export default function StudioFullscreen() {
     );
     return url.toString();
   }, [
+    awaitingInitialGenerationHandoff,
     initialGenerationRequested,
     projectSlug,
     resolvedInitialSessionId,

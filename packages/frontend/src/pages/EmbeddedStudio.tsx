@@ -125,31 +125,36 @@ export default function EmbeddedStudio() {
     Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
   const shouldResumeStudio = resumeStudio || initialGenerationRequested;
   const canBootstrapStudio = Boolean(project || initialGenerationRequested);
-
-  const initialGenerationStatusQuery = trpc.project.status.useQuery(
+  const { data: projectStatusData } = trpc.project.status.useQuery(
     { slug: projectSlug!, version: studioVersion },
     {
       enabled: !!projectSlug && initialGenerationRequested,
+      staleTime: 0,
+      refetchOnMount: "always",
+      refetchOnReconnect: "always",
       refetchInterval: (query) => {
-        const polledSessionId =
+        const sessionId =
           query.state.data && "studioHandoff" in query.state.data
             ? query.state.data.studioHandoff?.sessionId ?? null
             : null;
         return initialGenerationRequested &&
           !requestedInitialSessionId &&
-          !polledSessionId
+          sessionId == null
           ? 1_000
           : false;
       },
     },
   );
   const polledInitialSessionId =
-    initialGenerationStatusQuery.data &&
-    "studioHandoff" in initialGenerationStatusQuery.data
-      ? initialGenerationStatusQuery.data.studioHandoff?.sessionId ?? null
+    initialGenerationRequested &&
+    projectStatusData &&
+    "studioHandoff" in projectStatusData
+      ? projectStatusData.studioHandoff?.sessionId?.trim() || null
       : null;
   const resolvedInitialSessionId =
-    requestedInitialSessionId ?? polledInitialSessionId ?? null;
+    requestedInitialSessionId ?? polledInitialSessionId;
+  const awaitingInitialGenerationHandoff =
+    initialGenerationRequested && !resolvedInitialSessionId;
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -324,31 +329,6 @@ export default function EmbeddedStudio() {
     },
   });
 
-  // Reset local state when navigating between projects.
-  useEffect(() => {
-    if (
-      !initialGenerationRequested ||
-      !projectSlug ||
-      requestedInitialSessionId ||
-      !resolvedInitialSessionId
-    ) {
-      return;
-    }
-
-    const params = new URLSearchParams(location.search);
-    params.set("sessionId", resolvedInitialSessionId);
-    navigate(`${ROUTES.PROJECT(projectSlug)}?${params.toString()}`, {
-      replace: true,
-    });
-  }, [
-    initialGenerationRequested,
-    location.search,
-    navigate,
-    projectSlug,
-    requestedInitialSessionId,
-    resolvedInitialSessionId,
-  ]);
-
   useEffect(() => {
     setEditRequested(false);
     setPreviewSurface("publish");
@@ -391,15 +371,18 @@ export default function EmbeddedStudio() {
 
   useEffect(() => {
     if (!initialGenerationRequested || !projectSlug || !canBootstrapStudio) return;
+    setPreviewSurface("live");
+    setEditRequested(true);
+
+    if (awaitingInitialGenerationHandoff) return;
     if (studioUrlQuery.data?.status === "running") return;
     if (editRequested || startStudio.isPending || startStudio.data) return;
     if (hardRestartStudio.isPending || isRenamePending) return;
 
-    setPreviewSurface("live");
-    setEditRequested(true);
     clearRuntimeOverride();
     startStudio.mutate({ slug: projectSlug, version: studioVersion });
   }, [
+    awaitingInitialGenerationHandoff,
     clearRuntimeOverride,
     editRequested,
     hardRestartStudio.isPending,
@@ -493,7 +476,7 @@ export default function EmbeddedStudio() {
 
   const studioIframeSrc = useMemo(() => {
     const liveStudioBaseUrl = studioBaseUrl;
-    if (!liveStudioBaseUrl) return null;
+    if (!liveStudioBaseUrl || awaitingInitialGenerationHandoff) return null;
 
     const url = new URL(resolveStudioRuntimeUrl(liveStudioBaseUrl, "vivd-studio"));
     url.searchParams.set("embedded", "1");
@@ -527,6 +510,7 @@ export default function EmbeddedStudio() {
     );
     return url.toString();
   }, [
+    awaitingInitialGenerationHandoff,
     initialGenerationRequested,
     projectSlug,
     publicPreviewEnabled,

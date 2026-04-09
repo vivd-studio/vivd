@@ -451,13 +451,11 @@ async function startServer() {
       }
 
       const initialGenerationService = await getInitialGenerationService();
-      const result = await initialGenerationService.startInitialGeneration({
+      return await initialGenerationService.resolveInitialGenerationSessionForHandoff({
         projectSlug,
         version,
         workspaceDir: workspace.getProjectPath(),
       });
-
-      return result.sessionId ?? null;
     },
     getProxyBasePath,
     rewriteRootAssetUrlsInText,

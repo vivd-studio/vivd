@@ -598,7 +598,7 @@ describe("EmbeddedStudio", () => {
     );
   });
 
-  it("auto-starts studio when initial generation is requested and no runtime is active", () => {
+  it("waits for the backend handoff session before auto-starting studio during initial generation", () => {
     const startStudioMutate = vi.fn();
     useLocationMock.mockReturnValue({
       search: "?view=studio&version=1&initialGeneration=1",
@@ -613,13 +613,21 @@ describe("EmbeddedStudio", () => {
     getStudioUrlUseQueryMock.mockReturnValueOnce({
       data: { status: "stopped" },
     });
+    projectStatusUseQueryMock.mockReturnValueOnce({
+      data: {
+        status: "starting_studio",
+        studioHandoff: {
+          mode: "studio_astro",
+          initialGeneration: true,
+          sessionId: null,
+        },
+      },
+    });
 
     renderEmbeddedStudio();
 
-    expect(startStudioMutate).toHaveBeenCalledWith({
-      slug: "site-1",
-      version: 1,
-    });
+    expect(startStudioMutate).not.toHaveBeenCalled();
+    expect(screen.getByTestId("studio-startup-loading")).toBeInTheDocument();
   });
 
   it("shows startup loading instead of not-found while initial generation waits for the fresh project list", () => {
@@ -674,7 +682,7 @@ describe("EmbeddedStudio", () => {
     expect(returnToUrl.searchParams.get("sessionId")).toBe("sess-1");
   });
 
-  it("resolves a missing initial session id from project status on the project page", () => {
+  it("adopts a backend-polled initial session id on the project page", () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);
     useLocationMock.mockReturnValue({
@@ -700,14 +708,76 @@ describe("EmbeddedStudio", () => {
 
     renderEmbeddedStudio();
 
-    expect(navigateMock).toHaveBeenCalledWith(
-      "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-polled",
-      { replace: true },
-    );
-
+    expect(navigateMock).not.toHaveBeenCalled();
     const iframe = screen.getByTitle("Vivd Studio - site-1");
     const iframeUrl = new URL(iframe.getAttribute("src") ?? "");
     expect(iframeUrl.searchParams.get("sessionId")).toBe("sess-polled");
+  });
+
+  it("rewrites the embedded studio bootstrap target when a backend-polled session id appears later", () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1&initialGeneration=1",
+    });
+
+    let currentProjectStatus: {
+      status: string;
+      studioHandoff: {
+        mode: "studio_astro";
+        initialGeneration: true;
+        sessionId: string | null;
+      };
+    } | undefined = {
+      status: "starting_studio",
+      studioHandoff: {
+        mode: "studio_astro",
+        initialGeneration: true,
+        sessionId: null,
+      },
+    };
+
+    projectStatusUseQueryMock.mockImplementation(() => ({
+      data: currentProjectStatus,
+    }));
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "http://app.localhost:4102",
+        bootstrapToken: "bootstrap-1",
+        userActionToken: "user-action-token-1",
+      },
+    });
+
+    const view = renderEmbeddedStudio();
+
+    expect(HTMLFormElement.prototype.submit).not.toHaveBeenCalled();
+    let nextField = document.querySelector(
+      'form[target="vivd-studio-embedded-site-1-v1"] input[name="next"]',
+    ) as HTMLInputElement | null;
+    expect(nextField).toBeNull();
+
+    currentProjectStatus = {
+      status: "generating_initial_site",
+      studioHandoff: {
+        mode: "studio_astro",
+        initialGeneration: true,
+        sessionId: "sess-polled",
+      },
+    };
+
+    view.rerender(
+      <MemoryRouter>
+        <EmbeddedStudio />
+      </MemoryRouter>,
+    );
+
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(HTMLFormElement.prototype.submit).toHaveBeenCalledTimes(1);
+    nextField = document.querySelector(
+      'form[target="vivd-studio-embedded-site-1-v1"] input[name="next"]',
+    ) as HTMLInputElement | null;
+    expect(nextField?.value).toContain("sessionId=sess-polled");
   });
 
   it("posts the studio bootstrap token to the bootstrap endpoint and keeps the iframe URL clean", () => {

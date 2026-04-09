@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveStudioBrowserUrl } from "../src/services/studioMachines/runtimeAccessResolver";
 
 describe("resolveStudioBrowserUrl", () => {
-  it("keeps the direct runtime origin for platform installs", () => {
+  it("keeps the direct runtime origin for hosted platform installs", () => {
     expect(
       resolveStudioBrowserUrl({
         installProfile: "platform",
@@ -13,6 +13,32 @@ describe("resolveStudioBrowserUrl", () => {
         compatibilityUrl: "/_studio/runtime-1",
       }),
     ).toBe("https://vivd-studio-prod.fly.dev:3115");
+  });
+
+  it("prefers the compatibility route for local platform hosts on non-fly providers", () => {
+    expect(
+      resolveStudioBrowserUrl({
+        installProfile: "platform",
+        providerKind: "local",
+        requestHost: "app.localhost:18080",
+        requestProtocol: "http",
+        runtimeUrl: "http://app.localhost:4100",
+        compatibilityUrl: "http://app.localhost:18080/_studio/runtime-1",
+      }),
+    ).toBe("http://app.localhost:18080/_studio/runtime-1");
+  });
+
+  it("prefers the compatibility route for local-development docker platform hosts", () => {
+    expect(
+      resolveStudioBrowserUrl({
+        installProfile: "platform",
+        providerKind: "docker",
+        requestHost: "app.localhost:18080",
+        requestProtocol: "http",
+        runtimeUrl: "http://app.localhost:4100",
+        compatibilityUrl: "http://app.localhost/_studio/runtime-1",
+      }),
+    ).toBe("http://app.localhost:18080/_studio/runtime-1");
   });
 
   it("prefers the compatibility route for solo installs when the direct runtime uses a non-default port", () => {
@@ -28,15 +54,28 @@ describe("resolveStudioBrowserUrl", () => {
     ).toBe("https://vivd.felixpahlke.de/_studio/runtime-1");
   });
 
-  it("keeps the direct runtime origin for local development hosts", () => {
+  it("prefers the same-origin compatibility route for local providers when the host uses a different origin than the dev server", () => {
     expect(
       resolveStudioBrowserUrl({
         installProfile: "solo",
-        providerKind: "docker",
-        requestHost: "app.localhost",
+        providerKind: "local",
+        requestHost: "app.localhost:18080",
         requestProtocol: "http",
         runtimeUrl: "http://app.localhost:4100",
-        compatibilityUrl: "http://app.localhost/_studio/runtime-1",
+        compatibilityUrl: "http://app.localhost:18080/_studio/runtime-1",
+      }),
+    ).toBe("http://app.localhost:18080/_studio/runtime-1");
+  });
+
+  it("keeps the direct runtime origin when the request already targets the local dev server origin", () => {
+    expect(
+      resolveStudioBrowserUrl({
+        installProfile: "solo",
+        providerKind: "local",
+        requestHost: "app.localhost:4100",
+        requestProtocol: "http",
+        runtimeUrl: "http://app.localhost:4100",
+        compatibilityUrl: "http://app.localhost:18080/_studio/runtime-1",
       }),
     ).toBe("http://app.localhost:4100");
   });

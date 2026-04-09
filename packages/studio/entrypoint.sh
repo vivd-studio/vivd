@@ -378,9 +378,18 @@ hydrate_opencode() {
 
   OPENCODE_SESSION_DIFF_DIR="${VIVD_OPENCODE_DATA_HOME}/storage/session_diff"
   OPENCODE_SNAPSHOT_DIR="${VIVD_OPENCODE_DATA_HOME}/snapshot"
+  OPENCODE_DB_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db"
+  OPENCODE_DB_SHM_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db-shm"
+  OPENCODE_DB_WAL_PATH="${VIVD_OPENCODE_DATA_HOME}/opencode.db-wal"
   SESSION_DIFF_PID=""
   SNAPSHOT_PID=""
   DB_PID=""
+
+  # Fresh boots must not inherit stale run-state when the remote OpenCode
+  # payload is partial or absent. Keep cache/auth files, but clear session DB +
+  # hydrated runtime artifacts before pulling from storage.
+  rm -f "$OPENCODE_DB_PATH" "$OPENCODE_DB_SHM_PATH" "$OPENCODE_DB_WAL_PATH"
+  rm -rf "$OPENCODE_SESSION_DIFF_DIR" "$OPENCODE_SNAPSHOT_DIR"
 
   if [ -n "$S3_OPENCODE_STORAGE_URI" ]; then
     echo "Hydrating OpenCode session diffs from S3..."
@@ -404,9 +413,9 @@ hydrate_opencode() {
     echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
     mkdir -p "${VIVD_OPENCODE_DATA_HOME}"
     (
-      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db" "${VIVD_OPENCODE_DATA_HOME}/opencode.db" || true &
-      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-shm" "${VIVD_OPENCODE_DATA_HOME}/opencode.db-shm" || true &
-      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-wal" "${VIVD_OPENCODE_DATA_HOME}/opencode.db-wal" || true &
+      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db" "$OPENCODE_DB_PATH" || true &
+      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-shm" "$OPENCODE_DB_SHM_PATH" || true &
+      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-wal" "$OPENCODE_DB_WAL_PATH" || true &
       wait
     ) &
     DB_PID="$!"
@@ -446,6 +455,8 @@ const fs = require("fs");
 const port = Number.parseInt(process.env.STUB_PORT || "3100", 10);
 const host = process.env.STUB_HOST || "0.0.0.0";
 const readyFile = process.env.STUB_READY_FILE || "";
+const sockets = new Set();
+let shuttingDown = false;
 
 const cleanup = () => {
   if (!readyFile) return;
@@ -468,6 +479,13 @@ const server = http.createServer((req, res) => {
   res.end("Studio is starting up. Please retry shortly.");
 });
 
+server.keepAliveTimeout = 1000;
+server.headersTimeout = 2000;
+server.on("connection", (socket) => {
+  sockets.add(socket);
+  socket.on("close", () => sockets.delete(socket));
+});
+
 server.listen(port, host, () => {
   if (!readyFile) return;
   try {
@@ -476,15 +494,34 @@ server.listen(port, host, () => {
     // Ignore readiness marker write failures; the shell will warn below.
   }
 });
+
+const shutdown = () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  const forceExitTimer = setTimeout(() => {
+    for (const socket of sockets) {
+      try {
+        socket.destroy();
+      } catch {
+        // Ignore socket teardown failures during forced shutdown.
+      }
+    }
+    cleanup();
+    process.exit(0);
+  }, 1000);
+  forceExitTimer.unref?.();
+
+  server.close(() => {
+    clearTimeout(forceExitTimer);
+    cleanup();
+    process.exit(0);
+  });
+};
+
 process.on("exit", cleanup);
-process.on("SIGINT", () => server.close(() => {
-  cleanup();
-  process.exit(0);
-}));
-process.on("SIGTERM", () => server.close(() => {
-  cleanup();
-  process.exit(0);
-}));
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 ' >/dev/null 2>&1 &
     STUB_PID="$!"
 
@@ -520,6 +557,15 @@ process.on("SIGTERM", () => server.close(() => {
 
   if [ -n "$STUB_PID" ]; then
     kill -TERM "$STUB_PID" 2>/dev/null || true
+    STUB_WAITED="0"
+    while kill -0 "$STUB_PID" 2>/dev/null; do
+      if [ "$STUB_WAITED" -ge 5 ]; then
+        kill -KILL "$STUB_PID" 2>/dev/null || true
+        break
+      fi
+      sleep 1
+      STUB_WAITED="$((STUB_WAITED + 1))"
+    done
     wait "$STUB_PID" 2>/dev/null || true
     rm -f "$STUB_READY_FILE" 2>/dev/null || true
   fi

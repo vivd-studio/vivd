@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 import type { PluginOption } from "vite";
 
 export default defineConfig({
-  base: "/vivd-studio",
+  base: "./",
   root: path.resolve(__dirname),
   // Cast to avoid type mismatches when multiple Vite versions are present in the workspace.
   plugins: [react()] as unknown as PluginOption[],

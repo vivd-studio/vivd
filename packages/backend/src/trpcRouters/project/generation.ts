@@ -35,7 +35,7 @@ import {
 } from "../../services/project/ProjectArtifactsService";
 import { thumbnailService } from "../../services/project/ThumbnailService";
 import { alignProjectArtifactKeyToSlug } from "../../services/project/slugRename";
-import { prepareStudioInitialGenerationHandoff } from "../../services/project/StudioInitialGenerationService";
+import { startStudioInitialGeneration } from "../../services/project/StudioInitialGenerationService";
 import { analyzeImages } from "../../generator/image_analyzer";
 import { scraperClient } from "../../generator/scraper-client";
 import {
@@ -634,30 +634,34 @@ export const projectGenerationProcedures = {
             version,
           });
 
-          await prepareStudioInitialGenerationHandoff({
+          const initialGeneration = await startStudioInitialGeneration({
             organizationId,
             projectSlug: slug,
             version,
             requestHost: ctx.requestHost,
           });
+
+          generationCtx.updateStatus(initialGeneration.status);
+
+          return {
+            status: initialGeneration.status,
+            slug,
+            version,
+            message: initialGeneration.reused
+              ? "Studio handoff resumed."
+              : "Studio handoff ready.",
+            studioHandoff: {
+              mode: "studio_astro" as const,
+              initialGeneration: true,
+              sessionId: initialGeneration.sessionId,
+            },
+          };
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
           generationCtx.updateStatus("failed", message);
           throw error;
         }
-
-        return {
-          status: "starting_studio",
-          slug,
-          version,
-          message: "Studio handoff ready.",
-          studioHandoff: {
-            mode: "studio_astro" as const,
-            initialGeneration: true,
-            sessionId: null,
-          },
-        };
       }
 
       // Create a generation context pointing to existing version

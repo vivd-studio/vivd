@@ -478,7 +478,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     studioKey: string,
   ): Promise<StudioMachineStartResult> {
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     return ensureExistingMachineRunningWorkflow(
       {
         routeIdFor: (organizationId, projectSlug, version) =>
@@ -554,7 +554,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
 
   private async restartInner(args: StudioMachineRestartArgs): Promise<StudioMachineStartResult> {
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     return restartInnerWorkflow(
       {
         key: (organizationId, projectSlug, version) =>
@@ -602,7 +602,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     args: StudioMachineStartArgs,
   ): Promise<StudioMachineStartResult> {
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     return ensureRunningInnerWorkflow(
       {
         key: (organizationId, projectSlug, version) =>
@@ -647,7 +647,7 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
 
   async listStudioMachines(): Promise<FlyStudioMachineSummary[]> {
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     return listStudioMachinesWorkflow({
       compatibilityRoutesEnabled,
       getDesiredImage: () => this.getDesiredImage(),
@@ -900,8 +900,8 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     version: number,
   ): Promise<StudioMachineUrlResult | null> {
     try {
-      const compatibilityRoutesEnabled =
-        await shouldCreateStudioCompatibilityRoutes();
+        const compatibilityRoutesEnabled =
+          await shouldCreateStudioCompatibilityRoutes(this.kind);
       return getStudioMachineUrlWorkflow(
         {
           listMachines: () => this.apiClient.listMachines(),

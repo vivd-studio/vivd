@@ -171,7 +171,6 @@ export function useStudioRuntimeGuard({
       checkInFlightRef.current = true;
 
       try {
-        touchStudioRef.current();
         const healthy = await pingStudioHealth();
         if (guardGenerationRef.current !== guardGeneration) return;
 
@@ -187,7 +186,6 @@ export function useStudioRuntimeGuard({
           });
           if (guardGenerationRef.current !== guardGeneration) return;
 
-          touchStudioRef.current();
           const retryHealthy = await pingStudioHealth();
           if (guardGenerationRef.current !== guardGeneration) return;
           if (retryHealthy) {
@@ -225,6 +223,48 @@ export function useStudioRuntimeGuard({
     if (!enabled || !studioProbeBaseUrl) return;
     void runHealthCheck("retry-on-fail");
   }, [enabled, runHealthCheck, studioProbeBaseUrl]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const touchIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      touchStudioRef.current();
+    };
+
+    touchIfVisible();
+
+    const interval = window.setInterval(() => {
+      touchIfVisible();
+    }, mergedTiming.heartbeatIntervalMs);
+
+    const onFocus = () => {
+      touchIfVisible();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        touchIfVisible();
+      }
+    };
+
+    const onPageShow = () => {
+      if (document.visibilityState === "visible") {
+        touchIfVisible();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [enabled, mergedTiming.heartbeatIntervalMs]);
 
   useEffect(() => {
     if (!enabled || !studioProbeBaseUrl) return;

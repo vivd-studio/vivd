@@ -8,6 +8,7 @@ import {
 } from "@vivd/shared";
 import {
   agentEventEmitter,
+  deleteSession,
   getSessionContent,
   getSessionsStatus,
   listQuestions,
@@ -21,6 +22,7 @@ import {
   syncSourceToBucket,
 } from "../sync/ArtifactSyncService.js";
 import { requestConnectedArtifactBuild } from "../sync/ConnectedArtifactBuildService.js";
+import { requestBucketSync } from "../sync/AgentTaskSyncService.js";
 import { saveInitialGenerationSnapshot } from "./InitialGenerationSnapshotService.js";
 import { thumbnailGenerationReporter } from "../reporting/ThumbnailGenerationReporter.js";
 import {
@@ -36,6 +38,7 @@ const MONITOR_POLL_MS = 5_000;
 const TERMINAL_IDLE_GRACE_MS = 10_000;
 const DEFAULT_INITIAL_GENERATION_MANIFEST_WAIT_MS = 10_000;
 const INITIAL_GENERATION_MANIFEST_POLL_MS = 250;
+const INITIAL_GENERATION_RUNTIME_STARTED_AT_MS = Date.now();
 
 export type StartInitialGenerationOptions = {
   projectSlug: string;
@@ -164,6 +167,33 @@ function writeInitialGenerationManifest(
   );
 }
 
+function requestInitialGenerationStateSync(options: {
+  workspaceDir: string;
+  projectSlug: string;
+  version: number;
+  manifest: ScratchInitialGenerationManifest;
+}): void {
+  requestBucketSync("initial-generation-state", {
+    projectDir: options.workspaceDir,
+    projectSlug: options.projectSlug,
+    version: options.version,
+    state: options.manifest.state,
+    sessionId: options.manifest.sessionId ?? null,
+    startedAt: options.manifest.startedAt ?? null,
+    completedAt: options.manifest.completedAt ?? null,
+  });
+}
+
+function persistInitialGenerationManifest(options: {
+  workspaceDir: string;
+  projectSlug: string;
+  version: number;
+  manifest: ScratchInitialGenerationManifest;
+}): void {
+  writeInitialGenerationManifest(options.workspaceDir, options.manifest);
+  requestInitialGenerationStateSync(options);
+}
+
 function extractErrorMessage(value: unknown): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -223,7 +253,107 @@ type MonitoredSessionRecord = {
     };
     error?: unknown;
   };
+  parts?: Array<{
+    type?: string;
+    text?: string;
+    status?: string;
+    state?: { status?: string };
+  }>;
+  content?: string;
 };
+
+function countRecordedAssistantArtifacts(
+  messages: MonitoredSessionRecord[],
+): number {
+  let total = 0;
+
+  for (const message of messages) {
+    if (message?.info?.role !== "assistant") {
+      continue;
+    }
+
+    if (extractErrorMessage(message.info.error)) {
+      total += 1;
+    }
+
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    for (const part of parts) {
+      if (part?.type === "tool") {
+        const status =
+          typeof part.status === "string"
+            ? part.status
+            : typeof part.state?.status === "string"
+              ? part.state.status
+              : null;
+        if (status !== "running") {
+          total += 1;
+        }
+        continue;
+      }
+
+      if (
+        (part?.type === "reasoning" || part?.type === "text") &&
+        typeof part.text === "string" &&
+        part.text.trim()
+      ) {
+        total += 1;
+      }
+    }
+
+    if (
+      parts.length === 0 &&
+      typeof message.content === "string" &&
+      message.content.trim()
+    ) {
+      total += 1;
+    }
+  }
+
+  return total;
+}
+
+function getEarliestMessageCreatedAt(
+  messages: MonitoredSessionRecord[],
+): number | null {
+  let earliest: number | null = null;
+
+  for (const message of messages) {
+    const createdAt = message?.info?.time?.created;
+    if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+      continue;
+    }
+
+    earliest =
+      earliest == null || createdAt < earliest ? createdAt : earliest;
+  }
+
+  return earliest;
+}
+
+function shouldTreatZeroActivitySessionAsStaleForThisRuntime(options: {
+  sessionStatus:
+    | { type: "idle" | "busy" | "done" | "retry" | "error"; message?: string }
+    | null;
+  hasPendingQuestion: boolean;
+  messages: MonitoredSessionRecord[];
+  activityCount: number;
+}): boolean {
+  const sessionStatusType = options.sessionStatus?.type ?? "idle";
+  if (sessionStatusType === "busy" || sessionStatusType === "retry") {
+    return false;
+  }
+
+  if (options.hasPendingQuestion || options.activityCount > 0) {
+    return false;
+  }
+
+  const earliestMessageCreatedAt = getEarliestMessageCreatedAt(options.messages);
+  if (earliestMessageCreatedAt == null) {
+    return false;
+  }
+
+  return earliestMessageCreatedAt < INITIAL_GENERATION_RUNTIME_STARTED_AT_MS;
+}
 
 function deriveMonitoredSessionOutcome(options: {
   sessionStatus:
@@ -434,6 +564,121 @@ async function updateBackendInitialGenerationStatus(options: {
   });
 }
 
+async function inspectExistingInitialGenerationSession(options: {
+  workspaceDir: string;
+  sessionId: string;
+}): Promise<{
+  messages: MonitoredSessionRecord[];
+  sessionStatus:
+    | { type: "idle" | "busy" | "done" | "retry" | "error"; message?: string }
+    | null;
+  hasPendingQuestion: boolean;
+  outcome: { state: "active" | "completed" | "failed"; errorMessage?: string };
+  activityCount: number;
+}> {
+  const [statusMap, questions, messages] = await Promise.all([
+    getSessionsStatus(options.workspaceDir),
+    listQuestions(options.workspaceDir).catch(() => []),
+    getSessionContent(options.sessionId, options.workspaceDir).catch(() => []),
+  ]);
+
+  const hasPendingQuestion = Array.isArray(questions)
+    ? questions.some((question: { sessionID?: string; sessionId?: string }) => {
+        const sessionId = question.sessionID ?? question.sessionId;
+        return sessionId === options.sessionId;
+      })
+    : false;
+
+  const normalizedMessages = Array.isArray(messages)
+    ? (messages as MonitoredSessionRecord[])
+    : [];
+  const sessionStatus =
+    (statusMap[options.sessionId] as
+      | { type: "idle" | "busy" | "done" | "retry" | "error"; message?: string }
+      | undefined) ?? null;
+  const activityCount = countRecordedAssistantArtifacts(normalizedMessages);
+  let outcome = deriveMonitoredSessionOutcome({
+    sessionStatus,
+    messages: normalizedMessages,
+    hasPendingQuestion,
+  });
+
+  if (
+    outcome.state === "active" &&
+    shouldTreatZeroActivitySessionAsStaleForThisRuntime({
+      sessionStatus,
+      hasPendingQuestion,
+      messages: normalizedMessages,
+      activityCount,
+    })
+  ) {
+    outcome = {
+      state: "failed",
+      errorMessage: normalizeInitialGenerationFailureMessage(null),
+    };
+  }
+
+  return {
+    messages: normalizedMessages,
+    sessionStatus,
+    hasPendingQuestion,
+    outcome,
+    activityCount,
+  };
+}
+
+async function resetInitialGenerationForFreshStart(options: {
+  projectSlug: string;
+  version: number;
+  workspaceDir: string;
+  sessionId: string | null;
+  errorMessage: string;
+  deleteSessionRecord?: boolean;
+}): Promise<void> {
+  if (options.deleteSessionRecord && options.sessionId) {
+    try {
+      await deleteSession(options.sessionId, options.workspaceDir);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[InitialGeneration] Failed to delete stale session ${options.projectSlug}/v${options.version} (${options.sessionId}): ${message}`,
+      );
+    }
+  }
+
+  const manifest = readInitialGenerationManifest(options.workspaceDir);
+  if (manifest.sessionId && options.sessionId && manifest.sessionId !== options.sessionId) {
+    return;
+  }
+
+  persistInitialGenerationManifest({
+    workspaceDir: options.workspaceDir,
+    projectSlug: options.projectSlug,
+    version: options.version,
+    manifest: {
+      ...manifest,
+      state: "failed",
+      sessionId: null,
+      errorMessage: options.errorMessage,
+      completedAt: new Date().toISOString(),
+    },
+  });
+
+  try {
+    await updateBackendInitialGenerationStatus({
+      projectSlug: options.projectSlug,
+      version: options.version,
+      status: "failed",
+      errorMessage: options.errorMessage,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[InitialGeneration] Failed to report restart reset for ${options.projectSlug}/v${options.version}: ${message}`,
+    );
+  }
+}
+
 function startMonitor(options: {
   projectSlug: string;
   version: number;
@@ -613,12 +858,17 @@ async function markSessionFailed(options: {
       return;
     }
 
-    writeInitialGenerationManifest(options.workspaceDir, {
-      ...manifest,
-      state: "failed",
-      sessionId: options.sessionId,
-      errorMessage: options.errorMessage,
-      completedAt: new Date().toISOString(),
+    persistInitialGenerationManifest({
+      workspaceDir: options.workspaceDir,
+      projectSlug: options.projectSlug,
+      version: options.version,
+      manifest: {
+        ...manifest,
+        state: "failed",
+        sessionId: options.sessionId,
+        errorMessage: options.errorMessage,
+        completedAt: new Date().toISOString(),
+      },
     });
 
     try {
@@ -662,13 +912,18 @@ async function markSessionGenerating(options: {
     return;
   }
 
-  writeInitialGenerationManifest(options.workspaceDir, {
-    ...manifest,
-    state: "generating_initial_site",
-    sessionId: options.sessionId,
-    startedAt: manifest.startedAt ?? new Date().toISOString(),
-    completedAt: null,
-    errorMessage: null,
+  persistInitialGenerationManifest({
+    workspaceDir: options.workspaceDir,
+    projectSlug: options.projectSlug,
+    version: options.version,
+    manifest: {
+      ...manifest,
+      state: "generating_initial_site",
+      sessionId: options.sessionId,
+      startedAt: manifest.startedAt ?? new Date().toISOString(),
+      completedAt: null,
+      errorMessage: null,
+    },
   });
 
   try {
@@ -776,12 +1031,17 @@ async function finalizeSessionCompletion(options: {
         );
       }
 
-      writeInitialGenerationManifest(options.workspaceDir, {
-        ...manifest,
-        state: "completed",
-        sessionId: options.sessionId,
-        errorMessage: null,
-        completedAt: new Date().toISOString(),
+      persistInitialGenerationManifest({
+        workspaceDir: options.workspaceDir,
+        projectSlug: options.projectSlug,
+        version: options.version,
+        manifest: {
+          ...manifest,
+          state: "completed",
+          sessionId: options.sessionId,
+          errorMessage: null,
+          completedAt: new Date().toISOString(),
+        },
       });
 
       await updateBackendInitialGenerationStatus({
@@ -809,10 +1069,11 @@ async function finalizeSessionCompletion(options: {
 async function startInitialGenerationInternal(
   options: StartInitialGenerationOptions,
 ): Promise<StartInitialGenerationResult> {
-  const manifest = await readInitialGenerationManifestWithRetry(
+  let manifest = await readInitialGenerationManifestWithRetry(
     options.workspaceDir,
   );
   const existingSessionId = manifest.sessionId?.trim() || null;
+  let resetForFreshStart = false;
 
   if (existingSessionId) {
     const sessions = await listSessions(options.workspaceDir);
@@ -821,10 +1082,15 @@ async function startInitialGenerationInternal(
     );
 
     if (existingSession) {
-      const statuses = await getSessionsStatus(options.workspaceDir);
-      const sessionStatus = statuses[existingSessionId]?.type ?? "idle";
+      const assessment = await inspectExistingInitialGenerationSession({
+        workspaceDir: options.workspaceDir,
+        sessionId: existingSessionId,
+      });
 
-      if (agentEventEmitter.isSessionCompleted(existingSessionId)) {
+      if (
+        agentEventEmitter.isSessionCompleted(existingSessionId) ||
+        assessment.outcome.state === "completed"
+      ) {
         await finalizeSessionCompletion({
           projectSlug: options.projectSlug,
           version: options.version,
@@ -839,16 +1105,32 @@ async function startInitialGenerationInternal(
         };
       }
 
-      const nextState =
-        manifest.state === "completed" || manifest.state === "failed"
-          ? manifest.state
-          : "generating_initial_site";
+      if (assessment.outcome.state === "failed") {
+        const errorMessage =
+          assessment.outcome.errorMessage ??
+          normalizeInitialGenerationFailureMessage(null);
 
-      if (nextState === "generating_initial_site") {
-        writeInitialGenerationManifest(options.workspaceDir, {
-          ...manifest,
-          state: nextState,
-          errorMessage: null,
+        await resetInitialGenerationForFreshStart({
+          projectSlug: options.projectSlug,
+          version: options.version,
+          workspaceDir: options.workspaceDir,
+          sessionId: existingSessionId,
+          errorMessage,
+          deleteSessionRecord: assessment.activityCount === 0,
+        });
+        resetForFreshStart = true;
+      } else {
+        const nextState = "generating_initial_site";
+
+        persistInitialGenerationManifest({
+          workspaceDir: options.workspaceDir,
+          projectSlug: options.projectSlug,
+          version: options.version,
+          manifest: {
+            ...manifest,
+            state: nextState,
+            errorMessage: null,
+          },
         });
         try {
           await updateBackendInitialGenerationStatus({
@@ -863,23 +1145,34 @@ async function startInitialGenerationInternal(
             `[InitialGeneration] Failed to report resumed status for ${options.projectSlug}/v${options.version}: ${message}`,
           );
         }
-      }
 
-      if (sessionStatus === "busy" || sessionStatus === "retry") {
         startMonitor({
           projectSlug: options.projectSlug,
           version: options.version,
           workspaceDir: options.workspaceDir,
           sessionId: existingSessionId,
         });
-      }
 
-      return {
+        return {
+          sessionId: existingSessionId,
+          reused: true,
+          status: nextState,
+        };
+      }
+    } else {
+      await resetInitialGenerationForFreshStart({
+        projectSlug: options.projectSlug,
+        version: options.version,
+        workspaceDir: options.workspaceDir,
         sessionId: existingSessionId,
-        reused: true,
-        status: nextState,
-      };
+        errorMessage: normalizeInitialGenerationFailureMessage(null),
+      });
+      resetForFreshStart = true;
     }
+  }
+
+  if (resetForFreshStart) {
+    manifest = readInitialGenerationManifest(options.workspaceDir);
   }
 
   const task = buildInitialGenerationTask({
@@ -893,23 +1186,21 @@ async function startInitialGenerationInternal(
       options.workspaceDir,
       undefined,
       options.model,
-      {
-        // The scratch initial-generation prompt already carries the full
-        // project-building instruction set. Skipping the extra Vivd
-        // session-start prompt keeps this path closer to upstream OpenCode
-        // and avoids doubling the prompt surface on the most fragile first run.
-        skipSessionStartSystemPrompt: true,
-      },
     );
 
     const sessionId = result.sessionId;
-    writeInitialGenerationManifest(options.workspaceDir, {
-      ...manifest,
-      state: "generating_initial_site",
-      sessionId,
-      startedAt: manifest.startedAt ?? new Date().toISOString(),
-      completedAt: null,
-      errorMessage: null,
+    persistInitialGenerationManifest({
+      workspaceDir: options.workspaceDir,
+      projectSlug: options.projectSlug,
+      version: options.version,
+      manifest: {
+        ...manifest,
+        state: "generating_initial_site",
+        sessionId,
+        startedAt: manifest.startedAt ?? new Date().toISOString(),
+        completedAt: null,
+        errorMessage: null,
+      },
     });
 
     await updateBackendInitialGenerationStatus({
@@ -934,12 +1225,17 @@ async function startInitialGenerationInternal(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to start initial generation.";
-    writeInitialGenerationManifest(options.workspaceDir, {
-      ...manifest,
-      state: "failed",
-      errorMessage: message,
-      completedAt: new Date().toISOString(),
-      sessionId: null,
+    persistInitialGenerationManifest({
+      workspaceDir: options.workspaceDir,
+      projectSlug: options.projectSlug,
+      version: options.version,
+      manifest: {
+        ...manifest,
+        state: "failed",
+        errorMessage: message,
+        completedAt: new Date().toISOString(),
+        sessionId: null,
+      },
     });
 
     try {
@@ -962,6 +1258,76 @@ async function startInitialGenerationInternal(
 }
 
 class InitialGenerationService {
+  async resolveInitialGenerationSessionForHandoff(
+    options: StartInitialGenerationOptions,
+  ): Promise<string | null> {
+    const manifest = await readInitialGenerationManifestWithRetry(
+      options.workspaceDir,
+    );
+    const existingSessionId = manifest.sessionId?.trim() || null;
+    if (!existingSessionId) {
+      return null;
+    }
+
+    const sessions = await listSessions(options.workspaceDir);
+    const existingSession = sessions.find(
+      (session: { id?: string }) => session.id === existingSessionId,
+    );
+
+    if (!existingSession) {
+      await resetInitialGenerationForFreshStart({
+        projectSlug: options.projectSlug,
+        version: options.version,
+        workspaceDir: options.workspaceDir,
+        sessionId: existingSessionId,
+        errorMessage: normalizeInitialGenerationFailureMessage(null),
+      });
+      return null;
+    }
+
+    const assessment = await inspectExistingInitialGenerationSession({
+      workspaceDir: options.workspaceDir,
+      sessionId: existingSessionId,
+    });
+
+    if (
+      agentEventEmitter.isSessionCompleted(existingSessionId) ||
+      assessment.outcome.state === "completed"
+    ) {
+      await finalizeSessionCompletion({
+        projectSlug: options.projectSlug,
+        version: options.version,
+        workspaceDir: options.workspaceDir,
+        sessionId: existingSessionId,
+      });
+      return existingSessionId;
+    }
+
+    if (assessment.outcome.state === "active") {
+      startMonitor({
+        projectSlug: options.projectSlug,
+        version: options.version,
+        workspaceDir: options.workspaceDir,
+        sessionId: existingSessionId,
+      });
+      return existingSessionId;
+    }
+
+    const errorMessage =
+      assessment.outcome.errorMessage ??
+      normalizeInitialGenerationFailureMessage(null);
+
+    await resetInitialGenerationForFreshStart({
+      projectSlug: options.projectSlug,
+      version: options.version,
+      workspaceDir: options.workspaceDir,
+      sessionId: existingSessionId,
+      errorMessage,
+      deleteSessionRecord: assessment.activityCount === 0,
+    });
+    return null;
+  }
+
   async startInitialGeneration(
     options: StartInitialGenerationOptions,
   ): Promise<StartInitialGenerationResult> {

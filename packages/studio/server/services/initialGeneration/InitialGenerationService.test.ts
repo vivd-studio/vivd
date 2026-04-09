@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   runTaskMock,
+  deleteSessionMock,
   getSessionContentMock,
   listSessionsMock,
   listQuestionsMock,
@@ -14,6 +15,7 @@ const {
   syncSourceToBucketMock,
   buildAndUploadPreviewMock,
   requestConnectedArtifactBuildMock,
+  requestBucketSyncMock,
   saveInitialGenerationSnapshotMock,
   thumbnailRequestMock,
   detectProjectTypeMock,
@@ -24,6 +26,7 @@ const {
   getStudioIdMock,
 } = vi.hoisted(() => ({
   runTaskMock: vi.fn(),
+  deleteSessionMock: vi.fn(),
   getSessionContentMock: vi.fn(),
   listSessionsMock: vi.fn(),
   listQuestionsMock: vi.fn(),
@@ -33,6 +36,7 @@ const {
   syncSourceToBucketMock: vi.fn(),
   buildAndUploadPreviewMock: vi.fn(),
   requestConnectedArtifactBuildMock: vi.fn(),
+  requestBucketSyncMock: vi.fn(),
   saveInitialGenerationSnapshotMock: vi.fn(),
   thumbnailRequestMock: vi.fn(),
   detectProjectTypeMock: vi.fn(),
@@ -48,6 +52,7 @@ vi.mock("../../opencode/index.js", () => ({
     subscribeToSession: subscribeToSessionMock,
     isSessionCompleted: isSessionCompletedMock,
   },
+  deleteSession: deleteSessionMock,
   getSessionContent: getSessionContentMock,
   getSessionsStatus: getSessionsStatusMock,
   listQuestions: listQuestionsMock,
@@ -62,6 +67,10 @@ vi.mock("../sync/ArtifactSyncService.js", () => ({
 
 vi.mock("../sync/ConnectedArtifactBuildService.js", () => ({
   requestConnectedArtifactBuild: requestConnectedArtifactBuildMock,
+}));
+
+vi.mock("../sync/AgentTaskSyncService.js", () => ({
+  requestBucketSync: requestBucketSyncMock,
 }));
 
 vi.mock("./InitialGenerationSnapshotService.js", () => ({
@@ -142,6 +151,7 @@ describe("InitialGenerationService", () => {
     sessionListener = null;
 
     runTaskMock.mockReset();
+    deleteSessionMock.mockReset();
     getSessionContentMock.mockReset();
     listSessionsMock.mockReset();
     listQuestionsMock.mockReset();
@@ -151,6 +161,7 @@ describe("InitialGenerationService", () => {
     syncSourceToBucketMock.mockReset();
     buildAndUploadPreviewMock.mockReset();
     requestConnectedArtifactBuildMock.mockReset();
+    requestBucketSyncMock.mockReset();
     saveInitialGenerationSnapshotMock.mockReset();
     thumbnailRequestMock.mockReset();
     detectProjectTypeMock.mockReset();
@@ -161,6 +172,7 @@ describe("InitialGenerationService", () => {
     getStudioIdMock.mockReset();
 
     runTaskMock.mockResolvedValue({ sessionId: "sess-1" });
+    deleteSessionMock.mockResolvedValue(true);
     getSessionContentMock.mockResolvedValue([]);
     listSessionsMock.mockResolvedValue([]);
     listQuestionsMock.mockResolvedValue([]);
@@ -177,6 +189,7 @@ describe("InitialGenerationService", () => {
       requested: false,
       reason: "disabled",
     });
+    requestBucketSyncMock.mockReturnValue(true);
     saveInitialGenerationSnapshotMock.mockResolvedValue({
       commitHash: "head-1234567",
       createdCommit: true,
@@ -241,7 +254,16 @@ describe("InitialGenerationService", () => {
       tmpDir,
       undefined,
       { provider: "openai", modelId: "gpt-5.4" },
-      { skipSessionStartSystemPrompt: true },
+    );
+    expect(requestBucketSyncMock).toHaveBeenCalledWith(
+      "initial-generation-state",
+      expect.objectContaining({
+        projectDir: tmpDir,
+        projectSlug: "site-1",
+        version: 1,
+        state: "generating_initial_site",
+        sessionId: "sess-1",
+      }),
     );
 
     const startedManifest = readManifest(tmpDir);
@@ -269,6 +291,16 @@ describe("InitialGenerationService", () => {
       commitHash: "head-1234567",
     });
     expect(thumbnailRequestMock).toHaveBeenCalledWith("site-1", 1);
+    expect(requestBucketSyncMock).toHaveBeenCalledWith(
+      "initial-generation-state",
+      expect.objectContaining({
+        projectDir: tmpDir,
+        projectSlug: "site-1",
+        version: 1,
+        state: "completed",
+        sessionId: "sess-1",
+      }),
+    );
 
     const completedManifest = readManifest(tmpDir);
     expect(completedManifest.state).toBe("completed");
@@ -468,5 +500,238 @@ describe("InitialGenerationService", () => {
       "The AI provider stopped this run before the initial site finished. Open Studio to continue the session.",
     );
     vi.useRealTimers();
+  });
+
+  it("drops a stale empty startup session and starts a fresh visible session", async () => {
+    writeManifest(tmpDir, {
+      state: "generating_initial_site",
+      sessionId: "sess-stale",
+      startedAt: new Date(Date.now() - 30_000).toISOString(),
+    });
+    listSessionsMock.mockResolvedValue([{ id: "sess-stale" }]);
+    getSessionsStatusMock.mockResolvedValue({
+      "sess-stale": { type: "idle" },
+    });
+    getSessionsStatusMock.mockImplementation(async (workspaceDir: string) =>
+      workspaceDir === tmpDir
+        ? { "sess-stale": { type: "idle" }, "sess-fresh": { type: "busy" } }
+        : {},
+    );
+    getSessionContentMock.mockImplementation(async (sessionId: string) =>
+      sessionId === "sess-stale"
+        ? [
+            {
+              info: {
+                id: "msg-user",
+                role: "user",
+                time: {
+                  created: Date.now() - 30_000,
+                  updated: Date.now() - 30_000,
+                  completed: Date.now() - 30_000,
+                },
+              },
+              parts: [{ type: "text", text: "Create the initial site" }],
+            },
+            {
+              info: {
+                id: "msg-assistant",
+                role: "assistant",
+                time: {
+                  created: Date.now() - 25_000,
+                },
+              },
+              parts: [],
+            },
+          ]
+        : [],
+    );
+    runTaskMock.mockResolvedValueOnce({ sessionId: "sess-fresh" });
+
+    const result = await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+    });
+
+    expect(deleteSessionMock).toHaveBeenCalledWith("sess-stale", tmpDir);
+    expect(runTaskMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      sessionId: "sess-fresh",
+      reused: false,
+      status: "generating_initial_site",
+    });
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("generating_initial_site");
+    expect(manifest.sessionId).toBe("sess-fresh");
+  });
+
+  it("starts a fresh session instead of reusing a failed partial initial-generation run", async () => {
+    writeManifest(tmpDir, {
+      state: "generating_initial_site",
+      sessionId: "sess-stale",
+      startedAt: new Date(Date.now() - 30_000).toISOString(),
+    });
+    listSessionsMock.mockResolvedValue([{ id: "sess-stale" }]);
+    getSessionsStatusMock.mockImplementation(async (workspaceDir: string) =>
+      workspaceDir === tmpDir
+        ? { "sess-stale": { type: "idle" }, "sess-fresh": { type: "busy" } }
+        : {},
+    );
+    getSessionContentMock.mockImplementation(async (sessionId: string) =>
+      sessionId === "sess-stale"
+        ? [
+            {
+              info: {
+                id: "msg-user",
+                role: "user",
+                time: {
+                  created: Date.now() - 30_000,
+                  updated: Date.now() - 30_000,
+                  completed: Date.now() - 30_000,
+                },
+              },
+              parts: [{ type: "text", text: "Create the initial site" }],
+            },
+            {
+              info: {
+                id: "msg-assistant",
+                role: "assistant",
+                time: {
+                  created: Date.now() - 25_000,
+                  updated: Date.now() - 25_000,
+                },
+              },
+              parts: [{ type: "reasoning", text: "Inspecting the workspace" }],
+            },
+          ]
+        : [],
+    );
+    runTaskMock.mockResolvedValueOnce({ sessionId: "sess-fresh" });
+
+    const result = await initialGenerationService.startInitialGeneration({
+      projectSlug: "site-1",
+      version: 1,
+      workspaceDir: tmpDir,
+    });
+
+    expect(deleteSessionMock).not.toHaveBeenCalled();
+    expect(runTaskMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      sessionId: "sess-fresh",
+      reused: false,
+      status: "generating_initial_site",
+    });
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("generating_initial_site");
+    expect(manifest.sessionId).toBe("sess-fresh");
+    expect(manifest.errorMessage).toBeNull();
+  });
+
+  it("returns null for handoff when the stored session is a dead empty startup artifact", async () => {
+    writeManifest(tmpDir, {
+      state: "generating_initial_site",
+      sessionId: "sess-stale",
+      startedAt: new Date(Date.now() - 30_000).toISOString(),
+    });
+    listSessionsMock.mockResolvedValue([{ id: "sess-stale" }]);
+    getSessionsStatusMock.mockResolvedValue({
+      "sess-stale": { type: "idle" },
+    });
+    getSessionContentMock.mockResolvedValue([
+      {
+        info: {
+          id: "msg-user",
+          role: "user",
+          time: {
+            created: Date.now() - 30_000,
+            updated: Date.now() - 30_000,
+            completed: Date.now() - 30_000,
+          },
+        },
+        parts: [{ type: "text", text: "Create the initial site" }],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          role: "assistant",
+          time: {
+            created: Date.now() - 25_000,
+          },
+        },
+        parts: [],
+      },
+    ]);
+
+    const sessionId =
+      await initialGenerationService.resolveInitialGenerationSessionForHandoff({
+        projectSlug: "site-1",
+        version: 1,
+        workspaceDir: tmpDir,
+      });
+
+    expect(sessionId).toBeNull();
+    expect(deleteSessionMock).toHaveBeenCalledWith("sess-stale", tmpDir);
+    expect(runTaskMock).not.toHaveBeenCalled();
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("failed");
+    expect(manifest.sessionId).toBeNull();
+  });
+
+  it("returns null for handoff when the stored session is a failed partial initial-generation run", async () => {
+    writeManifest(tmpDir, {
+      state: "generating_initial_site",
+      sessionId: "sess-stale",
+      startedAt: new Date(Date.now() - 30_000).toISOString(),
+    });
+    listSessionsMock.mockResolvedValue([{ id: "sess-stale" }]);
+    getSessionsStatusMock.mockResolvedValue({
+      "sess-stale": { type: "idle" },
+    });
+    getSessionContentMock.mockResolvedValue([
+      {
+        info: {
+          id: "msg-user",
+          role: "user",
+          time: {
+            created: Date.now() - 30_000,
+            updated: Date.now() - 30_000,
+            completed: Date.now() - 30_000,
+          },
+        },
+        parts: [{ type: "text", text: "Create the initial site" }],
+      },
+      {
+        info: {
+          id: "msg-assistant",
+          role: "assistant",
+          time: {
+            created: Date.now() - 25_000,
+            updated: Date.now() - 25_000,
+          },
+        },
+        parts: [{ type: "reasoning", text: "Inspecting the workspace" }],
+      },
+    ]);
+
+    const sessionId =
+      await initialGenerationService.resolveInitialGenerationSessionForHandoff({
+        projectSlug: "site-1",
+        version: 1,
+        workspaceDir: tmpDir,
+      });
+
+    expect(sessionId).toBeNull();
+    expect(deleteSessionMock).not.toHaveBeenCalled();
+    expect(runTaskMock).not.toHaveBeenCalled();
+
+    const manifest = readManifest(tmpDir);
+    expect(manifest.state).toBe("failed");
+    expect(manifest.sessionId).toBeNull();
+    expect(manifest.errorMessage).toBe(
+      "The agent stopped before finishing the initial generation. Open Studio to continue the session.",
+    );
   });
 });

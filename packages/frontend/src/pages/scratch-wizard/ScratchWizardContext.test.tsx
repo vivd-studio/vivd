@@ -173,7 +173,7 @@ describe("ScratchWizardContext", () => {
     });
   });
 
-  it("hands over to Studio on polled startup even before a session id is known", async () => {
+  it("redirects to Studio on a polled startup even before the session id is known", async () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);
 
@@ -227,6 +227,13 @@ describe("ScratchWizardContext", () => {
         </ScratchWizardProvider>
       </MemoryRouter>,
     );
+
+    await waitFor(() => {
+      expect(projectStatusUseQueryMock).toHaveBeenCalledWith(
+        { slug: "site-1", version: 1 },
+        expect.objectContaining({ enabled: true }),
+      );
+    });
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(

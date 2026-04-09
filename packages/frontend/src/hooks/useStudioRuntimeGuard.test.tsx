@@ -415,12 +415,13 @@ describe("useStudioRuntimeGuard", () => {
   it("stays idle when no host-safe probe url is available", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    const touchStudio = vi.fn();
 
     render(
       <GuardHarness
-        enabled={false}
+        enabled
         studioProbeBaseUrl={null}
-        touchStudio={vi.fn()}
+        touchStudio={touchStudio}
         ensureStudioRunning={vi.fn()}
         onRecovered={vi.fn()}
         timing={timing}
@@ -432,5 +433,30 @@ describe("useStudioRuntimeGuard", () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(touchStudio).toHaveBeenCalled();
+  });
+
+  it("stays fully idle when the guard is disabled", async () => {
+    const fetchMock = vi.fn();
+    const touchStudio = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GuardHarness
+        enabled={false}
+        studioProbeBaseUrl={null}
+        touchStudio={touchStudio}
+        ensureStudioRunning={vi.fn()}
+        onRecovered={vi.fn()}
+        timing={timing}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(touchStudio).not.toHaveBeenCalled();
   });
 });

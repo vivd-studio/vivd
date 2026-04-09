@@ -428,10 +428,7 @@ export function ChatProvider({
   const startInitialGeneration = useCallback(() => {
     if (initialGenerationStarting) return;
 
-    if (
-      initialGenerationRequested &&
-      (requestedInitialSessionId || selectedSessionId || sessions.length > 0)
-    ) {
+    if (initialGenerationRequested && (requestedInitialSessionId || selectedSessionId)) {
       return;
     }
 
@@ -471,7 +468,6 @@ export function ChatProvider({
     requestedInitialSessionId,
     setSelectedSessionId,
     selectedSessionId,
-    sessions.length,
     startInitialGenerationMutation,
     version,
   ]);
@@ -498,7 +494,6 @@ export function ChatProvider({
     if (sessionsLoading || isSessionHydrating) return;
     if (initialGenerationStarting || initialGenerationFailed) return;
     if (runTaskPending || activeQuestionRequest) return;
-    if (sessions.length > 0) return;
     if (autoInitialGenerationAttemptedRef.current) return;
 
     autoInitialGenerationAttemptedRef.current = true;
@@ -512,7 +507,6 @@ export function ChatProvider({
     requestedInitialSessionId,
     runTaskPending,
     selectedSessionId,
-    sessions.length,
     sessionsLoading,
     startInitialGeneration,
   ]);

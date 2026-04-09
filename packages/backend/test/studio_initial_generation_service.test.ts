@@ -137,7 +137,7 @@ describe("StudioInitialGenerationService", () => {
       requestHost: "org-1.vivd.studio",
     });
 
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(2_000);
 
     await expect(promise).resolves.toEqual({
       sessionId: "sess-1",

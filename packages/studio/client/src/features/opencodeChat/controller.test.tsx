@@ -253,7 +253,7 @@ describe("useOpencodeChatController", () => {
     });
   });
 
-  it("auto-selects the newest session during initial generation even before attention signals arrive", async () => {
+  it("does not auto-select an unrelated session during initial generation without a handed-off session id", async () => {
     mockOpencodeChat.sessions = [
       {
         id: "sess-latest",
@@ -276,11 +276,13 @@ describe("useOpencodeChatController", () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(mockOpencodeChat.setSelectedSessionId).toHaveBeenCalledWith(
-        "sess-latest",
-      );
+    await act(async () => {
+      await Promise.resolve();
     });
+
+    expect(mockOpencodeChat.setSelectedSessionId).not.toHaveBeenCalledWith(
+      "sess-latest",
+    );
   });
 
   it("stops a pending new-session start before the first prompt dispatch", async () => {

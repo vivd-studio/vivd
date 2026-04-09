@@ -46,6 +46,7 @@ export interface EventCallbacks {
 }
 
 const INACTIVITY_TIMEOUT_MS = 60 * 1000;
+const IDLE_SETTLE_MS = 1_500;
 type ToolStatus = "running" | "completed" | "error";
 const DEBUG_EVENTS = new Set(["1", "true", "yes", "on"]).has(
   (process.env.VIVD_OPENCODE_DEBUG_EVENTS || "").trim().toLowerCase(),
@@ -56,6 +57,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
   let lastEvent: any = null;
   let lastEventTime: number = Date.now();
   let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   const resetInactivityTimer = () => {
     if (inactivityTimer) {
@@ -86,6 +88,27 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
     }, INACTIVITY_TIMEOUT_MS);
   };
 
+  const cancelIdleTimer = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  };
+
+  const scheduleIdleCallback = (shouldEmitIdle: boolean) => {
+    if (!shouldEmitIdle || idleTimer) {
+      return;
+    }
+
+    idleTimer = setTimeout(() => {
+      idleTimer = null;
+      if (!isActive) {
+        return;
+      }
+      callbacks.onIdle?.();
+    }, IDLE_SETTLE_MS);
+  };
+
   const start = async () => {
     const events = await client.event.subscribe();
     const filterSessionId = callbacks.sessionId;
@@ -107,7 +130,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
           Array<{ partId: string; delta: string }>
         >();
         const loggedEncryptedToolMarkers = new Set<string>();
-        let hasObservedSessionActivity = false;
+        let hasObservedAssistantActivity = false;
         let hasTerminalSessionError = false;
 
         const queueUnknownText = (
@@ -185,6 +208,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
             callbacks.onEvent?.(event);
 
             if (event.type === "message.updated") {
+              cancelIdleTimer();
               const { info } = (event as any).properties;
               if (info?.id && typeof info.id === "string") {
                 if (typeof info.role === "string") {
@@ -198,6 +222,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
             }
 
             if (event.type === "message.part.updated") {
+              cancelIdleTimer();
               const { part, delta } = (event as any).properties;
               const partDelta = typeof delta === "string" ? delta : "";
               if (part?.id && typeof part.id === "string" && part?.type) {
@@ -208,7 +233,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
               const messageRole = messageRoles.get(messageId);
               const isAssistantMessage =
                 messageRole === "assistant" || assistantMessageIds.has(messageId);
-              hasObservedSessionActivity = true;
+              hasObservedAssistantActivity = true;
 
               if (part.type === "step-finish") {
                 if (part.cost !== undefined && callbacks.onUsageUpdated) {
@@ -339,6 +364,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 }
               }
             } else if (event.type === "message.part.delta") {
+              cancelIdleTimer();
               const properties = (event as any).properties ?? {};
               const partId = typeof properties.partID === "string" ? properties.partID : "";
               const messageId =
@@ -354,7 +380,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 continue;
               }
 
-              hasObservedSessionActivity = true;
+              hasObservedAssistantActivity = true;
               const partType = partTypes.get(partId);
               const messageRole = messageRoles.get(messageId);
               const isAssistantMessage =
@@ -383,36 +409,24 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 textState.set(partId, (textState.get(partId) || 0) + deltaText.length);
               }
             } else if (event.type === "session.idle") {
-              if (hasTerminalSessionError) {
-                continue;
-              }
-              if (!hasObservedSessionActivity) {
-                continue;
-              }
-              callbacks.onIdle?.();
+              scheduleIdleCallback(
+                !hasTerminalSessionError && hasObservedAssistantActivity,
+              );
             } else if (event.type === "session.status") {
               const status = (event as any).properties?.status;
               if (status?.type === "busy") {
-                hasObservedSessionActivity = true;
+                cancelIdleTimer();
                 hasTerminalSessionError = false;
               } else if (status?.type === "done") {
-                if (hasTerminalSessionError) {
-                  continue;
-                }
-                if (!hasObservedSessionActivity) {
-                  continue;
-                }
-                callbacks.onIdle?.();
+                scheduleIdleCallback(
+                  !hasTerminalSessionError && hasObservedAssistantActivity,
+                );
               } else if (status?.type === "idle") {
-                if (hasTerminalSessionError) {
-                  continue;
-                }
-                if (!hasObservedSessionActivity) {
-                  continue;
-                }
-                callbacks.onIdle?.();
+                scheduleIdleCallback(
+                  !hasTerminalSessionError && hasObservedAssistantActivity,
+                );
               } else if (status?.type === "retry" || status?.type === "error") {
-                hasObservedSessionActivity = true;
+                cancelIdleTimer();
                 if (status?.type === "error") {
                   hasTerminalSessionError = true;
                 }
@@ -452,6 +466,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
       clearTimeout(inactivityTimer);
       inactivityTimer = null;
     }
+    cancelIdleTimer();
   };
 
   return { start, stop };

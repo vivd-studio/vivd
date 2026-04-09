@@ -67,16 +67,27 @@ function resolveWindowRelativeOrigin(
 export function selectBrowserStudioBaseUrl(
   runtime: StudioRuntimeSession | null,
 ): string | null {
-  return pickFirstDefinedUrl(
-    runtime
-      ? [
-          runtime.browserUrl,
-          runtime.url,
-          runtime.runtimeUrl,
-          runtime.compatibilityUrl,
-        ]
-      : [],
-  );
+  if (!runtime) return null;
+
+  const preferredUrl = pickFirstDefinedUrl([
+    runtime.browserUrl,
+    runtime.url,
+    runtime.runtimeUrl,
+  ]);
+  const compatibilityUrl = pickFirstDefinedUrl([runtime.compatibilityUrl]);
+
+  if (
+    compatibilityUrl &&
+    typeof window !== "undefined" &&
+    resolveWindowRelativeOrigin(compatibilityUrl) === window.location.origin
+  ) {
+    const preferredOrigin = resolveWindowRelativeOrigin(preferredUrl);
+    if (preferredOrigin && preferredOrigin !== window.location.origin) {
+      return compatibilityUrl;
+    }
+  }
+
+  return preferredUrl ?? compatibilityUrl;
 }
 
 export function selectHostProbeStudioBaseUrl(
@@ -166,7 +177,7 @@ export function useStudioHostRuntime({
 
   const { isRecovering: isStudioRecovering, requestRecoveryCheck } =
     useStudioRuntimeGuard({
-      enabled: Boolean(studioHostProbeBaseUrl),
+      enabled: Boolean(studioRuntime),
       studioProbeBaseUrl: studioHostProbeBaseUrl,
       touchStudio,
       ensureStudioRunning,

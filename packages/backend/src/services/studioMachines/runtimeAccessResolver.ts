@@ -62,6 +62,26 @@ function normalizeRequestOrigin(
   return `${inferRequestProtocol(hostname, normalizedProtocol)}://${host}`;
 }
 
+function normalizeCompatibilityBrowserUrl(
+  compatibility: URL,
+  request: URL,
+  requestIsLocalDevelopment: boolean,
+): string {
+  if (
+    requestIsLocalDevelopment &&
+    compatibility.hostname === request.hostname &&
+    compatibility.origin !== request.origin
+  ) {
+    const rewritten = new URL(
+      `${compatibility.pathname}${compatibility.search}${compatibility.hash}`,
+      request.origin,
+    );
+    return rewritten.toString();
+  }
+
+  return compatibility.toString();
+}
+
 export function resolveStudioBrowserUrl(
   input: ResolveStudioBrowserUrlInput,
 ): string | null {
@@ -71,10 +91,6 @@ export function resolveStudioBrowserUrl(
   if (!directRuntimeUrl) return compatibilityUrl;
   if (!compatibilityUrl) return directRuntimeUrl;
 
-  if (input.providerKind === "local" || input.installProfile === "platform") {
-    return directRuntimeUrl;
-  }
-
   const requestOrigin = normalizeRequestOrigin(
     input.requestHost,
     input.requestProtocol,
@@ -83,10 +99,42 @@ export function resolveStudioBrowserUrl(
 
   let runtime: URL;
   let request: URL;
+  let compatibility: URL;
   try {
     runtime = new URL(directRuntimeUrl, requestOrigin);
     request = new URL(requestOrigin);
+    compatibility = new URL(compatibilityUrl, requestOrigin);
   } catch {
+    return directRuntimeUrl;
+  }
+
+  const requestIsLocalDevelopment = isLocalDevelopmentHostname(request.hostname);
+  const normalizedCompatibilityUrl = normalizeCompatibilityBrowserUrl(
+    compatibility,
+    request,
+    requestIsLocalDevelopment,
+  );
+  const normalizedCompatibility = new URL(normalizedCompatibilityUrl, requestOrigin);
+
+  if (
+    requestIsLocalDevelopment &&
+    input.providerKind !== "fly" &&
+    normalizedCompatibility.origin === request.origin &&
+    runtime.origin !== request.origin
+  ) {
+    return normalizedCompatibilityUrl;
+  }
+
+  if (
+    normalizedCompatibility.origin === request.origin &&
+    runtime.origin !== request.origin
+  ) {
+    if (input.installProfile !== "platform") {
+      return normalizedCompatibilityUrl;
+    }
+  }
+
+  if (input.installProfile === "platform") {
     return directRuntimeUrl;
   }
 
@@ -94,13 +142,12 @@ export function resolveStudioBrowserUrl(
     runtime.protocol,
     runtime.port,
   );
-  const requestIsLocalDevelopment = isLocalDevelopmentHostname(request.hostname);
 
   if (
     !requestIsLocalDevelopment &&
     (runtime.protocol !== request.protocol || runtimeUsesNonDefaultPort)
   ) {
-    return compatibilityUrl;
+    return normalizedCompatibilityUrl;
   }
 
   return directRuntimeUrl;

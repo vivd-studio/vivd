@@ -35,6 +35,16 @@ export function createStudioTrpcFetch({
 
     const controller = new AbortController();
     const timeoutTarget = normalizeRequestTarget(url);
+    if (timeoutTarget.includes("/undefined")) {
+      console.error("[StudioTRPC] Undefined request target", {
+        timeoutTarget,
+        locationHref: window.location.href,
+        locationPathname: window.location.pathname,
+        runtimeBasePath:
+          (window as Window & { __vivdBasePath?: unknown }).__vivdBasePath ?? null,
+        stack: new Error().stack,
+      });
+    }
     const timeoutMs = resolveTimeoutMs(timeoutTarget);
     let timedOut = false;
     const timeoutId = window.setTimeout(() => {

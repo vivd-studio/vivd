@@ -394,7 +394,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
     allowNetworkRecovery = true,
   ): Promise<StudioMachineStartResult> {
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     return await ensureContainerRunningWorkflow(
       {
         key: (organizationId, projectSlug, version) =>
@@ -620,7 +620,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
       getContainerRouteId(inspected) ||
       this.config.routeIdFor(organizationId, projectSlug, version);
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     if (!compatibilityRoutesEnabled) {
       await this.routeService.removeRuntimeRoute(routeId);
     }
@@ -706,7 +706,7 @@ export class DockerStudioMachineProvider implements ManagedStudioMachineProvider
 
   async listStudioMachines(): Promise<StudioMachineSummary[]> {
     const compatibilityRoutesEnabled =
-      await shouldCreateStudioCompatibilityRoutes();
+      await shouldCreateStudioCompatibilityRoutes(this.kind);
     return await listStudioMachinesWorkflow({
       compatibilityRoutesEnabled,
       getDesiredImage: () => this.getDesiredImage(),
