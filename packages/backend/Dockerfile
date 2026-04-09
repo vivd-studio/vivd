@@ -18,7 +18,7 @@ RUN apt-get update \
 
 # Install opencode CLI (required for the studio OpenCode server when running STUDIO_MACHINE_PROVIDER=local)
 # Clean up unused musl binary (saves ~120MB)
-RUN npm install -g opencode-ai@1.3.9 \
+RUN npm install -g opencode-ai@1.4.1 \
   && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/*musl* \
   && npm cache clean --force
 

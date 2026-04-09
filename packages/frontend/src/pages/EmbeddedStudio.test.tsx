@@ -744,6 +744,31 @@ describe("EmbeddedStudio", () => {
     expect(iframeUrl.searchParams.get("sessionId")).toBeNull();
   });
 
+  it("re-enters initial-generation mode when reopening studio for a generating project", () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1",
+    });
+    projectStatusUseQueryMock.mockReturnValue({
+      data: {
+        status: "generating_initial_site",
+        studioHandoff: {
+          mode: "studio_astro",
+          initialGeneration: true,
+          sessionId: null,
+        },
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1",
+      { replace: true },
+    );
+  });
+
   it("rewrites the embedded studio bootstrap target when a backend-polled session id appears later", () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);

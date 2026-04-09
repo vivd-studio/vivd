@@ -53,11 +53,10 @@ export default function StudioFullscreen() {
     Number.isFinite(versionOverride) && versionOverride > 0
       ? versionOverride
       : currentVersion;
-  const canBootstrapStudio = Boolean(project || initialGenerationRequested);
   const { data: projectStatusData } = trpc.project.status.useQuery(
     { slug: projectSlug!, version },
     {
-      enabled: !!projectSlug && initialGenerationRequested,
+      enabled: !!projectSlug,
       staleTime: 0,
       refetchOnMount: "always",
       refetchOnReconnect: "always",
@@ -70,7 +69,11 @@ export default function StudioFullscreen() {
           query.state.data && "studioHandoff" in query.state.data
             ? query.state.data.studioHandoff?.sessionId ?? null
             : null;
-        return initialGenerationRequested &&
+        const shouldTrackInitialGeneration =
+          initialGenerationRequested ||
+          status === "generating_initial_site" ||
+          status === "initial_generation_paused";
+        return shouldTrackInitialGeneration &&
           !requestedInitialSessionId &&
           status !== "initial_generation_paused" &&
           status !== "completed" &&
@@ -81,14 +84,25 @@ export default function StudioFullscreen() {
       },
     },
   );
-  const initialGenerationStatus =
-    initialGenerationRequested &&
-    projectStatusData &&
-    "status" in projectStatusData
+  const projectInitialGenerationStatus =
+    projectStatusData && "status" in projectStatusData
       ? projectStatusData.status
       : null;
+  const shouldAutoResumeInitialGeneration =
+    !initialGenerationRequested &&
+    (projectInitialGenerationStatus === "generating_initial_site" ||
+      projectInitialGenerationStatus === "initial_generation_paused");
+  const effectiveInitialGenerationRequested =
+    initialGenerationRequested || shouldAutoResumeInitialGeneration;
+  const canBootstrapStudio = Boolean(
+    project || initialGenerationRequested || shouldAutoResumeInitialGeneration,
+  );
+  const initialGenerationStatus =
+    effectiveInitialGenerationRequested && projectInitialGenerationStatus
+      ? projectInitialGenerationStatus
+      : null;
   const polledInitialSessionId =
-    initialGenerationRequested &&
+    effectiveInitialGenerationRequested &&
     projectStatusData &&
     "studioHandoff" in projectStatusData
       ? projectStatusData.studioHandoff?.sessionId?.trim() || null
@@ -96,24 +110,54 @@ export default function StudioFullscreen() {
   const resolvedInitialSessionId =
     requestedInitialSessionId ?? polledInitialSessionId;
   const awaitingInitialGenerationHandoff =
-    initialGenerationRequested &&
+    effectiveInitialGenerationRequested &&
     !resolvedInitialSessionId &&
     initialGenerationStatus !== "initial_generation_paused" &&
     initialGenerationStatus !== "completed" &&
     initialGenerationStatus !== "failed";
+
+  useEffect(() => {
+    if (!projectSlug || !shouldAutoResumeInitialGeneration) return;
+
+    const params = new URLSearchParams(location.search);
+    if (params.get("initialGeneration") === "1") return;
+
+    params.set("initialGeneration", "1");
+    if (polledInitialSessionId) {
+      params.set("sessionId", polledInitialSessionId);
+    }
+
+    navigate(
+      `${ROUTES.PROJECT_STUDIO_FULLSCREEN(projectSlug)}?${params.toString()}`,
+      { replace: true },
+    );
+  }, [
+    location.search,
+    navigate,
+    polledInitialSessionId,
+    projectSlug,
+    shouldAutoResumeInitialGeneration,
+  ]);
   const studioReturnPath = useMemo(() => {
     if (!projectSlug) return ROUTES.DASHBOARD;
 
     const params = new URLSearchParams({
       view: "studio",
       version: String(version),
-      ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+      ...(effectiveInitialGenerationRequested
+        ? { initialGeneration: "1" }
+        : {}),
     });
     if (resolvedInitialSessionId) {
       params.set("sessionId", resolvedInitialSessionId);
     }
     return `${ROUTES.PROJECT(projectSlug)}?${params.toString()}`;
-  }, [initialGenerationRequested, projectSlug, resolvedInitialSessionId, version]);
+  }, [
+    effectiveInitialGenerationRequested,
+    projectSlug,
+    resolvedInitialSessionId,
+    version,
+  ]);
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -331,7 +375,7 @@ export default function StudioFullscreen() {
     url.searchParams.set("fullscreen", "1");
     url.searchParams.set("projectSlug", projectSlug || "");
     url.searchParams.set("version", String(version));
-    if (initialGenerationRequested) {
+    if (effectiveInitialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
     if (resolvedInitialSessionId) {
@@ -341,7 +385,9 @@ export default function StudioFullscreen() {
     const returnToParams = new URLSearchParams({
       view: "studio",
       version: String(version),
-      ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+      ...(effectiveInitialGenerationRequested
+        ? { initialGeneration: "1" }
+        : {}),
     });
     if (resolvedInitialSessionId) {
       returnToParams.set("sessionId", resolvedInitialSessionId);
@@ -356,7 +402,7 @@ export default function StudioFullscreen() {
     return url.toString();
   }, [
     awaitingInitialGenerationHandoff,
-    initialGenerationRequested,
+    effectiveInitialGenerationRequested,
     projectSlug,
     resolvedInitialSessionId,
     studioBaseUrl,
@@ -390,7 +436,7 @@ export default function StudioFullscreen() {
     );
   }
 
-  if (!project && initialGenerationRequested) {
+  if (!project && effectiveInitialGenerationRequested) {
     return (
       <StudioStartupLoading
         fullScreen

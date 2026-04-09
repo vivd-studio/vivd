@@ -47,7 +47,7 @@ import { serverManager } from "./serverManager.js";
 import { workspaceEventPump } from "./events/workspaceEventPump.js";
 
 const RUN_REVERT_TESTS = process.env.VIVD_RUN_OPENCODE_REVERT_TESTS === "1";
-const OPENCODE_VERSION = "1.3.9";
+const OPENCODE_VERSION = "1.4.1";
 
 // To run inside the production-like Studio image (no network required):
 // `docker build -f packages/studio/Dockerfile -t vivd-studio:test .`

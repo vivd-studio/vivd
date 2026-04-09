@@ -123,12 +123,10 @@ export default function EmbeddedStudio() {
     : NaN;
   const studioVersion =
     Number.isFinite(versionOverride) && versionOverride > 0 ? versionOverride : version;
-  const shouldResumeStudio = resumeStudio || initialGenerationRequested;
-  const canBootstrapStudio = Boolean(project || initialGenerationRequested);
   const { data: projectStatusData } = trpc.project.status.useQuery(
     { slug: projectSlug!, version: studioVersion },
     {
-      enabled: !!projectSlug && initialGenerationRequested,
+      enabled: !!projectSlug && (initialGenerationRequested || resumeStudio),
       staleTime: 0,
       refetchOnMount: "always",
       refetchOnReconnect: "always",
@@ -141,7 +139,12 @@ export default function EmbeddedStudio() {
           query.state.data && "studioHandoff" in query.state.data
             ? query.state.data.studioHandoff?.sessionId ?? null
             : null;
-        return initialGenerationRequested &&
+        const shouldTrackInitialGeneration =
+          initialGenerationRequested ||
+          (resumeStudio &&
+            (status === "generating_initial_site" ||
+              status === "initial_generation_paused"));
+        return shouldTrackInitialGeneration &&
           !requestedInitialSessionId &&
           status !== "initial_generation_paused" &&
           status !== "completed" &&
@@ -152,14 +155,27 @@ export default function EmbeddedStudio() {
       },
     },
   );
-  const initialGenerationStatus =
-    initialGenerationRequested &&
-    projectStatusData &&
-    "status" in projectStatusData
+  const projectInitialGenerationStatus =
+    projectStatusData && "status" in projectStatusData
       ? projectStatusData.status
       : null;
+  const shouldAutoResumeInitialGeneration =
+    !initialGenerationRequested &&
+    resumeStudio &&
+    (projectInitialGenerationStatus === "generating_initial_site" ||
+      projectInitialGenerationStatus === "initial_generation_paused");
+  const effectiveInitialGenerationRequested =
+    initialGenerationRequested || shouldAutoResumeInitialGeneration;
+  const shouldResumeStudio = resumeStudio || effectiveInitialGenerationRequested;
+  const canBootstrapStudio = Boolean(
+    project || initialGenerationRequested || shouldAutoResumeInitialGeneration,
+  );
+  const initialGenerationStatus =
+    effectiveInitialGenerationRequested && projectInitialGenerationStatus
+      ? projectInitialGenerationStatus
+      : null;
   const polledInitialSessionId =
-    initialGenerationRequested &&
+    effectiveInitialGenerationRequested &&
     projectStatusData &&
     "studioHandoff" in projectStatusData
       ? projectStatusData.studioHandoff?.sessionId?.trim() || null
@@ -167,11 +183,33 @@ export default function EmbeddedStudio() {
   const resolvedInitialSessionId =
     requestedInitialSessionId ?? polledInitialSessionId;
   const awaitingInitialGenerationHandoff =
-    initialGenerationRequested &&
+    effectiveInitialGenerationRequested &&
     !resolvedInitialSessionId &&
     initialGenerationStatus !== "initial_generation_paused" &&
     initialGenerationStatus !== "completed" &&
     initialGenerationStatus !== "failed";
+
+  useEffect(() => {
+    if (!projectSlug || !shouldAutoResumeInitialGeneration) return;
+
+    const params = new URLSearchParams(location.search);
+    if (params.get("initialGeneration") === "1") return;
+
+    params.set("initialGeneration", "1");
+    if (polledInitialSessionId) {
+      params.set("sessionId", polledInitialSessionId);
+    }
+
+    navigate(`${ROUTES.PROJECT(projectSlug)}?${params.toString()}`, {
+      replace: true,
+    });
+  }, [
+    location.search,
+    navigate,
+    polledInitialSessionId,
+    projectSlug,
+    shouldAutoResumeInitialGeneration,
+  ]);
 
   const utils = trpc.useUtils();
   const startStudio = trpc.project.startStudio.useMutation({
@@ -387,7 +425,13 @@ export default function EmbeddedStudio() {
   };
 
   useEffect(() => {
-    if (!initialGenerationRequested || !projectSlug || !canBootstrapStudio) return;
+    if (
+      !effectiveInitialGenerationRequested ||
+      !projectSlug ||
+      !canBootstrapStudio
+    ) {
+      return;
+    }
     setPreviewSurface("live");
     setEditRequested(true);
 
@@ -403,7 +447,7 @@ export default function EmbeddedStudio() {
     clearRuntimeOverride,
     editRequested,
     hardRestartStudio.isPending,
-    initialGenerationRequested,
+    effectiveInitialGenerationRequested,
     isRenamePending,
     canBootstrapStudio,
     projectSlug,
@@ -472,7 +516,9 @@ export default function EmbeddedStudio() {
     onFullscreen: () => {
       const params = new URLSearchParams({
         version: String(studioVersion),
-        ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+        ...(effectiveInitialGenerationRequested
+          ? { initialGeneration: "1" }
+          : {}),
       });
       if (resolvedInitialSessionId) {
         params.set("sessionId", resolvedInitialSessionId);
@@ -501,7 +547,7 @@ export default function EmbeddedStudio() {
     url.searchParams.set("version", String(studioVersion));
     url.searchParams.set("publicPreviewEnabled", publicPreviewEnabled ? "1" : "0");
     url.searchParams.set("sidebarOpen", sidebarOpen ? "1" : "0");
-    if (initialGenerationRequested) {
+    if (effectiveInitialGenerationRequested) {
       url.searchParams.set("initialGeneration", "1");
     }
     if (resolvedInitialSessionId) {
@@ -513,7 +559,9 @@ export default function EmbeddedStudio() {
     const returnToParams = new URLSearchParams({
       view: "studio",
       version: String(studioVersion),
-      ...(initialGenerationRequested ? { initialGeneration: "1" } : {}),
+      ...(effectiveInitialGenerationRequested
+        ? { initialGeneration: "1" }
+        : {}),
     });
     if (resolvedInitialSessionId) {
       returnToParams.set("sessionId", resolvedInitialSessionId);
@@ -528,7 +576,7 @@ export default function EmbeddedStudio() {
     return url.toString();
   }, [
     awaitingInitialGenerationHandoff,
-    initialGenerationRequested,
+    effectiveInitialGenerationRequested,
     projectSlug,
     publicPreviewEnabled,
     resolvedInitialSessionId,
@@ -858,7 +906,7 @@ export default function EmbeddedStudio() {
     );
   }
 
-  if (!project && initialGenerationRequested) {
+  if (!project && effectiveInitialGenerationRequested) {
     return (
       <FramedHostShell
         className="h-full"
