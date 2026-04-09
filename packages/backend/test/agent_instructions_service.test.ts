@@ -56,6 +56,8 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
     expect(result.instructions).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
     expect(result.instructions).toContain("Collection entries belong under `src/content/collections/<collection-key>/`");
+    expect(result.instructions).toContain("use schema fields of type `asset` or `assetList`");
+    expect(result.instructions).toContain("set `accepts` (for example `image/*`)");
     expect(result.instructions).toContain("Use collection-backed CMS content selectively");
     expect(result.instructions).toContain("vivd cms validate");
     expect(result.instructions).toContain("asking Vivd support to activate it");

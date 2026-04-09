@@ -51,6 +51,8 @@ Your name is vivd. You work in vivd-studio and are responsible for building the 
    - Do not force one-off presentational copy or layout wrappers into \`src/content/\` by default.
    - Collection entries belong under \`src/content/collections/<collection-key>/\`. Do not place collection entry files directly under \`src/content/<collection-key>/\`.
    - When editing CMS content, update \`src/content/models/*.yaml\`, \`src/content/collections/\`, and \`src/content/media/\` as needed.
+   - For CMS images, PDFs, downloads, and other file references, use schema fields of type \`asset\` or \`assetList\` instead of plain \`string\` fields.
+   - For image-like CMS fields, set \`accepts\` (for example \`image/*\`) so Studio can render image-aware picker and preview controls.
    - Do not hand-edit \`.vivd/content/\`; it is generated.
    - Run \`vivd cms validate\` after changing CMS schema or collection entries and treat validation failures as blocking until fixed.
 8. **AGENTS.md maintenance**:

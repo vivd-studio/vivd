@@ -15,6 +15,8 @@ The Vivd YAML files under `src/content/` are the canonical source of truth.
 - Do not replace them with a separate Astro-only schema/source-of-truth such as `src/content.config.ts`.
 - Astro Content Collections may be used as the Astro rendering/query layer, but they should read from the existing Vivd content contract instead of introducing a second parallel content model.
 - Collection entries belong under `src/content/collections/<collection-key>/`; do not place them directly under `src/content/<collection-key>/`.
+- For CMS images, PDFs, downloads, and other file references, use schema fields of type `asset` or `assetList` instead of plain `string`.
+- For image-like CMS fields, set `accepts` (for example `image/*`) so Studio can render image-aware picker and preview controls.
 - Do not hand-edit `.vivd/content/`; it is generated.
 - Run `vivd cms validate` after changing CMS schema or collection entries.
 

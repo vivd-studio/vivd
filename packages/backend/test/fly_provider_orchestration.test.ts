@@ -317,7 +317,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
     );
   });
 
-  it("parkStudioMachine does not retry once a machine is not suspend-eligible", async () => {
+  it("parkStudioMachine does not retry once a machine lacks suspend autostop", async () => {
     vi.stubEnv("VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS", "0");
 
     const provider = new FlyStudioMachineProvider();
@@ -329,6 +329,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
     machine.config = {
       ...(machine.config || {}),
       guest: { cpu_kind: "performance", cpus: 1, memory_mb: 4096 },
+      services: [{ autostop: "stop", autostart: true, ports: [{ port: 4100 }] }],
     };
 
     (provider as any).getMachine = async () => machine;
@@ -380,6 +381,53 @@ describe("FlyStudioMachineProvider orchestration", () => {
     ).resolves.toBeUndefined();
 
     expect(requestRuntimeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("parkStudioMachine retries runtime cleanup once after startup 503", async () => {
+    vi.stubEnv("VIVD_FLY_PARK_RUNTIME_CLEANUP_DRAIN_MS", "0");
+
+    const provider = new FlyStudioMachineProvider();
+    const machine = studioMachine({
+      id: "machine-1",
+      state: "started",
+      image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
+    });
+
+    (provider as any).getMachine = async () => machine;
+    (provider as any).config.getPublicUrlForPort = (port: number) =>
+      `https://studio.test:${port}`;
+
+    const cleanupMock = vi
+      .spyOn(provider as any, "requestRuntimeCleanup")
+      .mockRejectedValueOnce(
+        new Error(
+          "[FlyMachines] Runtime cleanup failed 503: Studio is starting up. Please retry shortly.",
+        ),
+      )
+      .mockResolvedValueOnce(undefined);
+    const waitForReadyMock = vi
+      .spyOn(provider as any, "waitForReady")
+      .mockResolvedValue(undefined);
+    const suspendOrStopMock = vi
+      .spyOn(provider as any, "suspendOrStopMachine")
+      .mockResolvedValue("suspended");
+    const removeRuntimeRouteMock = vi
+      .spyOn((provider as any).routeService, "removeRuntimeRoute")
+      .mockResolvedValue(undefined);
+
+    const result = await provider.parkStudioMachine("machine-1");
+
+    expect(result).toBe("suspended");
+    expect(cleanupMock).toHaveBeenCalledTimes(2);
+    expect(waitForReadyMock).toHaveBeenCalledWith({
+      machineId: "machine-1",
+      url: "https://studio.test:4100",
+      timeoutMs: (provider as any).config.startTimeoutMs,
+    });
+    expect(suspendOrStopMock).toHaveBeenCalledWith("machine-1");
+    expect(removeRuntimeRouteMock).toHaveBeenCalledWith(
+      (provider as any).config.routeIdFor("org-1", "site-1", 1),
+    );
   });
 
   it("ensureRunningInner creates a machine with expected metadata and returns start result", async () => {

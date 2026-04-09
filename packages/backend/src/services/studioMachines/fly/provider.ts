@@ -80,7 +80,6 @@ import { parseNonNegativeInt, sleep } from "./utils";
 
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const DEFAULT_PARK_RUNTIME_CLEANUP_DRAIN_MS = 3_000;
-const MAX_SUSPEND_ELIGIBLE_MEMORY_MB = 2048;
 const RUNTIME_CLEANUP_STATUS_POLL_MS = 250;
 const RUNTIME_CLEANUP_STATUS_TIMEOUT_MS = 15_000;
 
@@ -98,12 +97,17 @@ function hasSuspendAutostop(machine: FlyMachine): boolean {
 }
 
 function isSuspendRetryEligible(machine: FlyMachine): boolean {
-  if (!hasSuspendAutostop(machine)) return false;
-  const memoryMb = machine.config?.guest?.memory_mb;
-  if (typeof memoryMb === "number" && Number.isFinite(memoryMb)) {
-    return memoryMb <= MAX_SUSPEND_ELIGIBLE_MEMORY_MB;
-  }
-  return true;
+  return hasSuspendAutostop(machine);
+}
+
+function isRuntimeCleanupStartupError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("runtime cleanup") &&
+    normalized.includes("503") &&
+    (normalized.includes("starting up") || normalized.includes('"status":"starting"'))
+  );
 }
 
 export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
@@ -342,17 +346,37 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     if (!port || !accessToken) return;
 
     const url = this.config.getPublicUrlForPort(port);
+    let cleanupError: unknown = null;
     try {
       await this.requestRuntimeCleanup(url, accessToken);
-      const drainMs = getParkRuntimeCleanupDrainMs();
-      if (drainMs > 0) {
-        await sleep(drainMs);
-      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      cleanupError = error;
+      if (isRuntimeCleanupStartupError(error)) {
+        try {
+          await this.waitForReady({
+            machineId: machine.id,
+            url,
+            timeoutMs: this.config.startTimeoutMs,
+          });
+          await this.requestRuntimeCleanup(url, accessToken);
+          cleanupError = null;
+        } catch (retryError) {
+          cleanupError = retryError;
+        }
+      }
+    }
+
+    if (cleanupError) {
+      const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
       console.warn(
         `[FlyMachines] Runtime cleanup before park failed for ${machine.id}: ${message}`,
       );
+      return;
+    }
+
+    const drainMs = getParkRuntimeCleanupDrainMs();
+    if (drainMs > 0) {
+      await sleep(drainMs);
     }
   }
 

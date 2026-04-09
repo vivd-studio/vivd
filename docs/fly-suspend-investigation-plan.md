@@ -14,17 +14,17 @@
 
 ### 1. Re-establish the test matrix
 
-- [ ] Re-run `fly_warm_wake_auth.test.ts` with a more production-like suspend-eligible config.
+- [x] Re-run `fly_warm_wake_auth.test.ts` with a more production-like suspend-eligible config.
 - [ ] Re-run `fly_reconcile_flow.test.ts` with the same config.
-- [ ] Compare `shared/1024`, `shared/2048`, and the closest safe production-like test shape that Fly suspend still supports.
+- [x] Compare `shared/1024`, `shared/2048`, and the closest safe production-like test shape that Fly suspend still supports.
 - [ ] Use `v1.1.92` as the known-good control without re-running it unless later evidence makes that necessary.
 
 ### 2. Compare tests against production reality
 
-- [ ] List current production Studio machines after the latest deploy/reconcile pass.
-- [ ] Bucket them by final parked state: `suspended`, `stopped`, `started`, other.
-- [ ] Identify a small set of stopped outliers and a matching set of healthy suspended machines for comparison.
-- [ ] Capture the concrete machine ids, image tags, guest shape, region, and most recent relevant events for both groups.
+- [x] List current production Studio machines after the latest deploy/reconcile pass.
+- [x] Bucket them by final parked state: `suspended`, `stopped`, `started`, other.
+- [x] Identify a small set of stopped outliers and a matching set of healthy suspended machines for comparison.
+- [x] Capture the concrete machine ids, image tags, guest shape, region, and most recent relevant events for both groups.
 
 ### 3. Investigate stopped outliers
 
@@ -39,10 +39,10 @@
 
 ### 4. Investigate possible test-harness skew
 
-- [ ] Review whether the smokes still generate extra traffic or timing pressure that production does not.
+- [x] Review whether the smokes still generate extra traffic or timing pressure that production does not.
 - [ ] Check whether the reconcile smoke parks the drifted machine too soon after startup relative to production.
-- [ ] Check whether warm-wake auth is still holding runtime/browser/session activity longer than the real product path.
-- [ ] Decide whether any harness timing changes are warranted without weakening the real `suspended` contract.
+- [x] Check whether warm-wake auth is still holding runtime/browser/session activity longer than the real product path.
+- [x] Decide whether any harness timing changes are warranted without weakening the real `suspended` contract.
 
 ### 5. Review current hardening for cleanup candidates
 
@@ -72,6 +72,10 @@
 - Recent real Fly event streams for the failing tests showed `stop -> exit (requested_stop=true)` without a `suspending` or `suspended` transition.
 - Production observations after the latest deploy suggest many machines are still reconciling and parking successfully as `suspended`, so the local tests are currently painting a worse picture than production.
 - In the screenshot comparison set, all six machines share the same image (`1.1.99`), region (`fra`), and `performance / 4096 MiB` placement, but the stopped machines are younger than the suspended machines. That makes project or machine history a stronger candidate than raw config drift.
+- A targeted backend hardening landed in `packages/backend/src/services/studioMachines/fly/provider.ts`: if runtime cleanup fails with the startup `503`, the park path now waits for runtime readiness and retries cleanup once before falling through. The focused provider regression coverage is green, but this did not change the real warm-wake outcome on `vivd-studio-dev`.
+- On `vivd-studio-dev`, a direct machine-level control still degraded to `stop` even after the runtime had fully reached `/health -> {"status":"ok"}`, `POST /vivd-studio/api/cleanup/preview-leave` returned `200`, `/vivd-studio/api/cleanup/status` reported `state:"idle"` with every tracked subsystem (`bucket_sync`, `workspace_state_reporter`, `usage_reporter`, `agent_lease_reporter`, `opencode_runtime`) at `idle`, and the raw Fly `POST /suspend` endpoint itself returned `200 {"ok":true}`.
+- The same direct control showed the remaining runtime process set was already minimal: the guest only had the main `entrypoint.sh`, the main `node dist/index.js`, `hallpass`, and the entrypoint loop's `sleep 1`, with no leftover OpenCode server child and no pending sync trigger file. The pause file `/tmp/vivd-sync.pause` was present, which means the current cleanup status is truthful about the requested pause but still does not explain the Fly stop fallback.
+- A production-shaped warm-wake smoke pinned to the actual prod image `ghcr.io/vivd-studio/vivd-studio:1.1.99` also fell back to `stop` on `vivd-studio-dev`, with the same clean `SIGINT -> SIGTERM -> exit 0` log pattern as the current dev tag. That means the harsher local/test picture is not unique to the current dev image; the `vivd-studio-dev` app or the fresh standalone test-project path is harsher than current production.
 
 ### Production comparison set from the current machine overview screenshot
 
@@ -86,7 +90,8 @@
 
 ### Open questions
 
-- What production-relevant test shape, if any, behaves better locally than `shared / 1024 MB` and `shared / 2048 MB`?
+- What production-relevant test shape, if any, behaves better locally than `shared / 1024 MB`, `shared / 2048 MB`, and `performance / 4096 MiB` on `vivd-studio-dev`?
 - Are the production stopped outliers tied to a narrow class of machines rather than a general runtime regression?
-- Why do fresh smoke-created machines on the current image fail to suspend locally even when older production machines on the same image and guest shape can still end up `suspended`?
+- Why do fresh smoke-created machines on `vivd-studio-dev` fail to suspend locally even when older production machines on `vivd-studio-prod` with the same `1.1.99` image and guest shape can still end up `suspended`?
+- Is the remaining skew primarily app-level (`vivd-studio-dev` vs `vivd-studio-prod`) or project-history-level (fresh standalone test projects vs older real projects)?
 - Which of the new suspend hardening code paths are genuinely required once the test-vs-production mismatch is understood?

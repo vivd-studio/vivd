@@ -85,7 +85,7 @@ Treat this as a harness bug first. On April 9, 2026, in-frame fetches against ru
 
 - `VIVD_STUDIO_HOST_SMOKE_MIN_RECORDED_ACTIONS=1`
 
-Use this only for local exploratory repro speed. Do not make `1` the repo default.
+Use this only for local exploratory repro speed. The repo default is `2`; do not make `1` the default.
 
 ## Live Container Inspection
 

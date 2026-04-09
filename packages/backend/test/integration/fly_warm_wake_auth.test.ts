@@ -429,7 +429,12 @@ if (!backendUrl || !studioId || !accessToken || !organizationId || !projectSlug 
   throw new Error("missing connected-mode env");
 }
 
-const statusUrl = new URL("/api/trpc/studioApi.getStatus", backendUrl);
+function resolveBackendUrl(path) {
+  const normalizedBase = backendUrl.endsWith("/") ? backendUrl : backendUrl + "/";
+  return new URL(path.replace(/^\\//, ""), normalizedBase);
+}
+
+const statusUrl = resolveBackendUrl("/api/trpc/studioApi.getStatus");
 statusUrl.searchParams.set("input", JSON.stringify({ studioId }));
 
 const headers = {
@@ -445,7 +450,7 @@ if (!statusResponse.ok) {
   throw new Error(\`getStatus \${statusResponse.status}: \${statusText}\`);
 }
 
-const workspaceResponse = await fetch(new URL("/api/trpc/studioApi.reportWorkspaceState", backendUrl), {
+const workspaceResponse = await fetch(resolveBackendUrl("/api/trpc/studioApi.reportWorkspaceState"), {
   method: "POST",
   headers,
   body: JSON.stringify({
@@ -592,12 +597,11 @@ describe.sequential("Fly warm wake + auth", () => {
       const organizationId = TEST_ORGANIZATION_ID;
       const projectSlug = `warm-wake-${runId}`;
       const version = 1;
-      const startEnv =
-        VERIFY_BACKEND_CALLBACKS && TEST_MAIN_BACKEND_URL
-          ? {
-              MAIN_BACKEND_URL: TEST_MAIN_BACKEND_URL,
-            }
-          : {};
+      const startEnv = TEST_MAIN_BACKEND_URL
+        ? {
+            MAIN_BACKEND_URL: TEST_MAIN_BACKEND_URL,
+          }
+        : {};
 
       let machineId: string | null = null;
       let latestEvents: FlyMachineEvent[] = [];

@@ -44,6 +44,8 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
     expect(prompt).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
     expect(prompt).toContain("Collection entries belong under `src/content/collections/<collection-key>/`");
+    expect(prompt).toContain("use schema fields of type `asset` or `assetList`");
+    expect(prompt).toContain("set `accepts` (for example `image/*`)");
     expect(prompt).toContain("vivd cms validate");
     expect(prompt).toContain("Redirects for migrated URLs");
     expect(prompt).toContain("Tool Usage Contract");

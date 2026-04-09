@@ -17,6 +17,7 @@ Use this skill when touching Fly Studio lifecycle/auth code or when a prod Studi
    - keep machine runtime auth separate from browser user auth
 3. When debugging, distinguish a true suspend resume from a cold boot before changing code.
 4. Use the local user's `fly` or `flyctl` CLI when available; if backend-host SSH would help and the user has not provided access details yet, ask for them explicitly.
+   - In this repo's current setup, `.env` may include `PROD_FLY_API_TOKEN`; use it carefully for read-only inspection of `vivd-studio-prod` machine list/status/logs when the user explicitly wants production debugging. Do not print the token or mutate prod machines unless the user explicitly asks for that.
 5. If you touch this area, update or propose the protecting regressions and release smokes instead of leaving the new behavior undocumented.
 
 ## Regression Playbook

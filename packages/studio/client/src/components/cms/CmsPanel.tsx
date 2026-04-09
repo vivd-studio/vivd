@@ -5,54 +5,31 @@ import { usePreview } from "@/components/preview/PreviewContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { buildAssetFileUrl } from "@/components/asset-explorer/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  AlertCircle,
-  ArrowDown,
-  ArrowUp,
   FileCode,
   FolderOpen,
   Loader2,
   Plus,
   RefreshCw,
-  Save,
-  Trash2,
   X,
 } from "lucide-react";
-import type {
-  CmsEntryRecord,
-  CmsFieldDefinition,
-  CmsModelRecord,
-} from "@vivd/shared/cms";
+import type { CmsModelRecord } from "@vivd/shared/cms";
 import {
-  buildDefaultFieldValue,
   buildRichTextReference,
   type CmsFieldSegment,
   cloneValue,
   collectRichTextSidecars,
-  deriveReferenceValue,
   getEntryTitle,
   getValueAtPath,
   resolveRelativePath,
   setValueAtPath,
-  titleizeKey,
 } from "./helpers";
-import { CmsAssetField } from "./CmsAssetField";
+import { CmsCollectionsSidebar } from "./CmsCollectionsSidebar";
+import { CmsEntriesSidebar } from "./CmsEntriesSidebar";
+import { CmsEntryEditor } from "./CmsEntryEditor";
 
 interface CmsPanelProps {
   projectSlug: string;
@@ -62,22 +39,6 @@ interface CmsPanelProps {
 
 function formatYaml(value: unknown): string {
   return `${stringifyYaml(value)}\n`;
-}
-
-function getFieldLabel(fieldKey: string, field: CmsFieldDefinition) {
-  return field.label?.trim() || titleizeKey(fieldKey);
-}
-
-function getEntryErrorCount(reportErrors: string[], entry: CmsEntryRecord): number {
-  return reportErrors.filter((error) => error.includes(entry.relativePath)).length;
-}
-
-function getModelErrorCount(reportErrors: string[], model: CmsModelRecord): number {
-  return reportErrors.filter(
-    (error) =>
-      error.includes(model.relativeSchemaPath) ||
-      error.includes(model.relativeCollectionRoot),
-  ).length;
 }
 
 function buildReferenceOptions(
@@ -90,10 +51,6 @@ function buildReferenceOptions(
       label: `${model.label} / ${getEntryTitle(entry, model, defaultLocale)}`,
     })),
   );
-}
-
-function ensureArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 function isImagePath(path: string): boolean {
@@ -541,463 +498,6 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     version,
   ]);
 
-  const renderField = useCallback(
-    (
-      fieldKey: string,
-      field: CmsFieldDefinition,
-      fieldPath: CmsFieldSegment[],
-    ) => {
-      const rawValue = draftValues ? getValueAtPath(draftValues, fieldPath) : undefined;
-      const fieldId = fieldPath.map(String).join(".");
-      const label = getFieldLabel(fieldKey, field);
-
-      if (field.localized) {
-        const localizedValue =
-          rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
-            ? (rawValue as Record<string, unknown>)
-            : {};
-
-        if (field.type === "richText" && field.storage === "sidecar-markdown") {
-          return (
-            <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
-              <div>
-                <Label className="text-sm font-medium">{label}</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Markdown sidecars stored next to the entry.
-                </p>
-              </div>
-              <div className="grid gap-3 xl:grid-cols-2">
-                {locales.map((locale) => {
-                  const relativeValue =
-                    typeof localizedValue[locale] === "string"
-                      ? (localizedValue[locale] as string)
-                      : "";
-                  const filePath =
-                    relativeValue && selectedEntry
-                      ? resolveRelativePath(selectedEntry.relativePath, relativeValue)
-                      : selectedEntry
-                        ? resolveRelativePath(
-                            selectedEntry.relativePath,
-                            buildRichTextReference(fieldPath, locale),
-                          )
-                        : "";
-                  return (
-                    <div key={`${fieldId}.${locale}`} className="space-y-2">
-                      <Label htmlFor={`${fieldId}.${locale}`}>{locale.toUpperCase()}</Label>
-                      <Textarea
-                        id={`${fieldId}.${locale}`}
-                        rows={10}
-                        value={sidecarDrafts[filePath] ?? ""}
-                        onChange={(event) =>
-                          handleRichTextChange(fieldPath, locale, event.target.value)
-                        }
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        }
-
-        return (
-          <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
-            <div>
-              <Label className="text-sm font-medium">{label}</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Stored per locale in the entry YAML.
-              </p>
-            </div>
-            <div className="grid gap-3 xl:grid-cols-2">
-              {locales.map((locale) => (
-                <div key={`${fieldId}.${locale}`} className="space-y-2">
-                  <Label htmlFor={`${fieldId}.${locale}`}>{locale.toUpperCase()}</Label>
-                  {field.type === "text" ? (
-                    <Textarea
-                      id={`${fieldId}.${locale}`}
-                      rows={5}
-                      value={
-                        typeof localizedValue[locale] === "string"
-                          ? (localizedValue[locale] as string)
-                          : ""
-                      }
-                      onChange={(event) =>
-                        applyDraftValue(fieldPath, {
-                          ...localizedValue,
-                          [locale]: event.target.value,
-                        })
-                      }
-                    />
-                  ) : (
-                    <Input
-                      id={`${fieldId}.${locale}`}
-                      value={
-                        typeof localizedValue[locale] === "string"
-                          ? (localizedValue[locale] as string)
-                          : ""
-                      }
-                      onChange={(event) =>
-                        applyDraftValue(fieldPath, {
-                          ...localizedValue,
-                          [locale]: event.target.value,
-                        })
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      }
-
-      if (field.type === "string" || field.type === "slug" || field.type === "date" || field.type === "datetime") {
-        return (
-          <div key={fieldId} className="space-y-2">
-            <Label htmlFor={fieldId}>{label}</Label>
-            <Input
-              id={fieldId}
-              value={typeof rawValue === "string" ? rawValue : ""}
-              onChange={(event) => applyDraftValue(fieldPath, event.target.value)}
-            />
-          </div>
-        );
-      }
-
-      if (field.type === "text" || field.type === "richText") {
-        return (
-          <div key={fieldId} className="space-y-2">
-            <Label htmlFor={fieldId}>{label}</Label>
-            <Textarea
-              id={fieldId}
-              rows={field.type === "richText" ? 10 : 5}
-              value={typeof rawValue === "string" ? rawValue : ""}
-              onChange={(event) =>
-                field.type === "richText" && field.storage === "sidecar-markdown"
-                  ? handleRichTextChange(fieldPath, null, event.target.value)
-                  : applyDraftValue(fieldPath, event.target.value)
-              }
-            />
-          </div>
-        );
-      }
-
-      if (field.type === "number") {
-        return (
-          <div key={fieldId} className="space-y-2">
-            <Label htmlFor={fieldId}>{label}</Label>
-            <Input
-              id={fieldId}
-              type="number"
-              value={typeof rawValue === "number" ? String(rawValue) : ""}
-              onChange={(event) =>
-                applyDraftValue(
-                  fieldPath,
-                  event.target.value === "" ? null : Number(event.target.value),
-                )
-              }
-            />
-          </div>
-        );
-      }
-
-      if (field.type === "boolean") {
-        return (
-          <div
-            key={fieldId}
-            className="flex items-center justify-between rounded-lg border border-border/60 p-4"
-          >
-            <div>
-              <Label htmlFor={fieldId}>{label}</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Toggle this field directly in the collection entry.
-              </p>
-            </div>
-            <Checkbox
-              id={fieldId}
-              checked={Boolean(rawValue)}
-              onCheckedChange={(checked) => applyDraftValue(fieldPath, Boolean(checked))}
-            />
-          </div>
-        );
-      }
-
-      if (field.type === "enum") {
-        return (
-          <div key={fieldId} className="space-y-2">
-            <Label>{label}</Label>
-            <Select
-              value={typeof rawValue === "string" ? rawValue : ""}
-              onValueChange={(value) => applyDraftValue(fieldPath, value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select an option" />
-              </SelectTrigger>
-              <SelectContent>
-                {(field.options ?? []).map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        );
-      }
-
-      if (field.type === "reference") {
-        return (
-          <div key={fieldId} className="space-y-2">
-            <Label>{label}</Label>
-            <Select
-              value={deriveReferenceValue(rawValue) || "__empty__"}
-              onValueChange={(value) =>
-                applyDraftValue(fieldPath, value === "__empty__" ? "" : value)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select an entry" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__empty__">No reference</SelectItem>
-                {referenceOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        );
-      }
-
-      if (field.type === "asset") {
-        if (!selectedEntry || !selectedModel) {
-          return null;
-        }
-
-        const mediaRootPath = "src/content/media";
-        const defaultFolderPath = `${mediaRootPath}/${selectedModel.key}/${selectedEntry.key}`;
-        return (
-          <CmsAssetField
-            key={fieldId}
-            projectSlug={projectSlug}
-            version={version}
-            fieldId={fieldId}
-            label={label}
-            field={field}
-            value={rawValue}
-            entryRelativePath={selectedEntry.relativePath}
-            mediaRootPath={mediaRootPath}
-            defaultFolderPath={defaultFolderPath}
-            canUseAiImages={canUseAiImages}
-            onChange={(nextValue) => applyDraftValue(fieldPath, nextValue)}
-            onOpenAsset={openAssetReference}
-          />
-        );
-      }
-
-      if (field.type === "assetList") {
-        if (!selectedEntry || !selectedModel) {
-          return null;
-        }
-
-        const items = ensureArray(rawValue);
-        const mediaRootPath = "src/content/media";
-        const defaultFolderPath = `${mediaRootPath}/${selectedModel.key}/${selectedEntry.key}`;
-        return (
-          <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <Label>{label}</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Ordered asset references stored in the entry YAML.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={openExplorer}>
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  Explorer
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const nextItem =
-                      items[0] && typeof items[0] === "object" && !Array.isArray(items[0])
-                        ? { ...(items[0] as Record<string, unknown>), path: "" }
-                        : "";
-                    applyDraftValue(fieldPath, [...items, nextItem]);
-                  }}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add asset
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No assets yet.</p>
-              ) : null}
-              {items.map((item, index) => {
-                return (
-                  <div key={`${fieldId}.${index}`} className="space-y-2">
-                    <CmsAssetField
-                      projectSlug={projectSlug}
-                      version={version}
-                      fieldId={`${fieldId}.${index}`}
-                      label={`${label} ${index + 1}`}
-                      field={{ ...field, type: "asset" }}
-                      value={item}
-                      entryRelativePath={selectedEntry.relativePath}
-                      mediaRootPath={mediaRootPath}
-                      defaultFolderPath={defaultFolderPath}
-                      canUseAiImages={canUseAiImages}
-                      compact
-                      onChange={(nextValue) => {
-                        const nextItems = [...items];
-                        nextItems[index] = nextValue;
-                        applyDraftValue(fieldPath, nextItems);
-                      }}
-                      onOpenAsset={openAssetReference}
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const nextItems = [...items];
-                          nextItems.splice(index, 1);
-                          applyDraftValue(fieldPath, nextItems);
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-
-      if (field.type === "object") {
-        return (
-          <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
-            <div>
-              <Label className="text-sm font-medium">{label}</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Nested structured fields.
-              </p>
-            </div>
-            <div className="space-y-4">
-              {Object.entries(field.fields ?? {}).map(([nestedKey, nestedField]) =>
-                renderField(nestedKey, nestedField, [...fieldPath, nestedKey]),
-              )}
-            </div>
-          </div>
-        );
-      }
-
-      if (field.type === "list") {
-        const items = ensureArray(rawValue);
-        return (
-          <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <Label className="text-sm font-medium">{label}</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Ordered list values stored directly in the entry.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  applyDraftValue(fieldPath, [
-                    ...items,
-                    buildDefaultFieldValue(fieldKey, field.item ?? { type: "string" }, defaultLocale),
-                  ])
-                }
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add item
-              </Button>
-            </div>
-            <div className="space-y-3">
-              {items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No items yet.</p>
-              ) : null}
-              {items.map((_, index) => (
-                <div
-                  key={`${fieldId}.${index}`}
-                  className="rounded-lg border border-border/50 bg-muted/20 p-3"
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-sm font-medium">Item {index + 1}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        applyDraftValue(
-                          fieldPath,
-                          items.filter((_, itemIndex) => itemIndex !== index),
-                        )
-                      }
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                  {field.item ? (
-                    field.item.type === "object" ? (
-                      <div className="space-y-4">
-                        {Object.entries(field.item.fields ?? {}).map(
-                          ([nestedKey, nestedField]) =>
-                            renderField(nestedKey, nestedField, [
-                              ...fieldPath,
-                              index,
-                              nestedKey,
-                            ]),
-                        )}
-                      </div>
-                    ) : (
-                      renderField(`${fieldKey}-${index}`, field.item, [...fieldPath, index])
-                    )
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div
-          key={fieldId}
-          className="rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground"
-        >
-          Unsupported field type: <code>{field.type}</code>
-        </div>
-      );
-    },
-    [
-      applyDraftValue,
-      canUseAiImages,
-      defaultLocale,
-      draftValues,
-      locales,
-      openAssetReference,
-      openExplorer,
-      referenceOptions,
-      selectedEntry,
-      selectedModel,
-      sidecarDrafts,
-      handleRichTextChange,
-    ],
-  );
-
   if (statusQuery.isLoading) {
     return (
       <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
@@ -1165,326 +665,66 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <div className="flex w-[260px] min-w-[260px] flex-col border-r">
-            <div className="flex items-center justify-between gap-2 px-4 py-3">
-              <div>
-                <h3 className="text-sm font-semibold">Collections</h3>
-                <p className="text-xs text-muted-foreground">
-                  Schema-authored content models
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCreatingModel((current) => !current)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add
-              </Button>
-            </div>
-            {creatingModel ? (
-              <div className="space-y-2 border-t px-4 py-3">
-                <Label htmlFor="new-model-key">Collection key</Label>
-                <Input
-                  id="new-model-key"
-                  value={newModelKey}
-                  onChange={(event) => setNewModelKey(event.target.value)}
-                  placeholder="products"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={scaffoldModelMutation.isPending}
-                    onClick={() => void handleCreateModel()}
-                  >
-                    Create
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setCreatingModel(false);
-                      setNewModelKey("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-            <ScrollArea className="flex-1">
-              <div className="space-y-1 p-2">
-                {report.models.map((model) => {
-                  const active = model.key === selectedModelKey;
-                  const errorCount = getModelErrorCount(report.errors, model);
-                  return (
-                    <button
-                      key={model.key}
-                      type="button"
-                      onClick={() => setSelectedModelKey(model.key)}
-                      className={cn(
-                        "flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors",
-                        active
-                          ? "border-primary/40 bg-primary/5"
-                          : "border-transparent hover:border-border hover:bg-muted/40",
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{model.label}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {model.entries.length} entries
-                        </p>
-                      </div>
-                      {errorCount > 0 ? (
-                        <Badge variant="destructive">{errorCount}</Badge>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </div>
+          <CmsCollectionsSidebar
+            models={report.models}
+            reportErrors={report.errors}
+            selectedModelKey={selectedModelKey}
+            creatingModel={creatingModel}
+            newModelKey={newModelKey}
+            isScaffoldingModel={scaffoldModelMutation.isPending}
+            onToggleCreateModel={() => setCreatingModel((current) => !current)}
+            onNewModelKeyChange={setNewModelKey}
+            onCreateModel={() => void handleCreateModel()}
+            onCancelCreateModel={() => {
+              setCreatingModel(false);
+              setNewModelKey("");
+            }}
+            onSelectModel={setSelectedModelKey}
+          />
 
-          <div className="flex w-[320px] min-w-[320px] flex-col border-r">
-            <div className="flex items-center justify-between gap-2 px-4 py-3">
-              <div>
-                <h3 className="text-sm font-semibold">
-                  {selectedModel?.label ?? "Entries"}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Active and inactive collection items
-                </p>
-              </div>
-              {selectedModel ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreatingEntry((current) => !current)}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add
-                </Button>
-              ) : null}
-            </div>
-            {creatingEntry && selectedModel ? (
-              <div className="space-y-2 border-t px-4 py-3">
-                <Label htmlFor="new-entry-key">Entry key</Label>
-                <Input
-                  id="new-entry-key"
-                  value={newEntryKey}
-                  onChange={(event) => setNewEntryKey(event.target.value)}
-                  placeholder="alpine-boot"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={scaffoldEntryMutation.isPending}
-                    onClick={() => void handleCreateEntry()}
-                  >
-                    Create
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setCreatingEntry(false);
-                      setNewEntryKey("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-            <ScrollArea className="flex-1">
-              <div className="space-y-2 p-2">
-                {selectedModel?.entries.length ? (
-                  selectedModel.entries.map((entry) => {
-                    const active = entry.key === selectedEntryKey;
-                    const errorCount = getEntryErrorCount(report.errors, entry);
-                    return (
-                      <button
-                        key={entry.key}
-                        type="button"
-                        onClick={() => setSelectedEntryKey(entry.key)}
-                        className={cn(
-                          "flex w-full items-start justify-between rounded-lg border px-3 py-3 text-left transition-colors",
-                          active
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-transparent hover:border-border hover:bg-muted/40",
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {getEntryTitle(entry, selectedModel, defaultLocale)}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {entry.key}
-                          </p>
-                          <div className="mt-2 flex gap-2">
-                            <Badge
-                              variant={entry.status === "inactive" ? "outline" : "success"}
-                            >
-                              {entry.status ?? "active"}
-                            </Badge>
-                            {typeof entry.sortOrder === "number" ? (
-                              <Badge variant="outline">#{entry.sortOrder}</Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                        {errorCount > 0 ? (
-                          <Badge variant="destructive">{errorCount}</Badge>
-                        ) : null}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    {selectedModel
-                      ? "No entries yet."
-                      : "Add a collection to begin."}
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          </div>
+          <CmsEntriesSidebar
+            selectedModel={selectedModel}
+            selectedEntryKey={selectedEntryKey}
+            defaultLocale={defaultLocale}
+            reportErrors={report.errors}
+            creatingEntry={creatingEntry}
+            newEntryKey={newEntryKey}
+            isScaffoldingEntry={scaffoldEntryMutation.isPending}
+            onToggleCreateEntry={() => setCreatingEntry((current) => !current)}
+            onNewEntryKeyChange={setNewEntryKey}
+            onCreateEntry={() => void handleCreateEntry()}
+            onCancelCreateEntry={() => {
+              setCreatingEntry(false);
+              setNewEntryKey("");
+            }}
+            onSelectEntry={setSelectedEntryKey}
+          />
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            {selectedModel && selectedEntry && draftValues ? (
-              <>
-                <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate text-sm font-semibold">
-                        {getEntryTitle(selectedEntry, selectedModel, defaultLocale)}
-                      </h3>
-                      {isDirty ? <Badge variant="outline">Unsaved</Badge> : null}
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {selectedEntry.key} · {selectedEntry.relativePath}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleMoveEntry(-1)}
-                      disabled={
-                        busy ||
-                        selectedModel.entries.findIndex(
-                          (entry) => entry.key === selectedEntry.key,
-                        ) <= 0
-                      }
-                    >
-                      <ArrowUp className="mr-2 h-4 w-4" />
-                      Up
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleMoveEntry(1)}
-                      disabled={
-                        busy ||
-                        selectedModel.entries.findIndex(
-                          (entry) => entry.key === selectedEntry.key,
-                        ) >=
-                          selectedModel.entries.length - 1
-                      }
-                    >
-                      <ArrowDown className="mr-2 h-4 w-4" />
-                      Down
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingTextFile(selectedModel.relativeSchemaPath)}
-                    >
-                      <FileCode className="mr-2 h-4 w-4" />
-                      Schema
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingTextFile(selectedEntry.relativePath)}
-                    >
-                      Raw YAML
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={!isDirty || busy}
-                      onClick={() => void handleSaveEntry()}
-                    >
-                      {isSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                      )}
-                      Save
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void handleDeleteEntry()}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-                <ScrollArea className="flex-1">
-                  <div className="space-y-5 px-5 py-5">
-                    {loadingSidecars ? (
-                      <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading Markdown sidecars…
-                      </div>
-                    ) : null}
-
-                    {Object.entries(selectedModel.fields).map(([fieldKey, field]) =>
-                      renderField(fieldKey, field, [fieldKey]),
-                    )}
-
-                    {report.errors.length > 0 ? (
-                      <>
-                        <Separator />
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4 text-destructive" />
-                            <h4 className="text-sm font-semibold">Validation</h4>
-                          </div>
-                          <div className="space-y-2">
-                            {report.errors.slice(0, 12).map((error) => (
-                              <div
-                                key={error}
-                                className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
-                              >
-                                {error}
-                              </div>
-                            ))}
-                            {report.errors.length > 12 ? (
-                              <p className="text-xs text-muted-foreground">
-                                Showing 12 of {report.errors.length} issues.
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                </ScrollArea>
-              </>
-            ) : (
-              <div className="flex flex-1 items-center justify-center px-6">
-                <div className="max-w-md space-y-3 text-center">
-                  <h3 className="text-lg font-semibold">Select a collection entry</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Choose a collection and entry to edit its structured content.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+          <CmsEntryEditor
+            projectSlug={projectSlug}
+            version={version}
+            selectedModel={selectedModel}
+            selectedEntryKey={selectedEntryKey}
+            draftValues={draftValues}
+            defaultLocale={defaultLocale}
+            locales={locales}
+            sidecarDrafts={sidecarDrafts}
+            canUseAiImages={canUseAiImages}
+            referenceOptions={referenceOptions}
+            reportErrors={report.errors}
+            isDirty={isDirty}
+            busy={busy}
+            isSaving={isSaving}
+            loadingSidecars={loadingSidecars}
+            setEditingTextFile={setEditingTextFile}
+            applyDraftValue={applyDraftValue}
+            handleRichTextChange={handleRichTextChange}
+            openAssetReference={openAssetReference}
+            openExplorer={openExplorer}
+            onMoveEntry={handleMoveEntry}
+            onSaveEntry={() => void handleSaveEntry()}
+            onDeleteEntry={() => void handleDeleteEntry()}
+          />
         </div>
       )}
     </div>
