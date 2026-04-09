@@ -60,6 +60,10 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain(".vivd/dropped-images/");
     expect(result.instructions).toContain("Treat both as working material");
     expect(result.instructions).toContain("Redirects for migrated URLs");
+    expect(result.instructions).toContain("Tool Usage Contract");
+    expect(result.instructions).toContain(
+      "Never print pseudo tool-call text such as `[tool_call: ...]`",
+    );
     expect(result.instructions).toContain("User messages may contain `<vivd-internal ... />`");
     expect(result.instructionsHash).toHaveLength(64);
   });
@@ -76,6 +80,10 @@ describe("AgentInstructionsService", () => {
     });
 
     expect(result.templateSource).toBe("system_setting");
-    expect(result.instructions).toBe("Project=Beta Plugins=None Context=");
+    expect(result.instructions).toContain("Project=Beta Plugins=None Context=");
+    expect(result.instructions).toContain("Tool Usage Contract");
+    expect(result.instructions).toContain(
+      "Never print pseudo tool-call text such as `[tool_call: ...]`",
+    );
   });
 });

@@ -39,9 +39,13 @@ export function areStudioCompatibilityRoutesEnabled(
     return true;
   }
 
+  if (providerKind === "local") {
+    return true;
+  }
+
   if (
     localDevelopmentOrigin &&
-    (providerKind === "docker" || providerKind === "local")
+    providerKind === "docker"
   ) {
     return true;
   }

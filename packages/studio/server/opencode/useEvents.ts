@@ -133,6 +133,10 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
         let hasObservedAssistantActivity = false;
         let hasTerminalSessionError = false;
 
+        const markAssistantActivity = () => {
+          hasObservedAssistantActivity = true;
+        };
+
         const queueUnknownText = (
           messageId: string,
           partId: string,
@@ -216,6 +220,7 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 }
                 if (info?.role === "assistant") {
                   assistantMessageIds.add(info.id);
+                  markAssistantActivity();
                 }
                 flushPendingUnknownTextIfKnown(info.id);
               }
@@ -233,7 +238,14 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
               const messageRole = messageRoles.get(messageId);
               const isAssistantMessage =
                 messageRole === "assistant" || assistantMessageIds.has(messageId);
-              hasObservedAssistantActivity = true;
+              if (
+                isAssistantMessage ||
+                part.type === "reasoning" ||
+                part.type === "tool" ||
+                part.type === "step-finish"
+              ) {
+                markAssistantActivity();
+              }
 
               if (part.type === "step-finish") {
                 if (part.cost !== undefined && callbacks.onUsageUpdated) {
@@ -380,11 +392,13 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                 continue;
               }
 
-              hasObservedAssistantActivity = true;
               const partType = partTypes.get(partId);
               const messageRole = messageRoles.get(messageId);
               const isAssistantMessage =
                 messageRole === "assistant" || assistantMessageIds.has(messageId);
+              if (isAssistantMessage || partType === "reasoning") {
+                markAssistantActivity();
+              }
 
               if (partType === "reasoning") {
                 assistantMessageIds.add(messageId);

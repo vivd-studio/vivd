@@ -364,6 +364,97 @@ describe("canonical timeline builder", () => {
     ]);
   });
 
+  it("removes leaked pseudo tool-call text from assistant responses that already have real tool parts", () => {
+    const timeline = buildCanonicalTimelineModel({
+      messages: [
+        createRecord({
+          id: "u1",
+          role: "user",
+          createdAt: BASE_TIME + 10_000,
+          parts: [{ id: "text-u1", type: "text", text: "Inspect the project" }],
+        }),
+        createRecord({
+          id: "a1",
+          role: "assistant",
+          parentID: "u1",
+          createdAt: BASE_TIME + 11_000,
+          completedAt: BASE_TIME + 12_000,
+          parts: [
+            { id: "tool-a1", type: "tool", tool: "glob", status: "completed" },
+            {
+              id: "text-a1",
+              type: "text",
+              text: "I'll start by exploring the existing setup.\n\n[tool_call: glob for pattern \"**/*\"] [tool_call: read for absolute_path \"/tmp/package.json\"]",
+            },
+          ],
+        }),
+      ],
+      sessionStatus: { type: "done" },
+      isThinking: false,
+      isWaiting: false,
+    });
+
+    const agentRow = timeline.items.find((item) => item.kind === "agent");
+    if (agentRow?.kind !== "agent") {
+      throw new Error("Expected completed agent row");
+    }
+
+    expect(agentRow.orderedParts).toMatchObject([
+      { id: "tool-a1", type: "tool", status: "completed" },
+      {
+        id: "text-a1",
+        type: "text",
+        text: "I'll start by exploring the existing setup.",
+      },
+    ]);
+  });
+
+  it("drops marker-only pseudo tool-call text parts when real tool parts already exist", () => {
+    const timeline = buildCanonicalTimelineModel({
+      messages: [
+        createRecord({
+          id: "u1",
+          role: "user",
+          createdAt: BASE_TIME + 10_000,
+          parts: [{ id: "text-u1", type: "text", text: "Build it" }],
+        }),
+        createRecord({
+          id: "a1",
+          role: "assistant",
+          parentID: "u1",
+          createdAt: BASE_TIME + 11_000,
+          completedAt: BASE_TIME + 12_000,
+          parts: [
+            { id: "tool-a1", type: "tool", tool: "bash", status: "running" },
+            {
+              id: "text-a1",
+              type: "text",
+              text: "[tool_call: bash for 'npm run build']",
+            },
+          ],
+        }),
+      ],
+      sessionStatus: { type: "done" },
+      isThinking: false,
+      isWaiting: false,
+    });
+
+    const agentRow = timeline.items.find((item) => item.kind === "agent");
+    if (agentRow?.kind !== "agent") {
+      throw new Error("Expected completed agent row");
+    }
+
+    expect(agentRow.orderedParts).toMatchObject([
+      {
+        id: "tool-a1",
+        type: "tool",
+        tool: "bash",
+        status: "completed",
+      },
+    ]);
+    expect(agentRow.orderedParts).toHaveLength(1);
+  });
+
   it("does not suggest continue when a final answer exists in an earlier assistant message of the latest turn", () => {
     const shouldSuggest = shouldSuggestInterruptedContinueFromRecords({
       sessionStatus: "done",

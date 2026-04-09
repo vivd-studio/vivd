@@ -510,6 +510,129 @@ describe("useEvents", () => {
     expect(onIdle).not.toHaveBeenCalled();
   });
 
+  it("does not treat user text parts as assistant activity for idle completion", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-user-part",
+          info: { id: "user-part", role: "user" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-user-part",
+          part: {
+            id: "text-user-part-1",
+            messageID: "user-part",
+            type: "text",
+            text: "were you finished?",
+          },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-user-part",
+          status: { type: "idle" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-user-part",
+      onIdle,
+    });
+    await start();
+    await vi.runAllTimersAsync();
+    stop();
+
+    expect(onIdle).not.toHaveBeenCalled();
+  });
+
+  it("does not treat user text deltas as assistant activity for idle completion", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-user-delta",
+          info: { id: "user-delta", role: "user" },
+        },
+      },
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "sess-user-delta",
+          messageID: "user-delta",
+          partID: "text-user-delta-1",
+          field: "text",
+          delta: "continue",
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-user-delta",
+          status: { type: "idle" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-user-delta",
+      onIdle,
+    });
+    await start();
+    await vi.runAllTimersAsync();
+    stop();
+
+    expect(onIdle).not.toHaveBeenCalled();
+  });
+
+  it("treats reasoning parts as assistant activity even before role metadata arrives", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-reasoning-first",
+          part: {
+            id: "reasoning-1",
+            messageID: "assistant-reasoning-first",
+            type: "reasoning",
+            text: "Scanning the project",
+          },
+        },
+      },
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "sess-reasoning-first",
+          status: { type: "done" },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-reasoning-first",
+      onIdle,
+    });
+    await start();
+    await vi.runAllTimersAsync();
+    stop();
+
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
   it("debounces transient idle states until the session stays idle", async () => {
     vi.useFakeTimers();
     const onIdle = vi.fn();

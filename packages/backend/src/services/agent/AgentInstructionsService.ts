@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   applyAgentInstructionsTemplate,
   DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE,
+  ensureMandatoryToolChannelGuidance,
   formatAgentInstructionsPlugins,
   normalizeAgentInstructionsTemplate,
   renderDefaultVivdAgentInstructions,
@@ -65,12 +66,14 @@ class AgentInstructionsService {
             sourceContext: input.source === "url" ? URL_SOURCE_CONTEXT : "",
             platformSurfaceMode: "cli",
           })
-        : normalizeAgentInstructionsTemplate(
-            applyAgentInstructionsTemplate(template, {
-              project_name: input.projectName,
-              enabled_plugins: formatAgentInstructionsPlugins(input.enabledPlugins),
-              source_context: input.source === "url" ? URL_SOURCE_CONTEXT : "",
-            }),
+        : ensureMandatoryToolChannelGuidance(
+            normalizeAgentInstructionsTemplate(
+              applyAgentInstructionsTemplate(template, {
+                project_name: input.projectName,
+                enabled_plugins: formatAgentInstructionsPlugins(input.enabledPlugins),
+                source_context: input.source === "url" ? URL_SOURCE_CONTEXT : "",
+              }),
+            ),
           );
 
     return {

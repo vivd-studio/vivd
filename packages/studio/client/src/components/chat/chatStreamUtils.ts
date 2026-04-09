@@ -3,6 +3,7 @@ export type DeltaPartType = "reasoning" | "text";
 export type EventDedupState = { ids: Set<string>; queue: string[] };
 export type ToolActivityLabelParts = { action: string; target?: string };
 const REDACTED_THOUGHT_PATTERN = /\[REDACTED\]/gi;
+const PSEUDO_TOOL_CALL_PATTERN = /\[tool_call:[^[\]]+\]/gi;
 const TOOL_TARGET_INPUT_KEYS = [
   "path",
   "filePath",
@@ -373,6 +374,18 @@ export function sanitizeThoughtText(text: string): string {
 
   return withoutRedacted
     .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function sanitizePseudoToolCallText(text: string): string {
+  if (!text) return "";
+
+  return text
+    .replace(PSEUDO_TOOL_CALL_PATTERN, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

@@ -1,5 +1,6 @@
 import {
   normalizeMessagePart,
+  sanitizePseudoToolCallText,
   normalizeToolStatus,
 } from "../../../components/chat/chatStreamUtils";
 import {
@@ -169,6 +170,41 @@ function finalizeInterruptedToolParts(
   return changed ? nextParts : parts;
 }
 
+function stripLeakedPseudoToolCallText(
+  parts: RenderableChatPart[],
+): RenderableChatPart[] {
+  const hasStructuredToolPart = parts.some((part) => part?.type === "tool");
+  if (!hasStructuredToolPart) {
+    return parts;
+  }
+
+  let changed = false;
+  const nextParts = parts
+    .map((part) => {
+      if (part?.type !== "text" || typeof part?.text !== "string") {
+        return part;
+      }
+
+      const sanitizedText = sanitizePseudoToolCallText(part.text);
+      if (sanitizedText === part.text) {
+        return part;
+      }
+
+      changed = true;
+      if (!sanitizedText) {
+        return null;
+      }
+
+      return {
+        ...part,
+        text: sanitizedText,
+      };
+    })
+    .filter((part): part is RenderableChatPart => Boolean(part));
+
+  return changed ? nextParts : parts;
+}
+
 function normalizeRecordToRenderableMessage(
   record: OpenCodeSessionMessageRecord,
   options?: {
@@ -187,8 +223,10 @@ function normalizeRecordToRenderableMessage(
           ? "interrupted"
           : null
       : null;
-  const renderableParts = extractRenderableParts(
-    (record.parts ?? []).map(normalizeMessagePart).filter(Boolean),
+  const renderableParts = stripLeakedPseudoToolCallText(
+    extractRenderableParts(
+      (record.parts ?? []).map(normalizeMessagePart).filter(Boolean),
+    ),
   );
   const normalizedParts =
     role === "agent"

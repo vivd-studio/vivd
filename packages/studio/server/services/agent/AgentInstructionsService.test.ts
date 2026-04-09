@@ -43,6 +43,10 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain("src/content/vivd.content.yaml");
     expect(prompt).toContain("vivd cms validate");
     expect(prompt).toContain("Redirects for migrated URLs");
+    expect(prompt).toContain("Tool Usage Contract");
+    expect(prompt).toContain(
+      "Never print pseudo tool-call text such as `[tool_call: ...]`",
+    );
     expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
     expect(prompt).toContain("Prefer plugin-backed solutions over custom implementations");
   });

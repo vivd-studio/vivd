@@ -10,6 +10,12 @@ export interface RenderDefaultVivdAgentInstructionsInput {
   platformSurfaceMode?: VivdPlatformSurfaceMode;
 }
 
+export const MANDATORY_TOOL_CHANNEL_GUIDANCE = `## Tool Usage Contract
+
+- Use the runtime's real tool/function channel to execute tools.
+- Never print pseudo tool-call text such as \`[tool_call: ...]\`, fake XML/JSON tool blocks, or other internal tool syntax in normal assistant text.
+- If you want to explain what you are about to do, describe it in plain language before or after the real tool call instead of emitting fake tool markup.`;
+
 export const DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE = `# Project: {project_name}
 
 Your name is vivd. You work in vivd-studio and are responsible for building the customer's website. This is a live production website. Code changes will be deployed to the internet.
@@ -79,7 +85,9 @@ User messages may contain \`<vivd-internal ... />\` self-closing tags with metad
 
 - \`<vivd-internal type="dropped-file" filename="..." path=".vivd/dropped-images/..." />\` - User dropped a temporary reference file in chat. You can read it for context or move it into the project if it should be kept.
 - \`<vivd-internal type="element-ref" source-file="src/components/..." source-loc="20:125" text="..." />\` - For Astro projects: User selected an element. The \`source-file\` is the Astro component path, \`source-loc\` is line:column.
-- \`<vivd-internal type="element-ref" selector="/html/body/..." file="index.html" text="..." />\` - For static HTML: User selected an element. The selector is an XPath.`;
+- \`<vivd-internal type="element-ref" selector="/html/body/..." file="index.html" text="..." />\` - For static HTML: User selected an element. The selector is an XPath.
+
+{mandatory_tool_channel_guidance}`;
 
 function buildPlatformSurfaceSection(mode: VivdPlatformSurfaceMode): string {
   if (mode === "plugin-only") {
@@ -127,10 +135,24 @@ export function applyAgentInstructionsTemplate(
   return output;
 }
 
+export function ensureMandatoryToolChannelGuidance(input: string): string {
+  const normalized = normalizeAgentInstructionsTemplate(input);
+  if (
+    normalized.includes("Never print pseudo tool-call text") ||
+    normalized.includes(MANDATORY_TOOL_CHANNEL_GUIDANCE)
+  ) {
+    return normalized;
+  }
+
+  return normalizeAgentInstructionsTemplate(
+    `${normalized}\n\n${MANDATORY_TOOL_CHANNEL_GUIDANCE}`,
+  );
+}
+
 export function renderDefaultVivdAgentInstructions(
   input: RenderDefaultVivdAgentInstructionsInput,
 ): string {
-  return normalizeAgentInstructionsTemplate(
+  return ensureMandatoryToolChannelGuidance(
     applyAgentInstructionsTemplate(DEFAULT_AGENT_INSTRUCTIONS_TEMPLATE, {
       project_name: input.projectName,
       enabled_plugins: formatAgentInstructionsPlugins(input.enabledPlugins),
@@ -138,6 +160,7 @@ export function renderDefaultVivdAgentInstructions(
       platform_surface_section: buildPlatformSurfaceSection(
         input.platformSurfaceMode ?? "cli",
       ),
+      mandatory_tool_channel_guidance: MANDATORY_TOOL_CHANNEL_GUIDANCE,
     }),
   );
 }

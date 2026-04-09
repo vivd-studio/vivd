@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getToolActivityLabel,
   normalizeMessagePart,
+  sanitizePseudoToolCallText,
   sanitizeThoughtText,
   upsertDeltaStreamingPart,
   upsertToolStartedPart,
@@ -40,6 +41,22 @@ describe("chatStreamUtils reasoning sanitization", () => {
       text: "[REDACTED]",
     });
     expect(normalized).toBeNull();
+  });
+
+  it("strips leaked pseudo tool-call text while preserving prose", () => {
+    expect(
+      sanitizePseudoToolCallText(
+        "I'll explore the project first.\n\n[tool_call: glob for pattern \"**/*\"] [tool_call: read for absolute_path \"/tmp/package.json\"]",
+      ),
+    ).toBe("I'll explore the project first.");
+  });
+
+  it("returns empty string when text only contains pseudo tool-call markers", () => {
+    expect(
+      sanitizePseudoToolCallText(
+        "[tool_call: glob for pattern \"**/*\"]\n[tool_call: bash for 'pwd']",
+      ),
+    ).toBe("");
   });
 
   it("formats read tool labels with filename and status", () => {
