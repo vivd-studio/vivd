@@ -5,6 +5,7 @@ import {
   waitForReady,
   waitForState,
 } from "../src/services/studioMachines/fly/lifecycle";
+import * as runtimeHttp from "../src/services/studioMachines/fly/runtimeHttp";
 import type { FlyMachine } from "../src/services/studioMachines/fly/types";
 
 function machine(state: FlyMachine["state"]): FlyMachine {
@@ -141,17 +142,18 @@ describe("Fly lifecycle helpers", () => {
     vi.useFakeTimers();
 
     const getMachine = vi.fn<() => Promise<FlyMachine>>().mockResolvedValue(machine("started"));
-    const fetchMock = vi
-      .fn<typeof fetch>()
+    const requestRuntimeMock = vi
+      .spyOn(runtimeHttp, "requestRuntime")
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: "starting" }),
-      } as Response)
+        status: 200,
+        headers: {},
+        body: JSON.stringify({ status: "starting" }),
+      })
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: "ok" }),
-      } as Response);
-    vi.stubGlobal("fetch", fetchMock);
+        status: 200,
+        headers: {},
+        body: JSON.stringify({ status: "ok" }),
+      });
 
     const result = waitForReady({
       machineId: "machine-1",
@@ -163,7 +165,7 @@ describe("Fly lifecycle helpers", () => {
     await vi.advanceTimersByTimeAsync(300);
     await result;
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requestRuntimeMock).toHaveBeenCalledTimes(2);
     expect(getMachine).toHaveBeenCalledTimes(2);
   });
 
@@ -176,11 +178,11 @@ describe("Fly lifecycle helpers", () => {
         new Error("[FlyMachines] resource_exhausted: rate limit exceeded"),
       )
       .mockResolvedValueOnce(machine("started"));
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: "ok" }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
+    const requestRuntimeMock = vi.spyOn(runtimeHttp, "requestRuntime").mockResolvedValue({
+      status: 200,
+      headers: {},
+      body: JSON.stringify({ status: "ok" }),
+    });
 
     const result = waitForReady({
       machineId: "machine-1",
@@ -193,7 +195,7 @@ describe("Fly lifecycle helpers", () => {
     await result;
 
     expect(getMachine).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(requestRuntimeMock).toHaveBeenCalledTimes(1);
   });
 
   it("waitForState backs off and continues when Fly rate limits machine polling", async () => {

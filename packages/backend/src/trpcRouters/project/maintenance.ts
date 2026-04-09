@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
+import { PROJECT_VERSION_MANUAL_STATUS_VALUES } from "@vivd/shared/types";
 import {
   protectedProcedure,
   adminProcedure,
@@ -15,9 +16,7 @@ import {
   getProjectDir,
   getVersionDir,
   getManifest,
-  getCurrentVersion,
   getVersionData,
-  updateVersionStatus,
   isLegacyProject,
   migrateProjectIfNeeded,
   listProjectSlugs,
@@ -71,6 +70,7 @@ import { isManagedStudioMachineProvider } from "../../services/studioMachines/ty
 import { projectMetaService } from "../../services/project/ProjectMetaService";
 import { getProjectArtifactKeyPrefix } from "../../services/project/ProjectStoragePaths";
 import { rewriteProjectArtifactKeyForSlug } from "../../services/project/slugRename";
+import { projectStatusOverrideService } from "../../services/project/ProjectStatusOverrideService";
 
 const PROJECT_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -125,46 +125,43 @@ function moveDirectory(fromPath: string, toPath: string): void {
 
 export const projectMaintenanceProcedures = {
   /**
-   * Admin endpoint to hard reset a stuck project's status.
-   * Use this when a project is stuck in a processing state.
+   * Org-admin endpoint to manually override a project's current version status.
    */
-  resetStatus: ownerProcedure
+  setStatus: orgAdminProcedure
     .input(
       z.object({
         slug: z.string(),
-        version: z.number().optional(),
+        version: z.number().int().positive().optional(),
+        status: z.enum(PROJECT_VERSION_MANUAL_STATUS_VALUES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) =>
+      projectStatusOverrideService.setVersionStatus({
+        organizationId: ctx.organizationId ?? "default",
+        slug: input.slug,
+        version: input.version,
+        status: input.status,
+      }),
+    ),
+
+  /**
+   * Backward-compatible alias for forcing a project version into `failed`.
+   */
+  resetStatus: orgAdminProcedure
+    .input(
+      z.object({
+        slug: z.string(),
+        version: z.number().int().positive().optional(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      const organizationId = ctx.organizationId ?? "default";
-      const { slug, version } = input;
-      const manifest = await getManifest(organizationId, slug);
-      if (!manifest) throw new Error("Project not found");
-
-      const targetVersion = version ?? (await getCurrentVersion(organizationId, slug));
-      if (targetVersion === 0) {
-        throw new Error("No versions found for this project");
-      }
-
-      const versionData = await getVersionData(organizationId, slug, targetVersion);
-      const currentStatus = versionData?.status || "unknown";
-
-      // Update the status to 'failed'
-      await updateVersionStatus(organizationId, slug, targetVersion, "failed");
-
-      console.log(
-        `[Admin] Reset status for ${slug}/v${targetVersion}: ${currentStatus} -> failed`
-      );
-
-      return {
-        success: true,
-        slug,
-        version: targetVersion,
-        previousStatus: currentStatus,
-        newStatus: "failed",
-        message: `Reset ${slug} v${targetVersion} from '${currentStatus}' to 'failed'`,
-      };
-    }),
+    .mutation(async ({ ctx, input }) =>
+      projectStatusOverrideService.setVersionStatus({
+        organizationId: ctx.organizationId ?? "default",
+        slug: input.slug,
+        version: input.version,
+        status: "failed",
+      }),
+    ),
 
   updateTitle: adminProcedure
     .input(

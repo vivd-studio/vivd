@@ -580,6 +580,20 @@ export async function runTask(
   agentEventEmitter.setSessionStatus(currentSessionId, { type: "busy" });
   let completionHandled = false;
   let idleFinalizationInFlight = false;
+  let bucketSyncRequestedForCurrentActivity = false;
+
+  const markSessionActivity = () => {
+    bucketSyncRequestedForCurrentActivity = false;
+  };
+
+  const requestBucketSyncForSettledActivity = () => {
+    if (bucketSyncRequestedForCurrentActivity) return;
+    bucketSyncRequestedForCurrentActivity = true;
+    requestBucketSyncAfterAgentTask({
+      sessionId: currentSessionId,
+      projectDir: directory,
+    });
+  };
 
   const finalizeSessionRun = () => {
     if (completionHandled) return;
@@ -602,16 +616,14 @@ export async function runTask(
         );
       }
     })();
-    requestBucketSyncAfterAgentTask({
-      sessionId: currentSessionId,
-      projectDir: directory,
-    });
+    requestBucketSyncForSettledActivity();
     stop();
   };
 
   const { start, stop } = useEvents(client, {
     sessionId: currentSessionId,
     onStartThinking: () => {
+      markSessionActivity();
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
         createAgentEvent(currentSessionId, "thinking.started", {
@@ -620,6 +632,7 @@ export async function runTask(
       );
     },
     onReasoning: (content, partId) => {
+      markSessionActivity();
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
         createAgentEvent(currentSessionId, "reasoning.delta", {
@@ -630,6 +643,7 @@ export async function runTask(
       );
     },
     onText: (content, partId) => {
+      markSessionActivity();
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
         createAgentEvent(currentSessionId, "message.delta", {
@@ -640,6 +654,7 @@ export async function runTask(
       );
     },
     onToolCall: (toolCall: ToolCall) => {
+      markSessionActivity();
       console.log(
         `[OpenCode] tool.started session=${currentSessionId} tool=${toolCall.tool || "unknown"} id=${toolCall.id}`,
       );
@@ -655,6 +670,7 @@ export async function runTask(
       );
     },
     onToolCallFinished: (toolCall: ToolCall) => {
+      markSessionActivity();
       // @ts-ignore - SDK tool call fields vary by version.
       const isError =
         toolCall.state?.status === "error" || toolCall.status === "error";
@@ -683,6 +699,7 @@ export async function runTask(
       }
     },
     onUsageUpdated: async (data) => {
+      markSessionActivity();
       agentEventEmitter.emitSessionEvent(
         currentSessionId,
         createAgentEvent(currentSessionId, "usage.updated", {
@@ -728,6 +745,7 @@ export async function runTask(
         });
       } finally {
         idleFinalizationInFlight = false;
+        requestBucketSyncForSettledActivity();
         if (shouldFinalize) {
           finalizeSessionRun();
         }

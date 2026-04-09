@@ -172,6 +172,23 @@ aws_s3_cp() {
   fi
 }
 
+aws_s3_ls() {
+  TARGET_URI="$1"
+  if [ -n "$VIVD_S3_ENDPOINT_URL" ]; then
+    aws --endpoint-url "$VIVD_S3_ENDPOINT_URL" s3 ls "$TARGET_URI"
+  else
+    aws s3 ls "$TARGET_URI"
+  fi
+}
+
+aws_s3_cp_optional() {
+  SRC="$1"
+  DST="$2"
+  if aws_s3_ls "$SRC" >/dev/null 2>&1; then
+    aws_s3_cp "$SRC" "$DST"
+  fi
+}
+
 aws_s3_rm() {
   TARGET_URI="$1"
   if [ -n "$VIVD_S3_ENDPOINT_URL" ]; then
@@ -412,10 +429,12 @@ hydrate_opencode() {
     echo "  Source: ${S3_OPENCODE_URI}"
     echo "  Target: ${VIVD_OPENCODE_DATA_HOME}"
     mkdir -p "${VIVD_OPENCODE_DATA_HOME}"
+    # These DB objects are optional on first boot; missing keys should not
+    # block startup or spam fatal copy errors.
     (
-      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db" "$OPENCODE_DB_PATH" || true &
-      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-shm" "$OPENCODE_DB_SHM_PATH" || true &
-      aws_s3_cp "${S3_OPENCODE_URI}/opencode.db-wal" "$OPENCODE_DB_WAL_PATH" || true &
+      aws_s3_cp_optional "${S3_OPENCODE_URI}/opencode.db" "$OPENCODE_DB_PATH" || true &
+      aws_s3_cp_optional "${S3_OPENCODE_URI}/opencode.db-shm" "$OPENCODE_DB_SHM_PATH" || true &
+      aws_s3_cp_optional "${S3_OPENCODE_URI}/opencode.db-wal" "$OPENCODE_DB_WAL_PATH" || true &
       wait
     ) &
     DB_PID="$!"

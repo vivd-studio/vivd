@@ -1,4 +1,5 @@
 import type { FlyMachine, FlyMachineState } from "./types";
+import { requestRuntime } from "./runtimeHttp";
 import { sleep } from "./utils";
 
 const READY_POLL_INTERVAL_MS = 250;
@@ -112,9 +113,16 @@ export async function waitForReady(options: {
 
     if (state === "started") {
       try {
-        const response = await fetch(`${options.url}/health`, { method: "GET" });
-        if (response.ok) {
-          const data = (await response.json()) as { status?: string };
+        const response = await requestRuntime({
+          url: `${options.url}/health`,
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+          timeoutMs: 3_000,
+        });
+        if (response.status >= 200 && response.status < 300) {
+          const data = JSON.parse(response.body || "{}") as { status?: string };
           if (data.status === "ok") return;
         }
       } catch {

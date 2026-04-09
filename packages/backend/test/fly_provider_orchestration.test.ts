@@ -9,6 +9,7 @@ vi.mock("../src/services/studioMachines/compatibilityRoutePolicy", () => ({
 }));
 
 import { FlyStudioMachineProvider } from "../src/services/studioMachines/fly/provider";
+import * as runtimeHttp from "../src/services/studioMachines/fly/runtimeHttp";
 import {
   buildStudioEnvWorkflow,
   ensureExistingMachineRunningWorkflow,
@@ -356,6 +357,29 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(removeRuntimeRouteMock).toHaveBeenCalledWith(
       (provider as any).config.routeIdFor("org-1", "site-1", 1),
     );
+  });
+
+  it("requestRuntimeCleanup falls back when cleanup status is unsupported", async () => {
+    const provider = new FlyStudioMachineProvider();
+    const requestRuntimeMock = vi.spyOn(runtimeHttp, "requestRuntime");
+
+    requestRuntimeMock
+      .mockResolvedValueOnce({
+        status: 200,
+        headers: {},
+        body: "",
+      })
+      .mockResolvedValueOnce({
+        status: 404,
+        headers: {},
+        body: "<pre>Cannot GET /vivd-studio/api/cleanup/status</pre>",
+      });
+
+    await expect(
+      (provider as any).requestRuntimeCleanup("https://studio.test:4100", "token-1"),
+    ).resolves.toBeUndefined();
+
+    expect(requestRuntimeMock).toHaveBeenCalledTimes(2);
   });
 
   it("ensureRunningInner creates a machine with expected metadata and returns start result", async () => {

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  sessionMessagesMock,
   setSessionStatusMock,
   emitSessionEventMock,
   createAgentEventMock,
@@ -14,6 +15,7 @@ const {
   startRunMock,
   finishRunMock,
 } = vi.hoisted(() => ({
+  sessionMessagesMock: vi.fn(),
   setSessionStatusMock: vi.fn(),
   emitSessionEventMock: vi.fn(),
   createAgentEventMock: vi.fn((_sessionId, _type, payload) => payload),
@@ -104,6 +106,7 @@ describe("runTask completion sync", () => {
     emitSessionEventMock.mockReset();
     createAgentEventMock.mockClear();
     getClientAndDirectoryMock.mockReset();
+    sessionMessagesMock.mockReset();
     startMock.mockReset();
     stopMock.mockReset();
     requestBucketSyncAfterAgentTaskMock.mockReset();
@@ -115,6 +118,7 @@ describe("runTask completion sync", () => {
 
     startMock.mockResolvedValue(undefined);
     stopMock.mockReturnValue(undefined);
+    requestBucketSyncAfterAgentTaskMock.mockReturnValue(true);
     usageReportMock.mockResolvedValue(undefined);
     updateSessionTitleMock.mockResolvedValue(undefined);
     getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
@@ -130,17 +134,37 @@ describe("runTask completion sync", () => {
           list: vi.fn().mockResolvedValue({
             data: [{ id: "session-1", title: "Session 1" }],
           }),
+          messages: sessionMessagesMock,
         },
       },
     });
   });
 
-  it("requests exactly one bucket sync when idle events fire more than once", async () => {
+  it("requests exactly one bucket sync when non-terminal idle events fire more than once", async () => {
+    const unfinishedMessages = {
+      data: [
+        {
+          info: {
+            id: "a-unfinished",
+            role: "assistant",
+          },
+          parts: [{ type: "reasoning", text: "Still working" }],
+        },
+      ],
+      error: undefined,
+    };
+    sessionMessagesMock
+      .mockResolvedValueOnce({
+        data: [],
+        error: undefined,
+      })
+      .mockResolvedValue(unfinishedMessages);
+
     await runTask("update site", "/workspace/project");
     expect(typeof onIdleHandler).toBe("function");
 
-    onIdleHandler?.();
-    onIdleHandler?.();
+    await onIdleHandler?.();
+    await onIdleHandler?.();
     await flushPromises();
 
     expect(requestBucketSyncAfterAgentTaskMock).toHaveBeenCalledTimes(1);
@@ -156,8 +180,8 @@ describe("runTask completion sync", () => {
         version: 1,
       }),
     );
-    expect(finishRunMock).toHaveBeenCalledTimes(1);
-    expect(stopMock).toHaveBeenCalledTimes(1);
+    expect(finishRunMock).not.toHaveBeenCalled();
+    expect(stopMock).not.toHaveBeenCalled();
   });
 });
 

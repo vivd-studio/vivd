@@ -1,6 +1,10 @@
 import { serverManager as opencodeServerManager } from "../../opencode/serverManager.js";
 import { usageReporter } from "../reporting/UsageReporter.js";
 import { workspaceStateReporter } from "../reporting/WorkspaceStateReporter.js";
+import {
+  acquireBucketSyncPause,
+  type BucketSyncPauseLease,
+} from "../sync/SyncPauseService.js";
 
 export type RuntimeQuiesceSubsystemState = "active" | "quiescing" | "idle";
 
@@ -132,7 +136,21 @@ export class RuntimeQuiesceCoordinator {
   }
 }
 
+let bucketSyncPauseLease: BucketSyncPauseLease | null = null;
+
 export const runtimeQuiesceCoordinator = new RuntimeQuiesceCoordinator([
+  {
+    name: "bucket_sync",
+    quiesce: async () => {
+      if (!bucketSyncPauseLease) {
+        bucketSyncPauseLease = acquireBucketSyncPause();
+      }
+    },
+    resume: () => {
+      bucketSyncPauseLease?.release();
+      bucketSyncPauseLease = null;
+    },
+  },
   {
     name: "workspace_state_reporter",
     quiesce: async () => {

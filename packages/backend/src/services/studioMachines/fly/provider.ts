@@ -74,12 +74,15 @@ import {
 } from "./lifecycle";
 import { FlyProviderConfig } from "./providerConfig";
 import { FlyRuntimeRouteService } from "./runtimeRouteService";
+import { requestRuntime } from "./runtimeHttp";
 import { shouldCreateStudioCompatibilityRoutes } from "../compatibilityRoutePolicy";
 import { parseNonNegativeInt, sleep } from "./utils";
 
 const STUDIO_AUTH_HEADER = "x-vivd-studio-token";
 const DEFAULT_PARK_RUNTIME_CLEANUP_DRAIN_MS = 3_000;
 const MAX_SUSPEND_ELIGIBLE_MEMORY_MB = 2048;
+const RUNTIME_CLEANUP_STATUS_POLL_MS = 250;
+const RUNTIME_CLEANUP_STATUS_TIMEOUT_MS = 15_000;
 
 function getParkRuntimeCleanupDrainMs(): number {
   return parseNonNegativeInt(
@@ -353,33 +356,85 @@ export class FlyStudioMachineProvider implements ManagedStudioMachineProvider {
     }
   }
 
+  private async waitForRuntimeCleanupIdle(
+    url: string,
+    accessToken: string,
+    timeoutMs = RUNTIME_CLEANUP_STATUS_TIMEOUT_MS,
+  ): Promise<boolean> {
+    const cleanupStatusUrl = new URL("/vivd-studio/api/cleanup/status", url);
+    const startedAt = Date.now();
+    let lastState = "unknown";
+    let lastSubsystems = "unknown";
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const response = await requestRuntime({
+        url: cleanupStatusUrl.toString(),
+        method: "GET",
+        headers: {
+          [STUDIO_AUTH_HEADER]: accessToken,
+          Accept: "application/json",
+        },
+        timeoutMs: 5_000,
+      });
+
+      if (response.status === 404) {
+        return false;
+      }
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `[FlyMachines] Runtime cleanup status failed ${response.status}: ${
+            response.body || "unknown error"
+          }`,
+        );
+      }
+
+      const parsed = JSON.parse(response.body || "{}") as {
+        state?: string;
+        subsystems?: Record<string, string>;
+      };
+      lastState = typeof parsed.state === "string" ? parsed.state : "unknown";
+      lastSubsystems = parsed.subsystems
+        ? Object.entries(parsed.subsystems)
+            .map(([name, state]) => `${name}=${state}`)
+            .join(",")
+        : "unknown";
+
+      if (lastState === "idle") {
+        return true;
+      }
+
+      await sleep(RUNTIME_CLEANUP_STATUS_POLL_MS);
+    }
+
+    throw new Error(
+      `[FlyMachines] Runtime cleanup did not reach idle state within ${timeoutMs}ms (state=${lastState}; subsystems=${lastSubsystems})`,
+    );
+  }
+
   private async requestRuntimeCleanup(
     url: string,
     accessToken: string,
   ): Promise<void> {
     const cleanupUrl = new URL("/vivd-studio/api/cleanup/preview-leave", url);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    timeout.unref?.();
+    const response = await requestRuntime({
+      url: cleanupUrl.toString(),
+      method: "POST",
+      headers: {
+        [STUDIO_AUTH_HEADER]: accessToken,
+      },
+      timeoutMs: 15_000,
+    });
 
-    try {
-      const response = await fetch(cleanupUrl, {
-        method: "POST",
-        headers: {
-          [STUDIO_AUTH_HEADER]: accessToken,
-        },
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(
-          `[FlyMachines] Runtime cleanup failed ${response.status}: ${body || "unknown error"}`,
-        );
-      }
-    } finally {
-      clearTimeout(timeout);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `[FlyMachines] Runtime cleanup failed ${response.status}: ${
+          response.body || "unknown error"
+        }`,
+      );
     }
+
+    await this.waitForRuntimeCleanupIdle(url, accessToken);
   }
 
   private buildStudioEnv(

@@ -756,4 +756,106 @@ describe("useEvents", () => {
 
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
+
+  it("treats session.updated after a completed tool as a settled assistant boundary", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-session-updated",
+          info: { id: "assistant-session-updated", role: "assistant" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-session-updated",
+          part: {
+            id: "tool-session-updated-1",
+            messageID: "assistant-session-updated",
+            type: "tool",
+            tool: "edit",
+            state: {
+              status: "completed",
+              input: { file: "index.html" },
+            },
+          },
+        },
+      },
+      {
+        type: "session.updated",
+        properties: {
+          sessionID: "sess-session-updated",
+          info: {
+            id: "sess-session-updated",
+            time: { updated: Date.now() },
+          },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-session-updated",
+      onIdle,
+    });
+    await start();
+    await vi.runAllTimersAsync();
+    stop();
+
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not treat session.updated as settled while a tool is still running", async () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+
+    const client = makeClient([
+      {
+        type: "message.updated",
+        properties: {
+          sessionID: "sess-session-running-tool",
+          info: { id: "assistant-session-running-tool", role: "assistant" },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: "sess-session-running-tool",
+          part: {
+            id: "tool-session-running-tool-1",
+            messageID: "assistant-session-running-tool",
+            type: "tool",
+            tool: "edit",
+            state: {
+              status: "running",
+              input: { file: "index.html" },
+            },
+          },
+        },
+      },
+      {
+        type: "session.updated",
+        properties: {
+          sessionID: "sess-session-running-tool",
+          info: {
+            id: "sess-session-running-tool",
+            time: { updated: Date.now() },
+          },
+        },
+      },
+    ]);
+
+    const { start, stop } = useEvents(client, {
+      sessionId: "sess-session-running-tool",
+      onIdle,
+    });
+    await start();
+    await vi.runAllTimersAsync();
+    stop();
+
+    expect(onIdle).not.toHaveBeenCalled();
+  });
 });

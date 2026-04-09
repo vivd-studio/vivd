@@ -54,7 +54,7 @@ describe("resolveStudioMainBackendUrl", () => {
     expect(url).toBe("http://127.0.0.1:3100/vivd-studio");
   });
 
-  it("uses http for localhost request hosts", () => {
+  it("does not inject localhost request hosts for remote providers", () => {
     const url = resolveStudioMainBackendUrl({
       providerKind: "fly",
       requestHost: "org.localhost",
@@ -64,6 +64,19 @@ describe("resolveStudioMainBackendUrl", () => {
       backendPort: "3000",
     });
 
-    expect(url).toBe("http://org.localhost/vivd-studio");
+    expect(url).toBeNull();
+  });
+
+  it("does not inject localhost canonical origins for remote providers", () => {
+    const url = resolveStudioMainBackendUrl({
+      providerKind: "fly",
+      requestHost: null,
+      backendUrlEnv: "",
+      domainEnv: "http://localhost",
+      betterAuthUrlEnv: "http://app.localhost",
+      backendPort: "3000",
+    });
+
+    expect(url).toBeNull();
   });
 });

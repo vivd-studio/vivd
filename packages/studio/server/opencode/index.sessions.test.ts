@@ -20,6 +20,7 @@ const {
   createAgentEventMock,
   getSystemPromptForSessionStartMock,
   finishSessionRunsMock,
+  requestBucketSyncAfterAgentTaskMock,
 } = vi.hoisted(() => ({
   getClientAndDirectoryMock: vi.fn(),
   sessionCreateMock: vi.fn(),
@@ -40,6 +41,7 @@ const {
   createAgentEventMock: vi.fn((_sessionId, _type, payload) => payload),
   getSystemPromptForSessionStartMock: vi.fn(),
   finishSessionRunsMock: vi.fn(),
+  requestBucketSyncAfterAgentTaskMock: vi.fn(),
 }));
 
 vi.mock("./serverManager.js", () => ({
@@ -81,7 +83,7 @@ vi.mock("../services/reporting/UsageReporter.js", () => ({
 }));
 
 vi.mock("../services/sync/AgentTaskSyncService.js", () => ({
-  requestBucketSyncAfterAgentTask: vi.fn(),
+  requestBucketSyncAfterAgentTask: requestBucketSyncAfterAgentTaskMock,
 }));
 
 vi.mock("../services/agent/AgentInstructionsService.js", () => ({
@@ -128,6 +130,7 @@ describe("opencode index session behavior", () => {
     createAgentEventMock.mockClear();
     getSystemPromptForSessionStartMock.mockReset();
     finishSessionRunsMock.mockReset();
+    requestBucketSyncAfterAgentTaskMock.mockReset();
 
     sessionListMock.mockResolvedValue({ data: [], error: undefined });
     sessionMessagesMock.mockResolvedValue({ data: [], error: undefined });
@@ -140,6 +143,7 @@ describe("opencode index session behavior", () => {
     getSessionStatusesMock.mockReturnValue({});
     getSessionStatusSnapshotsMock.mockReturnValue({});
     getSystemPromptForSessionStartMock.mockResolvedValue("system prompt");
+    requestBucketSyncAfterAgentTaskMock.mockReturnValue(true);
 
     getClientAndDirectoryMock.mockResolvedValue({
       directory: "/workspace/project/",
@@ -558,6 +562,12 @@ describe("opencode index session behavior", () => {
       "sess-existing",
       expect.objectContaining({ kind: "session.completed" }),
     );
+    expect(requestBucketSyncAfterAgentTaskMock).toHaveBeenCalledTimes(1);
+    expect(requestBucketSyncAfterAgentTaskMock).toHaveBeenCalledWith({
+      sessionId: "sess-existing",
+      projectDir: "/workspace/project/",
+    });
+    expect(stopEventsMock).not.toHaveBeenCalled();
   });
 
   it("emits session.error and rejects when promptAsync fails", async () => {

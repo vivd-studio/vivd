@@ -2,6 +2,10 @@ import { useState, useEffect, useRef, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Measurable } from "@radix-ui/rect";
 import {
+  isProjectVersionManualStatus,
+  type ProjectVersionManualStatus,
+} from "@vivd/shared/types";
+import {
   Card,
   CardContent,
   CardFooter,
@@ -22,7 +26,6 @@ import {
   Check,
   Plus,
   Loader2,
-  RotateCcw,
   Globe,
   Trash2,
   MoreVertical,
@@ -59,6 +62,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface VersionInfo {
   version: number;
@@ -106,6 +116,50 @@ export function isStudioAccessibleProjectStatus(
   );
 }
 
+const MANUAL_PROJECT_STATUS_LABELS: Record<ProjectVersionManualStatus, string> = {
+  completed: "Completed",
+  failed: "Failed",
+  initial_generation_paused: "Paused",
+};
+
+const MANUAL_PROJECT_STATUS_DESCRIPTIONS: Record<
+  ProjectVersionManualStatus,
+  string
+> = {
+  completed:
+    "Use when the site is usable and the current project status is simply stale.",
+  failed:
+    "Use when the run genuinely failed and should stop being treated as in progress.",
+  initial_generation_paused:
+    "Use when a scratch bootstrap run stopped early but should remain resumable in Studio.",
+};
+
+export function getManualProjectStatusOptions(source?: "url" | "scratch") {
+  const values: ProjectVersionManualStatus[] =
+    source === "scratch"
+      ? ["completed", "failed", "initial_generation_paused"]
+      : ["completed", "failed"];
+
+  return values.map((value) => ({
+    value,
+    label: MANUAL_PROJECT_STATUS_LABELS[value],
+    description: MANUAL_PROJECT_STATUS_DESCRIPTIONS[value],
+  }));
+}
+
+export function getDefaultManualProjectStatus(
+  currentStatus: string | null | undefined,
+  source?: "url" | "scratch",
+): ProjectVersionManualStatus {
+  if (isProjectVersionManualStatus(currentStatus)) {
+    if (currentStatus !== "initial_generation_paused" || source === "scratch") {
+      return currentStatus;
+    }
+  }
+
+  return source === "scratch" ? "initial_generation_paused" : "failed";
+}
+
 function isDevDomain(domain: string): boolean {
   return (
     domain === "localhost" ||
@@ -132,15 +186,19 @@ export function ProjectCard({
   const isSuperAdmin = session?.user?.role === "super_admin";
   const utils = trpc.useUtils();
 
-  const resetMutation = trpc.project.resetStatus.useMutation({
-    onSuccess: (data) => {
-      toast.success("Status Reset", {
+  const setStatusMutation = trpc.project.setStatus.useMutation({
+    onSuccess: (data, variables) => {
+      toast.success("Project status updated", {
         description: data.message,
       });
       utils.project.list.invalidate();
+      utils.project.status.invalidate({
+        slug: variables.slug,
+        version: variables.version,
+      });
     },
     onError: (error) => {
-      toast.error("Reset Failed", {
+      toast.error("Status update failed", {
         description: error.message,
       });
     },
@@ -247,7 +305,7 @@ export function ProjectCard({
   const [selectedVersion, setSelectedVersion] = useState(
     project.currentVersion || 1,
   );
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [editTitleInput, setEditTitleInput] = useState(project.title ?? "");
@@ -272,6 +330,10 @@ export function ProjectCard({
   });
   const canManagePreview = membership?.organizationRole !== "client_editor";
   const canRenameProject = membership?.organizationRole !== "client_editor";
+  const canOverrideProjectStatus =
+    isSuperAdmin ||
+    membership?.organizationRole === "owner" ||
+    membership?.organizationRole === "admin";
   const isRenamePending = renameSlugMutation.isPending;
   const isTitleUpdatePending = updateTitleMutation.isPending;
 
@@ -355,6 +417,11 @@ export function ProjectCard({
   const selectedVersionStatus =
     selectedVersionInfo?.status ??
     (selectedVersion === project.currentVersion ? project.status : "unknown");
+  const manualProjectStatusOptions = getManualProjectStatusOptions(project.source);
+  const [manualStatusInput, setManualStatusInput] =
+    useState<ProjectVersionManualStatus>(() =>
+      getDefaultManualProjectStatus(selectedVersionStatus, project.source),
+    );
   const isCompleted =
     selectedVersionStatus === "completed";
   const isFailed =
@@ -383,6 +450,13 @@ export function ProjectCard({
       ? actionsMenuItemAnchorRef
       : tagsAreaAnchorRef
   ) as unknown as RefObject<Measurable>;
+
+  useEffect(() => {
+    if (!showStatusDialog) return;
+    setManualStatusInput(
+      getDefaultManualProjectStatus(selectedVersionStatus, project.source),
+    );
+  }, [project.source, selectedVersionStatus, showStatusDialog]);
 
   // Calculate progress and label
   let statusLabel = "Pending";
@@ -637,25 +711,23 @@ export function ProjectCard({
                   Open Studio
                 </Button>
               )}
-              {isSuperAdmin && (
+              {canOverrideProjectStatus && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowResetConfirm(true);
+                    setShowStatusDialog(true);
                   }}
-                  disabled={resetMutation.isPending}
+                  disabled={setStatusMutation.isPending}
                 >
-                  <RotateCcw
+                  <Settings2
                     className={`w-3 h-3 mr-1 ${
-                      resetMutation.isPending ? "animate-spin" : ""
+                      setStatusMutation.isPending ? "animate-spin" : ""
                     }`}
                   />
-                  {resetMutation.isPending
-                    ? "Resetting..."
-                    : "Force Reset (Super Admin)"}
+                  {setStatusMutation.isPending ? "Updating..." : "Set status"}
                 </Button>
               )}
             </div>
@@ -681,6 +753,19 @@ export function ProjectCard({
                   Open Studio
                 </Button>
               )}
+              {canOverrideProjectStatus && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowStatusDialog(true);
+                  }}
+                  disabled={setStatusMutation.isPending}
+                >
+                  Set status
+                </Button>
+              )}
             </div>
           )}
 
@@ -703,6 +788,19 @@ export function ProjectCard({
               >
                 Open Studio
               </Button>
+              {canOverrideProjectStatus && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowStatusDialog(true);
+                  }}
+                  disabled={setStatusMutation.isPending}
+                >
+                  Set status
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
@@ -860,6 +958,15 @@ export function ProjectCard({
                 <Settings2 className="w-4 h-4 mr-2" />
                 Manage versions
               </DropdownMenuItem>
+              {canOverrideProjectStatus && (
+                <DropdownMenuItem
+                  onClick={() => setShowStatusDialog(true)}
+                  disabled={setStatusMutation.isPending}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Set project status
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={() => setPublishDialogOpen(true)}
                 disabled={!isCompleted}
@@ -948,31 +1055,60 @@ export function ProjectCard({
         ) : null}
       </Card>
 
-      <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+      <AlertDialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Force Reset Project?</AlertDialogTitle>
+            <AlertDialogTitle>Set project status</AlertDialogTitle>
             <AlertDialogDescription>
-              Force reset {project.slug} v{selectedVersion} to{" "}
-              <code>failed</code>? This is an admin-only action.
+              Override {project.slug} v{selectedVersion} with a durable status.
+              This is available to organization admins and super admins.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-3">
+            <Select
+              value={manualStatusInput}
+              onValueChange={(value) =>
+                setManualStatusInput(value as ProjectVersionManualStatus)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {manualProjectStatusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              {
+                manualProjectStatusOptions.find(
+                  (option) => option.value === manualStatusInput,
+                )?.description
+              }
+            </div>
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={resetMutation.isPending}>
+            <AlertDialogCancel disabled={setStatusMutation.isPending}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:border dark:border-destructive/40 dark:bg-destructive/12 dark:text-destructive dark:shadow-none dark:hover:bg-destructive/18 dark:hover:border-destructive/55"
-              disabled={resetMutation.isPending}
+              disabled={
+                setStatusMutation.isPending ||
+                manualStatusInput === selectedVersionStatus
+              }
               onClick={() => {
-                resetMutation.mutate({
+                setStatusMutation.mutate({
                   slug: project.slug,
                   version: selectedVersion,
+                  status: manualStatusInput,
                 });
-                setShowResetConfirm(false);
+                setShowStatusDialog(false);
               }}
             >
-              Force Reset
+              Update status
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

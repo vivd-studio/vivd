@@ -11,13 +11,10 @@ import { router, studioOrgProcedure, studioProjectProcedure } from "../trpc";
 import { usageService, type TokenData } from "../services/usage/UsageService";
 import { limitsService } from "../services/usage/LimitsService";
 import { getVersionDir, touchProjectUpdatedAt } from "../generator/versionUtils";
-import {
-  readInitialGenerationManifest,
-  writeInitialGenerationManifest,
-} from "../generator/initialGeneration";
 import { thumbnailService } from "../services/project/ThumbnailService";
 import { previewScreenshotService } from "../services/project/PreviewScreenshotService";
 import { projectMetaService } from "../services/project/ProjectMetaService";
+import { setProjectVersionStatus } from "../services/project/ProjectStatusService";
 import { studioWorkspaceStateService } from "../services/project/StudioWorkspaceStateService";
 import { studioAgentLeaseService } from "../services/project/StudioAgentLeaseService";
 import { agentInstructionsService } from "../services/agent/AgentInstructionsService";
@@ -515,43 +512,14 @@ export const studioApiRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const versionDir = getVersionDir(
-        ctx.organizationId!,
-        input.slug,
-        input.version,
-      );
-      const manifest = readInitialGenerationManifest(versionDir);
-      if (manifest?.mode === "studio_astro") {
-        const nextSessionId = input.sessionId ?? manifest.sessionId ?? null;
-        const now = new Date().toISOString();
-        writeInitialGenerationManifest(versionDir, {
-          ...manifest,
-          state: input.status,
-          sessionId: nextSessionId,
-          startedAt:
-            input.status === "generating_initial_site"
-              ? manifest.startedAt ?? now
-              : manifest.startedAt ?? (nextSessionId ? now : null),
-          completedAt:
-            input.status === "completed" || input.status === "failed"
-              ? now
-              : null,
-          errorMessage:
-            input.status === "failed" ||
-            input.status === "initial_generation_paused"
-              ? input.errorMessage ?? manifest.errorMessage ?? "Initial generation failed."
-              : null,
-        });
-      }
-
-      await projectMetaService.updateVersionStatus({
+      await setProjectVersionStatus({
         organizationId: ctx.organizationId!,
         slug: input.slug,
         version: input.version,
         status: input.status,
+        sessionId: input.sessionId,
         errorMessage:
-          input.status === "failed" ||
-          input.status === "initial_generation_paused"
+          input.status === "failed" || input.status === "initial_generation_paused"
             ? input.errorMessage
             : undefined,
       });

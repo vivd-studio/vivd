@@ -137,6 +137,21 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
           hasObservedAssistantActivity = true;
         };
 
+        const hasRunningTools = () => {
+          for (const status of toolStates.values()) {
+            if (status === "running") return true;
+          }
+          return false;
+        };
+
+        const scheduleAssistantSettleCheck = () => {
+          scheduleIdleCallback(
+            !hasTerminalSessionError &&
+              hasObservedAssistantActivity &&
+              !hasRunningTools(),
+          );
+        };
+
         const queueUnknownText = (
           messageId: string,
           partId: string,
@@ -372,8 +387,11 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                     currentStatus === "error"
                   ) {
                     callbacks.onToolCallFinished?.(toolCall);
+                    scheduleAssistantSettleCheck();
                   }
                 }
+              } else if (part.type === "step-finish") {
+                scheduleAssistantSettleCheck();
               }
             } else if (event.type === "message.part.delta") {
               cancelIdleTimer();
@@ -451,6 +469,9 @@ export function useEvents(client: OpencodeClient, callbacks: EventCallbacks = {}
                   nextRetryAt: status.next,
                 });
               }
+            } else if (event.type === "session.updated") {
+              cancelIdleTimer();
+              scheduleAssistantSettleCheck();
             }
           } catch (error) {
             console.error("[useEvents] Error while handling event:", event, error);

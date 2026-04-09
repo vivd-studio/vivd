@@ -23,6 +23,13 @@ function toMainBackendUrl(rawOrigin: string): string {
 function extractHostname(host: string): string {
   const normalized = host.trim().toLowerCase();
   if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      return new URL(normalized).hostname.toLowerCase();
+    } catch {
+      // Fall through to best-effort parsing below.
+    }
+  }
   if (normalized.startsWith("[")) {
     const idx = normalized.indexOf("]");
     return idx > 0 ? normalized.slice(1, idx) : normalized;
@@ -35,6 +42,7 @@ function isLocalHost(host: string): boolean {
   if (!hostname) return false;
   return (
     hostname === "localhost" ||
+    hostname === "::1" ||
     hostname === "127.0.0.1" ||
     hostname === "0.0.0.0" ||
     hostname.endsWith(".localhost")
@@ -69,21 +77,24 @@ function pickFallbackOrigin(input: ResolveStudioMainBackendUrlInput): string {
  */
 export function resolveStudioMainBackendUrl(
   input: ResolveStudioMainBackendUrlInput,
-): string {
+): string | null {
   if (input.providerKind !== "local") {
-    const canonicalOrigin =
-      input.backendUrlEnv?.trim() ||
-      input.domainEnv?.trim() ||
-      input.betterAuthUrlEnv?.trim();
-    if (canonicalOrigin) {
-      return toMainBackendUrl(canonicalOrigin);
+    const canonicalOrigins = [
+      input.backendUrlEnv?.trim() || "",
+      input.domainEnv?.trim() || "",
+      input.betterAuthUrlEnv?.trim() || "",
+    ].filter(Boolean);
+    const reachableCanonicalOrigin = canonicalOrigins.find((origin) => !isLocalHost(origin));
+    if (reachableCanonicalOrigin) {
+      return toMainBackendUrl(reachableCanonicalOrigin);
     }
 
     const requestHost = input.requestHost?.trim();
-    if (requestHost) {
-      const scheme = isLocalHost(requestHost) ? "http" : "https";
-      return toMainBackendUrl(`${scheme}://${requestHost}`);
+    if (requestHost && !isLocalHost(requestHost)) {
+      return toMainBackendUrl(`https://${requestHost}`);
     }
+
+    return null;
   }
 
   return toMainBackendUrl(pickFallbackOrigin(input));

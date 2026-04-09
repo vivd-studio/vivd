@@ -6,5 +6,6 @@ export * from "./pluginContracts.js";
 export * from "./pluginPackages.js";
 export * from "./plugins.js";
 export * from "./projectActions.js";
+export * from "./projectStatus.js";
 export * from "./studioMode.js";
 export * from "./theme.js";

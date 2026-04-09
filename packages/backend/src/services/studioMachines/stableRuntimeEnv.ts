@@ -138,16 +138,16 @@ export async function resolveStableStudioMachineEnv(options: {
     getOrganizationGithubRepoPrefix(options.organizationId),
     getResolvedSupportEmail(),
   ]);
+  const mainBackendUrl = resolveStudioMainBackendUrl({
+    providerKind: options.providerKind,
+    requestHost: options.requestHost,
+    backendUrlEnv: process.env.BACKEND_URL,
+    domainEnv: process.env.DOMAIN,
+    betterAuthUrlEnv: process.env.BETTER_AUTH_URL,
+    backendPort: process.env.PORT,
+  });
 
   const env: Record<string, string> = {
-    MAIN_BACKEND_URL: resolveStudioMainBackendUrl({
-      providerKind: options.providerKind,
-      requestHost: options.requestHost,
-      backendUrlEnv: process.env.BACKEND_URL,
-      domainEnv: process.env.DOMAIN,
-      betterAuthUrlEnv: process.env.BETTER_AUTH_URL,
-      backendPort: process.env.PORT,
-    }),
     GITHUB_REPO_PREFIX: buildStudioGitHubRepoPrefix({
       organizationId: options.organizationId,
       organizationRepoPrefix,
@@ -155,6 +155,9 @@ export async function resolveStableStudioMachineEnv(options: {
     ...readInstanceStudioRuntimeFlags(),
   };
 
+  if (mainBackendUrl) {
+    env.MAIN_BACKEND_URL = mainBackendUrl;
+  }
   if (enabledPluginIds.length > 0) {
     env.VIVD_ENABLED_PLUGINS = enabledPluginIds.join(",");
   }
