@@ -506,6 +506,7 @@ export const studioApiRouter = router({
         version: z.number().int().positive(),
         status: z.enum([
           "generating_initial_site",
+          "initial_generation_paused",
           "completed",
           "failed",
         ]),
@@ -536,7 +537,8 @@ export const studioApiRouter = router({
               ? now
               : null,
           errorMessage:
-            input.status === "failed"
+            input.status === "failed" ||
+            input.status === "initial_generation_paused"
               ? input.errorMessage ?? manifest.errorMessage ?? "Initial generation failed."
               : null,
         });
@@ -547,7 +549,11 @@ export const studioApiRouter = router({
         slug: input.slug,
         version: input.version,
         status: input.status,
-        errorMessage: input.status === "failed" ? input.errorMessage : undefined,
+        errorMessage:
+          input.status === "failed" ||
+          input.status === "initial_generation_paused"
+            ? input.errorMessage
+            : undefined,
       });
       return { success: true };
     }),

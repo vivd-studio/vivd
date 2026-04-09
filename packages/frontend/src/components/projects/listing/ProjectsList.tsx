@@ -46,7 +46,10 @@ export function ProjectsList() {
     refetchInterval: (query) => {
       const projects = query.state.data?.projects ?? [];
       return projects.some(
-        (p) => p.status !== "completed" && p.status !== "failed",
+        (p) =>
+          p.status !== "completed" &&
+          p.status !== "failed" &&
+          p.status !== "initial_generation_paused",
       )
         ? 2000
         : false;

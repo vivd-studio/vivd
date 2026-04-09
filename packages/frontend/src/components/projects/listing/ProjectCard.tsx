@@ -100,6 +100,7 @@ export function isStudioAccessibleProjectStatus(
   return (
     status === "completed" ||
     status === "failed" ||
+    status === "initial_generation_paused" ||
     status === "starting_studio" ||
     status === "generating_initial_site"
   );
@@ -358,8 +359,13 @@ export function ProjectCard({
     selectedVersionStatus === "completed";
   const isFailed =
     selectedVersionStatus === "failed";
+  const isInitialGenerationPaused =
+    selectedVersionStatus === "initial_generation_paused";
   const isProcessing =
-    !isCompleted && !isFailed && selectedVersionStatus !== "unknown";
+    !isCompleted &&
+    !isFailed &&
+    !isInitialGenerationPaused &&
+    selectedVersionStatus !== "unknown";
   const canOpenStudio = isStudioAccessibleProjectStatus(selectedVersionStatus);
   const totalVersions = project.totalVersions || 1;
   const projectTags = project.tags ?? [];
@@ -406,6 +412,10 @@ export function ProjectCard({
     case "generating_initial_site":
       statusLabel = "Generating Initial Site";
       statusColor = "default";
+      break;
+    case "initial_generation_paused":
+      statusLabel = "Initial Generation Paused";
+      statusColor = "secondary";
       break;
     case "creating_hero":
       statusLabel = "Creating Hero Image";
@@ -671,6 +681,28 @@ export function ProjectCard({
                   Open Studio
                 </Button>
               )}
+            </div>
+          )}
+
+          {isInitialGenerationPaused && (
+            <div className="text-sm text-center space-y-2 flex flex-col items-center justify-center grow">
+              <div className="font-medium text-foreground">
+                Initial generation paused
+              </div>
+              <div className="text-xs text-muted-foreground max-w-[24rem]">
+                {selectedVersionInfo?.errorMessage ||
+                  "The bootstrap run stopped before finishing. Open Studio to continue the same project from there."}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openProjectStudio();
+                }}
+              >
+                Open Studio
+              </Button>
             </div>
           )}
         </CardContent>

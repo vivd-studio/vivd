@@ -858,7 +858,7 @@ export const projectGenerationProcedures = {
 
       // Get error message from version data if status is failed
       const errorMessage =
-        status === "failed"
+        status === "failed" || status === "initial_generation_paused"
           ? versionData?.errorMessage ||
             manifest.versions.find((v) => v.version === targetVersion)
               ?.errorMessage

@@ -173,6 +173,62 @@ describe("ScratchWizardContext", () => {
     });
   });
 
+  it("still redirects to Studio when the bootstrap run is already paused", async () => {
+    const navigateMock = vi.fn();
+    useNavigateMock.mockReturnValue(navigateMock);
+
+    const pendingStartGeneration = new Promise(() => undefined);
+    startScratchGenerationUseMutationMock.mockReturnValue({
+      mutateAsync: vi.fn().mockReturnValue(pendingStartGeneration),
+    });
+
+    let currentStatus:
+      | {
+          status: string;
+          studioHandoff?: {
+            mode?: string;
+            initialGeneration?: boolean;
+            sessionId?: string | null;
+          };
+        }
+      | undefined;
+    projectStatusUseQueryMock.mockImplementation((input: { slug: string }, options: { enabled: boolean }) => {
+      if (!options.enabled || !input.slug) {
+        return { data: undefined };
+      }
+      return {
+        data: currentStatus,
+      };
+    });
+
+    const view = renderProvider();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    currentStatus = {
+      status: "initial_generation_paused",
+      studioHandoff: {
+        mode: "studio_astro",
+        initialGeneration: true,
+        sessionId: "sess-paused",
+      },
+    };
+    view.rerender(
+      <MemoryRouter initialEntries={["/vivd-studio/projects/new/scratch"]}>
+        <ScratchWizardProvider>
+          <ScratchWizardTestHarness />
+        </ScratchWizardProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/vivd-studio/projects/site-1?view=studio&version=1&initialGeneration=1&sessionId=sess-paused",
+        { replace: true },
+      );
+    });
+  });
+
   it("redirects to Studio on a polled startup even before the session id is known", async () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);

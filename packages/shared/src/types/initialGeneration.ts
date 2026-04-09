@@ -10,6 +10,7 @@ export type InitialGenerationState =
   | "draft"
   | "starting_studio"
   | "generating_initial_site"
+  | "initial_generation_paused"
   | "completed"
   | "failed";
 

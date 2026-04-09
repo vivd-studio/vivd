@@ -714,6 +714,36 @@ describe("EmbeddedStudio", () => {
     expect(iframeUrl.searchParams.get("sessionId")).toBe("sess-polled");
   });
 
+  it("does not block Studio boot forever when initial generation is paused without a session id", () => {
+    useLocationMock.mockReturnValue({
+      search: "?view=studio&version=1&initialGeneration=1",
+    });
+    projectStatusUseQueryMock.mockReturnValue({
+      data: {
+        status: "initial_generation_paused",
+        studioHandoff: {
+          mode: "studio_astro",
+          initialGeneration: true,
+          sessionId: null,
+        },
+      },
+    });
+    getStudioUrlUseQueryMock.mockReturnValue({
+      data: {
+        status: "running",
+        url: "https://studio.example.com/runtime",
+        bootstrapToken: null,
+      },
+    });
+
+    renderEmbeddedStudio();
+
+    const iframe = screen.getByTitle("Vivd Studio - site-1");
+    const iframeUrl = new URL(iframe.getAttribute("src") ?? "");
+    expect(iframeUrl.searchParams.get("initialGeneration")).toBe("1");
+    expect(iframeUrl.searchParams.get("sessionId")).toBeNull();
+  });
+
   it("rewrites the embedded studio bootstrap target when a backend-polled session id appears later", () => {
     const navigateMock = vi.fn();
     useNavigateMock.mockReturnValue(navigateMock);

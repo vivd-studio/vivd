@@ -362,7 +362,11 @@ function deriveMonitoredSessionOutcome(options: {
   messages: MonitoredSessionRecord[];
   hasPendingQuestion: boolean;
   now?: number;
-}): { state: "active" | "completed" | "failed"; errorMessage?: string } {
+}): {
+  state: "active" | "completed" | "interrupted" | "failed";
+  errorMessage?: string;
+} {
+  const activityCount = countRecordedAssistantArtifacts(options.messages);
   const sessionStatusType = options.sessionStatus?.type ?? "idle";
   if (sessionStatusType === "busy" || sessionStatusType === "retry") {
     return { state: "active" };
@@ -383,14 +387,14 @@ function deriveMonitoredSessionOutcome(options: {
   const assistantError = extractErrorMessage(latestAssistant.info.error);
   if (assistantError) {
     return {
-      state: "failed",
+      state: "interrupted",
       errorMessage: normalizeInitialGenerationFailureMessage(assistantError),
     };
   }
 
   if (sessionStatusType === "error") {
     return {
-      state: "failed",
+      state: "interrupted",
       errorMessage: normalizeInitialGenerationFailureMessage(
         options.sessionStatus?.message ?? null,
       ),
@@ -403,11 +407,12 @@ function deriveMonitoredSessionOutcome(options: {
 
   const latestActivityAt = getMessageActivityAt(latestAssistant.info);
   if (
+    activityCount > 0 &&
     latestActivityAt != null &&
     (options.now ?? Date.now()) - latestActivityAt >= TERMINAL_IDLE_GRACE_MS
   ) {
     return {
-      state: "failed",
+      state: "interrupted",
       errorMessage: normalizeInitialGenerationFailureMessage(null),
     };
   }
@@ -551,7 +556,11 @@ ${businessBriefSection}
 async function updateBackendInitialGenerationStatus(options: {
   projectSlug: string;
   version: number;
-  status: "generating_initial_site" | "completed" | "failed";
+  status:
+    | "generating_initial_site"
+    | "initial_generation_paused"
+    | "completed"
+    | "failed";
   sessionId?: string;
   errorMessage?: string;
 }): Promise<void> {
@@ -573,7 +582,10 @@ async function inspectExistingInitialGenerationSession(options: {
     | { type: "idle" | "busy" | "done" | "retry" | "error"; message?: string }
     | null;
   hasPendingQuestion: boolean;
-  outcome: { state: "active" | "completed" | "failed"; errorMessage?: string };
+  outcome: {
+    state: "active" | "completed" | "interrupted" | "failed";
+    errorMessage?: string;
+  };
   activityCount: number;
 }> {
   const [statusMap, questions, messages] = await Promise.all([
@@ -657,10 +669,10 @@ async function resetInitialGenerationForFreshStart(options: {
     version: options.version,
     manifest: {
       ...manifest,
-      state: "failed",
+      state: "initial_generation_paused",
       sessionId: null,
       errorMessage: options.errorMessage,
-      completedAt: new Date().toISOString(),
+      completedAt: null,
     },
   });
 
@@ -668,7 +680,7 @@ async function resetInitialGenerationForFreshStart(options: {
     await updateBackendInitialGenerationStatus({
       projectSlug: options.projectSlug,
       version: options.version,
-      status: "failed",
+      status: "initial_generation_paused",
       errorMessage: options.errorMessage,
     });
   } catch (error) {
@@ -741,8 +753,13 @@ function startMonitor(options: {
         return;
       }
 
+      if (assessment.outcome.state === "interrupted") {
+        reportSessionInterrupted(assessment.outcome.errorMessage);
+        return;
+      }
+
       if (assessment.outcome.state === "failed") {
-        reportSessionFailure(assessment.outcome.errorMessage);
+        reportSessionFailed(assessment.outcome.errorMessage);
         return;
       }
 
@@ -758,7 +775,17 @@ function startMonitor(options: {
     }
   };
 
-  const reportSessionFailure = (message?: string) => {
+  const reportSessionInterrupted = (message?: string) => {
+    if (settled) return;
+    failureObserved = true;
+    stopPolling();
+    void markSessionPaused({
+      ...options,
+      errorMessage: normalizeInitialGenerationFailureMessage(message ?? null),
+    });
+  };
+
+  const reportSessionFailed = (message?: string) => {
     if (settled) return;
     failureObserved = true;
     stopPolling();
@@ -815,8 +842,13 @@ function startMonitor(options: {
         return;
       }
 
+      if (outcome.state === "interrupted") {
+        reportSessionInterrupted(outcome.errorMessage);
+        return;
+      }
+
       if (outcome.state === "failed") {
-        reportSessionFailure(outcome.errorMessage);
+        reportSessionFailed(outcome.errorMessage);
         return;
       }
 
@@ -852,7 +884,9 @@ function startMonitor(options: {
           return;
         }
 
-        reportSessionFailure(errorData.message || "Initial generation failed.");
+        reportSessionInterrupted(
+          errorData.message || "Initial generation failed.",
+        );
         return;
       }
 
@@ -916,6 +950,67 @@ async function markSessionFailed(options: {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
         `[InitialGeneration] Failed to report backend failure for ${options.projectSlug}/v${options.version}: ${message}`,
+      );
+    }
+  })().finally(() => {
+    finalizationLocks.delete(key);
+  });
+
+  finalizationLocks.set(key, promise);
+  return await promise;
+}
+
+async function markSessionPaused(options: {
+  projectSlug: string;
+  version: number;
+  workspaceDir: string;
+  sessionId: string;
+  errorMessage: string;
+}): Promise<void> {
+  const key = `${options.workspaceDir}:${options.sessionId}:paused`;
+  if (finalizationLocks.has(key)) {
+    return await finalizationLocks.get(key);
+  }
+
+  const promise = (async () => {
+    const manifest = readInitialGenerationManifest(options.workspaceDir);
+    if (manifest.sessionId && manifest.sessionId !== options.sessionId) {
+      return;
+    }
+
+    if (
+      manifest.state === "initial_generation_paused" &&
+      manifest.sessionId === options.sessionId &&
+      (manifest.errorMessage ?? "") === options.errorMessage
+    ) {
+      return;
+    }
+
+    persistInitialGenerationManifest({
+      workspaceDir: options.workspaceDir,
+      projectSlug: options.projectSlug,
+      version: options.version,
+      manifest: {
+        ...manifest,
+        state: "initial_generation_paused",
+        sessionId: options.sessionId,
+        errorMessage: options.errorMessage,
+        completedAt: null,
+      },
+    });
+
+    try {
+      await updateBackendInitialGenerationStatus({
+        projectSlug: options.projectSlug,
+        version: options.version,
+        status: "initial_generation_paused",
+        sessionId: options.sessionId,
+        errorMessage: options.errorMessage,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[InitialGeneration] Failed to report backend paused state for ${options.projectSlug}/v${options.version}: ${message}`,
       );
     }
   })().finally(() => {
@@ -1138,6 +1233,33 @@ async function startInitialGenerationInternal(
         };
       }
 
+      if (assessment.outcome.state === "interrupted") {
+        const errorMessage =
+          assessment.outcome.errorMessage ??
+          normalizeInitialGenerationFailureMessage(null);
+
+        await markSessionPaused({
+          projectSlug: options.projectSlug,
+          version: options.version,
+          workspaceDir: options.workspaceDir,
+          sessionId: existingSessionId,
+          errorMessage,
+        });
+
+        startMonitor({
+          projectSlug: options.projectSlug,
+          version: options.version,
+          workspaceDir: options.workspaceDir,
+          sessionId: existingSessionId,
+        });
+
+        return {
+          sessionId: existingSessionId,
+          reused: true,
+          status: "initial_generation_paused",
+        };
+      }
+
       if (assessment.outcome.state === "failed") {
         const errorMessage =
           assessment.outcome.errorMessage ??
@@ -1336,7 +1458,22 @@ class InitialGenerationService {
       return existingSessionId;
     }
 
-    if (assessment.outcome.state === "active") {
+    if (
+      assessment.outcome.state === "active" ||
+      assessment.outcome.state === "interrupted"
+    ) {
+      if (assessment.outcome.state === "interrupted") {
+        await markSessionPaused({
+          projectSlug: options.projectSlug,
+          version: options.version,
+          workspaceDir: options.workspaceDir,
+          sessionId: existingSessionId,
+          errorMessage:
+            assessment.outcome.errorMessage ??
+            normalizeInitialGenerationFailureMessage(null),
+        });
+      }
+
       startMonitor({
         projectSlug: options.projectSlug,
         version: options.version,

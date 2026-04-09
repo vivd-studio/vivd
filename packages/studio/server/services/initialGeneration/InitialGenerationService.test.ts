@@ -482,7 +482,7 @@ describe("InitialGenerationService", () => {
     }
   });
 
-  it("marks interrupted initial-generation sessions as failed when the runtime goes idle with a terminal assistant error", async () => {
+  it("marks interrupted initial-generation sessions as paused when the runtime goes idle with a terminal assistant error", async () => {
     vi.useFakeTimers();
     getSessionsStatusMock.mockResolvedValue({
       "sess-1": {
@@ -532,7 +532,7 @@ describe("InitialGenerationService", () => {
     await flushAsyncWork();
 
     const manifest = readManifest(tmpDir);
-    expect(manifest.state).toBe("failed");
+    expect(manifest.state).toBe("initial_generation_paused");
     expect(manifest.sessionId).toBe("sess-1");
     expect(manifest.errorMessage).toBe(
       "The AI provider stopped this run before the initial site finished. Open Studio to continue the session.",
@@ -653,7 +653,7 @@ describe("InitialGenerationService", () => {
     expect(manifest.sessionId).toBe("sess-fresh");
   });
 
-  it("starts a fresh session instead of reusing a failed partial initial-generation run", async () => {
+  it("reuses an interrupted partial initial-generation run instead of creating a duplicate session", async () => {
     writeManifest(tmpDir, {
       state: "generating_initial_site",
       sessionId: "sess-stale",
@@ -694,8 +694,6 @@ describe("InitialGenerationService", () => {
           ]
         : [],
     );
-    runTaskMock.mockResolvedValueOnce({ sessionId: "sess-fresh" });
-
     const result = await initialGenerationService.startInitialGeneration({
       projectSlug: "site-1",
       version: 1,
@@ -703,17 +701,19 @@ describe("InitialGenerationService", () => {
     });
 
     expect(deleteSessionMock).not.toHaveBeenCalled();
-    expect(runTaskMock).toHaveBeenCalledTimes(1);
+    expect(runTaskMock).not.toHaveBeenCalled();
     expect(result).toEqual({
-      sessionId: "sess-fresh",
-      reused: false,
-      status: "generating_initial_site",
+      sessionId: "sess-stale",
+      reused: true,
+      status: "initial_generation_paused",
     });
 
     const manifest = readManifest(tmpDir);
-    expect(manifest.state).toBe("generating_initial_site");
-    expect(manifest.sessionId).toBe("sess-fresh");
-    expect(manifest.errorMessage).toBeNull();
+    expect(manifest.state).toBe("initial_generation_paused");
+    expect(manifest.sessionId).toBe("sess-stale");
+    expect(manifest.errorMessage).toBe(
+      "The agent stopped before finishing the initial generation. Open Studio to continue the session.",
+    );
   });
 
   it("returns null for handoff when the stored session is a dead empty startup artifact", async () => {
@@ -763,11 +763,11 @@ describe("InitialGenerationService", () => {
     expect(runTaskMock).not.toHaveBeenCalled();
 
     const manifest = readManifest(tmpDir);
-    expect(manifest.state).toBe("failed");
+    expect(manifest.state).toBe("initial_generation_paused");
     expect(manifest.sessionId).toBeNull();
   });
 
-  it("returns null for handoff when the stored session is a failed partial initial-generation run", async () => {
+  it("returns the interrupted session for handoff so Studio can continue it", async () => {
     writeManifest(tmpDir, {
       state: "generating_initial_site",
       sessionId: "sess-stale",
@@ -810,13 +810,13 @@ describe("InitialGenerationService", () => {
         workspaceDir: tmpDir,
       });
 
-    expect(sessionId).toBeNull();
+    expect(sessionId).toBe("sess-stale");
     expect(deleteSessionMock).not.toHaveBeenCalled();
     expect(runTaskMock).not.toHaveBeenCalled();
 
     const manifest = readManifest(tmpDir);
-    expect(manifest.state).toBe("failed");
-    expect(manifest.sessionId).toBeNull();
+    expect(manifest.state).toBe("initial_generation_paused");
+    expect(manifest.sessionId).toBe("sess-stale");
     expect(manifest.errorMessage).toBe(
       "The agent stopped before finishing the initial generation. Open Studio to continue the session.",
     );

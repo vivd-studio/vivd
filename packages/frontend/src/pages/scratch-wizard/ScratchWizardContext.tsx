@@ -307,6 +307,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     const studioStartupObserved =
       statusData.status === "starting_studio" ||
       statusData.status === "generating_initial_site" ||
+      statusData.status === "initial_generation_paused" ||
       statusData.status === "completed";
     if (studioHandoffRequested && studioStartupObserved) {
       navigateToStartedProjectStudio(
@@ -535,6 +536,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
     if (status === "analyzing_images") return 60;
     if (status === "starting_studio") return 70;
     if (status === "generating_initial_site") return 85;
+    if (status === "initial_generation_paused") return 100;
     if (status === "generating_html") return 75;
     if (status === "completed") return 100;
     if (status === "failed") return 100;

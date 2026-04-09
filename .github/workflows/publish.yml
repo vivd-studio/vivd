@@ -446,8 +446,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   studio-fly-warm-wake-auth-smoke:
-    needs: [detect-changes, build-studio]
-    if: needs.build-studio.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
+    needs: [detect-changes, build-studio, deploy]
+    if: needs.build-studio.result == 'success' && needs.deploy.result == 'success' && needs.detect-changes.outputs.skip_fly_release_smoke != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -515,14 +515,14 @@ jobs:
           set -euo pipefail
 
           {
-            echo "### Fly Studio warm-wake auth release gate"
+            echo "### Fly Studio warm-wake auth post-deploy signal"
             echo "- config: ${CONFIG_OUTCOME:-skipped}"
             echo "- wake_auth: ${WAKE_OUTCOME:-skipped}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-studio:
-    needs: [detect-changes, build-studio, studio-opencode-revert-smoke, studio-fly-warm-wake-auth-smoke]
-    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && needs.studio-opencode-revert-smoke.result == 'success' && (needs.detect-changes.outputs.skip_fly_release_smoke == 'true' || needs.studio-fly-warm-wake-auth-smoke.result == 'success')
+    needs: [detect-changes, build-studio, studio-opencode-revert-smoke]
+    if: always() && needs.detect-changes.outputs.build_studio == 'true' && needs.build-studio.result == 'success' && needs.studio-opencode-revert-smoke.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

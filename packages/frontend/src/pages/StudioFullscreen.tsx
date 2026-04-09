@@ -62,18 +62,31 @@ export default function StudioFullscreen() {
       refetchOnMount: "always",
       refetchOnReconnect: "always",
       refetchInterval: (query) => {
+        const status =
+          query.state.data && "status" in query.state.data
+            ? query.state.data.status
+            : null;
         const sessionId =
           query.state.data && "studioHandoff" in query.state.data
             ? query.state.data.studioHandoff?.sessionId ?? null
             : null;
         return initialGenerationRequested &&
           !requestedInitialSessionId &&
+          status !== "initial_generation_paused" &&
+          status !== "completed" &&
+          status !== "failed" &&
           sessionId == null
           ? 1_000
           : false;
       },
     },
   );
+  const initialGenerationStatus =
+    initialGenerationRequested &&
+    projectStatusData &&
+    "status" in projectStatusData
+      ? projectStatusData.status
+      : null;
   const polledInitialSessionId =
     initialGenerationRequested &&
     projectStatusData &&
@@ -83,7 +96,11 @@ export default function StudioFullscreen() {
   const resolvedInitialSessionId =
     requestedInitialSessionId ?? polledInitialSessionId;
   const awaitingInitialGenerationHandoff =
-    initialGenerationRequested && !resolvedInitialSessionId;
+    initialGenerationRequested &&
+    !resolvedInitialSessionId &&
+    initialGenerationStatus !== "initial_generation_paused" &&
+    initialGenerationStatus !== "completed" &&
+    initialGenerationStatus !== "failed";
   const studioReturnPath = useMemo(() => {
     if (!projectSlug) return ROUTES.DASHBOARD;
 

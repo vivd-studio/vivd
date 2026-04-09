@@ -5,6 +5,7 @@ describe("isStudioAccessibleProjectStatus", () => {
   it("keeps interrupted scratch/studio states openable in Studio", () => {
     expect(isStudioAccessibleProjectStatus("starting_studio")).toBe(true);
     expect(isStudioAccessibleProjectStatus("generating_initial_site")).toBe(true);
+    expect(isStudioAccessibleProjectStatus("initial_generation_paused")).toBe(true);
     expect(isStudioAccessibleProjectStatus("failed")).toBe(true);
     expect(isStudioAccessibleProjectStatus("completed")).toBe(true);
   });
