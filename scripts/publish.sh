@@ -11,6 +11,7 @@ DRY_RUN=false
 TAG_INPUT=""
 RUN_LOCAL_HOST_SMOKE=true
 RUN_FLY_RELEASE_SMOKE=true
+DEFAULT_HOST_SMOKE_PORT=18080
 
 print_usage() {
   cat <<'EOF'
@@ -116,7 +117,72 @@ ensure_tag_absent() {
   fi
 }
 
+resolve_host_smoke_port() {
+  if [[ -n "${VIVD_STUDIO_HOST_SMOKE_PORT:-}" ]]; then
+    printf '%s\n' "$VIVD_STUDIO_HOST_SMOKE_PORT"
+    return 0
+  fi
+
+  node -e '
+const net = require("node:net");
+
+const preferredPort = Number.parseInt(process.argv[1], 10);
+
+function tryPort(port) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", (error) => {
+      if (error && error.code === "EADDRINUSE") {
+        resolve(null);
+        return;
+      }
+      reject(error);
+    });
+    server.listen(port, "127.0.0.1", () => {
+      const address = server.address();
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+        if (typeof address === "object" && address && "port" in address) {
+          resolve(address.port);
+          return;
+        }
+        reject(new Error("Could not determine free host smoke port"));
+      });
+    });
+  });
+}
+
+(async () => {
+  const preferred = await tryPort(preferredPort);
+  if (preferred !== null) {
+    process.stdout.write(String(preferred));
+    return;
+  }
+
+  const fallback = await tryPort(0);
+  if (fallback === null) {
+    throw new Error("Could not determine free host smoke port");
+  }
+
+  process.stderr.write(
+    `[publish.sh] Host smoke port ${preferredPort} is already in use; using ${fallback} instead.\n`,
+  );
+  process.stdout.write(String(fallback));
+})().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[publish.sh] ${message}`);
+  process.exit(1);
+});
+' "$DEFAULT_HOST_SMOKE_PORT"
+}
+
 run_release_preflight() {
+  local host_smoke_port=""
+
   run_step "TypeScript typecheck" npm run typecheck
   run_step "Build shared" npm run build --workspace=@vivd/shared
   run_step "Build builder" npm run build --workspace=@vivd/builder
@@ -136,9 +202,10 @@ run_release_preflight() {
     run_step \
       "Install Playwright Chromium" \
       npx playwright install chromium
+    host_smoke_port="$(resolve_host_smoke_port)"
     run_step \
       "Studio Docker-provider host smoke" \
-      env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_PORT=18080 npm run studio:host-smoke
+      env STUDIO_IMAGE=vivd-studio:publish-host-smoke VIVD_STUDIO_HOST_SMOKE_PORT="$host_smoke_port" npm run studio:host-smoke
   else
     echo
     echo "==> Local host/browser smoke skipped (--skip-host-smoke)"
