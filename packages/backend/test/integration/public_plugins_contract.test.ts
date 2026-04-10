@@ -228,6 +228,7 @@ describe.sequential("DB integration: public plugin HTTP contract", () => {
             Origin: sourceOrigin,
             Referer: sourceReferer,
             "User-Agent": "Vivd Plugin Contract Test",
+            "cf-ipcountry": "DE",
           },
         );
         expect(pageviewResponse.status).toBe(200);
@@ -363,6 +364,13 @@ describe.sequential("DB integration: public plugin HTTP contract", () => {
           referrerHost: "google.com",
           events: 3,
         });
+        expect(summary.countries).toContainEqual({
+          countryCode: "DE",
+          pageviews: 1,
+          uniqueVisitors: 1,
+          uniqueSessions: 1,
+          share: 100,
+        });
         expect(summary.contactForm).toMatchObject({
           enabled: true,
           submissions: 1,
@@ -392,6 +400,20 @@ describe.sequential("DB integration: public plugin HTTP contract", () => {
           pageviews: 1,
           submissions: 1,
           submissionRatePct: 100,
+        });
+        expect(summary.pathAnalysis).toMatchObject({
+          sessionsWithPageviews: 1,
+          totalTransitions: 0,
+        });
+        expect(summary.pathAnalysis.topEntryPages).toContainEqual({
+          path: "/landing",
+          sessions: 1,
+          share: 100,
+        });
+        expect(summary.pathAnalysis.topExitPages).toContainEqual({
+          path: "/landing",
+          sessions: 1,
+          share: 100,
         });
       } finally {
         restoreEnv();

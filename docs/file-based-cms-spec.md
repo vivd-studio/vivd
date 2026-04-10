@@ -562,7 +562,7 @@ For Astro projects:
 
 1. Vivd reads and validates `src/content/`.
 2. Vivd generates normalized artifacts into `.vivd/content/`.
-3. Astro consumes a thin adapter built on Astro Content Collections or a custom loader.
+3. Astro consumes a thin adapter built on Astro Content Collections with a Vivd custom loader over the normalized artifacts.
 4. Page code imports typed helpers instead of parsing YAML directly.
 
 Recommended runtime/helper surface:
@@ -575,6 +575,132 @@ Default behavior:
 
 - inactive entries are excluded from public/rendered queries unless explicitly requested
 - generated metadata includes model labels, field info, and validation state where useful
+
+### Concrete Astro Adapter Design
+
+The Astro adapter should be a generated bridge, not a second hand-authored source of truth.
+
+Recommended generated file layout:
+
+```text
+src/
+  content.config.ts
+  generated/
+    vivd/
+      astro-content.generated.ts
+      cms-helpers.generated.ts
+.vivd/
+  content/
+    manifest.json
+    assets.json
+    models/*.json
+    media/**
+```
+
+Responsibilities:
+
+- `src/content.config.ts`
+  - stable thin wrapper, scaffolded once
+  - imports and re-exports generated Vivd Astro collections
+  - should not be hand-maintained as a second schema surface
+- `src/generated/vivd/astro-content.generated.ts`
+  - generated from `src/content/vivd.content.yaml` and `src/content/models/*.yaml`
+  - defines Astro collections with `defineCollection(...)`
+  - uses a Vivd loader that reads normalized `.vivd/content/models/*.json`
+  - generates the Astro/Zod schema that matches the Vivd model schema
+- `src/generated/vivd/cms-helpers.generated.ts`
+  - generated typed helper layer for Astro page code
+  - wraps `astro:content` queries and applies Vivd semantics such as inactive filtering, sort-field ordering, and asset/reference convenience helpers
+- `.vivd/content/**`
+  - generated normalized data and derived media
+  - remains the build/runtime data source for the Astro loader
+
+Recommended `src/content.config.ts` shape:
+
+```ts
+export { collections } from "./generated/vivd/astro-content.generated";
+```
+
+Recommended generation lifecycle:
+
+- `vivd cms validate`
+  - validates the canonical `src/content/` files
+  - may optionally report whether generated adapter artifacts are stale
+- `vivd cms build-artifacts`
+  - validates canonical content
+  - regenerates `.vivd/content/**`
+  - regenerates `src/generated/vivd/astro-content.generated.ts`
+  - regenerates `src/generated/vivd/cms-helpers.generated.ts`
+  - ensures `src/content.config.ts` exists if missing
+- Studio save/refresh in Astro projects
+  - should run the same artifact step after CMS mutations
+- Astro preview/build
+  - should depend on the same generated artifacts instead of reparsing raw YAML independently
+
+Important nuance:
+
+- entry-content changes do not conceptually require a new schema wrapper, but they do require refreshed `.vivd/content/models/*.json` and media artifacts
+- for simplicity, `vivd cms build-artifacts` may regenerate the generated Astro files on every CMS refresh even if only entry values changed
+- the generated Astro adapter files should only change materially when the root config or model schemas change
+
+### Astro Adapter Mapping Rules
+
+The Astro adapter should map Vivd model schemas into Zod/Astro collections like this:
+
+- `string`, `text`, `slug`
+  - `z.string()`
+- `number`
+  - `z.number()`
+- `boolean`
+  - `z.boolean()`
+- `date`, `datetime`
+  - `z.string()` in v1 to avoid timezone/coercion surprises between source YAML and runtime
+- `enum`
+  - `z.enum([...])` when options are present
+- `object`
+  - recursive `z.object(...)`
+- `list`
+  - recursive `z.array(...)`
+- `localized: true`
+  - `z.object({ [defaultLocale]: baseSchema, [otherLocale]: baseSchema.optional() })`
+  - v1 keeps non-default locales optional unless the Vivd schema later adds stricter per-locale requirements
+- `richText` with `storage: sidecar-markdown`
+  - source YAML stores relative sidecar paths
+  - the Vivd build step resolves those files and the Astro loader exposes markdown strings in the final collection entry shape
+  - generated metadata may preserve the original sidecar file path under a private `_vivd` metadata key when useful for Studio/debugging
+- `reference`
+  - source accepts `"model:entry"` or `{ model, entry }`
+  - normalized loader output should expose `{ model, entry, id }`
+  - generated helper functions should resolve references to actual entries instead of asking page code to parse the string form manually
+- `asset`
+  - normalized loader output should expose one consistent object shape such as:
+    - `path`: canonical source-relative path
+    - `url`: stable runtime URL such as `/media/...`
+    - `mimeType`
+    - image metadata when available
+    - label/alt/localized metadata when present in source
+- `assetList`
+  - array of that same normalized asset object shape
+
+### Astro Query Helper Rules
+
+The generated Astro helper layer should be the default page-facing surface.
+
+Recommended helpers:
+
+- `getCmsCollection(modelKey, options?)`
+- `getCmsEntry(modelKey, entryKey, options?)`
+- `resolveCmsAsset(assetRef)`
+- `resolveCmsReference(referenceRef, options?)`
+
+Recommended behavior:
+
+- call through to `astro:content` under the hood
+- filter inactive entries by default
+- apply schema-defined sort ordering consistently
+- keep raw Astro collection access available for advanced use, but steer agent/project code toward the helpers
+
+This keeps `astro:content` as the framework integration layer while preserving Vivd-specific semantics in one shared adapter instead of duplicating them across page files.
 
 ### Why A Translation Layer Is Required
 

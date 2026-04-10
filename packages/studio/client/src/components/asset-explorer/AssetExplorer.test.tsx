@@ -3,8 +3,10 @@ import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetExplorer } from "./AssetExplorer";
+import { ASTRO_CONTENT_MEDIA_PATH } from "./utils";
 
 const listAssetsUseQueryMock = vi.fn();
+const getPreviewInfoUseQueryMock = vi.fn();
 const createFolderUseMutationMock = vi.fn();
 const createImageUseMutationMock = vi.fn();
 const useUtilsMock = vi.fn();
@@ -16,6 +18,11 @@ let currentPreviewPath = "/";
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => useUtilsMock(),
+    project: {
+      getPreviewInfo: {
+        useQuery: (...args: unknown[]) => getPreviewInfoUseQueryMock(...args),
+      },
+    },
     assets: {
       listAssets: {
         useQuery: (...args: unknown[]) => listAssetsUseQueryMock(...args),
@@ -132,11 +139,21 @@ describe("AssetExplorer", () => {
     invalidateMock.mockReset();
     refetchMock.mockReset();
     fetchMock.mockReset();
+    getPreviewInfoUseQueryMock.mockReset();
 
     useUtilsMock.mockReturnValue({
       assets: {
         invalidate: invalidateMock,
       },
+    });
+    getPreviewInfoUseQueryMock.mockReturnValue({
+      data: {
+        mode: "static",
+        status: "ready",
+        url: "/",
+      },
+      isFetched: true,
+      isLoading: false,
     });
 
     listAssetsUseQueryMock.mockImplementation(
@@ -223,6 +240,49 @@ describe("AssetExplorer", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain("path=public%2Fimages");
     expect(fetchMock.mock.calls[0]?.[0]).not.toContain(
       "path=.vivd%2Fuploads",
+    );
+  });
+
+  it("uses src/content/media as the Astro gallery root and upload target", async () => {
+    getPreviewInfoUseQueryMock.mockReturnValue({
+      data: {
+        mode: "devserver",
+        status: "ready",
+        url: "/",
+      },
+      isFetched: true,
+      isLoading: false,
+    });
+
+    render(<AssetExplorer projectSlug="demo" version={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("image-gallery-view")).toHaveAttribute(
+        "data-path",
+        ASTRO_CONTENT_MEDIA_PATH,
+      );
+    });
+
+    const file = new File(["demo"], "logo.png", { type: "image/png" });
+    const files = createFileList([file]);
+    const dataTransfer = {
+      types: ["Files"],
+      files,
+    };
+
+    fireEvent.dragOver(screen.getByTestId("image-gallery-view"), {
+      dataTransfer,
+    });
+    fireEvent.drop(screen.getByTestId("image-gallery-view"), {
+      dataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      `path=${encodeURIComponent(ASTRO_CONTENT_MEDIA_PATH)}`,
     );
   });
 

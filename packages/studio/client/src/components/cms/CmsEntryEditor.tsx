@@ -84,9 +84,9 @@ export function CmsEntryEditor({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
+      <div className="flex flex-col gap-3 border-b px-4 py-3 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-sm font-semibold">
               {getEntryTitle(selectedEntry, selectedModel, defaultLocale)}
             </h3>
@@ -96,7 +96,7 @@ export function CmsEntryEditor({
             {selectedEntry.key} · {selectedEntry.relativePath}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <Button
             variant="outline"
             size="sm"
@@ -145,7 +145,7 @@ export function CmsEntryEditor({
         </div>
       </div>
       <ScrollArea className="flex-1">
-        <div className="space-y-5 px-5 py-5">
+        <div className="space-y-5 px-4 py-5 sm:px-5">
           {loadingSidecars ? (
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />

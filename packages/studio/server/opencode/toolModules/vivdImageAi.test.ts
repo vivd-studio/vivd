@@ -132,7 +132,7 @@ describe("vivdImageAiToolDefinition", () => {
     expect(createImageGenerationMock).not.toHaveBeenCalled();
   });
 
-  it("defaults create outputs to public/images for Astro workspaces", async () => {
+  it("defaults create outputs to src/content/media for Astro workspaces", async () => {
     isConnectedModeMock.mockReturnValue(false);
     createImageGenerationMock.mockResolvedValue({
       data: { id: "gen_astro_1" },
@@ -156,7 +156,7 @@ describe("vivdImageAiToolDefinition", () => {
 
       const result = JSON.parse(raw);
       expect(result.ok).toBe(true);
-      expect(result.output.path.startsWith("public/images/")).toBe(true);
+      expect(result.output.path.startsWith("src/content/media/")).toBe(true);
       expect(fs.existsSync(path.join(workspaceDir, result.output.path))).toBe(true);
     } finally {
       fs.rmSync(workspaceDir, { recursive: true, force: true });

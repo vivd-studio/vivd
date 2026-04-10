@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import type { AssetItem, ViewMode, FileTreeNode } from "./types";
 import {
+  ASTRO_CONTENT_MEDIA_PATH,
   buildImageUrl,
   isVivdInternalAssetPath,
   pickInitialAssetExplorerPath,
@@ -114,6 +115,10 @@ export function AssetExplorer({
   );
 
   // Check both paths in parallel for initial detection
+  const previewInfoQuery = trpc.project.getPreviewInfo.useQuery(
+    { slug: projectSlug, version },
+    { enabled: !initialPathDetected, staleTime: 0 },
+  );
   const publicImagesCheck = trpc.assets.listAssets.useQuery(
     { slug: projectSlug, version, relativePath: "public/images" },
     { enabled: !initialPathDetected, staleTime: 0 },
@@ -126,39 +131,43 @@ export function AssetExplorer({
     { slug: projectSlug, version, relativePath: STUDIO_UPLOADS_PATH },
     { enabled: !initialPathDetected, staleTime: 0 },
   );
+  const isAstroProject = previewInfoQuery.data?.mode === "devserver";
+  const uploadsHasItems = !!uploadsCheck.data?.items?.length;
+  const publicImagesHasItems = !!publicImagesCheck.data?.items?.length;
+  const imagesHasItems = !!imagesCheck.data?.items?.length;
+  const fallbackGalleryPath = pickInitialAssetExplorerPath({
+    isAstroProject,
+    uploadsHasItems,
+    publicImagesHasItems,
+    imagesHasItems,
+  });
 
   // Detect initial path
   useEffect(() => {
     if (initialPathDetected) return;
 
-    // Wait for both queries to complete
+    if (!previewInfoQuery.isFetched) {
+      return;
+    }
+
     if (
-      !publicImagesCheck.isFetched ||
-      !imagesCheck.isFetched ||
-      !uploadsCheck.isFetched
+      !isAstroProject &&
+      (!publicImagesCheck.isFetched ||
+        !imagesCheck.isFetched ||
+        !uploadsCheck.isFetched)
     ) {
       return;
     }
 
-    const uploadsHasItems = !!uploadsCheck.data?.items?.length;
-    const publicHasItems = !!publicImagesCheck.data?.items?.length;
-    const imagesHasItems = !!imagesCheck.data?.items?.length;
-
-    setCurrentPath(
-      pickInitialAssetExplorerPath({
-        uploadsHasItems,
-        publicImagesHasItems: publicHasItems,
-        imagesHasItems,
-      }),
-    );
+    setCurrentPath(fallbackGalleryPath);
     setInitialPathDetected(true);
   }, [
+    previewInfoQuery.isFetched,
+    isAstroProject,
     publicImagesCheck.isFetched,
-    publicImagesCheck.data,
     imagesCheck.isFetched,
-    imagesCheck.data,
     uploadsCheck.isFetched,
-    uploadsCheck.data,
+    fallbackGalleryPath,
     initialPathDetected,
   ]);
 
@@ -167,14 +176,14 @@ export function AssetExplorer({
     {
       slug: projectSlug,
       version,
-      relativePath: currentPath ?? "images",
+      relativePath: currentPath ?? fallbackGalleryPath,
     },
     { enabled: viewMode === "gallery" && currentPath !== null, staleTime: 0 },
   );
 
-  // Query for create image dialog - use detected path (public/images for Astro, images for HTML)
+  // Query for create image dialog - use the same detected gallery path as the main explorer.
   const allImagesQuery = trpc.assets.listAssets.useQuery(
-    { slug: projectSlug, version, relativePath: currentPath ?? "images" },
+    { slug: projectSlug, version, relativePath: currentPath ?? fallbackGalleryPath },
     { enabled: isCreateImageOpen && currentPath !== null, staleTime: 0 },
   );
 
@@ -311,16 +320,10 @@ export function AssetExplorer({
   const handleCreateImage = () => {
     if (!createImagePrompt.trim()) return;
 
-    const publicHasItems = !!publicImagesCheck.data?.items?.length;
-    const imagesHasItems = !!imagesCheck.data?.items?.length;
     const targetPath =
       currentPath && !isVivdInternalAssetPath(currentPath)
         ? currentPath
-        : pickInitialAssetExplorerPath({
-            uploadsHasItems: false,
-            publicImagesHasItems: publicHasItems,
-            imagesHasItems,
-          });
+        : fallbackGalleryPath;
 
     createImageMutation.mutate({
       slug: projectSlug,
@@ -380,7 +383,8 @@ export function AssetExplorer({
         onBack={
           currentPath &&
           currentPath !== "images" &&
-          currentPath !== "public/images"
+          currentPath !== "public/images" &&
+          currentPath !== ASTRO_CONTENT_MEDIA_PATH
             ? () => {
                 const parts = currentPath.split("/");
                 parts.pop();
@@ -388,7 +392,9 @@ export function AssetExplorer({
               }
             : undefined
         }
-        onCreateFolder={() => handleCreateFolder(currentPath ?? "images")}
+        onCreateFolder={() =>
+          handleCreateFolder(currentPath ?? fallbackGalleryPath)
+        }
         onCreateImage={
           canUseAiImages ? () => setIsCreateImageOpen(true) : undefined
         }

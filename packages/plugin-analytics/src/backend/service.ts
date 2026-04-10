@@ -91,6 +91,13 @@ export interface AnalyticsSummaryPayload {
     events: number;
     share: number;
   }>;
+  countries: Array<{
+    countryCode: string;
+    pageviews: number;
+    uniqueVisitors: number;
+    uniqueSessions: number;
+    share: number;
+  }>;
   contactForm: {
     enabled: boolean;
     submissions: number;
@@ -143,6 +150,27 @@ export interface AnalyticsSummaryPayload {
       pageviews: number;
       submissions: number;
       submissionRatePct: number;
+    }>;
+  };
+  pathAnalysis: {
+    sessionsWithPageviews: number;
+    totalTransitions: number;
+    topEntryPages: Array<{
+      path: string;
+      sessions: number;
+      share: number;
+    }>;
+    topExitPages: Array<{
+      path: string;
+      sessions: number;
+      share: number;
+    }>;
+    topTransitions: Array<{
+      fromPath: string;
+      toPath: string;
+      transitions: number;
+      uniqueSessions: number;
+      share: number;
     }>;
   };
 }
@@ -206,6 +234,11 @@ function buildComparisonMetric(
 function normalizeAttributionLabel(value: string | null, fallback: string): string {
   const normalized = (value || "").trim();
   return normalized || fallback;
+}
+
+function normalizeCountryCode(value: string | null | undefined): string {
+  const normalized = (value || "").trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(normalized) ? normalized : "unknown";
 }
 
 function normalizeAnalyticsConfig(configJson: unknown): AnalyticsPluginConfig {
@@ -416,6 +449,13 @@ class AnalyticsPluginService {
         },
       ],
     };
+    const emptyPathAnalysis = {
+      sessionsWithPageviews: 0,
+      totalTransitions: 0,
+      topEntryPages: [],
+      topExitPages: [],
+      topTransitions: [],
+    };
 
     if (!enabled || !existing) {
       return {
@@ -435,6 +475,7 @@ class AnalyticsPluginService {
         topPages: [],
         topReferrers: [],
         devices: [],
+        countries: [],
         contactForm: {
           enabled: contactFormEnabled,
           submissions: 0,
@@ -449,6 +490,7 @@ class AnalyticsPluginService {
           campaigns: [],
           sources: [],
         },
+        pathAnalysis: emptyPathAnalysis,
       };
     }
 
@@ -497,6 +539,7 @@ class AnalyticsPluginService {
       topPagesRows,
       topReferrerRows,
       deviceRows,
+      pageviewRows,
       contactTotalsRows,
       contactDailyRows,
       contactTopSourceRows,
@@ -564,6 +607,22 @@ class AnalyticsPluginService {
           .where(rangeWhere)
           .groupBy(sql`coalesce(${analyticsEvent.deviceType}, 'unknown')`)
           .orderBy(desc(sql<number>`count(*)`)),
+        db
+          .select({
+            id: analyticsEvent.id,
+            sessionId: analyticsEvent.sessionId,
+            visitorIdHash: analyticsEvent.visitorIdHash,
+            path: analyticsEvent.path,
+            countryCode: analyticsEvent.countryCode,
+            createdAt: analyticsEvent.createdAt,
+          })
+          .from(analyticsEvent)
+          .where(and(rangeWhere, eq(analyticsEvent.eventType, "pageview")))
+          .orderBy(
+            analyticsEvent.sessionId,
+            analyticsEvent.createdAt,
+            analyticsEvent.id,
+          ),
         db
           .select({
             submissions: sql<number>`count(*)`,
@@ -740,6 +799,178 @@ class AnalyticsPluginService {
         share: deviceTotal > 0 ? roundToTwoDecimals((events / deviceTotal) * 100) : 0,
       };
     });
+
+    const countryMap = new Map<
+      string,
+      {
+        countryCode: string;
+        pageviews: number;
+        visitorIds: Set<string>;
+        sessionIds: Set<string>;
+      }
+    >();
+    const entryPageCounts = new Map<string, number>();
+    const exitPageCounts = new Map<string, number>();
+    const transitionCounts = new Map<
+      string,
+      {
+        fromPath: string;
+        toPath: string;
+        transitions: number;
+        uniqueSessions: number;
+      }
+    >();
+    let sessionsWithPageviews = 0;
+    let totalTransitions = 0;
+    let currentSessionId: string | null = null;
+    let currentSessionPaths: string[] = [];
+
+    const finalizeSessionPaths = () => {
+      if (currentSessionPaths.length === 0) return;
+      const normalizedPaths: string[] = [];
+      for (const path of currentSessionPaths) {
+        const normalizedPath = path.trim() || "/";
+        if (normalizedPaths[normalizedPaths.length - 1] !== normalizedPath) {
+          normalizedPaths.push(normalizedPath);
+        }
+      }
+      currentSessionPaths = [];
+      if (normalizedPaths.length === 0) return;
+
+      sessionsWithPageviews += 1;
+      const entryPath = normalizedPaths[0]!;
+      const exitPath = normalizedPaths[normalizedPaths.length - 1]!;
+      entryPageCounts.set(entryPath, (entryPageCounts.get(entryPath) ?? 0) + 1);
+      exitPageCounts.set(exitPath, (exitPageCounts.get(exitPath) ?? 0) + 1);
+
+      const sessionTransitionKeys = new Set<string>();
+      for (let index = 1; index < normalizedPaths.length; index += 1) {
+        const fromPath = normalizedPaths[index - 1]!;
+        const toPath = normalizedPaths[index]!;
+        const key = `${fromPath}\u001f${toPath}`;
+        const existingTransition = transitionCounts.get(key);
+        if (existingTransition) {
+          existingTransition.transitions += 1;
+          if (!sessionTransitionKeys.has(key)) {
+            existingTransition.uniqueSessions += 1;
+          }
+        } else {
+          transitionCounts.set(key, {
+            fromPath,
+            toPath,
+            transitions: 1,
+            uniqueSessions: 1,
+          });
+        }
+        sessionTransitionKeys.add(key);
+        totalTransitions += 1;
+      }
+    };
+
+    for (const row of pageviewRows) {
+      const countryCode = normalizeCountryCode(row.countryCode);
+      const existingCountry = countryMap.get(countryCode);
+      if (existingCountry) {
+        existingCountry.pageviews += 1;
+        if (row.visitorIdHash) existingCountry.visitorIds.add(row.visitorIdHash);
+        if (row.sessionId) existingCountry.sessionIds.add(row.sessionId);
+      } else {
+        countryMap.set(countryCode, {
+          countryCode,
+          pageviews: 1,
+          visitorIds: row.visitorIdHash ? new Set([row.visitorIdHash]) : new Set(),
+          sessionIds: row.sessionId ? new Set([row.sessionId]) : new Set(),
+        });
+      }
+
+      const sessionId = (row.sessionId || "").trim();
+      if (!sessionId) continue;
+      if (currentSessionId !== sessionId) {
+        finalizeSessionPaths();
+        currentSessionId = sessionId;
+      }
+      currentSessionPaths.push(row.path);
+    }
+    finalizeSessionPaths();
+
+    const countries = Array.from(countryMap.values())
+      .sort((left, right) => {
+        if (right.pageviews !== left.pageviews) return right.pageviews - left.pageviews;
+        if (right.sessionIds.size !== left.sessionIds.size) {
+          return right.sessionIds.size - left.sessionIds.size;
+        }
+        return left.countryCode.localeCompare(right.countryCode);
+      })
+      .slice(0, 12)
+      .map((row) => ({
+        countryCode: row.countryCode,
+        pageviews: row.pageviews,
+        uniqueVisitors: row.visitorIds.size,
+        uniqueSessions: row.sessionIds.size,
+        share:
+          totals.pageviews > 0
+            ? roundToTwoDecimals((row.pageviews / totals.pageviews) * 100)
+            : 0,
+      }));
+
+    const topEntryPages = Array.from(entryPageCounts.entries())
+      .sort((left, right) => {
+        if (right[1] !== left[1]) return right[1] - left[1];
+        return left[0].localeCompare(right[0]);
+      })
+      .slice(0, 8)
+      .map(([path, sessions]) => ({
+        path,
+        sessions,
+        share:
+          sessionsWithPageviews > 0
+            ? roundToTwoDecimals((sessions / sessionsWithPageviews) * 100)
+            : 0,
+      }));
+
+    const topExitPages = Array.from(exitPageCounts.entries())
+      .sort((left, right) => {
+        if (right[1] !== left[1]) return right[1] - left[1];
+        return left[0].localeCompare(right[0]);
+      })
+      .slice(0, 8)
+      .map(([path, sessions]) => ({
+        path,
+        sessions,
+        share:
+          sessionsWithPageviews > 0
+            ? roundToTwoDecimals((sessions / sessionsWithPageviews) * 100)
+            : 0,
+      }));
+
+    const topTransitions = Array.from(transitionCounts.values())
+      .sort((left, right) => {
+        if (right.transitions !== left.transitions) {
+          return right.transitions - left.transitions;
+        }
+        if (right.uniqueSessions !== left.uniqueSessions) {
+          return right.uniqueSessions - left.uniqueSessions;
+        }
+        if (left.fromPath !== right.fromPath) {
+          return left.fromPath.localeCompare(right.fromPath);
+        }
+        return left.toPath.localeCompare(right.toPath);
+      })
+      .slice(0, 12)
+      .map((row) => ({
+        ...row,
+        share:
+          totalTransitions > 0
+            ? roundToTwoDecimals((row.transitions / totalTransitions) * 100)
+            : 0,
+      }));
+    const pathAnalysis = {
+      sessionsWithPageviews,
+      totalTransitions,
+      topEntryPages,
+      topExitPages,
+      topTransitions,
+    };
 
     const contactTotalsRow = contactTotalsRows[0] ?? {
       submissions: 0,
@@ -960,6 +1191,7 @@ class AnalyticsPluginService {
       topPages,
       topReferrers,
       devices,
+      countries,
       contactForm: {
         enabled: contactFormEnabled,
         submissions: contactSubmissions,
@@ -971,6 +1203,7 @@ class AnalyticsPluginService {
       comparison,
       funnel,
       attribution,
+      pathAnalysis,
     };
   }
 

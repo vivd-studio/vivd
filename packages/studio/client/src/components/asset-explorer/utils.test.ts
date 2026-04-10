@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { File, FileCode, FileText, Image as ImageIcon } from "lucide-react";
 import {
+  ASTRO_CONTENT_MEDIA_PATH,
   buildAssetFileUrl,
   buildImageUrl,
   buildProjectFileUrl,
@@ -78,9 +79,12 @@ describe("asset explorer path helpers", () => {
     expect(isVivdInternalAssetPath("images/logo.png")).toBe(false);
   });
 
-  it("only allows public assets to be dragged into the preview", () => {
+  it("allows preview dragging for non-internal asset paths", () => {
     expect(canDragAssetToPreview(".vivd/uploads/logo.png")).toBe(false);
     expect(canDragAssetToPreview("public/images/logo.png")).toBe(true);
+    expect(canDragAssetToPreview("src/content/media/shared/logo.png")).toBe(
+      true,
+    );
   });
 
   it("builds raw asset URLs for image and document viewers", () => {
@@ -110,6 +114,7 @@ describe("asset explorer path helpers", () => {
   it("keeps startup focused on public/project image folders instead of hidden uploads", () => {
     expect(
       pickInitialAssetExplorerPath({
+        isAstroProject: false,
         uploadsHasItems: true,
         publicImagesHasItems: true,
         imagesHasItems: true,
@@ -118,10 +123,22 @@ describe("asset explorer path helpers", () => {
 
     expect(
       pickInitialAssetExplorerPath({
+        isAstroProject: false,
         uploadsHasItems: true,
         publicImagesHasItems: false,
         imagesHasItems: true,
       })
     ).toBe("images");
+  });
+
+  it("pins Astro projects to the canonical content media root", () => {
+    expect(
+      pickInitialAssetExplorerPath({
+        isAstroProject: true,
+        uploadsHasItems: false,
+        publicImagesHasItems: true,
+        imagesHasItems: true,
+      })
+    ).toBe(ASTRO_CONTENT_MEDIA_PATH);
   });
 });

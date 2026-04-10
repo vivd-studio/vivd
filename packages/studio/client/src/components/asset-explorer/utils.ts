@@ -9,6 +9,7 @@ import type { AssetItem, FileTreeNode } from "./types";
 import { getVivdStudioToken, withVivdStudioTokenQuery } from "@/lib/studioAuth";
 
 export const STUDIO_UPLOADS_PATH = ".vivd/uploads";
+export const ASTRO_CONTENT_MEDIA_PATH = "src/content/media";
 export const FILE_TREE_INDENT_STEP_PX = 16;
 export const FILE_TREE_BASE_PADDING_PX = 12;
 export const FILE_TREE_GRAYED_FOLDER_NAMES = [
@@ -201,10 +202,15 @@ export function canDragAssetToPreview(assetPath: string): boolean {
 }
 
 export function pickInitialAssetExplorerPath(options: {
+  isAstroProject: boolean;
   uploadsHasItems: boolean;
   publicImagesHasItems: boolean;
   imagesHasItems: boolean;
 }): string {
+  if (options.isAstroProject) {
+    return ASTRO_CONTENT_MEDIA_PATH;
+  }
+
   if (options.publicImagesHasItems || !options.imagesHasItems) {
     return "public/images";
   }

@@ -1508,6 +1508,257 @@ export declare function listAssets(modelKey?: string): any[];
 export declare function resolveCmsAsset(assetRef: unknown): any | null;
 `;
 
+const GENERATED_CMS_HELPERS_SOURCE = `import {
+  getCmsCollection as getRuntimeCmsCollection,
+  getCmsEntry as getRuntimeCmsEntry,
+  listAssets as getRuntimeAssets,
+  resolveCmsAsset as resolveRuntimeCmsAsset,
+} from "../../../.vivd/content/runtime.mjs";
+
+export const VIVD_MEDIA_URL_BASE = "/media";
+
+function normalizeMediaInputPath(value: string): string {
+  return String(value || "")
+    .replace(/\\\\/g, "/")
+    .replace(/^\\/+/, "")
+    .replace(/^src\\/content\\/media\\/+/, "")
+    .replace(/^media\\/+/, "");
+}
+
+function normalizeAssetRecord(asset: any): any | null {
+  if (!asset || typeof asset !== "object") return null;
+
+  const normalizedPath =
+    typeof asset.artifactPath === "string"
+      ? normalizeMediaInputPath(asset.artifactPath)
+      : typeof asset.relativePath === "string"
+        ? normalizeMediaInputPath(asset.relativePath)
+        : typeof asset.path === "string"
+          ? normalizeMediaInputPath(asset.path)
+          : "";
+
+  return {
+    ...asset,
+    path: normalizedPath,
+    url: toMediaUrl(normalizedPath),
+  };
+}
+
+export function toMediaUrl(value: string): string {
+  const normalized = normalizeMediaInputPath(value);
+  return normalized ? VIVD_MEDIA_URL_BASE + "/" + normalized : VIVD_MEDIA_URL_BASE;
+}
+
+export function getCmsCollection(
+  modelKey: string,
+  options?: { includeInactive?: boolean },
+): any[] {
+  return getRuntimeCmsCollection(modelKey, options);
+}
+
+export function getCmsEntry(
+  modelKey: string,
+  entryKey: string,
+  options?: { includeInactive?: boolean },
+): any | null {
+  return getRuntimeCmsEntry(modelKey, entryKey, options);
+}
+
+export function listAssets(modelKey?: string): any[] {
+  return getRuntimeAssets(modelKey)
+    .map((asset: any) => normalizeAssetRecord(asset))
+    .filter(Boolean);
+}
+
+export function resolveCmsAsset(assetRef: unknown): any | null {
+  const resolved = resolveRuntimeCmsAsset(assetRef);
+  if (resolved) {
+    return normalizeAssetRecord(resolved);
+  }
+
+  if (typeof assetRef === "string") {
+    const path = normalizeMediaInputPath(assetRef);
+    return {
+      path,
+      url: toMediaUrl(path),
+    };
+  }
+
+  if (
+    assetRef &&
+    typeof assetRef === "object" &&
+    "path" in assetRef &&
+    typeof (assetRef as { path?: unknown }).path === "string"
+  ) {
+    const pathValue = (assetRef as { path: string }).path;
+    return {
+      ...assetRef,
+      path: normalizeMediaInputPath(pathValue),
+      url: toMediaUrl(pathValue),
+    };
+  }
+
+  return null;
+}
+`;
+
+const ASTRO_MEDIA_ROUTE_SOURCE = `import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
+const SOURCE_MEDIA_ROOT = path.join(PROJECT_ROOT, "src", "content", "media");
+const ARTIFACT_MEDIA_ROOT = path.join(PROJECT_ROOT, ".vivd", "content", "media");
+
+export const prerender = true;
+
+function normalizeRequestPath(value) {
+  return String(value || "")
+    .replace(/\\\\/g, "/")
+    .replace(/^\\/+/, "")
+    .replace(/^media\\/+/, "");
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeJoin(rootDir, relativePath) {
+  const resolvedRoot = path.resolve(rootDir);
+  const resolvedPath = path.resolve(resolvedRoot, relativePath);
+  if (
+    resolvedPath !== resolvedRoot &&
+    !resolvedPath.startsWith(resolvedRoot + path.sep)
+  ) {
+    return null;
+  }
+  return resolvedPath;
+}
+
+async function listFiles(rootDir, prefix = "") {
+  const entries = await fs.readdir(rootDir, { withFileTypes: true });
+  const results = [];
+
+  for (const entry of entries) {
+    const relativePath = prefix ? prefix + "/" + entry.name : entry.name;
+    const absolutePath = path.join(rootDir, entry.name);
+
+    if (entry.isDirectory()) {
+      results.push(...(await listFiles(absolutePath, relativePath)));
+      continue;
+    }
+
+    if (entry.isFile()) {
+      results.push(relativePath);
+    }
+  }
+
+  return results;
+}
+
+function getMimeType(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  switch (extension) {
+    case ".avif":
+      return "image/avif";
+    case ".gif":
+      return "image/gif";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".json":
+      return "application/json";
+    case ".pdf":
+      return "application/pdf";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".txt":
+      return "text/plain; charset=utf-8";
+    case ".webp":
+      return "image/webp";
+    case ".xml":
+      return "application/xml";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+async function getMediaRoots() {
+  const roots = [];
+  if (await pathExists(SOURCE_MEDIA_ROOT)) {
+    roots.push(SOURCE_MEDIA_ROOT);
+  }
+  if (await pathExists(ARTIFACT_MEDIA_ROOT)) {
+    roots.push(ARTIFACT_MEDIA_ROOT);
+  }
+  return Array.from(new Set(roots));
+}
+
+export const getStaticPaths = async () => {
+  const roots = await getMediaRoots();
+  const seen = new Set<string>();
+
+  for (const rootDir of roots) {
+    for (const relativePath of await listFiles(rootDir)) {
+      seen.add(relativePath);
+    }
+  }
+
+  return Array.from(seen).map((relativePath) => ({
+    params: {
+      path: relativePath,
+    },
+  }));
+};
+
+export const GET = async ({ params }) => {
+  const requestedPath = normalizeRequestPath(
+    typeof params.path === "string" ? params.path : "",
+  );
+
+  if (!requestedPath) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  for (const rootDir of await getMediaRoots()) {
+    const filePath = safeJoin(rootDir, requestedPath);
+    if (!filePath) {
+      continue;
+    }
+
+    try {
+      const stats = await fs.stat(filePath);
+      if (!stats.isFile()) {
+        continue;
+      }
+
+      const body = await fs.readFile(filePath);
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": getMimeType(filePath),
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return new Response("Not found", { status: 404 });
+};
+`;
+
 function buildManifest(report: CmsValidationReport) {
   return {
     version: CMS_VERSION,
@@ -1522,6 +1773,76 @@ function buildManifest(report: CmsValidationReport) {
       entryCount: model.entries.length,
     })),
   };
+}
+
+async function readPackageJson(projectDir: string): Promise<Record<string, unknown> | null> {
+  const packageJsonPath = path.join(projectDir, "package.json");
+  if (!(await pathExists(packageJsonPath))) {
+    return null;
+  }
+
+  try {
+    const raw = await fs.readFile(packageJsonPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function isAstroProject(projectDir: string): Promise<boolean> {
+  for (const candidate of [
+    "astro.config.mjs",
+    "astro.config.js",
+    "astro.config.ts",
+    "astro.config.cjs",
+    "astro.config.mts",
+  ]) {
+    if (await pathExists(path.join(projectDir, candidate))) {
+      return true;
+    }
+  }
+
+  const packageJson = await readPackageJson(projectDir);
+  if (!packageJson) return false;
+
+  const dependencies = isRecord(packageJson.dependencies)
+    ? packageJson.dependencies
+    : null;
+  const devDependencies = isRecord(packageJson.devDependencies)
+    ? packageJson.devDependencies
+    : null;
+
+  return (
+    typeof dependencies?.astro === "string" ||
+    typeof devDependencies?.astro === "string"
+  );
+}
+
+async function writeFileIfMissing(filePath: string, content: string): Promise<void> {
+  if (await pathExists(filePath)) {
+    return;
+  }
+
+  await ensureDirectory(path.dirname(filePath));
+  await fs.writeFile(filePath, content, "utf8");
+}
+
+async function ensureAstroAdapterFiles(projectDir: string): Promise<void> {
+  if (!(await isAstroProject(projectDir))) {
+    return;
+  }
+
+  await ensureDirectory(path.join(projectDir, "src", "generated", "vivd"));
+  await fs.writeFile(
+    path.join(projectDir, "src", "generated", "vivd", "cms-helpers.generated.ts"),
+    GENERATED_CMS_HELPERS_SOURCE,
+    "utf8",
+  );
+  await writeFileIfMissing(
+    path.join(projectDir, "src", "pages", "media", "[...path].js"),
+    ASTRO_MEDIA_ROUTE_SOURCE,
+  );
 }
 
 export async function buildCmsArtifacts(projectDir: string): Promise<CmsBuildArtifactsResult> {
@@ -1578,6 +1899,8 @@ export async function buildCmsArtifacts(projectDir: string): Promise<CmsBuildArt
       "utf8",
     );
   }
+
+  await ensureAstroAdapterFiles(projectDir);
 
   return {
     paths: report.paths,

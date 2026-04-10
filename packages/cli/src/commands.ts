@@ -1,6 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { validateConnectedStudioBackendClientConfig } from "@vivd/shared/studio";
+import {
+  renderVivdCliRootHelp,
+  validateConnectedStudioBackendClientConfig,
+} from "@vivd/shared/studio";
 import { parseCliArgs, resolveHelpTopic, isHelpRequested, type CliFlags } from "./args.js";
 import { resolveCliRuntime } from "./backend.js";
 import {
@@ -245,11 +248,6 @@ const GENERAL_HELP: Record<string, string> = {
   ].join("\n"),
 };
 
-type HelpEntry = {
-  command: string;
-  description: string;
-};
-
 function jsonResult(data: unknown, human: string, exitCode?: number): CommandResult {
   return { data, human, exitCode };
 }
@@ -362,202 +360,10 @@ function isPreviewScreenshotCliEnabled(env: NodeJS.ProcessEnv = process.env): bo
   return parseBooleanEnv(env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED, false);
 }
 
-function formatHelpEntries(entries: HelpEntry[]): string[] {
-  const width = entries.reduce((max, entry) => Math.max(max, entry.command.length), 0);
-  return entries.map(
-    (entry) => `  ${entry.command.padEnd(width)}  ${entry.description}`,
-  );
-}
-
-function formatHelpSection(title: string, entries: HelpEntry[]): string[] {
-  return [title, ...formatHelpEntries(entries)];
-}
-
-function formatHelpListSection(title: string, lines: string[]): string[] {
-  return [title, ...lines.map((line) => `  ${line}`)];
-}
-
 function getRootHelpText(env: NodeJS.ProcessEnv = process.env): string {
-  const previewEntries: HelpEntry[] = [
-    {
-      command: "vivd preview status",
-      description: "Show runtime health, preview mode, browser URL, and dev server state",
-    },
-    {
-      command: "vivd preview logs [path]",
-      description: "Capture browser console output for a preview path such as / or /pricing",
-    },
-    {
-      command: "vivd preview help",
-      description: "Show preview-specific flags, filters, and screenshot guidance",
-    },
-  ];
-
-  if (isPreviewScreenshotCliEnabled(env)) {
-    previewEntries.splice(2, 0, {
-      command: "vivd preview screenshot [path]",
-      description: "Capture a preview screenshot (experimental; saved under .vivd/dropped-images/ by default)",
-    });
-  }
-
-  const pluginShortcutLines = Array.from(new Set(listCliPluginHelpSummaryLines()));
-
-  const lines = [
-    "Work with the connected Vivd project, preview runtime, plugins, and local CMS workspace.",
-    "",
-    "USAGE",
-    "  vivd <command> <subcommand> [flags]",
-    "",
-    ...formatHelpSection("CONNECTION & CONTEXT", [
-      {
-        command: "vivd doctor",
-        description: "Check backend connectivity, auth env, and the current Studio/project context",
-      },
-      {
-        command: "vivd whoami",
-        description: "Print the connected Studio, project slug, and project version",
-      },
-      {
-        command: "vivd project info",
-        description: "Show project metadata and currently enabled plugins",
-      },
-    ]),
-    "",
-    ...formatHelpSection("PREVIEW & DEBUGGING", previewEntries),
-    "",
-    ...formatHelpSection("PLUGINS", [
-      {
-        command: "vivd plugins catalog",
-        description: "List available and enabled plugins for the current project",
-      },
-      {
-        command: "vivd plugins info <pluginId>",
-        description: "Show plugin state, usage hints, and supported capabilities",
-      },
-      {
-        command: "vivd plugins config show <pluginId>",
-        description: "Print the current plugin config",
-      },
-      {
-        command: "vivd plugins config template <pluginId>",
-        description: "Print a starter JSON config payload",
-      },
-      {
-        command: "vivd plugins config apply <pluginId> --file config.json",
-        description: "Update a plugin config from JSON on disk or stdin",
-      },
-      {
-        command: "vivd plugins action <pluginId> <actionId> [args...]",
-        description: "Run a plugin action such as recipient verification",
-      },
-      {
-        command: "vivd plugins help",
-        description: "Show the generic plugin workflow plus available plugin aliases",
-      },
-    ]),
-  ];
-
-  if (pluginShortcutLines.length > 0) {
-    lines.push(
-      "",
-      ...formatHelpListSection("PLUGIN SHORTCUTS", [
-        "Prefer the generic `vivd plugins ...` grammar when possible; current first-party aliases include:",
-        ...pluginShortcutLines,
-      ]),
-    );
-  }
-
-  lines.push(
-    "",
-    ...formatHelpSection("LOCAL CMS", [
-      {
-        command: "vivd cms status",
-        description: "Inspect the local src/content/ workspace state",
-      },
-      {
-        command: "vivd cms validate",
-        description: "Validate local CMS files without a connected runtime",
-      },
-      {
-        command: "vivd cms scaffold init",
-        description: "Create the baseline local CMS structure",
-      },
-      {
-        command: "vivd cms scaffold model <key>",
-        description: "Create a starter schema/model file",
-      },
-      {
-        command: "vivd cms scaffold entry <model-key> <entry-key>",
-        description: "Create a starter content entry file",
-      },
-      {
-        command: "vivd cms build-artifacts",
-        description: "Regenerate derived artifacts under .vivd/content",
-      },
-      {
-        command: "vivd cms help",
-        description: "Show CMS-specific guidance and constraints",
-      },
-    ]),
-    "",
-    ...formatHelpSection("PUBLISH CHECKLIST", [
-      {
-        command: "vivd publish checklist show",
-        description: "Inspect the current checklist state for the targeted project version",
-      },
-      {
-        command: "vivd publish checklist update <item-id> --status <status>",
-        description: "Update one checklist item status or note",
-      },
-      {
-        command: "vivd publish checklist run",
-        description: "Start a full checklist pass; use only when the user explicitly asks",
-      },
-      {
-        command: "vivd publish help",
-        description: "Show checklist workflow details and allowed statuses",
-      },
-    ]),
-    "",
-    ...formatHelpSection("GLOBAL FLAGS", [
-      {
-        command: "--help",
-        description: "Show help for the current command",
-      },
-      {
-        command: "--json",
-        description: "Print machine-readable JSON instead of the human summary",
-      },
-      {
-        command: "--slug <project-slug>",
-        description: "Override VIVD_PROJECT_SLUG for project-scoped commands",
-      },
-      {
-        command: "--version <project-version>",
-        description: "Override VIVD_PROJECT_VERSION for project-scoped commands",
-      },
-    ]),
-    "",
-    ...formatHelpListSection("EXAMPLES", [
-      "$ vivd doctor",
-      "$ vivd project info",
-      "$ vivd preview status",
-      "$ vivd preview logs /pricing --level warn --contains hydrate",
-      "$ vivd plugins catalog",
-      "$ vivd plugins info analytics",
-      "$ vivd plugins action contact_form verify_recipient owner@example.com",
-      "$ vivd cms validate",
-      "$ vivd publish checklist show",
-    ]),
-    "",
-    ...formatHelpListSection("LEARN MORE", [
-      "Connected commands need MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN.",
-      "Project-scoped commands use VIVD_PROJECT_SLUG / VIVD_PROJECT_VERSION or --slug / --version.",
-      "Use `vivd <command> help` for command-specific flags, aliases, and examples.",
-    ]),
-  );
-
-  return lines.join("\n");
+  return renderVivdCliRootHelp({
+    previewScreenshotEnabled: isPreviewScreenshotCliEnabled(env),
+  });
 }
 
 function isPreviewScreenshotFormat(value: string | undefined): value is "png" | "jpeg" | "webp" {

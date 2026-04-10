@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { formatDocumentTitle } from "@/lib/brand";
 import { authClient } from "@/lib/auth-client";
@@ -78,6 +79,35 @@ function formatDeviceLabel(value: string): string {
     default:
       return "Unknown";
   }
+}
+
+let countryDisplayNames: Intl.DisplayNames | null | undefined;
+
+function getCountryDisplayNames(): Intl.DisplayNames | null {
+  if (countryDisplayNames !== undefined) return countryDisplayNames;
+  try {
+    countryDisplayNames =
+      typeof Intl.DisplayNames === "function"
+        ? new Intl.DisplayNames(undefined, { type: "region" })
+        : null;
+  } catch {
+    countryDisplayNames = null;
+  }
+  return countryDisplayNames;
+}
+
+function formatCountryName(value: string): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(normalized)) return "Unknown";
+  return getCountryDisplayNames()?.of(normalized) || normalized;
+}
+
+function formatCountryFlag(value: string): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(normalized)) return "??";
+  return String.fromCodePoint(
+    ...normalized.split("").map((char) => 127397 + char.charCodeAt(0)),
+  );
 }
 
 function MetricCard({
@@ -851,6 +881,70 @@ export default function AnalyticsProjectPage() {
 
                   <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                     <SectionCard
+                      title="Country breakdown"
+                      description="Where tracked pageviews and sessions originated."
+                    >
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/30">
+                            <tr className="text-left">
+                              <th className="w-12 px-3 py-2 font-medium">#</th>
+                              <th className="px-3 py-2 font-medium">Country</th>
+                              <th className="px-3 py-2 font-medium">Pageviews</th>
+                              <th className="px-3 py-2 font-medium">Visitors</th>
+                              <th className="px-3 py-2 font-medium">Sessions</th>
+                              <th className="px-3 py-2 font-medium">Share</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analyticsSummary.countries.length > 0 ? (
+                              analyticsSummary.countries.map((row, index) => (
+                                <tr key={row.countryCode} className="border-t">
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {index + 1}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span aria-hidden="true" className="text-base">
+                                        {formatCountryFlag(row.countryCode)}
+                                      </span>
+                                      <div className="min-w-0">
+                                        <div>{formatCountryName(row.countryCode)}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {row.countryCode === "unknown"
+                                            ? "Unknown source"
+                                            : row.countryCode}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.pageviews)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.uniqueVisitors)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.uniqueSessions)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatPercent(row.share)}
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr className="border-t">
+                                <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                  No country data in this range.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard
                       title="Device mix"
                       description="Share of tracked events by device type."
                     >
@@ -877,63 +971,214 @@ export default function AnalyticsProjectPage() {
                         </p>
                       )}
                     </SectionCard>
+                  </div>
 
-                    <SectionCard
-                      title="Lead sources"
-                      description={`Unique source hosts: ${formatInteger(analyticsSummary.contactForm.uniqueSourceHosts)}`}
-                    >
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">Total submissions</p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatInteger(analyticsSummary.contactForm.submissions)}
-                          </p>
-                        </div>
-                        <div className="rounded-md border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">Avg submissions / day</p>
-                          <p className="mt-1 text-lg font-semibold">
-                            {formatRatio(summaryInsights.avgDailySubmissions)}
-                          </p>
-                        </div>
+                  <SectionCard
+                    title="Visitor paths"
+                    description="How tracked sessions enter, move through, and leave the site."
+                  >
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="rounded-md border bg-muted/20 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          Sessions with pageviews
+                        </p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {formatInteger(analyticsSummary.pathAnalysis.sessionsWithPageviews)}
+                        </p>
                       </div>
+                      <div className="rounded-md border bg-muted/20 p-3">
+                        <p className="text-xs text-muted-foreground">Tracked transitions</p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {formatInteger(analyticsSummary.pathAnalysis.totalTransitions)}
+                        </p>
+                      </div>
+                      <div className="rounded-md border bg-muted/20 p-3">
+                        <p className="text-xs text-muted-foreground">Avg transitions / session</p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {formatRatio(
+                            analyticsSummary.pathAnalysis.sessionsWithPageviews > 0
+                              ? analyticsSummary.pathAnalysis.totalTransitions /
+                                  analyticsSummary.pathAnalysis.sessionsWithPageviews
+                              : 0,
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                       <div className="overflow-x-auto rounded-md border">
                         <table className="w-full text-sm">
                           <thead className="bg-muted/30">
                             <tr className="text-left">
                               <th className="w-12 px-3 py-2 font-medium">#</th>
-                              <th className="px-3 py-2 font-medium">Source host</th>
-                              <th className="px-3 py-2 font-medium">Submissions</th>
+                              <th className="px-3 py-2 font-medium">Top entry pages</th>
+                              <th className="px-3 py-2 font-medium">Sessions</th>
+                              <th className="px-3 py-2 font-medium">Share</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {analyticsSummary.contactForm.topSourceHosts.length > 0 ? (
-                              analyticsSummary.contactForm.topSourceHosts.map(
-                                (row, index) => (
-                                  <tr key={row.sourceHost} className="border-t">
-                                    <td className="px-3 py-2 text-muted-foreground">
-                                      {index + 1}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs break-all">
-                                      {row.sourceHost}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {formatInteger(row.submissions)}
-                                    </td>
-                                  </tr>
-                                ),
-                              )
+                            {analyticsSummary.pathAnalysis.topEntryPages.length > 0 ? (
+                              analyticsSummary.pathAnalysis.topEntryPages.map((row, index) => (
+                                <tr key={row.path} className="border-t">
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {index + 1}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs break-all">{row.path}</td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.sessions)}
+                                  </td>
+                                  <td className="px-3 py-2">{formatPercent(row.share)}</td>
+                                </tr>
+                              ))
                             ) : (
                               <tr className="border-t">
-                                <td className="px-3 py-3 text-muted-foreground" colSpan={3}>
-                                  No contact submissions in this range.
+                                <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  No entry-page data in this range.
                                 </td>
                               </tr>
                             )}
                           </tbody>
                         </table>
                       </div>
-                    </SectionCard>
-                  </div>
+
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/30">
+                            <tr className="text-left">
+                              <th className="w-12 px-3 py-2 font-medium">#</th>
+                              <th className="px-3 py-2 font-medium">Top exit pages</th>
+                              <th className="px-3 py-2 font-medium">Sessions</th>
+                              <th className="px-3 py-2 font-medium">Share</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analyticsSummary.pathAnalysis.topExitPages.length > 0 ? (
+                              analyticsSummary.pathAnalysis.topExitPages.map((row, index) => (
+                                <tr key={row.path} className="border-t">
+                                  <td className="px-3 py-2 text-muted-foreground">
+                                    {index + 1}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs break-all">{row.path}</td>
+                                  <td className="px-3 py-2">
+                                    {formatInteger(row.sessions)}
+                                  </td>
+                                  <td className="px-3 py-2">{formatPercent(row.share)}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr className="border-t">
+                                <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                                  No exit-page data in this range.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30">
+                          <tr className="text-left">
+                            <th className="w-12 px-3 py-2 font-medium">#</th>
+                            <th className="px-3 py-2 font-medium">From</th>
+                            <th className="px-3 py-2 font-medium">To</th>
+                            <th className="px-3 py-2 font-medium">Transitions</th>
+                            <th className="px-3 py-2 font-medium">Sessions</th>
+                            <th className="px-3 py-2 font-medium">Share</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analyticsSummary.pathAnalysis.topTransitions.length > 0 ? (
+                            analyticsSummary.pathAnalysis.topTransitions.map((row, index) => (
+                              <tr
+                                key={`${row.fromPath}-${row.toPath}`}
+                                className="border-t"
+                              >
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {index + 1}
+                                </td>
+                                <td className="px-3 py-2 text-xs break-all">
+                                  {row.fromPath}
+                                </td>
+                                <td className="px-3 py-2 text-xs break-all">
+                                  {row.toPath}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {formatInteger(row.transitions)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {formatInteger(row.uniqueSessions)}
+                                </td>
+                                <td className="px-3 py-2">{formatPercent(row.share)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="border-t">
+                              <td className="px-3 py-3 text-muted-foreground" colSpan={6}>
+                                No path-transition data in this range.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard
+                    title="Lead sources"
+                    description={`Unique source hosts: ${formatInteger(analyticsSummary.contactForm.uniqueSourceHosts)}`}
+                  >
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="rounded-md border bg-muted/20 p-3">
+                        <p className="text-xs text-muted-foreground">Total submissions</p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {formatInteger(analyticsSummary.contactForm.submissions)}
+                        </p>
+                      </div>
+                      <div className="rounded-md border bg-muted/20 p-3">
+                        <p className="text-xs text-muted-foreground">Avg submissions / day</p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {formatRatio(summaryInsights.avgDailySubmissions)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30">
+                          <tr className="text-left">
+                            <th className="w-12 px-3 py-2 font-medium">#</th>
+                            <th className="px-3 py-2 font-medium">Source host</th>
+                            <th className="px-3 py-2 font-medium">Submissions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analyticsSummary.contactForm.topSourceHosts.length > 0 ? (
+                            analyticsSummary.contactForm.topSourceHosts.map((row, index) => (
+                              <tr key={row.sourceHost} className="border-t">
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {index + 1}
+                                </td>
+                                <td className="px-3 py-2 text-xs break-all">
+                                  {row.sourceHost}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {formatInteger(row.submissions)}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="border-t">
+                              <td className="px-3 py-3 text-muted-foreground" colSpan={3}>
+                                No contact submissions in this range.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </SectionCard>
                 </div>
               ) : null}
             </>

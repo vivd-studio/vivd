@@ -32,24 +32,24 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("- contact_form");
     expect(result.instructions).toContain("- analytics");
     expect(result.instructions).toContain("Enabled plugins for this project");
-    expect(result.instructions).toContain("Vivd CLI and plugin-first features");
+    expect(result.instructions).toContain("Vivd CLI and platform features");
     expect(result.instructions).toContain(
-      "Use the `vivd` CLI as the default way to interact with the Vivd platform the website is running on.",
+      "The `vivd` CLI is the default interface for platform-specific actions, configuration, and inspection in this Studio runtime.",
     );
+    expect(result.instructions).toContain("Start CLI discovery with `vivd --help`.");
+    expect(result.instructions).toContain("USAGE");
+    expect(result.instructions).toContain("DISCOVER MORE");
     expect(result.instructions).toContain(
-      "Treat publish/checklist, plugin, and other platform-state requests as `vivd` CLI work first, not file-search work.",
+      "Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as `vivd` CLI work first, not file-search work.",
     );
     expect(result.instructions).toContain("vivd preview status");
     expect(result.instructions).toContain("vivd plugins catalog");
     expect(result.instructions).toContain("vivd plugins info <pluginId>");
     expect(result.instructions).toContain("vivd plugins config show <pluginId>");
-    expect(result.instructions).toContain("vivd plugins action <pluginId> <actionId> ...");
-    expect(result.instructions).toContain("vivd plugins contact ...");
-    expect(result.instructions).toContain("vivd publish checklist run");
-    expect(result.instructions).toContain("vivd publish checklist show");
-    expect(result.instructions).toContain("not a routine test command");
+    expect(result.instructions).toContain("vivd plugins action <pluginId> <actionId> [args...]");
+    expect(result.instructions).toContain("Use `vivd <command> help` to drill into the relevant area.");
     expect(result.instructions).toContain(
-      "Use `vivd publish checklist show` to review the saved checklist",
+      "If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.",
     );
     expect(result.instructions).toContain("Structured CMS content");
     expect(result.instructions).toContain("src/content/vivd.content.yaml");
@@ -79,7 +79,7 @@ describe("AgentInstructionsService", () => {
 
   it("uses custom template from system settings with token replacement", async () => {
     getSystemSettingValueMock.mockResolvedValue(
-      "Project={{project_name}} Plugins={{enabled_plugins}} Context={{source_context}}",
+      "Project={{project_name}} Plugins={{enabled_plugins}} Context={{source_context}} Help={{vivd_cli_root_help}}",
     );
 
     const result = await agentInstructionsService.render({
@@ -90,6 +90,7 @@ describe("AgentInstructionsService", () => {
 
     expect(result.templateSource).toBe("system_setting");
     expect(result.instructions).toContain("Project=Beta Plugins=None Context=");
+    expect(result.instructions).toContain("Help=Work with the connected Vivd project");
     expect(result.instructions).toContain("Tool Usage Contract");
     expect(result.instructions).toContain(
       "Never print pseudo tool-call text such as `[tool_call: ...]`",

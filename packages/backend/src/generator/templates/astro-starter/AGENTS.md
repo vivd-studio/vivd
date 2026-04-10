@@ -19,6 +19,7 @@ The Vivd YAML files under `src/content/` are the canonical source of truth.
 - For CMS images, PDFs, downloads, and other file references, use schema fields of type `asset` or `assetList` instead of plain `string`.
 - For image-like CMS fields, set `accepts` (for example `image/*`) so Studio can render image-aware picker and preview controls.
 - Prefer `src/content/media/` as the canonical home for Astro-managed site assets.
+- In rendered Astro page/component code, do not point markup at raw `src/content/media/...` paths. Use the stable `/media/...` runtime path or generated helper functions instead.
 - Use `public/` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, `robots.txt`, verification files, or explicit compatibility cases.
 - Do not hand-edit `.vivd/content/`; it is generated.
 - Run `vivd cms validate` after changing CMS schema or collection entries.

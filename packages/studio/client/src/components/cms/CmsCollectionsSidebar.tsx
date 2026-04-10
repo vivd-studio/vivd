@@ -43,9 +43,9 @@ export function CmsCollectionsSidebar({
   onSelectModel,
 }: CmsCollectionsSidebarProps) {
   return (
-    <div className="flex w-[260px] min-w-[260px] flex-col border-r">
-      <div className="flex items-center justify-between gap-2 px-4 py-3">
-        <div>
+    <div className="flex max-h-[240px] w-full flex-col border-b lg:max-h-none lg:w-[220px] lg:min-w-[220px] lg:border-b-0 lg:border-r xl:w-[240px] xl:min-w-[240px]">
+      <div className="flex items-start justify-between gap-2 px-3 py-3 sm:px-4">
+        <div className="min-w-0">
           <h3 className="text-sm font-semibold">Collections</h3>
           <p className="text-xs text-muted-foreground">Schema-authored content models</p>
         </div>
@@ -55,7 +55,7 @@ export function CmsCollectionsSidebar({
         </Button>
       </div>
       {creatingModel ? (
-        <div className="space-y-2 border-t px-4 py-3">
+        <div className="space-y-2 border-t px-3 py-3 sm:px-4">
           <Label htmlFor="new-model-key">Collection key</Label>
           <Input
             id="new-model-key"
@@ -84,19 +84,23 @@ export function CmsCollectionsSidebar({
                 type="button"
                 onClick={() => onSelectModel(model.key)}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors",
+                  "flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors",
                   active
                     ? "border-primary/40 bg-primary/5"
                     : "border-transparent hover:border-border hover:bg-muted/40",
                 )}
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{model.label}</p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-sm font-medium leading-5">{model.label}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
                     {model.entries.length} entries
                   </p>
                 </div>
-                {errorCount > 0 ? <Badge variant="destructive">{errorCount}</Badge> : null}
+                {errorCount > 0 ? (
+                  <Badge variant="destructive" className="px-1.5 py-0 text-[11px]">
+                    {errorCount}
+                  </Badge>
+                ) : null}
               </button>
             );
           })}

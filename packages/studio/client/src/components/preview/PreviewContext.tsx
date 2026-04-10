@@ -56,6 +56,7 @@ import {
 } from "@/lib/hostBridge";
 import type { AssetItem, FileTreeNode } from "../asset-explorer/types";
 import { sendPreviewLeaveBeacon } from "./previewLeave";
+import { toAstroRuntimeAssetPath } from "./assetPathMapping";
 
 // Version info from project data
 interface VersionInfo {
@@ -506,18 +507,6 @@ export function PreviewProvider({
     [projectSlug, selectedVersion],
   );
 
-  const toPublicUrlPath = useCallback(
-    (assetPath: string, baseline: string | null) => {
-      const withoutLeadingSlash = assetPath.replace(/^\/+/, "");
-      const withoutPublicPrefix = withoutLeadingSlash.replace(/^public\//, "");
-      const baselineHasLeadingSlash = (baseline ?? "").startsWith("/");
-      return baselineHasLeadingSlash
-        ? `/${withoutPublicPrefix}`
-        : withoutPublicPrefix;
-    },
-    [],
-  );
-
   const collectTextPatchesFromDocument = useCallback(
     (doc: Document): VivdPatch[] => {
       return collectVivdTextPatchesFromDocument(doc);
@@ -705,7 +694,7 @@ export function PreviewProvider({
           syncUnsavedChangesState();
           return;
         }
-        const newValue = toPublicUrlPath(assetPath, baseline);
+        const newValue = toAstroRuntimeAssetPath(assetPath, baseline);
         if (baseline === newValue) {
           pendingImagePatchesRef.current.delete(key);
         } else {

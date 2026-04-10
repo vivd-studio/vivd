@@ -48,6 +48,7 @@ describe("cms workspace utilities", () => {
     tempDirs.push(projectDir);
 
     await scaffoldCmsWorkspace(projectDir);
+    await fs.writeFile(path.join(projectDir, "astro.config.mjs"), "export default {};\n", "utf8");
     const paths = getCmsPaths(projectDir);
     await fs.writeFile(
       path.join(paths.modelsRoot, "products.yaml"),
@@ -120,6 +121,18 @@ heroImage:
     expect(await fs.readFile(path.join(result.outputDir, "runtime.mjs"), "utf8")).toContain(
       "getCmsCollection",
     );
+    expect(
+      await fs.readFile(
+        path.join(projectDir, "src", "generated", "vivd", "cms-helpers.generated.ts"),
+        "utf8",
+      ),
+    ).toContain('export const VIVD_MEDIA_URL_BASE = "/media"');
+    expect(
+      await fs.readFile(
+        path.join(projectDir, "src", "pages", "media", "[...path].js"),
+        "utf8",
+      ),
+    ).toContain('const SOURCE_MEDIA_ROOT = path.join(PROJECT_ROOT, "src", "content", "media")');
     expect(
       await fs.readFile(path.join(result.outputDir, "media", "products", "alpine-boot", "hero.jpg"), "utf8"),
     ).toBe("hero-bytes");

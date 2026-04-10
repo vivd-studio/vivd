@@ -5,6 +5,7 @@ import {
   ensureMandatoryToolChannelGuidance,
   formatAgentInstructionsPlugins,
   normalizeAgentInstructionsTemplate,
+  renderVivdCliRootHelp,
   renderDefaultVivdAgentInstructions,
   URL_SOURCE_CONTEXT,
 } from "@vivd/shared/studio";
@@ -29,6 +30,17 @@ export interface RenderAgentInstructionsResult {
 interface TemplateResult {
   template: string;
   source: "default" | "system_setting";
+}
+
+function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  return fallback;
 }
 
 class AgentInstructionsService {
@@ -65,6 +77,10 @@ class AgentInstructionsService {
             enabledPlugins: input.enabledPlugins,
             sourceContext: input.source === "url" ? URL_SOURCE_CONTEXT : "",
             platformSurfaceMode: "cli",
+            previewScreenshotCliEnabled: parseBooleanEnv(
+              process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
+              false,
+            ),
           })
         : ensureMandatoryToolChannelGuidance(
             normalizeAgentInstructionsTemplate(
@@ -72,6 +88,12 @@ class AgentInstructionsService {
                 project_name: input.projectName,
                 enabled_plugins: formatAgentInstructionsPlugins(input.enabledPlugins),
                 source_context: input.source === "url" ? URL_SOURCE_CONTEXT : "",
+                vivd_cli_root_help: renderVivdCliRootHelp({
+                  previewScreenshotEnabled: parseBooleanEnv(
+                    process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
+                    false,
+                  ),
+                }),
               }),
             ),
           );

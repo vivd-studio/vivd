@@ -45,11 +45,26 @@ function readEnabledPluginsFromEnv(): string[] {
     .filter(Boolean);
 }
 
+function parseBooleanEnv(value: string | undefined, fallback = false): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  return fallback;
+}
+
 function buildFallbackInstructions(projectSlug: string, connectedCliAvailable: boolean): string {
   return renderDefaultVivdAgentInstructions({
     projectName: projectSlug,
     enabledPlugins: readEnabledPluginsFromEnv(),
     platformSurfaceMode: connectedCliAvailable ? "cli" : "plugin-only",
+    previewScreenshotCliEnabled: parseBooleanEnv(
+      process.env.VIVD_CLI_PREVIEW_SCREENSHOT_ENABLED,
+      false,
+    ),
   });
 }
 

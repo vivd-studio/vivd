@@ -1,3 +1,5 @@
+import { renderVivdCliRootHelp } from "./cliHelp.js";
+
 export const URL_SOURCE_CONTEXT =
   "This website was created from an existing website. The `.vivd/` folder contains screenshots, website text, and image descriptions of the old website.";
 
@@ -8,6 +10,7 @@ export interface RenderDefaultVivdAgentInstructionsInput {
   enabledPlugins?: string[];
   sourceContext?: string;
   platformSurfaceMode?: VivdPlatformSurfaceMode;
+  previewScreenshotCliEnabled?: boolean;
 }
 
 export const MANDATORY_TOOL_CHANNEL_GUIDANCE = `## Tool Usage Contract
@@ -55,6 +58,7 @@ Your name is vivd. You work in vivd-studio and are responsible for building the 
    - For CMS images, PDFs, downloads, and other file references, use schema fields of type \`asset\` or \`assetList\` instead of plain \`string\` fields.
    - For image-like CMS fields, set \`accepts\` (for example \`image/*\`) so Studio can render image-aware picker and preview controls.
    - Do not hand-edit \`.vivd/content/\`; it is generated.
+   - In Astro page/component code, do not render raw \`src/content/media/...\` paths. Use generated/runtime helpers or the stable \`/media/...\` runtime path instead.
    - Run \`vivd cms validate\` after changing CMS schema or collection entries and treat validation failures as blocking until fixed.
 8. **AGENTS.md maintenance**:
    - Treat the project-root \`AGENTS.md\` file as living project memory for future agent sessions.
@@ -98,7 +102,17 @@ User messages may contain \`<vivd-internal ... />\` self-closing tags with metad
 
 {mandatory_tool_channel_guidance}`;
 
-function buildPlatformSurfaceSection(mode: VivdPlatformSurfaceMode): string {
+function indentBlock(input: string, indent: string): string {
+  return input
+    .split("\n")
+    .map((line) => `${indent}${line}`)
+    .join("\n");
+}
+
+function buildPlatformSurfaceSection(
+  mode: VivdPlatformSurfaceMode,
+  options?: { previewScreenshotCliEnabled?: boolean },
+): string {
   if (mode === "plugin-only") {
     return `4. **Plugin-first features**:
    - Vivd supports first-party plugins such as Contact Form and Analytics.
@@ -106,21 +120,19 @@ function buildPlatformSurfaceSection(mode: VivdPlatformSurfaceMode): string {
    - If the needed plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`;
   }
 
-  return `4. **Vivd CLI and plugin-first features**:
-   - The \`vivd\` CLI is available in this Studio runtime and is the preferred way to inspect project/plugin state.
-   - Use the \`vivd\` CLI as the default way to interact with the Vivd platform the website is running on.
-   - Treat publish/checklist, plugin, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
-   - Use \`vivd whoami\` or \`vivd project info\` when you need runtime/project context before making changes.
-   - When debugging preview/runtime issues, use \`vivd preview status\` first to see whether the Studio runtime is reachable and whether the dev server is running.
-   - Vivd supports first-party plugins for some functionality, including Contact Form and Analytics.
-   - Before building those features manually, inspect the available plugin surface with \`vivd plugins catalog\`.
-   - Discover plugin-specific capabilities with \`vivd plugins info <pluginId>\`.
-   - For plugin configuration, prefer the generic commands \`vivd plugins config show <pluginId>\`, \`vivd plugins config template <pluginId>\`, and \`vivd plugins config apply <pluginId> --file ...\`.
-   - For plugin-specific operations beyond config, use \`vivd plugins action <pluginId> <actionId> ...\`.
-   - Current first-party compatibility aliases like \`vivd plugins contact ...\` and \`vivd plugins analytics info\` still work, but treat the generic plugin commands as the main discovery surface.
-   - Use \`vivd publish checklist show\` to review the saved checklist and \`vivd publish checklist update <item-id> --status <status> [--note ...]\` to continue or record checklist work item by item.
-   - Treat \`vivd publish checklist run\` as an explicit full checklist pass, not a routine test command; use it only when the user explicitly asks to run it.
-   - If a matching plugin is enabled, follow the CLI output instructions/snippets.
+  const cliRootHelp = renderVivdCliRootHelp({
+    previewScreenshotEnabled: options?.previewScreenshotCliEnabled,
+  });
+
+  return `4. **Vivd CLI and platform features**:
+   - The \`vivd\` CLI is the default interface for platform-specific actions, configuration, and inspection in this Studio runtime.
+   - Start CLI discovery with \`vivd --help\`. Current top-level help:
+     \`\`\`text
+${indentBlock(cliRootHelp, "     ")}
+     \`\`\`
+   - Use \`vivd <command> help\` to drill into the relevant area.
+   - Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as \`vivd\` CLI work first, not file-search work.
+   - If a matching first-party plugin is enabled, prefer using it through the CLI instead of building a custom replacement.
    - If the plugin is not enabled, recommend asking Vivd support to activate it instead of building a custom replacement by default.`;
 }
 
@@ -169,6 +181,9 @@ export function renderDefaultVivdAgentInstructions(
       source_context: input.sourceContext?.trim() || "",
       platform_surface_section: buildPlatformSurfaceSection(
         input.platformSurfaceMode ?? "cli",
+        {
+          previewScreenshotCliEnabled: input.previewScreenshotCliEnabled,
+        },
       ),
       mandatory_tool_channel_guidance: MANDATORY_TOOL_CHANNEL_GUIDANCE,
     }),

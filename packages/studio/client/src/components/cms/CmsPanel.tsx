@@ -536,9 +536,9 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
 
   return (
     <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background">
-      <div className="flex items-center justify-between gap-4 border-b px-5 py-4">
+      <div className="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold">Content</h2>
             {report.initialized ? (
               report.valid ? (
@@ -560,7 +560,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             Schema-rendered collection editing for <code>src/content/</code>.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           {report.initialized ? (
             <>
               <Button variant="outline" size="sm" onClick={openExplorer}>
@@ -664,7 +664,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <CmsCollectionsSidebar
             models={report.models}
             reportErrors={report.errors}

@@ -58,4 +58,35 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain("User messages may contain `<vivd-internal ... />`");
     expect(prompt).toContain("Prefer plugin-backed solutions over custom implementations");
   });
+
+  it("falls back to shared CLI instructions when connected mode is available but backend fetch fails", async () => {
+    isConnectedModeMock.mockReturnValue(true);
+    getConnectedBackendAuthConfigMock.mockReturnValue({
+      backendUrl: "https://backend.example.test",
+      studioId: "studio_1",
+      studioAccessToken: "token_1",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("network failed")) as unknown as typeof fetch,
+    );
+
+    try {
+      const prompt = await agentInstructionsService.getSystemPromptForSessionStart({
+        projectSlug: "demo-project",
+        projectVersion: 1,
+      });
+
+      expect(prompt).toContain("Start CLI discovery with `vivd --help`.");
+      expect(prompt).toContain("USAGE");
+      expect(prompt).toContain("DISCOVER MORE");
+      expect(prompt).toContain("vivd plugins catalog");
+      expect(prompt).toContain("vivd publish checklist show");
+      expect(prompt).toContain(
+        "Treat preview/runtime, plugin, publish/checklist, and other platform-state requests as `vivd` CLI work first, not file-search work.",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

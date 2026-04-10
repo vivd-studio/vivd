@@ -154,6 +154,15 @@ function makeSummary() {
         share: 70,
       },
     ],
+    countries: [
+      {
+        countryCode: "DE",
+        pageviews: 222,
+        uniqueVisitors: 180,
+        uniqueSessions: 190,
+        share: 33.3,
+      },
+    ],
     contactForm: {
       enabled: true,
       submissions: 10,
@@ -238,6 +247,33 @@ function makeSummary() {
         },
       ],
     },
+    pathAnalysis: {
+      sessionsWithPageviews: 120,
+      totalTransitions: 140,
+      topEntryPages: [
+        {
+          path: "/",
+          sessions: 80,
+          share: 66.7,
+        },
+      ],
+      topExitPages: [
+        {
+          path: "/contact",
+          sessions: 45,
+          share: 37.5,
+        },
+      ],
+      topTransitions: [
+        {
+          fromPath: "/",
+          toPath: "/pricing",
+          transitions: 22,
+          uniqueSessions: 20,
+          share: 15.7,
+        },
+      ],
+    },
   };
 }
 
@@ -304,7 +340,7 @@ describe("ProjectAnalytics", () => {
     });
   });
 
-  it("renders analytics summary cards and attribution tables", () => {
+  it("renders analytics summary cards, geography, and path analysis", () => {
     render(
       <MemoryRouter>
         <ProjectAnalytics />
@@ -318,6 +354,8 @@ describe("ProjectAnalytics", () => {
     expect(screen.getAllByText("Contact submissions").length).toBeGreaterThan(0);
     expect(screen.getByText("Top pages")).toBeInTheDocument();
     expect(screen.getByText("UTM campaign attribution")).toBeInTheDocument();
+    expect(screen.getByText("Country breakdown")).toBeInTheDocument();
+    expect(screen.getByText("Visitor paths")).toBeInTheDocument();
 
     const campaignsSection = screen.getByText("UTM campaign attribution").closest("section");
     expect(campaignsSection).not.toBeNull();
@@ -329,5 +367,17 @@ describe("ProjectAnalytics", () => {
     expect(sourcesSection).not.toBeNull();
     const sources = within(sourcesSection!);
     expect(sources.getAllByText("google")[0]).toBeInTheDocument();
+
+    const countriesSection = screen.getByText("Country breakdown").closest("section");
+    expect(countriesSection).not.toBeNull();
+    const countries = within(countriesSection!);
+    expect(countries.getByText("DE")).toBeInTheDocument();
+    expect(countries.getByText("222")).toBeInTheDocument();
+
+    const pathsSection = screen.getByText("Visitor paths").closest("section");
+    expect(pathsSection).not.toBeNull();
+    const paths = within(pathsSection!);
+    expect(paths.getByText("/pricing")).toBeInTheDocument();
+    expect(paths.getByText("/contact")).toBeInTheDocument();
   });
 });
