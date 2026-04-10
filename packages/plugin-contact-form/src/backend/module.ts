@@ -58,6 +58,20 @@ export const contactFormPluginDefinition = {
         ],
       },
       {
+        actionId: "mark_recipient_verified",
+        title: "Mark recipient verified",
+        description:
+          "Manually mark a contact-form recipient email as verified and add it to the project config.",
+        arguments: [
+          {
+            name: "email",
+            type: "email",
+            required: true,
+            description: "Recipient email address to mark as verified.",
+          },
+        ],
+      },
+      {
         actionId: "resend_recipient",
         title: "Resend recipient verification",
         description:
@@ -106,6 +120,7 @@ export interface ContactRecipientVerificationRequestResult {
   status:
     | "already_verified"
     | "added_verified"
+    | "marked_verified"
     | "verification_sent"
     | "verification_pending";
   cooldownRemainingSeconds: number;
@@ -154,6 +169,12 @@ export interface ContactFormPluginBackendRuntime {
     requestedByUserId?: string | null;
     requestHost?: string | null;
   }): Promise<ContactRecipientVerificationRequestResult>;
+  markRecipientVerified(options: {
+    organizationId: string;
+    projectSlug: string;
+    email: string;
+    requestedByUserId?: string | null;
+  }): Promise<ContactRecipientVerificationRequestResult>;
   mapPublicError?(
     context: PluginPublicErrorContext,
   ): PluginPublicErrorPayload | null;
@@ -184,6 +205,7 @@ async function runContactFormAction(
   options: PluginActionContext,
 ): Promise<ProjectPluginActionPayload<"contact_form">> {
   if (
+    options.actionId !== "mark_recipient_verified" &&
     options.actionId !== "verify_recipient" &&
     options.actionId !== "resend_recipient"
   ) {
@@ -197,19 +219,29 @@ async function runContactFormAction(
     );
   }
 
-  const result = await runtime.requestRecipientVerification({
-    organizationId: options.organizationId,
-    projectSlug: options.projectSlug,
-    email,
-    requestedByUserId: options.requestedByUserId,
-    requestHost: options.requestHost,
-  });
+  const result =
+    options.actionId === "mark_recipient_verified"
+      ? await runtime.markRecipientVerified({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          email,
+          requestedByUserId: options.requestedByUserId,
+        })
+      : await runtime.requestRecipientVerification({
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          email,
+          requestedByUserId: options.requestedByUserId,
+          requestHost: options.requestHost,
+        });
 
   return {
     pluginId: "contact_form",
     actionId: options.actionId,
     summary:
-      options.actionId === "resend_recipient"
+      options.actionId === "mark_recipient_verified"
+        ? "Marked recipient email as verified."
+        : options.actionId === "resend_recipient"
         ? "Resent recipient verification request."
         : "Requested recipient verification.",
     result,

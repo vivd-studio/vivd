@@ -6,7 +6,7 @@
 
 - `v1.1.92` is still the latest known state where the relevant tests reliably observed `suspended`.
 - We are treating `v1.1.92` as the accepted known-good control unless later evidence forces a re-run.
-- Current production behavior is better than the local test picture: most recent reconciled machines appear to be ending in `suspended`, with a smaller set of stopped outliers.
+- As of April 9, 2026, the current `1.1.100` picture is worse than the earlier `1.1.99` screenshot: the visible `vivd-studio-prod` machines are now `stopped` or `started`, and at least one active `1.1.100` machine (`e2869e7dcd29d8`) has already gone through a real `stop -> start` cycle after rollout.
 - The current local test shape may still be pessimistic relative to production, especially around machine size, timing, and machine history.
 - We should avoid keeping broad suspend-specific hardening if production evidence and focused experiments show that part of it is unnecessary.
 
@@ -76,6 +76,11 @@
 - On `vivd-studio-dev`, a direct machine-level control still degraded to `stop` even after the runtime had fully reached `/health -> {"status":"ok"}`, `POST /vivd-studio/api/cleanup/preview-leave` returned `200`, `/vivd-studio/api/cleanup/status` reported `state:"idle"` with every tracked subsystem (`bucket_sync`, `workspace_state_reporter`, `usage_reporter`, `agent_lease_reporter`, `opencode_runtime`) at `idle`, and the raw Fly `POST /suspend` endpoint itself returned `200 {"ok":true}`.
 - The same direct control showed the remaining runtime process set was already minimal: the guest only had the main `entrypoint.sh`, the main `node dist/index.js`, `hallpass`, and the entrypoint loop's `sleep 1`, with no leftover OpenCode server child and no pending sync trigger file. The pause file `/tmp/vivd-sync.pause` was present, which means the current cleanup status is truthful about the requested pause but still does not explain the Fly stop fallback.
 - A production-shaped warm-wake smoke pinned to the actual prod image `ghcr.io/vivd-studio/vivd-studio:1.1.99` also fell back to `stop` on `vivd-studio-dev`, with the same clean `SIGINT -> SIGTERM -> exit 0` log pattern as the current dev tag. That means the harsher local/test picture is not unique to the current dev image; the `vivd-studio-dev` app or the fresh standalone test-project path is harsher than current production.
+- The warm-wake smoke itself had two real harness bugs and they are now fixed: path-prefixed `MAIN_BACKEND_URL` values are preserved when the optional backend-callback helper builds tRPC URLs, and `VIVD_FLY_TEST_MAIN_BACKEND_URL` is no longer coupled to `VIVD_FLY_WAKE_VERIFY_BACKEND_CALLBACKS`.
+- The provider also had a real prod-shape gap: the one-time “restart and re-park” recovery path only retried for machines up to `2048 MiB`. That limit is now removed, and the focused orchestration regression is updated to prove the retry still runs on `performance / 4096 MiB` machines.
+- Even after that retry fix, the real production-shaped warm-wake smoke on `vivd-studio-dev` still stopped twice in a row on `1.1.100`: the first park attempt fell back to `stop`, the provider restarted the same machine and retried park, and the second attempt also ended in `stop`.
+- The strongest control experiment so far is no longer Studio-specific: on April 9, 2026, a throwaway `nginx:alpine` machine created in the same `vivd-studio-dev` app, with the same `performance / 4096 MiB` guest shape and `autostop: "suspend"`, also turned a direct Fly `POST /suspend` into `stopping -> stopped`.
+- That means the current failure is not explained by Studio runtime auth, quiesce, OpenCode, or the provider's explicit stop fallback alone. At minimum it is app-level to the current Fly app surface; it may be broader Fly behavior, but that could not be isolated further from this machine because the available token is not authorized to create a fresh throwaway Fly app for a second control.
 
 ### Production comparison set from the current machine overview screenshot
 
@@ -92,6 +97,6 @@
 
 - What production-relevant test shape, if any, behaves better locally than `shared / 1024 MB`, `shared / 2048 MB`, and `performance / 4096 MiB` on `vivd-studio-dev`?
 - Are the production stopped outliers tied to a narrow class of machines rather than a general runtime regression?
-- Why do fresh smoke-created machines on `vivd-studio-dev` fail to suspend locally even when older production machines on `vivd-studio-prod` with the same `1.1.99` image and guest shape can still end up `suspended`?
-- Is the remaining skew primarily app-level (`vivd-studio-dev` vs `vivd-studio-prod`) or project-history-level (fresh standalone test projects vs older real projects)?
+- Is the remaining skew primarily app-level (`vivd-studio-dev` / `vivd-studio-prod`) or broader Fly suspend behavior that changed after the earlier `v1.1.92` successes?
+- Why did some older `1.1.99` production machines appear as `suspended` in the April 9, 2026 screenshot if a same-app minimal control now also stops on direct `/suspend`?
 - Which of the new suspend hardening code paths are genuinely required once the test-vs-production mismatch is understood?

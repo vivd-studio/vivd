@@ -1012,6 +1012,7 @@ describe("DockerStudioMachineProvider", () => {
       "OPENCODE_MODEL_STANDARD",
       "openrouter/google/gemini-3-flash-preview",
     );
+    vi.stubEnv("OPENCODE_MODEL_STANDARD_VARIANT", "high");
 
     const provider = new DockerStudioMachineProvider();
     const apiClient = (provider as any).apiClient;
@@ -1059,6 +1060,7 @@ describe("DockerStudioMachineProvider", () => {
             "VIVD_PROJECT_SLUG=site-1",
             "VIVD_PROJECT_VERSION=1",
             "OPENCODE_MODEL_STANDARD=openrouter/google/gemini-2.5-flash",
+            "OPENCODE_MODEL_STANDARD_VARIANT=medium",
           ],
           Labels: {
             vivd_managed: "true",
@@ -1093,6 +1095,7 @@ describe("DockerStudioMachineProvider", () => {
             "VIVD_PROJECT_SLUG=site-1",
             "VIVD_PROJECT_VERSION=1",
             "OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview",
+            "OPENCODE_MODEL_STANDARD_VARIANT=high",
           ],
           Labels: {
             vivd_managed: "true",
@@ -1142,6 +1145,7 @@ describe("DockerStudioMachineProvider", () => {
         config: expect.objectContaining({
           Env: expect.arrayContaining([
             "OPENCODE_MODEL_STANDARD=openrouter/google/gemini-3-flash-preview",
+            "OPENCODE_MODEL_STANDARD_VARIANT=high",
           ]),
         }),
       }),

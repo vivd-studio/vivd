@@ -21,6 +21,7 @@ import type { SanitizedSessionError } from "./sync/errorPolicy";
 type ControllerModel = {
   provider: string;
   modelId: string;
+  variant?: string;
 } | null;
 
 type UseOpencodeChatControllerArgs = {
@@ -143,6 +144,7 @@ export function useOpencodeChatController({
         ? {
             provider: selectedModel.provider,
             modelId: selectedModel.modelId,
+            ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
           }
         : undefined,
     }),

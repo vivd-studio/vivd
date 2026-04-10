@@ -268,6 +268,7 @@ export const agentRouter = router({
           .object({
             provider: z.string(),
             modelId: z.string(),
+            variant: z.string().optional(),
           })
           .optional(),
       }),
@@ -298,6 +299,7 @@ export const agentRouter = router({
           .object({
             provider: z.string(),
             modelId: z.string(),
+            variant: z.string().optional(),
           })
           .optional(),
       }),

@@ -102,6 +102,7 @@ export interface ContactRecipientVerificationRequestResult {
   status:
     | "already_verified"
     | "added_verified"
+    | "marked_verified"
     | "verification_sent"
     | "verification_pending";
   cooldownRemainingSeconds: number;
@@ -503,6 +504,145 @@ class ContactFormRecipientVerificationService {
     return {
       email: normalizedEmail,
       status: "verification_sent",
+      cooldownRemainingSeconds: 0,
+    };
+  }
+
+  async markRecipientVerified(options: {
+    organizationId: string;
+    projectSlug: string;
+    pluginInstanceId: string;
+    email: string;
+    requestedByUserId?: string | null;
+  }): Promise<ContactRecipientVerificationRequestResult> {
+    const normalizedEmail = normalizeEmailAddress(options.email);
+    if (!recipientEmailSchema.safeParse(normalizedEmail).success) {
+      throw new ContactRecipientEmailFormatError();
+    }
+
+    const pluginInstance = await db.query.projectPluginInstance.findFirst({
+      where: and(
+        eq(projectPluginInstance.id, options.pluginInstanceId),
+        eq(projectPluginInstance.organizationId, options.organizationId),
+        eq(projectPluginInstance.projectSlug, options.projectSlug),
+        eq(projectPluginInstance.pluginId, "contact_form"),
+      ),
+      columns: {
+        id: true,
+        configJson: true,
+      },
+    });
+    if (!pluginInstance) {
+      throw new Error("Contact Form plugin instance not found");
+    }
+
+    const config = normalizeContactFormConfig(pluginInstance.configJson);
+    const currentRecipients = new Set(
+      config.recipientEmails.map((value) => normalizeEmailAddress(value)),
+    );
+    const existing = await db.query.contactFormRecipientVerification.findFirst({
+      where: and(
+        eq(contactFormRecipientVerification.organizationId, options.organizationId),
+        eq(contactFormRecipientVerification.projectSlug, options.projectSlug),
+        eq(contactFormRecipientVerification.email, normalizedEmail),
+      ),
+      columns: {
+        id: true,
+        status: true,
+      },
+    });
+
+    const orgEmails = await this.listOrganizationEmails({
+      organizationId: options.organizationId,
+    });
+    const verifiedOrgEmailSet = new Set(
+      orgEmails.filter((row) => row.emailVerified).map((row) => row.email),
+    );
+
+    if (
+      currentRecipients.has(normalizedEmail) &&
+      (verifiedOrgEmailSet.has(normalizedEmail) || existing?.status === "verified")
+    ) {
+      return {
+        email: normalizedEmail,
+        status: "already_verified",
+        cooldownRemainingSeconds: 0,
+      };
+    }
+
+    if (verifiedOrgEmailSet.has(normalizedEmail) || existing?.status === "verified") {
+      await this.addRecipientToPluginConfig({
+        pluginInstanceId: pluginInstance.id,
+        email: normalizedEmail,
+      });
+
+      if (existing) {
+        await db
+          .update(contactFormRecipientVerification)
+          .set({
+            pluginInstanceId: pluginInstance.id,
+            status: "verified",
+            verificationTokenHash: null,
+            verificationTokenExpiresAt: null,
+            verifiedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(contactFormRecipientVerification.id, existing.id));
+      }
+
+      return {
+        email: normalizedEmail,
+        status: "added_verified",
+        cooldownRemainingSeconds: 0,
+      };
+    }
+
+    const now = new Date();
+    const nextConfig = withRecipientEmail(config, normalizedEmail);
+
+    await db.transaction(async (tx) => {
+      if (existing) {
+        await tx
+          .update(contactFormRecipientVerification)
+          .set({
+            pluginInstanceId: pluginInstance.id,
+            status: "verified",
+            verificationTokenHash: null,
+            verificationTokenExpiresAt: null,
+            verifiedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(contactFormRecipientVerification.id, existing.id));
+      } else {
+        await tx.insert(contactFormRecipientVerification).values({
+          id: randomUUID(),
+          organizationId: options.organizationId,
+          projectSlug: options.projectSlug,
+          pluginInstanceId: pluginInstance.id,
+          email: normalizedEmail,
+          status: "verified",
+          verificationTokenHash: null,
+          verificationTokenExpiresAt: null,
+          lastSentAt: null,
+          verifiedAt: now,
+          createdByUserId: options.requestedByUserId ?? null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      await tx
+        .update(projectPluginInstance)
+        .set({
+          configJson: nextConfig,
+          updatedAt: now,
+        })
+        .where(eq(projectPluginInstance.id, pluginInstance.id));
+    });
+
+    return {
+      email: normalizedEmail,
+      status: "marked_verified",
       cooldownRemainingSeconds: 0,
     };
   }

@@ -29,6 +29,12 @@ import {
 } from "../services/storage/ObjectStorageService";
 import { normalizeOrganizationId } from "../lib/organizationIdentifiers";
 import { alignProjectArtifactKeyToSlug } from "../services/project/slugRename";
+import {
+  SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
+  SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH,
+  SCRATCH_REFERENCE_FILES_RELATIVE_PATH,
+} from "@vivd/shared";
+import { getScratchCreationMode } from "../generator/initialGeneration";
 
 type CreateContextResult = {
   session: any;
@@ -997,10 +1003,21 @@ export function createProjectRuntimeRouter(
         const relativePath = rawRelativePath
           .replace(/\\/g, "/")
           .replace(/^\/+|\/+$/g, "");
+        const scratchCreationMode = getScratchCreationMode();
+        const remappedRelativePath =
+          relativePath === SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH &&
+          scratchCreationMode === "legacy_html"
+            ? SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH
+            : relativePath;
 
-        if (relativePath !== "images" && relativePath !== "references") {
+        if (
+          relativePath !== SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH &&
+          relativePath !== SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH &&
+          relativePath !== SCRATCH_REFERENCE_FILES_RELATIVE_PATH
+        ) {
           return res.status(400).json({
-            error: 'Invalid upload path. Allowed paths: "images", "references".',
+            error:
+              'Invalid upload path. Allowed paths: "images", "references", "src/content/media/shared".',
           });
         }
 
@@ -1011,7 +1028,7 @@ export function createProjectRuntimeRouter(
 
         let targetDir: string;
         try {
-          targetDir = safeJoin(versionDir, relativePath);
+          targetDir = safeJoin(versionDir, remappedRelativePath);
         } catch {
           return res.status(400).json({ error: "Invalid path" });
         }
@@ -1032,14 +1049,14 @@ export function createProjectRuntimeRouter(
 
           let filePath: string;
           try {
-            const rel = path.posix.join(relativePath, sanitizedName);
+            const rel = path.posix.join(remappedRelativePath, sanitizedName);
             filePath = safeJoin(versionDir, rel);
           } catch {
             return res.status(400).json({ error: "Invalid filename" });
           }
 
           fs.writeFileSync(filePath, file.buffer);
-          uploaded.push(path.posix.join(relativePath, sanitizedName));
+          uploaded.push(path.posix.join(remappedRelativePath, sanitizedName));
         }
 
         await projectMetaService.touchUpdatedAt(organizationId, slug);

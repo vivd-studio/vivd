@@ -249,4 +249,22 @@ describe("contactFormPluginService", () => {
     expect(findFirstMock).not.toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalled();
   });
+
+  it("rejects manually marking a recipient verified when the plugin is not enabled", async () => {
+    findFirstMock.mockResolvedValueOnce(makeRow({ status: "disabled" }));
+
+    await expect(
+      contactFormPluginService.markRecipientVerified({
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        email: "person@example.com",
+        requestedByUserId: "user-1",
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ContactFormPluginNotEnabledError",
+        message: "Contact Form plugin is not enabled for this project",
+      }),
+    );
+  });
 });

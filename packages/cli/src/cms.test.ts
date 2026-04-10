@@ -35,7 +35,7 @@ describe("cms workspace utilities", () => {
 
     expect(initResult.created).toContain("src/content/vivd.content.yaml");
     expect(modelResult.created).toContain("src/content/models/products.yaml");
-    expect(entryResult.created).toContain("src/content/collections/products/alpine-boot/index.yaml");
+    expect(entryResult.created).toContain("src/content/products/alpine-boot.yaml");
     expect(report.valid).toBe(true);
     expect(report.initialized).toBe(true);
     expect(report.modelCount).toBe(1);
@@ -53,8 +53,8 @@ describe("cms workspace utilities", () => {
       path.join(paths.modelsRoot, "products.yaml"),
       `label: Products
 storage:
-  path: ./collections/products
-  entryFormat: directory
+  path: ./products
+  entryFormat: file
 display:
   primaryField: title
 entry:
@@ -93,19 +93,18 @@ models:
 `,
       "utf8",
     );
-    const entryDir = path.join(paths.collectionsRoot, "products", "alpine-boot");
-    await fs.mkdir(entryDir, { recursive: true });
+    await fs.mkdir(path.join(paths.contentRoot, "products"), { recursive: true });
     const mediaDir = path.join(paths.mediaRoot, "products", "alpine-boot");
     await fs.mkdir(mediaDir, { recursive: true });
     await fs.writeFile(path.join(mediaDir, "hero.jpg"), "hero-bytes", "utf8");
     await fs.writeFile(
-      path.join(entryDir, "index.yaml"),
+      path.join(paths.contentRoot, "products", "alpine-boot.yaml"),
       `slug: alpine-boot
 status: active
 title:
   en: Alpine Boot
 heroImage:
-  path: ../../../media/products/alpine-boot/hero.jpg
+  path: ../media/products/alpine-boot/hero.jpg
 `,
       "utf8",
     );
@@ -149,8 +148,8 @@ models:
       path.join(paths.modelsRoot, "products.yaml"),
       `label: Products
 storage:
-  path: ./collections/products
-  entryFormat: directory
+  path: ./products
+  entryFormat: file
 entry:
   fields:
     broken:
@@ -160,10 +159,9 @@ entry:
 `,
       "utf8",
     );
-    const entryDir = path.join(paths.collectionsRoot, "products", "alpine-boot");
-    await fs.mkdir(entryDir, { recursive: true });
+    await fs.mkdir(path.join(paths.contentRoot, "products"), { recursive: true });
     await fs.writeFile(
-      path.join(entryDir, "index.yaml"),
+      path.join(paths.contentRoot, "products", "alpine-boot.yaml"),
       `broken: something
 heroImage:
   path: ../hero.jpg
@@ -182,7 +180,7 @@ heroImage:
     ).toBe(true);
   });
 
-  it("reports descriptive errors for unsupported flat collection layouts", async () => {
+  it("accepts flat collection layouts and legacy field-list schemas", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);
 
@@ -196,7 +194,6 @@ locales:
   - en
 models:
   - menu
-  - features
 `,
       "utf8",
     );
@@ -220,17 +217,10 @@ fields:
 
     const report = await validateCmsWorkspace(projectDir);
 
-    expect(report.valid).toBe(false);
-    expect(
-      report.errors.some((error) =>
-        error.includes("legacy flat collection schemas are not supported"),
-      ),
-    ).toBe(true);
-    expect(
-      report.errors.some((error) =>
-        error.includes("src/content/menu/ uses an unsupported flat collection layout"),
-      ),
-    ).toBe(true);
+    expect(report.valid).toBe(true);
+    expect(report.errors).toEqual([]);
+    expect(report.modelCount).toBe(1);
+    expect(report.entryCount).toBe(1);
   });
 
 });

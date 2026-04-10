@@ -1029,12 +1029,17 @@ async function sendPromptAsync(
       "No model configured. Set OPENCODE_MODEL_STANDARD and optionally OPENCODE_MODEL_ADVANCED / OPENCODE_MODEL_PRO.",
     );
   }
-  const { provider: providerID, modelId: modelID } = resolvedModel;
+  const {
+    provider: providerID,
+    modelId: modelID,
+    variant,
+  } = resolvedModel;
 
   const result = await client.session.promptAsync({
     sessionID: sessionId,
     directory,
     model: { providerID, modelID },
+    ...(variant ? { variant } : {}),
     ...(systemPrompt ? { system: systemPrompt } : {}),
     ...(toolEnablement ? { tools: toolEnablement } : {}),
     parts: [{ type: "text", text: task }],

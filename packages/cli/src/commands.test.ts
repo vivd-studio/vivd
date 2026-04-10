@@ -145,6 +145,7 @@ describe("dispatchCli", () => {
     const previewHelp = await dispatchCli(["preview", "help"]);
 
     expect(rootHelp.human).toContain("vivd preview help");
+    expect(rootHelp.human).not.toContain("vivd preview screenshot [path]");
     expect(previewHelp.human).toContain("vivd preview status");
     expect(previewHelp.human).toContain("vivd preview logs [path]");
     expect(previewHelp.human).not.toContain("vivd preview screenshot [path]");
@@ -443,6 +444,41 @@ describe("dispatchCli", () => {
     },
   );
 
+  it("marks a contact recipient verified via the contact alias", async () => {
+    runtime.client.mutation.mockResolvedValue({
+      pluginId: "contact_form",
+      actionId: "mark_recipient_verified",
+      summary: "Marked recipient email as verified.",
+      result: {
+        email: "person@example.com",
+        status: "marked_verified",
+        cooldownRemainingSeconds: 0,
+      },
+    });
+
+    const result = await dispatchCli([
+      "plugins",
+      "contact",
+      "recipients",
+      "mark-verified",
+      "person@example.com",
+    ]);
+
+    expect(runtime.client.mutation).toHaveBeenCalledWith(
+      "studioApi.runProjectPluginAction",
+      {
+        studioId: "studio_1",
+        slug: "demo",
+        pluginId: "contact_form",
+        actionId: "mark_recipient_verified",
+        args: ["person@example.com"],
+      },
+    );
+    expect(result.human).toContain("Marked recipient email as verified.");
+    expect(result.human).toContain("Recipient: person@example.com");
+    expect(result.human).toContain("manually marked verified");
+  });
+
   it("shows generic plugin info through the capability contract", async () => {
     runtime.client.query.mockResolvedValue({
       pluginId: "contact_form",
@@ -462,6 +498,12 @@ describe("dispatchCli", () => {
               actionId: "verify_recipient",
               title: "Verify recipient",
               description: "Send verification email",
+              arguments: [{ name: "email", type: "email", required: true }],
+            },
+            {
+              actionId: "mark_recipient_verified",
+              title: "Mark recipient verified",
+              description: "Manually mark recipient verified",
               arguments: [{ name: "email", type: "email", required: true }],
             },
           ],
@@ -505,6 +547,9 @@ describe("dispatchCli", () => {
     expect(result.human).toContain("Plugin ID: contact_form");
     expect(result.human).toContain("Config support: show, template, apply");
     expect(result.human).toContain("- verify_recipient <email> - Verify recipient");
+    expect(result.human).toContain(
+      "- mark_recipient_verified <email> - Mark recipient verified",
+    );
   });
 
   it.each([
@@ -987,11 +1032,11 @@ describe("dispatchCli", () => {
   it("runs generic plugin actions", async () => {
     runtime.client.mutation.mockResolvedValue({
       pluginId: "contact_form",
-      actionId: "verify_recipient",
-      summary: "Requested recipient verification.",
+      actionId: "mark_recipient_verified",
+      summary: "Marked recipient email as verified.",
       result: {
         email: "person@example.com",
-        status: "verification_sent",
+        status: "marked_verified",
         cooldownRemainingSeconds: 0,
       },
     });
@@ -1000,7 +1045,7 @@ describe("dispatchCli", () => {
       "plugins",
       "action",
       "contact_form",
-      "verify_recipient",
+      "mark_recipient_verified",
       "person@example.com",
     ]);
 
@@ -1010,12 +1055,12 @@ describe("dispatchCli", () => {
         studioId: "studio_1",
         slug: "demo",
         pluginId: "contact_form",
-        actionId: "verify_recipient",
+        actionId: "mark_recipient_verified",
         args: ["person@example.com"],
       },
     );
-    expect(result.human).toContain("Requested recipient verification.");
-    expect(result.human).toContain("Action: verify_recipient");
+    expect(result.human).toContain("Marked recipient email as verified.");
+    expect(result.human).toContain("Action: mark_recipient_verified");
     expect(result.human).toContain("\"email\": \"person@example.com\"");
   });
 
@@ -1029,9 +1074,25 @@ describe("dispatchCli", () => {
     const contactHelp = await dispatchCli(["plugins", "contact", "help"]);
     const analyticsHelp = await dispatchCli(["plugins", "analytics", "help"]);
 
+    expect(rootHelp.human).toContain("USAGE");
+    expect(rootHelp.human).toContain("CONNECTION & CONTEXT");
+    expect(rootHelp.human).toContain("PREVIEW & DEBUGGING");
+    expect(rootHelp.human).toContain("PLUGINS");
+    expect(rootHelp.human).toContain("LOCAL CMS");
+    expect(rootHelp.human).toContain("PUBLISH CHECKLIST");
+    expect(rootHelp.human).toContain("GLOBAL FLAGS");
+    expect(rootHelp.human).toContain("EXAMPLES");
     expect(rootHelp.human).toContain("vivd project info");
+    expect(rootHelp.human).toContain("vivd preview status");
+    expect(rootHelp.human).toContain("vivd preview logs /pricing --level warn --contains hydrate");
+    expect(rootHelp.human).toContain("vivd preview screenshot [path]");
+    expect(rootHelp.human).toContain("vivd plugins action <pluginId> <actionId> [args...]");
+    expect(rootHelp.human).toContain("PLUGIN SHORTCUTS");
+    expect(rootHelp.human).toContain("vivd plugins contact info");
+    expect(rootHelp.human).toContain("vivd plugins analytics info");
+    expect(rootHelp.human).toContain("MAIN_BACKEND_URL, STUDIO_ID, and STUDIO_ACCESS_TOKEN");
     expect(rootHelp.human).toContain("vivd cms help");
-    expect(rootHelp.human).toContain("vivd preview help");
+    expect(rootHelp.human).toContain("vivd publish help");
     expect(cmsHelp.human).toContain("vivd cms scaffold init");
     expect(cmsHelp.human).toContain("src/content/");
     expect(previewHelp.human).toContain("vivd preview status");
@@ -1050,6 +1111,7 @@ describe("dispatchCli", () => {
     expect(contactHelp.human).toContain("vivd plugins info contact_form");
     expect(contactHelp.human).toContain("vivd plugins contact config show");
     expect(contactHelp.human).toContain("vivd plugins contact recipients verify <email>");
+    expect(contactHelp.human).toContain("vivd plugins contact recipients mark-verified <email>");
     expect(analyticsHelp.human).toContain("vivd plugins info analytics");
     expect(analyticsHelp.human).toContain("vivd plugins analytics info");
   });

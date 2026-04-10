@@ -294,6 +294,30 @@ class ContactFormPluginService {
     });
   }
 
+  async markRecipientVerified(options: {
+    organizationId: string;
+    projectSlug: string;
+    email: string;
+    requestedByUserId?: string | null;
+  }): Promise<ContactRecipientVerificationRequestResult> {
+    const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      pluginId: "contact_form",
+    });
+    if (!pluginInstance || pluginInstance.status !== "enabled") {
+      throw new ContactFormPluginNotEnabledError();
+    }
+
+    return contactFormRecipientVerificationService.markRecipientVerified({
+      organizationId: options.organizationId,
+      projectSlug: options.projectSlug,
+      pluginInstanceId: pluginInstance.id,
+      email: options.email,
+      requestedByUserId: options.requestedByUserId,
+    });
+  }
+
   async getContactFormInfo(options: {
     organizationId: string;
     projectSlug: string;

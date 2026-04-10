@@ -43,6 +43,9 @@ export const contactFormPluginModule: PluginModule<"contact_form"> = {
     requestRecipientVerification(options) {
       return contactFormPluginService.requestRecipientVerification(options);
     },
+    markRecipientVerified(options) {
+      return contactFormPluginService.markRecipientVerified(options);
+    },
     mapPublicError(context) {
       const { error } = context;
       if (

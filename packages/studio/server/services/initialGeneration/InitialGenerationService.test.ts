@@ -90,6 +90,9 @@ vi.mock("../project/projectType.js", () => ({
 vi.mock("@vivd/shared", async () => {
   return {
     INITIAL_GENERATION_MANIFEST_RELATIVE_PATH: ".vivd/initial-generation.json",
+    SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH: "src/content/media/shared",
+    SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH: "images",
+    SCRATCH_REFERENCE_FILES_RELATIVE_PATH: "references",
     isConnectedMode: isConnectedModeMock,
     getBackendUrl: getBackendUrlMock,
     getConnectedOrganizationId: getConnectedOrganizationIdMock,
@@ -240,8 +243,14 @@ describe("InitialGenerationService", () => {
       "Title: Acme Studio\n\nDescription:\nA modern studio landing page.\n",
       "utf-8",
     );
-    fs.mkdirSync(path.join(tmpDir, "images"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, "images", "logo.png"), "fake", "utf-8");
+    fs.mkdirSync(path.join(tmpDir, "src", "content", "media", "shared"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "content", "media", "shared", "logo.png"),
+      "fake",
+      "utf-8",
+    );
     fs.mkdirSync(path.join(tmpDir, "references"), { recursive: true });
     fs.writeFileSync(
       path.join(tmpDir, "references", "urls.txt"),
@@ -264,7 +273,8 @@ describe("InitialGenerationService", () => {
     expect(task).toContain("Create a complete, finished version 1");
     expect(task).toContain("you may ask the user clarifying questions");
     expect(task).toContain("scratch_brief.txt");
-    expect(task).toContain("images/logo.png");
+    expect(task).toContain("src/content/media/shared/logo.png");
+    expect(task).toContain("canonical home for Astro-managed site assets");
     expect(task).toContain("https://example.com");
     expect(task).toContain("AGENTS.md");
   });
@@ -274,7 +284,7 @@ describe("InitialGenerationService", () => {
       projectSlug: "site-1",
       version: 1,
       workspaceDir: tmpDir,
-      model: { provider: "openai", modelId: "gpt-5.4" },
+      model: { provider: "openai", modelId: "gpt-5.4", variant: "high" },
     });
 
     expect(result).toEqual({
@@ -287,7 +297,7 @@ describe("InitialGenerationService", () => {
       expect.stringContaining("Acme Studio"),
       tmpDir,
       undefined,
-      { provider: "openai", modelId: "gpt-5.4" },
+      { provider: "openai", modelId: "gpt-5.4", variant: "high" },
     );
     expect(requestBucketSyncMock).toHaveBeenCalledWith(
       "initial-generation-state",
@@ -353,7 +363,7 @@ describe("InitialGenerationService", () => {
       projectSlug: "site-1",
       version: 1,
       workspaceDir: tmpDir,
-      model: { provider: "openai", modelId: "gpt-5.4" },
+      model: { provider: "openai", modelId: "gpt-5.4", variant: "high" },
     });
 
     mockCompletedSessionState();
@@ -461,7 +471,7 @@ describe("InitialGenerationService", () => {
         projectSlug: "site-1",
         version: 1,
         workspaceDir: tmpDir,
-        model: { provider: "openai", modelId: "gpt-5.4" },
+        model: { provider: "openai", modelId: "gpt-5.4", variant: "high" },
       });
 
       expect(result).toEqual({

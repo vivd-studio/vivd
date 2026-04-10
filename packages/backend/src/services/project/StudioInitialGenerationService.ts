@@ -8,6 +8,7 @@ const STUDIO_FETCH_TIMEOUT_MS = 10_000;
 type StudioInitialGenerationModelSelection = {
   provider: string;
   modelId: string;
+  variant?: string;
 };
 
 type StudioInitialGenerationStartResult = {

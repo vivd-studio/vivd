@@ -17,6 +17,7 @@ const {
       tier: "standard" | "advanced" | "pro";
       provider: string;
       modelId: string;
+      variant?: string;
       label: string;
     }>,
   },
@@ -466,6 +467,7 @@ describe("ChatProvider follow-up behavior", () => {
         tier: "standard",
         provider: "openai",
         modelId: "gpt-4.1-mini",
+        variant: "high",
         label: "Standard",
       },
       {
@@ -504,10 +506,53 @@ describe("ChatProvider follow-up behavior", () => {
         model: {
           provider: "openai",
           modelId: "gpt-4.1-mini",
+          variant: "high",
         },
       });
     });
     expect(latestContext?.selectedModel?.modelId).toBe("gpt-4.1-mini");
+  });
+
+  it("restores a saved model preference by tier when multiple tiers share a model id", async () => {
+    availableModelsState.data = [
+      {
+        tier: "standard",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        label: "Standard",
+      },
+      {
+        tier: "pro",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+        label: "Pro",
+      },
+    ];
+    window.localStorage.setItem(
+      "vivd-selected-model",
+      JSON.stringify({
+        tier: "pro",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      }),
+    );
+
+    render(
+      <ChatProvider projectSlug="site-1" version={1}>
+        <CaptureContext />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(latestContext?.selectedModel).toMatchObject({
+        tier: "pro",
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      });
+    });
   });
 
   it("pauses auto-send after stop until a queued follow-up is sent manually", async () => {

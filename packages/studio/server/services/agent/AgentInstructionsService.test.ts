@@ -39,11 +39,14 @@ describe("studio AgentInstructionsService fallback", () => {
     expect(prompt).toContain(".vivd/uploads/");
     expect(prompt).toContain(".vivd/dropped-images/");
     expect(prompt).toContain("Treat both as working material");
+    expect(prompt).toContain("`src/content/media/` by default");
+    expect(prompt).toContain("Use `public/` only for passthrough files");
     expect(prompt).toContain("Structured CMS content");
     expect(prompt).toContain("src/content/vivd.content.yaml");
     expect(prompt).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
     expect(prompt).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
-    expect(prompt).toContain("Collection entries belong under `src/content/collections/<collection-key>/`");
+    expect(prompt).toContain("Prefer flat collection folders directly under `src/content/`");
+    expect(prompt).toContain("Directory-style collection entries are also allowed");
     expect(prompt).toContain("use schema fields of type `asset` or `assetList`");
     expect(prompt).toContain("set `accepts` (for example `image/*`)");
     expect(prompt).toContain("vivd cms validate");

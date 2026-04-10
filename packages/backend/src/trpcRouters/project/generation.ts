@@ -48,6 +48,10 @@ import {
 import { installProfileService } from "../../services/system/InstallProfileService";
 import { ensureGitRepositoryHasInitialCommit } from "../../generator/gitUtils";
 import { setProjectVersionStatus } from "../../services/project/ProjectStatusService";
+import {
+  getScratchBrandAssetsRelativePath,
+  SCRATCH_REFERENCE_FILES_RELATIVE_PATH,
+} from "@vivd/shared";
 
 /**
  * Check if single project mode is enabled and a project already exists.
@@ -471,11 +475,17 @@ export const projectGenerationProcedures = {
         });
       }
 
-      // Create images and references directories for uploads
-      const imagesDir = path.join(generationCtx.outputDir, "images");
-      const referencesDir = path.join(generationCtx.outputDir, "references");
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
+      // Create brand-assets and references directories for uploads.
+      const brandAssetsDir = path.join(
+        generationCtx.outputDir,
+        getScratchBrandAssetsRelativePath(scratchCreationMode),
+      );
+      const referencesDir = path.join(
+        generationCtx.outputDir,
+        SCRATCH_REFERENCE_FILES_RELATIVE_PATH,
+      );
+      if (!fs.existsSync(brandAssetsDir)) {
+        fs.mkdirSync(brandAssetsDir, { recursive: true });
       }
       if (!fs.existsSync(referencesDir)) {
         fs.mkdirSync(referencesDir, { recursive: true });
@@ -505,7 +515,11 @@ export const projectGenerationProcedures = {
 
       if (normalizedReferenceUrls?.length) {
         fs.writeFileSync(
-          path.join(generationCtx.outputDir, "references", "urls.txt"),
+          path.join(
+            generationCtx.outputDir,
+            SCRATCH_REFERENCE_FILES_RELATIVE_PATH,
+            "urls.txt",
+          ),
           normalizedReferenceUrls.join("\n") + "\n",
         );
       }

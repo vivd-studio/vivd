@@ -154,15 +154,12 @@ src/
     models/
       products.yaml
       categories.yaml
-    collections/
-      products/
-        alpine-boot/
-          index.yaml
-          description.en.md
-          description.de.md
-      categories/
-        winter-boots/
-          index.yaml
+    products/
+      alpine-boot.yaml
+      alpine-boot.description.en.md
+      alpine-boot.description.de.md
+    categories/
+      winter-boots.yaml
     media/
       products/
         alpine-boot/
@@ -197,7 +194,6 @@ Recommended default scaffold:
 
 - `src/content/vivd.content.yaml`
 - `src/content/models/`
-- `src/content/collections/`
 - `src/content/media/`
 
 The default scaffold does not need to ship real business collections in every project. An empty or minimal ready-to-use structure is enough as long as:
@@ -277,8 +273,8 @@ Example:
 ```yaml
 label: Products
 storage:
-  path: ./collections/products
-  entryFormat: directory
+  path: ./products
+  entryFormat: file
 display:
   primaryField: name
 route:
@@ -330,12 +326,13 @@ entry:
 
 ### Entry Format
 
-Each entry should live in its own directory when the schema uses `entryFormat: directory`.
+The default scaffold should use flat file entries under `src/content/<collection-key>/`.
+Directory-style entries should still be supported when the schema uses `entryFormat: directory`.
 
 Example:
 
 ```yaml
-# src/content/collections/products/alpine-boot/index.yaml
+# src/content/products/alpine-boot.yaml
 slug: alpine-boot
 status: active
 sku: BOOT-001
@@ -344,21 +341,21 @@ name:
   de: Alpine-Stiefel
 category: boots
 description:
-  en: ./description.en.md
-  de: ./description.de.md
+  en: ./alpine-boot.description.en.md
+  de: ./alpine-boot.description.de.md
 attributes:
   - key: material
     value:
       en: Leather
       de: Leder
 documents:
-  - path: ../../../media/products/alpine-boot/datasheet-en.pdf
+  - path: ../media/products/alpine-boot/datasheet-en.pdf
     label:
       en: Datasheet
       de: Datenblatt
     locale: en
 heroImage:
-  path: ../../../media/products/alpine-boot/hero.jpg
+  path: ../media/products/alpine-boot/hero.jpg
   alt:
     en: Alpine boot in profile view
     de: Alpine-Stiefel in Seitenansicht
@@ -413,6 +410,30 @@ Asset fields should reference those files by relative path, and validation shoul
 
 We should treat PDFs, brochures, menus, price lists, and similar files as first-class CMS assets, not as an afterthought.
 
+## Astro Asset Strategy
+
+For Astro-backed Vivd projects, `src/content/media/` should be the canonical source of truth for Vivd-managed images and documents.
+
+Rules:
+
+- use `src/content/media/` as the shared backing store for CMS asset fields, content-focused media browsing, and Astro-first asset workflows in Studio
+- reserve `public/` for passthrough assets that intentionally need stable raw URLs and no Vivd/CMS ownership, such as favicons, manifest icons, `robots.txt`, verification files, or other framework-public files
+- do not create a second long-lived user-managed image library under `public/images/` for Astro projects by default
+- keep `src/content/media/` human-editable and repo-owned; generated/runtime copies belong outside the canonical tree
+- Astro page/component code should not point directly at `src/content/media/...` paths in rendered markup; use generated/runtime URLs or approved helpers instead
+
+Recommended folder conventions inside `src/content/media/`:
+
+- `shared/` for reusable site-wide assets
+- `pages/<page-key>/` for page-owned assets that are not part of a repeatable collection
+- `<collection-key>/<entry-key>/` for collection-owned assets
+
+Runtime/build rule:
+
+- the Astro adapter should derive runtime-servable media artifacts from `src/content/media/` into generated output, for example `.vivd/content/media/**`, and publish/serve them at one stable runtime URL base such as `/media/...`
+- the canonical source remains `src/content/media/`; runtime/public copies are derived artifacts
+- non-image documents such as PDFs should follow the same rule instead of using a separate ad-hoc public-files path
+
 ## Localization
 
 CMS localization should be field-based, not entry-duplication-based, in v1.
@@ -466,10 +487,46 @@ Agent instructions should say:
 - treat `src/content/` as the CMS source of truth when `src/content/vivd.content.yaml` exists
 - do not hand-edit `.vivd/content/`
 - create or update models in `src/content/models/*.yaml`
-- create or update collection entries in `src/content/collections/`
+- prefer collection entries under `src/content/<collection-key>/` unless the schema already uses a different `storage.path`
 - place attachments in `src/content/media/`
 - run `vivd cms validate` after changing schema or entries
 - use generated runtime helpers or approved render helpers instead of inventing raw file-system reads in page code
+
+## Astro Asset Migration Plan
+
+The current repo still has Astro-facing asset flows that prefer `public/images/`. That should be treated as transitional compatibility, not the long-term convention.
+
+Phase 1: lock the canonical source decision
+
+- `src/content/media/` is the only canonical Vivd-managed asset root for Astro projects
+- `public/images/` remains readable during migration, but new Astro-first CMS/content flows should stop treating it as the primary library
+
+Phase 2: align Studio surfaces on one library
+
+- keep the CMS picker rooted in `src/content/media/`
+- make the Astro asset explorer/gallery default to `src/content/media/` instead of `public/images/`
+- make AI image create/edit flows for Astro default to `src/content/media/`
+- make the content tab and asset/gallery surfaces read from the same underlying media tree so replacements, previews, and metadata all target one source
+- keep `.vivd/uploads/` and `.vivd/dropped-images/` as temporary working storage only
+
+Phase 3: add an Astro runtime adapter for canonical media
+
+- generate derived media artifacts from `src/content/media/` into a non-canonical runtime area, for example `.vivd/content/media/**`
+- expose those files to preview/build/publish under a stable runtime URL base such as `/media/...`
+- provide a small approved helper layer for Astro code and generated data so pages can resolve CMS/media assets without hardcoding source-tree paths
+- make image and document assets follow the same adapter path
+
+Phase 4: fix page-level replacement flows
+
+- preview drag/drop and in-page image replacement should stop assuming every Astro image is a `public/` URL rewrite
+- when an image comes from a CMS asset field, replacement should edit the CMS field value, not only the `.astro` source string
+- when an image is page-owned but not CMS-backed, Studio should still store the chosen file under `src/content/media/pages/...` and rewrite the page to the adapter/runtime URL instead of a raw source-tree path
+
+Phase 5: compatibility and cleanup
+
+- keep short-term compatibility for existing `public/images/` references in older projects
+- add an explicit migration path later, such as a Studio action or CLI command, to move/import `public/images/` assets into `src/content/media/` and rewrite references
+- once the adapter and migration tooling are stable, stop generating new Astro assets into `public/images/` by default
 
 This keeps the agent surface simple and Git-friendly.
 
@@ -640,7 +697,6 @@ Rejected for now. Astro/build-backed projects are the right first target. Other 
 ## Open Questions
 
 - Should `pages` be a distinct model kind, or just a convention over a normal collection plus route metadata?
-- For Astro projects, should generic document assets from `src/content/media/` be copied into a public/runtime location, or should the adapter expose them another way?
 - Should generated artifacts live in `.vivd/content/` permanently, or should some framework adapters generate into `src/generated/` instead?
 - How much schema editing should Studio own in v1 vs later?
 - Do we want explicit draft scheduling/versioning in v1, or only active/inactive?
@@ -654,6 +710,7 @@ The recommended v1 is:
 - declarative YAML schemas
 - entry directories with YAML metadata plus Markdown sidecars for long copy
 - repo-owned media files for images and documents
+- `src/content/media/` as the canonical Astro asset root, with derived runtime/public copies generated from it instead of a parallel `public/images/` library
 - Studio UI rendered from those schemas, starting with collection workflows
 - direct agent file edits
 - `vivd` CLI for validation/scaffolding

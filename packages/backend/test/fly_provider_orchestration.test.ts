@@ -272,6 +272,14 @@ describe("FlyStudioMachineProvider orchestration", () => {
       state: "started",
       image: "ghcr.io/vivd-studio/vivd-studio:v1.2.3",
     });
+    initialMachine.config = {
+      ...(initialMachine.config || {}),
+      guest: { cpu_kind: "performance", cpus: 1, memory_mb: 4096 },
+    };
+    restartedMachine.config = {
+      ...(restartedMachine.config || {}),
+      guest: { cpu_kind: "performance", cpus: 1, memory_mb: 4096 },
+    };
 
     (provider as any).getMachine = vi
       .fn()
@@ -565,6 +573,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
       "OPENCODE_MODEL_STANDARD",
       "openrouter/google/gemini-3-flash-preview",
     );
+    vi.stubEnv("OPENCODE_MODEL_STANDARD_VARIANT", "high");
 
     const provider = new FlyStudioMachineProvider();
     const desiredImage = "ghcr.io/vivd-studio/vivd-studio:v2.0.0";
@@ -575,6 +584,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
       metadataImage: desiredImage,
       env: {
         OPENCODE_MODEL_STANDARD: "openrouter/google/gemini-2.5-flash",
+        OPENCODE_MODEL_STANDARD_VARIANT: "medium",
       },
     });
 
@@ -607,6 +617,7 @@ describe("FlyStudioMachineProvider orchestration", () => {
     expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD).toBe(
       "openrouter/google/gemini-3-flash-preview",
     );
+    expect(updatedConfig?.env?.OPENCODE_MODEL_STANDARD_VARIANT).toBe("high");
   });
 
   it("warmReconcileStudioMachine clears legacy session env while refreshing passthrough drift", async () => {

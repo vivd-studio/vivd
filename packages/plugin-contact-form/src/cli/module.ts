@@ -208,6 +208,7 @@ function formatContactRecipientVerificationReport(input: {
   status:
     | "already_verified"
     | "added_verified"
+    | "marked_verified"
     | "verification_sent"
     | "verification_pending";
   cooldownRemainingSeconds: number;
@@ -217,6 +218,8 @@ function formatContactRecipientVerificationReport(input: {
       ? "already verified"
       : input.status === "added_verified"
         ? "verified and added to the contact config"
+        : input.status === "marked_verified"
+          ? "manually marked verified"
         : input.status === "verification_sent"
           ? "verification email sent"
           : "verification already pending";
@@ -267,6 +270,11 @@ export const contactFormCliModule: PluginCliModule = {
       renderMode: "plugin",
     },
     {
+      tokens: ["contact", "recipients", "mark-verified"],
+      target: { kind: "action", actionId: "mark_recipient_verified" },
+      renderMode: "plugin",
+    },
+    {
       tokens: ["contact", "recipients", "resend"],
       target: { kind: "action", actionId: "resend_recipient" },
       renderMode: "plugin",
@@ -280,6 +288,7 @@ export const contactFormCliModule: PluginCliModule = {
       "vivd plugins contact config template",
       "vivd plugins contact config apply --file config.json",
       "vivd plugins contact recipients verify <email>",
+      "vivd plugins contact recipients mark-verified <email>",
       "vivd plugins contact recipients resend <email>",
     ],
     lines: [
@@ -289,6 +298,7 @@ export const contactFormCliModule: PluginCliModule = {
       "vivd plugins config template contact_form",
       "vivd plugins config apply contact_form --file config.json",
       "vivd plugins action contact_form verify_recipient <email>",
+      "vivd plugins action contact_form mark_recipient_verified <email>",
       "vivd plugins action contact_form resend_recipient <email>",
       "Compatibility aliases:",
       "vivd plugins contact info",
@@ -296,6 +306,7 @@ export const contactFormCliModule: PluginCliModule = {
       "vivd plugins contact config template",
       "vivd plugins contact config apply --file config.json",
       "vivd plugins contact recipients verify <email>",
+      "vivd plugins contact recipients mark-verified <email>",
       "vivd plugins contact recipients resend <email>",
       "Use --file - to read JSON config from stdin.",
       "Contact info shows submit endpoint, configured recipients, verification state, and install guidance.",
@@ -334,6 +345,7 @@ export const contactFormCliModule: PluginCliModule = {
   },
   renderAction(action: PluginCliActionResultPayload) {
     if (
+      action.actionId !== "mark_recipient_verified" &&
       action.actionId !== "verify_recipient" &&
       action.actionId !== "resend_recipient"
     ) {
@@ -345,6 +357,7 @@ export const contactFormCliModule: PluginCliModule = {
       status:
         | "already_verified"
         | "added_verified"
+        | "marked_verified"
         | "verification_sent"
         | "verification_pending";
       cooldownRemainingSeconds: number;

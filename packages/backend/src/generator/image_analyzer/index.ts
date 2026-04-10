@@ -1,5 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
+import {
+  SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
+  SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH,
+} from "@vivd/shared";
 import { ENABLE_IMAGE_ANALYSIS, MAX_IMAGES_TO_ANALYZE } from "../config";
 import { log } from "../logger";
 import type { ImageInfo } from "./types";
@@ -11,12 +15,32 @@ import type { FlowContext } from "../../services/integrations/OpenRouterService"
 
 export type { ImageInfo };
 
+function resolveScratchImagesDirectory(outputDir: string): {
+  absoluteDir: string;
+  relativeDir: string;
+} | null {
+  const candidates = [
+    SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
+    SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH,
+  ];
+
+  for (const relativeDir of candidates) {
+    const absoluteDir = path.join(outputDir, relativeDir);
+    if (fs.existsSync(absoluteDir) && fs.statSync(absoluteDir).isDirectory()) {
+      return { absoluteDir, relativeDir };
+    }
+  }
+
+  return null;
+}
+
 export async function analyzeImages(outputDir: string, flowContext?: FlowContext) {
-  const imagesDir = path.join(outputDir, "images");
-  if (!fs.existsSync(imagesDir)) {
+  const imageDirectory = resolveScratchImagesDirectory(outputDir);
+  if (!imageDirectory) {
     log("No images directory found.");
     return;
   }
+  const imagesDir = imageDirectory.absoluteDir;
 
   const files = fs
     .readdirSync(imagesDir)
@@ -27,6 +51,8 @@ export async function analyzeImages(outputDir: string, flowContext?: FlowContext
     const dims = getImageDimensions(path.join(imagesDir, file));
     return {
       filename: file,
+      relativePath: path.posix.join(imageDirectory.relativeDir, file),
+      absolutePath: path.join(imagesDir, file),
       width: dims.width,
       height: dims.height,
       analyzed: false,
@@ -54,7 +80,7 @@ export async function analyzeImages(outputDir: string, flowContext?: FlowContext
         if (!fs.existsSync(filteredDir)) {
           fs.mkdirSync(filteredDir);
         }
-        const oldPath = path.join(imagesDir, img.filename);
+        const oldPath = img.absolutePath ?? path.join(imagesDir, img.filename);
         const newPath = path.join(filteredDir, img.filename);
         fs.renameSync(oldPath, newPath);
         log(`Filtered out ${img.filename} (ratio: ${ratio.toFixed(2)})`);
@@ -113,5 +139,5 @@ export async function analyzeImages(outputDir: string, flowContext?: FlowContext
   }
 
   // 3. Generate Report
-  generateImageDescriptionFile(validImages, outputDir);
+  generateImageDescriptionFile(validImages, outputDir, imageDirectory.relativeDir);
 }

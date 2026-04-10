@@ -68,13 +68,11 @@ export function ModelSelector({
         {models.map((model) => {
           const modelConfig = tierConfig[model.tier];
           const ModelIcon = modelConfig.icon;
-          const isSelected =
-            selectedModel?.provider === model.provider &&
-            selectedModel?.modelId === model.modelId;
+          const isSelected = selectedModel?.tier === model.tier;
 
           return (
             <DropdownMenuItem
-              key={`${model.provider}/${model.modelId}`}
+              key={model.tier}
               onClick={() => onSelect(model)}
               className="flex items-start gap-2.5 py-2"
             >

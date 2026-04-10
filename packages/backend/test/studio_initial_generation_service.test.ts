@@ -233,6 +233,62 @@ describe("StudioInitialGenerationService", () => {
     );
   });
 
+  it("forwards model variants to the Studio initial-generation mutation", async () => {
+    ensureRunningMock.mockResolvedValue({
+      studioId: "studio-1",
+      url: "https://fallback.example/runtime-123",
+      runtimeUrl: "https://studio.example/runtime-123",
+      compatibilityUrl: "https://app.example/_studio/runtime-123",
+      accessToken: "studio-token-1",
+    });
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(mockResponse({ status: "ok" }))
+      .mockResolvedValueOnce(
+        mockResponse({
+          sessionId: "sess-variant",
+          reused: false,
+          status: "generating_initial_site",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      startStudioInitialGeneration({
+        organizationId: "org-1",
+        projectSlug: "site-1",
+        version: 1,
+        model: {
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4",
+          variant: "high",
+        },
+      }),
+    ).resolves.toEqual({
+      sessionId: "sess-variant",
+      reused: false,
+      status: "generating_initial_site",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://studio.example/runtime-123/vivd-studio/api/trpc/agent.startInitialGeneration",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          projectSlug: "site-1",
+          version: 1,
+          model: {
+            provider: "openrouter",
+            modelId: "openai/gpt-5.4",
+            variant: "high",
+          },
+        }),
+      }),
+    );
+  });
+
   it("prefers the provider-supplied backend URL for Docker-managed runtimes", async () => {
     providerKindMock.value = "docker";
 

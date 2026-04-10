@@ -16,6 +16,7 @@ import { BRAND_NAME, formatDocumentTitle } from "@/lib/brand";
 import { toast } from "sonner";
 import { ROUTES } from "@/app/router";
 import { useAppConfig } from "@/lib/AppConfigContext";
+import { SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH } from "@vivd/shared";
 import { scratchSchema, type ScratchValues, type StylePreset } from "./types";
 
 type SiteTheme = "dark" | "light" | null;
@@ -424,7 +425,7 @@ export function ScratchWizardProvider({ children }: { children: ReactNode }) {
               assets,
               slug,
               version,
-              "images",
+              SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
               (uploaded, _total) => {
                 setUploadProgress((prev) => ({
                   ...prev,

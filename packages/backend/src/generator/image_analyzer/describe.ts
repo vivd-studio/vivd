@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH } from "@vivd/shared";
 import { VISION_MODEL } from "../config";
 import { log } from "../logger";
 import { IMAGE_DESCRIPTION_PROMPT } from "../prompts";
@@ -16,7 +17,15 @@ export async function describeImage(
   outputDir: string,
   flowContext?: FlowContext,
 ): Promise<{ description: string }> {
-  const imagePath = path.join(outputDir, "images", image.filename);
+  const imagePath =
+    image.absolutePath ??
+    (image.relativePath
+      ? path.join(outputDir, ...image.relativePath.split("/"))
+      : path.join(
+          outputDir,
+          SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH,
+          image.filename,
+        ));
 
   // Read image and convert to base64
   let imageBuffer: Buffer = fs.readFileSync(imagePath);

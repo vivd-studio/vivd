@@ -7,16 +7,19 @@ Entries should be proactively added or removed to always stay relevant to the cu
 If this Astro project uses the Vivd CMS contract, the canonical structured content lives under `src/content/`:
 
 - collection schemas: `src/content/models/*.yaml`
-- collection entries: `src/content/collections/`
+- collection entries: `src/content/<collection-key>/`
 - CMS media/documents: `src/content/media/`
 
 The Vivd YAML files under `src/content/` are the canonical source of truth.
 
 - Do not replace them with a separate Astro-only schema/source-of-truth such as `src/content.config.ts`.
 - Astro Content Collections may be used as the Astro rendering/query layer, but they should read from the existing Vivd content contract instead of introducing a second parallel content model.
-- Collection entries belong under `src/content/collections/<collection-key>/`; do not place them directly under `src/content/<collection-key>/`.
+- Prefer flat collection folders directly under `src/content/`, for example `src/content/<collection-key>/<entry>.yaml`, unless the existing schema already uses a different `storage.path`.
+- Directory-style collection entries are also allowed when the schema uses `storage.entryFormat: directory`.
 - For CMS images, PDFs, downloads, and other file references, use schema fields of type `asset` or `assetList` instead of plain `string`.
 - For image-like CMS fields, set `accepts` (for example `image/*`) so Studio can render image-aware picker and preview controls.
+- Prefer `src/content/media/` as the canonical home for Astro-managed site assets.
+- Use `public/` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, `robots.txt`, verification files, or explicit compatibility cases.
 - Do not hand-edit `.vivd/content/`; it is generated.
 - Run `vivd cms validate` after changing CMS schema or collection entries.
 

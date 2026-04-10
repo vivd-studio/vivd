@@ -442,6 +442,26 @@ describe("opencode index session behavior", () => {
     );
   });
 
+  it("passes the configured model variant to promptAsync", async () => {
+    await runTask("deep analysis", "/workspace/project", undefined, {
+      provider: "openrouter",
+      modelId: "openai/gpt-5.4",
+      variant: "high",
+    });
+
+    expect(sessionPromptAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionID: "sess-new",
+        directory: "/workspace/project/",
+        model: {
+          providerID: "openrouter",
+          modelID: "openai/gpt-5.4",
+        },
+        variant: "high",
+      }),
+    );
+  });
+
   it("injects the session-start system prompt for a pre-created empty session", async () => {
     await runTask("first message", "/workspace/project", "sess-existing");
 

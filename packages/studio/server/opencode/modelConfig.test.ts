@@ -31,6 +31,7 @@ describe("OpenCode model config", () => {
     vi.stubEnv("OPENCODE_MODEL_STANDARD", "openrouter/google/gemini-2.5-flash");
     vi.stubEnv("OPENCODE_MODEL_ADVANCED", "openrouter/google/gemini-3-pro-preview");
     vi.stubEnv("OPENCODE_MODEL_PRO", "openrouter/google/gemini-3-pro-preview");
+    vi.stubEnv("OPENCODE_MODEL_PRO_VARIANT", "high");
 
     expect(getAvailableModels()).toEqual([
       {
@@ -49,6 +50,7 @@ describe("OpenCode model config", () => {
         tier: "pro",
         provider: "openrouter",
         modelId: "google/gemini-3-pro-preview",
+        variant: "high",
         label: "Pro",
       },
     ]);
@@ -57,10 +59,12 @@ describe("OpenCode model config", () => {
   it("defaults general chat to the standard tier", () => {
     vi.stubEnv("OPENCODE_MODEL_STANDARD", "openrouter/google/gemini-2.5-flash");
     vi.stubEnv("OPENCODE_MODEL_ADVANCED", "openrouter/google/gemini-3-pro-preview");
+    vi.stubEnv("OPENCODE_MODEL_STANDARD_VARIANT", "low");
 
     expect(getDefaultModel()).toEqual({
       provider: "openrouter",
       modelId: "google/gemini-2.5-flash",
+      variant: "low",
     });
   });
 
@@ -75,6 +79,7 @@ describe("OpenCode model config", () => {
   it("enriches configured models with provider metadata when available", async () => {
     vi.stubEnv("OPENCODE_MODEL_STANDARD", "openrouter/google/gemini-2.5-flash");
     vi.stubEnv("OPENCODE_MODEL_ADVANCED", "openrouter/google/gemini-3-pro-preview");
+    vi.stubEnv("OPENCODE_MODEL_ADVANCED_VARIANT", "high");
 
     configProvidersMock.mockResolvedValue({
       error: null,
@@ -131,6 +136,7 @@ describe("OpenCode model config", () => {
         tier: "advanced",
         provider: "openrouter",
         modelId: "google/gemini-3-pro-preview",
+        variant: "high",
         label: "Advanced",
         providerLabel: "OpenRouter",
         modelLabel: "Gemini 3 Pro Preview",
@@ -142,6 +148,36 @@ describe("OpenCode model config", () => {
     expect(getClientAndDirectoryMock).toHaveBeenCalledWith("/workspace/project");
     expect(configProvidersMock).toHaveBeenCalledWith({
       directory: "/tmp/workspace",
+    });
+  });
+
+  it("keeps validation variant-aware when multiple tiers share a model id", async () => {
+    vi.stubEnv("OPENCODE_MODEL_STANDARD", "openrouter/openai/gpt-5.4");
+    vi.stubEnv("OPENCODE_MODEL_PRO", "openrouter/openai/gpt-5.4");
+    vi.stubEnv("OPENCODE_MODEL_PRO_VARIANT", "high");
+
+    const { validateModelSelection } = await import("./modelConfig.js");
+
+    expect(
+      validateModelSelection({
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+        variant: "high",
+      }),
+    ).toEqual({
+      provider: "openrouter",
+      modelId: "openai/gpt-5.4",
+      variant: "high",
+    });
+
+    expect(
+      validateModelSelection({
+        provider: "openrouter",
+        modelId: "openai/gpt-5.4",
+      }),
+    ).toEqual({
+      provider: "openrouter",
+      modelId: "openai/gpt-5.4",
     });
   });
 });

@@ -236,6 +236,38 @@ describe("useOpencodeChatController", () => {
     });
   });
 
+  it("passes the selected model variant through runTask payloads", async () => {
+    const { result } = renderHook(() =>
+      useOpencodeChatController({
+        projectSlug: "site-1",
+        version: 1,
+        selectedModel: {
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4",
+          variant: "high",
+        },
+      }),
+    );
+
+    act(() => {
+      result.current.sendTask("review the site", "sess-1");
+    });
+
+    await waitFor(() => {
+      expect(runTaskMutateAsync).toHaveBeenCalledWith({
+        projectSlug: "site-1",
+        task: "review the site",
+        sessionId: "sess-1",
+        version: 1,
+        model: {
+          provider: "openrouter",
+          modelId: "openai/gpt-5.4",
+          variant: "high",
+        },
+      });
+    });
+  });
+
   it("locks onto an explicitly requested session on mount", async () => {
     renderHook(() =>
       useOpencodeChatController({

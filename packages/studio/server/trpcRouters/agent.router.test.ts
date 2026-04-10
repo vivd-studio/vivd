@@ -193,6 +193,7 @@ describe("agent router", () => {
     validateModelSelectionMock.mockReturnValueOnce({
       provider: "openai",
       modelId: "gpt-4.1-mini",
+      variant: "high",
     });
     const caller = agentRouter.createCaller(makeContext());
 
@@ -201,14 +202,14 @@ describe("agent router", () => {
       task: "polish copy",
       sessionId: "sess-existing",
       version: 3,
-      model: { provider: "openai", modelId: "gpt-4.1-preview" },
+      model: { provider: "openai", modelId: "gpt-4.1-preview", variant: "high" },
     });
 
     expect(runTaskMock).toHaveBeenCalledWith(
       "polish copy",
       "/tmp/workspace",
       "sess-existing",
-      { provider: "openai", modelId: "gpt-4.1-mini" },
+      { provider: "openai", modelId: "gpt-4.1-mini", variant: "high" },
     );
     expect(result).toEqual({ success: true, sessionId: "sess-1", version: 3 });
   });
@@ -254,20 +255,21 @@ describe("agent router", () => {
     validateModelSelectionMock.mockReturnValueOnce({
       provider: "openai",
       modelId: "gpt-5.4",
+      variant: "high",
     });
     const caller = agentRouter.createCaller(makeContext());
 
     const result = await caller.startInitialGeneration({
       projectSlug: "site-1",
       version: 3,
-      model: { provider: "openai", modelId: "gpt-5.4-preview" },
+      model: { provider: "openai", modelId: "gpt-5.4-preview", variant: "high" },
     });
 
     expect(startInitialGenerationServiceMock).toHaveBeenCalledWith({
       projectSlug: "site-1",
       version: 3,
       workspaceDir: "/tmp/workspace",
-      model: { provider: "openai", modelId: "gpt-5.4" },
+      model: { provider: "openai", modelId: "gpt-5.4", variant: "high" },
     });
     expect(result).toEqual({
       sessionId: "sess-initial",

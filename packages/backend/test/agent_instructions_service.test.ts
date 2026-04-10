@@ -55,7 +55,8 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain("src/content/vivd.content.yaml");
     expect(result.instructions).toContain("Astro Content Collections may be used as the Astro rendering/query layer");
     expect(result.instructions).toContain("Do not replace it with a separate Astro-only schema/source-of-truth");
-    expect(result.instructions).toContain("Collection entries belong under `src/content/collections/<collection-key>/`");
+    expect(result.instructions).toContain("Prefer flat collection folders directly under `src/content/`");
+    expect(result.instructions).toContain("Directory-style collection entries are also allowed");
     expect(result.instructions).toContain("use schema fields of type `asset` or `assetList`");
     expect(result.instructions).toContain("set `accepts` (for example `image/*`)");
     expect(result.instructions).toContain("Use collection-backed CMS content selectively");
@@ -65,6 +66,8 @@ describe("AgentInstructionsService", () => {
     expect(result.instructions).toContain(".vivd/uploads/");
     expect(result.instructions).toContain(".vivd/dropped-images/");
     expect(result.instructions).toContain("Treat both as working material");
+    expect(result.instructions).toContain("`src/content/media/` by default");
+    expect(result.instructions).toContain("Use `public/` only for passthrough files");
     expect(result.instructions).toContain("Redirects for migrated URLs");
     expect(result.instructions).toContain("Tool Usage Contract");
     expect(result.instructions).toContain(

@@ -481,45 +481,51 @@ function parseModelSchema(
   const entry = isRecord(parsed.entry) ? parsed.entry : null;
   const fields: Record<string, CmsFieldDefinition> = {};
   const fieldsValue = entry && isRecord(entry.fields) ? entry.fields : null;
-  const hasLegacyFieldList = Array.isArray(parsed.fields);
+  const legacyFieldsValue = Array.isArray(parsed.fields) ? parsed.fields : null;
+  const storagePath =
+    storage && typeof storage.path === "string" && storage.path.trim().length > 0
+      ? storage.path.trim()
+      : `./${modelKey}`;
+  const entryFormat =
+    storage?.entryFormat === "directory" || storage?.entryFormat === "file"
+      ? storage.entryFormat
+      : storagePath === `./collections/${modelKey}`
+        ? "directory"
+        : "file";
 
-  if (hasLegacyFieldList) {
-    errors.push(
-      `${schemaLabel}: legacy flat collection schemas are not supported. Define storage.path: ./collections/${modelKey}, storage.entryFormat: directory, and entry.fields, then store entries under src/content/collections/${modelKey}/<entry>/index.yaml`,
-    );
-  }
-  if (!storage) {
-    errors.push(`${schemaLabel}: storage is required`);
-  }
-  if (!entry) {
-    errors.push(`${schemaLabel}: entry is required`);
-  }
-  if (!fieldsValue) {
+  if (!fieldsValue && !legacyFieldsValue) {
     errors.push(`${schemaLabel}: entry.fields is required`);
+    return null;
   }
-  if (!storage || !entry || !fieldsValue) return null;
-
-  const storagePath = typeof storage.path === "string" ? storage.path.trim() : "";
-  const entryFormat = storage.entryFormat === "directory" ? "directory" : null;
-  if (!storagePath) {
-    errors.push(`${schemaLabel}: storage.path is required`);
-  }
-  if (entryFormat !== "directory") {
-    errors.push(`${schemaLabel}: storage.entryFormat must be directory in v1`);
-  }
-  if (storagePath && storagePath !== `./collections/${modelKey}`) {
+  if (storagePath !== `./${modelKey}` && storagePath !== `./collections/${modelKey}`) {
     errors.push(
-      `${schemaLabel}: storage.path should be ./collections/${modelKey} for collection model ${modelKey}`,
+      `${schemaLabel}: storage.path should be ./${modelKey} or ./collections/${modelKey} for collection model ${modelKey}`,
     );
-  }
-  if (!storagePath || entryFormat !== "directory" || storagePath !== `./collections/${modelKey}`) {
     return null;
   }
 
-  for (const [fieldKey, rawField] of Object.entries(fieldsValue)) {
-    const normalized = normalizeFieldDefinition(fieldKey, rawField, errors, schemaLabel);
-    if (normalized) {
-      fields[fieldKey] = normalized;
+  if (fieldsValue) {
+    for (const [fieldKey, rawField] of Object.entries(fieldsValue)) {
+      const normalized = normalizeFieldDefinition(fieldKey, rawField, errors, schemaLabel);
+      if (normalized) {
+        fields[fieldKey] = normalized;
+      }
+    }
+  } else if (legacyFieldsValue) {
+    for (const rawField of legacyFieldsValue) {
+      if (!isRecord(rawField) || typeof rawField.name !== "string") {
+        errors.push(`${schemaLabel}: legacy field list entries must define a name`);
+        continue;
+      }
+      const fieldKey = rawField.name.trim();
+      if (!fieldKey) {
+        errors.push(`${schemaLabel}: legacy field list entries must define a name`);
+        continue;
+      }
+      const normalized = normalizeFieldDefinition(fieldKey, rawField, errors, schemaLabel);
+      if (normalized) {
+        fields[fieldKey] = normalized;
+      }
     }
   }
   if (Object.keys(fields).length === 0) return null;
@@ -545,7 +551,7 @@ function parseModelSchema(
     label,
     storage: {
       path: storagePath,
-      entryFormat: "directory",
+      entryFormat,
     },
     display: primaryField ? { primaryField } : undefined,
     route: route
@@ -948,34 +954,6 @@ async function loadEntryRecord(options: {
   };
 }
 
-async function detectUnsupportedFlatCollectionLayout(options: {
-  paths: CmsPaths;
-  modelKey: string;
-  errors: string[];
-}): Promise<void> {
-  const { paths, modelKey, errors } = options;
-  const flatCollectionRoot = path.join(paths.contentRoot, modelKey);
-  if (!(await pathExists(flatCollectionRoot))) return;
-
-  let dirents: { name: string; isDirectory(): boolean; isFile(): boolean }[];
-  try {
-    dirents = await fs.readdir(flatCollectionRoot, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  const hasFlatContent = dirents.some((dirent) => {
-    if (dirent.name.startsWith(".")) return false;
-    if (dirent.isDirectory()) return true;
-    return dirent.isFile() && /\.(ya?ml|md)$/i.test(dirent.name);
-  });
-  if (!hasFlatContent) return;
-
-  errors.push(
-    `src/content/${modelKey}/ uses an unsupported flat collection layout. Move entries to src/content/collections/${modelKey}/<entry>/index.yaml and keep the model schema storage.path set to ./collections/${modelKey}.`,
-  );
-}
-
 async function loadModelRecord(options: {
   paths: CmsPaths;
   rootConfig: CmsRootConfig;
@@ -990,11 +968,6 @@ async function loadModelRecord(options: {
     errors.push(`${relativeSchemaPath}: schema file is missing`);
     return null;
   }
-  await detectUnsupportedFlatCollectionLayout({
-    paths,
-    modelKey: modelRef.key,
-    errors,
-  });
 
   const schemaParsed = await readYamlObject(schemaPath, errors, relativeSchemaPath);
   if (!schemaParsed) return null;
@@ -1193,8 +1166,8 @@ function buildDefaultCollectionModelSchema(modelKey: string): CmsModelSchema {
   return {
     label: titleizeKey(modelKey),
     storage: {
-      path: `./collections/${modelKey}`,
-      entryFormat: "directory",
+      path: `./${modelKey}`,
+      entryFormat: "file",
     },
     display: {
       primaryField: "title",
@@ -1308,7 +1281,7 @@ export async function scaffoldCmsWorkspace(projectDir: string): Promise<CmsScaff
   const paths = getCmsPaths(projectDir);
   const created: string[] = [];
   const skipped: string[] = [];
-  const directories = [paths.contentRoot, paths.modelsRoot, paths.collectionsRoot, paths.mediaRoot];
+  const directories = [paths.contentRoot, paths.modelsRoot, paths.mediaRoot];
 
   for (const dirPath of directories) {
     if (await pathExists(dirPath)) {
@@ -1331,7 +1304,6 @@ export async function scaffoldCmsWorkspace(projectDir: string): Promise<CmsScaff
   }
   for (const filePath of [
     path.join(paths.modelsRoot, ".gitkeep"),
-    path.join(paths.collectionsRoot, ".gitkeep"),
     path.join(paths.mediaRoot, ".gitkeep"),
   ]) {
     if (await ensurePlaceholderFile(filePath)) {
@@ -1382,7 +1354,7 @@ export async function scaffoldCmsModel(
     created.push(toPosix(path.relative(projectDir, schemaPath)));
   }
 
-  const collectionDir = path.join(paths.collectionsRoot, normalizedKey);
+  const collectionDir = path.join(paths.contentRoot, normalizedKey);
   if (await pathExists(collectionDir)) {
     skipped.push(toPosix(path.relative(projectDir, collectionDir)));
   } else {

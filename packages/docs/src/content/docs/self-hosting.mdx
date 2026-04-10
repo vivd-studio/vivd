@@ -317,7 +317,7 @@ Most self-host installs do not need much more env work. You usually only edit `.
 - GitHub backup/sync: `GITHUB_SYNC_ENABLED`, `GITHUB_ORG`, `GITHUB_TOKEN`
 - scraper residential proxying when website import is blocked by datacenter-IP or anti-bot checks: `PROXY_HOST`, optional `PROXY_PORT`, `PROXY_USERNAME`, `PROXY_PASSWORD`
 - a remote S3-compatible object store instead of the bundled local bucket
-- an optional `OPENCODE_MODEL_PRO`
+- an optional `OPENCODE_MODEL_PRO` and per-tier `OPENCODE_MODEL_*_VARIANT`
 
 For the install-wide UI surface behind those choices, use [Instance Settings](/instance-settings/).
 Use [Email & Deliverability](/email-and-deliverability/) for the admin-side email

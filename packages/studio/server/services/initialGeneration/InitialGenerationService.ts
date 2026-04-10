@@ -3,6 +3,9 @@ import path from "node:path";
 import {
   isConnectedMode,
   INITIAL_GENERATION_MANIFEST_RELATIVE_PATH,
+  SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
+  SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH,
+  SCRATCH_REFERENCE_FILES_RELATIVE_PATH,
   type InitialGenerationState,
   type ScratchInitialGenerationManifest,
 } from "@vivd/shared";
@@ -455,6 +458,47 @@ function formatListSection(title: string, items: string[]): string {
   return `${title}\n${items.map((item) => `- ${item}`).join("\n")}`;
 }
 
+function listScratchUploadedAssets(workspaceDir: string): string[] {
+  const candidates = [
+    SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH,
+    SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH,
+  ];
+  const collected: string[] = [];
+  const seen = new Set<string>();
+
+  for (const relativeRoot of candidates) {
+    const rootDir = path.join(workspaceDir, relativeRoot);
+    const files = listFilesRecursive(rootDir).map((file) => `${relativeRoot}/${file}`);
+    for (const file of files) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      collected.push(file);
+    }
+  }
+
+  return collected.sort((a, b) => a.localeCompare(b));
+}
+
+function getPreferredScratchAssetRoot(workspaceDir: string): string {
+  if (
+    listFilesRecursive(
+      path.join(workspaceDir, SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH),
+    ).length > 0
+  ) {
+    return SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH;
+  }
+
+  if (
+    listFilesRecursive(
+      path.join(workspaceDir, SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH),
+    ).length > 0
+  ) {
+    return SCRATCH_LEGACY_BRAND_ASSETS_RELATIVE_PATH;
+  }
+
+  return SCRATCH_ASTRO_BRAND_ASSETS_RELATIVE_PATH;
+}
+
 function buildStyleBlock(
   manifest: ScratchInitialGenerationManifest,
 ): string | null {
@@ -496,16 +540,17 @@ export function buildInitialGenerationTask(options: {
     path.join(options.workspaceDir, ".vivd", "image-files-description.txt"),
   );
   const referenceUrls =
-    readTextFileIfExists(path.join(options.workspaceDir, "references", "urls.txt")) ??
+    readTextFileIfExists(
+      path.join(options.workspaceDir, SCRATCH_REFERENCE_FILES_RELATIVE_PATH, "urls.txt"),
+    ) ??
     (options.manifest.referenceUrls?.join("\n") || null);
-  const uploadedAssets = listFilesRecursive(path.join(options.workspaceDir, "images")).map(
-    (file) => `images/${file}`,
-  );
+  const uploadedAssets = listScratchUploadedAssets(options.workspaceDir);
+  const preferredAssetRoot = getPreferredScratchAssetRoot(options.workspaceDir);
   const referenceFiles = listFilesRecursive(
-    path.join(options.workspaceDir, "references"),
+    path.join(options.workspaceDir, SCRATCH_REFERENCE_FILES_RELATIVE_PATH),
   )
     .filter((file) => file !== "urls.txt")
-    .map((file) => `references/${file}`);
+    .map((file) => `${SCRATCH_REFERENCE_FILES_RELATIVE_PATH}/${file}`);
   const styleBlock = buildStyleBlock(options.manifest);
   const fallbackBusinessBrief = [
     `Title: ${options.manifest.title}`,
@@ -535,7 +580,9 @@ Create a complete, finished version 1 of the website in this run, not just a rou
 Keep it production-ready: responsive, accessible, polished, and free of placeholder content.
 If something important is missing, you may ask the user clarifying questions using the question tool, but otherwise make reasonable assumptions and finish the site.
 Keep the project as Astro with the existing Tailwind setup. Do not replace the framework.
-Use uploaded source assets from \`images/\` when relevant. If a file should be publicly served by Astro, copy or move the final chosen asset into \`public/images/\` and update the site code accordingly.
+Use uploaded source assets from \`${preferredAssetRoot}/\` when relevant.
+Treat \`src/content/media/\` as the canonical home for Astro-managed site assets. If the workspace still has legacy scratch assets under \`images/\`, you may reuse them, but prefer keeping final managed assets under \`src/content/media/\`.
+Use \`public/\` only for passthrough files that intentionally need raw framework-public URLs, such as favicons, manifest icons, verification files, or other explicit compatibility cases. Do not default to moving the whole asset library into \`public/images/\`.
 Treat \`references/\` as working material for inspiration and reconstruction, not as public site assets by default.
 Maintain a clean structure in \`src/layouts\`, \`src/components\`, \`src/styles\`, and any additional content/data files you add.
 Proactively update \`AGENTS.md\` so it stays current for this project, especially content locations and editing instructions.

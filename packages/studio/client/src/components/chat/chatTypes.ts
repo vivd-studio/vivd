@@ -102,6 +102,7 @@ export interface ModelTier {
   tier: "standard" | "advanced" | "pro";
   provider: string;
   modelId: string;
+  variant?: string;
   label: string;
   providerLabel?: string;
   modelLabel?: string;

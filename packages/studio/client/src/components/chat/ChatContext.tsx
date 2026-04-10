@@ -148,7 +148,12 @@ export function ChatProvider({
   const persistSelectedModelPreference = useCallback((model: ModelTier) => {
     localStorage.setItem(
       "vivd-selected-model",
-      JSON.stringify({ provider: model.provider, modelId: model.modelId }),
+      JSON.stringify({
+        tier: model.tier,
+        provider: model.provider,
+        modelId: model.modelId,
+        ...(model.variant ? { variant: model.variant } : {}),
+      }),
     );
   }, []);
 
@@ -183,11 +188,26 @@ export function ChatProvider({
     const savedModel = localStorage.getItem("vivd-selected-model");
     if (savedModel) {
       try {
-        const { provider, modelId } = JSON.parse(savedModel);
-        const matchingModel = availableModels.find(
-          (model) =>
-            model.provider === provider && model.modelId === modelId,
-        );
+        const { tier, provider, modelId, variant } = JSON.parse(savedModel);
+        const matchingModel =
+          availableModels.find(
+            (model) =>
+              typeof tier === "string" &&
+              model.tier === tier &&
+              model.provider === provider &&
+              model.modelId === modelId &&
+              (model.variant || undefined) === (variant || undefined),
+          ) ??
+          availableModels.find(
+            (model) =>
+              model.provider === provider &&
+              model.modelId === modelId &&
+              (model.variant || undefined) === (variant || undefined),
+          ) ??
+          availableModels.find(
+            (model) =>
+              model.provider === provider && model.modelId === modelId,
+          );
         if (matchingModel) {
           setSelectedModelState(matchingModel);
           return;
@@ -205,6 +225,7 @@ export function ChatProvider({
       return {
         provider: selectedModel.provider,
         modelId: selectedModel.modelId,
+        ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
       };
     }
 
@@ -215,6 +236,7 @@ export function ChatProvider({
       return {
         provider: defaultModel.provider,
         modelId: defaultModel.modelId,
+        ...(defaultModel.variant ? { variant: defaultModel.variant } : {}),
       };
     }
 
@@ -258,6 +280,7 @@ export function ChatProvider({
       ? {
           provider: selectedModel.provider,
           modelId: selectedModel.modelId,
+          ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
         }
       : null,
     initialSelectedSessionId: requestedInitialSessionId,
