@@ -1,7 +1,18 @@
-import type { PluginPackageDescriptor } from "@vivd/shared/types";
+import type {
+  PluginModule as SharedPluginModule,
+  PluginPackageDescriptor,
+} from "@vivd/shared/types";
+import type express from "express";
+import type { Multer } from "multer";
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
 import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 import { contactFormPluginBackendHooks } from "@vivd/plugin-contact-form/backendHooks";
+import { analyticsPluginPublicRoutes } from "./analytics/backendContribution";
+import {
+  contactFormPluginModule,
+  contactFormPluginPublicRoutes,
+} from "./contactForm/backendContribution";
+import { analyticsPluginModule } from "./analytics/module";
 import type { PluginEntitlementState } from "./PluginEntitlementService";
 import type {
   OrganizationPluginIssue,
@@ -53,8 +64,32 @@ export interface BackendPluginIntegrationHooks {
   }) => Promise<void>;
 }
 
+export type PublicPluginRouterDeps = {
+  upload: Pick<Multer, "none">;
+};
+
+export interface BackendPublicPluginRouteDefinition {
+  routeId: string;
+  mountPath: string;
+  createRouter: (deps: PublicPluginRouterDeps) => express.Router;
+}
+
+export interface BackendPluginContribution<
+  TPluginId extends string = string,
+> {
+  module: SharedPluginModule<TPluginId>;
+  publicRoutes?: readonly BackendPublicPluginRouteDefinition[];
+  hooks?: BackendPluginIntegrationHooks;
+}
+
 export interface BackendPluginPackageDescriptor
-  extends PluginPackageDescriptor<string, never, BackendPluginIntegrationHooks> {}
+  extends PluginPackageDescriptor<
+    string,
+    never,
+    BackendPluginContribution<string>
+  > {
+  backend: BackendPluginContribution<string>;
+}
 
 function defineBackendPluginPackageDescriptors<
   const T extends readonly BackendPluginPackageDescriptor[],
@@ -80,10 +115,23 @@ export const backendPluginPackageDescriptors =
   defineBackendPluginPackageDescriptors([
   {
     ...contactFormPluginDescriptor,
-    backendHooks: contactFormPluginBackendHooks,
+    backend: {
+      module: contactFormPluginModule,
+      publicRoutes: contactFormPluginPublicRoutes,
+      hooks: contactFormPluginBackendHooks,
+    } as BackendPluginContribution<"contact_form">,
   },
   {
     ...analyticsPluginDescriptor,
-    backendHooks: undefined,
+    backend: {
+      module: analyticsPluginModule,
+      publicRoutes: analyticsPluginPublicRoutes,
+    } as BackendPluginContribution<"analytics">,
   },
 ] as const);
+
+export function listBackendPublicPluginRouteDefinitions(): BackendPublicPluginRouteDefinition[] {
+  return backendPluginPackageDescriptors.flatMap<BackendPublicPluginRouteDefinition>(
+    (descriptor) => [...(descriptor.backend.publicRoutes ?? [])],
+  );
+}

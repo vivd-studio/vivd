@@ -3,8 +3,10 @@ import type {
   ProjectPluginUiRegistry,
 } from "@vivd/shared/types";
 import { analyticsPluginDescriptor } from "@vivd/plugin-analytics/descriptor";
+import { contactFormPluginDescriptor } from "@vivd/plugin-contact-form/descriptor";
 
 export const studioPluginDescriptors = [
+  contactFormPluginDescriptor,
   analyticsPluginDescriptor,
 ] satisfies readonly PluginPackageDescriptor[];
 

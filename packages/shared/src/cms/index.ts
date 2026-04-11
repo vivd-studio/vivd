@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml, parse as parseYaml } from "yaml";
-import { inspectAstroCollectionsWorkspace } from "./astroCollections.js";
+import {
+  createAstroCollectionEntry,
+  inspectAstroCollectionsWorkspace,
+} from "./astroCollections.js";
 
 export const CMS_VERSION = 1;
 export const CMS_CONTENT_ROOT = path.join("src", "content");
@@ -113,6 +116,8 @@ export interface CmsModelRecord {
   collectionRoot: string;
   relativeCollectionRoot: string;
   entryFormat: "directory" | "file";
+  entryFileExtension?: string | null;
+  directoryIndexEntries?: boolean;
   sortField: string | null;
   fields: Record<string, CmsFieldDefinition>;
   display?: {
@@ -142,6 +147,11 @@ export interface CmsScaffoldResult {
   paths: CmsPaths;
 }
 
+export interface CmsCreateEntryResult extends CmsScaffoldResult {
+  createdEntryKey: string;
+  createdEntryRelativePath: string;
+}
+
 type ReferenceCheck = {
   sourcePath: string;
   modelKey: string;
@@ -157,6 +167,7 @@ function toPosix(value: string): string {
 
 function titleizeKey(value: string): string {
   return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[-_]+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -1057,6 +1068,8 @@ async function loadModelRecord(options: {
     collectionRoot,
     relativeCollectionRoot,
     entryFormat: schema.storage.entryFormat,
+    entryFileExtension: ".yaml",
+    directoryIndexEntries: schema.storage.entryFormat === "directory",
     sortField: schema.entry.sortField ?? null,
     fields: schema.entry.fields,
     display: schema.display,
@@ -1475,6 +1488,29 @@ export async function scaffoldCmsEntry(
   );
 
   return { created, skipped, paths };
+}
+
+export async function createCmsEntry(
+  projectDir: string,
+  modelKey: string,
+  entryKey: string,
+): Promise<CmsCreateEntryResult> {
+  const astroResult = await createAstroCollectionEntry(projectDir, modelKey, entryKey);
+  if (astroResult) {
+    return astroResult;
+  }
+
+  const scaffold = await scaffoldCmsEntry(projectDir, modelKey, entryKey);
+  const normalizedEntryKey = entryKey.trim().toLowerCase();
+  const createdEntryRelativePath =
+    scaffold.created.find((createdPath) => /\.(json|ya?ml|mdx?|markdown)$/i.test(createdPath)) ??
+    path.posix.join("src/content", modelKey.trim().toLowerCase(), `${normalizedEntryKey}.yaml`);
+
+  return {
+    ...scaffold,
+    createdEntryKey: normalizedEntryKey,
+    createdEntryRelativePath,
+  };
 }
 
 async function readPackageJson(projectDir: string): Promise<Record<string, unknown> | null> {

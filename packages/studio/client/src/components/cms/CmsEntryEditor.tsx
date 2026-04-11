@@ -25,6 +25,7 @@ interface CmsEntryEditorProps {
   reportErrors: string[];
   sourceKind: CmsSourceKind;
   readOnly: boolean;
+  readOnlyMessage?: string | null;
   isDirty: boolean;
   busy: boolean;
   isSaving: boolean;
@@ -57,6 +58,7 @@ export function CmsEntryEditor({
   reportErrors,
   sourceKind,
   readOnly,
+  readOnlyMessage,
   isDirty,
   busy,
   isSaving,
@@ -172,9 +174,10 @@ export function CmsEntryEditor({
           {readOnly ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                {sourceKind === "astro-collections"
-                  ? "Astro Content Collections are the source of truth for this project. Studio can inspect the schema and entries here, but entry editing is not wired yet."
-                  : "This entry is currently inspect-only."}
+                {readOnlyMessage ??
+                  (sourceKind === "astro-collections"
+                    ? "Astro Content Collections are the source of truth for this project. This entry format is currently inspect-only in Studio."
+                    : "This entry is currently inspect-only.")}
               </div>
               {Object.entries(selectedModel.fields).map(([fieldKey, field]) => (
                 <CmsFieldRenderer

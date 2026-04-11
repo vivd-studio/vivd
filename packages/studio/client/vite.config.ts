@@ -16,6 +16,10 @@ export default defineConfig({
         __dirname,
         "../../plugin-analytics/src",
       ),
+      "@vivd/plugin-contact-form": path.resolve(
+        __dirname,
+        "../../plugin-contact-form/src",
+      ),
     },
   },
   build: {

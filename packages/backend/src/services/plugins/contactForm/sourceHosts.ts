@@ -1,1 +1,1 @@
-export * from "@vivd/plugin-contact-form/backend/sourceHosts";
+export { inferProjectPluginSourceHosts as inferContactFormAutoSourceHosts } from "../runtime/sourceHosts";

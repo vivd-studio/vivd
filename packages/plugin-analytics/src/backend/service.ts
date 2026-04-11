@@ -1,15 +1,4 @@
 import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
-import { db } from "@vivd/backend/src/db";
-import {
-  analyticsEvent,
-  contactFormSubmission,
-  projectPluginInstance,
-} from "@vivd/backend/src/db/schema";
-import { pluginEntitlementService } from "@vivd/backend/src/services/plugins/PluginEntitlementService";
-import {
-  projectPluginInstanceService,
-  type ProjectPluginInstanceRow,
-} from "@vivd/backend/src/services/plugins/core/instanceService";
 import {
   analyticsPluginConfigSchema,
   type AnalyticsPluginConfig,
@@ -19,6 +8,10 @@ import {
   getAnalyticsTrackEndpoint,
 } from "./publicApi";
 import { getAnalyticsSnippets } from "./snippets";
+import type {
+  AnalyticsPluginInstanceRow,
+  AnalyticsPluginServiceDeps,
+} from "./ports";
 
 export interface AnalyticsPluginPayload {
   pluginId: "analytics";
@@ -272,7 +265,27 @@ export class AnalyticsPluginNotEnabledError extends Error {
   }
 }
 
-class AnalyticsPluginService {
+export function createAnalyticsPluginService(
+  deps: AnalyticsPluginServiceDeps,
+) {
+  const {
+    db,
+    tables,
+    pluginEntitlementService,
+    projectPluginInstanceService,
+    getPublicPluginApiBaseUrl,
+  } = deps;
+  const { analyticsEvent, contactFormSubmission, projectPluginInstance } = tables;
+
+  async function resolveAnalyticsPublicEndpoints() {
+    const baseUrl = await getPublicPluginApiBaseUrl();
+    return {
+      scriptEndpoint: getAnalyticsScriptEndpoint(baseUrl),
+      trackEndpoint: getAnalyticsTrackEndpoint(baseUrl),
+    };
+  }
+
+  class AnalyticsPluginService {
   async ensureAnalyticsPlugin(options: {
     organizationId: string;
     projectSlug: string;
@@ -755,8 +768,19 @@ class AnalyticsPluginService {
           : 0,
     };
 
-    const dailyRowByDate = new Map(
-      dailyRows.map((row) => [
+    const dailyRowByDate = new Map<string, {
+      events: number;
+      pageviews: number;
+      uniqueVisitors: number;
+      uniqueSessions: number;
+    }>(
+      dailyRows.map((row: {
+        date: string;
+        events: unknown;
+        pageviews: unknown;
+        uniqueVisitors: unknown;
+        uniqueSessions: unknown;
+      }) => [
         row.date,
         {
           events: toCount(row.events),
@@ -776,22 +800,32 @@ class AnalyticsPluginService {
       };
     });
 
-    const topPages = topPagesRows.map((row) => ({
+    const topPages = topPagesRows.map((row: {
+      path: string;
+      pageviews: unknown;
+      uniqueVisitors: unknown;
+    }) => ({
       path: row.path,
       pageviews: toCount(row.pageviews),
       uniqueVisitors: toCount(row.uniqueVisitors),
     }));
 
-    const topReferrers = topReferrerRows.map((row) => ({
+    const topReferrers = topReferrerRows.map((row: {
+      referrerHost: string | null;
+      events: unknown;
+    }) => ({
       referrerHost: row.referrerHost || "direct",
       events: toCount(row.events),
     }));
 
     const deviceTotal = deviceRows.reduce(
-      (sum, row) => sum + toCount(row.events),
+      (sum: number, row: { events: unknown }) => sum + toCount(row.events),
       0,
     );
-    const devices = deviceRows.map((row) => {
+    const devices = deviceRows.map((row: {
+      deviceType: string | null;
+      events: unknown;
+    }) => {
       const events = toCount(row.events);
       return {
         deviceType: row.deviceType || "unknown",
@@ -993,14 +1027,20 @@ class AnalyticsPluginService {
           )
         : 0;
 
-    const contactDailyRowByDate = new Map(
-      contactDailyRows.map((row) => [row.date, toCount(row.submissions)]),
+    const contactDailyRowByDate = new Map<string, number>(
+      contactDailyRows.map((row: {
+        date: string;
+        submissions: unknown;
+      }) => [row.date, toCount(row.submissions)]),
     );
     const contactDaily = emptyContactDaily.map((row) => ({
       date: row.date,
       submissions: contactDailyRowByDate.get(row.date) ?? 0,
     }));
-    const contactTopSourceHosts = contactTopSourceRows.map((row) => ({
+    const contactTopSourceHosts = contactTopSourceRows.map((row: {
+      sourceHost: string | null;
+      submissions: unknown;
+    }) => ({
       sourceHost: row.sourceHost || "unknown",
       submissions: toCount(row.submissions),
     }));
@@ -1211,10 +1251,8 @@ class AnalyticsPluginService {
     organizationId: string;
     projectSlug: string;
   }): Promise<AnalyticsPluginInfoPayload> {
-    const [scriptEndpoint, trackEndpoint] = await Promise.all([
-      getAnalyticsScriptEndpoint(),
-      getAnalyticsTrackEndpoint(),
-    ]);
+    const { scriptEndpoint, trackEndpoint } =
+      await resolveAnalyticsPublicEndpoints();
 
     const [entitlement, existing] = await Promise.all([
       pluginEntitlementService.resolveEffectiveEntitlement({
@@ -1345,10 +1383,10 @@ class AnalyticsPluginService {
   }
 
   private async toPayload(
-    row: ProjectPluginInstanceRow,
+    row: AnalyticsPluginInstanceRow,
     created: boolean,
   ): Promise<AnalyticsPluginPayload> {
-    const scriptEndpoint = await getAnalyticsScriptEndpoint();
+    const { scriptEndpoint } = await resolveAnalyticsPublicEndpoints();
     const normalizedConfig = normalizeAnalyticsConfig(row.configJson);
     return {
       pluginId: "analytics",
@@ -1360,6 +1398,11 @@ class AnalyticsPluginService {
       snippets: getAnalyticsSnippets(row.publicToken, scriptEndpoint),
     };
   }
+  }
+
+  return new AnalyticsPluginService();
 }
 
-export const analyticsPluginService = new AnalyticsPluginService();
+export type AnalyticsPluginService = ReturnType<
+  typeof createAnalyticsPluginService
+>;

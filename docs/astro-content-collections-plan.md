@@ -75,6 +75,7 @@ Responsibilities:
 - inspect `src/content.config.ts`
 - discover collections and their schemas
 - normalize supported Astro/Zod schema shapes into the same field metadata shape the Studio CMS form renderer already consumes
+- apply narrow compatibility heuristics where needed so obvious local image fields that are still modeled as plain strings can keep using the richer Studio asset/image UI while projects migrate toward stronger Astro-native image schemas
 - list, read, create, update, and delete entries
 - resolve asset/media field behavior
 - expose a stable Studio/CLI-facing contract
@@ -133,7 +134,7 @@ Studio should support:
 
 - collection discovery
 - entry browsing
-- schema-driven field rendering directly from the normalized `src/content.config.ts` adapter output
+- schema-driven field rendering directly from the normalized `src/content.config.ts` adapter output, with a narrow Studio-side fallback for obvious image-like `string` / `string[]` fields
 - entry creation/deletion
 - entry editing
 - asset selection/upload/replacement

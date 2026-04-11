@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type {
+  CmsCreateEntryResult,
   CmsAssetRecord,
   CmsEntryRecord,
   CmsFieldDefinition,
@@ -27,6 +28,30 @@ const SUPPORTED_ENTRY_EXTENSIONS = new Set([
   ".mdx",
   ".markdown",
 ]);
+const IMAGE_FIELD_TOKENS = new Set([
+  "image",
+  "img",
+  "photo",
+  "picture",
+  "thumbnail",
+  "thumb",
+  "logo",
+  "avatar",
+  "poster",
+  "icon",
+]);
+const IMAGE_LIST_FIELD_TOKENS = new Set([
+  "images",
+  "photos",
+  "pictures",
+  "thumbnails",
+  "gallery",
+  "logos",
+  "avatars",
+  "posters",
+  "icons",
+]);
+const IMAGE_REFERENCE_EXTENSION_REGEX = /\.(avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i;
 
 type ParsedFieldResult = {
   field: CmsFieldDefinition;
@@ -43,6 +68,8 @@ type ParsedCollectionDefinition = {
   relativeSchemaPath: string;
   sortField: string | null;
   supportedEntries: boolean;
+  entryExtensionHint: string | null;
+  directoryIndexEntries: boolean;
 };
 
 type SchemaParseContext = {
@@ -57,9 +84,14 @@ function toPosix(value: string): string {
 
 function titleizeKey(value: string): string {
   return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[-_]+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -188,16 +220,200 @@ function expressionToStringLiteral(expression: ts.Expression): string | null {
   return null;
 }
 
+function inferEntryPatternHints(pattern: string | null): {
+  entryExtensionHint: string | null;
+  directoryIndexEntries: boolean;
+} {
+  if (!pattern) {
+    return {
+      entryExtensionHint: null,
+      directoryIndexEntries: false,
+    };
+  }
+
+  const normalized = pattern.trim().toLowerCase();
+  const directoryIndexEntries = /(^|\/)index\.[^/]+$/.test(normalized);
+
+  for (const extension of [".mdx", ".md", ".markdown", ".yaml", ".yml", ".json"]) {
+    if (normalized.includes(extension)) {
+      return {
+        entryExtensionHint: extension,
+        directoryIndexEntries,
+      };
+    }
+  }
+
+  return {
+    entryExtensionHint: null,
+    directoryIndexEntries,
+  };
+}
+
+function getFieldNameTokens(fieldKey: string): string[] {
+  return fieldKey
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^a-zA-Z0-9]+/)
+    .flatMap((segment) => segment.split(/\s+/))
+    .map((segment) => segment.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function looksLikeImageFieldName(fieldKey: string): boolean {
+  const tokens = getFieldNameTokens(fieldKey);
+  if (tokens.some((token) => IMAGE_FIELD_TOKENS.has(token))) {
+    return true;
+  }
+  const normalized = tokens.join("");
+  return normalized.endsWith("image");
+}
+
+function looksLikeImageListFieldName(fieldKey: string): boolean {
+  const tokens = getFieldNameTokens(fieldKey);
+  if (tokens.some((token) => IMAGE_LIST_FIELD_TOKENS.has(token))) {
+    return true;
+  }
+  const normalized = tokens.join("");
+  return normalized.endsWith("images") || normalized.endsWith("gallery");
+}
+
+function looksLikeManagedImageReference(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || !IMAGE_REFERENCE_EXTENSION_REGEX.test(trimmed)) {
+    return false;
+  }
+  const normalized = trimmed.toLowerCase();
+  return (
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("src/content/media/") ||
+    normalized.includes("/media/")
+  );
+}
+
+function collectNonEmptyStringValues(values: unknown[]): string[] {
+  return values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function shouldPromoteStringFieldToImageAsset(fieldKey: string, values: unknown[]): boolean {
+  const nonEmptyValues = collectNonEmptyStringValues(values);
+  const allLookManagedImageLike =
+    nonEmptyValues.length > 0 && nonEmptyValues.every(looksLikeManagedImageReference);
+
+  if (allLookManagedImageLike) {
+    return true;
+  }
+
+  return looksLikeImageFieldName(fieldKey) && nonEmptyValues.length === 0;
+}
+
+function shouldPromoteStringListToImageAssetList(fieldKey: string, values: unknown[]): boolean {
+  const flattenedItems = values.flatMap((value) => (Array.isArray(value) ? value : []));
+  const nonEmptyValues = collectNonEmptyStringValues(flattenedItems);
+  const allLookManagedImageLike =
+    nonEmptyValues.length > 0 && nonEmptyValues.every(looksLikeManagedImageReference);
+
+  if (allLookManagedImageLike) {
+    return true;
+  }
+
+  return looksLikeImageListFieldName(fieldKey) && nonEmptyValues.length === 0;
+}
+
+function applyAstroFieldHeuristics(
+  fieldKey: string,
+  field: CmsFieldDefinition,
+  values: unknown[],
+): CmsFieldDefinition {
+  if (field.type === "string" && shouldPromoteStringFieldToImageAsset(fieldKey, values)) {
+    return {
+      ...field,
+      type: "asset",
+      accepts: ["image/*"],
+    };
+  }
+
+  if (
+    field.type === "list" &&
+    field.item?.type === "string" &&
+    shouldPromoteStringListToImageAssetList(fieldKey, values)
+  ) {
+    return {
+      ...field,
+      type: "assetList",
+      accepts: ["image/*"],
+      item: undefined,
+    };
+  }
+
+  if (field.type === "object" && field.fields) {
+    const nextFields: Record<string, CmsFieldDefinition> = {};
+    for (const [nestedKey, nestedField] of Object.entries(field.fields)) {
+      const nestedValues = values.map((value) =>
+        isRecord(value) ? value[nestedKey] : undefined,
+      );
+      nextFields[nestedKey] = applyAstroFieldHeuristics(
+        nestedKey,
+        nestedField,
+        nestedValues,
+      );
+    }
+    return {
+      ...field,
+      fields: nextFields,
+    };
+  }
+
+  if (field.type === "list" && field.item) {
+    const flattenedValues = values.flatMap((value) => (Array.isArray(value) ? value : []));
+    return {
+      ...field,
+      item: applyAstroFieldHeuristics(fieldKey, field.item, flattenedValues),
+    };
+  }
+
+  return field;
+}
+
+function applyAstroFieldHeuristicsToFields(
+  fields: Record<string, CmsFieldDefinition>,
+  entries: CmsEntryRecord[],
+): Record<string, CmsFieldDefinition> {
+  const nextFields: Record<string, CmsFieldDefinition> = {};
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    nextFields[fieldKey] = applyAstroFieldHeuristics(
+      fieldKey,
+      field,
+      entries.map((entry) => entry.values[fieldKey]),
+    );
+  }
+  return nextFields;
+}
+
 function resolveCollectionRoot(
   projectDir: string,
   configPath: string,
   collectionKey: string,
   collectionConfig: ts.ObjectLiteralExpression,
-): { root: string; supportedEntries: boolean; error: string | null } {
+): {
+  root: string;
+  supportedEntries: boolean;
+  error: string | null;
+  entryExtensionHint: string | null;
+  directoryIndexEntries: boolean;
+} {
   const loaderExpression = getObjectPropertyValue(collectionConfig, "loader");
   if (!loaderExpression) {
     const root = path.join(projectDir, "src", "content", collectionKey);
-    return { root, supportedEntries: true, error: null };
+    return {
+      root,
+      supportedEntries: true,
+      error: null,
+      entryExtensionHint: null,
+      directoryIndexEntries: false,
+    };
   }
 
   const unwrapped = withTransparentWrappers(loaderExpression);
@@ -206,6 +422,8 @@ function resolveCollectionRoot(
       root: path.join(projectDir, "src", "content", collectionKey),
       supportedEntries: false,
       error: "unsupported non-call loader",
+      entryExtensionHint: null,
+      directoryIndexEntries: false,
     };
   }
 
@@ -215,6 +433,8 @@ function resolveCollectionRoot(
       root: path.join(projectDir, "src", "content", collectionKey),
       supportedEntries: false,
       error: `unsupported loader ${loaderPath ?? "<unknown>"}`,
+      entryExtensionHint: null,
+      directoryIndexEntries: false,
     };
   }
 
@@ -224,11 +444,15 @@ function resolveCollectionRoot(
       root: path.join(projectDir, "src", "content", collectionKey),
       supportedEntries: false,
       error: "glob loader missing object configuration",
+      entryExtensionHint: null,
+      directoryIndexEntries: false,
     };
   }
 
+  const loaderObject = withTransparentWrappers(loaderArg) as ts.ObjectLiteralExpression;
+
   const baseExpression = getObjectPropertyValue(
-    withTransparentWrappers(loaderArg) as ts.ObjectLiteralExpression,
+    loaderObject,
     "base",
   );
   const baseValue = baseExpression ? expressionToStringLiteral(baseExpression) : null;
@@ -237,8 +461,13 @@ function resolveCollectionRoot(
       root: path.join(projectDir, "src", "content", collectionKey),
       supportedEntries: false,
       error: "glob loader base must be a string literal",
+      entryExtensionHint: null,
+      directoryIndexEntries: false,
     };
   }
+  const patternExpression = getObjectPropertyValue(loaderObject, "pattern");
+  const patternValue = patternExpression ? expressionToStringLiteral(patternExpression) : null;
+  const patternHints = inferEntryPatternHints(patternValue);
 
   let root = baseValue;
   if (!path.isAbsolute(root)) {
@@ -253,6 +482,8 @@ function resolveCollectionRoot(
     root,
     supportedEntries: true,
     error: null,
+    entryExtensionHint: patternHints.entryExtensionHint,
+    directoryIndexEntries: patternHints.directoryIndexEntries,
   };
 }
 
@@ -336,7 +567,7 @@ function parseSchemaExpression(
   if (ts.isCallExpression(unwrapped) && ts.isPropertyAccessExpression(unwrapped.expression)) {
     const methodName = unwrapped.expression.name.text;
     const receiver = unwrapped.expression.expression;
-    if (methodName === "array") {
+    if (!(ts.isIdentifier(receiver) && receiver.text === "z") && methodName === "array") {
       const item = parseSchemaExpression(receiver, context);
       if (!item) return null;
       if (item.field.type === "asset") {
@@ -708,7 +939,12 @@ async function buildEntriesForCollection(
     const relativePath = toPosix(path.relative(projectDir, filePath));
     const values = await parseEntryValues(filePath);
     const relativeToCollection = toPosix(path.relative(model.collectionRoot, filePath));
-    const key = relativeToCollection.replace(/\.[^.]+$/, "");
+    const normalizedRelativeToCollection = relativeToCollection.replace(/\.[^.]+$/, "");
+    const basename = path.posix.basename(normalizedRelativeToCollection);
+    const isDirectoryIndexEntry = basename === "index";
+    const key = isDirectoryIndexEntry
+      ? path.posix.dirname(normalizedRelativeToCollection)
+      : normalizedRelativeToCollection;
     const sortValue =
       model.sortField && typeof values[model.sortField] === "number"
         ? (values[model.sortField] as number)
@@ -721,7 +957,9 @@ async function buildEntriesForCollection(
       key,
       filePath,
       relativePath,
-      deletePath: relativePath,
+      deletePath: isDirectoryIndexEntry
+        ? toPosix(path.relative(projectDir, path.dirname(filePath)))
+        : relativePath,
       values,
       slug: typeof values.slug === "string" ? values.slug : key,
       status: typeof values.status === "string" ? values.status : null,
@@ -738,6 +976,195 @@ async function buildEntriesForCollection(
     }
     return left.key.localeCompare(right.key);
   });
+}
+
+function normalizeEntryKey(entryKey: string): string {
+  const normalized = entryKey
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .toLowerCase();
+
+  if (!normalized) {
+    throw new Error("Entry key is required");
+  }
+
+  const segments = normalized.split("/");
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") {
+      throw new Error(`Invalid entry key: ${entryKey}`);
+    }
+    if (!/^[a-z0-9][a-z0-9-_]*$/.test(segment)) {
+      throw new Error(`Invalid entry key: ${entryKey}`);
+    }
+  }
+
+  return segments.join("/");
+}
+
+function buildDefaultAstroFieldValue(
+  fieldKey: string,
+  field: CmsFieldDefinition,
+  entryKey: string,
+  defaultLocale: string,
+): unknown {
+  const entrySeed = titleizeKey(entryKey.split("/").pop() || entryKey);
+  const preferredText = TITLE_FIELD_KEYS.has(fieldKey) ? entrySeed : "";
+
+  if (field.localized) {
+    return { [defaultLocale]: preferredText };
+  }
+
+  switch (field.type) {
+    case "slug":
+      return entryKey.split("/").pop() || entryKey;
+    case "string":
+    case "text":
+    case "richText":
+    case "date":
+    case "datetime":
+      return preferredText;
+    case "number":
+      return typeof field.default === "number" ? field.default : 0;
+    case "boolean":
+      return typeof field.default === "boolean" ? field.default : false;
+    case "enum":
+      return field.default ?? field.options?.[0] ?? "";
+    case "object": {
+      const nested: Record<string, unknown> = {};
+      for (const [nestedKey, nestedField] of Object.entries(field.fields ?? {})) {
+        nested[nestedKey] = buildDefaultAstroFieldValue(
+          nestedKey,
+          nestedField,
+          entryKey,
+          defaultLocale,
+        );
+      }
+      return nested;
+    }
+    case "list":
+    case "assetList":
+      return [];
+    case "asset":
+    case "reference":
+      return "";
+    default:
+      return field.default ?? null;
+  }
+}
+
+function serializeAstroEntryValues(
+  filePath: string,
+  value: Record<string, unknown>,
+): string {
+  const normalized = filePath.toLowerCase();
+  if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
+    return `${stringifyYaml(value)}\n`;
+  }
+  if (normalized.endsWith(".json")) {
+    return `${JSON.stringify(value, null, 2)}\n`;
+  }
+  if (
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".mdx") ||
+    normalized.endsWith(".markdown")
+  ) {
+    return `---\n${stringifyYaml(value).trimEnd()}\n---\n`;
+  }
+  throw new Error(`Unsupported entry format for ${filePath}`);
+}
+
+function inferEntryLayoutFromModel(model: CmsModelRecord): {
+  extension: string;
+  directoryIndexEntries: boolean;
+} {
+  if (model.entries.length === 0) {
+    return {
+      extension: model.entryFileExtension || ".yaml",
+      directoryIndexEntries: Boolean(model.directoryIndexEntries),
+    };
+  }
+
+  const counts = new Map<string, number>();
+  for (const entry of model.entries) {
+    const ext = path.extname(entry.relativePath).toLowerCase() || ".yaml";
+    const basename = path.posix.basename(entry.relativePath).toLowerCase();
+    const mode = basename.startsWith("index.") ? "dir" : "flat";
+    const key = `${mode}:${ext}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const [winner] =
+    [...counts.entries()].sort((left, right) => right[1] - left[1])[0] ?? ["flat:.yaml", 0];
+  const [mode, extension] = winner.split(":");
+
+  return {
+    extension: extension || ".yaml",
+    directoryIndexEntries: mode === "dir",
+  };
+}
+
+export async function createAstroCollectionEntry(
+  projectDir: string,
+  modelKey: string,
+  entryKey: string,
+): Promise<CmsCreateEntryResult | null> {
+  const report = await inspectAstroCollectionsWorkspace(projectDir);
+  if (!report) {
+    return null;
+  }
+
+  const model = report.models.find((item) => item.key === modelKey.trim());
+  if (!model) {
+    throw new Error(`Collection not found: ${modelKey}`);
+  }
+
+  const normalizedEntryKey = normalizeEntryKey(entryKey);
+  if (model.entries.some((entry) => entry.key === normalizedEntryKey)) {
+    throw new Error(`Entry already exists: ${normalizedEntryKey}`);
+  }
+
+  const { extension, directoryIndexEntries } = inferEntryLayoutFromModel(model);
+  const entryFilePath = directoryIndexEntries
+    ? path.join(model.collectionRoot, normalizedEntryKey, `index${extension}`)
+    : path.join(model.collectionRoot, `${normalizedEntryKey}${extension}`);
+  const relativeEntryPath = toPosix(path.relative(projectDir, entryFilePath));
+
+  if (await pathExists(entryFilePath)) {
+    throw new Error(`Entry already exists: ${relativeEntryPath}`);
+  }
+
+  await fs.mkdir(path.dirname(entryFilePath), { recursive: true });
+
+  const values: Record<string, unknown> = {};
+  for (const [fieldKey, field] of Object.entries(model.fields)) {
+    values[fieldKey] = buildDefaultAstroFieldValue(
+      fieldKey,
+      field,
+      normalizedEntryKey,
+      report.defaultLocale ?? "en",
+    );
+  }
+
+  await fs.writeFile(
+    entryFilePath,
+    serializeAstroEntryValues(entryFilePath, values),
+    "utf8",
+  );
+
+  const created: string[] = [];
+  if (directoryIndexEntries) {
+    created.push(toPosix(path.relative(projectDir, path.dirname(entryFilePath))));
+  }
+  created.push(relativeEntryPath);
+
+  return {
+    created,
+    skipped: [],
+    paths: report.paths,
+    createdEntryKey: normalizedEntryKey,
+    createdEntryRelativePath: relativeEntryPath,
+  };
 }
 
 async function parseCollections(
@@ -844,12 +1271,18 @@ async function parseCollections(
       relativeSchemaPath: toPosix(path.relative(projectDir, configPath)),
       sortField: inferSortField(fields),
       supportedEntries: rootResolution.supportedEntries,
+      entryExtensionHint: rootResolution.entryExtensionHint,
+      directoryIndexEntries: rootResolution.directoryIndexEntries,
     });
   }
 
   const models: CmsModelRecord[] = [];
   for (const parsedModel of parsedModels) {
     const entries = await buildEntriesForCollection(projectDir, parsedModel);
+    const fields = applyAstroFieldHeuristicsToFields(parsedModel.fields, entries);
+    for (const entry of entries) {
+      entry.assetRefs = collectAssetRefs(projectDir, entry, parsedModel.key, fields);
+    }
     models.push({
       key: parsedModel.key,
       label: parsedModel.label,
@@ -858,11 +1291,13 @@ async function parseCollections(
       collectionRoot: parsedModel.collectionRoot,
       relativeCollectionRoot: parsedModel.relativeCollectionRoot,
       entryFormat: "file",
+      entryFileExtension: parsedModel.entryExtensionHint,
+      directoryIndexEntries: parsedModel.directoryIndexEntries,
       sortField: parsedModel.sortField,
-      display: inferPrimaryField(parsedModel.fields)
-        ? { primaryField: inferPrimaryField(parsedModel.fields) }
+      display: inferPrimaryField(fields)
+        ? { primaryField: inferPrimaryField(fields) }
         : undefined,
-      fields: parsedModel.fields,
+      fields,
       entries,
     });
   }

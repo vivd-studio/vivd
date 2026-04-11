@@ -26,11 +26,11 @@ const organizationPluginHooks = new Map<
   }) => Promise<Map<string, OrganizationPluginProjectIntegrationSummary>>
 >(
   backendPluginPackageDescriptors.flatMap((descriptor) =>
-    descriptor.backendHooks?.buildOrganizationProjectSummaries
+    descriptor.backend.hooks?.buildOrganizationProjectSummaries
       ? [
           [
             descriptor.pluginId as PluginId,
-            descriptor.backendHooks.buildOrganizationProjectSummaries,
+            descriptor.backend.hooks.buildOrganizationProjectSummaries,
           ] as const,
         ]
       : [],
@@ -78,8 +78,8 @@ interface SuperAdminEntitlementHook {
 
 const superAdminEntitlementHooks = new Map<PluginId, SuperAdminEntitlementHook>(
   backendPluginPackageDescriptors.flatMap((descriptor) => {
-    const prepare = descriptor.backendHooks?.prepareProjectEntitlementFields;
-    const cleanup = descriptor.backendHooks?.cleanupProjectEntitlementFields;
+    const prepare = descriptor.backend.hooks?.prepareProjectEntitlementFields;
+    const cleanup = descriptor.backend.hooks?.cleanupProjectEntitlementFields;
     if (!prepare || !cleanup) return [];
 
     return [

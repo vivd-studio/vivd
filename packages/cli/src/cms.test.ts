@@ -107,6 +107,70 @@ hero: ../media/blog/hero.jpg
     });
   });
 
+  it("promotes obvious string-based Astro image fields back to asset UI metadata", async () => {
+    const projectDir = await createTempProjectDir();
+    tempDirs.push(projectDir);
+
+    await fs.mkdir(path.join(projectDir, "src", "content", "team"), { recursive: true });
+    await fs.mkdir(path.join(projectDir, "src", "content", "media", "team"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+const team = defineCollection({
+  schema: z.object({
+    name: z.string(),
+    profileImage: z.string().optional(),
+    galleryImages: z.array(z.string()).optional(),
+  }),
+});
+
+export const collections = { team };
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "team", "apollo.yaml"),
+      `name: Apollo
+profileImage: ../media/team/apollo.webp
+galleryImages:
+  - ../media/team/apollo-1.webp
+  - ../media/team/apollo-2.webp
+`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "team", "apollo.webp"),
+      "hero",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "team", "apollo-1.webp"),
+      "gallery-1",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(projectDir, "src", "content", "media", "team", "apollo-2.webp"),
+      "gallery-2",
+      "utf8",
+    );
+
+    const report = await validateCmsWorkspace(projectDir);
+
+    expect(report.valid).toBe(true);
+    expect(report.models[0]?.fields.profileImage).toMatchObject({
+      type: "asset",
+      accepts: ["image/*"],
+    });
+    expect(report.models[0]?.fields.galleryImages).toMatchObject({
+      type: "assetList",
+      accepts: ["image/*"],
+    });
+    expect(report.assetCount).toBe(3);
+  });
+
   it("reports missing src/content.config.ts for Astro projects before falling back to legacy YAML scaffolding", async () => {
     const projectDir = await createTempProjectDir();
     tempDirs.push(projectDir);

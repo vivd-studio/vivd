@@ -3,8 +3,10 @@ import type {
   CmsFieldDefinition,
   CmsModelRecord,
 } from "@vivd/shared/cms";
+import { stringify as stringifyYaml } from "yaml";
 
 export type CmsFieldSegment = string | number;
+export type CmsEntryFileFormat = "yaml" | "json" | "markdown" | "unsupported";
 
 export type RichTextSidecarSpec = {
   pathKey: string;
@@ -14,12 +16,39 @@ export type RichTextSidecarSpec = {
   filePath: string;
 };
 
+const IMAGE_FIELD_TOKENS = new Set([
+  "image",
+  "img",
+  "photo",
+  "picture",
+  "thumbnail",
+  "thumb",
+  "logo",
+  "avatar",
+  "poster",
+  "icon",
+]);
+const IMAGE_LIST_FIELD_TOKENS = new Set([
+  "images",
+  "photos",
+  "pictures",
+  "thumbnails",
+  "gallery",
+  "logos",
+  "avatars",
+  "posters",
+  "icons",
+]);
+const IMAGE_REFERENCE_EXTENSION_REGEX = /\.(avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i;
+const NON_LOCAL_ASSET_REFERENCE_REGEX = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function titleizeKey(value: string): string {
   return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[-_]+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -34,6 +63,33 @@ export function cloneValue<T>(value: T): T {
 
 export function normalizePosix(value: string): string {
   return value.replace(/\\/g, "/");
+}
+
+function getFieldNameTokens(fieldKey: string): string[] {
+  return fieldKey
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^a-zA-Z0-9]+/)
+    .flatMap((segment) => segment.split(/\s+/))
+    .map((segment) => segment.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function looksLikeImageFieldName(fieldKey: string): boolean {
+  const tokens = getFieldNameTokens(fieldKey);
+  if (tokens.some((token) => IMAGE_FIELD_TOKENS.has(token))) {
+    return true;
+  }
+  const normalized = tokens.join("");
+  return normalized.endsWith("image");
+}
+
+function looksLikeImageListFieldName(fieldKey: string): boolean {
+  const tokens = getFieldNameTokens(fieldKey);
+  if (tokens.some((token) => IMAGE_LIST_FIELD_TOKENS.has(token))) {
+    return true;
+  }
+  const normalized = tokens.join("");
+  return normalized.endsWith("images") || normalized.endsWith("gallery");
 }
 
 export function dirnamePosix(value: string): string {
@@ -95,6 +151,55 @@ export function buildRelativeReferencePath(
   }
 
   return relativeSegments.join("/");
+}
+
+export function getCmsEntryFileFormat(filePath: string): CmsEntryFileFormat {
+  const normalized = normalizePosix(filePath).toLowerCase();
+  if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
+    return "yaml";
+  }
+  if (normalized.endsWith(".json")) {
+    return "json";
+  }
+  if (
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".mdx") ||
+    normalized.endsWith(".markdown")
+  ) {
+    return "markdown";
+  }
+  return "unsupported";
+}
+
+export function isWritableCmsEntryFile(filePath: string): boolean {
+  return getCmsEntryFileFormat(filePath) !== "unsupported";
+}
+
+export function serializeCmsEntryValues(
+  filePath: string,
+  value: unknown,
+  currentContent = "",
+): string {
+  const format = getCmsEntryFileFormat(filePath);
+  switch (format) {
+    case "yaml":
+      return `${stringifyYaml(value)}\n`;
+    case "json":
+      return `${JSON.stringify(value, null, 2)}\n`;
+    case "markdown": {
+      const frontmatter = stringifyYaml(value).trimEnd();
+      const existingMatch = currentContent.match(
+        /^---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n)?/,
+      );
+      const body = existingMatch ? currentContent.slice(existingMatch[0].length) : currentContent;
+      if (!body.length) {
+        return `---\n${frontmatter}\n---\n`;
+      }
+      return `---\n${frontmatter}\n---\n\n${body.replace(/^\r?\n/, "")}`;
+    }
+    default:
+      throw new Error(`Unsupported CMS entry format for ${filePath}`);
+  }
 }
 
 export function isPathInsideRoot(candidatePath: string, rootPath: string): boolean {
@@ -178,6 +283,14 @@ export function getAssetPathValue(value: unknown): string {
   return "";
 }
 
+export function looksLikeLocalImageAssetReference(value: unknown): boolean {
+  const assetPath = getAssetPathValue(value).trim();
+  if (!assetPath || !IMAGE_REFERENCE_EXTENSION_REGEX.test(assetPath)) {
+    return false;
+  }
+  return !NON_LOCAL_ASSET_REFERENCE_REGEX.test(assetPath);
+}
+
 export function setAssetPathValue(value: unknown, nextPath: string): unknown {
   if (isRecord(value)) {
     return {
@@ -186,6 +299,56 @@ export function setAssetPathValue(value: unknown, nextPath: string): unknown {
     };
   }
   return nextPath;
+}
+
+function fieldAcceptsImages(field: CmsFieldDefinition): boolean {
+  return (field.accepts ?? []).some((accept) => accept.startsWith("image/"));
+}
+
+export function shouldRenderImageAssetField(
+  fieldKey: string,
+  field: CmsFieldDefinition,
+  value: unknown,
+): boolean {
+  if (field.type !== "string") {
+    return false;
+  }
+
+  if (fieldAcceptsImages(field)) {
+    return true;
+  }
+
+  const assetPath = getAssetPathValue(value).trim();
+  if (assetPath.length > 0) {
+    return looksLikeLocalImageAssetReference(assetPath);
+  }
+
+  return looksLikeImageFieldName(fieldKey);
+}
+
+export function shouldRenderImageAssetListField(
+  fieldKey: string,
+  field: CmsFieldDefinition,
+  value: unknown,
+): boolean {
+  if (field.type !== "list" || field.item?.type !== "string") {
+    return false;
+  }
+
+  if (fieldAcceptsImages(field) || fieldAcceptsImages(field.item)) {
+    return true;
+  }
+
+  const items = Array.isArray(value) ? value : [];
+  const nonEmptyPaths = items
+    .map((item) => getAssetPathValue(item).trim())
+    .filter((item) => item.length > 0);
+
+  if (nonEmptyPaths.length > 0) {
+    return nonEmptyPaths.every((item) => looksLikeLocalImageAssetReference(item));
+  }
+
+  return looksLikeImageListFieldName(fieldKey);
 }
 
 export function buildDefaultFieldValue(

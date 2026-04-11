@@ -10,6 +10,8 @@
     "./backend/config": "./src/backend/config.ts",
     "./backend/module": "./src/backend/module.ts",
     "./backend/adminHooks": "./src/backend/adminHooks.ts",
+    "./backend/ports": "./src/backend/ports.ts",
+    "./backend/contribution": "./src/backend/contribution.ts",
     "./backend/publicApi": "./src/backend/publicApi.ts",
     "./backend/service": "./src/backend/service.ts",
     "./backend/snippets": "./src/backend/snippets.ts",

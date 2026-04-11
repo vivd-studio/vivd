@@ -1,6 +1,3 @@
-import { eq } from "drizzle-orm";
-import { db } from "@vivd/backend/src/db";
-
 function readBooleanEnv(name: string, fallback: boolean): boolean {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -14,27 +11,20 @@ const requireVerifiedRecipients = readBooleanEnv(
   "VIVD_CONTACT_FORM_REQUIRE_VERIFIED_RECIPIENTS",
   true,
 );
-import { organizationMember, projectPluginInstance } from "@vivd/backend/src/db/schema";
-import { pluginEntitlementService } from "@vivd/backend/src/services/plugins/PluginEntitlementService";
-import {
-  projectPluginInstanceService,
-  type ProjectPluginInstanceRow,
-} from "@vivd/backend/src/services/plugins/core/instanceService";
 import {
   DEFAULT_CONTACT_FORM_FIELDS,
   contactFormPluginConfigSchema,
   type ContactFormPluginConfig,
 } from "./config";
-import {
-  getContactFormSubmitEndpoint,
-} from "./publicApi";
-import { inferContactFormAutoSourceHosts } from "./sourceHosts";
+import type {
+  ContactRecipientDirectory,
+  ContactRecipientVerificationRequestResult,
+} from "./module";
+import type {
+  ContactFormPluginInstanceRow,
+  ContactFormPluginServiceDeps,
+} from "./ports";
 import { getContactFormSnippets } from "./snippets";
-import {
-  contactFormRecipientVerificationService,
-  type ContactRecipientDirectory,
-  type ContactRecipientVerificationRequestResult,
-} from "./recipientVerification";
 
 export interface ContactFormPluginPayload {
   pluginId: "contact_form";
@@ -146,7 +136,11 @@ function uniqueValues(values: string[]): string[] {
   return output;
 }
 
-class ContactFormPluginService {
+class ContactFormPluginServiceImpl {
+  constructor(
+    private readonly deps: ContactFormPluginServiceDeps,
+  ) {}
+
   private async assertRecipientEmailsAreVerified(options: {
     organizationId: string;
     projectSlug: string;
@@ -156,26 +150,17 @@ class ContactFormPluginService {
       throw new ContactFormRecipientRequiredError();
     }
 
-    const members = await db.query.organizationMember.findMany({
-      where: eq(organizationMember.organizationId, options.organizationId),
-      with: {
-        user: {
-          columns: {
-            email: true,
-            emailVerified: true,
-          },
-        },
-      },
-    });
-
     const verifiedEmailSet = new Set<string>();
-    for (const member of members) {
-      if (!member.user.emailVerified) continue;
-      verifiedEmailSet.add(normalizeEmailAddress(member.user.email));
+    const verifiedOrganizationEmails =
+      await this.deps.listVerifiedOrganizationMemberEmails({
+        organizationId: options.organizationId,
+      });
+    for (const email of verifiedOrganizationEmails) {
+      verifiedEmailSet.add(normalizeEmailAddress(email));
     }
 
     const verifiedExternalEmailSet =
-      await contactFormRecipientVerificationService.listVerifiedExternalRecipientEmailSet({
+      await this.deps.recipientVerificationService.listVerifiedExternalRecipientEmailSet({
         organizationId: options.organizationId,
         projectSlug: options.projectSlug,
         recipientEmails: options.recipientEmails,
@@ -197,7 +182,8 @@ class ContactFormPluginService {
     organizationId: string;
     projectSlug: string;
   }): Promise<ContactFormPluginPayload> {
-    const { row, created } = await projectPluginInstanceService.ensurePluginInstance({
+    const { row, created } =
+      await this.deps.projectPluginInstanceService.ensurePluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
@@ -215,7 +201,7 @@ class ContactFormPluginService {
       return this.ensureContactFormPlugin(options);
     }
 
-    const existing = await projectPluginInstanceService.getPluginInstance({
+    const existing = await this.deps.projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
@@ -240,21 +226,20 @@ class ContactFormPluginService {
       throw new ContactFormRecipientRequiredError();
     }
 
-    const { row } = await projectPluginInstanceService.ensurePluginInstance({
+    const { row } =
+      await this.deps.projectPluginInstanceService.ensurePluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
     });
 
-    const [updated] = await db
-      .update(projectPluginInstance)
-      .set({
+    const updated =
+      await this.deps.projectPluginInstanceService.updatePluginInstance({
+        instanceId: row.id,
         configJson: parsedConfig,
         status: "enabled",
         updatedAt: new Date(),
-      })
-      .where(eq(projectPluginInstance.id, row.id))
-      .returning();
+      });
 
     if (updated) return await this.toPayload(updated, false);
 
@@ -275,7 +260,8 @@ class ContactFormPluginService {
     requestedByUserId?: string | null;
     requestHost?: string | null;
   }): Promise<ContactRecipientVerificationRequestResult> {
-    const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+    const pluginInstance =
+      await this.deps.projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
@@ -284,7 +270,7 @@ class ContactFormPluginService {
       throw new ContactFormPluginNotEnabledError();
     }
 
-    return contactFormRecipientVerificationService.requestRecipientVerification({
+    return this.deps.recipientVerificationService.requestRecipientVerification({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginInstanceId: pluginInstance.id,
@@ -300,7 +286,8 @@ class ContactFormPluginService {
     email: string;
     requestedByUserId?: string | null;
   }): Promise<ContactRecipientVerificationRequestResult> {
-    const pluginInstance = await projectPluginInstanceService.getPluginInstance({
+    const pluginInstance =
+      await this.deps.projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
@@ -309,7 +296,7 @@ class ContactFormPluginService {
       throw new ContactFormPluginNotEnabledError();
     }
 
-    return contactFormRecipientVerificationService.markRecipientVerified({
+    return this.deps.recipientVerificationService.markRecipientVerified({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginInstanceId: pluginInstance.id,
@@ -322,12 +309,12 @@ class ContactFormPluginService {
     organizationId: string;
     projectSlug: string;
   }): Promise<ContactFormPluginInfoPayload> {
-    const submitEndpoint = await getContactFormSubmitEndpoint();
-    const inferredAutoSourceHosts = await inferContactFormAutoSourceHosts({
+    const submitEndpoint = await this.deps.getContactFormSubmitEndpoint();
+    const inferredAutoSourceHosts = await this.deps.inferSourceHosts({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
     });
-    const entitlement = await pluginEntitlementService.resolveEffectiveEntitlement({
+    const entitlement = await this.deps.pluginEntitlementService.resolveEffectiveEntitlement({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
@@ -341,7 +328,7 @@ class ContactFormPluginService {
       ? entitlement.turnstileSiteKey
       : null;
 
-    const existing = await projectPluginInstanceService.getPluginInstance({
+    const existing = await this.deps.projectPluginInstanceService.getPluginInstance({
       organizationId: options.organizationId,
       projectSlug: options.projectSlug,
       pluginId: "contact_form",
@@ -350,7 +337,7 @@ class ContactFormPluginService {
       ? normalizeContactFormConfig(existing.configJson)
       : null;
     const recipients =
-      await contactFormRecipientVerificationService.listRecipientDirectory({
+      await this.deps.recipientVerificationService.listRecipientDirectory({
         organizationId: options.organizationId,
         projectSlug: options.projectSlug,
         verifiedRecipientEmails: normalizedExistingConfig?.recipientEmails ?? [],
@@ -501,10 +488,10 @@ class ContactFormPluginService {
   }
 
   private async toPayload(
-    row: ProjectPluginInstanceRow,
+    row: ContactFormPluginInstanceRow,
     created: boolean,
   ): Promise<ContactFormPluginPayload> {
-    const submitEndpoint = await getContactFormSubmitEndpoint();
+    const submitEndpoint = await this.deps.getContactFormSubmitEndpoint();
     const normalizedConfig = normalizeContactFormConfig(row.configJson);
     return {
       pluginId: "contact_form",
@@ -520,4 +507,12 @@ class ContactFormPluginService {
   }
 }
 
-export const contactFormPluginService = new ContactFormPluginService();
+export function createContactFormPluginService(
+  deps: ContactFormPluginServiceDeps,
+) {
+  return new ContactFormPluginServiceImpl(deps);
+}
+
+export type ContactFormPluginService = ReturnType<
+  typeof createContactFormPluginService
+>;

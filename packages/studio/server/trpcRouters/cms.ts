@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  createCmsEntry,
   scaffoldCmsEntry,
   scaffoldCmsModel,
   scaffoldCmsWorkspace,
@@ -115,6 +116,24 @@ export const cmsRouter = router({
       markCmsWorkspaceChange(input.slug, input.version, "cms-entry-scaffolded");
       return {
         scaffold,
+        ...prepared,
+      };
+    }),
+
+  createEntry: publicProcedure
+    .input(
+      mutationInput.extend({
+        modelKey: z.string().min(1),
+        entryKey: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const projectDir = requireWorkspace(ctx);
+      const created = await createCmsEntry(projectDir, input.modelKey, input.entryKey);
+      const prepared = await prepareCmsArtifacts(projectDir);
+      markCmsWorkspaceChange(input.slug, input.version, "cms-entry-created");
+      return {
+        created,
         ...prepared,
       };
     }),

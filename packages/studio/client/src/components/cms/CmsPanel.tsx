@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { stringify as stringifyYaml } from "yaml";
 import { trpc } from "@/lib/trpc";
 import { usePreview } from "@/components/preview/PreviewContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -19,12 +18,15 @@ import {
 import type { CmsModelRecord } from "@vivd/shared/cms";
 import {
   buildRichTextReference,
+  getCmsEntryFileFormat,
+  isWritableCmsEntryFile,
   type CmsFieldSegment,
   cloneValue,
   collectRichTextSidecars,
   getEntryTitle,
   getValueAtPath,
   resolveRelativePath,
+  serializeCmsEntryValues,
   setValueAtPath,
 } from "./helpers";
 import { CmsCollectionsSidebar } from "./CmsCollectionsSidebar";
@@ -35,10 +37,6 @@ interface CmsPanelProps {
   projectSlug: string;
   version: number;
   onClose: () => void;
-}
-
-function formatYaml(value: unknown): string {
-  return `${stringifyYaml(value)}\n`;
 }
 
 function buildReferenceOptions(
@@ -72,7 +70,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   });
   const initMutation = trpc.cms.init.useMutation();
   const scaffoldModelMutation = trpc.cms.scaffoldModel.useMutation();
-  const scaffoldEntryMutation = trpc.cms.scaffoldEntry.useMutation();
+  const createEntryMutation = trpc.cms.createEntry.useMutation();
   const prepareMutation = trpc.cms.prepare.useMutation();
   const saveTextFileMutation = trpc.assets.saveTextFile.useMutation();
   const deleteAssetMutation = trpc.assets.deleteAsset.useMutation();
@@ -95,8 +93,8 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const defaultLocale = report?.defaultLocale ?? "en";
   const locales = report?.locales.length ? report.locales : [defaultLocale];
   const isAstroCollectionsSource = report?.sourceKind === "astro-collections";
-  const isAstroReadOnly = isAstroCollectionsSource && report?.initialized;
   const isAstroMissingConfig = isAstroCollectionsSource && !report?.initialized;
+  const allowAstroSchemaScaffolding = !isAstroCollectionsSource;
 
   const selectedModel = useMemo(
     () => report?.models.find((model) => model.key === selectedModelKey) ?? null,
@@ -110,6 +108,28 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
   const referenceOptions = useMemo(
     () => buildReferenceOptions(report?.models ?? [], defaultLocale),
     [defaultLocale, report?.models],
+  );
+  const selectedEntryFormat = selectedEntry
+    ? getCmsEntryFileFormat(selectedEntry.relativePath)
+    : null;
+  const isSelectedEntryWritable = selectedEntry
+    ? isWritableCmsEntryFile(selectedEntry.relativePath)
+    : true;
+
+  const serializeEntryContent = useCallback(
+    async (relativePath: string, nextValues: unknown) => {
+      const format = getCmsEntryFileFormat(relativePath);
+      let currentContent = "";
+      if (format === "markdown") {
+        const response = await fetch(buildAssetFileUrl(projectSlug, version, relativePath));
+        if (!response.ok) {
+          throw new Error(`Failed to load ${relativePath} before saving`);
+        }
+        currentContent = await response.text();
+      }
+      return serializeCmsEntryValues(relativePath, nextValues, currentContent);
+    },
+    [projectSlug, version],
   );
 
   useEffect(() => {
@@ -290,6 +310,10 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
 
   const handleSaveEntry = useCallback(async () => {
     if (!selectedEntry || !selectedModel || !draftValues) return;
+    if (!isSelectedEntryWritable) {
+      toast.error("This entry format is currently inspect-only in Studio");
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -297,7 +321,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
         slug: projectSlug,
         version,
         relativePath: selectedEntry.relativePath,
-        content: formatYaml(draftValues),
+        content: await serializeEntryContent(selectedEntry.relativePath, draftValues),
       });
 
       const sidecars = collectRichTextSidecars(
@@ -347,6 +371,8 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     projectSlug,
     refreshCms,
     saveTextFileMutation,
+    serializeEntryContent,
+    isSelectedEntryWritable,
     selectedEntry,
     selectedModel,
     sidecarDrafts,
@@ -409,15 +435,17 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
         setIsSaving(true);
         await Promise.all(
           reordered.map((entry, index) =>
-            saveTextFileMutation.mutateAsync({
-              slug: projectSlug,
-              version,
-              relativePath: entry.relativePath,
-              content: formatYaml({
-                ...entry.values,
-                [sortField]: index,
+            serializeEntryContent(entry.relativePath, {
+              ...entry.values,
+              [sortField]: index,
+            }).then((content) =>
+              saveTextFileMutation.mutateAsync({
+                slug: projectSlug,
+                version,
+                relativePath: entry.relativePath,
+                content,
               }),
-            }),
+            ),
           ),
         );
         await handlePrepare();
@@ -436,6 +464,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
       isDirty,
       projectSlug,
       saveTextFileMutation,
+      serializeEntryContent,
       selectedEntry,
       selectedModel,
       version,
@@ -476,14 +505,14 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     const entryKey = newEntryKey.trim();
     if (!entryKey) return;
     try {
-      const result = await scaffoldEntryMutation.mutateAsync({
+      const result = await createEntryMutation.mutateAsync({
         slug: projectSlug,
         version,
         modelKey: selectedModel.key,
         entryKey,
       });
       await refreshCms();
-      setSelectedEntryKey(entryKey.toLowerCase());
+      setSelectedEntryKey(result.created.createdEntryKey);
       setCreatingEntry(false);
       setNewEntryKey("");
       if (result.built) {
@@ -502,9 +531,9 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     }
   }, [
     newEntryKey,
+    createEntryMutation,
     projectSlug,
     refreshCms,
-    scaffoldEntryMutation,
     selectedModel,
     version,
   ]);
@@ -540,7 +569,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
     loadingSidecars ||
     initMutation.isPending ||
     scaffoldModelMutation.isPending ||
-    scaffoldEntryMutation.isPending ||
+    createEntryMutation.isPending ||
     prepareMutation.isPending ||
     saveTextFileMutation.isPending ||
     deleteAssetMutation.isPending;
@@ -705,7 +734,7 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             models={report.models}
             reportErrors={report.errors}
             selectedModelKey={selectedModelKey}
-            allowCreateModel={!isAstroReadOnly}
+            allowCreateModel={allowAstroSchemaScaffolding}
             creatingModel={creatingModel}
             newModelKey={newModelKey}
             isScaffoldingModel={scaffoldModelMutation.isPending}
@@ -724,10 +753,10 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             selectedEntryKey={selectedEntryKey}
             defaultLocale={defaultLocale}
             reportErrors={report.errors}
-            allowCreateEntry={!isAstroReadOnly}
+            allowCreateEntry={Boolean(selectedModel)}
             creatingEntry={creatingEntry}
             newEntryKey={newEntryKey}
-            isScaffoldingEntry={scaffoldEntryMutation.isPending}
+            isScaffoldingEntry={createEntryMutation.isPending}
             onToggleCreateEntry={() => setCreatingEntry((current) => !current)}
             onNewEntryKeyChange={setNewEntryKey}
             onCreateEntry={() => void handleCreateEntry()}
@@ -751,7 +780,12 @@ export function CmsPanel({ projectSlug, version, onClose }: CmsPanelProps) {
             referenceOptions={referenceOptions}
             reportErrors={report.errors}
             sourceKind={report.sourceKind}
-            readOnly={isAstroReadOnly}
+            readOnly={!isSelectedEntryWritable}
+            readOnlyMessage={
+              !isSelectedEntryWritable && selectedEntryFormat
+                ? `Studio can inspect this Astro entry, but ${selectedEntryFormat} entries are not writable yet.`
+                : null
+            }
             isDirty={isDirty}
             busy={busy}
             isSaving={isSaving}

@@ -20,6 +20,8 @@ import {
   deriveReferenceValue,
   getValueAtPath,
   resolveRelativePath,
+  shouldRenderImageAssetField,
+  shouldRenderImageAssetListField,
   titleizeKey,
 } from "./helpers";
 
@@ -185,6 +187,33 @@ export function CmsFieldRenderer({
           ))}
         </div>
       </div>
+    );
+  }
+
+  if (shouldRenderImageAssetField(fieldKey, field, rawValue)) {
+    if (!selectedEntryRelativePath || !selectedEntryKey || !selectedModel) {
+      return null;
+    }
+
+    const mediaRootPath = "src/content/media";
+    const defaultFolderPath = `${mediaRootPath}/${selectedModel.key}/${selectedEntryKey}`;
+    return (
+      <CmsAssetField
+        key={fieldId}
+        projectSlug={projectSlug}
+        version={version}
+        fieldId={fieldId}
+        label={label}
+        field={{ ...field, type: "asset", accepts: field.accepts?.length ? field.accepts : ["image/*"] }}
+        value={rawValue}
+        entryRelativePath={selectedEntryRelativePath}
+        mediaRootPath={mediaRootPath}
+        defaultFolderPath={defaultFolderPath}
+        canUseAiImages={canUseAiImages}
+        readOnly={readOnly}
+        onChange={(nextValue) => applyDraftValue(fieldPath, nextValue)}
+        onOpenAsset={openAssetReference}
+      />
     );
   }
 
@@ -400,6 +429,93 @@ export function CmsFieldRenderer({
                 fieldId={`${fieldId}.${index}`}
                 label={`${label} ${index + 1}`}
                 field={{ ...field, type: "asset" }}
+                value={item}
+                entryRelativePath={selectedEntryRelativePath}
+                mediaRootPath={mediaRootPath}
+                defaultFolderPath={defaultFolderPath}
+                canUseAiImages={canUseAiImages}
+                readOnly={readOnly}
+                compact
+                onChange={(nextValue) => {
+                  const nextItems = [...items];
+                  nextItems[index] = nextValue;
+                  applyDraftValue(fieldPath, nextItems);
+                }}
+                onOpenAsset={openAssetReference}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={readOnly}
+                  onClick={() => {
+                    const nextItems = [...items];
+                    nextItems.splice(index, 1);
+                    applyDraftValue(fieldPath, nextItems);
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (shouldRenderImageAssetListField(fieldKey, field, rawValue)) {
+    if (!selectedEntryRelativePath || !selectedEntryKey || !selectedModel) {
+      return null;
+    }
+
+    const items = ensureArray(rawValue);
+    const mediaRootPath = "src/content/media";
+    const defaultFolderPath = `${mediaRootPath}/${selectedModel.key}/${selectedEntryKey}`;
+    const assetListField: CmsFieldDefinition = {
+      ...field,
+      type: "assetList",
+      accepts: field.accepts?.length ? field.accepts : ["image/*"],
+      item: undefined,
+    };
+    return (
+      <div key={fieldId} className="space-y-3 rounded-lg border border-border/60 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <Label>{label}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ordered asset references stored in the entry YAML.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={openExplorer} disabled={readOnly}>
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Explorer
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={readOnly}
+              onClick={() => applyDraftValue(fieldPath, [...items, ""])}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add asset
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No assets yet.</p>
+          ) : null}
+          {items.map((item, index) => (
+            <div key={`${fieldId}.${index}`} className="space-y-2">
+              <CmsAssetField
+                projectSlug={projectSlug}
+                version={version}
+                fieldId={`${fieldId}.${index}`}
+                label={`${label} ${index + 1}`}
+                field={{ ...assetListField, type: "asset" }}
                 value={item}
                 entryRelativePath={selectedEntryRelativePath}
                 mediaRootPath={mediaRootPath}

@@ -5,9 +5,7 @@ import {
 import {
   analyticsPluginConfigSchema,
   type AnalyticsPluginConfig,
-  analyticsPluginModule,
 } from "./analytics/module";
-import { contactFormPluginModule } from "./contactForm/module";
 import type {
   PluginCatalogEntry as SharedPluginCatalogEntry,
   PluginDefinition as SharedPluginDefinition,
@@ -29,10 +27,10 @@ export { analyticsPluginConfigSchema };
 export type { AnalyticsPluginConfig };
 
 const pluginModules = Object.fromEntries(
-  [
-    ["contact_form", contactFormPluginModule],
-    ["analytics", analyticsPluginModule],
-  ] as const,
+  backendPluginPackageDescriptors.map((descriptor) => [
+    descriptor.pluginId,
+    descriptor.backend.module,
+  ]),
 ) as Record<PluginId, PluginModule>;
 
 const pluginRegistry = Object.fromEntries(

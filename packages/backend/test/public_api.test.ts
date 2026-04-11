@@ -15,8 +15,8 @@ import {
   ContactRecipientVerificationEndpointUnavailableError,
   getContactFormSubmitEndpoint,
   getContactRecipientVerificationEndpoint,
-  getPublicPluginApiBaseUrl,
 } from "../src/services/plugins/contactForm/publicApi";
+import { getPublicPluginApiBaseUrl } from "../src/services/plugins/runtime/publicApi";
 
 const originalPublicPluginApiBaseUrl = process.env.VIVD_PUBLIC_PLUGIN_API_BASE_URL;
 const originalAppUrl = process.env.VIVD_APP_URL;

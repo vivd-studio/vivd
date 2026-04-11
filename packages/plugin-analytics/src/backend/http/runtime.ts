@@ -1,23 +1,10 @@
 import express from "express";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
-import type { Multer } from "multer";
 import { z } from "zod";
-import { db } from "@vivd/backend/src/db";
-import { analyticsEvent, projectPluginInstance } from "@vivd/backend/src/db/schema";
 import { analyticsPluginConfigSchema } from "../config";
 import { getAnalyticsTrackEndpoint } from "../publicApi";
-import { pluginEntitlementService } from "@vivd/backend/src/services/plugins/PluginEntitlementService";
-import { inferContactFormAutoSourceHosts } from "@vivd/plugin-contact-form/backend/sourceHosts";
-import {
-  extractSourceHostFromHeaders,
-  isHostAllowed,
-  normalizeHostCandidate,
-} from "@vivd/plugin-contact-form/backend/hostUtils";
-
-export type AnalyticsPublicRouterDeps = {
-  upload: Pick<Multer, "none">;
-};
+import type { AnalyticsPublicRouterDeps } from "../ports";
 
 const DEFAULT_RATE_LIMIT_PER_TOKEN_PER_MINUTE = 240;
 
@@ -426,6 +413,21 @@ function buildAnalyticsScript(options: {
 export function createAnalyticsPublicRouter(
   deps: AnalyticsPublicRouterDeps,
 ) {
+  const {
+    upload,
+    db,
+    tables,
+    pluginEntitlementService,
+    getPublicPluginApiBaseUrl,
+    inferSourceHosts,
+    hostUtils,
+  } = deps;
+  const { analyticsEvent, projectPluginInstance } = tables;
+  const {
+    extractSourceHostFromHeaders,
+    isHostAllowed,
+    normalizeHostCandidate,
+  } = hostUtils;
   const router = express.Router();
   const formParser = express.urlencoded({ extended: false, limit: "128kb" });
   const jsonParser = express.json({ limit: "128kb" });
@@ -473,7 +475,9 @@ export function createAnalyticsPublicRouter(
     const config = configResult.success
       ? configResult.data
       : analyticsPluginConfigSchema.parse({});
-    const trackEndpoint = await getAnalyticsTrackEndpoint();
+    const trackEndpoint = getAnalyticsTrackEndpoint(
+      await getPublicPluginApiBaseUrl(),
+    );
 
     const script = buildAnalyticsScript({
       token,
@@ -488,7 +492,7 @@ export function createAnalyticsPublicRouter(
 
   router.post(
     "/analytics/v1/track",
-    deps.upload.none(),
+    upload.none(),
     formParser,
     jsonParser,
     async (req, res) => {
@@ -539,7 +543,7 @@ export function createAnalyticsPublicRouter(
       const requestedSourceHost = normalizeHostCandidate(fields.sourceHost);
       const sourceHost = requestedSourceHost || sourceHostFromHeaders;
 
-      const inferredSourceHosts = await inferContactFormAutoSourceHosts({
+      const inferredSourceHosts = await inferSourceHosts({
         organizationId: pluginInstance.organizationId,
         projectSlug: pluginInstance.projectSlug,
       });

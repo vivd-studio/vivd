@@ -1,1 +1,1 @@
-export * from "@vivd/plugin-contact-form/backend/http/helpers";
+export * from "../../../services/plugins/runtime/hostUtils";

@@ -1,13 +1,10 @@
 import type express from "express";
-import type { Multer } from "multer";
-import { createAnalyticsPublicRouter } from "./analytics/runtime";
-import { createContactFormPublicRouter } from "./contactForm/submit";
-import { createContactRecipientVerificationRouter } from "./contactForm/recipientVerification";
-import { createEmailFeedbackRouter } from "./contactForm/feedback";
+import {
+  listBackendPublicPluginRouteDefinitions,
+  type PublicPluginRouterDeps,
+} from "../../services/plugins/descriptors";
 
-export type PublicPluginRouterDeps = {
-  upload: Pick<Multer, "none">;
-};
+export type { PublicPluginRouterDeps } from "../../services/plugins/descriptors";
 
 interface PublicPluginRouteRegistrationDefinition {
   routeId: string;
@@ -21,28 +18,8 @@ export interface PublicPluginRouteRegistration {
   router: express.Router;
 }
 
-const publicPluginRouteDefinitions: PublicPluginRouteRegistrationDefinition[] = [
-  {
-    routeId: "contact_form.email_feedback",
-    mountPath: "",
-    createRouter: () => createEmailFeedbackRouter(),
-  },
-  {
-    routeId: "analytics.public",
-    mountPath: "/plugins",
-    createRouter: (deps) => createAnalyticsPublicRouter(deps),
-  },
-  {
-    routeId: "contact_form.recipient_verification",
-    mountPath: "/plugins",
-    createRouter: () => createContactRecipientVerificationRouter(),
-  },
-  {
-    routeId: "contact_form.submit",
-    mountPath: "/plugins",
-    createRouter: (deps) => createContactFormPublicRouter(deps),
-  },
-];
+const publicPluginRouteDefinitions: PublicPluginRouteRegistrationDefinition[] =
+  listBackendPublicPluginRouteDefinitions();
 
 export function listPublicPluginRouteRegistrations(
   deps: PublicPluginRouterDeps,

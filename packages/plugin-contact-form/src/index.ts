@@ -13,6 +13,12 @@ export {
 } from "./backend/adminHooks";
 export { contactFormPluginBackendHooks } from "./backendHooks";
 export { contactFormPluginDescriptor } from "./descriptor";
+export {
+  createContactFormPluginBackendContribution,
+} from "./backend/contribution";
+export type {
+  ContactFormPluginBackendContributionDeps,
+} from "./backend/ports";
 export { contactFormCliModule } from "./cli/module";
 export { contactFormFrontendPluginModule } from "./frontend/module";
 export { default as ContactFormProjectPage } from "./frontend/ContactFormProjectPage";

@@ -135,4 +135,76 @@ export const collections = {
       }),
     ).rejects.toThrow("Astro-backed projects now use");
   });
+
+  it("creates Astro collection entries as real collection files", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "blog"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+
+export const collections = {
+  blog: defineCollection({
+    schema: z.object({
+      slug: z.string().optional(),
+      title: z.string(),
+      order: z.number().optional(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.createEntry({
+      slug: "demo-site",
+      version: 1,
+      modelKey: "blog",
+      entryKey: "new-post",
+    });
+
+    expect(result.created.createdEntryKey).toBe("new-post");
+    expect(result.report.valid).toBe(true);
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "blog", "new-post.yaml"), "utf8"),
+    ).resolves.toContain("title: New Post");
+    expect(touchMock).toHaveBeenCalledWith("demo-site");
+    expect(requestBucketSyncMock).toHaveBeenCalledWith("cms-entry-created", {
+      slug: "demo-site",
+      version: 1,
+    });
+  });
+
+  it("uses Astro glob pattern hints when creating the first entry in a markdown collection", async () => {
+    await fs.mkdir(path.join(projectDir, "src", "content", "notes"), { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, "src", "content.config.ts"),
+      `import { defineCollection, z } from "astro:content";
+import { glob } from "astro/loaders";
+
+export const collections = {
+  notes: defineCollection({
+    loader: glob({ pattern: "**/*.md", base: "./src/content/notes" }),
+    schema: z.object({
+      title: z.string(),
+    }),
+  }),
+};
+`,
+      "utf8",
+    );
+
+    const caller = cmsRouter.createCaller(makeContext(projectDir));
+    const result = await caller.createEntry({
+      slug: "demo-site",
+      version: 1,
+      modelKey: "notes",
+      entryKey: "first-note",
+    });
+
+    expect(result.created.createdEntryRelativePath).toBe("src/content/notes/first-note.md");
+    await expect(
+      fs.readFile(path.join(projectDir, "src", "content", "notes", "first-note.md"), "utf8"),
+    ).resolves.toContain("---");
+  });
 });
